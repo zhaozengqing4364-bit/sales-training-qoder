@@ -484,8 +484,12 @@ describe("ReportPage", () => {
         expect(screen.getByText("证据强度：63 分。")).toBeTruthy();
         expect(screen.getByText("证据支撑")).toBeTruthy();
         expect(screen.getByText("证据补强")).toBeTruthy();
+        expect(screen.getByText("下一轮训练卡")).toBeTruthy();
+        expect(screen.getByText("汇总上次卡点、修正动作、判定条件、回放锚点和按目标再练入口。")).toBeTruthy();
         expect(screen.getByText("功能点说得多，但还没有把产品价值翻译成客户收益。")).toBeTruthy();
+        expect(screen.getByText("修正动作：下一轮先用客户收益语言重述价值，再回应价格顾虑。")).toBeTruthy();
         expect(screen.getByText("先补 ROI 证据，再推进一个明确的下一步动作。")).toBeTruthy();
+        expect(screen.getByText("判定条件：至少给出一条证据并确认下一步。")).toBeTruthy();
         expect(screen.getByText("综合评分反映价值翻译、证据支撑和异议推进的完成度。"))
             .toBeTruthy();
         expect(screen.getByTestId("audio-audit-card")).toBeTruthy();
@@ -735,6 +739,57 @@ describe("ReportPage", () => {
         expect(pushMock).toHaveBeenCalledWith(
             "/practice/retry-1?scenario_type=sales&agent_id=agent-1&persona_id=persona-1",
         );
+    });
+
+    it("routes incomplete sales retry configuration to the sales training page from the next-round card", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            retry_entry: {
+                scenario_type: "sales",
+                agent_id: null,
+                persona_id: null,
+                presentation_id: null,
+                focus_intent: {
+                    version: "retry_focus_v1",
+                    source_session_id: "session-1",
+                    main_issue: baseReport.main_issue,
+                    next_goal: {
+                        goal_type: "evidence_backing",
+                        goal_text: "先补 ROI 证据，再推进一个明确的下一步动作。",
+                        rule: "至少给出一条证据并确认下一步。",
+                    },
+                },
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再推进一个明确的下一步动作。",
+                rule: "至少给出一条证据并确认下一步。",
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 82,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("下一轮训练卡")).toBeTruthy();
+        expect(screen.getByText("当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。")).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "去销售训练页重新选择" }));
+
+        expect(createSessionMock).not.toHaveBeenCalled();
+        expect(pushMock).toHaveBeenCalledWith("/training/sales");
     });
 
     it("keeps degraded replay fallback visible and lets evidence cards jump into replay by turn", async () => {

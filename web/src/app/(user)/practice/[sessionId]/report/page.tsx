@@ -341,6 +341,10 @@ function formatReplayAnchorHint(anchor?: ReplayAnchor | null): string {
     return "当前暂无可定位的回放片段。";
 }
 
+function getRetryFallbackPath(retry?: PracticeSessionReport["retry_entry"] | null): string {
+    return retry?.scenario_type === "presentation" ? "/training/presentation" : "/training/sales";
+}
+
 export default function ComprehensiveReportPage() {
     const router = useRouter();
     const params = useParams();
@@ -388,7 +392,7 @@ export default function ComprehensiveReportPage() {
     }, [sessionId]);
 
     useEffect(() => {
-        void loadUnifiedEvidence();
+        void Promise.resolve().then(loadUnifiedEvidence);
     }, [loadUnifiedEvidence]);
 
     useEffect(() => {
@@ -460,7 +464,7 @@ export default function ComprehensiveReportPage() {
 
     useEffect(() => {
         if (!report || (!report.main_issue && !report.next_goal)) {
-            setReplayData(null);
+            queueMicrotask(() => setReplayData(null));
             return;
         }
 
@@ -499,7 +503,7 @@ export default function ComprehensiveReportPage() {
         let cancelled = false;
 
         if (report.scenario_type === "presentation") {
-            setKnowledgeCheck(null);
+            queueMicrotask(() => setKnowledgeCheck(null));
             debug.log("[Report] Knowledge-check skipped for presentation scenario", {
                 sessionId,
                 scenarioType: report.scenario_type,
@@ -542,11 +546,13 @@ export default function ComprehensiveReportPage() {
         }
 
         let cancelled = false;
-        setHighlightsLoading(true);
-        setHighlightsUnavailableHint(null);
 
-        api.sessions.getHighlights(sessionId)
-            .then((data) => {
+        const loadHighlights = async () => {
+            setHighlightsLoading(true);
+            setHighlightsUnavailableHint(null);
+
+            try {
+                const data = await api.sessions.getHighlights(sessionId);
                 if (cancelled) return;
                 setHighlightsData(data);
                 debug.log("[Report] Highlights loaded", {
@@ -554,8 +560,7 @@ export default function ComprehensiveReportPage() {
                     scenarioType: report.scenario_type,
                     highlightCount: data.highlights.length,
                 });
-            })
-            .catch((err) => {
+            } catch (err) {
                 if (cancelled) return;
                 setHighlightsData(null);
                 setHighlightsUnavailableHint(
@@ -568,12 +573,14 @@ export default function ComprehensiveReportPage() {
                     scenarioType: report.scenario_type,
                     error: err,
                 });
-            })
-            .finally(() => {
+            } finally {
                 if (!cancelled) {
                     setHighlightsLoading(false);
                 }
-            });
+            }
+        };
+
+        void Promise.resolve().then(loadHighlights);
 
         return () => {
             cancelled = true;
@@ -612,6 +619,11 @@ export default function ComprehensiveReportPage() {
         )
             ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
             : null;
+    const retryFallbackPath = getRetryFallbackPath(retryEntry);
+    const retryNeedsManualSelection = Boolean(retryBlockedHint || !retryEntry?.scenario_type);
+    const retryActionLabel = retryNeedsManualSelection
+        ? (retryEntry?.scenario_type === "presentation" ? "去演讲训练页重新选择" : "去销售训练页重新选择")
+        : "按目标再练一轮";
     const issueReplayAnchor = replayData?.main_issue?.replay_anchor ?? null;
     const nextGoalReplayAnchor = replayData?.next_goal?.replay_anchor ?? null;
     const issueReplayHint = formatReplayAnchorHint(issueReplayAnchor);
@@ -637,11 +649,13 @@ export default function ComprehensiveReportPage() {
 
         if (retryBlockedHint) {
             setRetryHint(retryBlockedHint);
+            router.push(retryFallbackPath);
             return;
         }
 
         if (!retry?.scenario_type) {
             setRetryHint("当前报告缺少再练配置，请先返回训练页重新创建会话。");
+            router.push("/training/sales");
             return;
         }
 
@@ -650,6 +664,7 @@ export default function ComprehensiveReportPage() {
             && (!retry.agent_id || !retry.persona_id)
         ) {
             setRetryHint("当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。");
+            router.push("/training/sales");
             return;
         }
 
@@ -681,9 +696,12 @@ export default function ComprehensiveReportPage() {
         completenessScore: report?.completeness_score,
         overallScore: report?.overall_score,
     });
+    const reportLogicScore = reportRollups.logic;
+    const reportAccuracyScore = reportRollups.accuracy;
+    const reportCompletenessScore = reportRollups.completeness;
     const reportOverallScore = reportRollups.overall ?? 0;
 
-    const dimensionScores = useMemo(() => {
+    const dimensionScores = (() => {
         if (!report) {
             return [];
         }
@@ -697,11 +715,11 @@ export default function ComprehensiveReportPage() {
         }
 
         return buildSalesDimensionScores({
-            logic: reportRollups.logic,
-            accuracy: reportRollups.accuracy,
-            completeness: reportRollups.completeness,
+            logic: reportLogicScore,
+            accuracy: reportAccuracyScore,
+            completeness: reportCompletenessScore,
         });
-    }, [presentationReview, reportRollups.accuracy, reportRollups.completeness, reportRollups.logic, report]);
+    })();
 
     const practiceSuggestions = useMemo(() => {
         if (presentationReview?.recommendations?.length) {
@@ -921,9 +939,8 @@ export default function ComprehensiveReportPage() {
                                     size="sm"
                                     onClick={handleRetryFromGoal}
                                     className="whitespace-nowrap"
-                                    disabled={Boolean(retryBlockedHint)}
                                 >
-                                    按目标再练一轮
+                                    {retryActionLabel}
                                 </Button>
                             )}
                         </div>
@@ -1165,15 +1182,20 @@ export default function ComprehensiveReportPage() {
                 </>
             )}
 
-            {!isPresentationScenario && (report.overall_result || report.main_issue) && (
+            {!isPresentationScenario && (report.overall_result || report.main_issue || report.next_goal) && (
                 <GlassCard className="p-6 mb-6">
                     <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                        <h2 className="text-lg font-semibold text-zinc-900">销售推进结果</h2>
+                        <div>
+                            <h2 className="text-lg font-semibold text-zinc-900">下一轮训练卡</h2>
+                            <p className="text-sm text-zinc-600 mt-1">
+                                汇总上次卡点、修正动作、判定条件、回放锚点和按目标再练入口。
+                            </p>
+                        </div>
                         <span className={cn("text-xs font-semibold px-3 py-1 rounded-full border", overallResultTone)}>
                             {overallResultLabel}
                         </span>
                     </div>
-                    {report.main_issue ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
                             <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
                                 <p className="text-xs font-semibold text-amber-700">本场销售主问题</p>
@@ -1183,10 +1205,16 @@ export default function ComprehensiveReportPage() {
                                     </span>
                                 ) : null}
                             </div>
-                            <p className="text-sm text-amber-900">{report.main_issue.issue_text}</p>
-                            <p className="text-xs text-amber-700 mt-2">
-                                修正动作：{report.main_issue.recovery_rule}
-                            </p>
+                            {report.main_issue ? (
+                                <>
+                                    <p className="text-sm text-amber-900">{report.main_issue.issue_text}</p>
+                                    <p className="text-xs text-amber-700 mt-2">
+                                        修正动作：{report.main_issue.recovery_rule}
+                                    </p>
+                                </>
+                            ) : (
+                                <p className="text-sm text-amber-900">本场未产生主问题诊断结果，下一轮先按目标补齐证据。</p>
+                            )}
                             <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
                                 <p className="text-xs text-amber-700">{issueReplayHint}</p>
                                 <Button
@@ -1202,29 +1230,28 @@ export default function ComprehensiveReportPage() {
                                 </Button>
                             </div>
                         </div>
-                    ) : (
-                        <p className="text-sm text-zinc-600">本场未产生主问题诊断结果。</p>
-                    )}
-                </GlassCard>
-            )}
-
-            {!isPresentationScenario && report.next_goal && (
-                <GlassCard className="p-6 mb-6">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div>
+                        <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
                             <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <h2 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-blue-900 flex items-center gap-2">
                                     <Target className="w-5 h-5 text-blue-600" />
                                     下一轮销售目标
-                                </h2>
+                                </h3>
                                 {reportLearningCue?.goalLabel ? (
                                     <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-800">
                                         {reportLearningCue.goalLabel}
                                     </span>
                                 ) : null}
                             </div>
-                            <p className="text-sm text-zinc-700 mb-2">{report.next_goal.goal_text}</p>
-                            <p className="text-xs text-zinc-500">判定条件：{report.next_goal.rule}</p>
+                            {report.next_goal ? (
+                                <>
+                                    <p className="text-sm text-blue-950 mb-2">{report.next_goal.goal_text}</p>
+                                    <p className="text-xs text-blue-700">判定条件：{report.next_goal.rule}</p>
+                                </>
+                            ) : (
+                                <p className="text-sm text-blue-950">
+                                    当前报告缺少明确下一轮目标，请先回销售训练页重新选择练习组合。
+                                </p>
+                            )}
                             <p className="text-xs text-blue-700 mt-2">{nextGoalReplayHint}</p>
                             {retryBlockedHint && (
                                 <p className="text-xs text-amber-700 mt-2">{retryBlockedHint}</p>
@@ -1232,8 +1259,7 @@ export default function ComprehensiveReportPage() {
                             {retryHint && (
                                 <p className="text-xs text-amber-700 mt-2">{retryHint}</p>
                             )}
-                        </div>
-                        <div className="flex flex-col items-stretch gap-2">
+                            <div className="mt-4 flex flex-col sm:flex-row items-stretch gap-2">
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -1251,10 +1277,10 @@ export default function ComprehensiveReportPage() {
                                 size="sm"
                                 onClick={handleRetryFromGoal}
                                 className="whitespace-nowrap"
-                                disabled={Boolean(retryBlockedHint)}
                             >
-                                按目标再练一轮
+                                {retryActionLabel}
                             </Button>
+                            </div>
                         </div>
                     </div>
                 </GlassCard>
