@@ -1376,61 +1376,6 @@ async function apiFetch<T>(
     }
 }
 
-async function apiFetchBlob(
-    endpoint: string,
-    options: ApiFetchOptions = {},
-): Promise<Blob> {
-    const url = `${resolveApiBaseUrl()}${endpoint}`;
-    const { skipSessionExpiredHandling = false, ...requestOptions } = options;
-    const resolvedCredentials = requestOptions.credentials || "include";
-    const headers = attachCsrfHeader(
-        createHeaders(requestOptions.headers),
-        {
-            method: requestOptions.method,
-            credentials: resolvedCredentials,
-        },
-    );
-
-    try {
-        const response = await fetchWithLoopbackRetry(url, {
-            ...requestOptions,
-            credentials: resolvedCredentials,
-            headers,
-        });
-
-        if (!response.ok) {
-            const responseJson = await response.json().catch(() => ({}));
-            const normalized = normalizeApiErrorPayload(response.status, responseJson);
-
-            if (response.status === 401 && !skipSessionExpiredHandling) {
-                triggerSessionExpiredOnce();
-            }
-
-            throw new ApiRequestError(normalized);
-        }
-
-        return response.blob();
-    } catch (error) {
-        if (error instanceof ApiRequestError) {
-            throw error;
-        }
-
-        if (error instanceof Error && error.name === "AbortError") {
-            throw error;
-        }
-
-        const message = error instanceof Error && error.message.trim()
-            ? error.message
-            : "请求失败，请稍后重试。";
-
-        throw new ApiRequestError({
-            status: 0,
-            errorCode: "[NETWORK_ERROR]",
-            message,
-        });
-    }
-}
-
 // File upload fetch wrapper with AbortController support
 async function apiUpload<T>(
     endpoint: string,
