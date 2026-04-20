@@ -10,12 +10,16 @@ const {
     getSalesAgentsMock,
     listScenariosMock,
     getSalesPersonasMock,
+    getRecommendationMock,
+    getMyHistoryMock,
 } = vi.hoisted(() => ({
     backMock: vi.fn(),
     pushMock: vi.fn(),
     getSalesAgentsMock: vi.fn(),
     listScenariosMock: vi.fn(),
     getSalesPersonasMock: vi.fn(),
+    getRecommendationMock: vi.fn(),
+    getMyHistoryMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -55,6 +59,14 @@ vi.mock("@/lib/api/client", async () => {
                 list: listScenariosMock,
                 getSalesPersonas: getSalesPersonasMock,
             },
+            dashboard: {
+                ...actual.api.dashboard,
+                getRecommendation: getRecommendationMock,
+            },
+            user: {
+                ...actual.api.user,
+                getMyHistory: getMyHistoryMock,
+            },
         },
     };
 });
@@ -83,6 +95,8 @@ describe("SalesTrainingPage core combinations", () => {
         getSalesAgentsMock.mockReset();
         listScenariosMock.mockReset();
         getSalesPersonasMock.mockReset();
+        getRecommendationMock.mockReset();
+        getMyHistoryMock.mockReset();
 
         getSalesAgentsMock.mockResolvedValue([
             {
@@ -120,6 +134,21 @@ describe("SalesTrainingPage core combinations", () => {
                 difficulty: "hard",
             },
         ]);
+        getRecommendationMock.mockResolvedValue({
+            title: "继续训练",
+            reason: "完成一次新的可评估销售训练。",
+            action_label: "开始训练",
+            target_path: "/training/sales",
+            recommendation_kind: "onboarding",
+            scenario_type: "sales",
+        });
+        getMyHistoryMock.mockResolvedValue({
+            sessions: [],
+            total: 0,
+            page: 1,
+            page_size: 5,
+            total_pages: 0,
+        });
     });
 
     it("turns matched 80/20 combinations into focused start routes", async () => {
@@ -143,6 +172,89 @@ describe("SalesTrainingPage core combinations", () => {
         expect(focusIntent.main_issue?.issue_text).toContain("需求挖掘");
         expect(focusIntent.main_issue?.issue_text).toContain("价格敏感型客户");
         expect(focusIntent.next_goal?.goal_text).toContain("需求挖掘 × 价格敏感型客户");
+        expect(getRecommendationMock).toHaveBeenCalledTimes(1);
+        expect(getMyHistoryMock).toHaveBeenCalledWith({ page: 1, page_size: 5, scenario_type: "sales" });
+    });
+
+    it("prioritizes a core combination from the latest retry recommendation", async () => {
+        const focusIntent = {
+            version: "sales_retry_v1",
+            source_session_id: "session-previous",
+            main_issue: {
+                issue_type: "需求挖掘",
+                issue_text: "上次在价格敏感型客户场景中需求挖掘不足。",
+                recovery_rule: "围绕价格敏感型客户先确认预算和 ROI。",
+            },
+            next_goal: {
+                goal_type: "需求挖掘",
+                goal_text: "下一轮练习需求挖掘 × 价格敏感型客户。",
+                rule: "retry",
+            },
+        };
+        getRecommendationMock.mockResolvedValueOnce({
+            title: "复练需求挖掘",
+            reason: "基于上次可评估销售报告。",
+            action_label: "按目标再练",
+            target_path: `/agents/agent-sales?persona_id=persona-price&focus_intent=${encodeURIComponent(JSON.stringify(focusIntent))}`,
+            recommendation_kind: "sales_retry",
+            scenario_type: "sales",
+            source_session_id: "session-previous",
+        });
+
+        render(<SalesTrainingPage />);
+
+        expect(await screen.findByRole("button", {
+            name: /组合 1\s+基于上次报告推荐\s+需求挖掘\s+客户角色：价格敏感型客户/,
+        })).toBeTruthy();
+    });
+
+    it("falls back to recent sales history when the recommendation has no matching focus", async () => {
+        getRecommendationMock.mockResolvedValueOnce({
+            title: "普通训练",
+            reason: "先完成一次可评估训练。",
+            action_label: "开始训练",
+            target_path: "/training/sales",
+            recommendation_kind: "onboarding",
+            scenario_type: "sales",
+        });
+        getMyHistoryMock.mockResolvedValueOnce({
+            sessions: [
+                {
+                    session_id: "history-1",
+                    scenario_name: "销售对练",
+                    scenario_type: "sales",
+                    persona_name: "强势质疑型客户",
+                    agent_name: "销售陪练",
+                    start_time: "2026-04-19T10:00:00.000Z",
+                    duration_seconds: 600,
+                    overall_score: 72,
+                    report_status: "completed",
+                    report_generated_at: "2026-04-19T10:12:00.000Z",
+                    status: "completed",
+                    feedback_summary: "对强势质疑型客户需要更稳地回应。",
+                    main_issue: {
+                        issue_type: "异议处理",
+                        issue_text: "面对强势质疑型客户时异议处理容易绕开关键问题。",
+                        recovery_rule: "先复述质疑，再给证据。",
+                    },
+                    next_goal: {
+                        goal_type: "异议处理",
+                        goal_text: "下一轮练习异议处理 × 强势质疑型客户。",
+                        rule: "retry",
+                    },
+                },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 5,
+            total_pages: 1,
+        });
+
+        render(<SalesTrainingPage />);
+
+        expect(await screen.findByRole("button", {
+            name: /组合 1\s+基于上次报告推荐\s+异议处理\s+客户角色：强势质疑型客户/,
+        })).toBeTruthy();
     });
 
     it("uses an explicit training lobby return route instead of browser history", async () => {
