@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { TrendDataPoint } from "@/lib/api/types";
+import { ArrowRight } from "lucide-react";
 import {
     LineChart,
     Line,
@@ -19,8 +21,20 @@ interface TrendsChartProps {
 export function TrendsChart({ data }: TrendsChartProps) {
     if (!data || data.length === 0) {
         return (
-            <div className="h-72 flex items-center justify-center text-slate-400">
-                暂无趋势数据
+            <div className="h-72 flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 text-center">
+                <div>
+                    <p className="text-sm font-semibold text-slate-900">暂无趋势数据</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                        当前时间范围还没有可评估训练快照；完成一次有足够证据的训练后，这里会显示练习次数、平均分和活跃用户走势。
+                    </p>
+                    <Link
+                        href="/training"
+                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                    >
+                        去训练大厅
+                        <ArrowRight className="w-4 h-4" />
+                    </Link>
+                </div>
             </div>
         );
     }
