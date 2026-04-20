@@ -171,10 +171,12 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         useContinuousAudioUploaderMock.mockReturnValue({
             isUploading: false,
             segmentCount: 0,
+            pendingUploads: 0,
             lastError: null,
             uploadStatus: "idle",
             startUpload: vi.fn(),
             stopUpload: vi.fn(),
+            flushAndStop: vi.fn(),
         });
 
         getAgentWithPersonasMock.mockResolvedValue({
@@ -343,6 +345,98 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByRole("button", { name: "重试暂停" })).toBeTruthy();
     });
 
+    it("shows connection, microphone, lifecycle, session, and audio evidence faults together", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: "会话配置缺少客户画像，请返回训练入口重新选择。",
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "failed",
+            isConnected: false,
+            sessionStatus: "in_progress",
+            aiState: "idle",
+            messages: [],
+            fuzzyDetections: [],
+            salesStage: null,
+            scores: null,
+            liveSessionSummary: null,
+            actionCard: null,
+            coachHealth: null,
+            error: "连接失败，请检查网络。",
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+        });
+        useAudioRecorderMock.mockReturnValue({
+            isRecording: true,
+            hasPermission: true,
+            error: "麦克风被其他应用占用",
+            stream: null,
+            startRecording: vi.fn(),
+            stopRecording: vi.fn(),
+            requestPermission: vi.fn(),
+        });
+        usePracticeSessionLifecycleMock.mockReturnValue({
+            canToggleLifecycle: false,
+            handleEndSession: vi.fn(),
+            handleStartSession: vi.fn(),
+            handleTogglePauseResume: vi.fn(),
+            isEndingSession: false,
+            isSessionPaused: false,
+            isSessionTerminal: false,
+            lifecycleError: {
+                action: "end",
+                message: "结束失败，请再试一次。报告生成超时，请稍后再试。",
+                guidance: "请先确认连接正常，再点击“结束练习”；如果仍失败，可先重新连接后重试结束。",
+            },
+            audioEvidenceStatus: {
+                status: "timed_out",
+                message: "音频证据保存超时，本次报告可能缺少最后一段录音留痕。",
+                error: "segment 2 still pending",
+            },
+            pendingLifecycleAction: null,
+        });
+        useContinuousAudioUploaderMock.mockReturnValue({
+            isUploading: false,
+            segmentCount: 2,
+            pendingUploads: 1,
+            lastError: "OSS PUT 失败",
+            uploadStatus: "error",
+            startUpload: vi.fn(),
+            stopUpload: vi.fn(),
+            flushAndStop: vi.fn(),
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.getByLabelText("练习故障与恢复面板")).toBeTruthy();
+        expect(screen.getByText("当前有 5 项需要处理的练习状态")).toBeTruthy();
+        expect(screen.getByText("连接失败，请检查网络。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("会话配置缺少客户画像，请返回训练入口重新选择。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("结束失败，请再试一次。报告生成超时，请稍后再试。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("麦克风被其他应用占用", { exact: true })).toBeTruthy();
+        expect(screen.getByText("实时对话仍可继续，但回放或报告的音频证据可能缺失。原因：OSS PUT 失败", { exact: true })).toBeTruthy();
+        expect(screen.getByText("音频证据保存超时，本次报告可能缺少最后一段录音留痕。 原因：segment 2 still pending", { exact: true })).toBeTruthy();
+    });
+
     it("surfaces automatic start failure with a retry action", async () => {
         const handleStartSession = vi.fn();
         usePracticeRuntimeLockMock.mockReturnValue({
@@ -436,16 +530,18 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         useContinuousAudioUploaderMock.mockReturnValue({
             isUploading: false,
             segmentCount: 2,
+            pendingUploads: 0,
             lastError: "OSS PUT 失败",
             uploadStatus: "error",
             startUpload: restartUpload,
             stopUpload,
+            flushAndStop: vi.fn(),
         });
 
         render(<PracticeSessionPage />);
         await flushPreflightEffects();
 
-        expect(screen.getByText("录音留痕上传失败", { exact: true })).toBeTruthy();
+        expect(screen.getByText("音频留痕", { exact: true })).toBeTruthy();
         expect(screen.getByText("实时对话仍可继续，但回放或报告的音频证据可能缺失。原因：OSS PUT 失败", { exact: true })).toBeTruthy();
         expect(screen.getByText("留痕失败", { exact: true })).toBeTruthy();
         const retryButton = screen.getByRole("button", { name: "重试留痕" });
