@@ -146,7 +146,7 @@ These additions must be backward compatible: the existing dashboard should still
 
 | Surface | Command | Acceptance |
 | --- | --- | --- |
-| Dashboard recommendation contract | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_dashboard_recommendation.py -x -q` (or the existing dashboard recommendation test path) | Collects/runs without `rank_bm25`/`jwt` import blockers after Lane A dependency work; covers sales retry, PPT page retry, no-record fallback. |
+| Dashboard recommendation contract | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_dashboard_recommendation.py -x -q` | Collects/runs without `rank_bm25`/`jwt` import blockers after Lane A dependency work; covers sales retry, PPT page retry, no-record fallback. |
 | Audio segment API | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_audio_audit_contract.py -x -q` | Signing/register/failure-register contract remains stable. |
 | Lifecycle API | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q` | Start/pause/resume/end state transitions remain compatible. |
 | WebSocket status/reconnect | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -x -q` | Message/status/reconnect payloads remain stable. |
