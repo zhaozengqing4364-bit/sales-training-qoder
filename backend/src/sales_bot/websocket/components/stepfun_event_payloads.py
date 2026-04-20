@@ -90,3 +90,26 @@ def build_error_event(
             "turn_count": turn_count,
         },
     }
+
+
+def build_interrupted_event(
+    *,
+    reason: str,
+    session_status: str,
+    ai_state: str,
+    turn_count: int,
+    trace_id: str,
+    stream_id: str | None,
+) -> dict[str, Any]:
+    return {
+        "type": "interrupted",
+        "timestamp": _utc_now_iso(),
+        "trace_id": trace_id,
+        "stream_id": stream_id,
+        "data": {
+            "reason": reason,
+            "session_status": session_status,
+            "ai_state": ai_state,
+            "turn_count": turn_count,
+        },
+    }

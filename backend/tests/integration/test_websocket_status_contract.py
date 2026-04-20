@@ -6,8 +6,13 @@ import pytest
 
 from common.auth.service import get_session_cookie_name, resolve_websocket_auth
 from common.websocket.session_manager import SessionManager
-from common.websocket.session_state_service import SessionStateService, SessionStateSnapshot
-from presentation_coach.websocket.presentation_handler import PresentationWebSocketHandler
+from common.websocket.session_state_service import (
+    SessionStateService,
+    SessionStateSnapshot,
+)
+from presentation_coach.websocket.presentation_handler import (
+    PresentationWebSocketHandler,
+)
 from sales_bot.websocket.simple_handler import SimpleSalesHandler
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
 

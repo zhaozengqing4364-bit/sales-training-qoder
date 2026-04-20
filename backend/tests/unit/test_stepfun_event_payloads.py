@@ -8,6 +8,7 @@ from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
     build_heartbeat_event,
+    build_interrupted_event,
     build_stage_update_event,
     build_status_event,
 )
@@ -87,5 +88,27 @@ def test_build_error_event_shape():
         "session_status": "in_progress",
         "ai_state": "idle",
         "turn_count": 5,
+    }
+    _assert_iso_timestamp(payload["timestamp"])
+
+
+def test_build_interrupted_event_shape():
+    payload = build_interrupted_event(
+        reason="user_speaking",
+        session_status="in_progress",
+        ai_state="listening",
+        turn_count=6,
+        trace_id="trace-interrupt",
+        stream_id="stream-1",
+    )
+
+    assert payload["type"] == "interrupted"
+    assert payload["trace_id"] == "trace-interrupt"
+    assert payload["stream_id"] == "stream-1"
+    assert payload["data"] == {
+        "reason": "user_speaking",
+        "session_status": "in_progress",
+        "ai_state": "listening",
+        "turn_count": 6,
     }
     _assert_iso_timestamp(payload["timestamp"])

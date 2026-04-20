@@ -90,6 +90,7 @@ from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
     build_heartbeat_event,
+    build_interrupted_event,
     build_stage_update_event,
     build_status_event,
 )
@@ -3328,20 +3329,16 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         await self.manager.send_json(
             self.websocket,
-            {
-                "type": "interrupted",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "trace_id": get_trace_id(),
-                "stream_id": interrupted_stream_id,
-                "data": {
-                    "reason": reason,
-                    "session_status": self.session_status,
-                    "ai_state": "listening"
-                    if self.session_status == "in_progress"
-                    else "idle",
-                    "turn_count": self.turn_count,
-                },
-            },
+            build_interrupted_event(
+                reason=reason,
+                session_status=self.session_status,
+                ai_state="listening"
+                if self.session_status == "in_progress"
+                else "idle",
+                turn_count=self.turn_count,
+                trace_id=get_trace_id(),
+                stream_id=interrupted_stream_id,
+            ),
         )
         await self._send_status(
             "listening" if self.session_status == "in_progress" else "idle"
