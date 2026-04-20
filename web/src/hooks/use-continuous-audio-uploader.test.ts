@@ -501,6 +501,77 @@ describe("useContinuousAudioUploader", () => {
         expect(mockMediaRecorderStop).toHaveBeenCalled();
     });
 
+    it("flushAndStop waits for pending segment registration before marking evidence complete", async () => {
+        const { result } = renderHook(() =>
+            useContinuousAudioUploader({ sessionId, enabled: true }),
+        );
+
+        await act(async () => {
+            await result.current.startUpload();
+        });
+
+        await act(async () => {
+            fireDataAvailable(2048);
+        });
+
+        await waitFor(() => {
+            expect(result.current.segmentCount).toBe(1);
+        });
+
+        let flushResult: Awaited<ReturnType<typeof result.current.flushAndStop>> | null = null;
+        await act(async () => {
+            flushResult = await result.current.flushAndStop({ timeoutMs: 500 });
+        });
+
+        expect(flushResult).toEqual({
+            status: "completed",
+            pendingUploads: 0,
+            error: null,
+        });
+        expect(result.current.pendingUploads).toBe(0);
+        expect(result.current.uploadStatus).toBe("stopped");
+    });
+
+    it("flushAndStop returns a timeout outcome when evidence registration is still pending", async () => {
+        mockFetch.mockImplementation((url: string | Request) => {
+            const urlStr = typeof url === "string" ? url : url.url;
+            if (urlStr.includes("/audio-upload-urls")) {
+                return new Promise<Response>(() => {
+                    // Keep the upload pending so the bounded flush has to time out.
+                });
+            }
+            return mockFetchResponse(200, {});
+        });
+
+        const { result } = renderHook(() =>
+            useContinuousAudioUploader({ sessionId, enabled: true }),
+        );
+
+        await act(async () => {
+            await result.current.startUpload();
+        });
+
+        await act(async () => {
+            fireDataAvailable(2048);
+        });
+
+        await waitFor(() => {
+            expect(result.current.pendingUploads).toBe(1);
+        });
+
+        let flushResult: Awaited<ReturnType<typeof result.current.flushAndStop>> | null = null;
+        await act(async () => {
+            flushResult = await result.current.flushAndStop({ timeoutMs: 1 });
+        });
+
+        expect(flushResult).toEqual({
+            status: "timed_out",
+            pendingUploads: 1,
+            error: null,
+        });
+        expect(result.current.uploadStatus).toBe("stopped");
+    });
+
     it("handles microphone permission denial", async () => {
         mockGetUserMedia.mockRejectedValueOnce(
             new DOMException("Permission denied", "NotAllowedError"),
