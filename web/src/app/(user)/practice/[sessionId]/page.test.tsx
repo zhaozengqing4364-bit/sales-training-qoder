@@ -62,10 +62,11 @@ vi.mock("@/components/ui/glass-sheet", () => ({
 }));
 
 vi.mock("@/components/practice/RightPanelContent", () => ({
-    RightPanelContent: ({ liveSessionSummary }: { liveSessionSummary?: { main_issue?: { issue_text?: string | null } | null; focus_type?: string | null } | null }) => (
+    RightPanelContent: ({ liveSessionSummary, actionCompletionStatus }: { liveSessionSummary?: { main_issue?: { issue_text?: string | null } | null; focus_type?: string | null } | null; actionCompletionStatus?: { label: string } | null }) => (
         <div data-testid="right-panel-content">
             {liveSessionSummary?.focus_type ? <span>{`live-focus:${liveSessionSummary.focus_type}`}</span> : null}
             {liveSessionSummary?.main_issue?.issue_text ? <span>{liveSessionSummary.main_issue.issue_text}</span> : null}
+            {actionCompletionStatus?.label ? <span>{actionCompletionStatus.label}</span> : null}
         </div>
     ),
 }));
@@ -898,4 +899,60 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.queryByText("麦克风调试工具", { exact: true })).toBeNull();
         expect(screen.queryByText("正常学员练习请从 practice 主页面进入。", { exact: true })).toBeNull();
     });
+
+    it("passes a waiting action completion status to the realtime panel before the learner attempts it", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "connected",
+            isConnected: true,
+            sessionStatus: "in_progress",
+            aiState: "idle",
+            messages: [],
+            fuzzyDetections: [],
+            salesStage: null,
+            scores: {
+                overall_score: 70,
+                turn_count: 2,
+                suggestions: ["先确认预算与决策人"],
+                dimension_scores: { 价值表达: 70 },
+            },
+            liveSessionSummary: null,
+            actionCard: {
+                issue: "直接跳到报价",
+                replacement: "我先确认预算审批链路，再给你报价区间。",
+                next_turn_rule: "下一轮先确认预算与决策人。",
+            },
+            coachHealth: { status: "healthy", reason: null, message: "实时辅导正常。" },
+            error: null,
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.getAllByText("等待你在下一轮尝试").length).toBeGreaterThan(0);
+    });
+
 });

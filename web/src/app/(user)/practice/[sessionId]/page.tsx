@@ -11,10 +11,11 @@ import { AudioWaveform } from "@/components/ui/audio-waveform";
 import { GlassSheet } from "@/components/ui/glass-sheet";
 import { cn } from "@/lib/utils";
 import { usePracticeWebSocket } from "@/hooks/use-practice-websocket";
-import type { ConnectionState, SessionStatus } from "@/hooks/use-practice-websocket";
+import type { ActionCard, ConnectionState, SessionStatus } from "@/hooks/use-practice-websocket";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { useContinuousAudioUploader } from "@/hooks/use-continuous-audio-uploader";
 import { RightPanelContent } from "@/components/practice/RightPanelContent";
+import type { ActionCompletionStatus } from "@/components/practice/RightPanelContent";
 import { CoachHealthNotice } from "@/components/practice/CoachHealthNotice";
 import { api } from "@/lib/api/client";
 import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
@@ -36,6 +37,18 @@ const CONNECTION_STATUS_LABELS: Record<ConnectionState, string> = {
     reconnecting: "重连中...",
     failed: "连接失败",
 };
+
+type TrackedActionCard = {
+    key: string;
+    card: ActionCard;
+    userMessageCount: number;
+    suggestionCount: number;
+    overallScore: number;
+};
+
+function buildActionCardKey(actionCard: ActionCard): string {
+    return [actionCard.issue, actionCard.replacement, actionCard.next_turn_rule].join("|");
+}
 
 type PracticePreflightBrief = {
     trainingGoal: string;
@@ -403,6 +416,71 @@ export default function PracticeSessionPage() {
 
     // AI 是否正在忙碌（说话或思考中），用于一来一回交互模式
     const aiIsBusy = isPlayingAudio || aiState === "thinking" || aiState === "speaking";
+    const userMessageCount = React.useMemo(
+        () => messages.filter((message) => message.sender === "user").length,
+        [messages],
+    );
+    const actionCardKey = actionCard ? buildActionCardKey(actionCard) : null;
+    const [trackedActionCard, setTrackedActionCard] = React.useState<TrackedActionCard | null>(null);
+
+    React.useEffect(() => {
+        setTrackedActionCard(null);
+    }, [sessionId]);
+
+    React.useEffect(() => {
+        if (!actionCard || !actionCardKey) {
+            return;
+        }
+
+        setTrackedActionCard((current) => {
+            if (current?.key === actionCardKey) {
+                return current;
+            }
+
+            return {
+                key: actionCardKey,
+                card: actionCard,
+                userMessageCount,
+                suggestionCount: scores?.suggestions?.length ?? 0,
+                overallScore: scores?.overall_score ?? 0,
+            };
+        });
+    }, [actionCard, actionCardKey, scores, userMessageCount]);
+
+    const displayedActionCard = actionCard ?? trackedActionCard?.card ?? null;
+    const actionCompletionStatus = React.useMemo<ActionCompletionStatus | null>(() => {
+        if (!trackedActionCard) {
+            return null;
+        }
+
+        const hasAttemptedAction = userMessageCount > trackedActionCard.userMessageCount;
+        if (!hasAttemptedAction) {
+            return {
+                state: "waiting",
+                label: "等待你在下一轮尝试",
+                detail: "先按替换句完成下一次回应，系统会继续观察后续分数和建议变化。",
+            };
+        }
+
+        const currentSuggestionCount = scores?.suggestions?.length ?? trackedActionCard.suggestionCount;
+        const currentOverallScore = scores?.overall_score ?? trackedActionCard.overallScore;
+        const hasImprovementSignal = currentSuggestionCount < trackedActionCard.suggestionCount
+            || currentOverallScore > trackedActionCard.overallScore;
+
+        if (hasImprovementSignal) {
+            return {
+                state: "improved",
+                label: "本轮已尝试，继续巩固",
+                detail: "后续建议减少或分数上升，说明这次回应已经出现积极信号。",
+            };
+        }
+
+        return {
+            state: "missed",
+            label: "还未命中判定条件",
+            detail: "已经检测到新的用户回应，但还没有看到建议减少或分数改善，请下一轮继续按判定条件尝试。",
+        };
+    }, [scores, trackedActionCard, userMessageCount]);
     // 使用 ref 保持最新值，避免闭包过时问题
     const aiIsBusyRef = React.useRef(aiIsBusy);
     const isRecordingRef = React.useRef(isRecording);
@@ -1110,7 +1188,8 @@ export default function PracticeSessionPage() {
                     forbiddenWords={forbiddenWords}
                     scores={scores}
                     liveSessionSummary={liveSessionSummary}
-                    actionCard={actionCard}
+                    actionCard={displayedActionCard}
+                    actionCompletionStatus={actionCompletionStatus}
                     coachHealth={coachHealth}
                     fuzzyDetections={fuzzyDetections}
                     salesStage={salesStage}
@@ -1135,7 +1214,8 @@ export default function PracticeSessionPage() {
                         forbiddenWords={forbiddenWords}
                         scores={scores}
                         liveSessionSummary={liveSessionSummary}
-                        actionCard={actionCard}
+                        actionCard={displayedActionCard}
+                        actionCompletionStatus={actionCompletionStatus}
                         coachHealth={coachHealth}
                         fuzzyDetections={fuzzyDetections}
                         salesStage={salesStage}

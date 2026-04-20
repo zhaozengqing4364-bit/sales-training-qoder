@@ -286,6 +286,79 @@ describe("RightPanelContent", () => {
         expect(screen.queryByText("先别急着报价。")).toBeNull();
     });
 
+    it("shows waiting completion status for the active action card", () => {
+        render(
+            <RightPanelContent
+                {...baseProps}
+                scores={{
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 80,
+                    },
+                }}
+                actionCard={{
+                    issue: "直接跳到报价",
+                    replacement: "我先确认预算审批链路，再给你报价区间。",
+                    next_turn_rule: "下一轮先确认预算与决策人。",
+                }}
+                actionCompletionStatus={{
+                    state: "waiting",
+                    label: "等待你在下一轮尝试",
+                    detail: "先按替换句完成下一次回应，系统会继续观察后续分数和建议变化。",
+                }}
+                fuzzyDetections={[]}
+            />,
+        );
+
+        expect(screen.getByText("动作完成状态")).toBeTruthy();
+        expect(screen.getByText("等待你在下一轮尝试")).toBeTruthy();
+    });
+
+    it("shows conservative improved and missed action completion states", () => {
+        const { rerender } = render(
+            <RightPanelContent
+                {...baseProps}
+                scores={null}
+                actionCard={{
+                    issue: "直接跳到报价",
+                    replacement: "我先确认预算审批链路，再给你报价区间。",
+                    next_turn_rule: "下一轮先确认预算与决策人。",
+                }}
+                actionCompletionStatus={{
+                    state: "improved",
+                    label: "本轮已尝试，继续巩固",
+                    detail: "后续建议减少或分数上升，说明这次回应已经出现积极信号。",
+                }}
+                fuzzyDetections={[]}
+            />,
+        );
+
+        expect(screen.getByText("本轮已尝试，继续巩固")).toBeTruthy();
+
+        rerender(
+            <RightPanelContent
+                {...baseProps}
+                scores={null}
+                actionCard={{
+                    issue: "直接跳到报价",
+                    replacement: "我先确认预算审批链路，再给你报价区间。",
+                    next_turn_rule: "下一轮先确认预算与决策人。",
+                }}
+                actionCompletionStatus={{
+                    state: "missed",
+                    label: "还未命中判定条件",
+                    detail: "已经检测到新的用户回应，但还没有看到建议减少或分数改善，请下一轮继续按判定条件尝试。",
+                }}
+                fuzzyDetections={[]}
+            />,
+        );
+
+        expect(screen.getByText("还未命中判定条件")).toBeTruthy();
+    });
+
     it("shows realtime hints and score suggestions when there is no active action card", () => {
         render(
             <RightPanelContent

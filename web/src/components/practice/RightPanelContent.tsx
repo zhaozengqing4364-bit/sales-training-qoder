@@ -31,6 +31,12 @@ import type {
     ForbiddenWordDetection,
 } from "@/hooks/use-practice-websocket";
 
+export type ActionCompletionStatus = {
+    state: "waiting" | "improved" | "missed";
+    label: string;
+    detail: string;
+};
+
 interface RightPanelContentProps {
     scenarioType: "sales" | "presentation";
     presentationId?: string;
@@ -40,6 +46,7 @@ interface RightPanelContentProps {
     scores: ScoreUpdate | null;
     liveSessionSummary: LiveSessionConclusionSummary | null;
     actionCard: ActionCard | null;
+    actionCompletionStatus?: ActionCompletionStatus | null;
     coachHealth: CoachHealth;
     fuzzyDetections: FuzzyDetection[];
     salesStage: SalesStage | null;
@@ -55,6 +62,7 @@ export const RightPanelContent = React.memo(function RightPanelContent({
     scores,
     liveSessionSummary,
     actionCard,
+    actionCompletionStatus,
     coachHealth,
     fuzzyDetections,
     salesStage,
@@ -230,6 +238,44 @@ export const RightPanelContent = React.memo(function RightPanelContent({
                             <p className="font-bold text-amber-700 mb-1">下一轮判定条件</p>
                             <p className="text-amber-800">{actionCard.next_turn_rule}</p>
                         </div>
+                        {actionCompletionStatus && (
+                            <div
+                                className={cn(
+                                    "rounded-lg border p-3",
+                                    actionCompletionStatus.state === "improved"
+                                        ? "border-emerald-100 bg-emerald-50"
+                                        : actionCompletionStatus.state === "missed"
+                                        ? "border-amber-100 bg-amber-50"
+                                        : "border-slate-200 bg-slate-50",
+                                )}
+                            >
+                                <p
+                                    className={cn(
+                                        "font-bold mb-1",
+                                        actionCompletionStatus.state === "improved"
+                                            ? "text-emerald-700"
+                                            : actionCompletionStatus.state === "missed"
+                                            ? "text-amber-700"
+                                            : "text-slate-700",
+                                    )}
+                                >
+                                    动作完成状态
+                                </p>
+                                <p
+                                    className={cn(
+                                        "font-semibold",
+                                        actionCompletionStatus.state === "improved"
+                                            ? "text-emerald-900"
+                                            : actionCompletionStatus.state === "missed"
+                                            ? "text-amber-900"
+                                            : "text-slate-800",
+                                    )}
+                                >
+                                    {actionCompletionStatus.label}
+                                </p>
+                                <p className="text-xs text-slate-600 mt-1">{actionCompletionStatus.detail}</p>
+                            </div>
+                        )}
                         {objectionProofPrompt && (
                             <div className="rounded-lg border border-violet-100 bg-violet-50 p-3">
                                 <p className="font-bold text-violet-700 mb-1">当前仍卡住的证明</p>
