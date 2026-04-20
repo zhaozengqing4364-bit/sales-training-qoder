@@ -195,7 +195,6 @@ export default function SettingsPage() {
                 volume: extra.volume || "+0%",
                 pitch: extra.pitch || "+0Hz",
             });
-
             const audioUrl = URL.createObjectURL(blob);
             const audio = new Audio(audioUrl);
             previewAudioRef.current = audio;

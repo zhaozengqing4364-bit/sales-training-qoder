@@ -1183,7 +1183,6 @@ export default function EditPersonaPage() {
                                             volume: ttsConfig.volume,
                                             pitch: ttsConfig.pitch,
                                         });
-
                                         const audioUrl = URL.createObjectURL(blob);
                                         const audio = new Audio(audioUrl);
                                         previewAudioRef.current = audio;
