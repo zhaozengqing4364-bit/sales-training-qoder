@@ -104,6 +104,77 @@ describe("API client 401 handling", () => {
         expect(headers.get("X-CSRF-Token")).toBe("csrf-token-123");
     });
 
+    it("previews admin TTS through the shared API client with CSRF protection", async () => {
+        document.cookie = "app_csrf=tts-csrf-token; path=/";
+        const audioBlob = new Blob(["mp3"], { type: "audio/mpeg" });
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(audioBlob, {
+                status: 200,
+                headers: { "Content-Type": "audio/mpeg" },
+            }),
+        );
+
+        vi.stubGlobal("fetch", fetchMock);
+
+        const result = await api.admin.previewTTSBlob({
+            text: "试听统一客户端",
+            voice: "zh-CN-XiaoxiaoNeural",
+            rate: "+10%",
+            volume: "+5%",
+            pitch: "+2Hz",
+        });
+
+        expect(result).toBeInstanceOf(Blob);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const [url, requestOptions] = fetchMock.mock.calls[0] as [string, RequestInit];
+        const parsed = new URL(url);
+        const headers = new Headers(requestOptions.headers);
+
+        expect(parsed.pathname).toBe("/api/v1/admin/model-configs/tts/preview");
+        expect(parsed.searchParams.get("text")).toBe("试听统一客户端");
+        expect(parsed.searchParams.get("voice")).toBe("zh-CN-XiaoxiaoNeural");
+        expect(parsed.searchParams.get("rate")).toBe("+10%");
+        expect(parsed.searchParams.get("volume")).toBe("+5%");
+        expect(parsed.searchParams.get("pitch")).toBe("+2Hz");
+        expect(requestOptions).toMatchObject({
+            method: "POST",
+            credentials: "include",
+        });
+        expect(headers.get("X-CSRF-Token")).toBe("tts-csrf-token");
+    });
+
+    it("normalizes admin TTS preview failures into Chinese ApiRequestError text", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue(
+                new Response(
+                    JSON.stringify({
+                        success: false,
+                        error: "[TTS_PREVIEW_FAILED]",
+                        message: "upstream timeout",
+                        trace_id: "trace-tts-1",
+                    }),
+                    {
+                        status: 502,
+                        headers: { "Content-Type": "application/json" },
+                    },
+                ),
+            ),
+        );
+
+        await expect(
+            api.admin.previewTTSBlob({ text: "失败试听" }),
+        ).rejects.toMatchObject({
+            name: "ApiRequestError",
+            status: 502,
+            errorCode: "[TTS_PREVIEW_FAILED]",
+            message: "语音试听失败，请稍后重试。 (trace_id: trace-tts-1)",
+            rawMessage: "upstream timeout",
+            traceId: "trace-tts-1",
+        });
+    });
+
     it("attaches W3C trace context headers to API requests", async () => {
         const fetchMock = vi.fn().mockResolvedValue(
             new Response(
