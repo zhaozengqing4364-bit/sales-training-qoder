@@ -6,14 +6,28 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Users2, Target } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
-import { Agent, RetryFocusIntent, SalesPersonaOption, ScenarioSummary } from "@/lib/api/types";
+import {
+    Agent,
+    HistorySessionSummary,
+    Recommendation,
+    RetryFocusIntent,
+    SalesPersonaOption,
+    ScenarioSummary,
+} from "@/lib/api/types";
 import { AgentCard } from "@/components/ui/agent-card";
 
-const CORE_COMBINATIONS: Array<{
+type CoreCombination = {
     id: string;
     capability: string;
     role: string;
-}> = [
+};
+
+type PersonalizedCombination = {
+    combinationId: string;
+    sourceLabel: string;
+};
+
+const CORE_COMBINATIONS: CoreCombination[] = [
     { id: "c1", capability: "破冰建立信任", role: "冷淡型客户" },
     { id: "c2", capability: "破冰建立信任", role: "强势质疑型客户" },
     { id: "c3", capability: "需求挖掘", role: "价格敏感型客户" },
@@ -61,8 +75,102 @@ function resolveAgentForCapability(agents: Agent[], capability: string) {
     }) || agents[0] || null;
 }
 
+function parseFocusIntentFromTargetPath(targetPath: string | undefined): RetryFocusIntent | null {
+    if (!targetPath) return null;
+
+    try {
+        const url = new URL(targetPath, "https://local.sales-training");
+        const rawFocusIntent = url.searchParams.get("focus_intent");
+        if (!rawFocusIntent) return null;
+
+        const parsed = JSON.parse(rawFocusIntent) as Partial<RetryFocusIntent>;
+        if (typeof parsed.version !== "string" || typeof parsed.source_session_id !== "string") {
+            return null;
+        }
+
+        return {
+            version: parsed.version,
+            source_session_id: parsed.source_session_id,
+            main_issue: parsed.main_issue ?? null,
+            next_goal: parsed.next_goal ?? null,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function combinationMatchesEvidence(combination: CoreCombination, evidenceText: string): boolean {
+    return textMatchesTarget(evidenceText, combination.capability)
+        && textMatchesTarget(evidenceText, combination.role);
+}
+
+function resolveCombinationFromEvidence(evidenceParts: Array<string | null | undefined>): CoreCombination | null {
+    const evidenceText = evidenceParts.filter(Boolean).join(" ");
+    if (!evidenceText) return null;
+
+    return CORE_COMBINATIONS.find((combination) => combinationMatchesEvidence(combination, evidenceText)) || null;
+}
+
+function resolvePersonalizedCombination(
+    recommendation: Recommendation | null,
+    historySessions: HistorySessionSummary[],
+): PersonalizedCombination | null {
+    const recommendationFocusIntent = parseFocusIntentFromTargetPath(recommendation?.target_path);
+    const isSalesRecommendation = recommendation
+        ? recommendation.recommendation_kind === "sales_retry"
+            || recommendation.scenario_type === "sales"
+            || recommendation.target_path.startsWith("/agents/")
+        : false;
+
+    if (recommendation && isSalesRecommendation) {
+        const recommendedCombination = resolveCombinationFromEvidence([
+            recommendation.focus,
+            recommendation.title,
+            recommendation.reason,
+            recommendationFocusIntent?.main_issue?.issue_type,
+            recommendationFocusIntent?.main_issue?.issue_text,
+            recommendationFocusIntent?.main_issue?.recovery_rule,
+            recommendationFocusIntent?.next_goal?.goal_type,
+            recommendationFocusIntent?.next_goal?.goal_text,
+            recommendationFocusIntent?.next_goal?.rule,
+        ]);
+
+        if (recommendedCombination) {
+            return {
+                combinationId: recommendedCombination.id,
+                sourceLabel: "基于上次报告推荐",
+            };
+        }
+    }
+
+    for (const session of historySessions) {
+        if (session.scenario_type !== "sales") continue;
+
+        const historyCombination = resolveCombinationFromEvidence([
+            session.persona_name,
+            session.agent_name,
+            session.feedback_summary,
+            session.main_issue?.issue_type,
+            session.main_issue?.issue_text,
+            session.main_issue?.recovery_rule,
+            session.next_goal?.goal_type,
+            session.next_goal?.goal_text,
+            session.next_goal?.rule,
+        ]);
+
+        if (historyCombination) {
+            return {
+                combinationId: historyCombination.id,
+                sourceLabel: "基于上次报告推荐",
+            };
+        }
+    }
+
+    return null;
+}
+
 function buildCombinationFocusIntent(
-    combination: { id: string; capability: string; role: string },
+    combination: CoreCombination,
 ): RetryFocusIntent {
     return {
         version: "sales_core_combination_v1",
@@ -85,6 +193,8 @@ export default function SalesTrainingPage() {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [salesScenarios, setSalesScenarios] = useState<ScenarioSummary[]>([]);
     const [salesPersonas, setSalesPersonas] = useState<SalesPersonaOption[]>([]);
+    const [latestRecommendation, setLatestRecommendation] = useState<Recommendation | null>(null);
+    const [salesHistory, setSalesHistory] = useState<HistorySessionSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [failedSections, setFailedSections] = useState<string[]>([]);
@@ -93,12 +203,16 @@ export default function SalesTrainingPage() {
         setIsLoading(true);
         setLoadError(null);
         setFailedSections([]);
+        setLatestRecommendation(null);
+        setSalesHistory([]);
 
         try {
-            const [agentResult, scenarioResult, personasResult] = await Promise.allSettled([
+            const [agentResult, scenarioResult, personasResult, recommendationResult, historyResult] = await Promise.allSettled([
                 api.training.getSalesAgents(),
                 api.scenarios.list("sales"),
                 api.scenarios.getSalesPersonas(),
+                api.dashboard.getRecommendation(),
+                api.user.getMyHistory({ page: 1, page_size: 5, scenario_type: "sales" }),
             ]);
 
             const failedSections: string[] = [];
@@ -120,6 +234,12 @@ export default function SalesTrainingPage() {
             } else {
                 setSalesPersonas([]);
                 failedSections.push("角色画像");
+            }
+            if (recommendationResult.status === "fulfilled") {
+                setLatestRecommendation(recommendationResult.value);
+            }
+            if (historyResult.status === "fulfilled") {
+                setSalesHistory(historyResult.value.sessions || []);
             }
 
             setFailedSections(failedSections);
@@ -143,8 +263,13 @@ export default function SalesTrainingPage() {
         router.push(`/agents/${agentId}`);
     };
 
-    const combinationCards = useMemo(() => (
-        CORE_COMBINATIONS.map((combination) => {
+    const personalizedCombination = useMemo(
+        () => resolvePersonalizedCombination(latestRecommendation, salesHistory),
+        [latestRecommendation, salesHistory],
+    );
+
+    const combinationCards = useMemo(() => {
+        const cards = CORE_COMBINATIONS.map((combination) => {
             const agent = resolveAgentForCapability(agents, combination.capability);
             const persona = resolvePersonaForRole(salesPersonas, combination.role);
             const focusIntent = buildCombinationFocusIntent(combination);
@@ -158,12 +283,26 @@ export default function SalesTrainingPage() {
                 href,
                 agentName: agent?.name || null,
                 personaName: persona?.name || null,
+                isPersonalized: personalizedCombination?.combinationId === combination.id,
+                sourceLabel: personalizedCombination?.combinationId === combination.id
+                    ? personalizedCombination.sourceLabel
+                    : null,
                 unavailableReason: agent
                     ? `管理员尚未配置「${combination.role}」角色`
                     : "管理员尚未发布销售智能体",
             };
-        })
-    ), [agents, salesPersonas]);
+        });
+
+        if (!personalizedCombination) {
+            return cards;
+        }
+
+        return [...cards].sort((left, right) => {
+            if (left.id === personalizedCombination.combinationId) return -1;
+            if (right.id === personalizedCombination.combinationId) return 1;
+            return 0;
+        });
+    }, [agents, personalizedCombination, salesPersonas]);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -245,9 +384,16 @@ export default function SalesTrainingPage() {
                                     : "cursor-not-allowed border-amber-200 bg-amber-50/60"
                             }`}
                         >
-                            <p className="text-[11px] text-slate-500 font-semibold">
-                                组合 {idx + 1}
-                            </p>
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-[11px] text-slate-500 font-semibold">
+                                    组合 {idx + 1}
+                                </p>
+                                {item.sourceLabel && (
+                                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">
+                                        {item.sourceLabel}
+                                    </span>
+                                )}
+                            </div>
                             <p className="text-sm font-bold text-slate-900 mt-1">
                                 {item.capability}
                             </p>
