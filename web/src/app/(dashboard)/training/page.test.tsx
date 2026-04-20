@@ -200,4 +200,29 @@ describe("TrainingCategoriesPage", () => {
         expect(screen.queryByText("99.0 分")).toBeNull();
     });
 
+
+    it("shows training categories while the ability map history is still loading", async () => {
+        getCategoriesMock.mockResolvedValueOnce([
+            {
+                id: "sales",
+                title: "销售能力训练",
+                description: "销售训练入口先出现。",
+                icon_key: "Mic",
+                color_theme: "bg-blue-50 text-blue-600",
+                agent_count: 2,
+                tags: ["销售"],
+                status: "active",
+            },
+        ]);
+        getMyHistoryMock.mockReturnValueOnce(new Promise(() => undefined));
+
+        render(<TrainingCategoriesPage />);
+
+        expect(await screen.findByText("销售能力训练")).toBeTruthy();
+        expect(screen.getByText("销售训练入口先出现。")).toBeTruthy();
+        expect(screen.getByText("能力地图加载中")).toBeTruthy();
+        expect(screen.getByText("训练入口已可使用；最近表现和待复练目标加载完成后会自动更新。")).toBeTruthy();
+        expect(screen.getByRole("link", { name: /销售能力训练/ }).getAttribute("href")).toBe("/training/sales");
+    });
+
 });

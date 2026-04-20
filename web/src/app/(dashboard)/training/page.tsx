@@ -169,6 +169,7 @@ export default function TrainingCategoriesPage() {
     const [categories, setCategories] = useState<TrainingCategory[]>([]);
     const [historySessions, setHistorySessions] = useState<HistorySessionSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isAbilityMapLoading, setIsAbilityMapLoading] = useState(true);
     const [isDegraded, setIsDegraded] = useState(false);
     const [isAbilityMapDegraded, setIsAbilityMapDegraded] = useState(false);
     const [reloadVersion, setReloadVersion] = useState(0);
@@ -178,43 +179,40 @@ export default function TrainingCategoriesPage() {
 
         const loadCategories = async () => {
             setIsLoading(true);
-            try {
-                const [categoryResult, historyResult] = await Promise.allSettled([
-                    api.training.getCategories(),
-                    api.user.getMyHistory({ page: 1, page_size: 50 }),
-                ]);
-                if (!cancelled) {
-                    if (categoryResult.status === "fulfilled") {
-                        setCategories(categoryResult.value.length ? categoryResult.value : FALLBACK_CATEGORIES);
-                        setIsDegraded(false);
-                    } else {
-                        setCategories(FALLBACK_CATEGORIES);
-                        setIsDegraded(true);
-                    }
+            setIsAbilityMapLoading(true);
 
-                    if (historyResult.status === "fulfilled") {
-                        setHistorySessions(historyResult.value.sessions || []);
-                        setIsAbilityMapDegraded(false);
-                    } else {
-                        setHistorySessions([]);
-                        setIsAbilityMapDegraded(true);
-                    }
-                }
-            } catch {
-                if (!cancelled) {
+            void api.training.getCategories()
+                .then((result) => {
+                    if (cancelled) return;
+                    setCategories(result.length ? result : FALLBACK_CATEGORIES);
+                    setIsDegraded(false);
+                })
+                .catch(() => {
+                    if (cancelled) return;
                     setCategories(FALLBACK_CATEGORIES);
-                    setHistorySessions([]);
                     setIsDegraded(true);
+                })
+                .finally(() => {
+                    if (!cancelled) setIsLoading(false);
+                });
+
+            void api.user.getMyHistory({ page: 1, page_size: 50 })
+                .then((result) => {
+                    if (cancelled) return;
+                    setHistorySessions(result.sessions || []);
+                    setIsAbilityMapDegraded(false);
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setHistorySessions([]);
                     setIsAbilityMapDegraded(true);
-                }
-            } finally {
-                if (!cancelled) {
-                    setIsLoading(false);
-                }
-            }
+                })
+                .finally(() => {
+                    if (!cancelled) setIsAbilityMapLoading(false);
+                });
         };
 
-        loadCategories();
+        void loadCategories();
 
         return () => {
             cancelled = true;
@@ -307,17 +305,17 @@ export default function TrainingCategoriesPage() {
                                               <div>
                                                   <p className="text-[11px] font-semibold text-slate-500">最近表现</p>
                                                   <p className="mt-1 text-lg font-black text-slate-900">
-                                                      {abilitySummary.recentScore === null ? "--" : `${abilitySummary.recentScore.toFixed(1)} 分`}
+                                                      {isAbilityMapLoading || abilitySummary.recentScore === null ? "--" : `${abilitySummary.recentScore.toFixed(1)} 分`}
                                                   </p>
                                               </div>
                                               <div>
                                                   <p className="text-[11px] font-semibold text-slate-500">完成次数</p>
-                                                  <p className="mt-1 text-lg font-black text-slate-900">{abilitySummary.completionCount}</p>
+                                                  <p className="mt-1 text-lg font-black text-slate-900">{isAbilityMapLoading ? "--" : abilitySummary.completionCount}</p>
                                               </div>
                                           </div>
                                           <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2">
-                                              <p className="text-xs font-bold text-slate-700">{abilitySummary.focusLabel}</p>
-                                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{abilitySummary.focusDetail}</p>
+                                              <p className="text-xs font-bold text-slate-700">{isAbilityMapLoading ? "能力地图加载中" : abilitySummary.focusLabel}</p>
+                                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{isAbilityMapLoading ? "训练入口已可使用；最近表现和待复练目标加载完成后会自动更新。" : abilitySummary.focusDetail}</p>
                                           </div>
                                           <p className="mt-2 text-[11px] text-slate-400">只统计 completed/evaluable 训练。</p>
                                       </div>

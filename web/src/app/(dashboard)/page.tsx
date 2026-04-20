@@ -4,7 +4,6 @@ import packageJson from "../../../package.json";
 import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { DashboardSkeleton } from "@/components/dashboard-skeleton";
 import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { MobileQuickActions } from "@/components/layout/mobile-quick-actions";
 import { SwipeableItem } from "@/components/ui/swipeable-item";
@@ -292,7 +291,9 @@ export default function HomePage() {
     const versionBadge = getVersionBadge();
     const [isWeeklyStatsOpen, setIsWeeklyStatsOpen] = useState(false);
 
-    const [isLoading, setIsLoading] = useState(true);
+    const [isStatsLoading, setIsStatsLoading] = useState(true);
+    const [isRecommendationLoading, setIsRecommendationLoading] = useState(true);
+    const [isHistoryLoading, setIsHistoryLoading] = useState(true);
     const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
     const [recommendation, setRecommendation] = useState<Recommendation>(DEFAULT_RECOMMENDATION);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
@@ -306,53 +307,92 @@ export default function HomePage() {
     };
 
     useEffect(() => {
+        let cancelled = false;
+        const markSection = (section: string, degraded: boolean) => {
+            setDashboardDegradedSections((current) => {
+                if (degraded) {
+                    return current.includes(section) ? current : [...current, section];
+                }
+                return current.filter((item) => item !== section);
+            });
+        };
+
         const loadDashboardData = async () => {
-            setIsLoading(true);
-            const [statsResult, recResult, historyResult, interventionResult, momentumHistoryResult] = await Promise.allSettled([
-                api.dashboard.getStats(),
-                api.dashboard.getRecommendation(),
-                api.dashboard.getHistory(30),
-                api.user.getOpenIntervention(),
-                api.user.getMyHistory({ page: 1, page_size: 50 }),
-            ]);
+            await Promise.resolve();
+            if (cancelled) return;
 
-            const degradedSections: string[] = [];
+            setDashboardDegradedSections([]);
+            setIsStatsLoading(true);
+            setIsRecommendationLoading(true);
+            setIsHistoryLoading(true);
 
-            if (statsResult.status === "fulfilled") {
-                setStats(statsResult.value);
-            } else {
-                setStats(DEFAULT_STATS);
-                degradedSections.push("训练统计");
-            }
+            void api.dashboard.getStats()
+                .then((value) => {
+                    if (cancelled) return;
+                    setStats(value);
+                    markSection("训练统计", false);
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setStats(DEFAULT_STATS);
+                    markSection("训练统计", true);
+                })
+                .finally(() => {
+                    if (!cancelled) setIsStatsLoading(false);
+                });
 
-            if (recResult.status === "fulfilled") {
-                setRecommendation(recResult.value);
-            } else {
-                setRecommendation(DEFAULT_RECOMMENDATION);
-                degradedSections.push("推荐入口");
-            }
+            void api.dashboard.getRecommendation()
+                .then((value) => {
+                    if (cancelled) return;
+                    setRecommendation(value);
+                    markSection("推荐入口", false);
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setRecommendation(DEFAULT_RECOMMENDATION);
+                    markSection("推荐入口", true);
+                })
+                .finally(() => {
+                    if (!cancelled) setIsRecommendationLoading(false);
+                });
 
-            if (historyResult.status === "fulfilled") {
-                setHistoryItems(historyResult.value.slice(0, 5));
-            } else {
-                setHistoryItems([]);
-                degradedSections.push("最近记录");
-            }
+            void api.dashboard.getHistory(30)
+                .then((value) => {
+                    if (cancelled) return;
+                    setHistoryItems(value.slice(0, 5));
+                    markSection("最近记录", false);
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setHistoryItems([]);
+                    markSection("最近记录", true);
+                })
+                .finally(() => {
+                    if (!cancelled) setIsHistoryLoading(false);
+                });
 
-            setOpenIntervention(interventionResult.status === "fulfilled" ? interventionResult.value : null);
-            if (momentumHistoryResult.status === "fulfilled") {
-                setMomentumSessions(momentumHistoryResult.value.sessions.map(mapHistorySummaryToMomentumSource));
-            } else if (historyResult.status === "fulfilled") {
-                setMomentumSessions(historyResult.value);
-            } else {
-                setMomentumSessions([]);
-            }
+            void api.user.getOpenIntervention()
+                .then((value) => {
+                    if (!cancelled) setOpenIntervention(value);
+                })
+                .catch(() => {
+                    if (!cancelled) setOpenIntervention(null);
+                });
 
-            setDashboardDegradedSections(degradedSections);
-            setIsLoading(false);
+            void api.user.getMyHistory({ page: 1, page_size: 50 })
+                .then((value) => {
+                    if (!cancelled) setMomentumSessions(value.sessions.map(mapHistorySummaryToMomentumSource));
+                })
+                .catch(() => {
+                    if (!cancelled) setMomentumSessions([]);
+                });
         };
 
         void loadDashboardData();
+
+        return () => {
+            cancelled = true;
+        };
     }, [dashboardReloadVersion]);
 
     const resolvedHistoryItems = historyItems.map((item) => ({
@@ -381,6 +421,8 @@ export default function HomePage() {
     const isStatsDegraded = dashboardDegradedSections.includes("训练统计");
     const isRecommendationDegraded = dashboardDegradedSections.includes("推荐入口");
     const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
+    const isStatsUnavailable = isStatsLoading || isStatsDegraded;
+    const isRecommendationUnavailable = isRecommendationLoading || isRecommendationDegraded;
     const learnerMomentum = buildLearnerMomentum(momentumSessions);
     const weeklyProgressPercent = Math.min(100, Math.round((learnerMomentum.weeklyEligibleSessions / learnerMomentum.weeklyGoal) * 100));
     const momentumAchievementCopy = learnerMomentum.weeklyEligibleSessions >= learnerMomentum.weeklyGoal
@@ -388,18 +430,18 @@ export default function HomePage() {
         : learnerMomentum.streakDays >= 3
             ? "连续练习节奏稳定"
             : "完成 3 次可评估训练点亮本周轻成就";
-    const displayRecommendation: Recommendation = isRecommendationDegraded
+    const displayRecommendation: Recommendation = isRecommendationUnavailable
         ? {
-            title: "今日复练任务暂不可用",
-            reason: "推荐接口暂时无法读取，不代表今天没有复练任务；可先进入训练大厅或稍后重试。",
+            title: isRecommendationLoading ? "今日复练任务加载中" : "今日复练任务暂不可用",
+            reason: isRecommendationLoading ? "推荐入口仍在加载；你可以先进入训练大厅继续练习。" : "推荐接口暂时无法读取，不代表今天没有复练任务；可先进入训练大厅或稍后重试。",
             action_label: "去训练大厅",
             target_path: "/training",
         }
         : recommendation;
-    const recommendationSourceCopy = isRecommendationDegraded
-        ? "推荐状态：接口读取失败，未用默认训练入口伪装成真实推荐。"
+    const recommendationSourceCopy = isRecommendationUnavailable
+        ? (isRecommendationLoading ? "推荐状态：加载中，主训练入口仍可使用。" : "推荐状态：接口读取失败，未用默认训练入口伪装成真实推荐。")
         : getRecommendationSourceCopy(displayRecommendation);
-    const shouldShowTodayRetryCard = !isRecommendationDegraded && isTodayRetryRecommendation(displayRecommendation);
+    const shouldShowTodayRetryCard = !isRecommendationUnavailable && isTodayRetryRecommendation(displayRecommendation);
     const suggestedDurationCopy = formatSuggestedDuration(displayRecommendation);
     const todayRetryDetails = [
         displayRecommendation.due_reason ? `到期原因：${displayRecommendation.due_reason}` : null,
@@ -468,10 +510,6 @@ export default function HomePage() {
         },
     ];
 
-    if (isLoading) {
-        return <DashboardSkeleton />;
-    }
-
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
             <header className="flex items-end justify-between px-2">
@@ -528,7 +566,7 @@ export default function HomePage() {
                                 <div className="flex flex-col items-end">
                                     <span className="text-[10px] uppercase font-bold text-slate-400 group-hover:text-blue-500 transition-colors">本周练习</span>
                                     <span className="text-base font-bold text-slate-900">
-                                        {isStatsDegraded ? "统计暂不可用" : `${(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)} 小时`}
+                                        {isStatsUnavailable ? (isStatsLoading ? "统计加载中" : "统计暂不可用") : `${(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)} 小时`}
                                     </span>
                                 </div>
                                 <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
@@ -539,9 +577,9 @@ export default function HomePage() {
                         <DialogContent className="max-w-2xl">
                             <DialogHeader>
                                 <DialogTitle>本周训练报告</DialogTitle>
-                                <DialogDescription>{isStatsDegraded ? "训练统计接口暂时无法读取，请稍后重试。" : "您的训练状态非常棒！"}</DialogDescription>
+                                <DialogDescription>{isStatsUnavailable ? (isStatsLoading ? "训练统计仍在加载，其他入口可先使用。" : "训练统计接口暂时无法读取，请稍后重试。") : "您的训练状态非常棒！"}</DialogDescription>
                             </DialogHeader>
-                            {isStatsDegraded ? (
+                            {isStatsUnavailable ? (
                                 <div className="my-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                                     训练统计模块失败时不展示 0 小时、0 场或 0% 复练率，避免把接口失败误读成真实空数据。
                                 </div>
@@ -738,7 +776,7 @@ export default function HomePage() {
                 </section>
             )}
 
-            {isStatsDegraded ? (
+            {isStatsUnavailable ? (
                 <section>
                     <GlassCard className="p-5 border border-amber-200 bg-amber-50/80">
                         <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">训练统计暂不可用</p>
@@ -812,11 +850,11 @@ export default function HomePage() {
                         <TrendingUp className="w-8 h-8" />
                     </div>
                     <div>
-                        <div className="text-3xl font-black text-slate-900">{isStatsDegraded ? "暂不可用" : (stats.last_session?.score ?? 0)}</div>
+                        <div className="text-3xl font-black text-slate-900">{isStatsUnavailable ? (isStatsLoading ? "加载中" : "暂不可用") : (stats.last_session?.score ?? 0)}</div>
                         <div className="text-xs font-bold text-slate-400 uppercase mt-1">上次得分</div>
                     </div>
                     <p className="text-xs text-slate-500 px-4">
-                        {isStatsDegraded ? "训练统计接口失败时不展示默认 0 分，避免误导为真实成绩。" : formatScoreBasisCopy(stats)}
+                        {isStatsUnavailable ? (isStatsLoading ? "训练统计仍在加载，暂不展示默认 0 分。" : "训练统计接口失败时不展示默认 0 分，避免误导为真实成绩。") : formatScoreBasisCopy(stats)}
                     </p>
                 </GlassCard>
             </section>
@@ -841,8 +879,8 @@ export default function HomePage() {
                     {historyItems.length === 0 ? (
                         <div className="col-span-full">
                             <EmptyState
-                                title={isHistoryDegraded ? "最近记录暂不可用" : "暂无历史记录"}
-                                description={isHistoryDegraded ? "训练历史接口暂时无法读取，不代表你没有训练记录；可进入历史页重试查看。" : "开始您的第一次 AI 角色扮演，记录将显示在这里。"}
+                                title={isHistoryLoading ? "最近记录加载中" : isHistoryDegraded ? "最近记录暂不可用" : "暂无历史记录"}
+                                description={isHistoryLoading ? "最近记录仍在加载；你可以先使用训练入口继续练习。" : isHistoryDegraded ? "训练历史接口暂时无法读取，不代表你没有训练记录；可进入历史页重试查看。" : "开始您的第一次 AI 角色扮演，记录将显示在这里。"}
                                 actionLabel={isHistoryDegraded ? "去历史页重试" : "开始训练"}
                                 onAction={() => router.push(isHistoryDegraded ? "/history" : "/training")}
                             />

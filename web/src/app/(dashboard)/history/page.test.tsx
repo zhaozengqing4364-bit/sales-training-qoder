@@ -666,4 +666,46 @@ describe("HistoryPage", () => {
         );
         expect(screen.queryByText(/按问题再练/)).toBeNull();
     });
+
+    it("renders the history list while statistics and trends are still loading", async () => {
+        getMyHistoryMock.mockResolvedValueOnce({
+            sessions: [
+                {
+                    session_id: "session-progressive",
+                    scenario_name: "销售渐进加载演练",
+                    scenario_type: "sales",
+                    persona_name: "采购经理",
+                    agent_name: "销售教练",
+                    start_time: "2026-03-23T00:00:00Z",
+                    duration_seconds: 180,
+                    overall_score: 82,
+                    report_status: "completed",
+                    report_generated_at: "2026-03-23T00:10:00Z",
+                    status: "completed",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    evidence_completeness: { complete: true },
+                    effectiveness_snapshot: null,
+                    feedback_summary: "先保留历史列表，再等统计快照。",
+                    stage_summary: [],
+                    main_issue: null,
+                    next_goal: null,
+                },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 50,
+            total_pages: 1,
+        });
+        getHistoryStatisticsMock.mockReturnValueOnce(new Promise(() => undefined));
+        getHistoryTrendsMock.mockReturnValueOnce(new Promise(() => undefined));
+
+        render(<HistoryPage />);
+
+        expect(await screen.findByText("销售渐进加载演练")).toBeTruthy();
+        expect(screen.getByText("先保留历史列表，再等统计快照。"));
+        expect(screen.queryByText("正在加载训练历史...")).toBeNull();
+        expect(screen.getAllByText("--").length).toBeGreaterThan(0);
+    });
+
 });

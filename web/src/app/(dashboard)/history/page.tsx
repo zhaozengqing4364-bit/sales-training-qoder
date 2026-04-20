@@ -109,79 +109,79 @@ export default function HistoryPage() {
     const [trends, setTrends] = useState<HistoryTrendPoint[]>([]);
     const [analyticsSnapshotCount, setAnalyticsSnapshotCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
     const [historyLoadError, setHistoryLoadError] = useState<string | null>(null);
     const [analyticsHint, setAnalyticsHint] = useState<string | null>(null);
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
+        setIsAnalyticsLoading(true);
         setHistoryLoadError(null);
         setAnalyticsHint(null);
 
-        const [historyResult, statsResult, trendsResult] = await Promise.allSettled([
-            api.user.getMyHistory({
-                page: 1,
-                page_size: 50,
-                scenario_type: scenarioFilter === "all" ? undefined : scenarioFilter,
-            }),
+        const historyPromise = api.user.getMyHistory({
+            page: 1,
+            page_size: 50,
+            scenario_type: scenarioFilter === "all" ? undefined : scenarioFilter,
+        });
+
+        void historyPromise
+            .then((value) => {
+                const sessions = Array.isArray(value?.sessions) ? value.sessions : [];
+                setHistory(sessions);
+                debug.log("[History] Loaded unified evidence list", {
+                    scenarioFilter,
+                    sessionCount: sessions.length,
+                    evaluableCount: sessions.filter((item) => item.evaluable === true).length,
+                    notEvaluableCount: sessions.filter((item) => item.evaluable === false).length,
+                });
+            })
+            .catch((error) => {
+                setHistory([]);
+                setHistoryLoadError(`统一训练证据加载失败：${getApiErrorMessage(error)}`);
+                debug.error("[History] Unified evidence list load failed", {
+                    scenarioFilter,
+                    error,
+                });
+            })
+            .finally(() => setIsLoading(false));
+
+        void Promise.allSettled([
             api.dashboard.getHistoryStatistics(),
             api.dashboard.getHistoryTrends(30),
-        ]);
+        ]).then(([statsResult, trendsResult]) => {
+            const degradedSections: string[] = [];
 
-        let historyAvailable = false;
+            if (statsResult.status === "fulfilled") {
+                setStats(statsResult.value);
+            } else {
+                setStats(DEFAULT_STATS);
+                degradedSections.push("统计看板");
+            }
 
-        if (historyResult.status === "fulfilled") {
-            const sessions = Array.isArray(historyResult.value?.sessions)
-                ? historyResult.value.sessions
-                : [];
-            setHistory(sessions);
-            historyAvailable = true;
-            debug.log("[History] Loaded unified evidence list", {
-                scenarioFilter,
-                sessionCount: sessions.length,
-                evaluableCount: sessions.filter((item) => item.evaluable === true).length,
-                notEvaluableCount: sessions.filter((item) => item.evaluable === false).length,
-            });
-        } else {
-            setHistory([]);
-            setHistoryLoadError(`统一训练证据加载失败：${getApiErrorMessage(historyResult.reason)}`);
-            debug.error("[History] Unified evidence list load failed", {
-                scenarioFilter,
-                error: historyResult.reason,
-            });
-        }
+            if (trendsResult.status === "fulfilled") {
+                const trendPoints = Array.isArray(trendsResult.value) ? trendsResult.value : [];
+                setTrends(trendPoints);
+                setAnalyticsSnapshotCount(trendPoints.length);
+            } else {
+                setTrends([]);
+                degradedSections.push("趋势快照");
+                setAnalyticsSnapshotCount(0);
+            }
 
-        const degradedSections: string[] = [];
-
-        if (statsResult.status === "fulfilled") {
-            setStats(statsResult.value);
-        } else {
-            setStats(DEFAULT_STATS);
-            degradedSections.push("统计看板");
-        }
-
-        if (trendsResult.status === "fulfilled") {
-            const trendPoints = Array.isArray(trendsResult.value) ? trendsResult.value : [];
-            setTrends(trendPoints);
-            setAnalyticsSnapshotCount(trendPoints.length);
-        } else {
-            setTrends([]);
-            degradedSections.push("趋势快照");
-            setAnalyticsSnapshotCount(0);
-        }
-
-        if (historyAvailable && degradedSections.length > 0) {
-            setAnalyticsHint(`${degradedSections.join("、")}暂不可用，训练列表仍基于统一训练证据展示。`);
-            debug.warn("[History] Analytics snapshot unavailable; keeping unified evidence list", {
-                scenarioFilter,
-                degradedSections,
-            });
-        }
-
-        if (historyAvailable && degradedSections.length === 0 && historyResult.status === "fulfilled") {
-            setAnalyticsSnapshotCount((current) => current || historyResult.value.sessions.length);
-        }
-
-        setIsLoading(false);
+            if (degradedSections.length > 0) {
+                setAnalyticsHint(`${degradedSections.join("、")}暂不可用，训练列表仍基于统一训练证据展示。`);
+                debug.warn("[History] Analytics snapshot unavailable; keeping unified evidence list", {
+                    scenarioFilter,
+                    degradedSections,
+                });
+            } else {
+                setAnalyticsHint(null);
+                void historyPromise.then((value) => {
+                    setAnalyticsSnapshotCount((current) => current || value.sessions.length);
+                }).catch(() => undefined);
+            }
+        }).finally(() => setIsAnalyticsLoading(false));
     }, [scenarioFilter]);
 
     useEffect(() => {
@@ -207,6 +207,7 @@ export default function HistoryPage() {
         () => buildHistoryIssueReviewGroups(history),
         [history],
     );
+    const isAnalyticsUnavailable = isAnalyticsLoading || Boolean(analyticsHint);
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -337,21 +338,21 @@ export default function HistoryPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <GlassCard className="p-4">
                     <div className="text-xs text-slate-500">完成练习</div>
-                    <div className="text-2xl font-black text-slate-900 mt-1">{stats.total_sessions}</div>
+                    <div className="text-2xl font-black text-slate-900 mt-1">{isAnalyticsUnavailable ? "--" : stats.total_sessions}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <div className="text-xs text-slate-500">平均得分</div>
-                    <div className="text-2xl font-black text-blue-600 mt-1">{Math.round(stats.average_score || 0)}</div>
+                    <div className="text-2xl font-black text-blue-600 mt-1">{isAnalyticsUnavailable ? "--" : Math.round(stats.average_score || 0)}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <div className="text-xs text-slate-500">历史最好</div>
-                    <div className="text-2xl font-black text-emerald-600 mt-1">{Math.round(stats.best_score || 0)}</div>
+                    <div className="text-2xl font-black text-emerald-600 mt-1">{isAnalyticsUnavailable ? "--" : Math.round(stats.best_score || 0)}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <div className="text-xs text-slate-500">总时长（小时）</div>
                     <div className="text-2xl font-black text-slate-900 mt-1 flex items-center gap-2">
-                        {totalHours}
-                        {trendDelta !== null && (
+                        {isAnalyticsUnavailable ? "--" : totalHours}
+                        {!isAnalyticsUnavailable && trendDelta !== null && (
                             <Badge variant={trendDelta >= 0 ? "green" : "red"} className="text-[10px]">
                                 <TrendingUp className="w-3 h-3 mr-1" />
                                 {trendDelta >= 0 ? "+" : ""}

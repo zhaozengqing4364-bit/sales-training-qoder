@@ -656,4 +656,27 @@ describe("HomePage dashboard header", () => {
         expect(screen.getByText("本周目标进度只纳入 completed/evaluable 训练，避免把未完成或证据不足记录包装成成就。")).toBeTruthy();
     });
 
+
+    it("renders the main training CTA while stats and history are still loading", async () => {
+        getStatsMock.mockReturnValueOnce(new Promise(() => undefined));
+        getHistoryMock.mockReturnValueOnce(new Promise(() => undefined));
+        getMyHistoryMock.mockReturnValueOnce(new Promise(() => undefined));
+        getRecommendationMock.mockResolvedValueOnce({
+            title: "继续价值表达训练",
+            reason: "先把主训练入口展示出来，统计和历史稍后更新。",
+            action_label: "继续训练",
+            target_path: "/training/sales",
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.queryByText("loading dashboard")).toBeNull();
+        expect(screen.getAllByText("继续价值表达训练").length).toBeGreaterThan(0);
+        expect(screen.getAllByRole("link", { name: /继续训练/ }).some((link) => link.getAttribute("href") === "/training/sales")).toBe(true);
+        expect(screen.getByText("统计加载中")).toBeTruthy();
+        expect(screen.getByText("最近记录加载中")).toBeTruthy();
+        expect(screen.getByText("最近记录仍在加载；你可以先使用训练入口继续练习。")).toBeTruthy();
+    });
+
 });
