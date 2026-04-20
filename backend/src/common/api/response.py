@@ -1,5 +1,4 @@
-"""
-Unified API Response Helpers
+"""Unified API Response Helpers.
 
 Provides consistent response formatting across all API endpoints.
 Follows the Result[T] pattern for error handling.
@@ -19,7 +18,17 @@ from typing import Any
 from common.monitoring.logger import get_trace_id
 
 
-def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
+def _jsonable_data(data: Any) -> Any:
+    if hasattr(data, "model_dump"):
+        return data.model_dump()
+    return data
+
+
+def success_response(
+    data: Any,
+    trace_id: str | None = None,
+    message: str | None = None,
+) -> dict[str, Any]:
     """
     Create unified success response.
 
@@ -30,17 +39,20 @@ def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
     Returns:
         Dict with success=True and data
     """
-    return {
+    payload = {
         "success": True,
-        "data": data,
-        "trace_id": trace_id or get_trace_id()
+        "data": _jsonable_data(data),
+        "trace_id": trace_id or get_trace_id(),
     }
+    if message is not None:
+        payload["message"] = message
+    return payload
 
 
 def error_response(
     error_code: str,
     message: str | None = None,
-    trace_id: str | None = None
+    trace_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Create unified error response.
@@ -57,9 +69,10 @@ def error_response(
     """
     return {
         "success": False,
+        "data": None,
         "error": error_code,
         "message": message or error_code,
-        "trace_id": trace_id or get_trace_id()
+        "trace_id": trace_id or get_trace_id(),
     }
 
 

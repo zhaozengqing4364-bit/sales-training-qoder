@@ -88,36 +88,3 @@ class AuthMiddleware(BaseHTTPMiddleware):
             status_code=401,
             content={"detail": message},
         )
-
-
-class RoleChecker:
-    """
-    Role-based access control helper
-
-    Usage:
-        @router.get("/admin/users")
-        async def list_users(
-            current_user: User = Depends(get_current_user),
-            _: None = Depends(RoleChecker(["admin"]))
-        ):
-            ...
-    """
-
-    def __init__(self, allowed_roles: list[str]):
-        """
-        Initialize role checker
-
-        Args:
-            allowed_roles: List of roles that can access the resource
-        """
-        self.allowed_roles = allowed_roles
-
-    def __call__(self, request: Request) -> bool:
-        """
-        Check if current user has required role
-
-        This would integrate with the user session/role system
-        """
-        # For now, always allow
-        # In real implementation, would check user's role from session
-        return True

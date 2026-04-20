@@ -22,11 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from common.analytics.history_service import PROJECTION_SCORE_BASIS, history_service
+from common.api.response import error_response, success_response
 from common.auth.service import get_current_user
 from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, User
 from common.db.session import get_db
-from common.monitoring.logger import get_logger, get_trace_id
+from common.monitoring.logger import get_logger
 from common.services.practice_session_service import PracticeRetryEntryAssembler
 
 logger = get_logger(__name__)
@@ -72,6 +73,10 @@ class Recommendation(BaseModel):
     scenario_type: str | None = None
     source_session_id: str | None = None
     focus_page: int | None = None
+    due_reason: str | None = None
+    focus: str | None = None
+    suggested_duration_minutes: int | None = None
+    is_due_today: bool = True
 
 
 def _encode_focus_intent(focus_intent: dict | None) -> str | None:
@@ -138,7 +143,7 @@ def _build_next_goal_recommendation(session: PracticeSession) -> Recommendation 
         reason = f"{goal_text} 上次主问题：{issue_text}"
 
     return Recommendation(
-        title="按上次主问题再练一轮",
+        title="今日复练：按上次主问题再练一轮",
         reason=reason,
         action_label="按目标再练一轮",
         target_path=target_path,
@@ -146,6 +151,10 @@ def _build_next_goal_recommendation(session: PracticeSession) -> Recommendation 
         recommendation_kind="sales_retry",
         scenario_type="sales",
         source_session_id=str(session.session_id),
+        due_reason="上次报告已生成可复练的主问题与下一轮目标。",
+        focus=goal_text,
+        suggested_duration_minutes=12,
+        is_due_today=True,
     )
 
 
@@ -203,7 +212,7 @@ def _build_presentation_page_recommendation(
         reason = f"第 {page_number} 页集中出现 {issue_count} 个表达或内容问题，建议先复盘这一页。"
 
     return Recommendation(
-        title=f"补练 PPT 第 {page_number} 页",
+        title=f"今日复练：补练 PPT 第 {page_number} 页",
         reason=reason,
         action_label="查看逐页复练任务",
         target_path=(
@@ -214,28 +223,11 @@ def _build_presentation_page_recommendation(
         scenario_type="presentation",
         source_session_id=str(session.session_id),
         focus_page=page_number,
+        due_reason="上次 PPT 报告存在页级缺口，适合今天先复盘这一页。",
+        focus=f"PPT 第 {page_number} 页",
+        suggested_duration_minutes=10,
+        is_due_today=True,
     )
-
-
-# ========== Helper Functions ==========
-
-def success_response(data, trace_id: str = None):
-    """Create unified success response"""
-    return {
-        "success": True,
-        "data": data if isinstance(data, dict) else data.model_dump() if hasattr(data, 'model_dump') else data,
-        "trace_id": trace_id or get_trace_id()
-    }
-
-
-def error_response(error_code: str, message: str = None, trace_id: str = None):
-    """Create unified error response"""
-    return {
-        "success": False,
-        "error": error_code,
-        "message": message or error_code,
-        "trace_id": trace_id or get_trace_id()
-    }
 
 
 def calculate_trend_direction(current: float, previous: float) -> Literal["up", "down", "flat"]:
