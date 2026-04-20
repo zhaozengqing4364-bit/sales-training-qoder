@@ -10,6 +10,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -70,14 +71,14 @@ class LeaderboardService:
     - Update leaderboard entries in database
     """
 
-    def __init__(self):
-        self.time_periods = {
+    def __init__(self) -> None:
+        self.time_periods: dict[str, timedelta] = {
             "daily": timedelta(days=1),
             "weekly": timedelta(weeks=1),
             "monthly": timedelta(days=30),
             "all_time": timedelta(days=365 * 100),  # Effectively forever
         }
-        self.time_period_aliases = {
+        self.time_period_aliases: dict[str, str] = {
             "day": "daily",
             "daily": "daily",
             "week": "weekly",
@@ -87,12 +88,12 @@ class LeaderboardService:
             "all": "all_time",
             "all_time": "all_time",
         }
-        self.scenario_aliases = {
+        self.scenario_aliases: dict[str, str] = {
             "sales": "sales",
             "sales_bot": "sales",
             "presentation": "presentation",
         }
-        self.leaderboard_modes = {"score", "improvement", "issue_type"}
+        self.leaderboard_modes: set[str] = {"score", "improvement", "issue_type"}
 
     def _normalize_time_period(self, time_period: str | None) -> str:
         """Normalize time-period aliases to canonical values."""
@@ -116,19 +117,19 @@ class LeaderboardService:
         return normalized_mode
 
     @staticmethod
-    def _evaluable_filter():
+    def _evaluable_filter() -> Any:
         return (
             PracticeSession.effectiveness_snapshot["evaluable"].as_boolean().is_(True)
         )
 
     @staticmethod
-    def _not_evaluable_filter():
+    def _not_evaluable_filter() -> Any:
         return (
             PracticeSession.effectiveness_snapshot["evaluable"].as_boolean().is_(False)
         )
 
     @staticmethod
-    def _score_expr():
+    def _score_expr() -> Any:
         return (
             PracticeSession.logic_score
             + PracticeSession.accuracy_score
@@ -136,7 +137,7 @@ class LeaderboardService:
         ) / 3.0
 
     @staticmethod
-    def _score_fields_present_filter():
+    def _score_fields_present_filter() -> Any:
         return (
             (PracticeSession.logic_score.isnot(None))
             & (PracticeSession.accuracy_score.isnot(None))
@@ -144,12 +145,12 @@ class LeaderboardService:
         )
 
     @staticmethod
-    def _issue_type_expr():
+    def _issue_type_expr() -> Any:
         return PracticeSession.effectiveness_snapshot["main_issue"][
             "issue_type"
         ].as_string()
 
-    def _base_qualified_filters(self, cutoff_time: datetime):
+    def _base_qualified_filters(self, cutoff_time: datetime) -> tuple[Any, ...]:
         return (
             PracticeSession.start_time >= cutoff_time,
             PracticeSession.status == "completed",
