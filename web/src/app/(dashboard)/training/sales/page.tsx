@@ -166,7 +166,7 @@ export default function SalesTrainingPage() {
                 <Button 
                     variant="ghost" 
                     className="w-fit pl-0 text-slate-500 hover:text-slate-900 hover:bg-transparent gap-2"
-                    onClick={() => router.back()}
+                    onClick={() => router.push("/training")}
                 >
                     <ArrowLeft className="w-4 h-4" />
                     返回训练大厅
@@ -269,7 +269,7 @@ export default function SalesTrainingPage() {
                     Array.from({ length: 3 }).map((_, i) => (
                         <div key={i} className="h-64 rounded-3xl bg-white/50 animate-pulse border border-white/60" />
                     ))
-                ) : (
+                ) : agents.length > 0 ? (
                     agents.map((agent) => (
                         <AgentCard
                             key={agent.id}
@@ -286,6 +286,30 @@ export default function SalesTrainingPage() {
                             onClick={() => handleAgentClick(agent.id)}
                         />
                     ))
+                ) : (
+                    <div className="col-span-full rounded-3xl border border-slate-100 bg-white/70 p-8 text-center">
+                        <h2 className="text-lg font-bold text-slate-900">
+                            {loadError ? "销售训练入口加载不完整" : "暂无可用销售智能体"}
+                        </h2>
+                        <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
+                            {loadError
+                                ? "部分训练数据未加载成功，页面不会把失败伪装成空列表。请重试，或返回训练大厅选择其他训练模式。"
+                                : "当前没有发布中的销售智能体；请联系管理员发布智能体后再开始销售对练。"}
+                        </p>
+                        <div className="mt-4 flex justify-center gap-3">
+                            {loadError && (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        void loadSalesTrainingData();
+                                    }}
+                                >
+                                    重试销售入口
+                                </Button>
+                            )}
+                            <Button onClick={() => router.push("/training")}>返回训练大厅</Button>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>
