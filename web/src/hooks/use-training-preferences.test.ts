@@ -5,6 +5,8 @@ import {
     DEFAULT_TRAINING_PREFERENCES,
     TRAINING_PREFERENCES_STORAGE_KEY,
     normalizeTrainingPreferences,
+    mergeTrainingPreferences,
+    normalizeRemoteTrainingPreferences,
     persistTrainingPreferences,
     readTrainingPreferences,
     useTrainingPreferences,
@@ -26,11 +28,14 @@ describe("useTrainingPreferences", () => {
             agentId: " agent-1 ",
             personaId: "persona-1",
             presentationId: "ppt-1",
+            updatedAt: "2026-04-20T10:00:00.000Z",
         })).toEqual({
             voiceMode: "legacy",
             agentId: "agent-1",
             personaId: "persona-1",
             presentationId: "ppt-1",
+            updatedAt: "2026-04-20T10:00:00.000Z",
+            source: "default",
         });
     });
 
@@ -38,6 +43,67 @@ describe("useTrainingPreferences", () => {
         localStorage.setItem(TRAINING_PREFERENCES_STORAGE_KEY, "not-json");
 
         expect(readTrainingPreferences()).toEqual(DEFAULT_TRAINING_PREFERENCES);
+    });
+
+    it("normalizes remote preferences separately from local metadata", () => {
+        expect(normalizeRemoteTrainingPreferences(null)).toBeNull();
+        expect(normalizeRemoteTrainingPreferences({
+            voiceMode: "legacy",
+            agentId: "agent-remote",
+            personaId: "persona-remote",
+            presentationId: "ppt-remote",
+            updatedAt: "2026-04-20T10:00:00.000Z",
+        })).toEqual({
+            voiceMode: "legacy",
+            agentId: "agent-remote",
+            personaId: "persona-remote",
+            presentationId: "ppt-remote",
+            updatedAt: "2026-04-20T10:00:00.000Z",
+            source: "remote",
+        });
+    });
+
+    it("merges remote and local preferences by updatedAt while preserving fallback semantics", () => {
+        const olderLocal = {
+            voiceMode: "legacy",
+            agentId: "agent-local",
+            personaId: "persona-local",
+            presentationId: null,
+            updatedAt: "2026-04-20T09:00:00.000Z",
+        };
+        const newerRemote = {
+            voiceMode: "stepfun_realtime",
+            agentId: "agent-remote",
+            personaId: "persona-remote",
+            presentationId: "ppt-remote",
+            updatedAt: "2026-04-20T10:00:00.000Z",
+        };
+
+        expect(mergeTrainingPreferences({ remote: newerRemote, local: olderLocal })).toEqual({
+            voiceMode: "stepfun_realtime",
+            agentId: "agent-remote",
+            personaId: "persona-remote",
+            presentationId: "ppt-remote",
+            updatedAt: "2026-04-20T10:00:00.000Z",
+            source: "remote",
+        });
+        expect(mergeTrainingPreferences({ remote: olderLocal, local: newerRemote })).toEqual({
+            voiceMode: "stepfun_realtime",
+            agentId: "agent-remote",
+            personaId: "persona-remote",
+            presentationId: "ppt-remote",
+            updatedAt: "2026-04-20T10:00:00.000Z",
+            source: "local",
+        });
+        expect(mergeTrainingPreferences({ remote: null, local: newerRemote })).toEqual({
+            voiceMode: "stepfun_realtime",
+            agentId: "agent-remote",
+            personaId: "persona-remote",
+            presentationId: "ppt-remote",
+            updatedAt: "2026-04-20T10:00:00.000Z",
+            source: "local",
+        });
+        expect(mergeTrainingPreferences({ remote: {}, local: {} })).toEqual(DEFAULT_TRAINING_PREFERENCES);
     });
 
     it("persists a merged preference patch", () => {
@@ -49,7 +115,10 @@ describe("useTrainingPreferences", () => {
             personaId: "persona-1",
             presentationId: "ppt-1",
             voiceMode: "legacy",
+            updatedAt: expect.any(String),
+            source: "local",
         });
+        expect(Date.parse(saved.updatedAt || "")).not.toBeNaN();
         expect(readTrainingPreferences()).toEqual(saved);
     });
 
@@ -64,9 +133,12 @@ describe("useTrainingPreferences", () => {
         };
 
         expect(readTrainingPreferences(throwingStorage)).toEqual(DEFAULT_TRAINING_PREFERENCES);
-        expect(persistTrainingPreferences({ voiceMode: "legacy" }, throwingStorage)).toEqual({
+        const saved = persistTrainingPreferences({ voiceMode: "legacy" }, throwingStorage);
+        expect(saved).toEqual({
             ...DEFAULT_TRAINING_PREFERENCES,
             voiceMode: "legacy",
+            updatedAt: expect.any(String),
+            source: "local",
         });
     });
 
@@ -85,6 +157,8 @@ describe("useTrainingPreferences", () => {
             agentId: "agent-1",
             personaId: "persona-1",
             presentationId: null,
+            updatedAt: null,
+            source: "local",
         });
 
         act(() => {
@@ -96,6 +170,8 @@ describe("useTrainingPreferences", () => {
             agentId: "agent-1",
             personaId: "persona-2",
             presentationId: "ppt-1",
+            updatedAt: expect.any(String),
+            source: "local",
         });
         expect(readTrainingPreferences()).toEqual(result.current.trainingPreferences);
     });

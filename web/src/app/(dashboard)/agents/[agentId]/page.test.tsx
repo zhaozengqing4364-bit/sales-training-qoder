@@ -231,6 +231,59 @@ describe("AgentPersonaSelectPage", () => {
         );
     });
 
+
+    it("uses an explicit URL persona over remembered preferences even without focus intent", async () => {
+        localStorage.setItem(TRAINING_PREFERENCES_STORAGE_KEY, JSON.stringify({
+            agentId: "agent-1",
+            personaId: "persona-returning",
+            presentationId: null,
+            voiceMode: "legacy",
+            updatedAt: "2026-04-20T09:00:00.000Z",
+            source: "local",
+        }));
+        searchParamsMock.mockReturnValue(new URLSearchParams({
+            persona_id: "persona-explicit",
+        }));
+        getAgentWithPersonasMock.mockResolvedValueOnce({
+            id: "agent-1",
+            name: "销售陪练",
+            description: "帮助学员练习销售对话。",
+            category: "sales",
+            personas: [
+                {
+                    id: "persona-returning",
+                    name: "上次角色",
+                    description: "上次选择的对练角色。",
+                    difficulty: "medium",
+                    is_default: true,
+                },
+                {
+                    id: "persona-explicit",
+                    name: "显式角色",
+                    description: "URL 明确指定的角色。",
+                    difficulty: "hard",
+                },
+            ],
+        });
+
+        render(<AgentPersonaSelectPage />);
+
+        await screen.findByText("销售陪练");
+        fireEvent.click(screen.getByRole("button", { name: /开始对练/i }));
+
+        await waitFor(() => {
+            expect(createSessionMock).toHaveBeenCalledTimes(1);
+        });
+        expect(createSessionMock).toHaveBeenCalledWith({
+            agent_id: "agent-1",
+            persona_id: "persona-explicit",
+            scenario_type: "sales",
+            presentation_id: undefined,
+            voice_mode: "legacy",
+            focus_intent: undefined,
+        });
+    });
+
     it("saves the latest voice, persona, agent, and presentation choices locally", async () => {
         render(<AgentPersonaSelectPage />);
 
@@ -248,6 +301,8 @@ describe("AgentPersonaSelectPage", () => {
             personaId: "persona-1",
             presentationId: "ppt-1",
             voiceMode: "legacy",
+            updatedAt: expect.any(String),
+            source: "local",
         });
         expect(createSessionMock).toHaveBeenCalledWith({
             agent_id: "agent-1",
