@@ -251,6 +251,8 @@ export default function HomePage() {
         })[0];
     const hasHistory = historyItems.length > 0;
     const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
+    const isStatsDegraded = dashboardDegradedSections.includes("训练统计");
+    const isRecommendationDegraded = dashboardDegradedSections.includes("推荐入口");
     const recommendationSourceCopy = getRecommendationSourceCopy(recommendation);
     const onboardingSteps = [
         {
@@ -374,7 +376,7 @@ export default function HomePage() {
                                 <div className="flex flex-col items-end">
                                     <span className="text-[10px] uppercase font-bold text-slate-400 group-hover:text-blue-500 transition-colors">本周练习</span>
                                     <span className="text-base font-bold text-slate-900">
-                                        {(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)} 小时
+                                        {isStatsDegraded ? "暂不可用" : `${(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)} 小时`}
                                     </span>
                                 </div>
                                 <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
@@ -391,21 +393,23 @@ export default function HomePage() {
                                 <div className="p-4 bg-slate-50 rounded-2xl">
                                     <div className="text-xs font-bold text-slate-400 uppercase">总时长</div>
                                     <div className="text-2xl font-black text-slate-900 mt-1">
-                                        {(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)}h
+                                        {isStatsDegraded ? "--" : `${(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)}h`}
                                     </div>
-                                    <div className={cn("text-xs font-bold mt-1", stats.weekly_activity.trend_direction === "up" ? "text-emerald-600" : "text-red-600")}>
-                                        {stats.weekly_activity.trend_direction === "up" ? "+" : ""}{stats.weekly_activity.trend_percentage}% 较上周
+                                    <div className={cn("text-xs font-bold mt-1", isStatsDegraded ? "text-amber-600" : stats.weekly_activity.trend_direction === "up" ? "text-emerald-600" : "text-red-600")}>
+                                        {isStatsDegraded ? "统计接口暂不可用" : `${stats.weekly_activity.trend_direction === "up" ? "+" : ""}${stats.weekly_activity.trend_percentage}% 较上周`}
                                     </div>
                                 </div>
                                 <div className="p-4 bg-slate-50 rounded-2xl">
                                     <div className="text-xs font-bold text-slate-400 uppercase">训练场次</div>
-                                    <div className="text-2xl font-black text-slate-900 mt-1">{stats.weekly_activity.session_count}</div>
-                                    <div className="text-xs text-slate-500 font-bold mt-1">平均 {stats.weekly_activity.session_count > 0 ? Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count) : 0}分钟 / 场</div>
+                                    <div className="text-2xl font-black text-slate-900 mt-1">{isStatsDegraded ? "--" : stats.weekly_activity.session_count}</div>
+                                    <div className="text-xs text-slate-500 font-bold mt-1">
+                                        {isStatsDegraded ? "重试后再显示训练场次" : `平均 ${stats.weekly_activity.session_count > 0 ? Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count) : 0}分钟 / 场`}
+                                    </div>
                                 </div>
                                 <div className="p-4 bg-slate-50 rounded-2xl">
                                     <div className="text-xs font-bold text-slate-400 uppercase">次日复练率</div>
                                     <div className="text-xl font-black text-blue-600 mt-1">
-                                        {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                        {isStatsDegraded ? "--" : `${(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%`}
                                     </div>
                                 </div>
                             </div>
