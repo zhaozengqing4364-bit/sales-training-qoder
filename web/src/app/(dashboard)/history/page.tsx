@@ -378,12 +378,12 @@ export default function HistoryPage() {
                                 当前筛选条件下还没有训练证据；完成一次销售对练或 PPT 演练后，这里会展示回放、报告和按问题复练入口。
                             </p>
                             <div className="mt-5 flex justify-center">
-                                <Link href="/training">
-                                    <Button className="gap-1">
+                                <Button asChild className="gap-1">
+                                    <Link href="/training">
                                         去训练大厅
                                         <ArrowRight className="w-4 h-4" />
-                                    </Button>
-                                </Link>
+                                    </Link>
+                                </Button>
                             </div>
                         </div>
                     )}

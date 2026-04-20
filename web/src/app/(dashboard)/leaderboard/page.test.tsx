@@ -21,6 +21,12 @@ vi.mock("@/components/ui/glass-card", () => ({
     ),
 }));
 
+vi.mock("next/link", () => ({
+    default: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => (
+        <a href={href} className={className}>{children}</a>
+    ),
+}));
+
 vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
     return {
@@ -145,9 +151,11 @@ describe("LeaderboardPage", () => {
 
         render(<LeaderboardPage />);
 
+        expect(await screen.findByText("暂无排行榜数据")).toBeTruthy();
         expect(
-            await screen.findByText("暂无排行榜数据，完成可评估练习后会自动上榜。"),
+            screen.getByText(/当前筛选范围还没有可评估训练进入榜单/),
         ).toBeTruthy();
+        expect(screen.getByRole("link", { name: /去训练大厅/ }).getAttribute("href")).toBe("/training");
         expect(
             screen.getByText("均分与排名只纳入可评估的已完成训练，证据不足会话会单独记账，不会混入榜单。"),
         ).toBeTruthy();
@@ -175,7 +183,7 @@ describe("LeaderboardPage", () => {
         expect(
             await screen.findByText("排行榜暂时无法加载：leaderboard failed"),
         ).toBeTruthy();
-        expect(screen.queryByText("暂无排行榜数据，完成可评估练习后会自动上榜。")).toBeNull();
+        expect(screen.queryByText("暂无排行榜数据")).toBeNull();
         expect(screen.queryByText("我的排名")).toBeNull();
         expect(getMyRankMock).not.toHaveBeenCalled();
 
