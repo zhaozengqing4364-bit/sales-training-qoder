@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
+import { MobileQuickActions } from "@/components/layout/mobile-quick-actions";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api/client";
 import { HistorySessionSummary, TrainingCategory } from "@/lib/api/types";
@@ -350,6 +351,7 @@ export default function TrainingCategoriesPage() {
                           );
                       })}
             </div>
+            <MobileQuickActions primaryLabel="训练大厅" />
         </div>
     );
 }

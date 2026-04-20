@@ -6,6 +6,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { DashboardSkeleton } from "@/components/dashboard-skeleton";
 import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
+import { MobileQuickActions } from "@/components/layout/mobile-quick-actions";
 import { SwipeableItem } from "@/components/ui/swipeable-item";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
@@ -918,6 +919,7 @@ export default function HomePage() {
                     )}
                 </div>
             </section>
+            <MobileQuickActions primaryLabel="继续训练" />
         </div>
     );
 }

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,6 +31,8 @@ vi.mock("next/navigation", () => ({
     useRouter: () => ({
         push: vi.fn(),
     }),
+    usePathname: () => "/",
+    useParams: () => ({}),
 }));
 
 vi.mock("@/components/ui/glass-card", () => ({
@@ -504,6 +506,10 @@ describe("HomePage dashboard header", () => {
         expect(screen.getByText(/统一入口在侧边栏底部的“帮助与反馈”里；手机端先打开左上角菜单。/)).toBeTruthy();
         expect(screen.getByText(/页面异常、入口缺失或结果不对时，请通过这个统一入口反馈当前页面路径或会话编号。/)).toBeTruthy();
         expect(screen.getByText(/当前 learner 默认只看到训练、历史、个人中心；运行状态和管理后台只对管理员或支持角色开放。/)).toBeTruthy();
+        const mobileQuickActions = screen.getByRole("navigation", { name: "移动快捷入口" });
+        expect(mobileQuickActions).toBeTruthy();
+        expect(within(mobileQuickActions).getByRole("link", { name: /继续训练/ }).getAttribute("href")).toBe("/training");
+        expect(within(mobileQuickActions).getByRole("link", { name: /历史/ }).getAttribute("href")).toBe("/history");
         expect(screen.queryByText(/7 x 24/)).toBeNull();
     });
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +11,11 @@ const { getCategoriesMock, getMyHistoryMock } = vi.hoisted(() => ({
 
 vi.mock("next/link", () => ({
     default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
+}));
+
+vi.mock("next/navigation", () => ({
+    usePathname: () => "/training",
+    useParams: () => ({}),
 }));
 
 vi.mock("@/components/ui/glass-card", () => ({
@@ -80,6 +85,10 @@ describe("TrainingCategoriesPage", () => {
         render(<TrainingCategoriesPage />);
 
         expect(await screen.findByText("销售能力训练")).toBeTruthy();
+        const mobileQuickActions = screen.getByRole("navigation", { name: "移动快捷入口" });
+        expect(mobileQuickActions).toBeTruthy();
+        expect(within(mobileQuickActions).getByRole("link", { name: /训练大厅/ }).getAttribute("href")).toBe("/training");
+        expect(within(mobileQuickActions).getByRole("link", { name: /历史/ }).getAttribute("href")).toBe("/history");
         expect(screen.queryByText(/训练分类暂不可用/)).toBeNull();
     });
 

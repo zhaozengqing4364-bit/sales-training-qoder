@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,7 +34,12 @@ vi.mock("next/navigation", () => ({
         push: pushMock,
         replace: replaceMock,
     }),
+    usePathname: () => "/practice/session-current",
     useSearchParams: () => new URLSearchParams("scenario_type=sales&voice_mode=legacy"),
+}));
+
+vi.mock("next/link", () => ({
+    default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -256,6 +261,9 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByText("谨慎型采购经理：会反复确认投入产出、落地周期和风险控制。", { exact: true })).toBeTruthy();
         expect(screen.getByText("练习中遇到异常怎么办？")).toBeTruthy();
         expect(screen.getByText(/麦克风或连接异常时，先按故障面板动作重试/)).toBeTruthy();
+        const mobileQuickActions = screen.getByRole("navigation", { name: "移动快捷入口" });
+        expect(mobileQuickActions).toBeTruthy();
+        expect(within(mobileQuickActions).getByRole("link", { name: /训练大厅/ }).getAttribute("href")).toBe("/training");
     });
 
     it("hides the preflight brief after the learner already has conversation history", async () => {

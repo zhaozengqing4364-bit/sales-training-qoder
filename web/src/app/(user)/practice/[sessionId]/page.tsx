@@ -18,6 +18,7 @@ import { RightPanelContent } from "@/components/practice/RightPanelContent";
 import type { ActionCompletionStatus } from "@/components/practice/RightPanelContent";
 import { CoachHealthNotice } from "@/components/practice/CoachHealthNotice";
 import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
+import { MobileQuickActions } from "@/components/layout/mobile-quick-actions";
 import { api } from "@/lib/api/client";
 import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
 import { usePracticeRecordingHotkeys } from "./use-practice-recording-hotkeys";
@@ -1201,6 +1202,8 @@ export default function PracticeSessionPage() {
             </div>
 
             {/* 移动端底部面板 */}
+            <MobileQuickActions primaryLabel="训练大厅" placement="practice" />
+
             <GlassSheet
                 isOpen={isPanelOpen}
                 onClose={() => setIsPanelOpen(false)}
