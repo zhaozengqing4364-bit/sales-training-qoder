@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
     AlertTriangle,
     ArrowLeft,
+    BookmarkCheck,
     CheckCircle,
     Home,
     Lightbulb,
@@ -20,6 +21,7 @@ import { StatusIndicator } from "@/components/ui/status-indicator";
 import { api, ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
 import {
     ComprehensiveReport,
+    HighlightItem,
     HighlightsResponse,
     KnowledgeCheckDiagnostics,
     PracticeSessionReport,
@@ -36,6 +38,7 @@ import {
     formatEvidenceCompletenessNote,
     formatEvidenceDegradationItems,
     formatNotEvaluableReason,
+    formatIssueTypeLabel,
     formatPresentationDegradedNote,
     formatPresentationIssueContextLines,
     formatPresentationIssueLabel,
@@ -345,6 +348,145 @@ function getRetryFallbackPath(retry?: PracticeSessionReport["retry_entry"] | nul
     return retry?.scenario_type === "presentation" ? "/training/presentation" : "/training/sales";
 }
 
+const HIGHLIGHT_REVIEW_STORAGE_PREFIX = "qoder.highlightReviewList.v1";
+const HIGHLIGHT_REVIEW_LIMIT = 3;
+
+type HighlightReviewItem = {
+    id: string;
+    source_session_id: string;
+    turn_number: number;
+    content: string;
+    reason: string | null;
+    stage_name: string | null;
+    issue_label: string | null;
+    suggested_response: string | null;
+};
+
+type HighlightReviewFocusIntent = NonNullable<NonNullable<PracticeSessionReport["retry_entry"]>["focus_intent"]> & {
+    highlight_review: {
+        version: "highlight_review_v1";
+        selected_count: number;
+        items: HighlightReviewItem[];
+    };
+};
+
+function getHighlightReviewStorageKey(sessionId: string): string {
+    return `${HIGHLIGHT_REVIEW_STORAGE_PREFIX}:${sessionId}`;
+}
+
+function getHighlightReviewSuggestedResponse(highlight: HighlightItem): string | null {
+    return highlight.learning_evidence?.suggested_response
+        ?? highlight.suggested_response
+        ?? null;
+}
+
+function getHighlightReviewReason(highlight: HighlightItem): string | null {
+    return highlight.learning_evidence?.reason
+        ?? highlight.highlight_reason
+        ?? highlight.ai_feedback
+        ?? null;
+}
+
+function getHighlightReviewStageName(highlight: HighlightItem): string | null {
+    return highlight.stage_name
+        ?? highlight.learning_evidence?.stage?.name
+        ?? (highlight.sales_stage ? formatSessionStageLabel(highlight.sales_stage) : null);
+}
+
+function buildHighlightReviewItem(sessionId: string, highlight: HighlightItem): HighlightReviewItem {
+    return {
+        id: highlight.id,
+        source_session_id: sessionId,
+        turn_number: highlight.turn_number,
+        content: highlight.content,
+        reason: getHighlightReviewReason(highlight),
+        stage_name: getHighlightReviewStageName(highlight),
+        issue_label: formatIssueTypeLabel(highlight.learning_evidence?.issue_family ?? null),
+        suggested_response: getHighlightReviewSuggestedResponse(highlight),
+    };
+}
+
+function readHighlightReviewItems(sessionId: string): HighlightReviewItem[] {
+    if (typeof window === "undefined") {
+        return [];
+    }
+
+    try {
+        const raw = window.localStorage.getItem(getHighlightReviewStorageKey(sessionId));
+        if (!raw) {
+            return [];
+        }
+
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+
+        return parsed
+            .filter((item): item is HighlightReviewItem => (
+                item
+                && typeof item.id === "string"
+                && typeof item.content === "string"
+                && typeof item.turn_number === "number"
+            ))
+            .slice(0, HIGHLIGHT_REVIEW_LIMIT);
+    } catch (error) {
+        debug.warn("[Report] Failed to read highlight review list", { sessionId, error });
+        return [];
+    }
+}
+
+function persistHighlightReviewItems(sessionId: string, items: HighlightReviewItem[]) {
+    if (typeof window === "undefined") {
+        return;
+    }
+
+    try {
+        window.localStorage.setItem(
+            getHighlightReviewStorageKey(sessionId),
+            JSON.stringify(items.slice(0, HIGHLIGHT_REVIEW_LIMIT)),
+        );
+    } catch (error) {
+        debug.warn("[Report] Failed to persist highlight review list", { sessionId, error });
+    }
+}
+
+function buildHighlightReviewFocusIntent({
+    baseIntent,
+    report,
+    sessionId,
+    reviewItems,
+}: {
+    baseIntent?: PracticeSessionReport["retry_entry"] extends infer RetryEntry
+        ? RetryEntry extends { focus_intent?: infer FocusIntent | null }
+            ? FocusIntent | null
+            : never
+        : never;
+    report: PracticeSessionReport | null;
+    sessionId: string;
+    reviewItems: HighlightReviewItem[];
+}): HighlightReviewFocusIntent {
+    const safeBaseIntent = baseIntent ?? {
+        version: "retry_focus_v1",
+        source_session_id: sessionId,
+        main_issue: report?.main_issue ?? null,
+        next_goal: report?.next_goal ?? null,
+    };
+
+    return {
+        ...safeBaseIntent,
+        version: safeBaseIntent.version || "retry_focus_v1",
+        source_session_id: safeBaseIntent.source_session_id || sessionId,
+        main_issue: safeBaseIntent.main_issue ?? report?.main_issue ?? null,
+        next_goal: safeBaseIntent.next_goal ?? report?.next_goal ?? null,
+        highlight_review: {
+            version: "highlight_review_v1",
+            selected_count: reviewItems.length,
+            items: reviewItems.slice(0, HIGHLIGHT_REVIEW_LIMIT),
+        },
+    };
+}
+
 export default function ComprehensiveReportPage() {
     const router = useRouter();
     const params = useParams();
@@ -360,6 +502,7 @@ export default function ComprehensiveReportPage() {
     const [highlightsData, setHighlightsData] = useState<HighlightsResponse | null>(null);
     const [highlightsLoading, setHighlightsLoading] = useState(false);
     const [highlightsUnavailableHint, setHighlightsUnavailableHint] = useState<string | null>(null);
+    const [highlightReviewItems, setHighlightReviewItems] = useState<HighlightReviewItem[]>([]);
     const [retryHint, setRetryHint] = useState<string | null>(null);
 
     const loadUnifiedEvidence = useCallback(async () => {
@@ -461,6 +604,33 @@ export default function ComprehensiveReportPage() {
             cancelled = true;
         };
     }, [sessionId, report]);
+
+    useEffect(() => {
+        setHighlightReviewItems(readHighlightReviewItems(sessionId));
+    }, [sessionId]);
+
+    useEffect(() => {
+        if (!highlightsData) {
+            return;
+        }
+
+        setHighlightReviewItems((currentItems) => {
+            const highlightsById = new Map(highlightsData.highlights.map((highlight) => [highlight.id, highlight]));
+            const normalizedItems = currentItems
+                .map((item) => {
+                    const latestHighlight = highlightsById.get(item.id);
+                    if (latestHighlight) {
+                        return buildHighlightReviewItem(sessionId, latestHighlight);
+                    }
+                    return item.source_session_id === sessionId ? item : null;
+                })
+                .filter((item): item is HighlightReviewItem => Boolean(item))
+                .slice(0, HIGHLIGHT_REVIEW_LIMIT);
+
+            persistHighlightReviewItems(sessionId, normalizedItems);
+            return normalizedItems;
+        });
+    }, [highlightsData, sessionId]);
 
     useEffect(() => {
         if (!report || (!report.main_issue && !report.next_goal)) {
