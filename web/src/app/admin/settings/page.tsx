@@ -248,7 +248,7 @@ export default function SettingsPage() {
     // Load model configs when switching to models tab
     useEffect(() => {
         if (activeTab === "models" && !configs) {
-            loadConfigs();
+            void Promise.resolve().then(loadConfigs);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);

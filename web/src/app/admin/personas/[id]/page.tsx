@@ -429,7 +429,7 @@ export default function EditPersonaPage() {
     };
 
     useEffect(() => {
-        loadData();
+        void Promise.resolve().then(loadData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [personaId]);
 
