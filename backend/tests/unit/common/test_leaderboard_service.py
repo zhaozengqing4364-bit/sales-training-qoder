@@ -19,7 +19,11 @@ from common.db.models import Base, PracticeSession, Scenario, User
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-def _effectiveness_snapshot(*, evaluable: bool) -> dict[str, object]:
+def _effectiveness_snapshot(
+    *, evaluable: bool, issue_type: str | None = None
+) -> dict[str, object]:
+    if issue_type is None:
+        issue_type = "ok" if evaluable else "insufficient"
     return {
         "pass_flags": {
             "pass_3min_flow": evaluable,
@@ -28,7 +32,7 @@ def _effectiveness_snapshot(*, evaluable: bool) -> dict[str, object]:
         },
         "overall_result": "pass" if evaluable else "fail",
         "main_issue": {
-            "issue_type": "ok" if evaluable else "insufficient",
+            "issue_type": issue_type,
             "issue_text": "fixture",
             "recovery_rule": "fixture",
         },
@@ -36,6 +40,31 @@ def _effectiveness_snapshot(*, evaluable: bool) -> dict[str, object]:
         "evaluable": evaluable,
         "not_evaluable_reason": None if evaluable else "INSUFFICIENT_TURN_DATA",
     }
+
+
+def _completed_session(
+    *,
+    user_id: str,
+    scenario_id: str,
+    start_time: datetime,
+    score: float,
+    evaluable: bool = True,
+    issue_type: str = "evidence_gap",
+) -> PracticeSession:
+    return PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=user_id,
+        scenario_id=scenario_id,
+        status="completed",
+        start_time=start_time,
+        logic_score=score,
+        accuracy_score=score,
+        completeness_score=score,
+        effectiveness_snapshot=_effectiveness_snapshot(
+            evaluable=evaluable,
+            issue_type=issue_type,
+        ),
+    )
 
 
 @contextmanager
@@ -282,3 +311,263 @@ async def test_calculate_leaderboard_pushes_ranking_aggregation_into_sql(
     assert "practice_sessions.logic_score + practice_sessions.accuracy_score + practice_sessions.completeness_score" in aggregate_queries[0]
     assert "ORDER BY average_score DESC" in aggregate_queries[0]
     assert "JOIN scenarios" in aggregate_queries[0]
+
+
+@pytest.mark.asyncio
+async def test_calculate_improvement_leaderboard_requires_two_evaluable_sessions(
+    leaderboard_db: AsyncSession,
+):
+    now = datetime.now(UTC)
+    users = [
+        User(
+            user_id=str(uuid.uuid4()),
+            wechat_user_id=f"improvement_user_{index}",
+            name=name,
+            email=f"improvement_{index}@example.com",
+        )
+        for index, name in enumerate(["Alice", "Bob", "Carol", "Dora"], start=1)
+    ]
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="销售对练",
+    )
+    leaderboard_db.add_all([*users, scenario])
+    await leaderboard_db.flush()
+
+    leaderboard_db.add_all(
+        [
+            _completed_session(
+                user_id=users[0].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=5),
+                score=70,
+            ),
+            _completed_session(
+                user_id=users[0].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=3),
+                score=80,
+            ),
+            _completed_session(
+                user_id=users[0].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=1),
+                score=85,
+            ),
+            _completed_session(
+                user_id=users[1].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=4),
+                score=90,
+            ),
+            _completed_session(
+                user_id=users[1].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=1),
+                score=92,
+            ),
+            _completed_session(
+                user_id=users[2].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=1),
+                score=95,
+            ),
+            _completed_session(
+                user_id=users[3].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=2),
+                score=60,
+            ),
+            _completed_session(
+                user_id=users[3].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=1),
+                score=100,
+                evaluable=False,
+            ),
+        ]
+    )
+    await leaderboard_db.commit()
+
+    service = LeaderboardService()
+    result = await service.calculate_leaderboard(
+        db=leaderboard_db,
+        scenario_type="sales",
+        time_period="all_time",
+        leaderboard_mode="improvement",
+        limit=10,
+    )
+
+    assert result.is_success
+    assert result.value.leaderboard_mode == "improvement"
+    assert result.value.total_users == 2
+    assert result.value.evaluable_sessions == 5
+    assert result.value.not_evaluable_sessions == 1
+    assert [entry.username for entry in result.value.entries] == ["Alice", "Bob"]
+    assert result.value.entries[0].improvement_score == 15
+    assert result.value.entries[0].first_score == 70
+    assert result.value.entries[0].latest_score == 85
+    assert result.value.entries[0].sample_size == 3
+    assert result.value.entries[1].improvement_score == 2
+
+    bob_rank = await service.get_user_rank(
+        db=leaderboard_db,
+        user_id=users[1].user_id,
+        scenario_type="sales",
+        leaderboard_mode="improvement",
+    )
+    assert bob_rank.is_success
+    assert bob_rank.value["rank"] == 2
+    assert bob_rank.value["improvement_score"] == 2
+    assert bob_rank.value["sample_size"] == 2
+
+    carol_rank = await service.get_user_rank(
+        db=leaderboard_db,
+        user_id=users[2].user_id,
+        scenario_type="sales",
+        leaderboard_mode="improvement",
+    )
+    assert carol_rank.is_success
+    assert carol_rank.value["rank"] is None
+    assert carol_rank.value["sample_size"] == 1
+    assert carol_rank.value["message"] == "At least 2 evaluable sessions required"
+
+
+@pytest.mark.asyncio
+async def test_calculate_issue_type_leaderboard_filters_and_returns_buckets(
+    leaderboard_db: AsyncSession,
+):
+    now = datetime.now(UTC)
+    users = [
+        User(
+            user_id=str(uuid.uuid4()),
+            wechat_user_id=f"issue_user_{index}",
+            name=name,
+            email=f"issue_{index}@example.com",
+        )
+        for index, name in enumerate(["Alice", "Bob", "Carol", "Dora"], start=1)
+    ]
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="销售对练",
+    )
+    leaderboard_db.add_all([*users, scenario])
+    await leaderboard_db.flush()
+
+    leaderboard_db.add_all(
+        [
+            _completed_session(
+                user_id=users[0].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=3),
+                score=80,
+                issue_type="evidence_gap",
+            ),
+            _completed_session(
+                user_id=users[0].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=1),
+                score=90,
+                issue_type="evidence_gap",
+            ),
+            _completed_session(
+                user_id=users[1].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=1),
+                score=70,
+                issue_type="evidence_gap",
+            ),
+            _completed_session(
+                user_id=users[2].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=1),
+                score=95,
+                issue_type="objection_handling",
+            ),
+            _completed_session(
+                user_id=users[3].user_id,
+                scenario_id=scenario.scenario_id,
+                start_time=now - timedelta(days=1),
+                score=100,
+                evaluable=False,
+                issue_type="evidence_gap",
+            ),
+        ]
+    )
+    await leaderboard_db.commit()
+
+    service = LeaderboardService()
+    evidence_result = await service.calculate_leaderboard(
+        db=leaderboard_db,
+        scenario_type="sales",
+        leaderboard_mode="issue_type",
+        issue_type="evidence_gap",
+        limit=10,
+    )
+
+    assert evidence_result.is_success
+    assert evidence_result.value.leaderboard_mode == "issue_type"
+    assert evidence_result.value.issue_type == "evidence_gap"
+    assert evidence_result.value.evaluable_sessions == 3
+    assert evidence_result.value.not_evaluable_sessions == 1
+    assert [entry.username for entry in evidence_result.value.entries] == [
+        "Alice",
+        "Bob",
+    ]
+    assert evidence_result.value.entries[0].average_score == 85
+    assert all(
+        entry.issue_type == "evidence_gap" for entry in evidence_result.value.entries
+    )
+    assert evidence_result.value.issue_type_buckets == [
+        {"issue_type": "evidence_gap", "count": 2, "evaluable_sessions": 3},
+        {"issue_type": "objection_handling", "count": 1, "evaluable_sessions": 1},
+    ]
+
+    objection_result = await service.calculate_leaderboard(
+        db=leaderboard_db,
+        scenario_type="sales",
+        leaderboard_mode="issue_type",
+        issue_type="objection_handling",
+        limit=10,
+    )
+    assert objection_result.is_success
+    assert [entry.username for entry in objection_result.value.entries] == ["Carol"]
+
+    buckets_result = await service.calculate_leaderboard(
+        db=leaderboard_db,
+        scenario_type="sales",
+        leaderboard_mode="issue_type",
+        limit=10,
+    )
+    assert buckets_result.is_success
+    assert buckets_result.value.entries == []
+    assert buckets_result.value.issue_type_buckets == [
+        {"issue_type": "evidence_gap", "count": 2, "evaluable_sessions": 3},
+        {"issue_type": "objection_handling", "count": 1, "evaluable_sessions": 1},
+    ]
+    assert buckets_result.value.eligibility["explanation"] == (
+        "请选择一个目标问题后查看同目标榜"
+    )
+
+    bob_rank = await service.get_user_rank(
+        db=leaderboard_db,
+        user_id=users[1].user_id,
+        scenario_type="sales",
+        leaderboard_mode="issue_type",
+        issue_type="evidence_gap",
+    )
+    assert bob_rank.is_success
+    assert bob_rank.value["rank"] == 2
+    assert bob_rank.value["issue_type"] == "evidence_gap"
+
+    unselected_rank = await service.get_user_rank(
+        db=leaderboard_db,
+        user_id=users[1].user_id,
+        scenario_type="sales",
+        leaderboard_mode="issue_type",
+    )
+    assert unselected_rank.is_success
+    assert unselected_rank.value["rank"] is None
+    assert unselected_rank.value["issue_type_buckets"] == buckets_result.value.issue_type_buckets

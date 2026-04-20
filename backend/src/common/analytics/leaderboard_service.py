@@ -886,6 +886,323 @@ class LeaderboardService:
             )
             return Result.fail(fallback="[RANK_FAILED]")
 
+    async def _get_improvement_user_rank(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        scenario_type: str | None,
+        time_period: str,
+        cutoff_time: datetime,
+    ) -> Result[dict]:
+        score_expr = self._score_expr()
+        base_query = (
+            select(
+                PracticeSession.user_id.label("user_id"),
+                PracticeSession.session_id.label("session_id"),
+                PracticeSession.start_time.label("start_time"),
+                score_expr.label("score"),
+            )
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(*self._base_qualified_filters(cutoff_time))
+        )
+        user_evaluable_query = (
+            select(func.count(PracticeSession.session_id))
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(PracticeSession.user_id == user_id)
+            .where(*self._base_qualified_filters(cutoff_time))
+        )
+        if scenario_type:
+            base_query = base_query.where(Scenario.scenario_type == scenario_type)
+            user_evaluable_query = user_evaluable_query.where(
+                Scenario.scenario_type == scenario_type
+            )
+
+        base_subquery = base_query.subquery()
+        ranked_subquery = (
+            select(
+                base_subquery.c.user_id,
+                base_subquery.c.session_id,
+                base_subquery.c.start_time,
+                base_subquery.c.score,
+                func.row_number()
+                .over(
+                    partition_by=base_subquery.c.user_id,
+                    order_by=(
+                        base_subquery.c.start_time.asc(),
+                        base_subquery.c.session_id.asc(),
+                    ),
+                )
+                .label("first_rank"),
+                func.row_number()
+                .over(
+                    partition_by=base_subquery.c.user_id,
+                    order_by=(
+                        base_subquery.c.start_time.desc(),
+                        base_subquery.c.session_id.desc(),
+                    ),
+                )
+                .label("latest_rank"),
+            )
+        ).subquery()
+
+        first_score = func.max(
+            case((ranked_subquery.c.first_rank == 1, ranked_subquery.c.score))
+        ).label("first_score")
+        latest_score = func.max(
+            case((ranked_subquery.c.latest_rank == 1, ranked_subquery.c.score))
+        ).label("latest_score")
+        first_session_at = func.max(
+            case((ranked_subquery.c.first_rank == 1, ranked_subquery.c.start_time))
+        ).label("first_session_at")
+        latest_session_at = func.max(
+            case((ranked_subquery.c.latest_rank == 1, ranked_subquery.c.start_time))
+        ).label("latest_session_at")
+
+        grouped_subquery = (
+            select(
+                ranked_subquery.c.user_id,
+                func.count(ranked_subquery.c.session_id).label("total_sessions"),
+                func.avg(ranked_subquery.c.score).label("average_score"),
+                func.max(ranked_subquery.c.score).label("best_score"),
+                first_score,
+                latest_score,
+                (latest_score - first_score).label("improvement_score"),
+                first_session_at,
+                latest_session_at,
+            )
+            .group_by(ranked_subquery.c.user_id)
+            .having(func.count(ranked_subquery.c.session_id) >= 2)
+        ).subquery()
+
+        total_users_result = await db.execute(
+            select(func.count()).select_from(grouped_subquery)
+        )
+        total_users = int(total_users_result.scalar() or 0)
+        user_result = await db.execute(
+            select(grouped_subquery).where(grouped_subquery.c.user_id == user_id)
+        )
+        user_row = user_result.one_or_none()
+        not_evaluable_sessions = await self._count_not_evaluable_sessions(
+            db=db,
+            cutoff_time=cutoff_time,
+            scenario_type=scenario_type,
+        )
+
+        if not user_row:
+            user_evaluable_result = await db.execute(user_evaluable_query)
+            user_evaluable_sessions = int(user_evaluable_result.scalar() or 0)
+            return Result(
+                value={
+                    "user_id": user_id,
+                    "rank": None,
+                    "total_sessions": user_evaluable_sessions,
+                    "average_score": 0,
+                    "score_basis": PROJECTION_SCORE_BASIS,
+                    "leaderboard_mode": "improvement",
+                    "evaluable_sessions": user_evaluable_sessions,
+                    "not_evaluable_sessions": not_evaluable_sessions,
+                    "total_users": total_users,
+                    "percentile": 0,
+                    "time_period": time_period,
+                    "scenario_type": scenario_type,
+                    "improvement_score": None,
+                    "first_score": None,
+                    "latest_score": None,
+                    "sample_size": user_evaluable_sessions,
+                    "message": "At least 2 evaluable sessions required",
+                }
+            )
+
+        higher_count_query = (
+            select(func.count())
+            .select_from(grouped_subquery)
+            .where(
+                or_(
+                    grouped_subquery.c.improvement_score
+                    > user_row.improvement_score,
+                    and_(
+                        grouped_subquery.c.improvement_score
+                        == user_row.improvement_score,
+                        grouped_subquery.c.latest_score > user_row.latest_score,
+                    ),
+                    and_(
+                        grouped_subquery.c.improvement_score
+                        == user_row.improvement_score,
+                        grouped_subquery.c.latest_score == user_row.latest_score,
+                        grouped_subquery.c.total_sessions > user_row.total_sessions,
+                    ),
+                    and_(
+                        grouped_subquery.c.improvement_score
+                        == user_row.improvement_score,
+                        grouped_subquery.c.latest_score == user_row.latest_score,
+                        grouped_subquery.c.total_sessions == user_row.total_sessions,
+                        grouped_subquery.c.latest_session_at
+                        > user_row.latest_session_at,
+                    ),
+                )
+            )
+        )
+        higher_count_result = await db.execute(higher_count_query)
+        higher_count = int(higher_count_result.scalar() or 0)
+        rank = higher_count + 1
+        percentile = (
+            round(((total_users - higher_count) / total_users) * 100, 2)
+            if total_users > 0
+            else 0
+        )
+
+        return Result(
+            value={
+                "user_id": user_id,
+                "rank": rank,
+                "total_sessions": int(user_row.total_sessions or 0),
+                "average_score": round(user_row.average_score or 0, 2),
+                "best_score": round(user_row.best_score or 0, 2),
+                "score_basis": PROJECTION_SCORE_BASIS,
+                "leaderboard_mode": "improvement",
+                "evaluable_sessions": int(user_row.total_sessions or 0),
+                "not_evaluable_sessions": not_evaluable_sessions,
+                "total_users": total_users,
+                "percentile": percentile,
+                "time_period": time_period,
+                "scenario_type": scenario_type,
+                "improvement_score": round(user_row.improvement_score or 0, 2),
+                "first_score": round(user_row.first_score or 0, 2),
+                "latest_score": round(user_row.latest_score or 0, 2),
+                "first_session_at": user_row.first_session_at,
+                "latest_session_at": user_row.latest_session_at,
+                "sample_size": int(user_row.total_sessions or 0),
+                "message": "Rank calculated",
+            }
+        )
+
+    async def _get_issue_type_user_rank(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        scenario_type: str | None,
+        time_period: str,
+        cutoff_time: datetime,
+        issue_type: str | None,
+    ) -> Result[dict]:
+        normalized_issue_type = issue_type.strip() if issue_type else None
+        normalized_issue_type = normalized_issue_type or None
+        not_evaluable_sessions = await self._count_not_evaluable_sessions(
+            db=db,
+            cutoff_time=cutoff_time,
+            scenario_type=scenario_type,
+        )
+
+        if not normalized_issue_type:
+            buckets = await self._get_issue_type_buckets(
+                db=db,
+                cutoff_time=cutoff_time,
+                scenario_type=scenario_type,
+            )
+            return Result(
+                value={
+                    "user_id": user_id,
+                    "rank": None,
+                    "total_sessions": 0,
+                    "average_score": 0,
+                    "score_basis": PROJECTION_SCORE_BASIS,
+                    "leaderboard_mode": "issue_type",
+                    "issue_type": None,
+                    "issue_type_buckets": buckets,
+                    "evaluable_sessions": 0,
+                    "not_evaluable_sessions": not_evaluable_sessions,
+                    "total_users": 0,
+                    "percentile": 0,
+                    "time_period": time_period,
+                    "scenario_type": scenario_type,
+                    "message": "Select issue_type to calculate rank",
+                }
+            )
+
+        score_expr = self._score_expr()
+        issue_type_expr = self._issue_type_expr()
+        aggregated_query = (
+            select(
+                PracticeSession.user_id.label("user_id"),
+                func.count(PracticeSession.session_id).label("total_sessions"),
+                func.avg(score_expr).label("average_score"),
+            )
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(*self._base_qualified_filters(cutoff_time))
+            .where(issue_type_expr == normalized_issue_type)
+        )
+        if scenario_type:
+            aggregated_query = aggregated_query.where(
+                Scenario.scenario_type == scenario_type
+            )
+        aggregated_subquery = aggregated_query.group_by(
+            PracticeSession.user_id
+        ).subquery()
+
+        total_users_result = await db.execute(
+            select(func.count()).select_from(aggregated_subquery)
+        )
+        total_users = int(total_users_result.scalar() or 0)
+        user_result = await db.execute(
+            select(
+                aggregated_subquery.c.total_sessions,
+                aggregated_subquery.c.average_score,
+            ).where(aggregated_subquery.c.user_id == user_id)
+        )
+        user_row = user_result.one_or_none()
+
+        if not user_row:
+            return Result(
+                value={
+                    "user_id": user_id,
+                    "rank": None,
+                    "total_sessions": 0,
+                    "average_score": 0,
+                    "score_basis": PROJECTION_SCORE_BASIS,
+                    "leaderboard_mode": "issue_type",
+                    "issue_type": normalized_issue_type,
+                    "evaluable_sessions": 0,
+                    "not_evaluable_sessions": not_evaluable_sessions,
+                    "total_users": total_users,
+                    "percentile": 0,
+                    "time_period": time_period,
+                    "scenario_type": scenario_type,
+                    "message": "No completed sessions for issue_type",
+                }
+            )
+
+        higher_count_result = await db.execute(
+            select(func.count())
+            .select_from(aggregated_subquery)
+            .where(aggregated_subquery.c.average_score > user_row.average_score)
+        )
+        higher_count = int(higher_count_result.scalar() or 0)
+        rank = higher_count + 1
+        percentile = (
+            round(((total_users - higher_count) / total_users) * 100, 2)
+            if total_users > 0
+            else 0
+        )
+
+        return Result(
+            value={
+                "user_id": user_id,
+                "rank": rank,
+                "total_sessions": int(user_row.total_sessions or 0),
+                "average_score": round(user_row.average_score or 0, 2),
+                "score_basis": PROJECTION_SCORE_BASIS,
+                "leaderboard_mode": "issue_type",
+                "issue_type": normalized_issue_type,
+                "evaluable_sessions": int(user_row.total_sessions or 0),
+                "not_evaluable_sessions": not_evaluable_sessions,
+                "total_users": total_users,
+                "percentile": percentile,
+                "time_period": time_period,
+                "scenario_type": scenario_type,
+                "message": "Rank calculated",
+            }
+        )
+
 
 # Singleton instance
 leaderboard_service = LeaderboardService()
