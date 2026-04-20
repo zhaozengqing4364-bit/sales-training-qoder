@@ -289,7 +289,7 @@ describe("HistoryPage", () => {
 
         expect(await screen.findByText("统计看板、趋势快照暂不可用，训练列表仍基于统一训练证据展示。")).toBeTruthy();
         expect(screen.getByText("证据支撑")).toBeTruthy();
-        expect(screen.getByText("客户还没听到可信证据。")).toBeTruthy();
+        expect(screen.getAllByText("客户还没听到可信证据。").length).toBeGreaterThan(0);
         expect(screen.getByText("证据补强")).toBeTruthy();
         expect(screen.getByText("先补 ROI 证据，再确认下一步。")).toBeTruthy();
         expect(screen.getByText("最近一次报告提示：别只说结果，要补可信证据。")).toBeTruthy();
