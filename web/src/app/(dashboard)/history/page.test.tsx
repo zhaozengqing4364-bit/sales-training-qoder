@@ -443,6 +443,34 @@ describe("HistoryPage", () => {
         expect(screen.queryByText(/7 x 24/)).toBeNull();
     });
 
+    it("turns the empty history state into an actionable training CTA", async () => {
+        getMyHistoryMock.mockResolvedValue({
+            sessions: [],
+            total: 0,
+            page: 1,
+            page_size: 50,
+            total_pages: 0,
+        });
+        getHistoryStatisticsMock.mockResolvedValue({
+            total_sessions: 0,
+            evaluable_sessions: 0,
+            not_evaluable_sessions: 0,
+            average_score: 0,
+            best_score: 0,
+            total_practice_time_seconds: 0,
+            total_practice_time_minutes: 0,
+        });
+        getHistoryTrendsMock.mockResolvedValue([]);
+
+        render(<HistoryPage />);
+
+        expect(await screen.findByText("暂无训练记录")).toBeTruthy();
+        expect(
+            screen.getByText(/当前筛选条件下还没有训练证据；完成一次销售对练或 PPT 演练后/),
+        ).toBeTruthy();
+        expect(screen.getByRole("link", { name: /去训练大厅/ }).getAttribute("href")).toBe("/training");
+    });
+
     it("aggregates the top retry-eligible main issues and links to the latest report", async () => {
         getMyHistoryMock.mockResolvedValue({
             sessions: [
@@ -632,6 +660,9 @@ describe("HistoryPage", () => {
         render(<HistoryPage />);
 
         expect(await screen.findByText(/暂无可用于按问题复练的记录/)).toBeTruthy();
+        expect(screen.getByRole("link", { name: /去销售训练获取可复练证据/ }).getAttribute("href")).toBe(
+            "/training/sales",
+        );
         expect(screen.queryByText(/按问题再练/)).toBeNull();
     });
 });
