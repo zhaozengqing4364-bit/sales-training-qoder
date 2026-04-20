@@ -162,9 +162,8 @@ export interface Recommendation {
     focus_page?: number | null;
     due_reason?: string | null;
     focus?: string | null;
-    suggested_duration?: string | number | null;
     suggested_duration_minutes?: number | null;
-    is_due_today?: boolean | null;
+    is_due_today?: boolean;
 }
 
 // Agent types
