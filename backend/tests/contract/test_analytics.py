@@ -2,6 +2,9 @@
 Contract Tests for Analytics API
 Tests API contracts for practice history and leaderboard
 """
+import uuid
+from types import SimpleNamespace
+
 import pytest
 from httpx import AsyncClient
 
@@ -10,9 +13,11 @@ from common.analytics.admin_analytics_service import (
     ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE,
 )
 from common.analytics.history_service import HISTORY_QUERY_DB_PERFORMANCE_BASELINE
+from common.api import analytics as analytics_api
 from common.conversation.session_evidence import (
     SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE,
 )
+from common.error_handling.result import Result
 
 QUERY_INDEX_DISCOVERY_CONCLUSIONS = {
     "confirmed_gaps": {
