@@ -39,16 +39,28 @@ vi.mock("@/components/highlights", () => ({
     HighlightList: ({
         highlights,
         onJumpToMessage,
+        reviewSelectedIds = [],
+        onToggleReviewItem,
     }: {
-        highlights: Array<{ id: string; turn_number: number }>;
+        highlights: Array<{ id: string; turn_number: number; highlight_type?: string }>;
         onJumpToMessage?: (turnNumber: number) => void;
+        reviewSelectedIds?: string[];
+        onToggleReviewItem?: (highlight: { id: string; turn_number: number; highlight_type?: string }) => void;
     }) => (
         <div data-testid="highlight-list">
             <div>高光数:{highlights.length}</div>
+            <div>复习清单已选:{reviewSelectedIds.join(",") || "无"}</div>
             {highlights[0] ? (
-                <button type="button" onClick={() => onJumpToMessage?.(highlights[0].turn_number)}>
-                    跳到高光回放
-                </button>
+                <>
+                    <button type="button" onClick={() => onJumpToMessage?.(highlights[0].turn_number)}>
+                        跳到高光回放
+                    </button>
+                    {onToggleReviewItem && highlights[0].highlight_type === "bad" ? (
+                        <button type="button" onClick={() => onToggleReviewItem(highlights[0])}>
+                            加入复习清单
+                        </button>
+                    ) : null}
+                </>
             ) : null}
         </div>
     ),
