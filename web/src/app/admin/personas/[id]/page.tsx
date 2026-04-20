@@ -3,7 +3,7 @@ import { debug } from "@/lib/debug";
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
     AdminPersona,
     AdminKnowledgeBase,
@@ -1176,22 +1176,14 @@ export default function EditPersonaPage() {
                                     
                                     setIsPreviewingTTS(true);
                                     try {
-                                        const params = new URLSearchParams({
+                                        const blob = await api.admin.previewTTSBlob({
                                             text: `你好，我是${formData.name || "AI助手"}，很高兴为您服务。`,
                                             voice: ttsConfig.voice,
                                             rate: ttsConfig.rate,
                                             volume: ttsConfig.volume,
                                             pitch: ttsConfig.pitch,
                                         });
-                                        
-                                        const response = await fetch(
-                                            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1"}/admin/model-configs/tts/preview?${params}`,
-                                            { method: "POST" }
-                                        );
-                                        
-                                        if (!response.ok) throw new Error("试听失败");
-                                        
-                                        const blob = await response.blob();
+
                                         const audioUrl = URL.createObjectURL(blob);
                                         const audio = new Audio(audioUrl);
                                         previewAudioRef.current = audio;
@@ -1211,7 +1203,7 @@ export default function EditPersonaPage() {
                                         await audio.play();
                                     } catch (err) {
                                         debug.error("TTS preview failed:", err);
-                                        toast.error("试听失败");
+                                        toast.error(getApiErrorMessage(err));
                                         setIsPreviewingTTS(false);
                                     }
                                 }}
