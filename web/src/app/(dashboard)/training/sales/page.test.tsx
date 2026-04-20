@@ -145,6 +145,15 @@ describe("SalesTrainingPage core combinations", () => {
         expect(focusIntent.next_goal?.goal_text).toContain("需求挖掘 × 价格敏感型客户");
     });
 
+    it("uses an explicit training lobby return route instead of browser history", async () => {
+        render(<SalesTrainingPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: /返回训练大厅/ }));
+
+        expect(pushMock).toHaveBeenCalledWith("/training");
+        expect(backMock).not.toHaveBeenCalled();
+    });
+
     it("makes missing persona combinations visibly unavailable instead of leaving inert cards", async () => {
         getSalesPersonasMock.mockResolvedValueOnce([
             {
@@ -163,5 +172,17 @@ describe("SalesTrainingPage core combinations", () => {
         fireEvent.click(screen.getByRole("button", { name: /组合 1\s+破冰建立信任\s+客户角色：冷淡型客户/ }));
 
         expect(pushMock).not.toHaveBeenCalled();
+    });
+
+    it("separates partial API failure from real empty counts on the sales entry", async () => {
+        getSalesAgentsMock.mockRejectedValueOnce(new Error("agents unavailable"));
+
+        render(<SalesTrainingPage />);
+
+        expect(await screen.findByText("部分数据加载失败（智能体），请重试。")).toBeTruthy();
+        expect(screen.getByText("发布中的智能体")).toBeTruthy();
+        expect(screen.getByText("加载失败")).toBeTruthy();
+        expect(screen.getByText("可选客户画像")).toBeTruthy();
+        expect(screen.queryByText("发布中的智能体 0")).toBeNull();
     });
 });
