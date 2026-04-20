@@ -617,7 +617,8 @@ export default function ComprehensiveReportPage() {
             ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
             : null;
     const retryFallbackPath = getRetryFallbackPath(retryEntry);
-    const retryActionLabel = retryBlockedHint
+    const retryNeedsManualSelection = Boolean(retryBlockedHint || !retryEntry?.scenario_type);
+    const retryActionLabel = retryNeedsManualSelection
         ? (retryEntry?.scenario_type === "presentation" ? "去演讲训练页重新选择" : "去销售训练页重新选择")
         : "按目标再练一轮";
     const issueReplayAnchor = replayData?.main_issue?.replay_anchor ?? null;
