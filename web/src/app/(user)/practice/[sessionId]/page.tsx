@@ -453,6 +453,10 @@ export default function PracticeSessionPage() {
     const audioEvidenceEndState = audioEvidenceStatus.status === "failed" || audioEvidenceStatus.status === "timed_out"
         ? audioEvidenceStatus
         : null;
+    const handleRestartAudioUpload = React.useCallback(async () => {
+        await continuousUploader.stopUpload();
+        await continuousUploader.startUpload();
+    }, [continuousUploader]);
     const practiceFaults = React.useMemo<PracticeFault[]>(() => {
         const faults: PracticeFault[] = [];
 
@@ -625,10 +629,6 @@ export default function PracticeSessionPage() {
         && pendingLifecycleAction === null;
     const canRecord = canToggleRecordingBase && hasPermission !== false;
     const canRequestPermission = canToggleRecordingBase && hasPermission === false;
-    const handleRestartAudioUpload = React.useCallback(async () => {
-        await continuousUploader.stopUpload();
-        await continuousUploader.startUpload();
-    }, [continuousUploader]);
 
     // 统一的录音切换函数 - 点击一次开始，再点击一次结束
     const toggleRecording = React.useCallback(() => {
