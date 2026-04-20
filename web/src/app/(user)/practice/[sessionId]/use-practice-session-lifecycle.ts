@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SessionStatus } from "@/lib/api/types";
+import type { AudioEvidenceFlushResult } from "@/hooks/use-continuous-audio-uploader";
 import type { ConnectionState } from "@/hooks/use-practice-websocket";
 import { debug } from "@/lib/debug";
 import type { AudioFlushResult, AudioFlushStatus } from "@/hooks/use-continuous-audio-uploader";
@@ -15,13 +16,54 @@ interface UsePracticeSessionLifecycleParams {
     sessionStatus: SessionStatus;
     isRecordingRef: React.RefObject<boolean>;
     stopRecording: () => void;
-    flushAudioEvidence?: () => Promise<AudioFlushResult>;
+    flushAudioEvidence?: () => Promise<AudioEvidenceFlushResult>;
 }
 
 export interface PracticeLifecycleError {
     action: "start" | "pause" | "resume" | "end";
     message: string;
     guidance: string;
+}
+
+export type PracticeAudioEvidenceStatus =
+    | { status: "idle"; message: string | null; error: string | null }
+    | { status: "flushing"; message: string; error: string | null }
+    | { status: "completed"; message: string; error: string | null }
+    | { status: "failed"; message: string; error: string | null }
+    | { status: "timed_out"; message: string; error: string | null };
+
+function buildAudioEvidenceStatus(
+    result: AudioEvidenceFlushResult,
+): PracticeAudioEvidenceStatus {
+    if (result.status === "completed") {
+        return {
+            status: "completed",
+            message: "音频证据已保存，正在进入报告页。",
+            error: null,
+        };
+    }
+
+    if (result.status === "timed_out") {
+        return {
+            status: "timed_out",
+            message: "音频证据保存超时，本次报告可能缺少最后一段录音留痕。",
+            error: result.error,
+        };
+    }
+
+    if (result.status === "failed") {
+        return {
+            status: "failed",
+            message: "音频证据保存失败，本次报告会继续生成，但回放或证据完整度可能受影响。",
+            error: result.error,
+        };
+    }
+
+    return {
+        status: "completed",
+        message: "未检测到正在上传的音频留痕，正在进入报告页。",
+        error: null,
+    };
 }
 
 function buildLifecycleError(action: PracticeLifecycleError["action"], error: unknown): PracticeLifecycleError {
@@ -74,8 +116,11 @@ export function usePracticeSessionLifecycle({
     const [isEndingSession, setIsEndingSession] = React.useState(false);
     const [pendingLifecycleAction, setPendingLifecycleAction] = React.useState<"pause" | "resume" | null>(null);
     const [lifecycleError, setLifecycleError] = React.useState<PracticeLifecycleError | null>(null);
-    const [audioEvidenceFlushStatus, setAudioEvidenceFlushStatus] = React.useState<"idle" | "flushing" | AudioFlushStatus>("idle");
-    const [audioEvidenceFlushMessage, setAudioEvidenceFlushMessage] = React.useState<string | null>(null);
+    const [audioEvidenceStatus, setAudioEvidenceStatus] = React.useState<PracticeAudioEvidenceStatus>({
+        status: "idle",
+        message: null,
+        error: null,
+    });
     const hasStartedSessionRef = React.useRef(false);
     const hasNavigatedToReportRef = React.useRef(false);
 
@@ -93,8 +138,11 @@ export function usePracticeSessionLifecycle({
         setIsEndingSession(false);
         setPendingLifecycleAction(null);
         setLifecycleError(null);
-        setAudioEvidenceFlushStatus("idle");
-        setAudioEvidenceFlushMessage(null);
+        setAudioEvidenceStatus({
+            status: "idle",
+            message: null,
+            error: null,
+        });
     }, [sessionId]);
 
     const handleStartSession = React.useCallback(async () => {
@@ -134,41 +182,40 @@ export function usePracticeSessionLifecycle({
         hasNavigatedToReportRef.current = true;
         setLifecycleError(null);
 
-        const flushThenNavigate = async () => {
-            setAudioEvidenceFlushStatus("flushing");
-            setAudioEvidenceFlushMessage("正在保存最后一段音频证据，完成后进入报告。");
-
+        const finishAndNavigate = async () => {
             if (isRecordingRef.current) {
                 stopRecording();
             }
 
-            try {
-                const result = flushAudioEvidence
-                    ? await flushAudioEvidence()
-                    : { status: "completed" as const, pendingUploads: 0 };
-                setAudioEvidenceFlushStatus(result.status);
-                if (result.status === "completed") {
-                    setAudioEvidenceFlushMessage("音频证据已保存，正在进入报告。");
-                } else if (result.status === "timeout") {
-                    setAudioEvidenceFlushMessage("音频证据保存超时，报告页会以证据缺失口径解释影响范围。");
-                } else {
-                    setAudioEvidenceFlushMessage(result.error || "音频证据保存失败，报告页会以证据缺失口径解释影响范围。");
-                }
-            } catch (error) {
-                const message = getApiErrorMessage(error);
-                debug.warn("[PracticeSession] Audio evidence flush failed before report navigation", {
-                    sessionId,
-                    error,
-                    message,
+            if (flushAudioEvidence) {
+                setAudioEvidenceStatus({
+                    status: "flushing",
+                    message: "正在保存最后一段音频证据，完成后进入报告页。",
+                    error: null,
                 });
-                setAudioEvidenceFlushStatus("failed");
-                setAudioEvidenceFlushMessage(message || "音频证据保存失败，报告页会以证据缺失口径解释影响范围。");
-            } finally {
-                router.push(`/practice/${sessionId}/report`);
+
+                try {
+                    const flushResult = await flushAudioEvidence();
+                    setAudioEvidenceStatus(buildAudioEvidenceStatus(flushResult));
+                } catch (error) {
+                    const message = getApiErrorMessage(error);
+                    debug.warn("[PracticeSession] Audio evidence flush failed before report navigation", {
+                        sessionId,
+                        error,
+                        message,
+                    });
+                    setAudioEvidenceStatus({
+                        status: "failed",
+                        message: "音频证据保存失败，本次报告会继续生成，但回放或证据完整度可能受影响。",
+                        error: message,
+                    });
+                }
             }
+
+            router.push(`/practice/${sessionId}/report`);
         };
 
-        void flushThenNavigate();
+        void finishAndNavigate();
     }, [flushAudioEvidence, isRecordingRef, isSessionTerminal, router, sessionId, stopRecording]);
 
     const handleTogglePauseResume = React.useCallback(async () => {
@@ -228,6 +275,7 @@ export function usePracticeSessionLifecycle({
         handleEndSession,
         handleStartSession,
         handleTogglePauseResume,
+        audioEvidenceStatus,
         isEndingSession,
         isSessionPaused,
         isSessionTerminal,
