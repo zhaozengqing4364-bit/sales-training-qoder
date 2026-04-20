@@ -161,12 +161,21 @@ describe("HomePage dashboard header", () => {
             action_label: "按目标再练一轮",
             target_path: "/agents/agent-1?persona_id=persona-1&focus_intent=%7B%7D",
             score_basis: "session_evidence_projection_evaluable_only",
+            recommendation_kind: "sales_retry",
+            due_reason: "上次训练已生成可复练主问题",
+            focus: "价值主张缺少案例",
+            suggested_duration_minutes: 12,
+            is_due_today: true,
         });
 
         render(<HomePage />);
         await flushDashboardData();
 
+        expect(screen.getByText("今日复练任务")).toBeTruthy();
         expect(screen.getAllByText("按上次主问题再练一轮").length).toBeGreaterThan(0);
+        expect(screen.getByText("• 到期原因：上次训练已生成可复练主问题")).toBeTruthy();
+        expect(screen.getByText("• 本次焦点：价值主张缺少案例")).toBeTruthy();
+        expect(screen.getByText("• 建议时长：12 分钟")).toBeTruthy();
         expect(screen.getAllByText("推荐来源：上次可评估训练报告的主问题与下一轮目标。").length).toBeGreaterThan(0);
         const retryLinks = screen.getAllByRole("link", { name: "按目标再练一轮" });
         expect(retryLinks.some((link) => link.getAttribute("href") === "/agents/agent-1?persona_id=persona-1&focus_intent=%7B%7D")).toBe(true);
@@ -433,6 +442,32 @@ describe("HomePage dashboard header", () => {
 
         expect(screen.getByText("恢复后的销售复盘")).toBeTruthy();
         expect(screen.queryByText("最近记录暂不可用")).toBeNull();
+    });
+
+    it("shows a stats module failure instead of fake zero metrics when dashboard stats fail", async () => {
+        getStatsMock.mockRejectedValueOnce(new Error("stats unavailable"));
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("训练统计暂不可用，页面已保留可用入口；请稍后重试或前往对应页面查看。")).toBeTruthy();
+        expect(screen.getByText("统计暂不可用")).toBeTruthy();
+        expect(screen.getByText("训练统计模块失败时不展示 0 小时、0 场或 0% 复练率，避免把接口失败误读成真实空数据。")).toBeTruthy();
+        expect(screen.getByText("训练统计接口失败时不展示默认 0 分，避免误导为真实成绩。")).toBeTruthy();
+        expect(screen.queryByText("均分仅统计 0 次可评估训练，0 次证据不足训练不会计入均分。")).toBeNull();
+        expect(screen.queryByText("0.0%")).toBeNull();
+    });
+
+    it("shows recommendation failure as an unavailable module instead of a fake start-training recommendation", async () => {
+        getRecommendationMock.mockRejectedValueOnce(new Error("recommendation unavailable"));
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getAllByText("今日复练任务暂不可用").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("推荐接口暂时无法读取，不代表今天没有复练任务；可先进入训练大厅或稍后重试。").length).toBeGreaterThan(0);
+        expect(screen.getByText("推荐状态：接口读取失败，未用默认训练入口伪装成真实推荐。")).toBeTruthy();
+        expect(screen.queryByText("欢迎使用训练系统，开始一次练习来提升您的技能吧！")).toBeNull();
     });
 
     it("marks the dashboard as degraded instead of showing fake normal defaults when all home APIs fail", async () => {

@@ -107,6 +107,27 @@ function getRecommendationSourceCopy(recommendation: Recommendation): string | n
     return null;
 }
 
+function isTodayRetryRecommendation(recommendation: Recommendation): boolean {
+    return Boolean(
+        recommendation.is_due_today
+        || recommendation.recommendation_kind === "sales_retry"
+        || recommendation.recommendation_kind === "presentation_page_retry",
+    );
+}
+
+function formatSuggestedDuration(recommendation: Recommendation): string | null {
+    if (typeof recommendation.suggested_duration === "string" && recommendation.suggested_duration.trim()) {
+        return recommendation.suggested_duration.trim();
+    }
+    if (typeof recommendation.suggested_duration === "number" && Number.isFinite(recommendation.suggested_duration)) {
+        return `${recommendation.suggested_duration} 分钟`;
+    }
+    if (typeof recommendation.suggested_duration_minutes === "number" && Number.isFinite(recommendation.suggested_duration_minutes)) {
+        return `${recommendation.suggested_duration_minutes} 分钟`;
+    }
+    return null;
+}
+
 function resolveDashboardSessionId(item: Pick<SessionItem, "id" | "session_id">): string | null {
     const sessionId = item.session_id?.trim();
     if (sessionId) {
@@ -250,16 +271,35 @@ export default function HomePage() {
             return rightTime - leftTime;
         })[0];
     const hasHistory = historyItems.length > 0;
+    const isStatsDegraded = dashboardDegradedSections.includes("训练统计");
+    const isRecommendationDegraded = dashboardDegradedSections.includes("推荐入口");
     const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
-    const recommendationSourceCopy = getRecommendationSourceCopy(recommendation);
+    const displayRecommendation: Recommendation = isRecommendationDegraded
+        ? {
+            title: "今日复练任务暂不可用",
+            reason: "推荐接口暂时无法读取，不代表今天没有复练任务；可先进入训练大厅或稍后重试。",
+            action_label: "去训练大厅",
+            target_path: "/training",
+        }
+        : recommendation;
+    const recommendationSourceCopy = isRecommendationDegraded
+        ? "推荐状态：接口读取失败，未用默认训练入口伪装成真实推荐。"
+        : getRecommendationSourceCopy(displayRecommendation);
+    const shouldShowTodayRetryCard = !isRecommendationDegraded && isTodayRetryRecommendation(displayRecommendation);
+    const suggestedDurationCopy = formatSuggestedDuration(displayRecommendation);
+    const todayRetryDetails = [
+        displayRecommendation.due_reason ? `到期原因：${displayRecommendation.due_reason}` : null,
+        displayRecommendation.focus ? `本次焦点：${displayRecommendation.focus}` : null,
+        suggestedDurationCopy ? `建议时长：${suggestedDurationCopy}` : null,
+    ].filter((detail): detail is string => Boolean(detail));
     const onboardingSteps = [
         {
             key: "train",
             badge: "第 1 步",
-            title: recommendation.title,
-            description: recommendation.reason,
-            href: recommendation.target_path,
-            actionLabel: recommendation.action_label,
+            title: displayRecommendation.title,
+            description: displayRecommendation.reason,
+            href: displayRecommendation.target_path,
+            actionLabel: displayRecommendation.action_label,
             icon: Zap,
             accentClassName: "bg-blue-50 text-blue-700 border-blue-100",
             buttonClassName: "rounded-full bg-slate-900 text-white hover:bg-slate-800",
@@ -291,8 +331,8 @@ export default function HomePage() {
     ];
     const versionDialogHighlights = [
         {
-            title: recommendation.title,
-            description: recommendation.reason,
+            title: displayRecommendation.title,
+            description: displayRecommendation.reason,
             icon: Zap,
             iconClassName: "bg-blue-100 text-blue-600",
         },
@@ -355,7 +395,7 @@ export default function HomePage() {
                                         <Button variant="ghost" className="rounded-full">稍后再看</Button>
                                     </DialogClose>
                                     <DialogClose asChild>
-                                        <Button onClick={() => router.push(recommendation.target_path)} className="rounded-full bg-slate-900 text-white px-6">{recommendation.action_label}</Button>
+                                        <Button onClick={() => router.push(displayRecommendation.target_path)} className="rounded-full bg-slate-900 text-white px-6">{displayRecommendation.action_label}</Button>
                                     </DialogClose>
                                 </DialogFooter>
                             </DialogContent>
@@ -374,7 +414,7 @@ export default function HomePage() {
                                 <div className="flex flex-col items-end">
                                     <span className="text-[10px] uppercase font-bold text-slate-400 group-hover:text-blue-500 transition-colors">本周练习</span>
                                     <span className="text-base font-bold text-slate-900">
-                                        {(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)} 小时
+                                        {isStatsDegraded ? "统计暂不可用" : `${(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)} 小时`}
                                     </span>
                                 </div>
                                 <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
@@ -385,56 +425,64 @@ export default function HomePage() {
                         <DialogContent className="max-w-2xl">
                             <DialogHeader>
                                 <DialogTitle>本周训练报告</DialogTitle>
-                                <DialogDescription>您的训练状态非常棒！</DialogDescription>
+                                <DialogDescription>{isStatsDegraded ? "训练统计接口暂时无法读取，请稍后重试。" : "您的训练状态非常棒！"}</DialogDescription>
                             </DialogHeader>
-                            <div className="grid grid-cols-3 gap-4 py-6">
-                                <div className="p-4 bg-slate-50 rounded-2xl">
-                                    <div className="text-xs font-bold text-slate-400 uppercase">总时长</div>
-                                    <div className="text-2xl font-black text-slate-900 mt-1">
-                                        {(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)}h
+                            {isStatsDegraded ? (
+                                <div className="my-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                                    训练统计模块失败时不展示 0 小时、0 场或 0% 复练率，避免把接口失败误读成真实空数据。
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="grid grid-cols-3 gap-4 py-6">
+                                        <div className="p-4 bg-slate-50 rounded-2xl">
+                                            <div className="text-xs font-bold text-slate-400 uppercase">总时长</div>
+                                            <div className="text-2xl font-black text-slate-900 mt-1">
+                                                {(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)}h
+                                            </div>
+                                            <div className={cn("text-xs font-bold mt-1", stats.weekly_activity.trend_direction === "up" ? "text-emerald-600" : "text-red-600")}>
+                                                {stats.weekly_activity.trend_direction === "up" ? "+" : ""}{stats.weekly_activity.trend_percentage}% 较上周
+                                            </div>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl">
+                                            <div className="text-xs font-bold text-slate-400 uppercase">训练场次</div>
+                                            <div className="text-2xl font-black text-slate-900 mt-1">{stats.weekly_activity.session_count}</div>
+                                            <div className="text-xs text-slate-500 font-bold mt-1">平均 {stats.weekly_activity.session_count > 0 ? Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count) : 0}分钟 / 场</div>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl">
+                                            <div className="text-xs font-bold text-slate-400 uppercase">次日复练率</div>
+                                            <div className="text-xl font-black text-blue-600 mt-1">
+                                                {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className={cn("text-xs font-bold mt-1", stats.weekly_activity.trend_direction === "up" ? "text-emerald-600" : "text-red-600")}>
-                                        {stats.weekly_activity.trend_direction === "up" ? "+" : ""}{stats.weekly_activity.trend_percentage}% 较上周
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
+                                            <p className="text-[11px] text-blue-700 font-semibold">3分钟连续表达通过率</p>
+                                            <p className="text-xl font-black text-blue-900 mt-1">
+                                                {(stats.effectiveness?.pass_rate_3min_flow ?? 0).toFixed(1)}%
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
+                                            <p className="text-[11px] text-emerald-700 font-semibold">5轮追问稳定通过率</p>
+                                            <p className="text-xl font-black text-emerald-900 mt-1">
+                                                {(stats.effectiveness?.pass_rate_5turn_defense ?? 0).toFixed(1)}%
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                                            <p className="text-[11px] text-amber-700 font-semibold">四段结构完整率</p>
+                                            <p className="text-xl font-black text-amber-900 mt-1">
+                                                {(stats.effectiveness?.pass_rate_4step_structure ?? 0).toFixed(1)}%
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl bg-violet-50 border border-violet-100 p-3">
+                                            <p className="text-[11px] text-violet-700 font-semibold">次日复练率</p>
+                                            <p className="text-xl font-black text-violet-900 mt-1">
+                                                {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl">
-                                    <div className="text-xs font-bold text-slate-400 uppercase">训练场次</div>
-                                    <div className="text-2xl font-black text-slate-900 mt-1">{stats.weekly_activity.session_count}</div>
-                                    <div className="text-xs text-slate-500 font-bold mt-1">平均 {stats.weekly_activity.session_count > 0 ? Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count) : 0}分钟 / 场</div>
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl">
-                                    <div className="text-xs font-bold text-slate-400 uppercase">次日复练率</div>
-                                    <div className="text-xl font-black text-blue-600 mt-1">
-                                        {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
-                                    <p className="text-[11px] text-blue-700 font-semibold">3分钟连续表达通过率</p>
-                                    <p className="text-xl font-black text-blue-900 mt-1">
-                                        {(stats.effectiveness?.pass_rate_3min_flow ?? 0).toFixed(1)}%
-                                    </p>
-                                </div>
-                                <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
-                                    <p className="text-[11px] text-emerald-700 font-semibold">5轮追问稳定通过率</p>
-                                    <p className="text-xl font-black text-emerald-900 mt-1">
-                                        {(stats.effectiveness?.pass_rate_5turn_defense ?? 0).toFixed(1)}%
-                                    </p>
-                                </div>
-                                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
-                                    <p className="text-[11px] text-amber-700 font-semibold">四段结构完整率</p>
-                                    <p className="text-xl font-black text-amber-900 mt-1">
-                                        {(stats.effectiveness?.pass_rate_4step_structure ?? 0).toFixed(1)}%
-                                    </p>
-                                </div>
-                                <div className="rounded-xl bg-violet-50 border border-violet-100 p-3">
-                                    <p className="text-[11px] text-violet-700 font-semibold">次日复练率</p>
-                                    <p className="text-xl font-black text-violet-900 mt-1">
-                                        {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
-                                    </p>
-                                </div>
-                            </div>
+                                </>
+                            )}
                             <DialogFooter>
                                 <Button variant="outline" className="rounded-full" onClick={() => setIsWeeklyStatsOpen(false)}>关闭</Button>
                                 <Link href="/history">
@@ -471,7 +519,7 @@ export default function HomePage() {
                         </div>
                     </div>
                     <p className="text-sm leading-6 text-slate-600">
-                        {recommendation.reason}
+                        {displayRecommendation.reason}
                     </p>
                     <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-xs leading-6 text-slate-500">
                         先训练，再去历史页和统一报告复盘；首页不再放看起来能点、实际没有闭环的装饰性按钮。
@@ -508,7 +556,14 @@ export default function HomePage() {
 
             <LearnerHelpCard />
 
-            {stats.effectiveness && (
+            {isStatsDegraded ? (
+                <section>
+                    <GlassCard className="p-5 border border-amber-200 bg-amber-50/80">
+                        <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">训练统计暂不可用</p>
+                        <p className="mt-2 text-sm text-amber-800">统计模块加载失败时，首页不会显示 0% 通过率或 0% 次日复练率；请稍后重试首页数据。</p>
+                    </GlassCard>
+                </section>
+            ) : stats.effectiveness && (
                 <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <GlassCard className="p-5">
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">3分钟连续表达通过率</p>
@@ -543,21 +598,28 @@ export default function HomePage() {
                     <div className="relative z-10 flex flex-col justify-between h-full gap-6">
                         <div>
                             <div className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-200 text-xs font-bold uppercase tracking-wider mb-4 border border-blue-500/30">
-                                系统推荐
+                                {shouldShowTodayRetryCard ? "今日复练任务" : "系统推荐"}
                             </div>
-                            <h2 className="text-2xl font-bold mb-2">{recommendation.title}</h2>
+                            <h2 className="text-2xl font-bold mb-2">{displayRecommendation.title}</h2>
                             <p className="text-slate-300 text-sm leading-relaxed max-w-lg">
-                                {recommendation.reason}
+                                {displayRecommendation.reason}
                             </p>
+                            {todayRetryDetails.length > 0 && (
+                                <ul className="mt-3 space-y-1 text-xs text-blue-100/90">
+                                    {todayRetryDetails.map((detail) => (
+                                        <li key={detail}>• {detail}</li>
+                                    ))}
+                                </ul>
+                            )}
                             {recommendationSourceCopy && (
                                 <p className="text-xs text-blue-100/80 mt-3">
                                     {recommendationSourceCopy}
                                 </p>
                             )}
                         </div>
-                        <Link href={recommendation.target_path}>
+                        <Link href={displayRecommendation.target_path}>
                             <Button className="w-fit rounded-full bg-white text-slate-900 hover:bg-blue-50 font-bold">
-                                {recommendation.action_label} <ArrowRight className="ml-2 w-4 h-4" />
+                                {displayRecommendation.action_label} <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
                         </Link>
                     </div>
@@ -568,10 +630,12 @@ export default function HomePage() {
                         <TrendingUp className="w-8 h-8" />
                     </div>
                     <div>
-                        <div className="text-3xl font-black text-slate-900">{stats.last_session?.score ?? 0}</div>
+                        <div className="text-3xl font-black text-slate-900">{isStatsDegraded ? "暂不可用" : (stats.last_session?.score ?? 0)}</div>
                         <div className="text-xs font-bold text-slate-400 uppercase mt-1">上次得分</div>
                     </div>
-                    <p className="text-xs text-slate-500 px-4">{formatScoreBasisCopy(stats)}</p>
+                    <p className="text-xs text-slate-500 px-4">
+                        {isStatsDegraded ? "训练统计接口失败时不展示默认 0 分，避免误导为真实成绩。" : formatScoreBasisCopy(stats)}
+                    </p>
                 </GlassCard>
             </section>
 

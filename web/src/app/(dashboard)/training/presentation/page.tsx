@@ -18,11 +18,14 @@ export default function PresentationTrainingPage() {
     const [presentations, setPresentations] = useState<PresentationOption[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [reloadVersion, setReloadVersion] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
 
         const loadAgents = async () => {
+            setIsLoading(true);
+            setLoadError(null);
             try {
                 const [agentResult, presentationResult] = await Promise.allSettled([
                     api.agents.getList("presentation"),
@@ -33,23 +36,23 @@ export default function PresentationTrainingPage() {
                     return;
                 }
 
+                const failedSections: string[] = [];
                 if (agentResult.status === "fulfilled") {
                     setAgents(agentResult.value);
                 } else {
                     setAgents([]);
+                    failedSections.push("演讲智能体");
                 }
 
                 if (presentationResult.status === "fulfilled") {
                     setPresentations(presentationResult.value);
                 } else {
                     setPresentations([]);
+                    failedSections.push("PPT 列表");
                 }
 
-                if (
-                    agentResult.status === "rejected"
-                    && presentationResult.status === "rejected"
-                ) {
-                    setLoadError("演讲训练场景加载失败，请稍后重试");
+                if (failedSections.length > 0) {
+                    setLoadError(`部分演讲训练数据加载失败（${failedSections.join("、")}），请重试。`);
                 } else {
                     setLoadError(null);
                 }
@@ -72,7 +75,7 @@ export default function PresentationTrainingPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [reloadVersion]);
 
     const handleAgentClick = (agentId: string) => {
         router.push(`/agents/${agentId}`);
@@ -85,7 +88,7 @@ export default function PresentationTrainingPage() {
                 <Button 
                     variant="ghost" 
                     className="w-fit pl-0 text-slate-500 hover:text-slate-900 hover:bg-transparent gap-2"
-                    onClick={() => router.back()}
+                    onClick={() => router.push("/training")}
                 >
                     <ArrowLeft className="w-4 h-4" />
                     返回训练大厅
@@ -98,6 +101,20 @@ export default function PresentationTrainingPage() {
                     </div>
                 </div>
             </div>
+
+            {loadError && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-3">
+                    <p className="text-sm text-amber-800">{loadError}</p>
+                    <Button
+                        variant="outline"
+                        className="border-amber-300 text-amber-800 hover:bg-amber-100"
+                        onClick={() => setReloadVersion((version) => version + 1)}
+                        disabled={isLoading}
+                    >
+                        重试
+                    </Button>
+                </div>
+            )}
 
             {/* Scenarios Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -157,7 +174,9 @@ export default function PresentationTrainingPage() {
                 ) : (
                     <GlassCard className="col-span-full p-12 text-center">
                         <p className="text-slate-500">
-                            {loadError || "暂无演讲训练场景，请联系管理员添加演讲智能体或上传可用 PPT"}
+                            {loadError
+                                ? "演讲训练入口暂不可用，不代表没有可练内容；请重试或返回训练大厅。"
+                                : "暂无演讲训练场景，请联系管理员添加演讲智能体或上传可用 PPT"}
                         </p>
                     </GlassCard>
                 )}
