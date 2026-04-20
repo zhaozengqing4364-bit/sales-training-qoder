@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { Loader2, Trophy, User } from "lucide-react";
+import { ArrowRight, Loader2, Trophy, User } from "lucide-react";
 
 type TimePeriod = "weekly" | "monthly" | "all_time";
 type ScenarioFilter = "all" | "sales" | "presentation";
@@ -213,7 +214,21 @@ export default function LeaderboardPage() {
                     </button>
                 </GlassCard>
             ) : entries.length === 0 ? (
-                <GlassCard className="p-10 text-center text-slate-500">暂无排行榜数据，完成可评估练习后会自动上榜。</GlassCard>
+                <GlassCard className="p-10 text-center">
+                    <p className="text-sm font-semibold text-slate-900">暂无排行榜数据</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                        当前筛选范围还没有可评估训练进入榜单；至少完成一次有足够对话证据的训练后，均分和排名会自动刷新。
+                    </p>
+                    <div className="mt-5 flex justify-center">
+                        <Link
+                            href="/training"
+                            className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                        >
+                            去训练大厅
+                            <ArrowRight className="w-4 h-4" />
+                        </Link>
+                    </div>
+                </GlassCard>
             ) : (
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
