@@ -250,20 +250,28 @@ def _server_error(
 async def get_leaderboard(
     scenario_type: str | None = None,
     time_period: str = "all_time",
+    leaderboard_mode: str = Query("score"),
+    issue_type: str | None = None,
     include_me: bool = Query(False),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get leaderboard rankings"""
+    """Get leaderboard rankings."""
     try:
         normalized_scenario_type = _normalize_scenario_type(scenario_type)
         normalized_time_period = _normalize_time_period(time_period)
+        normalized_leaderboard_mode = _normalize_leaderboard_mode(leaderboard_mode)
         result = await leaderboard_service.calculate_leaderboard(
-            db=db,
-            scenario_type=normalized_scenario_type,
-            time_period=normalized_time_period,
-            limit=limit,
+            **_supported_service_kwargs(
+                leaderboard_service.calculate_leaderboard,
+                db=db,
+                scenario_type=normalized_scenario_type,
+                time_period=normalized_time_period,
+                limit=limit,
+                leaderboard_mode=normalized_leaderboard_mode,
+                issue_type=issue_type,
+            )
         )
 
         if not result.is_success:
@@ -272,42 +280,64 @@ async def get_leaderboard(
                 "Failed to fetch leaderboard",
                 scenario_type=normalized_scenario_type,
                 time_period=normalized_time_period,
+                leaderboard_mode=normalized_leaderboard_mode,
+                issue_type=issue_type,
             )
 
         stats = result.value
         response_payload = {
             "scenario_type": normalized_scenario_type,
-            "time_period": stats.time_period,
-            "score_basis": stats.score_basis,
-            "evaluable_sessions": stats.evaluable_sessions,
-            "not_evaluable_sessions": stats.not_evaluable_sessions,
-            "total_users": stats.total_users,
+            "time_period": _value(stats, "time_period", normalized_time_period),
+            "leaderboard_mode": normalized_leaderboard_mode,
+            "score_basis": _value(stats, "score_basis"),
+            "eligibility": _value(
+                stats,
+                "eligibility",
+                _leaderboard_eligibility(normalized_leaderboard_mode),
+            ),
+            "evaluable_sessions": _value(stats, "evaluable_sessions", 0),
+            "not_evaluable_sessions": _value(stats, "not_evaluable_sessions", 0),
+            "total_users": _value(stats, "total_users", 0),
             "entries": [
-                {
-                    "rank": entry.rank,
-                    "user_id": str(entry.user_id),
-                    "username": entry.username,
-                    "total_sessions": entry.total_sessions,
-                    "average_score": entry.average_score,
-                    "best_score": entry.best_score,
-                    "score_basis": entry.score_basis,
-                    "evaluable_sessions": entry.total_sessions,
-                    "not_evaluable_sessions": 0,
-                }
-                for entry in stats.entries
+                _serialize_leaderboard_entry(entry)
+                for entry in _value(stats, "entries", [])
             ],
         }
 
+        if issue_type is not None:
+            response_payload["issue_type"] = issue_type
+
+        issue_type_buckets = _value(stats, "issue_type_buckets")
+        if issue_type_buckets is not None:
+            response_payload["issue_type_buckets"] = issue_type_buckets
+
         if include_me:
             my_rank_result = await leaderboard_service.get_user_rank(
-                db=db,
-                user_id=current_user.user_id,
-                scenario_type=normalized_scenario_type,
-                time_period=normalized_time_period,
+                **_supported_service_kwargs(
+                    leaderboard_service.get_user_rank,
+                    db=db,
+                    user_id=current_user.user_id,
+                    scenario_type=normalized_scenario_type,
+                    time_period=normalized_time_period,
+                    leaderboard_mode=normalized_leaderboard_mode,
+                    issue_type=issue_type,
+                )
             )
             if my_rank_result.is_success:
-                response_payload["my_rank"] = my_rank_result.value
+                response_payload["my_rank"] = _rank_payload_with_mode(
+                    my_rank_result.value,
+                    normalized_leaderboard_mode,
+                    issue_type,
+                )
 
+        logger.info(
+            "Leaderboard API response prepared",
+            scenario_type=normalized_scenario_type,
+            time_period=normalized_time_period,
+            leaderboard_mode=normalized_leaderboard_mode,
+            issue_type=issue_type,
+            entries_count=len(response_payload["entries"]),
+        )
         return response_payload
 
     except HTTPException:
@@ -325,18 +355,26 @@ async def get_leaderboard(
 async def get_my_rank(
     scenario_type: str | None = None,
     time_period: str = "all_time",
+    leaderboard_mode: str = Query("score"),
+    issue_type: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get current user's rank"""
+    """Get current user's rank."""
     try:
         normalized_scenario_type = _normalize_scenario_type(scenario_type)
         normalized_time_period = _normalize_time_period(time_period)
+        normalized_leaderboard_mode = _normalize_leaderboard_mode(leaderboard_mode)
         result = await leaderboard_service.get_user_rank(
-            db=db,
-            user_id=current_user.user_id,
-            scenario_type=normalized_scenario_type,
-            time_period=normalized_time_period,
+            **_supported_service_kwargs(
+                leaderboard_service.get_user_rank,
+                db=db,
+                user_id=current_user.user_id,
+                scenario_type=normalized_scenario_type,
+                time_period=normalized_time_period,
+                leaderboard_mode=normalized_leaderboard_mode,
+                issue_type=issue_type,
+            )
         )
 
         if not result.is_success:
@@ -345,9 +383,15 @@ async def get_my_rank(
                 "Failed to fetch rank",
                 scenario_type=normalized_scenario_type,
                 time_period=normalized_time_period,
+                leaderboard_mode=normalized_leaderboard_mode,
+                issue_type=issue_type,
             )
 
-        return result.value
+        return _rank_payload_with_mode(
+            result.value,
+            normalized_leaderboard_mode,
+            issue_type,
+        )
 
     except HTTPException:
         raise
