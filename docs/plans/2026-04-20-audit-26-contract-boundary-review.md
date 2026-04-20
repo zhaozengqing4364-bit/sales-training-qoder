@@ -179,3 +179,32 @@ These additions must be backward compatible: the existing dashboard should still
 - Plan/PRD/test-spec/context read: `.omx/plans/ralplan-audit-26-remediation-plan.md`, `.omx/plans/prd-audit-26-remediation-plan.md`, `.omx/plans/test-spec-audit-26-remediation-plan.md`, `.omx/context/audit-26-remediation-plan-20260420T025004Z.md`.
 - Code evidence inspected: realtime handler symbols and protocol helpers, practice lifecycle/uploader hooks, dashboard recommendation backend/frontend types/tests, retry-entry assembler, report/replay retry references.
 - Source changes: documentation only (`docs/plans/2026-04-20-audit-26-contract-boundary-review.md`).
+
+## Post-integration review addendum — worker-2
+
+Date: 2026-04-20  
+Reviewer: worker-2  
+Scope: task-3 code-quality/documentation review after Lane A/B/C/D integration checkpoints currently present in this worktree. This addendum does not broaden Phase 1-2 scope and does not introduce Docker, deployment, operations, or infrastructure guidance.
+
+### Review result
+
+No blocking review findings were found in the current Phase 1-2 slice. The current changes keep the planned boundaries mostly intact:
+
+- **Admin TTS preview** now uses the unified frontend API client seam for settings and persona preview audio. The admin pages no longer construct `NEXT_PUBLIC_API_URL` fetches directly, so base URL resolution, cookie credentials, CSRF header attachment, loopback fallback, and `ApiRequestError` normalization stay centralized.
+- **RoleChecker always-allow risk** is removed from `backend/src/common/middleware/auth.py`; the remaining `RoleChecker` reference is a unit guard asserting the helper is absent.
+- **Response envelope helper** exists at `backend/src/common/api/response.py`, and the dashboard touched endpoints import that helper. Existing local helpers still remain in broader legacy endpoints such as `practice.py`, `training.py`, `users.py`, and `knowledge_debug.py`; that is acceptable for the approved minimal slice because the plan explicitly rejects a full envelope migration in Phase 1-2.
+- **Today retry foundation** keeps retry fields optional on the frontend type and dashboard rendering, preserving current recommendation compatibility while enabling the future “今日复练” card.
+- **Practice audio flush work** remains frontend-bounded and does not rename backend audio segment endpoints, preserving the durable evidence API surface documented above.
+
+### Non-blocking risks to carry forward
+
+1. `web/src/lib/api/client.ts` is still a shared high-churn file. Future admin/export/blob endpoints should reuse the existing low-level helpers instead of adding page-local fetches.
+2. Backend response helper adoption is intentionally partial. Do not treat the new helper as permission for a broad legacy endpoint migration without endpoint-specific contract tests.
+3. The practice audio flush state is user-visible and should remain covered by focused hook/page tests whenever the report navigation timing changes.
+4. The dashboard today-retry copy should continue to distinguish retry-eligible evidence from generic recommendations; missing evidence must stay explanatory rather than gamified.
+
+### Additional review gates run by this addendum
+
+- Direct admin preview fetch gate: `rg -n 'NEXT_PUBLIC_API_URL|fetch\(' web/src/app/admin/settings web/src/app/admin/personas -g '*.ts*'` should return no matches.
+- RoleChecker guard: `rg -n 'class RoleChecker|RoleChecker' backend/src backend/tests` should only find the absence guard test.
+- Response helper adoption check: `rg -n 'from common.api.response|common.api.response' backend/src/common/api backend/tests/unit/common -g '*.py'` should include `dashboard.py`, `server_error.py`, and `test_api_response.py`.
