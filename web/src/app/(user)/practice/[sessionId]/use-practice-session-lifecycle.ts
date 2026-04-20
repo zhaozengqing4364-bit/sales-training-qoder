@@ -7,6 +7,7 @@ import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SessionStatus } from "@/lib/api/types";
 import type { ConnectionState } from "@/hooks/use-practice-websocket";
 import { debug } from "@/lib/debug";
+import type { AudioFlushResult, AudioFlushStatus } from "@/hooks/use-continuous-audio-uploader";
 
 interface UsePracticeSessionLifecycleParams {
     sessionId: string;
@@ -14,6 +15,7 @@ interface UsePracticeSessionLifecycleParams {
     sessionStatus: SessionStatus;
     isRecordingRef: React.RefObject<boolean>;
     stopRecording: () => void;
+    flushAudioEvidence?: () => Promise<AudioFlushResult>;
 }
 
 export interface PracticeLifecycleError {
@@ -66,11 +68,14 @@ export function usePracticeSessionLifecycle({
     sessionStatus,
     isRecordingRef,
     stopRecording,
+    flushAudioEvidence,
 }: UsePracticeSessionLifecycleParams) {
     const router = useRouter();
     const [isEndingSession, setIsEndingSession] = React.useState(false);
     const [pendingLifecycleAction, setPendingLifecycleAction] = React.useState<"pause" | "resume" | null>(null);
     const [lifecycleError, setLifecycleError] = React.useState<PracticeLifecycleError | null>(null);
+    const [audioEvidenceFlushStatus, setAudioEvidenceFlushStatus] = React.useState<"idle" | "flushing" | AudioFlushStatus>("idle");
+    const [audioEvidenceFlushMessage, setAudioEvidenceFlushMessage] = React.useState<string | null>(null);
     const hasStartedSessionRef = React.useRef(false);
     const hasNavigatedToReportRef = React.useRef(false);
 
@@ -88,6 +93,8 @@ export function usePracticeSessionLifecycle({
         setIsEndingSession(false);
         setPendingLifecycleAction(null);
         setLifecycleError(null);
+        setAudioEvidenceFlushStatus("idle");
+        setAudioEvidenceFlushMessage(null);
     }, [sessionId]);
 
     const handleStartSession = React.useCallback(async () => {
@@ -127,12 +134,42 @@ export function usePracticeSessionLifecycle({
         hasNavigatedToReportRef.current = true;
         setLifecycleError(null);
 
-        if (isRecordingRef.current) {
-            stopRecording();
-        }
+        const flushThenNavigate = async () => {
+            setAudioEvidenceFlushStatus("flushing");
+            setAudioEvidenceFlushMessage("正在保存最后一段音频证据，完成后进入报告。");
 
-        router.push(`/practice/${sessionId}/report`);
-    }, [isRecordingRef, isSessionTerminal, router, sessionId, stopRecording]);
+            if (isRecordingRef.current) {
+                stopRecording();
+            }
+
+            try {
+                const result = flushAudioEvidence
+                    ? await flushAudioEvidence()
+                    : { status: "completed" as const, pendingUploads: 0 };
+                setAudioEvidenceFlushStatus(result.status);
+                if (result.status === "completed") {
+                    setAudioEvidenceFlushMessage("音频证据已保存，正在进入报告。");
+                } else if (result.status === "timeout") {
+                    setAudioEvidenceFlushMessage("音频证据保存超时，报告页会以证据缺失口径解释影响范围。");
+                } else {
+                    setAudioEvidenceFlushMessage(result.error || "音频证据保存失败，报告页会以证据缺失口径解释影响范围。");
+                }
+            } catch (error) {
+                const message = getApiErrorMessage(error);
+                debug.warn("[PracticeSession] Audio evidence flush failed before report navigation", {
+                    sessionId,
+                    error,
+                    message,
+                });
+                setAudioEvidenceFlushStatus("failed");
+                setAudioEvidenceFlushMessage(message || "音频证据保存失败，报告页会以证据缺失口径解释影响范围。");
+            } finally {
+                router.push(`/practice/${sessionId}/report`);
+            }
+        };
+
+        void flushThenNavigate();
+    }, [flushAudioEvidence, isRecordingRef, isSessionTerminal, router, sessionId, stopRecording]);
 
     const handleTogglePauseResume = React.useCallback(async () => {
         if (!canToggleLifecycle) {
@@ -195,6 +232,8 @@ export function usePracticeSessionLifecycle({
         isSessionPaused,
         isSessionTerminal,
         lifecycleError,
+        audioEvidenceFlushMessage,
+        audioEvidenceFlushStatus,
         pendingLifecycleAction,
     };
 }
