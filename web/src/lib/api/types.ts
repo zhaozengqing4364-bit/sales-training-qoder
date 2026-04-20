@@ -1424,6 +1424,18 @@ export interface ManagerInterventionItem {
     updated_at: string;
 }
 
+
+export interface LearnerOpenIntervention {
+    intervention_id: string;
+    issue_family: string;
+    note?: string | null;
+    due_state: "pending" | "due";
+    reminder_status: ManagerInterventionReminderStatus;
+    reminder_sent_at?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface ManagerInterventionListResponse {
     items: ManagerInterventionItem[];
     total: number;

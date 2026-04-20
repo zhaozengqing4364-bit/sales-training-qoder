@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.analytics.history_service import history_service
 from common.auth.service import get_current_user
-from common.db.models import User
+from common.db.models import ManagerIntervention, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
 
@@ -77,6 +77,28 @@ def error_response(error_code: str, message: str = None, trace_id: str = None):
         "error": error_code,
         "message": message or error_code,
         "trace_id": trace_id or get_trace_id(),
+    }
+
+
+def _serialize_open_intervention(
+    intervention: ManagerIntervention | None,
+) -> dict[str, str | None] | None:
+    if intervention is None:
+        return None
+
+    return {
+        "intervention_id": str(intervention.intervention_id),
+        "issue_family": str(intervention.issue_family),
+        "note": intervention.note,
+        "due_state": str(intervention.due_state),
+        "reminder_status": str(intervention.reminder_status),
+        "reminder_sent_at": (
+            intervention.reminder_sent_at.isoformat()
+            if intervention.reminder_sent_at
+            else None
+        ),
+        "created_at": intervention.created_at.isoformat(),
+        "updated_at": intervention.updated_at.isoformat(),
     }
 
 
@@ -186,6 +208,34 @@ async def update_current_user_info(
         logger.error(f"Failed to update user info: {str(e)}")
         await db.rollback()
         return error_response("[USER_UPDATE_FAILED]", "更新用户信息失败")
+
+
+@router.get("/users/me/interventions/open")
+async def get_my_open_intervention(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the latest unresolved manager intervention for the current learner only."""
+    try:
+        result = await db.execute(
+            select(ManagerIntervention)
+            .where(
+                ManagerIntervention.user_id == str(current_user.user_id),
+                ManagerIntervention.due_state.in_(["pending", "due"]),
+                ManagerIntervention.resolving_session_id.is_(None),
+            )
+            .order_by(
+                ManagerIntervention.updated_at.desc(),
+                ManagerIntervention.created_at.desc(),
+            )
+            .limit(1)
+        )
+        intervention = result.scalar_one_or_none()
+        return success_response(_serialize_open_intervention(intervention))
+
+    except (SQLAlchemyError, ValueError) as e:
+        logger.error(f"Failed to get open manager intervention: {str(e)}")
+        return error_response("[OPEN_INTERVENTION_FAILED]", "获取主管提醒失败")
 
 
 @router.get("/users/me/history")

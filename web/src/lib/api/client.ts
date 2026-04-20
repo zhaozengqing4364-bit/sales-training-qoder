@@ -91,6 +91,7 @@ import {
     AdminOperatingPackResponse,
     ManagerInterventionCreateRequest,
     ManagerInterventionItem,
+    LearnerOpenIntervention,
     ManagerInterventionListResponse,
     ManagerInterventionRemindRequest,
     ManagerInterventionRemindResponse,
@@ -1664,6 +1665,10 @@ export const api = {
             if (params?.scenario_type) queryParams.set("scenario_type", params.scenario_type);
 
             return apiFetch<HistoryListResponse>(`/users/me/history?${queryParams}`);
+        },
+
+        getOpenIntervention: async () => {
+            return apiFetch<LearnerOpenIntervention | null>("/users/me/interventions/open");
         },
     },
 

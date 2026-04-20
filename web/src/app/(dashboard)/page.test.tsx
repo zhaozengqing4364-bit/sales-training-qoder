@@ -9,11 +9,13 @@ const {
     getStatsMock,
     getRecommendationMock,
     getHistoryMock,
+    getOpenInterventionMock,
     useCurrentUserMock,
 } = vi.hoisted(() => ({
     getStatsMock: vi.fn(),
     getRecommendationMock: vi.fn(),
     getHistoryMock: vi.fn(),
+    getOpenInterventionMock: vi.fn(),
     useCurrentUserMock: vi.fn(),
 }));
 
@@ -82,6 +84,10 @@ vi.mock("@/lib/api/client", async () => {
                 getRecommendation: getRecommendationMock,
                 getHistory: getHistoryMock,
             },
+            user: {
+                ...actual.api.user,
+                getOpenIntervention: getOpenInterventionMock,
+            },
         },
     };
 });
@@ -103,6 +109,7 @@ describe("HomePage dashboard header", () => {
         getStatsMock.mockReset();
         getRecommendationMock.mockReset();
         getHistoryMock.mockReset();
+        getOpenInterventionMock.mockReset();
         useCurrentUserMock.mockReset();
 
         getStatsMock.mockResolvedValue({
@@ -125,6 +132,7 @@ describe("HomePage dashboard header", () => {
             target_path: "/training",
         });
         getHistoryMock.mockResolvedValue([]);
+        getOpenInterventionMock.mockResolvedValue(null);
         useCurrentUserMock.mockReturnValue({ data: null });
     });
 
@@ -493,4 +501,45 @@ describe("HomePage dashboard header", () => {
         expect(screen.getByText(/当前 learner 默认只看到训练、历史、个人中心；运行状态和管理后台只对管理员或支持角色开放。/)).toBeTruthy();
         expect(screen.queryByText(/7 x 24/)).toBeNull();
     });
+
+    it("shows the learner's open manager intervention without exposing admin-only fields", async () => {
+        getOpenInterventionMock.mockResolvedValue({
+            intervention_id: "intervention-1",
+            issue_family: "evidence_gap",
+            note: "本周先补一条客户案例，再推进下一步。",
+            due_state: "due",
+            reminder_status: "sent",
+            reminder_sent_at: "2026-04-19T08:00:00Z",
+            created_at: "2026-04-19T08:00:00Z",
+            updated_at: "2026-04-19T08:00:00Z",
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("主管给你的本周重点")).toBeTruthy();
+        expect(screen.getByText("evidence / gap")).toBeTruthy();
+        expect(screen.getByText("本周先补一条客户案例，再推进下一步。")).toBeTruthy();
+        expect(screen.getByText(/创建于/)).toBeTruthy();
+        expect(screen.getByRole("link", { name: "去训练" }).getAttribute("href")).toBe("/training");
+        expect(screen.queryByText("manager_user_id")).toBeNull();
+    });
+
+    it("hides manager intervention card when none is open or when the reminder endpoint fails", async () => {
+        getOpenInterventionMock.mockResolvedValueOnce(null);
+
+        const { unmount } = render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.queryByText("主管给你的本周重点")).toBeNull();
+        unmount();
+
+        getOpenInterventionMock.mockRejectedValueOnce(new Error("manager reminder unavailable"));
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.queryByText("主管给你的本周重点")).toBeNull();
+        expect(screen.getByText("第一次来，先这样开始")).toBeTruthy();
+    });
+
 });

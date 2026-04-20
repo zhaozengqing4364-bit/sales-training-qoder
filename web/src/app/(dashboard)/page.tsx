@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api/client";
-import { DashboardStats, Recommendation, SessionItem } from "@/lib/api/types";
+import { DashboardStats, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
     Dialog,
@@ -93,6 +93,13 @@ function getVersionBadge(): string {
 
 function getDisplayName(currentUser: ReturnType<typeof useCurrentUser>["data"]): string {
     return currentUser?.display_name || currentUser?.name || currentUser?.email?.split("@")[0] || "用户";
+}
+
+function formatInterventionIssueFamily(issueFamily: string): string {
+    return issueFamily
+        .split("_")
+        .filter(Boolean)
+        .join(" / ") || issueFamily;
 }
 
 function getRecommendationSourceCopy(recommendation: Recommendation): string | null {
@@ -203,6 +210,7 @@ export default function HomePage() {
     const [recommendation, setRecommendation] = useState<Recommendation>(DEFAULT_RECOMMENDATION);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
     const [dashboardDegradedSections, setDashboardDegradedSections] = useState<string[]>([]);
+    const [openIntervention, setOpenIntervention] = useState<LearnerOpenIntervention | null>(null);
     const [dashboardReloadVersion, setDashboardReloadVersion] = useState(0);
 
     const handleDeleteHistory = (id: string) => {
@@ -212,10 +220,11 @@ export default function HomePage() {
     useEffect(() => {
         const loadDashboardData = async () => {
             setIsLoading(true);
-            const [statsResult, recResult, historyResult] = await Promise.allSettled([
+            const [statsResult, recResult, historyResult, interventionResult] = await Promise.allSettled([
                 api.dashboard.getStats(),
                 api.dashboard.getRecommendation(),
                 api.dashboard.getHistory(),
+                api.user.getOpenIntervention(),
             ]);
 
             const degradedSections: string[] = [];
@@ -240,6 +249,8 @@ export default function HomePage() {
                 setHistoryItems([]);
                 degradedSections.push("最近记录");
             }
+
+            setOpenIntervention(interventionResult.status === "fulfilled" ? interventionResult.value : null);
 
             setDashboardDegradedSections(degradedSections);
             setIsLoading(false);
@@ -555,6 +566,32 @@ export default function HomePage() {
             </section>
 
             <LearnerHelpCard />
+
+            {openIntervention && (
+                <section>
+                    <GlassCard className="p-5 border border-violet-200 bg-violet-50/80">
+                        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">主管给你的本周重点</p>
+                                <h2 className="mt-2 text-lg font-bold text-slate-900">
+                                    {formatInterventionIssueFamily(openIntervention.issue_family)}
+                                </h2>
+                                <p className="mt-2 text-sm leading-6 text-slate-700">
+                                    {openIntervention.note || "主管提醒你本周优先完成一次针对性训练。"}
+                                </p>
+                                <p className="mt-2 text-xs text-slate-500">
+                                    创建于 {formatTimeAgo(openIntervention.created_at)}
+                                </p>
+                            </div>
+                            <Link href="/training">
+                                <Button className="rounded-full bg-violet-700 text-white hover:bg-violet-800">
+                                    去训练 <ArrowRight className="ml-2 w-4 h-4" />
+                                </Button>
+                            </Link>
+                        </div>
+                    </GlassCard>
+                </section>
+            )}
 
             {isStatsDegraded ? (
                 <section>
