@@ -124,7 +124,8 @@ describe("API client 401 handling", () => {
             pitch: "+2Hz",
         });
 
-        expect(result).toBeInstanceOf(Blob);
+        expect(result.type).toBe("audio/mpeg");
+        expect(result.size).toBeGreaterThan(0);
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
         const [url, requestOptions] = fetchMock.mock.calls[0] as [string, RequestInit];
