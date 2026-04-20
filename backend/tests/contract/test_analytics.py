@@ -292,6 +292,312 @@ class TestAnalyticsContract:
             assert payload["my_rank"].get("scenario_type") == "sales"
             assert payload["my_rank"].get("time_period") == "weekly"
 
+    async def test_get_leaderboard_with_improvement_mode_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Test improvement mode params flow through the public leaderboard API."""
+        captured: dict[str, object] = {}
+        leaderboard_user_id = uuid.uuid4()
+
+        async def fake_calculate_leaderboard(
+            *,
+            db,
+            scenario_type,
+            time_period,
+            limit,
+            leaderboard_mode,
+            issue_type=None,
+        ):
+            captured["calculate"] = {
+                "scenario_type": scenario_type,
+                "time_period": time_period,
+                "limit": limit,
+                "leaderboard_mode": leaderboard_mode,
+                "issue_type": issue_type,
+            }
+            return Result.ok(
+                SimpleNamespace(
+                    time_period=time_period,
+                    score_basis="session_evidence_projection_evaluable_only",
+                    evaluable_sessions=3,
+                    not_evaluable_sessions=1,
+                    total_users=1,
+                    entries=[
+                        SimpleNamespace(
+                            rank=1,
+                            user_id=leaderboard_user_id,
+                            username="Improving User",
+                            total_sessions=3,
+                            average_score=85.0,
+                            best_score=90.0,
+                            score_basis="session_evidence_projection_evaluable_only",
+                            evaluable_sessions=3,
+                            not_evaluable_sessions=0,
+                            improvement_score=15.0,
+                            first_score=70.0,
+                            latest_score=85.0,
+                            sample_size=3,
+                        )
+                    ],
+                )
+            )
+
+        async def fake_get_user_rank(
+            *,
+            db,
+            user_id,
+            scenario_type,
+            time_period,
+            leaderboard_mode,
+            issue_type=None,
+        ):
+            captured["rank"] = {
+                "scenario_type": scenario_type,
+                "time_period": time_period,
+                "leaderboard_mode": leaderboard_mode,
+                "issue_type": issue_type,
+            }
+            return Result.ok(
+                {
+                    "user_id": str(user_id),
+                    "rank": 1,
+                    "total_sessions": 3,
+                    "average_score": 85.0,
+                    "time_period": time_period,
+                    "scenario_type": scenario_type,
+                }
+            )
+
+        monkeypatch.setattr(
+            analytics_api.leaderboard_service,
+            "calculate_leaderboard",
+            fake_calculate_leaderboard,
+        )
+        monkeypatch.setattr(
+            analytics_api.leaderboard_service,
+            "get_user_rank",
+            fake_get_user_rank,
+        )
+
+        response = await async_client.get(
+            "/api/v1/analytics/leaderboard"
+            "?scenario_type=sales_bot&time_period=week"
+            "&leaderboard_mode=improvement&include_me=true&limit=10",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert captured["calculate"] == {
+            "scenario_type": "sales",
+            "time_period": "weekly",
+            "limit": 10,
+            "leaderboard_mode": "improvement",
+            "issue_type": None,
+        }
+        assert captured["rank"]["leaderboard_mode"] == "improvement"
+        assert payload["leaderboard_mode"] == "improvement"
+        assert payload["eligibility"]["minimum_evaluable_sessions"] == 2
+        assert payload["entries"][0]["improvement_score"] == 15.0
+        assert payload["entries"][0]["first_score"] == 70.0
+        assert payload["entries"][0]["latest_score"] == 85.0
+        assert payload["entries"][0]["sample_size"] == 3
+        assert payload["my_rank"]["leaderboard_mode"] == "improvement"
+
+    async def test_get_leaderboard_with_issue_type_mode_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Test issue_type mode echoes params, entries, and bucket metadata."""
+        captured: dict[str, object] = {}
+        leaderboard_user_id = uuid.uuid4()
+
+        async def fake_calculate_leaderboard(
+            *,
+            db,
+            scenario_type,
+            time_period,
+            limit,
+            leaderboard_mode,
+            issue_type=None,
+        ):
+            captured["calculate"] = {
+                "leaderboard_mode": leaderboard_mode,
+                "issue_type": issue_type,
+                "scenario_type": scenario_type,
+                "time_period": time_period,
+                "limit": limit,
+            }
+            return Result.ok(
+                SimpleNamespace(
+                    time_period=time_period,
+                    score_basis="session_evidence_projection_evaluable_only",
+                    evaluable_sessions=2,
+                    not_evaluable_sessions=1,
+                    total_users=1,
+                    issue_type_buckets=[
+                        {
+                            "issue_type": "evidence_gap",
+                            "eligible_sessions": 2,
+                            "user_count": 1,
+                        }
+                    ],
+                    entries=[
+                        {
+                            "rank": 1,
+                            "user_id": leaderboard_user_id,
+                            "username": "Evidence User",
+                            "total_sessions": 2,
+                            "average_score": 88.0,
+                            "best_score": 91.0,
+                            "score_basis": "session_evidence_projection_evaluable_only",
+                            "issue_type": "evidence_gap",
+                            "issue_type_sessions": 2,
+                        }
+                    ],
+                )
+            )
+
+        async def fake_get_user_rank(
+            *,
+            db,
+            user_id,
+            scenario_type,
+            time_period,
+            leaderboard_mode,
+            issue_type=None,
+        ):
+            captured["rank"] = {
+                "leaderboard_mode": leaderboard_mode,
+                "issue_type": issue_type,
+            }
+            return Result.ok(
+                {
+                    "user_id": str(user_id),
+                    "rank": 1,
+                    "total_sessions": 2,
+                    "average_score": 88.0,
+                }
+            )
+
+        monkeypatch.setattr(
+            analytics_api.leaderboard_service,
+            "calculate_leaderboard",
+            fake_calculate_leaderboard,
+        )
+        monkeypatch.setattr(
+            analytics_api.leaderboard_service,
+            "get_user_rank",
+            fake_get_user_rank,
+        )
+
+        response = await async_client.get(
+            "/api/v1/analytics/leaderboard"
+            "?leaderboard_mode=issue_type&issue_type=evidence_gap&include_me=true",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert captured["calculate"]["leaderboard_mode"] == "issue_type"
+        assert captured["calculate"]["issue_type"] == "evidence_gap"
+        assert captured["rank"]["leaderboard_mode"] == "issue_type"
+        assert captured["rank"]["issue_type"] == "evidence_gap"
+        assert payload["leaderboard_mode"] == "issue_type"
+        assert payload["issue_type"] == "evidence_gap"
+        assert payload["eligibility"]["issue_type_required_for_entries"] is True
+        assert payload["issue_type_buckets"] == [
+            {
+                "issue_type": "evidence_gap",
+                "eligible_sessions": 2,
+                "user_count": 1,
+            }
+        ]
+        assert payload["entries"][0]["issue_type"] == "evidence_gap"
+        assert payload["entries"][0]["issue_type_sessions"] == 2
+        assert payload["my_rank"]["leaderboard_mode"] == "issue_type"
+        assert payload["my_rank"]["issue_type"] == "evidence_gap"
+
+    async def test_get_my_rank_with_improvement_mode_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Test selected leaderboard mode is forwarded to my-rank."""
+        captured: dict[str, object] = {}
+
+        async def fake_get_user_rank(
+            *,
+            db,
+            user_id,
+            scenario_type,
+            time_period,
+            leaderboard_mode,
+            issue_type=None,
+        ):
+            captured.update(
+                {
+                    "scenario_type": scenario_type,
+                    "time_period": time_period,
+                    "leaderboard_mode": leaderboard_mode,
+                    "issue_type": issue_type,
+                }
+            )
+            return Result.ok(
+                {
+                    "user_id": str(user_id),
+                    "rank": 2,
+                    "total_sessions": 2,
+                    "average_score": 77.0,
+                    "time_period": time_period,
+                    "scenario_type": scenario_type,
+                }
+            )
+
+        monkeypatch.setattr(
+            analytics_api.leaderboard_service,
+            "get_user_rank",
+            fake_get_user_rank,
+        )
+
+        response = await async_client.get(
+            "/api/v1/analytics/leaderboard/my-rank"
+            "?scenario_type=sales_bot&time_period=week&leaderboard_mode=improvement",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        assert captured == {
+            "scenario_type": "sales",
+            "time_period": "weekly",
+            "leaderboard_mode": "improvement",
+            "issue_type": None,
+        }
+        payload = response.json()
+        assert payload["leaderboard_mode"] == "improvement"
+        assert payload["scenario_type"] == "sales"
+        assert payload["time_period"] == "weekly"
+
+    async def test_get_leaderboard_rejects_invalid_mode_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Test invalid leaderboard_mode fails loudly instead of falling back."""
+        response = await async_client.get(
+            "/api/v1/analytics/leaderboard?leaderboard_mode=surprise",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "[INVALID_LEADERBOARD_MODE]"
+
     async def test_get_admin_overview_projection_summary_contract(
         self,
         async_client: AsyncClient,
