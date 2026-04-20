@@ -392,7 +392,7 @@ export default function ComprehensiveReportPage() {
     }, [sessionId]);
 
     useEffect(() => {
-        void loadUnifiedEvidence();
+        void Promise.resolve().then(loadUnifiedEvidence);
     }, [loadUnifiedEvidence]);
 
     useEffect(() => {
@@ -464,7 +464,7 @@ export default function ComprehensiveReportPage() {
 
     useEffect(() => {
         if (!report || (!report.main_issue && !report.next_goal)) {
-            setReplayData(null);
+            queueMicrotask(() => setReplayData(null));
             return;
         }
 
@@ -503,7 +503,7 @@ export default function ComprehensiveReportPage() {
         let cancelled = false;
 
         if (report.scenario_type === "presentation") {
-            setKnowledgeCheck(null);
+            queueMicrotask(() => setKnowledgeCheck(null));
             debug.log("[Report] Knowledge-check skipped for presentation scenario", {
                 sessionId,
                 scenarioType: report.scenario_type,
@@ -546,10 +546,90 @@ export default function ComprehensiveReportPage() {
         }
 
         let cancelled = false;
-        setHighlightsLoading(true);
-        setHighlightsUnavailableHint(null);
 
-        api.sessions.getHighlights(sessionId)
+        const loadHighlights = async () => {
+            setHighlightsLoading(true);
+            setHighlightsUnavailableHint(null);
+
+            try {
+                const data = await api.sessions.getHighlights(sessionId);
+                if (cancelled) return;
+                setHighlightsData(data);
+                debug.log("[Report] Highlights loaded", {
+                    sessionId,
+                    scenarioType: report.scenario_type,
+                    highlightCount: data.highlights.length,
+                });
+            } catch (err) {
+                if (cancelled) return;
+                setHighlightsData(null);
+                setHighlightsUnavailableHint(
+                    report.scenario_type === "presentation"
+                        ? "高光片段暂不可用，PPT 基础复盘不受影响。"
+                        : "高光片段暂不可用，基础评估结果不受影响。",
+                );
+                debug.warn("[Report] Highlights unavailable; keeping unified evidence", {
+                    sessionId,
+                    scenarioType: report.scenario_type,
+                    error: err,
+                });
+            } finally {
+                if (!cancelled) {
+                    setHighlightsLoading(false);
+                }
+            }
+        };
+
+        void Promise.resolve().then(loadHighlights);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [sessionId, report]);
+
+    const isPresentationScenario = report?.scenario_type === "presentation";
+    const presentationReview = isPresentationScenario ? report?.presentation_review ?? null : null;
+    const presentationDegradedNote = formatPresentationDegradedNote(
+        presentationReview,
+        report?.evidence_completeness,
+    );
+    const presentationIssueItems = useMemo(
+        () => buildPresentationIssueItems(presentationReview),
+        [presentationReview],
+    );
+    const presentationIssueClusterCount = useMemo(() => {
+        const diagnosticCount = presentationReview?.diagnostics?.page_issue_cluster_count;
+        if (typeof diagnosticCount === "number") {
+            return diagnosticCount;
+        }
+        return (presentationReview?.page_summaries || []).reduce(
+            (count, pageSummary) => count + (pageSummary.issue_clusters?.length || 0),
+            0,
+        );
+    }, [presentationReview]);
+    const retryEntry = report?.retry_entry;
+    const retryBlockedHint = (
+        retryEntry?.scenario_type === "sales"
+        && (!retryEntry.agent_id || !retryEntry.persona_id)
+    )
+        ? "当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。"
+        : (
+            retryEntry?.scenario_type === "presentation"
+            && !retryEntry.presentation_id
+        )
+            ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
+            : null;
+    const retryFallbackPath = getRetryFallbackPath(retryEntry);
+    const retryNeedsManualSelection = Boolean(retryBlockedHint || !retryEntry?.scenario_type);
+    const retryActionLabel = retryNeedsManualSelection
+        ? (retryEntry?.scenario_type === "presentation" ? "去演讲训练页重新选择" : "去销售训练页重新选择")
+        : "按目标再练一轮";
+    const issueReplayAnchor = replayData?.main_issue?.replay_anchor ?? null;
+    const nextGoalReplayAnchor = replayData?.next_goal?.replay_anchor ?? null;
+    const issueReplayHint = formatReplayAnchorHint(issueReplayAnchor);
+    const nextGoalReplayHint = formatReplayAnchorHint(nextGoalReplayAnchor);
+    const issueReplayAvailable = hasReplayAnchorTarget(issueReplayAnchor);
+    const nextGoalReplayAvailable = hasReplayAnchorTarget(nextGoalReplayAnchor);
             .then((data) => {
                 if (cancelled) return;
                 setHighlightsData(data);
