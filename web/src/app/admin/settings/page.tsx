@@ -188,13 +188,14 @@ export default function SettingsPage() {
             }
 
             const extra = formData.extra_config as { rate?: string; volume?: string; pitch?: string } || {};
-            const blob = await api.admin.previewTTSBlob({
+            const blob = await api.adminTools.previewTTSBlob({
                 text: "你好，这是一段语音试听测试，用于预览当前的语速、音量和音调设置。",
                 voice: formData.model_name || "zh-CN-XiaoxiaoNeural",
                 rate: extra.rate || "+0%",
                 volume: extra.volume || "+0%",
                 pitch: extra.pitch || "+0Hz",
             });
+
             const audioUrl = URL.createObjectURL(blob);
             const audio = new Audio(audioUrl);
             previewAudioRef.current = audio;
@@ -211,7 +212,7 @@ export default function SettingsPage() {
             await audio.play();
         } catch (err) {
             debug.error("TTS preview failed:", err);
-            toast.error(getApiErrorMessage(err));
+            toast.error(`试听失败：${getApiErrorMessage(err)}`);
             setIsPreviewingTTS(false);
         }
     };
