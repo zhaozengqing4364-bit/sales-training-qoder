@@ -139,6 +139,11 @@ describe("LeaderboardPage", () => {
         expect(screen.getByText("当前榜单纳入 14 次可评估训练，3 次证据不足训练未计入排名。")).toBeTruthy();
         expect(screen.getByText("我的排名")).toBeTruthy();
         expect(screen.getByText(/均分 80/)).toBeTruthy();
+        expect(screen.getByText("我的附近排名")).toBeTruthy();
+        expect(screen.getByText("同分邻近用户")).toBeTruthy();
+        expect(screen.getByText("基于当前榜单页中与你名次相邻或均分接近的用户生成；只使用已完成且可评估训练。")).toBeTruthy();
+        expect(screen.getAllByText("赵六").length).toBeGreaterThan(0);
+        expect(screen.getByText(/与你均分差 1\.1 分/)).toBeTruthy();
         expect(screen.queryByText(/weighted-score/i)).toBeNull();
     });
 
@@ -155,7 +160,7 @@ describe("LeaderboardPage", () => {
         expect(
             screen.getByText(/当前筛选范围还没有可评估训练进入榜单/),
         ).toBeTruthy();
-        expect(screen.getByRole("link", { name: /去训练大厅/ }).getAttribute("href")).toBe("/training");
+        expect(screen.getAllByRole("link", { name: /去训练大厅/ }).some((link) => link.getAttribute("href") === "/training")).toBe(true);
         expect(
             screen.getByText("均分与排名只纳入可评估的已完成训练，证据不足会话会单独记账，不会混入榜单。"),
         ).toBeTruthy();
@@ -234,7 +239,7 @@ describe("LeaderboardPage", () => {
             });
         });
         expect(await screen.findByText("我的排名")).toBeTruthy();
-        expect(screen.getByText(/均分 78/)).toBeTruthy();
+        expect(screen.getAllByText(/均分 78/).length).toBeGreaterThan(0);
 
         fireEvent.click(screen.getByRole("button", { name: "总榜" }));
 
@@ -262,4 +267,34 @@ describe("LeaderboardPage", () => {
             screen.getByText("均分与排名只纳入可评估的已完成训练，证据不足会话会单独记账，不会混入榜单。"),
         ).toBeTruthy();
     });
+
+    it("explains when my rank is outside the current leaderboard page", async () => {
+        getPublicLeaderboardMock.mockResolvedValueOnce({
+            time_period: "weekly",
+            score_basis: "session_evidence_projection_evaluable_only",
+            evaluable_sessions: 20,
+            not_evaluable_sessions: 1,
+            total_users: 30,
+            entries: [
+                createLeaderboardEntry({ rank: 1, user_id: "top-1", username: "榜首", average_score: 96, best_score: 98 }),
+                createLeaderboardEntry({ rank: 2, user_id: "top-2", username: "第二名", average_score: 94, best_score: 96 }),
+            ],
+            my_rank: {
+                user_id: "me",
+                rank: 28,
+                total_sessions: 1,
+                average_score: 61.2,
+                score_basis: "session_evidence_projection_evaluable_only",
+                evaluable_sessions: 1,
+                not_evaluable_sessions: 0,
+            },
+        });
+
+        render(<LeaderboardPage />);
+
+        expect(await screen.findByText("我的附近排名暂不在本页范围")).toBeTruthy();
+        expect(screen.getByText(/你当前排名 #28，均分 61/)).toBeTruthy();
+        expect(screen.getAllByRole("link", { name: /去训练大厅/ }).some((link) => link.getAttribute("href") === "/training")).toBe(true);
+    });
+
 });

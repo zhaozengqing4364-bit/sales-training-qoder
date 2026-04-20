@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { ArrowRight, Loader2, Trophy, User } from "lucide-react";
+import { ArrowRight, Loader2, Trophy, User, UsersRound } from "lucide-react";
 
 type TimePeriod = "weekly" | "monthly" | "all_time";
 type ScenarioFilter = "all" | "sales" | "presentation";
@@ -20,9 +20,17 @@ type LeaderboardEntry = {
 };
 
 type MyRank = {
+    user_id?: string | null;
     rank: number | null;
     total_sessions: number;
     average_score: number;
+};
+
+type NearbyRankInsight = {
+    status: "ranked" | "not_enough_evidence" | "outside_current_page";
+    title: string;
+    description: string;
+    nearbyEntries: LeaderboardEntry[];
 };
 
 type LeaderboardMeta = {
@@ -41,6 +49,54 @@ const SCENARIO_OPTIONS: Array<{ value: ScenarioFilter; label: string }> = [
     { value: "sales", label: "销售对练" },
     { value: "presentation", label: "PPT 演练" },
 ];
+
+function buildNearbyRankInsight(
+    myRank: MyRank | null,
+    entries: LeaderboardEntry[],
+): NearbyRankInsight {
+    if (!myRank || myRank.rank === null || myRank.total_sessions <= 0) {
+        return {
+            status: "not_enough_evidence",
+            title: "暂未进入我的附近排名",
+            description: "当前账号还没有足够的可评估训练进入榜单；完成一次有足够对话证据的训练后，会显示你的排名和邻近用户。",
+            nearbyEntries: [],
+        };
+    }
+
+    const myRankValue = myRank.rank;
+    const byRank = entries.filter((entry) => (
+        Math.abs(entry.rank - myRankValue) <= 1
+        && entry.user_id !== myRank.user_id
+    ));
+    const byScore = entries
+        .filter((entry) => entry.user_id !== myRank.user_id)
+        .map((entry) => ({
+            entry,
+            scoreDistance: Math.abs(entry.average_score - myRank.average_score),
+        }))
+        .filter(({ scoreDistance }) => scoreDistance <= 2)
+        .sort((left, right) => left.scoreDistance - right.scoreDistance || left.entry.rank - right.entry.rank)
+        .map(({ entry }) => entry);
+    const nearbyEntries = Array.from(new Map(
+        [...byRank, ...byScore].map((entry) => [entry.user_id, entry]),
+    ).values()).slice(0, 3);
+
+    if (nearbyEntries.length === 0) {
+        return {
+            status: "outside_current_page",
+            title: "我的附近排名暂不在本页范围",
+            description: `你当前排名 #${myRank.rank}，均分 ${Math.round(myRank.average_score)}。本页还没有同分或相邻名次用户；继续完成可评估训练后会刷新附近对比。`,
+            nearbyEntries: [],
+        };
+    }
+
+    return {
+        status: "ranked",
+        title: "我的附近排名",
+        description: "基于当前榜单页中与你名次相邻或均分接近的用户生成；只使用已完成且可评估训练。",
+        nearbyEntries,
+    };
+}
 
 function rankBadge(rank: number): string {
     if (rank === 1) return "🥇";
@@ -101,6 +157,7 @@ export default function LeaderboardPage() {
 
             if (leaderboardResult.my_rank) {
                 setMyRank({
+                    user_id: leaderboardResult.my_rank.user_id,
                     rank: leaderboardResult.my_rank.rank,
                     total_sessions: leaderboardResult.my_rank.total_sessions,
                     average_score: leaderboardResult.my_rank.average_score,
@@ -120,6 +177,7 @@ export default function LeaderboardPage() {
 
             if (fallbackMyRank) {
                 setMyRank({
+                    user_id: fallbackMyRank.user_id,
                     rank: fallbackMyRank.rank,
                     total_sessions: fallbackMyRank.total_sessions,
                     average_score: fallbackMyRank.average_score,
@@ -140,6 +198,7 @@ export default function LeaderboardPage() {
 
     const topEntries = useMemo(() => entries.slice(0, 3), [entries]);
     const remainingEntries = useMemo(() => entries.slice(3), [entries]);
+    const nearbyRankInsight = useMemo(() => buildNearbyRankInsight(myRank, entries), [entries, myRank]);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -194,6 +253,52 @@ export default function LeaderboardPage() {
                         <span className="text-slate-700">{myRank.total_sessions} 次练习</span>
                         <span className="font-semibold text-slate-900">均分 {Math.round(myRank.average_score || 0)}</span>
                     </div>
+                </GlassCard>
+            )}
+
+            {!isLoading && !loadError && (
+                <GlassCard className="p-5 border border-blue-100 bg-blue-50/60">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div>
+                            <p className="text-xs font-semibold text-blue-700">附近排名</p>
+                            <h2 className="text-lg font-bold text-slate-900 mt-1">{nearbyRankInsight.title}</h2>
+                            <p className="text-sm text-slate-600 mt-1 max-w-3xl">{nearbyRankInsight.description}</p>
+                        </div>
+                        {nearbyRankInsight.status !== "ranked" && (
+                            <Link
+                                href="/training"
+                                className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                            >
+                                去训练大厅
+                                <ArrowRight className="w-4 h-4" />
+                            </Link>
+                        )}
+                    </div>
+
+                    {nearbyRankInsight.nearbyEntries.length > 0 && (
+                        <div className="mt-4">
+                            <p className="mb-2 text-xs font-semibold text-blue-700">同分邻近用户</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {nearbyRankInsight.nearbyEntries.map((entry) => (
+                                    <div key={entry.user_id} className="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2 font-bold text-slate-900">
+                                                <UsersRound className="w-4 h-4 text-blue-600" />
+                                                {entry.username}
+                                            </div>
+                                            <Badge variant="blue" className="text-[11px]">#{entry.rank}</Badge>
+                                        </div>
+                                        <div className="mt-3 text-sm text-slate-600">
+                                            均分 {Math.round(entry.average_score)} · 最佳 {Math.round(entry.best_score)} · {entry.total_sessions} 次练习
+                                        </div>
+                                        <p className="mt-2 text-xs text-slate-500">
+                                            与你均分差 {Math.abs(entry.average_score - (myRank?.average_score ?? entry.average_score)).toFixed(1)} 分
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </GlassCard>
             )}
 
