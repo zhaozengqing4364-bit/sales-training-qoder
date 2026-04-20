@@ -322,7 +322,13 @@ export default function HistoryPage() {
                         </div>
                     ) : (
                         <div className="mt-4 rounded-2xl border border-dashed border-blue-200 bg-white/70 p-4 text-sm text-slate-600">
-                            暂无可用于按问题复练的记录。完成一次可评估训练后，这里会按主问题聚合最常卡住的类型。
+                            <p>
+                                暂无可用于按问题复练的记录。完成一次可评估训练后，这里会按主问题聚合最常卡住的类型。
+                            </p>
+                            <Link href="/training/sales" className="mt-3 inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-700">
+                                去销售训练获取可复练证据
+                                <ArrowRight className="w-3 h-3" />
+                            </Link>
                         </div>
                     )}
                 </GlassCard>
@@ -362,13 +368,24 @@ export default function HistoryPage() {
                     正在加载训练历史...
                 </GlassCard>
             ) : history.length === 0 ? (
-                <GlassCard className="p-10 text-center text-slate-500">
+                <GlassCard className="p-10 text-center">
                     {historyLoadError ? (
-                        "统一训练证据加载失败，请点击右上角“重试”。"
+                        <p className="text-sm text-slate-500">统一训练证据加载失败，请点击右上角“重试”。</p>
                     ) : (
-                        <>
-                            暂无训练记录，去 <Link href="/training" className="text-blue-600 font-semibold">训练大厅</Link> 开始第一次练习吧。
-                        </>
+                        <div>
+                            <p className="text-sm font-semibold text-slate-900">暂无训练记录</p>
+                            <p className="mt-2 text-sm text-slate-500">
+                                当前筛选条件下还没有训练证据；完成一次销售对练或 PPT 演练后，这里会展示回放、报告和按问题复练入口。
+                            </p>
+                            <div className="mt-5 flex justify-center">
+                                <Link href="/training">
+                                    <Button className="gap-1">
+                                        去训练大厅
+                                        <ArrowRight className="w-4 h-4" />
+                                    </Button>
+                                </Link>
+                            </div>
+                        </div>
                     )}
                 </GlassCard>
             ) : (
