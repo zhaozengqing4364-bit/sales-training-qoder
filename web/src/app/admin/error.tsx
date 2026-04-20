@@ -27,10 +27,9 @@ export default function Error({
                 <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center text-red-500 mb-6 shadow-sm">
                     <AlertCircle className="w-8 h-8" strokeWidth={1.5} />
                 </div>
-                <h2 className="text-xl font-black text-slate-900 mb-2">Something went wrong!</h2>
+                <h2 className="text-xl font-black text-slate-900 mb-2">管理后台加载失败</h2>
                 <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-                    An unexpected error occurred while loading the dashboard.
-                    Our team has been notified.
+                    加载管理后台时发生异常，我们已记录该问题。请稍后重试或返回首页。
                 </p>
                 <div className="flex gap-4 w-full">
                     <Button
@@ -38,13 +37,13 @@ export default function Error({
                         onClick={() => window.location.href = '/'}
                         className="flex-1 rounded-full border-slate-200"
                     >
-                        Go Home
+                        返回首页
                     </Button>
                     <Button
                         onClick={reset}
                         className="flex-1 rounded-full bg-slate-900 hover:bg-slate-800 text-white"
                     >
-                        <RefreshCcw className="w-4 h-4 mr-2" /> Retry
+                        <RefreshCcw className="w-4 h-4 mr-2" /> 重试
                     </Button>
                 </div>
             </GlassCard>
