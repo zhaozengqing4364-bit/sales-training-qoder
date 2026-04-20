@@ -80,6 +80,58 @@ class TestSessionsContract:
         assert runtime_descriptor["scenario_type"] == "presentation"
         assert runtime_descriptor["presentation_id"] == presentation.presentation_id
 
+    async def test_create_presentation_session_persists_page_focus_intent(
+        self,
+        async_client: AsyncClient,
+        contract_auth_headers: dict,
+        test_db: AsyncSession,
+    ):
+        """Presentation retries should preserve target page focus in the runtime descriptor."""
+        presentation_scenario = Scenario(
+            scenario_id=str(uuid.uuid4()),
+            scenario_type="presentation",
+            name="contract_presentation_focus",
+            is_active=True,
+        )
+        presentation = Presentation(
+            presentation_id=str(uuid.uuid4()),
+            title="Contract Presentation Focus",
+            file_url="https://example.com/contract-focus.pptx",
+            status="ready",
+        )
+        test_db.add_all([presentation_scenario, presentation])
+        await test_db.commit()
+
+        focus_intent = {
+            "version": "presentation_page_retry_v1",
+            "source_session_id": "session-source",
+            "presentation_page": {
+                "page_number": 2,
+                "reason": "missing_required_points",
+                "summary": "第 2 页缺客户案例",
+                "missing_required_points": ["客户案例"],
+            },
+        }
+
+        response = await async_client.post(
+            "/api/v1/practice/sessions",
+            headers=contract_auth_headers,
+            json={
+                "scenario_type": "presentation",
+                "presentation_id": presentation.presentation_id,
+                "voice_mode": "stepfun_realtime",
+                "focus_intent": focus_intent,
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()["data"]
+        assert data["voice_policy_snapshot"]["focus_intent"] == focus_intent
+        runtime_descriptor = _require_dict(
+            data.get("runtime_descriptor"), "runtime_descriptor"
+        )
+        assert runtime_descriptor["focus_intent"] == focus_intent
+
     async def test_create_sales_session_contract_includes_snapshot_reference(
         self,
         async_client: AsyncClient,

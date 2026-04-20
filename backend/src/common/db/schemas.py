@@ -259,7 +259,7 @@ class SessionCreate(SessionBase):
     )
     focus_intent: dict[str, Any] | None = Field(
         default=None,
-        description="Optional retry focus intent carried forward from a prior sales report.",
+        description="Optional retry focus intent carried forward from a prior report, including sales issue/goal or presentation page focus.",
     )
 
 

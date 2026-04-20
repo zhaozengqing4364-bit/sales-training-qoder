@@ -292,6 +292,38 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getAllByText("panel-focus-page:2").length).toBeGreaterThan(0);
     });
 
+
+
+    it("prefers persisted runtime focus over URL page focus", async () => {
+        searchParamsMock.current = "scenario_type=presentation&presentation_id=presentation-1&focus=presentation_page&page=2";
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "presentation",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: undefined,
+            lockedPersonaId: undefined,
+            lockedPresentationId: "presentation-1",
+            focusIntent: {
+                version: "presentation_page_retry_v1",
+                source_session_id: "session-previous",
+                presentation_page: {
+                    page_number: 3,
+                    reason: "missing_required_points",
+                    summary: "第 3 页缺少客户案例。",
+                    missing_required_points: ["客户案例"],
+                },
+            },
+            sessionMetaError: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(await screen.findByText("开始前先看本次练习重点")).toBeTruthy();
+        expect(screen.getByText("第 3 页")).toBeTruthy();
+        expect(screen.queryByText("第 2 页")).toBeNull();
+        expect(screen.getAllByText("panel-focus-page:3").length).toBeGreaterThan(0);
+    });
+
     it("ignores invalid presentation page focus values", async () => {
         searchParamsMock.current = "scenario_type=presentation&presentation_id=presentation-1&focus=presentation_page&page=bad";
         usePracticeRuntimeLockMock.mockReturnValue({

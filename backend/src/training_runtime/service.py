@@ -26,14 +26,62 @@ def _filter_retry_focus_fields(
     return filtered or None
 
 
+def _sanitize_text(value: Any, *, max_length: int) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    return normalized[:max_length]
+
+
+def _sanitize_text_list(
+    value: Any,
+    *,
+    max_items: int = 10,
+    max_length: int = 120,
+) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    items = [
+        sanitized
+        for item in value[:max_items]
+        if (sanitized := _sanitize_text(item, max_length=max_length))
+    ]
+    return items or None
+
+
+def _sanitize_presentation_page_focus(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    raw_page_number = value.get("page_number")
+    if isinstance(raw_page_number, bool):
+        return None
+    try:
+        page_number = int(raw_page_number)
+    except (TypeError, ValueError):
+        return None
+    if page_number <= 0:
+        return None
+
+    sanitized: dict[str, Any] = {"page_number": page_number}
+    reason = _sanitize_text(value.get("reason"), max_length=120)
+    summary = _sanitize_text(value.get("summary"), max_length=500)
+    missing_required_points = _sanitize_text_list(value.get("missing_required_points"))
+    if reason is not None:
+        sanitized["reason"] = reason
+    if summary is not None:
+        sanitized["summary"] = summary
+    if missing_required_points is not None:
+        sanitized["missing_required_points"] = missing_required_points
+    return sanitized
+
+
 def _extract_runtime_focus_intent(
     session: PracticeSession,
     *,
     scenario_type: str,
 ) -> dict[str, Any] | None:
-    if str(scenario_type or "").lower() != "sales":
-        return None
-
     snapshot = getattr(session, "voice_policy_snapshot", None)
     if not isinstance(snapshot, dict):
         return None
@@ -50,7 +98,10 @@ def _extract_runtime_focus_intent(
         focus_intent.get("next_goal"),
         allowed_keys=("goal_type", "goal_text", "rule"),
     )
-    if main_issue is None and next_goal is None:
+    presentation_page = _sanitize_presentation_page_focus(
+        focus_intent.get("presentation_page")
+    )
+    if main_issue is None and next_goal is None and presentation_page is None:
         return None
 
     sanitized: dict[str, Any] = {
@@ -63,6 +114,8 @@ def _extract_runtime_focus_intent(
         sanitized["main_issue"] = main_issue
     if next_goal is not None:
         sanitized["next_goal"] = next_goal
+    if presentation_page is not None:
+        sanitized["presentation_page"] = presentation_page
     return deepcopy(sanitized)
 
 

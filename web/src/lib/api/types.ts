@@ -1844,11 +1844,19 @@ export interface LiveSessionConclusionSummary {
     claim_truth?: SessionClaimTruthPayload | null;
 }
 
+export interface PresentationPageFocusIntent {
+    page_number: number;
+    reason?: string | null;
+    summary?: string | null;
+    missing_required_points?: string[] | null;
+}
+
 export interface RetryFocusIntent {
     version: string;
     source_session_id: string;
     main_issue?: SessionMainIssue | null;
     next_goal?: SessionNextGoal | null;
+    presentation_page?: PresentationPageFocusIntent | null;
 }
 
 export interface RetryEntry {

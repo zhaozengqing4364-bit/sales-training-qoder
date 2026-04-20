@@ -78,6 +78,16 @@ function parsePresentationPageFocus(
     return { pageNumber };
 }
 
+function getPresentationPageFocusFromIntent(
+    focusIntent: ReturnType<typeof usePracticeRuntimeLock>["focusIntent"],
+): PresentationPageFocus | null {
+    const pageNumber = Number(focusIntent?.presentation_page?.page_number);
+    if (!Number.isInteger(pageNumber) || pageNumber <= 0) {
+        return null;
+    }
+    return { pageNumber };
+}
+
 function buildFallbackPreflightBrief(scenarioType: "sales" | "presentation"): PracticePreflightBrief {
     if (scenarioType === "presentation") {
         return {
@@ -358,8 +368,9 @@ export default function PracticeSessionPage() {
     const scenarioType = lockedScenarioType;
     const voiceMode = lockedVoiceMode;
     const presentationPageFocus = React.useMemo(
-        () => parsePresentationPageFocus(runtimeSearchParams, scenarioType),
-        [runtimeSearchParams, scenarioType],
+        () => getPresentationPageFocusFromIntent(focusIntent)
+            ?? parsePresentationPageFocus(runtimeSearchParams, scenarioType),
+        [focusIntent, runtimeSearchParams, scenarioType],
     );
     const focusIssueTypeLabel = React.useMemo(
         () => formatIssueTypeLabel(focusIntent?.main_issue?.issue_type ?? null),

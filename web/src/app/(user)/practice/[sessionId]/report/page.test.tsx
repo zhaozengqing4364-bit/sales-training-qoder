@@ -1719,6 +1719,16 @@ describe("ReportPage", () => {
                 agent_id: undefined,
                 persona_id: undefined,
                 presentation_id: "presentation-1",
+                focus_intent: {
+                    version: "presentation_page_retry_v1",
+                    source_session_id: "session-1",
+                    presentation_page: {
+                        page_number: 2,
+                        reason: "missing_required_points",
+                        summary: "第二页补充了 ROI 结果，但客户案例展开不够具体。",
+                        missing_required_points: ["客户案例"],
+                    },
+                },
             });
         });
         expect(pushMock).toHaveBeenCalledWith(

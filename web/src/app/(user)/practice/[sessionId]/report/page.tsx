@@ -87,6 +87,27 @@ function buildPresentationPagePracticePath({
     return `/practice/${sessionId}?${params.toString()}`;
 }
 
+function buildPresentationPageFocusIntent({
+    sourceSessionId,
+    pageSummary,
+}: {
+    sourceSessionId: string;
+    pageSummary: PresentationReview["page_summaries"][number];
+}) {
+    return {
+        version: "presentation_page_retry_v1",
+        source_session_id: sourceSessionId,
+        presentation_page: {
+            page_number: pageSummary.page_number,
+            reason: pageSummary.missing_required_points.length > 0
+                ? "missing_required_points"
+                : "page_review",
+            summary: pageSummary.summary,
+            missing_required_points: pageSummary.missing_required_points,
+        },
+    };
+}
+
 function formatSnapshotTime(value?: string | null): string {
     if (!value) return "--";
     const date = new Date(value);
@@ -920,8 +941,9 @@ export default function ComprehensiveReportPage() {
         }
     };
 
-    const handleRetryFromPresentationPage = async (pageNumber: number) => {
+    const handleRetryFromPresentationPage = async (pageSummary: PresentationReview["page_summaries"][number]) => {
         const retry = retryEntry;
+        const pageNumber = pageSummary.page_number;
         setRetryHint(null);
 
         if (retryBlockedHint || retry?.scenario_type !== "presentation" || !retry.presentation_id) {
@@ -936,6 +958,10 @@ export default function ComprehensiveReportPage() {
                 agent_id: retry.agent_id || undefined,
                 persona_id: retry.persona_id || undefined,
                 presentation_id: retry.presentation_id,
+                focus_intent: buildPresentationPageFocusIntent({
+                    sourceSessionId: sessionId,
+                    pageSummary,
+                }),
             });
             router.push(buildPresentationPagePracticePath({
                 sessionId: created.session_id,
@@ -1352,7 +1378,7 @@ export default function ComprehensiveReportPage() {
                                                 </Link>
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleRetryFromPresentationPage(pageSummary.page_number)}
+                                                    onClick={() => void handleRetryFromPresentationPage(pageSummary)}
                                                     className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                                                 >
                                                     补练第 {pageSummary.page_number} 页
@@ -1393,7 +1419,7 @@ export default function ComprehensiveReportPage() {
                                                     </Link>
                                                     <button
                                                         type="button"
-                                                        onClick={() => void handleRetryFromPresentationPage(pageSummary.page_number)}
+                                                        onClick={() => void handleRetryFromPresentationPage(pageSummary)}
                                                         className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
                                                     >
                                                         带着这些问题补练第 {pageSummary.page_number} 页
