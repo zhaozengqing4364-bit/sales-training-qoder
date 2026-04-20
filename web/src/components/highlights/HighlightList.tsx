@@ -16,6 +16,9 @@ interface HighlightListProps {
   totalGood: number;
   totalBad: number;
   onJumpToMessage?: (turnNumber: number) => void;
+  reviewSelectedIds?: string[];
+  reviewLimit?: number;
+  onToggleReviewItem?: (highlight: HighlightItem) => void;
 }
 
 function getHighlightReason(highlight: HighlightItem): string | null {
@@ -51,6 +54,9 @@ export function HighlightList({
   totalGood,
   totalBad,
   onJumpToMessage,
+  reviewSelectedIds = [],
+  reviewLimit = 3,
+  onToggleReviewItem,
 }: HighlightListProps) {
   const [expandedSections, setExpandedSections] = useState<{
     good: boolean;
@@ -60,6 +66,8 @@ export function HighlightList({
 
   const goodHighlights = highlights.filter((h) => h.highlight_type === "good");
   const badHighlights = highlights.filter((h) => h.highlight_type === "bad");
+  const reviewSelectedIdSet = new Set(reviewSelectedIds);
+  const reviewSelectionFull = reviewSelectedIds.length >= reviewLimit;
 
   const toggleSection = (section: "good" | "bad") => {
     setExpandedSections((prev) => ({
@@ -163,24 +171,31 @@ export function HighlightList({
                 expandedSections.bad ? "block" : "hidden",
               )}
             >
-              {badHighlights.map((highlight) => (
-                <HighlightCard
-                  key={highlight.id}
-                  id={highlight.id}
-                  type="bad"
-                  content={highlight.content}
-                  reason={getHighlightReason(highlight)}
-                  stageName={getHighlightStageName(highlight)}
-                  issueFamilyLabel={getHighlightIssueFamilyLabel(highlight)}
-                  goalText={getHighlightGoalText(highlight)}
-                  aiFeedback={highlight.ai_feedback}
-                  suggestedResponse={getHighlightSuggestedResponse(highlight)}
-                  score={highlight.score ?? undefined}
-                  audioUrl={highlight.audio_url ?? undefined}
-                  onJumpToMessage={() => onJumpToMessage?.(highlight.turn_number)}
-                  onViewContext={() => handleViewContext(highlight)}
-                />
-              ))}
+              {badHighlights.map((highlight) => {
+                const reviewSelected = reviewSelectedIdSet.has(highlight.id);
+
+                return (
+                  <HighlightCard
+                    key={highlight.id}
+                    id={highlight.id}
+                    type="bad"
+                    content={highlight.content}
+                    reason={getHighlightReason(highlight)}
+                    stageName={getHighlightStageName(highlight)}
+                    issueFamilyLabel={getHighlightIssueFamilyLabel(highlight)}
+                    goalText={getHighlightGoalText(highlight)}
+                    aiFeedback={highlight.ai_feedback}
+                    suggestedResponse={getHighlightSuggestedResponse(highlight)}
+                    score={highlight.score ?? undefined}
+                    audioUrl={highlight.audio_url ?? undefined}
+                    reviewSelected={reviewSelected}
+                    reviewSelectionDisabled={reviewSelectionFull && !reviewSelected}
+                    onToggleReviewItem={onToggleReviewItem ? () => onToggleReviewItem(highlight) : undefined}
+                    onJumpToMessage={() => onJumpToMessage?.(highlight.turn_number)}
+                    onViewContext={() => handleViewContext(highlight)}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
