@@ -283,13 +283,14 @@ export default function HistoryPage() {
                                     className="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm"
                                 >
                                     <div className="flex items-center justify-between gap-3">
-                                        <div className="font-bold text-slate-900">{issue.issueLabel}</div>
+                                        <div className="font-bold text-slate-900">{issue.issueLabel}复练</div>
                                         <Badge variant="blue" className="text-[11px]">
                                             出现 {issue.count} 次
                                         </Badge>
                                     </div>
                                     {issue.latestIssueText && (
                                         <p className="mt-3 text-sm text-slate-700 line-clamp-2">
+                                            <span className="text-slate-500">最近卡点：</span>
                                             {issue.latestIssueText}
                                         </p>
                                     )}
