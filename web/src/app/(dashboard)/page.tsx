@@ -512,7 +512,22 @@ export default function HomePage() {
 
             <LearnerHelpCard />
 
-            {stats.effectiveness && (
+            {isStatsDegraded ? (
+                <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+                    <h2 className="text-lg font-bold">训练统计暂不可用</h2>
+                    <p className="mt-2 text-sm">
+                        统计接口加载失败，首页不会用 0 小时、0 分或 0% 冒充真实数据。你仍可使用推荐入口、训练大厅和历史页继续训练或复盘。
+                    </p>
+                    <Button
+                        type="button"
+                        onClick={() => setDashboardReloadVersion((version) => version + 1)}
+                        variant="outline"
+                        className="mt-4 rounded-full border-amber-300 text-amber-800 hover:bg-amber-100"
+                    >
+                        重试训练统计
+                    </Button>
+                </section>
+            ) : stats.effectiveness && (
                 <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <GlassCard className="p-5">
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">3分钟连续表达通过率</p>
@@ -547,12 +562,23 @@ export default function HomePage() {
                     <div className="relative z-10 flex flex-col justify-between h-full gap-6">
                         <div>
                             <div className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-200 text-xs font-bold uppercase tracking-wider mb-4 border border-blue-500/30">
-                                系统推荐
+                                {recommendation.is_due_today ? "今日复练" : "系统推荐"}
                             </div>
                             <h2 className="text-2xl font-bold mb-2">{recommendation.title}</h2>
                             <p className="text-slate-300 text-sm leading-relaxed max-w-lg">
                                 {recommendation.reason}
                             </p>
+                            {isRecommendationDegraded && (
+                                <p className="text-xs text-amber-100 mt-3">
+                                    推荐接口暂不可用，当前仅保留训练大厅入口，避免把兜底内容伪装成个性化复练任务。
+                                </p>
+                            )}
+                            {!isRecommendationDegraded && recommendation.due_reason && (
+                                <p className="text-xs text-blue-100/80 mt-3">
+                                    今日原因：{recommendation.due_reason}
+                                    {recommendation.suggested_duration_minutes ? ` · 建议 ${recommendation.suggested_duration_minutes} 分钟` : ""}
+                                </p>
+                            )}
                             {recommendationSourceCopy && (
                                 <p className="text-xs text-blue-100/80 mt-3">
                                     {recommendationSourceCopy}
@@ -572,10 +598,12 @@ export default function HomePage() {
                         <TrendingUp className="w-8 h-8" />
                     </div>
                     <div>
-                        <div className="text-3xl font-black text-slate-900">{stats.last_session?.score ?? 0}</div>
+                        <div className="text-3xl font-black text-slate-900">{isStatsDegraded ? "--" : stats.last_session?.score ?? 0}</div>
                         <div className="text-xs font-bold text-slate-400 uppercase mt-1">上次得分</div>
                     </div>
-                    <p className="text-xs text-slate-500 px-4">{formatScoreBasisCopy(stats)}</p>
+                    <p className="text-xs text-slate-500 px-4">
+                        {isStatsDegraded ? "统计接口暂不可用，暂不展示上次得分。" : formatScoreBasisCopy(stats)}
+                    </p>
                 </GlassCard>
             </section>
 
