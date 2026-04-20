@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { ScoreDistribution } from "@/lib/api/types";
+import { ArrowRight } from "lucide-react";
 import {
     PieChart,
     Pie,
@@ -34,8 +36,20 @@ export function ScoreDistributionChart({ data }: ScoreDistributionChartProps) {
 
     if (total === 0) {
         return (
-            <div className="h-72 flex items-center justify-center text-slate-400">
-                暂无分数数据
+            <div className="h-72 flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 text-center">
+                <div>
+                    <p className="text-sm font-semibold text-slate-900">暂无分数数据</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                        还没有训练进入优秀/良好/及格/待提升分数桶；证据不足或未完成训练不会被计入分布。
+                    </p>
+                    <Link
+                        href="/training"
+                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                    >
+                        去训练大厅
+                        <ArrowRight className="w-4 h-4" />
+                    </Link>
+                </div>
             </div>
         );
     }
