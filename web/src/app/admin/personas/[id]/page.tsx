@@ -1176,7 +1176,7 @@ export default function EditPersonaPage() {
                                     
                                     setIsPreviewingTTS(true);
                                     try {
-                                        const blob = await api.adminTools.previewTTSBlob({
+                                        const blob = await api.admin.previewTTSBlob({
                                             text: `你好，我是${formData.name || "AI助手"}，很高兴为您服务。`,
                                             voice: ttsConfig.voice,
                                             rate: ttsConfig.rate,
@@ -1203,7 +1203,7 @@ export default function EditPersonaPage() {
                                         await audio.play();
                                     } catch (err) {
                                         debug.error("TTS preview failed:", err);
-                                        toast.error(`试听失败：${getApiErrorMessage(err)}`);
+                                        toast.error(getApiErrorMessage(err));
                                         setIsPreviewingTTS(false);
                                     }
                                 }}

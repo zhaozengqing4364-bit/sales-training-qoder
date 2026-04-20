@@ -1381,40 +1381,32 @@ async function apiFetchBlob(
     options: ApiFetchOptions = {},
 ): Promise<Blob> {
     const url = `${resolveApiBaseUrl()}${endpoint}`;
-    const requestId = `blob_${++requestCounter}`;
     const { skipSessionExpiredHandling = false, ...requestOptions } = options;
-    const controller = new AbortController();
-    const externalSignal = requestOptions.signal;
-    const signal = externalSignal || controller.signal;
-
-    if (externalSignal) {
-        externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
-    }
-
-    activeRequests.set(requestId, controller);
+    const resolvedCredentials = requestOptions.credentials || "include";
+    const headers = attachCsrfHeader(
+        createHeaders(requestOptions.headers),
+        {
+            method: requestOptions.method,
+            credentials: resolvedCredentials,
+        },
+    );
 
     try {
-        const resolvedCredentials = requestOptions.credentials || "include";
-        const headers = attachCsrfHeader(
-            createHeaders(requestOptions.headers, false),
-            {
-                method: requestOptions.method,
-                credentials: resolvedCredentials,
-            },
-        );
         const response = await fetchWithLoopbackRetry(url, {
             ...requestOptions,
-            signal,
             credentials: resolvedCredentials,
             headers,
         });
 
         if (!response.ok) {
             const responseJson = await response.json().catch(() => ({}));
+            const normalized = normalizeApiErrorPayload(response.status, responseJson);
+
             if (response.status === 401 && !skipSessionExpiredHandling) {
                 triggerSessionExpiredOnce();
             }
-            throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
+
+            throw new ApiRequestError(normalized);
         }
 
         return response.blob();
@@ -1436,8 +1428,6 @@ async function apiFetchBlob(
             errorCode: "[NETWORK_ERROR]",
             message,
         });
-    } finally {
-        activeRequests.delete(requestId);
     }
 }
 
@@ -2856,13 +2846,20 @@ export const api = {
             });
         },
 
-        previewTTSBlob: async (payload: AdminTTSPreviewRequest) => {
-            const searchParams = new URLSearchParams();
-            searchParams.set("text", payload.text);
-            if (payload.voice) searchParams.set("voice", payload.voice);
-            if (payload.rate) searchParams.set("rate", payload.rate);
-            if (payload.volume) searchParams.set("volume", payload.volume);
-            if (payload.pitch) searchParams.set("pitch", payload.pitch);
+        previewTTSBlob: async (params: {
+            text: string;
+            voice?: string;
+            rate?: string;
+            volume?: string;
+            pitch?: string;
+        }) => {
+            const searchParams = new URLSearchParams({
+                text: params.text,
+                voice: params.voice || "zh-CN-XiaoxiaoNeural",
+                rate: params.rate || "+0%",
+                volume: params.volume || "+0%",
+                pitch: params.pitch || "+0Hz",
+            });
 
             return apiFetchBlob(`/admin/model-configs/tts/preview?${searchParams}`, {
                 method: "POST",
