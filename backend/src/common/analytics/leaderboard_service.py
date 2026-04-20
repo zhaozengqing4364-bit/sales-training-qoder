@@ -8,10 +8,10 @@ Implements Constitution Principles:
 
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +33,14 @@ class LeaderboardView:
     best_score: float
     rank: int
     score_basis: str = PROJECTION_SCORE_BASIS
+    leaderboard_mode: str = "score"
+    improvement_score: float | None = None
+    first_score: float | None = None
+    latest_score: float | None = None
+    first_session_at: datetime | None = None
+    latest_session_at: datetime | None = None
+    sample_size: int | None = None
+    issue_type: str | None = None
 
 
 @dataclass
@@ -45,6 +53,10 @@ class LeaderboardStats:
     score_basis: str = PROJECTION_SCORE_BASIS
     evaluable_sessions: int = 0
     not_evaluable_sessions: int = 0
+    leaderboard_mode: str = "score"
+    issue_type: str | None = None
+    issue_type_buckets: list[dict[str, int | str]] = field(default_factory=list)
+    eligibility: dict[str, object] = field(default_factory=dict)
 
 
 class LeaderboardService:
@@ -80,6 +92,7 @@ class LeaderboardService:
             "sales_bot": "sales",
             "presentation": "presentation",
         }
+        self.leaderboard_modes = {"score", "improvement", "issue_type"}
 
     def _normalize_time_period(self, time_period: str | None) -> str:
         """Normalize time-period aliases to canonical values."""
@@ -92,6 +105,15 @@ class LeaderboardService:
         if not scenario_type:
             return None
         return self.scenario_aliases.get(scenario_type, scenario_type)
+
+    def _normalize_leaderboard_mode(self, leaderboard_mode: str | None) -> str:
+        """Normalize and validate leaderboard mode."""
+        if not leaderboard_mode:
+            return "score"
+        normalized_mode = leaderboard_mode.strip().lower()
+        if normalized_mode not in self.leaderboard_modes:
+            raise ValueError(f"Unsupported leaderboard mode: {leaderboard_mode}")
+        return normalized_mode
 
     @staticmethod
     def _evaluable_filter():
@@ -109,12 +131,54 @@ class LeaderboardService:
             + PracticeSession.completeness_score
         ) / 3.0
 
+    @staticmethod
+    def _score_fields_present_filter():
+        return (
+            (PracticeSession.logic_score.isnot(None))
+            & (PracticeSession.accuracy_score.isnot(None))
+            & (PracticeSession.completeness_score.isnot(None))
+        )
+
+    @staticmethod
+    def _issue_type_expr():
+        return PracticeSession.effectiveness_snapshot["main_issue"][
+            "issue_type"
+        ].as_string()
+
+    def _base_qualified_filters(self, cutoff_time: datetime):
+        return (
+            PracticeSession.start_time >= cutoff_time,
+            PracticeSession.status == "completed",
+            self._evaluable_filter(),
+            self._score_fields_present_filter(),
+        )
+
+    def _eligibility(self, leaderboard_mode: str) -> dict[str, object]:
+        if leaderboard_mode == "improvement":
+            return {
+                "score_basis": PROJECTION_SCORE_BASIS,
+                "min_evaluable_sessions": 2,
+                "explanation": "进步榜至少需要 2 次可评估训练",
+            }
+        if leaderboard_mode == "issue_type":
+            return {
+                "score_basis": PROJECTION_SCORE_BASIS,
+                "requires_issue_type": True,
+                "explanation": "同目标榜只统计有有效问题类型的可评估训练",
+            }
+        return {
+            "score_basis": PROJECTION_SCORE_BASIS,
+            "explanation": "综合分榜只统计可评估训练",
+        }
+
     async def calculate_leaderboard(
         self,
         db: AsyncSession,
         scenario_type: str | None = None,
         time_period: str = "all_time",
         limit: int = 100,
+        leaderboard_mode: str = "score",
+        issue_type: str | None = None,
     ) -> Result[LeaderboardStats]:
         """
         Calculate leaderboard for a scenario type and time period
@@ -124,6 +188,25 @@ class LeaderboardService:
         try:
             normalized_time_period = self._normalize_time_period(time_period)
             normalized_scenario_type = self._normalize_scenario_type(scenario_type)
+            normalized_leaderboard_mode = self._normalize_leaderboard_mode(
+                leaderboard_mode
+            )
+
+            if normalized_leaderboard_mode == "improvement":
+                return await self._calculate_improvement_leaderboard(
+                    db=db,
+                    scenario_type=normalized_scenario_type,
+                    time_period=normalized_time_period,
+                    limit=limit,
+                )
+            if normalized_leaderboard_mode == "issue_type":
+                return await self._calculate_issue_type_leaderboard(
+                    db=db,
+                    scenario_type=normalized_scenario_type,
+                    time_period=normalized_time_period,
+                    limit=limit,
+                    issue_type=issue_type,
+                )
 
             # Get time filter
             time_delta = self.time_periods.get(
@@ -150,11 +233,7 @@ class LeaderboardService:
                 .where(PracticeSession.start_time >= cutoff_time)
                 .where(PracticeSession.status == "completed")
                 .where(self._evaluable_filter())
-                .where(
-                    (PracticeSession.logic_score.isnot(None))
-                    & (PracticeSession.accuracy_score.isnot(None))
-                    & (PracticeSession.completeness_score.isnot(None))
-                )
+                .where(self._score_fields_present_filter())
                 .group_by(User.user_id, User.name)
                 .order_by(desc("average_score"))
                 .limit(limit)
@@ -188,11 +267,7 @@ class LeaderboardService:
                 .where(PracticeSession.start_time >= cutoff_time)
                 .where(PracticeSession.status == "completed")
                 .where(self._evaluable_filter())
-                .where(
-                    (PracticeSession.logic_score.isnot(None))
-                    & (PracticeSession.accuracy_score.isnot(None))
-                    & (PracticeSession.completeness_score.isnot(None))
-                )
+                .where(self._score_fields_present_filter())
             )
 
             if normalized_scenario_type:
@@ -209,11 +284,7 @@ class LeaderboardService:
                 .where(PracticeSession.start_time >= cutoff_time)
                 .where(PracticeSession.status == "completed")
                 .where(self._evaluable_filter())
-                .where(
-                    (PracticeSession.logic_score.isnot(None))
-                    & (PracticeSession.accuracy_score.isnot(None))
-                    & (PracticeSession.completeness_score.isnot(None))
-                )
+                .where(self._score_fields_present_filter())
             )
             if normalized_scenario_type:
                 evaluable_sessions_query = evaluable_sessions_query.where(
@@ -241,6 +312,8 @@ class LeaderboardService:
                 time_period=normalized_time_period,
                 evaluable_sessions=int(evaluable_sessions),
                 not_evaluable_sessions=not_evaluable_sessions,
+                leaderboard_mode="score",
+                eligibility=self._eligibility("score"),
             )
 
             logger.info(
@@ -249,6 +322,7 @@ class LeaderboardService:
                     "scenario_type": scenario_type,
                     "normalized_scenario_type": normalized_scenario_type,
                     "time_period": normalized_time_period,
+                    "leaderboard_mode": "score",
                     "entries": len(entries),
                 },
             )
