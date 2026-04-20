@@ -286,11 +286,12 @@ export default function HomePage() {
         ? "推荐状态：接口读取失败，未用默认训练入口伪装成真实推荐。"
         : getRecommendationSourceCopy(displayRecommendation);
     const shouldShowTodayRetryCard = !isRecommendationDegraded && isTodayRetryRecommendation(displayRecommendation);
+    const suggestedDurationCopy = formatSuggestedDuration(displayRecommendation);
     const todayRetryDetails = [
         displayRecommendation.due_reason ? `到期原因：${displayRecommendation.due_reason}` : null,
         displayRecommendation.focus ? `本次焦点：${displayRecommendation.focus}` : null,
-        formatSuggestedDuration(displayRecommendation) ? `建议时长：${formatSuggestedDuration(displayRecommendation)}` : null,
-    ].filter(Boolean);
+        suggestedDurationCopy ? `建议时长：${suggestedDurationCopy}` : null,
+    ].filter((detail): detail is string => Boolean(detail));
     const onboardingSteps = [
         {
             key: "train",
