@@ -160,6 +160,11 @@ export interface Recommendation {
     scenario_type?: "sales" | "presentation" | string | null;
     source_session_id?: string | null;
     focus_page?: number | null;
+    due_reason?: string | null;
+    focus?: string | null;
+    suggested_duration?: string | number | null;
+    suggested_duration_minutes?: number | null;
+    is_due_today?: boolean | null;
 }
 
 // Agent types
