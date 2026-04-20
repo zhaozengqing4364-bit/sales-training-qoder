@@ -335,11 +335,349 @@ class LeaderboardService:
                 extra={
                     "scenario_type": scenario_type,
                     "time_period": time_period,
+                    "leaderboard_mode": leaderboard_mode,
+                    "issue_type": issue_type,
                     "error": str(e),
                 },
                 exc_info=True,
             )
             return Result.fail(fallback="[LEADERBOARD_FAILED]")
+
+    async def _calculate_improvement_leaderboard(
+        self,
+        db: AsyncSession,
+        scenario_type: str | None,
+        time_period: str,
+        limit: int,
+    ) -> Result[LeaderboardStats]:
+        time_delta = self.time_periods.get(time_period, self.time_periods["all_time"])
+        cutoff_time = datetime.now() - time_delta
+        score_expr = self._score_expr()
+
+        base_query = (
+            select(
+                User.user_id.label("user_id"),
+                User.name.label("username"),
+                PracticeSession.session_id.label("session_id"),
+                PracticeSession.start_time.label("start_time"),
+                score_expr.label("score"),
+            )
+            .join(PracticeSession, User.user_id == PracticeSession.user_id)
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(*self._base_qualified_filters(cutoff_time))
+        )
+        if scenario_type:
+            base_query = base_query.where(Scenario.scenario_type == scenario_type)
+
+        base_subquery = base_query.subquery()
+        ranked_subquery = (
+            select(
+                base_subquery.c.user_id,
+                base_subquery.c.username,
+                base_subquery.c.session_id,
+                base_subquery.c.start_time,
+                base_subquery.c.score,
+                func.row_number()
+                .over(
+                    partition_by=base_subquery.c.user_id,
+                    order_by=(
+                        base_subquery.c.start_time.asc(),
+                        base_subquery.c.session_id.asc(),
+                    ),
+                )
+                .label("first_rank"),
+                func.row_number()
+                .over(
+                    partition_by=base_subquery.c.user_id,
+                    order_by=(
+                        base_subquery.c.start_time.desc(),
+                        base_subquery.c.session_id.desc(),
+                    ),
+                )
+                .label("latest_rank"),
+            )
+        ).subquery()
+
+        first_score = func.max(
+            case((ranked_subquery.c.first_rank == 1, ranked_subquery.c.score))
+        ).label("first_score")
+        latest_score = func.max(
+            case((ranked_subquery.c.latest_rank == 1, ranked_subquery.c.score))
+        ).label("latest_score")
+        first_session_at = func.max(
+            case((ranked_subquery.c.first_rank == 1, ranked_subquery.c.start_time))
+        ).label("first_session_at")
+        latest_session_at = func.max(
+            case((ranked_subquery.c.latest_rank == 1, ranked_subquery.c.start_time))
+        ).label("latest_session_at")
+
+        grouped_subquery = (
+            select(
+                ranked_subquery.c.user_id,
+                ranked_subquery.c.username,
+                func.count(ranked_subquery.c.session_id).label("total_sessions"),
+                func.avg(ranked_subquery.c.score).label("average_score"),
+                func.max(ranked_subquery.c.score).label("best_score"),
+                first_score,
+                latest_score,
+                (latest_score - first_score).label("improvement_score"),
+                first_session_at,
+                latest_session_at,
+            )
+            .group_by(ranked_subquery.c.user_id, ranked_subquery.c.username)
+            .having(func.count(ranked_subquery.c.session_id) >= 2)
+        ).subquery()
+
+        query = (
+            select(grouped_subquery)
+            .order_by(
+                grouped_subquery.c.improvement_score.desc(),
+                grouped_subquery.c.latest_score.desc(),
+                grouped_subquery.c.total_sessions.desc(),
+                grouped_subquery.c.latest_session_at.desc(),
+            )
+            .limit(limit)
+        )
+        result = await db.execute(query)
+        rows = result.all()
+
+        entries = [
+            LeaderboardView(
+                user_id=row.user_id,
+                username=row.username or "Anonymous",
+                total_sessions=int(row.total_sessions or 0),
+                average_score=round(row.average_score or 0, 2),
+                best_score=round(row.best_score or 0, 2),
+                rank=rank,
+                leaderboard_mode="improvement",
+                improvement_score=round(row.improvement_score or 0, 2),
+                first_score=round(row.first_score or 0, 2),
+                latest_score=round(row.latest_score or 0, 2),
+                first_session_at=row.first_session_at,
+                latest_session_at=row.latest_session_at,
+                sample_size=int(row.total_sessions or 0),
+            )
+            for rank, row in enumerate(rows, start=1)
+        ]
+
+        total_users_result = await db.execute(
+            select(func.count()).select_from(grouped_subquery)
+        )
+        evaluable_sessions_result = await db.execute(
+            select(func.coalesce(func.sum(grouped_subquery.c.total_sessions), 0))
+        )
+        not_evaluable_sessions = await self._count_not_evaluable_sessions(
+            db=db,
+            cutoff_time=cutoff_time,
+            scenario_type=scenario_type,
+        )
+
+        stats = LeaderboardStats(
+            entries=entries,
+            total_users=int(total_users_result.scalar() or 0),
+            time_period=time_period,
+            evaluable_sessions=int(evaluable_sessions_result.scalar() or 0),
+            not_evaluable_sessions=not_evaluable_sessions,
+            leaderboard_mode="improvement",
+            eligibility=self._eligibility("improvement"),
+        )
+
+        logger.info(
+            "Leaderboard calculated",
+            extra={
+                "scenario_type": scenario_type,
+                "time_period": time_period,
+                "leaderboard_mode": "improvement",
+                "entries": len(entries),
+            },
+        )
+        return Result(value=stats)
+
+    async def _calculate_issue_type_leaderboard(
+        self,
+        db: AsyncSession,
+        scenario_type: str | None,
+        time_period: str,
+        limit: int,
+        issue_type: str | None,
+    ) -> Result[LeaderboardStats]:
+        normalized_issue_type = issue_type.strip() if issue_type else None
+        normalized_issue_type = normalized_issue_type or None
+        time_delta = self.time_periods.get(time_period, self.time_periods["all_time"])
+        cutoff_time = datetime.now() - time_delta
+        issue_type_expr = self._issue_type_expr()
+        score_expr = self._score_expr()
+
+        if not normalized_issue_type:
+            buckets = await self._get_issue_type_buckets(
+                db=db,
+                cutoff_time=cutoff_time,
+                scenario_type=scenario_type,
+            )
+            not_evaluable_sessions = await self._count_not_evaluable_sessions(
+                db=db,
+                cutoff_time=cutoff_time,
+                scenario_type=scenario_type,
+            )
+            return Result(
+                value=LeaderboardStats(
+                    entries=[],
+                    total_users=0,
+                    time_period=time_period,
+                    evaluable_sessions=sum(
+                        int(bucket["evaluable_sessions"]) for bucket in buckets
+                    ),
+                    not_evaluable_sessions=not_evaluable_sessions,
+                    leaderboard_mode="issue_type",
+                    issue_type=None,
+                    issue_type_buckets=buckets,
+                    eligibility={
+                        **self._eligibility("issue_type"),
+                        "explanation": "请选择一个目标问题后查看同目标榜",
+                    },
+                )
+            )
+
+        query = (
+            select(
+                User.user_id,
+                User.name.label("username"),
+                func.count(PracticeSession.session_id).label("total_sessions"),
+                func.avg(score_expr).label("average_score"),
+                func.max(score_expr).label("best_score"),
+            )
+            .join(PracticeSession, User.user_id == PracticeSession.user_id)
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(*self._base_qualified_filters(cutoff_time))
+            .where(issue_type_expr == normalized_issue_type)
+            .group_by(User.user_id, User.name)
+            .order_by(desc("average_score"))
+            .limit(limit)
+        )
+        if scenario_type:
+            query = query.where(Scenario.scenario_type == scenario_type)
+
+        result = await db.execute(query)
+        rows = result.all()
+        entries = [
+            LeaderboardView(
+                user_id=row.user_id,
+                username=row.username or "Anonymous",
+                total_sessions=int(row.total_sessions or 0),
+                average_score=round(row.average_score or 0, 2),
+                best_score=round(row.best_score or 0, 2),
+                rank=rank,
+                leaderboard_mode="issue_type",
+                issue_type=normalized_issue_type,
+            )
+            for rank, row in enumerate(rows, start=1)
+        ]
+
+        count_query = (
+            select(func.count(func.distinct(User.user_id)))
+            .join(PracticeSession, User.user_id == PracticeSession.user_id)
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(*self._base_qualified_filters(cutoff_time))
+            .where(issue_type_expr == normalized_issue_type)
+        )
+        evaluable_sessions_query = (
+            select(func.count(PracticeSession.session_id))
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(*self._base_qualified_filters(cutoff_time))
+            .where(issue_type_expr == normalized_issue_type)
+        )
+        if scenario_type:
+            count_query = count_query.where(Scenario.scenario_type == scenario_type)
+            evaluable_sessions_query = evaluable_sessions_query.where(
+                Scenario.scenario_type == scenario_type
+            )
+
+        count_result = await db.execute(count_query)
+        evaluable_sessions_result = await db.execute(evaluable_sessions_query)
+        not_evaluable_sessions = await self._count_not_evaluable_sessions(
+            db=db,
+            cutoff_time=cutoff_time,
+            scenario_type=scenario_type,
+        )
+
+        stats = LeaderboardStats(
+            entries=entries,
+            total_users=int(count_result.scalar() or 0),
+            time_period=time_period,
+            evaluable_sessions=int(evaluable_sessions_result.scalar() or 0),
+            not_evaluable_sessions=not_evaluable_sessions,
+            leaderboard_mode="issue_type",
+            issue_type=normalized_issue_type,
+            issue_type_buckets=await self._get_issue_type_buckets(
+                db=db,
+                cutoff_time=cutoff_time,
+                scenario_type=scenario_type,
+            ),
+            eligibility=self._eligibility("issue_type"),
+        )
+
+        logger.info(
+            "Leaderboard calculated",
+            extra={
+                "scenario_type": scenario_type,
+                "time_period": time_period,
+                "leaderboard_mode": "issue_type",
+                "issue_type": normalized_issue_type,
+                "entries": len(entries),
+            },
+        )
+        return Result(value=stats)
+
+    async def _get_issue_type_buckets(
+        self,
+        db: AsyncSession,
+        cutoff_time: datetime,
+        scenario_type: str | None,
+    ) -> list[dict[str, int | str]]:
+        issue_type_expr = self._issue_type_expr()
+        query = (
+            select(
+                issue_type_expr.label("issue_type"),
+                func.count(func.distinct(PracticeSession.user_id)).label("count"),
+                func.count(PracticeSession.session_id).label("evaluable_sessions"),
+            )
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(*self._base_qualified_filters(cutoff_time))
+            .where(issue_type_expr.isnot(None))
+            .where(func.trim(issue_type_expr) != "")
+            .group_by(issue_type_expr)
+            .order_by(desc("evaluable_sessions"), issue_type_expr.asc())
+        )
+        if scenario_type:
+            query = query.where(Scenario.scenario_type == scenario_type)
+
+        result = await db.execute(query)
+        return [
+            {
+                "issue_type": row.issue_type,
+                "count": int(row.count or 0),
+                "evaluable_sessions": int(row.evaluable_sessions or 0),
+            }
+            for row in result.all()
+        ]
+
+    async def _count_not_evaluable_sessions(
+        self,
+        db: AsyncSession,
+        cutoff_time: datetime,
+        scenario_type: str | None,
+    ) -> int:
+        query = (
+            select(func.count(PracticeSession.session_id))
+            .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+            .where(PracticeSession.start_time >= cutoff_time)
+            .where(PracticeSession.status == "completed")
+            .where(self._not_evaluable_filter())
+        )
+        if scenario_type:
+            query = query.where(Scenario.scenario_type == scenario_type)
+        result = await db.execute(query)
+        return int(result.scalar() or 0)
 
     async def update_leaderboard_entries(self, db: AsyncSession) -> Result[bool]:
         """
