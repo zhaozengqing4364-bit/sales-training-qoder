@@ -4,13 +4,13 @@ import { useCallback, useRef, useState } from "react";
 import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
 import { debug } from "@/lib/debug";
 
-export type UploadStatus = "idle" | "uploading" | "flushing" | "error" | "stopped";
-export type AudioFlushStatus = "completed" | "failed" | "timeout";
+export type UploadStatus = "idle" | "uploading" | "error" | "stopped";
+export type AudioEvidenceFlushStatus = "completed" | "failed" | "timed_out" | "not_started";
 
-export interface AudioFlushResult {
-    status: AudioFlushStatus;
+export interface AudioEvidenceFlushResult {
+    status: AudioEvidenceFlushStatus;
     pendingUploads: number;
-    error?: string;
+    error: string | null;
 }
 
 export interface UseContinuousAudioUploaderOptions {
@@ -24,15 +24,17 @@ export interface UseContinuousAudioUploaderOptions {
 export interface ContinuousAudioUploaderState {
     isUploading: boolean;
     segmentCount: number;
+    pendingUploads: number;
     lastError: string | null;
     uploadStatus: UploadStatus;
     pendingUploads: number;
     startUpload: () => Promise<void>;
     stopUpload: () => Promise<void>;
-    flushAndStop: (options?: { timeoutMs?: number }) => Promise<AudioFlushResult>;
+    flushAndStop: (options?: { timeoutMs?: number }) => Promise<AudioEvidenceFlushResult>;
 }
 
 const SEGMENT_TIMESLICE_MS = 15_000;
+const FINAL_SEGMENT_SETTLE_MS = 100;
 const DEFAULT_FLUSH_TIMEOUT_MS = 5_000;
 const WEBM_OPUS_MIME = "audio/webm;codecs=opus";
 const WEBM_MIME = "audio/webm";
@@ -106,6 +108,7 @@ export function useContinuousAudioUploader(
 
     const [isUploading, setIsUploading] = useState(false);
     const [segmentCount, setSegmentCount] = useState(0);
+    const [pendingUploads, setPendingUploads] = useState(0);
     const [lastError, setLastError] = useState<string | null>(null);
     const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
     const [pendingUploads, setPendingUploads] = useState(0);
@@ -117,16 +120,19 @@ export function useContinuousAudioUploader(
     const segmentSequenceRef = useRef(0);
     const isStoppingRef = useRef(false);
     const isUploadingRef = useRef(false);
-    const pendingUploadsRef = useRef<Set<Promise<boolean>>>(new Set());
-    const uploadFailureRef = useRef<string | null>(null);
+    const pendingUploadPromisesRef = useRef<Set<Promise<void>>>(new Set());
+    const pendingUploadCountRef = useRef(0);
+    const uploadErrorRef = useRef<string | null>(null);
 
     const resetState = useCallback(() => {
         segmentSequenceRef.current = 0;
         isStoppingRef.current = false;
         isUploadingRef.current = false;
-        uploadFailureRef.current = null;
-        pendingUploadsRef.current.clear();
+        pendingUploadPromisesRef.current.clear();
+        pendingUploadCountRef.current = 0;
+        uploadErrorRef.current = null;
         setSegmentCount(0);
+        setPendingUploads(0);
         setLastError(null);
         setPendingUploads(0);
         setUploadStatus("idle");
@@ -140,6 +146,38 @@ export function useContinuousAudioUploader(
         streamRef.current = null;
         ownsStreamRef.current = false;
         mediaRecorderRef.current = null;
+    }, []);
+
+    const trackUpload = useCallback((uploadPromise: Promise<void>) => {
+        pendingUploadCountRef.current += 1;
+        setPendingUploads(pendingUploadCountRef.current);
+
+        const trackedPromise = uploadPromise.finally(() => {
+            pendingUploadPromisesRef.current.delete(trackedPromise);
+            pendingUploadCountRef.current = Math.max(0, pendingUploadCountRef.current - 1);
+            setPendingUploads(pendingUploadCountRef.current);
+        });
+
+        pendingUploadPromisesRef.current.add(trackedPromise);
+    }, []);
+
+    const waitForPendingUploads = useCallback(async (timeoutMs: number): Promise<"completed" | "timed_out"> => {
+        const deadline = Date.now() + timeoutMs;
+
+        while (pendingUploadPromisesRef.current.size > 0) {
+            const remainingMs = deadline - Date.now();
+            if (remainingMs <= 0) {
+                return "timed_out";
+            }
+
+            const currentBatch = Array.from(pendingUploadPromisesRef.current);
+            await Promise.race([
+                Promise.allSettled(currentBatch),
+                new Promise((resolve) => setTimeout(resolve, remainingMs)),
+            ]);
+        }
+
+        return "completed";
     }, []);
 
     /**
@@ -248,7 +286,7 @@ export function useContinuousAudioUploader(
                 debug.warn(
                     `[ContinuousAudioUploader] upload failed: ${message}`,
                 );
-                uploadFailureRef.current = message;
+                uploadErrorRef.current = message;
                 setLastError(message);
                 return false;
             }
@@ -304,7 +342,9 @@ export function useContinuousAudioUploader(
                     ? segmentSequenceRef.current // final segment uses same seq
                     : segmentSequenceRef.current++;
 
-                trackSegmentUpload(event.data, seq);
+                // Uploads remain backgrounded during recording, but tracked so
+                // end-of-session can wait for the durable evidence trail.
+                trackUpload(uploadSegment(event.data, seq));
             };
 
             recorder.onerror = () => {
@@ -326,18 +366,17 @@ export function useContinuousAudioUploader(
             isUploadingRef.current = false;
             cleanupStream();
         }
-    }, [enabled, mediaStream, trackSegmentUpload, cleanupStream]);
+    }, [enabled, mediaStream, uploadSegment, cleanupStream, trackUpload]);
 
     const flushAndStop = useCallback(async (
         options: { timeoutMs?: number } = {},
-    ): Promise<AudioFlushResult> => {
+    ): Promise<AudioEvidenceFlushResult> => {
         const timeoutMs = options.timeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS;
-
-        if (!isUploadingRef.current && pendingUploadsRef.current.size === 0) {
+        if (!isUploadingRef.current) {
             return {
-                status: uploadFailureRef.current ? "failed" : "completed",
-                pendingUploads: 0,
-                error: uploadFailureRef.current ?? undefined,
+                status: lastError ? "failed" : "not_started",
+                pendingUploads: pendingUploadCountRef.current,
+                error: lastError,
             };
         }
 
@@ -349,53 +388,35 @@ export function useContinuousAudioUploader(
             recorder.stop();
         }
 
-        // Give a tick for the final ondataavailable to fire
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const pendingAtFlush = Array.from(pendingUploadsRef.current);
-        let timedOut = false;
+        // Give a tick for the final ondataavailable to fire and be tracked.
+        await new Promise((resolve) => setTimeout(resolve, FINAL_SEGMENT_SETTLE_MS));
 
-        if (pendingAtFlush.length > 0) {
-            await Promise.race([
-                Promise.allSettled(pendingAtFlush),
-                new Promise((resolve) => {
-                    window.setTimeout(() => {
-                        timedOut = true;
-                        resolve(null);
-                    }, timeoutMs);
-                }),
-            ]);
-        }
+        const waitResult = await waitForPendingUploads(timeoutMs);
+        const error = uploadErrorRef.current || lastError;
+        const status: AudioEvidenceFlushStatus = waitResult === "timed_out"
+            ? "timed_out"
+            : error
+            ? "failed"
+            : "completed";
 
         isUploadingRef.current = false;
         setIsUploading(false);
+        setUploadStatus(status === "failed" ? "error" : "stopped");
         isStoppingRef.current = false;
         cleanupStream();
 
-        if (timedOut) {
-            const message = `音频留痕保存超时，仍有 ${pendingUploadsRef.current.size} 个分片未完成。`;
-            uploadFailureRef.current = message;
-            setLastError(message);
-            setUploadStatus("error");
-            return {
-                status: "timeout",
-                pendingUploads: pendingUploadsRef.current.size,
-                error: message,
-            };
-        }
+        debug.log(`[ContinuousAudioUploader] recording stopped with evidence status=${status}`);
 
-        if (uploadFailureRef.current) {
-            setUploadStatus("error");
-            return {
-                status: "failed",
-                pendingUploads: 0,
-                error: uploadFailureRef.current,
-            };
-        }
+        return {
+            status,
+            pendingUploads: pendingUploadCountRef.current,
+            error,
+        };
+    }, [cleanupStream, lastError, waitForPendingUploads]);
 
-        setUploadStatus("stopped");
-        debug.log("[ContinuousAudioUploader] recording stopped and flushed");
-        return { status: "completed", pendingUploads: 0 };
-    }, [cleanupStream]);
+    const stopUpload = useCallback(async () => {
+        await flushAndStop({ timeoutMs: DEFAULT_FLUSH_TIMEOUT_MS });
+    }, [flushAndStop]);
 
     const stopUpload = useCallback(async () => {
         await flushAndStop();
@@ -404,6 +425,7 @@ export function useContinuousAudioUploader(
     return {
         isUploading,
         segmentCount,
+        pendingUploads,
         lastError,
         uploadStatus,
         pendingUploads,
