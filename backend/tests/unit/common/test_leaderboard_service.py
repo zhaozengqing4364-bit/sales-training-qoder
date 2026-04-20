@@ -36,7 +36,11 @@ def _effectiveness_snapshot(
             "issue_text": "fixture",
             "recovery_rule": "fixture",
         },
-        "next_goal": {"goal_type": "continue", "goal_text": "fixture", "rule": "fixture"},
+        "next_goal": {
+            "goal_type": "continue",
+            "goal_text": "fixture",
+            "rule": "fixture",
+        },
         "evaluable": evaluable,
         "not_evaluable_reason": None if evaluable else "INSUFFICIENT_TURN_DATA",
     }
@@ -88,7 +92,9 @@ def _capture_sql_statements(engine: AsyncEngine) -> Iterator[list[str]]:
     try:
         yield statements
     finally:
-        event.remove(engine.sync_engine, "before_cursor_execute", _before_cursor_execute)
+        event.remove(
+            engine.sync_engine, "before_cursor_execute", _before_cursor_execute
+        )
 
 
 @pytest_asyncio.fixture()
@@ -256,7 +262,9 @@ async def test_calculate_leaderboard_accepts_alias_filters(
     )
     assert sales_monthly.is_success
     assert sales_monthly.value.time_period == "monthly"
-    assert sales_monthly.value.score_basis == "session_evidence_projection_evaluable_only"
+    assert (
+        sales_monthly.value.score_basis == "session_evidence_projection_evaluable_only"
+    )
     assert sales_monthly.value.evaluable_sessions == 2
     assert sales_monthly.value.not_evaluable_sessions == 1
     assert len(sales_monthly.value.entries) == 2
@@ -308,7 +316,10 @@ async def test_calculate_leaderboard_pushes_ranking_aggregation_into_sql(
     assert len(statements) == 4
     assert len(aggregate_queries) == 1
     assert len(count_queries) == 1
-    assert "practice_sessions.logic_score + practice_sessions.accuracy_score + practice_sessions.completeness_score" in aggregate_queries[0]
+    assert (
+        "practice_sessions.logic_score + practice_sessions.accuracy_score + practice_sessions.completeness_score"
+        in aggregate_queries[0]
+    )
     assert "ORDER BY average_score DESC" in aggregate_queries[0]
     assert "JOIN scenarios" in aggregate_queries[0]
 
@@ -570,4 +581,7 @@ async def test_calculate_issue_type_leaderboard_filters_and_returns_buckets(
     )
     assert unselected_rank.is_success
     assert unselected_rank.value["rank"] is None
-    assert unselected_rank.value["issue_type_buckets"] == buckets_result.value.issue_type_buckets
+    assert (
+        unselected_rank.value["issue_type_buckets"]
+        == buckets_result.value.issue_type_buckets
+    )

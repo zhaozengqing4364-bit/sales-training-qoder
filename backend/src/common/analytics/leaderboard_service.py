@@ -117,11 +117,15 @@ class LeaderboardService:
 
     @staticmethod
     def _evaluable_filter():
-        return PracticeSession.effectiveness_snapshot["evaluable"].as_boolean().is_(True)
+        return (
+            PracticeSession.effectiveness_snapshot["evaluable"].as_boolean().is_(True)
+        )
 
     @staticmethod
     def _not_evaluable_filter():
-        return PracticeSession.effectiveness_snapshot["evaluable"].as_boolean().is_(False)
+        return (
+            PracticeSession.effectiveness_snapshot["evaluable"].as_boolean().is_(False)
+        )
 
     @staticmethod
     def _score_expr():
@@ -1018,8 +1022,7 @@ class LeaderboardService:
             .select_from(grouped_subquery)
             .where(
                 or_(
-                    grouped_subquery.c.improvement_score
-                    > user_row.improvement_score,
+                    grouped_subquery.c.improvement_score > user_row.improvement_score,
                     and_(
                         grouped_subquery.c.improvement_score
                         == user_row.improvement_score,
