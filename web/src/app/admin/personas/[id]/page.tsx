@@ -340,11 +340,6 @@ export default function EditPersonaPage() {
     const [isPreviewingTTS, setIsPreviewingTTS] = useState(false);
     const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
-    useEffect(() => {
-        loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [personaId]);
-
     const loadData = async () => {
         setIsLoading(true);
         setError(null);
@@ -432,6 +427,11 @@ export default function EditPersonaPage() {
             setIsLoading(false);
         }
     };
+
+    useEffect(() => {
+        loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [personaId]);
 
     const buildPersonaToolPolicyPayload = (): Record<string, unknown> => {
         const lockToKnowledgeBase = toolPolicyForm.lockToKnowledgeBase;

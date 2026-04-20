@@ -232,14 +232,6 @@ export default function SettingsPage() {
         { id: "models", label: "模型配置", icon: Cpu },
     ];
 
-    // Load model configs when switching to models tab
-    useEffect(() => {
-        if (activeTab === "models" && !configs) {
-            loadConfigs();
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab]);
-
     const loadConfigs = async () => {
         setIsLoadingModels(true);
         try {
@@ -252,6 +244,14 @@ export default function SettingsPage() {
             setIsLoadingModels(false);
         }
     };
+
+    // Load model configs when switching to models tab
+    useEffect(() => {
+        if (activeTab === "models" && !configs) {
+            loadConfigs();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
 
     const resetForm = () => {
         const defaultProvider = MODEL_PROVIDER_MAP[activeModelType][0];
