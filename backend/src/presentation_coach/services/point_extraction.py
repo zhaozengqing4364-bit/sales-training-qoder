@@ -103,7 +103,7 @@ Provide actionable, specific talking points.""",
             )
             # Fallback to rule-based extraction
             return Result(value=self._extract_points_fallback(page))
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to extract points",
                 extra={"page_number": page.page_number, "error": str(e)},
@@ -139,7 +139,7 @@ Provide actionable, specific talking points.""",
 
             return Result(value=results)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to extract points for presentation",
                 extra={"error": str(e)},
@@ -153,8 +153,6 @@ Provide actionable, specific talking points.""",
 
         Uses simple heuristics when LLM fails
         """
-        content_lower = page.content.lower()
-
         # Generate generic talking points
         required_points = [
             f"Explain the main topic: {page.title}",

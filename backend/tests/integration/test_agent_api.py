@@ -10,6 +10,7 @@ References:
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -62,7 +63,8 @@ async def test_user(db_session):
     user = User(
         wechat_user_id="test_wechat_id",
         name="Test User",
-        email="test@example.com"
+        email="test@example.com",
+        role="admin",
     )
     db_session.add(user)
     await db_session.commit()
@@ -86,19 +88,36 @@ async def async_client(db_session, test_user):
 
 
 @pytest_asyncio.fixture
-async def auth_headers(async_client):
-    """Get authentication headers"""
-    try:
-        response = await async_client.post("/api/v1/auth/dev-login")
-        if response.status_code == 200:
-            data = response.json()
-            # The token is nested in data.data.access_token
-            token = data.get("data", {}).get("access_token")
-            if token:
-                return {"Authorization": f"Bearer {token}"}
-    except Exception:
-        pass
-    return {"Authorization": "Bearer dev_test_token"}
+async def auth_headers(test_user):
+    """Get authentication headers for admin fixture user."""
+    from common.auth.service import create_access_token
+
+    token = create_access_token(data={"sub": str(test_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def non_admin_user(db_session):
+    """Create a non-admin user for RBAC tests."""
+    user = User(
+        wechat_user_id="normal_wechat_id",
+        name="Normal User",
+        email="normal@example.com",
+        role="user",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def non_admin_headers(non_admin_user):
+    """JWT auth header for non-admin user."""
+    from common.auth.service import create_access_token
+
+    token = create_access_token(data={"sub": str(non_admin_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
@@ -109,14 +128,12 @@ async def sample_agent_data():
         "description": "帮助销售人员提升沟通技巧的 AI 教练",
         "icon": "🎯",
         "category": "sales",
-        "system_prompt": "你是一位资深销售教练...",
         "welcome_message": "你好！准备好练习了吗？",
         "capabilities_config": {
             "asr": {"enabled": True, "mode": "manual"},
             "tts": {"enabled": True, "voice": "zh-CN-YunxiNeural"},
             "fuzzy_detection": {"enabled": True}
-        },
-        "default_knowledge_base_ids": ["kb-001"]
+        }
     }
 
 
@@ -138,6 +155,34 @@ class TestAdminAgentAPI:
         assert data["data"]["status"] == "draft"
         assert "id" in data["data"]
         assert "created_at" in data["data"]
+
+    async def test_create_agent_rejects_unsupported_category(
+        self, async_client, auth_headers, sample_agent_data
+    ):
+        """Should reject unsupported agent categories."""
+        response = await async_client.post(
+            "/api/v1/admin/agents",
+            json={**sample_agent_data, "category": "customer_service"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "[AGENT_CATEGORY_RESTRICTED]" in response.text
+
+    async def test_admin_routes_require_admin_role(
+        self,
+        async_client,
+        non_admin_headers,
+        sample_agent_data,
+    ):
+        """Should reject non-admin access for admin agent routes."""
+        response = await async_client.post(
+            "/api/v1/admin/agents",
+            json=sample_agent_data,
+            headers=non_admin_headers,
+        )
+
+        assert response.status_code == 403
     
     async def test_list_agents_admin(self, async_client, auth_headers, sample_agent_data):
         """Should list agents with pagination - R1.2"""
@@ -206,8 +251,20 @@ class TestAdminAgentAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["data"]["system_prompt"] == "你是一位资深销售教练..."
+        assert data["data"]["system_prompt"] is None
         assert data["data"]["capabilities_config"]["asr"]["enabled"] is True
+
+    async def test_create_agent_rejects_deprecated_fields(
+        self, async_client, auth_headers, sample_agent_data
+    ):
+        response = await async_client.post(
+            "/api/v1/admin/agents",
+            json={**sample_agent_data, "default_knowledge_base_ids": ["kb-001"]},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "[FIELD_DEPRECATED_PERSONA_CENTERED]" in response.text
     
     async def test_update_agent(self, async_client, auth_headers, sample_agent_data):
         """Should update agent partially - R1.4"""
@@ -229,6 +286,61 @@ class TestAdminAgentAPI:
         data = response.json()
         assert data["success"] is True
         assert data["data"]["name"] == "Updated Name"
+
+    async def test_update_agent_rejects_unsupported_category(
+        self, async_client, auth_headers, sample_agent_data
+    ):
+        """Should reject unsupported category updates."""
+        create_response = await async_client.post(
+            "/api/v1/admin/agents",
+            json=sample_agent_data,
+            headers=auth_headers,
+        )
+        agent_id = create_response.json()["data"]["id"]
+
+        response = await async_client.put(
+            f"/api/v1/admin/agents/{agent_id}",
+            json={"category": "interview"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "[AGENT_CATEGORY_RESTRICTED]" in response.text
+
+    async def test_update_agent_persists_across_sessions(
+        self,
+        async_client,
+        auth_headers,
+        sample_agent_data,
+        test_engine,
+    ):
+        """Should persist agent update to DB across independent sessions."""
+        create_response = await async_client.post(
+            "/api/v1/admin/agents",
+            json=sample_agent_data,
+            headers=auth_headers,
+        )
+        agent_id = create_response.json()["data"]["id"]
+
+        new_description = "跨会话持久化智能体描述"
+        update_response = await async_client.put(
+            f"/api/v1/admin/agents/{agent_id}",
+            json={"description": new_description},
+            headers=auth_headers,
+        )
+        assert update_response.status_code == 200
+
+        verify_sessionmaker = sessionmaker(
+            test_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        async with verify_sessionmaker() as verify_session:
+            row = await verify_session.execute(
+                select(Agent).where(Agent.id == agent_id)
+            )
+            agent = row.scalar_one()
+            assert agent.description == new_description
     
     async def test_publish_agent(self, async_client, auth_headers, sample_agent_data):
         """Should publish agent - R1.5"""
@@ -445,3 +557,21 @@ class TestUserAgentAPI:
         # Should be sorted by display_order
         assert personas[0]["name"] == "价格敏感型"
         assert personas[0]["is_default"] is True
+
+    async def test_get_industry_pack_contract(
+        self,
+        async_client,
+        auth_headers,
+    ):
+        """Should expose composed industry-pack authority for existing admin entrypoints."""
+        response = await async_client.get(
+            "/api/v1/admin/agents/industry-pack-contract",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["contract_version"] == 1
+        assert data["industry_pack"]["authority_model"] == "composed_from_existing_admin_surfaces"
+        assert data["entrypoints"]["persona"] == "/api/v1/admin/personas/{persona_id}"
+        assert "practice_sessions.voice_policy_snapshot" in data["runtime_authorities"]

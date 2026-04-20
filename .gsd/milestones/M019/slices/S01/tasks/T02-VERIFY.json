@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M019/S01/T02",
+  "timestamp": 1776049059716,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k \"startup or bootstrap or migration\" -x -q",
+      "exitCode": 0,
+      "durationMs": 7342,
+      "verdict": "pass"
+    }
+  ]
+}

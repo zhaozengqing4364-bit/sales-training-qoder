@@ -4,25 +4,25 @@ export function DashboardSkeleton() {
     return (
         <div className="space-y-12 pb-20">
             {/* Header Skeleton */}
-            <div className="flex items-end justify-between px-2">
+            <div className="flex flex-col gap-4 px-2 md:flex-row md:items-end md:justify-between">
                 <div className="space-y-3">
-                    <Skeleton className="w-32 h-6 rounded-full" />
-                    <Skeleton className="w-64 h-10 rounded-lg" />
-                    <Skeleton className="w-48 h-6 rounded-lg" />
+                    <Skeleton className="h-6 w-32 rounded-full" />
+                    <Skeleton className="h-10 w-64 max-w-full rounded-lg" />
+                    <Skeleton className="h-6 w-48 max-w-full rounded-lg" />
                 </div>
-                <Skeleton className="w-40 h-14 rounded-full" />
+                <Skeleton className="h-14 w-40 rounded-full" />
             </div>
 
             {/* Bento Grid Skeleton */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[500px]">
+            <div className="grid min-h-[320px] grid-cols-1 gap-6 md:grid-cols-12 md:min-h-[500px]">
                 {/* Large Card */}
-                <div className="col-span-1 md:col-span-12 lg:col-span-8 h-full">
-                    <Skeleton className="w-full h-full rounded-[2.5rem]" />
+                <div className="col-span-1 h-full md:col-span-12 lg:col-span-8">
+                    <Skeleton className="h-full min-h-[200px] w-full rounded-[2.5rem]" />
                 </div>
                 {/* Side Stack */}
-                <div className="col-span-1 md:col-span-12 lg:col-span-4 flex flex-col gap-6 h-full">
+                <div className="col-span-1 flex h-full flex-col gap-6 md:col-span-12 lg:col-span-4">
                     <Skeleton className="w-full flex-1 rounded-[2.5rem]" />
-                    <Skeleton className="w-full h-48 rounded-[2.5rem]" />
+                    <Skeleton className="h-48 w-full rounded-[2.5rem]" />
                 </div>
             </div>
 

@@ -5,37 +5,68 @@ All errors are caught and converted to fallback responses
 """
 import traceback
 
-from fastapi import Request, status
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
+from common.monitoring.trace_context import build_traceparent, resolve_trace_headers
 
 logger = get_logger(__name__)
 
 
-class ErrorHandlerMiddleware(BaseHTTPMiddleware):
+class ErrorHandlerMiddleware:
     """
     Global error handler that catches all exceptions
     Never shows error popups to users - converts to graceful fallbacks
     """
 
     def __init__(self, app: ASGIApp):
-        super().__init__(app)
+        self.app = app
 
-    async def dispatch(self, request: Request, call_next):
+    @staticmethod
+    def _attach_trace_headers(
+        message: Message,
+        *,
+        trace_id: str,
+        response_traceparent: str | None,
+        tracestate: str | None,
+    ):
+        headers = MutableHeaders(scope=message)
+        headers["X-Trace-ID"] = trace_id
+
+        effective_traceparent = response_traceparent or build_traceparent(trace_id)
+        if effective_traceparent:
+            headers["traceparent"] = effective_traceparent
+        if tracestate:
+            headers["tracestate"] = tracestate
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
         """Process request with error handling"""
-        # Extract or generate trace_id
-        trace_id = request.headers.get("X-Trace-ID", "")
-        if trace_id:
-            set_trace_id(trace_id)
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = Headers(scope=scope)
+        request = Request(scope, receive=receive)
+        trace_id, response_traceparent, tracestate = resolve_trace_headers(headers)
+        set_trace_id(trace_id or "")
+
+        async def send_with_trace_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                self._attach_trace_headers(
+                    message,
+                    trace_id=get_trace_id(),
+                    response_traceparent=response_traceparent,
+                    tracestate=tracestate,
+                )
+            await send(message)
 
         try:
-            response = await call_next(request)
-            return response
+            await self.app(scope, receive, send_with_trace_headers)
 
-        except Exception as exc:
+        except (RuntimeError, ValueError) as exc:
             # Log the full error with trace_id
             logger.error(
                 f"Unhandled exception: {str(exc)}",
@@ -47,14 +78,15 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
             # Return fallback response - NEVER show raw error to user
             # User-facing: friendly status update
             # Admin-facing: full error details in logs
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,  # Always 200 - no error status
+            response = JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content={
                     "success": False,
                     "fallback": self._get_fallback_response(exc, request),
                     "trace_id": get_trace_id(),
-                }
+                },
             )
+            await response(scope, receive, send_with_trace_headers)
 
     def _get_fallback_response(self, exc: Exception, request: Request) -> str:
         """
@@ -99,10 +131,29 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
     return JSONResponse(
-        status_code=status.HTTP_200_OK,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "success": False,
             "fallback": "[PLEASE_TRY_AGAIN]",
             "trace_id": trace_id,
         }
     )
+
+
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """FastAPI HTTPException handler with trace_id for observability."""
+    trace_id = get_trace_id()
+    detail = exc.detail
+    if isinstance(detail, str):
+        message = detail
+    else:
+        message = str(detail)
+
+    payload = {
+        "success": False,
+        "error": message,
+        "message": message,
+        "detail": detail,
+        "trace_id": trace_id,
+    }
+    return JSONResponse(status_code=exc.status_code, content=payload)

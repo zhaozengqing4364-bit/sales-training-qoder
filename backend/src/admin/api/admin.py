@@ -13,9 +13,11 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.auth.service import get_current_user
+from common.api.server_error import build_server_error
+from common.auth.service import get_current_admin_user
 from common.db.models import (
     ForbiddenWord,
     Page,
@@ -51,15 +53,17 @@ class TalkingPointCreate(BaseModel):
 
 
 class ForbiddenWordCreate(BaseModel):
-    word: str
+    word: str | None = None
+    phrase: str | None = None
     pattern_type: str = "literal"  # literal or regex
+    suggested_alternative: str | None = None
 
 
 # Presentations CRUD
 @router.post("/admin/presentations")
 async def create_presentation(
     data: PresentationCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new presentation (without file upload)"""
@@ -78,9 +82,13 @@ async def create_presentation(
         await db.refresh(presentation)
 
         return presentation
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to create presentation: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to create presentation")
+        return build_server_error(
+            "[ADMIN_PRESENTATION_CREATE_FAILED]",
+            message="Failed to create presentation",
+            exc=e,
+        )
 
 
 @router.post("/admin/presentations/upload")
@@ -89,7 +97,7 @@ async def upload_presentation(
     title: str = None,
     description: str = None,
     extract_points: bool = True,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -179,15 +187,19 @@ async def upload_presentation(
 
         return presentation
 
-    except Exception as e:
+    except (SQLAlchemyError, OSError, ValueError) as e:
         logger.error(f"Failed to upload presentation: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to upload presentation")
+        return build_server_error(
+            "[ADMIN_PRESENTATION_UPLOAD_FAILED]",
+            message="Failed to upload presentation",
+            exc=e,
+        )
 
 
 @router.get("/admin/presentations")
 async def list_presentations(
     limit: int = 50,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all presentations"""
@@ -200,15 +212,19 @@ async def list_presentations(
         presentations = result.scalars().all()
 
         return {"presentations": presentations, "total": len(presentations)}
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to list presentations: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to list presentations")
+        return build_server_error(
+            "[ADMIN_PRESENTATION_LIST_FAILED]",
+            message="Failed to list presentations",
+            exc=e,
+        )
 
 
 @router.get("/admin/presentations/{presentation_id}")
 async def get_presentation(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get presentation details"""
@@ -224,15 +240,20 @@ async def get_presentation(
         return presentation
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to get presentation: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get presentation")
+        return build_server_error(
+            "[ADMIN_PRESENTATION_GET_FAILED]",
+            message="Failed to get presentation",
+            exc=e,
+            presentation_id=presentation_id,
+        )
 
 
 @router.delete("/admin/presentations/{presentation_id}")
 async def delete_presentation(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a presentation"""
@@ -256,16 +277,21 @@ async def delete_presentation(
         return {"deleted": True}
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to delete presentation: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to delete presentation")
+        return build_server_error(
+            "[ADMIN_PRESENTATION_DELETE_FAILED]",
+            message="Failed to delete presentation",
+            exc=e,
+            presentation_id=presentation_id,
+        )
 
 
 # Pages CRUD
 @router.get("/admin/presentations/{presentation_id}/pages")
 async def list_pages(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all pages in a presentation"""
@@ -278,9 +304,14 @@ async def list_pages(
         pages = result.scalars().all()
 
         return {"pages": pages, "total": len(pages)}
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to list pages: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to list pages")
+        return build_server_error(
+            "[ADMIN_PAGE_LIST_FAILED]",
+            message="Failed to list pages",
+            exc=e,
+            presentation_id=presentation_id,
+        )
 
 
 @router.put("/admin/presentations/{presentation_id}/pages/{page_number}")
@@ -288,7 +319,7 @@ async def update_page(
     presentation_id: str,
     page_number: int,
     data: PageUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update page content"""
@@ -323,9 +354,15 @@ async def update_page(
         return page
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to update page: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to update page")
+        return build_server_error(
+            "[ADMIN_PAGE_UPDATE_FAILED]",
+            message="Failed to update page",
+            exc=e,
+            presentation_id=presentation_id,
+            page_number=page_number,
+        )
 
 
 # Talking Points CRUD
@@ -334,7 +371,7 @@ async def create_talking_point(
     presentation_id: str,
     page_number: int,
     data: TalkingPointCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a required talking point for a page"""
@@ -353,16 +390,22 @@ async def create_talking_point(
         await db.refresh(talking_point)
 
         return talking_point
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to create talking point: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to create talking point")
+        return build_server_error(
+            "[ADMIN_TALKING_POINT_CREATE_FAILED]",
+            message="Failed to create talking point",
+            exc=e,
+            presentation_id=presentation_id,
+            page_number=page_number,
+        )
 
 
 @router.get("/admin/presentations/{presentation_id}/pages/{page_number}/talking-points")
 async def list_talking_points(
     presentation_id: str,
     page_number: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List talking points for a page"""
@@ -376,15 +419,21 @@ async def list_talking_points(
         points = result.scalars().all()
 
         return {"points": points, "total": len(points)}
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to list talking points: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to list talking points")
+        return build_server_error(
+            "[ADMIN_TALKING_POINT_LIST_FAILED]",
+            message="Failed to list talking points",
+            exc=e,
+            presentation_id=presentation_id,
+            page_number=page_number,
+        )
 
 
 @router.delete("/admin/talking-points/{point_id}")
 async def delete_talking_point(
     point_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a talking point"""
@@ -405,27 +454,37 @@ async def delete_talking_point(
         return {"deleted": True}
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to delete talking point: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to delete talking point")
+        return build_server_error(
+            "[ADMIN_TALKING_POINT_DELETE_FAILED]",
+            message="Failed to delete talking point",
+            exc=e,
+            point_id=point_id,
+        )
 
 
 # Forbidden Words CRUD
-@router.post("/admin/presentations/{presentation_id}/forbidden-words")
+@router.post("/admin/presentations/{presentation_id}/forbidden-words", status_code=201)
 async def create_forbidden_word(
     presentation_id: str,
     data: ForbiddenWordCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a forbidden word for a presentation"""
     try:
+        phrase_value = (data.phrase or data.word or "").strip()
+        if not phrase_value:
+            raise HTTPException(status_code=400, detail="Forbidden phrase is required")
+
         forbidden_word = ForbiddenWord(
-            word_id=uuid.uuid4(),
-            presentation_id=uuid.UUID(presentation_id),
-            word=data.word,
-            pattern_type=data.pattern_type,
-            created_at=datetime.now(),
+            word_id=str(uuid.uuid4()),
+            presentation_id=presentation_id,
+            page_id=None,
+            phrase=phrase_value,
+            suggested_alternative=data.suggested_alternative,
+            is_regex=(data.pattern_type == "regex"),
         )
 
         db.add(forbidden_word)
@@ -433,15 +492,22 @@ async def create_forbidden_word(
         await db.refresh(forbidden_word)
 
         return forbidden_word
-    except Exception as e:
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
         logger.error(f"Failed to create forbidden word: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to create forbidden word")
+        return build_server_error(
+            "[ADMIN_FORBIDDEN_WORD_CREATE_FAILED]",
+            message="Failed to create forbidden word",
+            exc=e,
+            presentation_id=presentation_id,
+        )
 
 
 @router.get("/admin/presentations/{presentation_id}/forbidden-words")
 async def list_forbidden_words(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List forbidden words for a presentation"""
@@ -454,15 +520,20 @@ async def list_forbidden_words(
         words = result.scalars().all()
 
         return {"words": words, "total": len(words)}
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to list forbidden words: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to list forbidden words")
+        return build_server_error(
+            "[ADMIN_FORBIDDEN_WORD_LIST_FAILED]",
+            message="Failed to list forbidden words",
+            exc=e,
+            presentation_id=presentation_id,
+        )
 
 
 @router.delete("/admin/forbidden-words/{word_id}")
 async def delete_forbidden_word(
     word_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a forbidden word"""
@@ -483,6 +554,11 @@ async def delete_forbidden_word(
         return {"deleted": True}
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to delete forbidden word: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to delete forbidden word")
+        return build_server_error(
+            "[ADMIN_FORBIDDEN_WORD_DELETE_FAILED]",
+            message="Failed to delete forbidden word",
+            exc=e,
+            word_id=word_id,
+        )

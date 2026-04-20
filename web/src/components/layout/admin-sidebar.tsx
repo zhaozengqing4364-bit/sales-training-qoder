@@ -1,21 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
     LayoutDashboard,
     Users,
     Bot,
+    User,
     Settings,
     Shield,
     LogOut,
     Activity,
     FileText,
+    ScrollText,
     PanelLeftClose,
     PanelLeftOpen,
-    BookOpen,
     ArrowLeft,
     BarChart3,
+    MessageSquareText,
+    Sparkles,
+    Presentation,
+    Database,
+    ChevronDown,
+    type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -35,8 +42,10 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/glass-tooltip";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "@/lib/api/client";
+import { authHandler } from "@/lib/auth-handler";
+import type { CurrentUser } from "@/lib/auth/current-user";
 
 interface UserInfo {
     id: string;
@@ -46,15 +55,8 @@ interface UserInfo {
     department?: string;
 }
 
-export function AdminSidebar() {
+export function AdminSidebar({ currentUser }: { currentUser: CurrentUser }) {
     const { isCollapsed, toggleSidebar } = useSidebarStore();
-    // Prevent hydration mismatch
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) return null;
 
     return (
         <aside
@@ -63,31 +65,121 @@ export function AdminSidebar() {
                 isCollapsed ? "w-20 px-3" : "w-72 px-5"
             )}
         >
-            <AdminSidebarContent isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} showToggle={true} />
+            <AdminSidebarContent
+                currentUser={currentUser}
+                isCollapsed={isCollapsed}
+                toggleSidebar={toggleSidebar}
+                showToggle={true}
+            />
         </aside>
     );
 }
 
 interface AdminSidebarContentProps {
+    currentUser: UserInfo | null;
     isCollapsed?: boolean;
     toggleSidebar?: () => void;
     showToggle?: boolean;
 }
 
-export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showToggle = false }: AdminSidebarContentProps) {
-    const pathname = usePathname();
+interface AdminNavItem {
+    label: string;
+    href: string;
+    icon: LucideIcon;
+}
 
-    const navItems = [
-        { label: "总览", icon: LayoutDashboard, href: "/admin" },
-        { label: "用户管理", icon: Users, href: "/admin/users" },
-        { label: "智能体管理", icon: Bot, href: "/admin/agents" },
-        { label: "角色管理", icon: Users, href: "/admin/personas" },
-        { label: "知识库管理", icon: BookOpen, href: "/admin/knowledge" },
-        { label: "训练记录", icon: FileText, href: "/admin/records" },
-        { label: "数据分析", icon: BarChart3, href: "/admin/analytics" },
-        { label: "系统设置", icon: Settings, href: "/admin/settings" },
-        { label: "操作日志", icon: Activity, href: "/admin/logs" },
-    ];
+interface AdminNavSection {
+    key: string;
+    label: string;
+    icon: LucideIcon;
+    href?: string;
+    items: AdminNavItem[];
+}
+
+const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
+    {
+        key: "overview",
+        label: "总览",
+        icon: LayoutDashboard,
+        href: "/admin",
+        items: [],
+    },
+    {
+        key: "assets",
+        label: "业务资产",
+        icon: Bot,
+        items: [
+            { label: "智能体管理", icon: Bot, href: "/admin/agents" },
+            { label: "角色管理", icon: User, href: "/admin/personas" },
+            { label: "知识库管理", icon: Database, href: "/admin/knowledge" },
+            { label: "检索策略", icon: Settings, href: "/admin/retrieval-strategies" },
+            { label: "PPT 演练管理", icon: Presentation, href: "/admin/presentations" },
+        ],
+    },
+    {
+        key: "policy",
+        label: "策略中心",
+        icon: Sparkles,
+        items: [
+            { label: "提示词管理", icon: MessageSquareText, href: "/admin/prompts" },
+            { label: "语音策略", icon: Activity, href: "/admin/voice-runtime" },
+            { label: "PPT AI 策略", icon: Sparkles, href: "/admin/presentation-ai" },
+        ],
+    },
+    {
+        key: "analytics",
+        label: "运营分析",
+        icon: BarChart3,
+        items: [
+            { label: "训练记录", icon: FileText, href: "/admin/records" },
+            { label: "数据分析", icon: BarChart3, href: "/admin/analytics" },
+        ],
+    },
+    {
+        key: "organization",
+        label: "组织与权限",
+        icon: Users,
+        items: [{ label: "用户管理", icon: Users, href: "/admin/users" }],
+    },
+    {
+        key: "governance",
+        label: "系统治理",
+        icon: Settings,
+        items: [
+            { label: "系统设置", icon: Settings, href: "/admin/settings" },
+            { label: "操作日志", icon: ScrollText, href: "/admin/logs" },
+        ],
+    },
+];
+
+function isPathActive(pathname: string, href: string): boolean {
+    if (href === "/admin") {
+        return pathname === href;
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function resolveActiveSectionKey(pathname: string): string | null {
+    for (const section of ADMIN_NAV_SECTIONS) {
+        if (section.href && isPathActive(pathname, section.href)) {
+            return section.key;
+        }
+        if (section.items.some((item) => isPathActive(pathname, item.href))) {
+            return section.key;
+        }
+    }
+    return null;
+}
+
+export function AdminSidebarContent({
+    currentUser,
+    isCollapsed = false,
+    toggleSidebar,
+    showToggle = false,
+}: AdminSidebarContentProps) {
+    const pathname = usePathname();
+    const [openSectionKeys, setOpenSectionKeys] = useState<Record<string, boolean>>({});
+    const activeSectionKey = resolveActiveSectionKey(pathname);
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
@@ -110,9 +202,22 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
 
             {/* Main Navigation */}
             <TooltipProvider delayDuration={0}>
-                <nav className="flex-1 space-y-1 flex flex-col w-full overflow-y-auto min-h-0">
-                    {navItems.map((item) => (
-                        <AdminNavLink key={item.href} item={item} pathname={pathname} isCollapsed={isCollapsed} />
+                <nav className="flex-1 space-y-2 flex flex-col w-full overflow-y-auto min-h-0 pr-1">
+                    {ADMIN_NAV_SECTIONS.map((section, sectionIndex) => (
+                        <AdminNavSectionGroup
+                            key={section.key}
+                            section={section}
+                            pathname={pathname}
+                            isCollapsed={isCollapsed}
+                            isLast={sectionIndex === ADMIN_NAV_SECTIONS.length - 1}
+                            isOpen={openSectionKeys[section.key] ?? section.key === activeSectionKey}
+                            onToggle={() => {
+                                setOpenSectionKeys((prev) => ({
+                                    ...prev,
+                                    [section.key]: !prev[section.key],
+                                }));
+                            }}
+                        />
                     ))}
                 </nav>
             </TooltipProvider>
@@ -122,7 +227,7 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
                 {/* Back to User Portal */}
                 <BackToUserLink isCollapsed={isCollapsed} />
                 {/* Admin User Card */}
-                <AdminUserCard isCollapsed={isCollapsed} />
+                <AdminUserCard currentUser={currentUser} isCollapsed={isCollapsed} />
 
                 {/* Collapse Trigger */}
                 {showToggle && toggleSidebar && (
@@ -148,36 +253,14 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
     );
 }
 
-function AdminUserCard({ isCollapsed }: { isCollapsed: boolean }) {
-    const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-
-    useEffect(() => {
-        // Try to get user info from localStorage first (set during login)
-        const storedUser = localStorage.getItem("user");
-        if (storedUser) {
-            try {
-                const parsed = JSON.parse(storedUser);
-                setUserInfo({
-                    id: parsed.id,
-                    display_name: parsed.name || parsed.display_name || "用户",
-                    role: parsed.role || "user",
-                    department: parsed.department,
-                });
-            } catch {
-                // Ignore parse errors
-            }
-        }
-
-        // Fetch fresh user info from API
-        api.user.getMe().then((data) => {
-            setUserInfo(data);
-            // Update localStorage
-            localStorage.setItem("user", JSON.stringify(data));
-        }).catch(() => {
-            // Ignore errors, use cached data
-        });
-    }, []);
-
+function AdminUserCard({
+    currentUser,
+    isCollapsed,
+}: {
+    currentUser: UserInfo | null;
+    isCollapsed: boolean;
+}) {
+    const userInfo = currentUser;
     const displayName = userInfo?.display_name || "管理员";
     const roleLabel = userInfo?.role === "admin" ? "超级用户" : "普通用户";
 
@@ -225,16 +308,17 @@ function AdminUserCard({ isCollapsed }: { isCollapsed: boolean }) {
 }
 
 function AdminProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
-    const router = useRouter();
-
-    const handleLogout = () => {
-        // Clear token
-        localStorage.removeItem("token");
-        // Clear any other user data
-        localStorage.removeItem("user");
-        
-        // Redirect to login
-        router.push("/login");
+    const handleLogout = async () => {
+        try {
+            await api.auth.logout();
+        } catch {
+            // Ignore logout API failures and still navigate away from the protected shell.
+        } finally {
+            authHandler.logout("已退出登录", {
+                redirectTo: "/login",
+                notify: false,
+            });
+        }
     };
 
     const displayName = userInfo?.display_name || "管理员";
@@ -306,8 +390,18 @@ function BackToUserLink({ isCollapsed }: { isCollapsed: boolean }) {
     );
 }
 
-function AdminNavLink({ item, pathname, isCollapsed }: { item: any, pathname: string, isCollapsed: boolean }) {
-    const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href) && item.href !== '/admin');
+function AdminNavLink({
+    item,
+    pathname,
+    isCollapsed,
+    tooltipLabel,
+}: {
+    item: AdminNavItem;
+    pathname: string;
+    isCollapsed: boolean;
+    tooltipLabel: string;
+}) {
+    const isActive = isPathActive(pathname, item.href);
 
     const LinkContent = (
         <Link
@@ -348,11 +442,122 @@ function AdminNavLink({ item, pathname, isCollapsed }: { item: any, pathname: st
                     {LinkContent}
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                    <p>{item.label}</p>
+                    <p>{tooltipLabel}</p>
                 </TooltipContent>
             </Tooltip>
         );
     }
 
     return LinkContent;
+}
+
+function AdminNavSectionGroup({
+    section,
+    pathname,
+    isCollapsed,
+    isLast,
+    isOpen,
+    onToggle,
+}: {
+    section: AdminNavSection;
+    pathname: string;
+    isCollapsed: boolean;
+    isLast: boolean;
+    isOpen: boolean;
+    onToggle: () => void;
+}) {
+    const hasChildren = section.items.length > 0;
+    const hasDirectHref = Boolean(section.href) && !hasChildren;
+    const isSectionActive = (section.href && isPathActive(pathname, section.href))
+        || section.items.some((item) => isPathActive(pathname, item.href));
+    const sectionLabel = section.label;
+
+    if (hasDirectHref && section.href) {
+        return (
+            <div className="space-y-1">
+                <AdminNavLink
+                    item={{ label: section.label, href: section.href, icon: section.icon }}
+                    pathname={pathname}
+                    isCollapsed={isCollapsed}
+                    tooltipLabel={sectionLabel}
+                />
+                {isCollapsed && !isLast && (
+                    <div className="mx-auto my-1 h-px w-7 bg-slate-200/80 rounded-full" />
+                )}
+            </div>
+        );
+    }
+
+    const SectionTrigger = (
+        <button
+            type="button"
+            onClick={onToggle}
+            className={cn(
+                "flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 w-full group",
+                isCollapsed ? "justify-center px-0 h-10" : "px-4",
+                isSectionActive
+                    ? "text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
+                    : "text-slate-500 hover:text-slate-900 hover:bg-white/40"
+            )}
+            aria-expanded={isOpen}
+            aria-label={sectionLabel}
+        >
+            <section.icon
+                strokeWidth={isSectionActive ? 2.5 : 2}
+                className={cn(
+                    "transition-all duration-300 shrink-0",
+                    isCollapsed ? "w-5 h-5" : "w-4 h-4",
+                    isSectionActive ? "text-slate-900 scale-110" : "text-slate-400 group-hover:text-slate-600 group-hover:scale-105"
+                )}
+            />
+            {!isCollapsed && (
+                <>
+                    <span className={cn("text-base font-medium tracking-wide whitespace-nowrap", isSectionActive && "font-bold")}>
+                        {section.label}
+                    </span>
+                    <ChevronDown
+                        className={cn(
+                            "ml-auto w-4 h-4 text-slate-400 transition-transform duration-200",
+                            isOpen && "rotate-180"
+                        )}
+                    />
+                </>
+            )}
+        </button>
+    );
+
+    return (
+        <div className="space-y-1">
+            {isCollapsed ? (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        {SectionTrigger}
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                        <p>{sectionLabel}</p>
+                    </TooltipContent>
+                </Tooltip>
+            ) : (
+                SectionTrigger
+            )}
+
+            {!isCollapsed && isOpen && (
+                <div className="pl-3 border-l border-slate-200 ml-4 space-y-1">
+                    {section.items.map((item) => (
+                        <AdminNavLink
+                            key={item.href}
+                            item={item}
+                            pathname={pathname}
+                            isCollapsed={false}
+                            tooltipLabel={`${sectionLabel} · ${item.label}`}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {isCollapsed && !isLast && (
+                <div className="mx-auto my-1 h-px w-7 bg-slate-200/80 rounded-full" />
+            )}
+        </div>
+    );
 }

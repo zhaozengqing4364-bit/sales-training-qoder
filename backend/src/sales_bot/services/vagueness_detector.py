@@ -127,7 +127,7 @@ class VaguenessDetector:
 
             return Result(value=issues)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to detect vagueness",
                 extra={"error": str(e)},

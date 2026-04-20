@@ -126,7 +126,7 @@ Provide an objective assessment of the salesperson's performance.""",
             )
             # Fallback to rule-based summary
             return Result(value=self._generate_fallback_summary(context_result.value))
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to generate summary",
                 extra={"session_id": str(session_id), "error": str(e)},

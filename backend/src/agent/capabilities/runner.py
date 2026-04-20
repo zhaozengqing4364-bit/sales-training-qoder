@@ -157,7 +157,7 @@ class CapabilityRunner:
                     capability_id=cap_id,
                     config=merged_config,
                 )
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 logger.error(
                     f"Failed to initialize capability '{cap_id}': {e}",
                     capability_id=cap_id,
@@ -166,7 +166,7 @@ class CapabilityRunner:
 
     async def run_all(
         self,
-        context: "AgentContext",
+        context: AgentContext,
         input_data: Any,
     ) -> list[CapabilityResult]:
         """
@@ -202,7 +202,7 @@ class CapabilityRunner:
                     cap.execute(context, input_data),
                     timeout=CAPABILITY_TIMEOUT_SECONDS
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error(
                     f"Capability '{cap.capability_id}' timed out "
                     f"after {CAPABILITY_TIMEOUT_SECONDS}s",
@@ -213,7 +213,7 @@ class CapabilityRunner:
                     success=False,
                     fallback="[CAPABILITY_TIMEOUT]",
                 )
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 error_code = self._get_error_code(e)
                 logger.error(
                     f"Capability '{cap.capability_id}' failed: {e}",
@@ -253,7 +253,7 @@ class CapabilityRunner:
     async def run_one(
         self,
         capability_id: str,
-        context: "AgentContext",
+        context: AgentContext,
         input_data: Any,
     ) -> CapabilityResult | None:
         """
@@ -277,7 +277,7 @@ class CapabilityRunner:
                         cap.execute(context, input_data),
                         timeout=CAPABILITY_TIMEOUT_SECONDS
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.error(
                         f"Capability '{capability_id}' timed out "
                         f"after {CAPABILITY_TIMEOUT_SECONDS}s",
@@ -288,7 +288,7 @@ class CapabilityRunner:
                         success=False,
                         fallback="[CAPABILITY_TIMEOUT]",
                     )
-                except Exception as e:
+                except (RuntimeError, ValueError, KeyError) as e:
                     error_code = self._get_error_code(e)
                     logger.error(
                         f"Capability '{capability_id}' failed: {e}",
@@ -307,7 +307,7 @@ class CapabilityRunner:
         )
         return None
 
-    async def on_session_start(self, context: "AgentContext") -> None:
+    async def on_session_start(self, context: AgentContext) -> None:
         """
         Call on_session_start for all capabilities.
 
@@ -326,7 +326,7 @@ class CapabilityRunner:
         for cap in self.capabilities:
             try:
                 await cap.on_session_start(context)
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 logger.error(
                     f"Capability '{cap.capability_id}' on_session_start failed: {e}",
                     capability_id=cap.capability_id,
@@ -334,7 +334,7 @@ class CapabilityRunner:
                     session_id=context.session_id,
                 )
 
-    async def on_session_end(self, context: "AgentContext") -> dict[str, Any]:
+    async def on_session_end(self, context: AgentContext) -> dict[str, Any]:
         """
         Call on_session_end for all capabilities and collect statistics.
 
@@ -366,7 +366,7 @@ class CapabilityRunner:
             try:
                 cap_stats = await cap.on_session_end(context)
                 stats[cap.capability_id] = cap_stats
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 logger.error(
                     f"Capability '{cap.capability_id}' on_session_end failed: {e}",
                     capability_id=cap.capability_id,

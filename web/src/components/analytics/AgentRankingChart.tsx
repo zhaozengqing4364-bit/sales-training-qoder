@@ -77,13 +77,13 @@ export function AgentRankingChart({ data }: AgentRankingChartProps) {
                             boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1)",
                             padding: "12px 16px",
                         }}
-                        formatter={(value: number, name: string, props: any) => {
-                            const item = props.payload;
+                        formatter={(value, name, props) => {
+                            const item = props?.payload;
                             return [
                                 <div key="tooltip" className="space-y-1">
-                                    <p>使用次数: {value}</p>
-                                    <p>平均分: {item.score.toFixed(1)}</p>
-                                    <p className="text-xs text-slate-500">类型: {item.type}</p>
+                                    <p>使用次数: {value as number ?? 0}</p>
+                                    <p>平均分: {item?.score?.toFixed(1) ?? 'N/A'}</p>
+                                    <p className="text-xs text-slate-500">类型: {item?.type}</p>
                                 </div>,
                                 "",
                             ];

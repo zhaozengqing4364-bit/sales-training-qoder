@@ -1,61 +1,326 @@
 "use client";
 
+import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
-// Note: Avatar might not exist in ui folder, check if I need to use simple img or create it. 
-// I'll check ui folder content later. If it fails, I'll use <img>. 
-// Actually, standard shadcn has Avatar. I should check if it's there. 
-// Assuming it might not be there based on `list_dir` output earlier (only 11 files).
-// So I will implement a simple Avatar div.
+import { Input } from "@/components/ui/input";
+import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
+import {
+    VOICE_SPEED_PREFERENCE_OPTIONS,
+    serializeVoiceSpeedPreference,
+    useVoiceSpeedPreference,
+} from "@/hooks/use-voice-speed-preference";
+import { api } from "@/lib/api/client";
+import type { CurrentUser } from "@/lib/auth/current-user";
+import { authHandler } from "@/lib/auth-handler";
+import { currentUserQueryKey } from "@/lib/query/auth";
+import { Briefcase, Key, Loader2, LogOut, Mail, Settings, Volume2 } from "lucide-react";
 
-import { User, Mail, Briefcase, Settings, LogOut, Bell, Moon, Volume2 } from "lucide-react";
-import { Input } from "@/components/ui/input"; // Checking if input exists. list_dir showed input.tsx.
+type ProfileForm = {
+    display_name: string;
+    email: string;
+    department: string;
+};
+
+type HistoryStats = {
+    total_sessions: number;
+    evaluable_sessions: number;
+    not_evaluable_sessions: number;
+    average_score: number;
+    best_score: number;
+    score_basis?: string;
+    total_practice_time_seconds: number;
+    total_practice_time_minutes: number;
+};
+
+type SessionStats = {
+    total_sessions: number;
+    weekly_sessions: number;
+    average_score: number;
+    completed_sessions: number;
+    total_practice_minutes: number;
+};
+
+const DEFAULT_STATS: HistoryStats = {
+    total_sessions: 0,
+    evaluable_sessions: 0,
+    not_evaluable_sessions: 0,
+    average_score: 0,
+    best_score: 0,
+    score_basis: "session_evidence_projection_evaluable_only",
+    total_practice_time_seconds: 0,
+    total_practice_time_minutes: 0,
+};
+
+const DEFAULT_SESSION_STATS: SessionStats = {
+    total_sessions: 0,
+    weekly_sessions: 0,
+    average_score: 0,
+    completed_sessions: 0,
+    total_practice_minutes: 0,
+};
 
 export default function ProfilePage() {
+    const queryClient = useQueryClient();
+    const { voiceSpeedPreference, setVoiceSpeedPreference } = useVoiceSpeedPreference();
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [profile, setProfile] = useState<ProfileForm>({
+        display_name: "",
+        email: "",
+        department: "",
+    });
+    const [stats, setStats] = useState<HistoryStats>(DEFAULT_STATS);
+    const [sessionStats, setSessionStats] = useState<SessionStats>(DEFAULT_SESSION_STATS);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadData = async () => {
+            const [profileResult, statsResult, sessionStatsResult] = await Promise.allSettled([
+                api.user.getMe(),
+                api.dashboard.getHistoryStatistics(),
+                api.sessions.getStats(),
+            ]);
+
+            if (cancelled) return;
+
+            if (profileResult.status === "fulfilled") {
+                setProfile({
+                    display_name: profileResult.value.display_name || profileResult.value.name || "用户",
+                    email: profileResult.value.email || "",
+                    department: profileResult.value.department || "",
+                });
+            }
+
+            if (statsResult.status === "fulfilled") {
+                setStats(statsResult.value);
+            }
+
+            if (sessionStatsResult.status === "fulfilled") {
+                setSessionStats(sessionStatsResult.value);
+            }
+
+            if (
+                profileResult.status === "rejected"
+                && statsResult.status === "rejected"
+                && sessionStatsResult.status === "rejected"
+            ) {
+                setError("加载个人信息失败，请刷新重试。");
+            }
+
+            setIsLoading(false);
+        };
+
+        loadData();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const avatarLabel = useMemo(() => {
+        const value = profile.display_name.trim();
+        return value ? value.charAt(0).toUpperCase() : "用";
+    }, [profile.display_name]);
+
+    const totalHours = useMemo(
+        () => Number((stats.total_practice_time_minutes / 60).toFixed(1)),
+        [stats.total_practice_time_minutes],
+    );
+    const normalizedProfileEmail = profile.email.trim();
+    const forgotPasswordHref = normalizedProfileEmail
+        ? `/forgot-password?email=${encodeURIComponent(normalizedProfileEmail)}`
+        : "/forgot-password";
+    const passwordResetDescription = normalizedProfileEmail
+        ? "通过邮箱重置密码，会带入当前账号邮箱。"
+        : "通过邮箱重置密码，进入邮箱找回流程。";
+    const scoreBasisCopy = `仅统计 ${stats.evaluable_sessions} 次可评估训练，${stats.not_evaluable_sessions} 次证据不足训练不计入均分。`;
+
+    const onFieldChange = (field: keyof ProfileForm, value: string) => {
+        setProfile((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        setError(null);
+
+        try {
+            const updated = await api.user.updateProfile({
+                display_name: profile.display_name.trim(),
+                email: profile.email.trim(),
+                department: profile.department.trim(),
+            });
+
+            const normalized = {
+                display_name: updated.display_name || updated.name || "用户",
+                email: updated.email || "",
+                department: updated.department || "",
+            };
+
+            setProfile(normalized);
+            setIsEditing(false);
+            queryClient.setQueryData<CurrentUser | undefined>(currentUserQueryKey, (current) => (
+                current
+                    ? {
+                        ...current,
+                        name: normalized.display_name,
+                        display_name: normalized.display_name,
+                        email: normalized.email,
+                        department: normalized.department || undefined,
+                    }
+                    : current
+            ));
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "保存失败，请稍后重试";
+            setError(message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCancelEdit = async () => {
+        setIsEditing(false);
+        setError(null);
+
+        try {
+            const current = await api.user.getMe();
+            setProfile({
+                display_name: current.display_name || current.name || "用户",
+                email: current.email || "",
+                department: current.department || "",
+            });
+        } catch {
+            // keep local draft when refetch fails
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await api.auth.logout();
+        } catch {
+            // Ignore logout API failure and still leave the protected session shell.
+        } finally {
+            authHandler.logout("已退出登录", {
+                redirectTo: "/login",
+                notify: false,
+            });
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6">
+                <div className="h-8 w-40 rounded bg-slate-100 animate-pulse" />
+                <div className="h-36 rounded-2xl bg-white/60 animate-pulse" />
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="h-28 rounded-2xl bg-white/60 animate-pulse" />
+                    <div className="h-28 rounded-2xl bg-white/60 animate-pulse" />
+                    <div className="h-28 rounded-2xl bg-white/60 animate-pulse" />
+                    <div className="h-28 rounded-2xl bg-white/60 animate-pulse" />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6">
-            <h1 className="text-2xl font-bold text-slate-800 mb-6">个人中心</h1>
+            <h1 className="text-2xl font-bold text-slate-800">个人中心</h1>
 
-            {/* User Info Card */}
-            <GlassCard className="p-6 flex flex-col md:flex-row items-center gap-6">
+            <GlassCard className="p-6 flex flex-col md:flex-row items-start md:items-center gap-6">
                 <div className="w-24 h-24 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-3xl font-bold border-4 border-white shadow-lg">
-                    张
+                    {avatarLabel}
                 </div>
-                <div className="flex-1 text-center md:text-left space-y-2">
-                    <h2 className="text-xl font-bold text-slate-800">张三</h2>
-                    <div className="flex flex-col md:flex-row gap-4 text-slate-500 text-sm md:justify-start justify-center">
-                        <span className="flex items-center gap-1"><Mail className="w-4 h-4" /> zhangsan@company.com</span>
-                        <span className="flex items-center gap-1"><Briefcase className="w-4 h-4" /> 销售部</span>
-                    </div>
+
+                <div className="flex-1 w-full space-y-4">
+                    {isEditing ? (
+                        <div className="space-y-3">
+                            <Input
+                                value={profile.display_name}
+                                onChange={(event) => onFieldChange("display_name", event.target.value)}
+                                placeholder="姓名"
+                            />
+                            <Input
+                                value={profile.email}
+                                onChange={(event) => onFieldChange("email", event.target.value)}
+                                placeholder="邮箱"
+                            />
+                            <Input
+                                value={profile.department}
+                                onChange={(event) => onFieldChange("department", event.target.value)}
+                                placeholder="部门"
+                            />
+                            <div className="flex gap-2">
+                                <Button onClick={handleSave} disabled={isSaving}>
+                                    {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                    保存
+                                </Button>
+                                <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+                                    取消
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            <h2 className="text-xl font-bold text-slate-800">{profile.display_name || "用户"}</h2>
+                            <div className="flex flex-col md:flex-row gap-4 text-slate-500 text-sm">
+                                <span className="flex items-center gap-1">
+                                    <Mail className="w-4 h-4" /> {profile.email || "未设置邮箱"}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                    <Briefcase className="w-4 h-4" /> {profile.department || "未设置部门"}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
-                <Button variant="outline" className="shrink-0">
-                    编辑资料
-                </Button>
+
+                {!isEditing ? (
+                    <Button variant="outline" className="shrink-0" onClick={() => setIsEditing(true)}>
+                        编辑资料
+                    </Button>
+                ) : null}
             </GlassCard>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {error ? <div className="text-sm text-red-600">{error}</div> : null}
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <GlassCard className="p-6 text-center">
                     <div className="text-slate-500 text-sm mb-1">总练习时长</div>
-                    <div className="text-2xl font-bold text-slate-800">12.5 <span className="text-sm font-normal text-slate-400">小时</span></div>
+                    <div className="text-2xl font-bold text-slate-800">
+                        {totalHours} <span className="text-sm font-normal text-slate-400">小时</span>
+                    </div>
                 </GlassCard>
                 <GlassCard className="p-6 text-center">
-                    <div className="text-slate-500 text-sm mb-1">本月练习</div>
-                    <div className="text-2xl font-bold text-slate-800">12 <span className="text-sm font-normal text-slate-400">次</span></div>
+                    <div className="text-slate-500 text-sm mb-1">累计练习</div>
+                    <div className="text-2xl font-bold text-slate-800">
+                        {stats.total_sessions} <span className="text-sm font-normal text-slate-400">次</span>
+                    </div>
                 </GlassCard>
                 <GlassCard className="p-6 text-center">
                     <div className="text-slate-500 text-sm mb-1">平均评分</div>
-                    <div className="text-2xl font-bold text-indigo-600">76 <span className="text-sm font-normal text-slate-400">分</span></div>
+                    <div className="text-2xl font-bold text-indigo-600">
+                        {Math.round(stats.average_score || 0)} <span className="text-sm font-normal text-slate-400">分</span>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-400">{scoreBasisCopy}</div>
+                </GlassCard>
+                <GlassCard className="p-6 text-center">
+                    <div className="text-slate-500 text-sm mb-1">本周练习</div>
+                    <div className="text-2xl font-bold text-slate-800">
+                        {sessionStats.weekly_sessions} <span className="text-sm font-normal text-slate-400">次</span>
+                    </div>
                 </GlassCard>
             </div>
 
-            {/* Settings Section */}
             <GlassCard className="p-6">
                 <h3 className="text-lg font-semibold text-slate-700 mb-4 flex items-center gap-2">
                     <Settings className="w-5 h-5" /> 系统设置
                 </h3>
                 <div className="space-y-6">
-                    {/* Setting Item */}
                     <div className="flex items-center justify-between py-2 border-b border-slate-100">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
@@ -63,51 +328,45 @@ export default function ProfilePage() {
                             </div>
                             <div>
                                 <div className="text-slate-700 font-medium">语音播放速度</div>
-                                <div className="text-xs text-slate-400">调节 AI 回复的语速</div>
+                                <div className="text-xs text-slate-400">仅保存在当前浏览器，刷新后会保留。</div>
                             </div>
                         </div>
-                        <select className="bg-slate-50 border border-slate-200 rounded-md text-sm p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
-                            <option>0.75x</option>
-                            <option>1.0x</option>
-                            <option>1.25x</option>
+                        <select
+                            aria-label="语音播放速度"
+                            className="bg-slate-50 border border-slate-200 rounded-md text-sm p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            value={serializeVoiceSpeedPreference(voiceSpeedPreference)}
+                            onChange={(event) => {
+                                setVoiceSpeedPreference(event.target.value);
+                            }}
+                        >
+                            {VOICE_SPEED_PREFERENCE_OPTIONS.map((option) => (
+                                <option key={option.storageValue} value={option.storageValue}>
+                                    {option.label}
+                                </option>
+                            ))}
                         </select>
                     </div>
 
-                    {/* Setting Item */}
                     <div className="flex items-center justify-between py-2 border-b border-slate-100">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
-                                <Bell className="w-4 h-4" />
+                            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                <Key className="w-4 h-4" />
                             </div>
                             <div>
-                                <div className="text-slate-700 font-medium">消息通知</div>
-                                <div className="text-xs text-slate-400">接收练习提醒和报告推送</div>
+                                <div className="text-slate-700 font-medium">修改密码</div>
+                                <div className="text-xs text-slate-400">{passwordResetDescription}</div>
                             </div>
                         </div>
-                        <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600">
-                            <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition" />
-                        </div>
-                    </div>
-
-                    {/* Setting Item */}
-                    <div className="flex items-center justify-between py-2">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
-                                <Moon className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <div className="text-slate-700 font-medium">深色模式</div>
-                                <div className="text-xs text-slate-400">切换系统外观</div>
-                            </div>
-                        </div>
-                        <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-200">
-                            <span className="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white transition" />
-                        </div>
+                        <Button variant="outline" size="sm" className="rounded-full text-sm" asChild>
+                            <Link href={forgotPasswordHref}>通过邮箱重置密码</Link>
+                        </Button>
                     </div>
                 </div>
             </GlassCard>
 
-            <Button variant="destructive" className="w-full md:w-auto" size="lg">
+            <LearnerHelpCard />
+
+            <Button variant="destructive" className="w-full md:w-auto" size="lg" onClick={handleLogout}>
                 <LogOut className="w-4 h-4 mr-2" />
                 退出登录
             </Button>

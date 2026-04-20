@@ -4,17 +4,68 @@
 > 
 > 参考: `docs/roadmap/sales-coach-upgrade.md` - 8. WebSocket 消息协议扩展
 
+## Auth transport contract（M020/S01 authority）
+
+### 当前正式 / 兼容 transport
+
+| Surface | 正式 transport | 兼容 transport | 当前 authority |
+|---|---|---|---|
+| 浏览器 websocket | session cookie | `?token=` query token | web 主链不再默认在 URL 上追加 `token=`；浏览器应优先复用登录后的 cookie-session。 |
+| 非浏览器 / script websocket | `Authorization: Bearer <jwt>` | `?token=` query token | 新调用方优先走 Authorization header；不要新增 query-token 依赖。 |
+| backend resolver（sales / presentation 共用） | `Authorization`、cookie | query token | 当前 shipped resolver 已收口为 `Authorization -> session cookie -> query token compatibility`；query token 仍是活跃兼容路径，但已明确标记为 deprecated compatibility。 |
+
+### 连接 URL
+
+#### 正式调用方式（推荐）
+```text
+wss://api.your-domain.com/ws/presentation/{session_id}
+wss://api.your-domain.com/ws/sales/{session_id}
+```
+
+- 浏览器主链：依赖现有 session cookie；
+- 脚本/非浏览器 caller：通过 `Authorization: Bearer <jwt>` 传递认证；
+- `session_id` 也兼容 query 形式：`/ws/presentation?session_id=...`、`/ws/sales?session_id=...`。
+
+#### 兼容调用方式（仅 legacy caller）
+```text
+wss://api.your-domain.com/ws/presentation/{session_id}?token={jwt_token}
+wss://api.your-domain.com/ws/presentation?session_id={session_id}&token={jwt_token}
+wss://api.your-domain.com/ws/sales/{session_id}?token={jwt_token}
+wss://api.your-domain.com/ws/sales?session_id={session_id}&token={jwt_token}
+```
+
+### 兼容路径关闭条件
+- 前端与脚本调用方全部迁移到 header/cookie；
+- focused proof 不再依赖 `query token`，且 backend websocket contract tests 与前端 websocket tests 同步通过；
+- 本文档、`docs/setup/auth-local.md`、`.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 同步删掉 query-token authority，避免文档与代码各说各话。
+
+### Repo-root 验证命令
+
+```bash
+backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py -x -q
+npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/lib/auth-handler.test.ts
+rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/auth-handler.ts
+```
+
 ## 连接建立
 
-### PPT 演练
-```
-wss://api.your-domain.com/ws/presentation/{session_id}?token={jwt_token}
-```
+### `session_id` 校验
 
-### 销售对练
-```
-wss://api.your-domain.com/ws/sales/{session_id}?token={jwt_token}
-```
+### `session_id` 校验
+- 服务端在握手阶段校验 `session_id` 是否为 UUID。
+- 非法 `session_id` 将直接拒绝连接（`close code = 4400`, `reason = INVALID_SESSION_ID`）。
+- `session_id` 与会话场景不匹配时，拒绝连接（`close code = 4409`, `reason = SESSION_SCENARIO_MISMATCH`）。
+
+### 认证 / runtime 拒连 close code
+
+| 场景 | close code | reason |
+|---|---:|---|
+| token 缺失或无效 | `4001` | `Unauthorized` |
+| session owner 不匹配且当前用户不是 admin | `4003` | `ACCESS_DENIED` |
+| knowledge-base lock 未绑定知识库 | `4410` | `KB_LOCK_UNBOUND` |
+| sales session 缺少 agent/persona runtime lock | `4411` | `AGENT_PERSONA_REQUIRED` |
+
+这些拒连信号是当前 websocket authority 的一部分：调用方必须把 close code / reason 当作稳定诊断面，而不是把所有拒连都视为网络波动。
 
 ### 连接成功响应
 ```json
@@ -43,6 +94,23 @@ interface WebSocketMessage<T = unknown> {
   data: T;                     // 消息数据
 }
 ```
+
+### 前端连接状态模型（训练页本地状态）
+
+> 连接状态由前端连接编排层维护；后端事件用于驱动会话态/处理态。
+
+```typescript
+type ConnectionState =
+  | "connecting"   // 初次连接中
+  | "connected"    // 连接正常
+  | "reconnecting" // 异常断开后自动重连中
+  | "failed"       // 超过重试上限，需用户手动重连
+```
+
+重连策略：
+- 指数退避：`1s → 2s → 4s → 8s → 16s`（上限 30s）
+- 最大自动重试：5 次
+- 超限后进入 `failed`，前端展示可恢复入口（手动重连）
 
 ---
 
@@ -116,10 +184,12 @@ interface WebSocketMessage<T = unknown> {
   "type": "text",
   "timestamp": "2025-01-11T10:00:00Z",
   "data": {
-    "content": "你好，我想了解一下你们的产品"
+    "text": "你好，我想了解一下你们的产品"
   }
 }
 ```
+
+> 兼容说明：后端优先消费 `data.text`，并兼容 legacy `data.content` 作为回退字段。
 
 ### page_change (✅ 已实现)
 
@@ -144,10 +214,28 @@ PPT 翻页
   "type": "control",
   "timestamp": "2025-01-11T10:00:00Z",
   "data": {
-    "action": "pause" | "resume" | "end"
+    "action": "start" | "pause" | "resume" | "end"
   }
 }
 ```
+
+### interrupt (✅ 已实现)
+
+显式中断当前 AI 播放/思考（推荐在用户抢话前发送）。
+
+```json
+{
+  "type": "interrupt",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "data": {
+    "reason": "user_speaking" | "manual"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| reason | string | ❌ | 中断原因，默认 `manual` |
 
 ---
 
@@ -272,10 +360,54 @@ AI 反馈/打断
   "timestamp": "2025-01-11T10:00:00Z",
   "trace_id": "abc123",
   "data": {
-    "interruption": true,
-    "reason": "forbidden_word" | "missing_point" | "vague_response",
-    "trigger": "大概",
-    "message": "您使用了模糊词'大概'，建议给出具体数据"
+    "feedback_type": "forbidden_word" | "missing_point" | "vague_response",
+    "message": "您使用了模糊词'大概'，建议给出具体数据",
+    "suggestions": [],
+    "current_page": 2
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| feedback_type | string | ✅ | 反馈类型 |
+| message | string | ✅ | 反馈文案 |
+| suggestions | string[] | ❌ | 备选建议 |
+| current_page | number | ❌ | 当前页号 |
+
+### slide_update (✅ 已实现)
+
+PPT 页上下文更新（翻页或重连恢复时发送）。
+
+```json
+{
+  "type": "slide_update",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "current_page": 2,
+    "page_number": 2,
+    "total_pages": 10,
+    "content": "本页提纲",
+    "page_content": "本页提纲"
+  }
+}
+```
+
+### point_covered (✅ 已实现)
+
+页面必讲点覆盖度更新。
+
+```json
+{
+  "type": "point_covered",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "point_id": "session-1:1",
+    "is_covered": true,
+    "content": "客户痛点",
+    "current_page": 2
   }
 }
 ```
@@ -292,8 +424,76 @@ AI 反馈/打断
   "data": {
     "session_status": "in_progress",
     "ai_state": "listening" | "thinking" | "speaking",
+    "turn_count": 12,
     "current_page": 2,
-    "interruption_count": 3
+    "context": "Page 2 of presentation"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| session_status | string | ✅ | 会话状态：`preparing/in_progress/paused/scoring/completed` |
+| ai_state | string | ✅ | 处理状态：`idle/listening/thinking/speaking` |
+| turn_count | number | ✅ | 当前轮次数 |
+| current_page | number | ❌ | PPT 场景当前页 |
+| context | string | ❌ | 额外上下文（如页上下文） |
+| connection_state | string | ❌ | 预留字段；若服务端提供，语义与前端连接态一致 |
+
+### session_ended (✅ 已实现)
+
+会话结束确认（前端据此安全跳转报告页）
+
+```json
+{
+  "type": "session_ended",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "session_id": "session-uuid-001",
+    "session_status": "scoring",
+    "turn_count": 12
+  }
+}
+```
+
+### interrupted (✅ 已实现)
+
+中断确认（停止旧流播放）
+
+```json
+{
+  "type": "interrupted",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "reason": "user_speaking",
+    "session_status": "in_progress",
+    "ai_state": "listening",
+    "turn_count": 12
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| reason | string | ✅ | 中断原因 |
+| session_status | string | ✅ | 中断时会话状态 |
+| ai_state | string | ✅ | 中断后处理状态 |
+| turn_count | number | ✅ | 中断时轮次数 |
+
+### backpressure (✅ 已实现，增强模式)
+
+背压通知（高频音频输入时限流）
+
+```json
+{
+  "type": "backpressure",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "action": "slow_down" | "resume",
+    "queue_size": 42
   }
 }
 ```
@@ -323,10 +523,21 @@ AI 反馈/打断
     "code": "[PROCESSING_ERROR]",
     "message": "语音识别失败，请重试",
     "user_action": "switch_to_browser_asr",
-    "fallback_text": "抱歉，我没有听清，请再说一遍"
+    "session_status": "in_progress",
+    "ai_state": "idle",
+    "turn_count": 12
   }
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| code | string | ✅ | 稳定错误码 |
+| message | string | ✅ | 面向用户的错误说明 |
+| user_action | string | ✅ | 建议恢复动作 |
+| session_status | string | ✅ | 发生错误时会话状态 |
+| ai_state | string | ✅ | 发生错误时处理状态 |
+| turn_count | number | ✅ | 发生错误时轮次数 |
 
 | 错误码 | 说明 | user_action |
 |--------|------|-------------|
@@ -381,6 +592,10 @@ AI 反馈/打断
 
 销售阶段更新
 
+触发语义：
+- 首次识别到有效阶段时发送一次；
+- 后续仅在阶段切换（`stage_changed=true`）时发送，避免每轮重复提示。
+
 ```json
 {
   "type": "stage_update",
@@ -403,6 +618,8 @@ AI 反馈/打断
 | key_actions | string[] | 关键动作 |
 | guidance | string | 指导建议 |
 | progress | number | 进度 0-1 |
+| stage_changed | boolean | 是否发生阶段切换（可选） |
+| previous_stage | string | 上一阶段 ID（可选） |
 
 **销售阶段定义:**
 
@@ -472,6 +689,30 @@ AI 反馈/打断
 | dimensions[].delta | number | 变化值 |
 | feedback | string | 反馈建议 |
 
+### action_card (✅ 已实现，沟通闭环)
+
+每轮仅下发一条“可执行动作卡”，用于替代泛化建议堆叠。
+该消息在 `stepfun_realtime_handler` 与 `enhanced_handler/capability_processor` 两条链路均会下发，字段结构保持一致。
+
+```json
+{
+  "type": "action_card",
+  "timestamp": "2026-02-21T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "issue": "检测到表达问题：大概、可能",
+    "replacement": "请问您当前最优先要解决的业务问题是什么？",
+    "next_turn_rule": "下一轮先问1个具体需求问题，再给出价值表达。"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| issue | string | 本轮唯一问题 |
+| replacement | string | 一句替换话术 |
+| next_turn_rule | string | 下一轮判定条件 |
+
 ### knowledge_context (调试用)
 
 知识库检索结果
@@ -522,7 +763,8 @@ export interface APIKnowledgeContextMessage { ... }
 - 超时后服务端关闭连接
 
 ### 重连策略
-- 断开后立即尝试重连
-- 使用指数退避: 1s, 2s, 4s, 8s, 最大 30s
-- 最多重试 5 次
-- 重连时携带 last_sequence 恢复状态
+- 异常断开后自动进入 `reconnecting`
+- 使用指数退避: 1s, 2s, 4s, 8s, 16s（最大 30s）
+- 最多重试 5 次，超限后进入 `failed`
+- `failed` 状态必须提供手动恢复入口（重新连接）
+- 重连时清理本地旧音频缓存/流状态，避免旧流污染新会话轮次

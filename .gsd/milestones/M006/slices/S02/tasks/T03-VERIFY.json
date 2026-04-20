@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M006/S02/T03",
+  "timestamp": 1774604647128,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "cd backend",
+      "exitCode": 0,
+      "durationMs": 3,
+      "verdict": "pass"
+    },
+    {
+      "command": "venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py\ncd web",
+      "exitCode": 0,
+      "durationMs": 6334,
+      "verdict": "pass"
+    },
+    {
+      "command": "pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "exitCode": 0,
+      "durationMs": 2079,
+      "verdict": "pass"
+    }
+  ]
+}

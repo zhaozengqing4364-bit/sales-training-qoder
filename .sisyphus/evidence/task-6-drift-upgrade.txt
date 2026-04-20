@@ -1,0 +1,156 @@
+T6 drifted-upgrade evidence
+Date: 2026-04-16
+
+Scope note:
+- This proof uses a database stamped to `20260413_1040_029` with the pre-T6 ORM/runtime drift shape manually created for the two target tables only.
+- The staged table intentionally omits `weaknesses` and both canonical indexes; the comprehensive report table uses the drifted nullable/JSON shape with `session_id` as PK but without canonical defaults/backfill.
+
+Command:
+"/opt/homebrew/opt/python@3.13/bin/python3.13" - <<'PY'
+from sqlalchemy import create_engine, text
+engine = create_engine('postgresql://postgres:password@localhost:5432/postgres', isolation_level='AUTOCOMMIT')
+with engine.connect() as conn:
+    conn.execute(text('DROP DATABASE IF EXISTS task6_drift_upgrade'))
+    conn.execute(text('CREATE DATABASE task6_drift_upgrade'))
+engine.dispose()
+print('recreated task6_drift_upgrade')
+PY
+
+Output:
+recreated task6_drift_upgrade
+
+Command:
+PYTHONPATH=src "/opt/homebrew/opt/python@3.13/bin/python3.13" - <<'PY'
+from sqlalchemy import create_engine
+from common.db.models import Base
+from agent.models import Agent, Persona, AgentPersona  # noqa: F401
+from common.knowledge.models import KnowledgeBase, KnowledgeDocument  # noqa: F401
+from common.knowledge.rag_profile_models import RagProfile  # noqa: F401
+from common.conversation.models import ConversationMessage  # noqa: F401
+from common.ai.models import ModelConfig  # noqa: F401
+engine = create_engine('postgresql://postgres:password@localhost:5432/task6_drift_upgrade')
+with engine.begin() as conn:
+    tables = [table for table in Base.metadata.sorted_tables if table.name not in {'staged_evaluation_results', 'comprehensive_reports'}]
+    Base.metadata.create_all(conn, tables=tables)
+engine.dispose()
+print('seeded non-target schema without alembic version rows')
+PY
+
+Output:
+seeded non-target schema without alembic version rows
+
+Command:
+PYTHONPATH=src DATABASE_URL="postgresql+asyncpg://postgres:password@localhost:5432/task6_drift_upgrade" alembic stamp 20260413_1040_029
+
+Output:
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running stamp_revision  -> 20260413_1040_029
+
+Command:
+"/opt/homebrew/opt/python@3.13/bin/python3.13" - <<'PY'
+from sqlalchemy import create_engine, text
+engine = create_engine('postgresql://postgres:password@localhost:5432/task6_drift_upgrade')
+with engine.begin() as conn:
+    conn.execute(text('''
+        CREATE TABLE staged_evaluation_results (
+            id VARCHAR(36) PRIMARY KEY,
+            session_id VARCHAR(36) NOT NULL,
+            stage_number INTEGER NOT NULL,
+            start_turn INTEGER NOT NULL,
+            end_turn INTEGER NOT NULL,
+            scores JSON,
+            strengths JSON,
+            suggestions JSON,
+            summary TEXT,
+            created_at TIMESTAMPTZ
+        )
+    '''))
+    conn.execute(text('''
+        CREATE TABLE comprehensive_reports (
+            session_id VARCHAR(36) PRIMARY KEY,
+            overall_score DOUBLE PRECISION,
+            dimension_scores JSON,
+            key_strengths JSON,
+            key_improvements JSON,
+            recommendations JSON,
+            detailed_feedback TEXT,
+            stage_summaries JSON,
+            created_at TIMESTAMPTZ
+        )
+    '''))
+    conn.execute(text("""
+        INSERT INTO staged_evaluation_results (
+            id, session_id, stage_number, start_turn, end_turn, scores, strengths, suggestions, summary, created_at
+        ) VALUES (
+            '22222222-2222-2222-2222-222222222222',
+            'session-drift-1',
+            2,
+            5,
+            9,
+            '{"communication": 72}',
+            '["good recovery"]',
+            '["ask more discovery questions"]',
+            'drifted summary',
+            '2026-04-16T00:00:00+00:00'
+        )
+    """))
+    conn.execute(text("""
+        INSERT INTO comprehensive_reports (
+            session_id, overall_score, dimension_scores, key_strengths, key_improvements, recommendations, detailed_feedback, stage_summaries, created_at
+        ) VALUES (
+            'session-drift-1',
+            NULL,
+            NULL,
+            '["good recovery"]',
+            '["needs deeper discovery"]',
+            NULL,
+            'legacy drift feedback',
+            NULL,
+            '2026-04-16T00:05:00+00:00'
+        )
+    """))
+engine.dispose()
+print('seeded drifted target tables')
+PY
+
+Output:
+seeded drifted target tables
+
+Command:
+PYTHONPATH=src DATABASE_URL="postgresql+asyncpg://postgres:password@localhost:5432/task6_drift_upgrade" alembic upgrade ae1dbf12bd03
+
+Output:
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 20260413_1040_029 -> ae1dbf12bd03, canonicalize report evaluation tables
+
+Inspection command:
+"/opt/homebrew/opt/python@3.13/bin/python3.13" - <<'PY'
+from sqlalchemy import create_engine, inspect, text
+engine = create_engine('postgresql://postgres:password@localhost:5432/task6_drift_upgrade')
+with engine.connect() as conn:
+    inspector = inspect(conn)
+    print('[drift staged columns]', [col['name'] for col in inspector.get_columns('staged_evaluation_results')])
+    print('[drift staged pk]', inspector.get_pk_constraint('staged_evaluation_results').get('constrained_columns'))
+    print('[drift staged indexes]', inspector.get_indexes('staged_evaluation_results'))
+    print('[drift report columns]', [col['name'] for col in inspector.get_columns('comprehensive_reports')])
+    print('[drift report pk]', inspector.get_pk_constraint('comprehensive_reports').get('constrained_columns'))
+    print('[drift report indexes]', inspector.get_indexes('comprehensive_reports'))
+    print('[drift staged row]', conn.execute(text("SELECT id, weaknesses, suggestions, summary FROM staged_evaluation_results WHERE session_id = 'session-drift-1'" )).fetchone())
+    print('[drift report row]', conn.execute(text("SELECT session_id, overall_score, dimension_scores, recommendations, detailed_feedback FROM comprehensive_reports WHERE session_id = 'session-drift-1'" )).fetchone())
+engine.dispose()
+PY
+
+Inspection output:
+[drift staged columns] ['id', 'session_id', 'stage_number', 'start_turn', 'end_turn', 'created_at', 'scores', 'strengths', 'weaknesses', 'suggestions', 'summary']
+[drift staged pk] ['id']
+[drift staged indexes] [{'name': 'idx_staged_eval_session', 'unique': False, 'column_names': ['session_id'], 'include_columns': [], 'dialect_options': {'postgresql_include': []}}, {'name': 'idx_staged_eval_stage', 'unique': True, 'column_names': ['session_id', 'stage_number'], 'include_columns': [], 'dialect_options': {'postgresql_include': []}}]
+[drift report columns] ['session_id', 'created_at', 'overall_score', 'dimension_scores', 'stage_summaries', 'key_strengths', 'key_improvements', 'detailed_feedback', 'recommendations']
+[drift report pk] ['session_id']
+[drift report indexes] []
+[drift staged row] ('22222222-2222-2222-2222-222222222222', [], ['ask more discovery questions'], 'drifted summary')
+[drift report row] ('session-drift-1', 0.0, [], [], 'legacy drift feedback')
+
+Alembic version check:
+task6_drift_upgrade [('ae1dbf12bd03',)]

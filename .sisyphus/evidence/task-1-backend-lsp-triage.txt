@@ -1,0 +1,171 @@
+Task T1 — backend diagnostics baseline and noise triage
+Date: 2026-04-15
+
+Scope kept intentionally narrow:
+- no auth/db/realtime/admin business-logic fixes
+- only diagnostic baseline config + evidence
+
+Files added for baseline normalization:
+- backend/pyrightconfig.json
+- pyrightconfig.json
+
+Canonical backend diagnostics commands (run from `backend/`)
+1) `/opt/homebrew/opt/python@3.13/bin/python3.13 -m pytest --collect-only || true`
+   Observed outcome:
+   - command is executable
+   - fails during collection at `backend/tests/contract/conftest.py:7`
+   - import chain reaches `backend/src/common/auth/service.py:15`
+   - terminal error is `ModuleNotFoundError: No module named 'jwt'`
+   Classification:
+   - environment/import-resolution noise, not proof of auth business-logic breakage
+   - `PyJWT[crypto]` is already declared in `backend/requirements.txt:45`
+
+2) `/opt/homebrew/opt/python@3.13/bin/python3.13 -m mypy src/ || true`
+   Observed outcome:
+   - command is executable
+   - terminal error is `No module named mypy`
+   Classification:
+   - environment noise (type checker absent from active interpreter)
+
+3) `/opt/homebrew/opt/python@3.13/bin/python3.13 -c "import fastapi, pydantic, sqlalchemy, websockets, httpx, jwt, passlib.context"`
+   Observed outcome:
+   - fails on `jwt`
+   Classification:
+   - environment noise
+   - corroborates pytest collection failure above
+
+4) Shell/path sanity checks
+   Observed outcome:
+   - `python` shell shim is missing entirely (`command not found`)
+   - `python3` points to Homebrew Python 3.14.3
+   - `pytest` runs on Homebrew Python 3.13.12
+   - active `sitecustomize` is `/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/sitecustomize.py`
+   Classification:
+   - environment ambiguity / tooling drift
+   - explains why repo-local `backend/sitecustomize.py` and `backend/usercustomize.py` are not taking effect in this workspace
+
+Important config conflict evaluated
+- root `pyproject.toml:4` => `pythonpath = ["backend/src"]`
+- `backend/pyproject.toml:48` => `pythonpath = ["src"]`
+- Decision: do not merge them in T1. Canonical backend commands should run from `backend/`; keep repo-root pytest config separate and explicitly document the backend working directory.
+
+Path-hack inventory relevant to diagnostics
+- `backend/src/main.py:20`
+- `backend/tests/conftest.py:18`
+- `backend/alembic/env.py:9`
+- `backend/scripts/repair_legacy_schema.py:24`
+- `backend/process_pending_docs.py:11`
+- `backend/reprocess_failed_docs.py:15`
+- `backend/reset_db.py:7`
+- `backend/tests/integration/test_nfr_ci_integration.py:19`
+
+Triage category A — real code defects to keep for downstream fixes
+1) `backend/src/common/auth/service.py:323-339`
+   - `reportArgumentType`: `verify_token` receives `str | None`
+   - `reportAssignmentType`: `payload.get("sub")` assigned to `str`
+   - `reportPossiblyUnboundVariable`: `user_id` may be unbound before SQL query
+   Why this is real:
+   - these are local control-flow/type issues after token parsing, independent of dependency availability
+
+2) `backend/src/sales_bot/websocket/stepfun_realtime_handler.py:888,892,895`
+   - `reportOptionalMemberAccess`: `.get(...)` called on value Pyright still treats as possibly `None`
+   Why this is real:
+   - localized Optional narrowing problem inside `_restore_session_state`
+
+3) `backend/src/sales_bot/websocket/stepfun_realtime_handler.py:795`
+   - `reportGeneralTypeIssues`: awaited value typed as plain `object`
+   Why this is real:
+   - async contract mismatch, not import noise
+
+4) `backend/src/sales_bot/websocket/stepfun_realtime_handler.py:1842`
+   - `reportArgumentType`: `str` passed where `SessionLifecycleAction` is required
+   Why this is real:
+   - enum/literal mismatch in runtime lifecycle transition call
+
+5) `backend/src/sales_bot/websocket/stepfun_realtime_handler.py:2543,2627`
+   - `PassFlags` vs `dict[str, bool] | None` mismatch
+   Why this is real:
+   - model/type contract divergence across helper boundaries
+
+6) `backend/src/sales_bot/websocket/stepfun_realtime_handler.py:2633,2635`
+   - `ActionCard` assigned where `dict[...]` is expected
+   Why this is real:
+   - object-vs-dict contract mismatch
+
+7) `backend/src/sales_bot/websocket/stepfun_realtime_handler.py:4245-4266`
+   - `reportPossiblyUnboundVariable`: `output` may be read before assignment
+   Why this is real:
+   - control-flow bug shape remains after ignoring import errors
+
+Triage category B — environment / import-resolution noise
+1) `backend/src/main.py:11-17,352,778`
+   - missing imports: `dotenv`, `fastapi`, `sqlalchemy`, `uvicorn`
+   Evidence that this is environment noise:
+   - these packages are runtime dependencies or expected entrypoint deps
+   - `fastapi` is declared in `backend/requirements.txt:2`
+   - `sqlalchemy` is declared in `backend/requirements.txt:33`
+   - `httpx` is declared in `backend/requirements.txt:49`
+   - `websockets` is declared in `backend/requirements.txt:5`
+
+2) `backend/src/common/auth/service.py:12-20`
+   - missing imports: `dotenv`, `fastapi`, `jwt`, `sqlalchemy`, `passlib.context`
+   Evidence that this is environment noise:
+   - `PyJWT[crypto]` is declared in `backend/requirements.txt:45`
+   - `passlib[bcrypt]` is declared in `backend/requirements.txt:46`
+   - `JWTError` unknown-import-symbol diagnostics are secondary fallout from unresolved `jwt`
+
+3) `backend/src/sales_bot/websocket/stepfun_realtime_handler.py:25-28`
+   - missing imports: `websockets`, `fastapi`, `sqlalchemy`
+   Evidence that this is environment noise:
+   - same dependency class as above; real local type defects remain separately visible in the same file
+
+4) `pytest --collect-only`
+   - stops on `ModuleNotFoundError: jwt`
+   Evidence that this is environment noise:
+   - failure happens before business assertions/tests run
+   - it is consistent with interpreter import probe and requirements declaration
+
+5) `python3`/`mypy` shell commands
+   - `python` missing
+   - `mypy` missing
+   - `python3` is a different interpreter family than `pytest`
+   Classification:
+   - workspace tooling drift, not repo code breakage
+
+Triage category C — deprecated-path / stale-path noise
+1) `backend/tests/integration/test_nfr_ci_integration.py:19`
+   - `sys.path.insert(0, str(Path(__file__).parent.parent / "src"))`
+   - from this file, that path resolves to `backend/tests/src`, not `backend/src`
+   Downstream symptom:
+   - LSP reports `common.monitoring.nfr_reporter` missing at lines `56, 94, 129, 173, 199, 233, 258, 293, 355, 367, 379, 391, 403, 415`
+   Counter-evidence:
+   - actual module exists at `backend/src/common/monitoring/nfr_reporter.py`
+   Classification:
+   - stale/incorrect path hack; do not treat as proof that `nfr_reporter` implementation is missing
+
+2) Root-level one-off helper scripts outside the canonical backend surfaces
+   - `backend/process_pending_docs.py:11`
+   - `backend/reprocess_failed_docs.py:15`
+   - `backend/reset_db.py:7`
+   Shared trait:
+   - standalone `sys.path.insert(..., "src")` bootstraps
+   Classification:
+   - stale/non-canonical diagnostic surfaces; do not mix into downstream real-defect backlog
+
+3) Repo-local pytest hook files
+   - `backend/sitecustomize.py:6-12`
+   - `backend/usercustomize.py:6-12`
+   Observed counter-evidence:
+   - current interpreter loads global Homebrew `sitecustomize`, not repo-local one
+   Classification:
+   - environment-shadowed hook path; useful repo documentation, but not an active control surface in this workspace
+
+Baseline decision summary
+- Added `backend/pyrightconfig.json` for backend-local editor/CLI usage.
+- Added repo-root `pyrightconfig.json` scoped only to backend paths because the live LSP appears repo-rooted.
+- Current `lsp_diagnostics` output did not materially change after adding the config files, so the active LSP service likely needs a restart or is pinned to an external environment. This is itself evidence of environment/tooling drift and should not be misread as business-code failure.
+
+Downstream safe-use guidance
+- When a diagnostic is only `reportMissingImports` for packages already listed in `backend/requirements.txt`, classify it as environment noise unless there is narrower repo-local contradiction.
+- Keep the real-defect backlog focused on local type/control-flow issues like Optional misuse, unbound variables, enum/type mismatches, and object-vs-dict mismatches.
+- Treat stale path hacks and shadowed startup hooks as separate cleanup/governance work; do not fix them under auth/db/realtime feature tasks unless explicitly scoped.

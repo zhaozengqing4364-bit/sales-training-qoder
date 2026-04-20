@@ -47,7 +47,7 @@ class LocalASRProvider(ASRProvider):
             )
             self._loaded = True
             logger.info("Local ASR model loaded successfully")
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Failed to load local ASR: {str(e)}")
             # Fall back to CPU if CUDA fails
             if self.device == "cuda":
@@ -91,7 +91,7 @@ class LocalASRProvider(ASRProvider):
                 if text:
                     yield Result.ok(text)
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Local ASR streaming error: {str(e)}")
             yield Result.fail("[USE_BROWSER_ASR]")
 
@@ -118,7 +118,7 @@ class LocalASRProvider(ASRProvider):
 
             return None
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.warning(f"Chunk processing error: {str(e)}")
             return None
 
@@ -146,7 +146,7 @@ class LocalASRProvider(ASRProvider):
             else:
                 return Result.fail("[USE_BROWSER_ASR]")
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Local file transcription error: {str(e)}")
             return Result.fail("[USE_BROWSER_ASR]")
 
@@ -160,6 +160,6 @@ class LocalASRProvider(ASRProvider):
         try:
             self._ensure_loaded()
             return Result.ok(self._loaded)
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Local ASR health check failed: {str(e)}")
             return Result.fail(False)

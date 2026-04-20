@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
@@ -10,7 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ArrowLeft, Save, Trash2, Loader2, Plus, User, GripVertical, Star, X, Database } from "lucide-react";
 import { api } from "@/lib/api/client";
-import { AdminAgent, AdminPersona, AdminKnowledgeBase } from "@/lib/api/types";
+import { AdminAgent, AdminAgentIndustryPackContract, AdminPersona } from "@/lib/api/types";
 import {
     Dialog,
     DialogContent,
@@ -25,12 +26,39 @@ interface LinkedPersona extends AdminPersona {
     is_default: boolean;
 }
 
-interface LinkedKnowledgeBase {
+interface ModelConfigListItem {
     id: string;
     name: string;
-    description?: string;
-    category: string;
-    document_count: number;
+    model_type: string;
+    provider: string;
+    model_name: string;
+    is_default: boolean;
+    is_active: boolean;
+    last_test_status: string | null;
+}
+
+interface ModelConfigListResponse {
+    llm: ModelConfigListItem[];
+    embedding: ModelConfigListItem[];
+    asr: ModelConfigListItem[];
+    tts: ModelConfigListItem[];
+    total: number;
+}
+
+interface RuntimeProfileItem {
+    id: string;
+    name: string;
+    voice_mode: "legacy" | "stepfun_realtime";
+    model_name: string;
+    voice_name: string;
+    is_default: boolean;
+    is_active: boolean;
+}
+
+interface AgentVoicePolicyConfig {
+    enabled: boolean;
+    runtime_profile_id?: string | null;
+    voice_mode_override?: "legacy" | "stepfun_realtime" | null;
 }
 
 const DIFFICULTY_MAP: Record<string, { label: string; color: string }> = {
@@ -50,6 +78,7 @@ interface CapabilitiesConfig {
     sales_stage?: CapabilityConfig;
     realtime_scoring?: CapabilityConfig;
     knowledge_retrieval?: CapabilityConfig;
+    llm?: CapabilityConfig;
     [key: string]: CapabilityConfig | undefined;
 }
 
@@ -83,6 +112,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     const { id } = use(params);
 
     const [agent, setAgent] = useState<AdminAgent | null>(null);
+    const [industryPackContract, setIndustryPackContract] = useState<AdminAgentIndustryPackContract | null>(null);
     const [linkedPersonas, setLinkedPersonas] = useState<LinkedPersona[]>([]);
     const [availablePersonas, setAvailablePersonas] = useState<AdminPersona[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -97,43 +127,53 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     const [removeTarget, setRemoveTarget] = useState<LinkedPersona | null>(null);
     const [isRemoving, setIsRemoving] = useState(false);
 
-    // Knowledge Base State
-    const [linkedKnowledgeBases, setLinkedKnowledgeBases] = useState<LinkedKnowledgeBase[]>([]);
-    const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<AdminKnowledgeBase[]>([]);
-    const [isAddKBOpen, setIsAddKBOpen] = useState(false);
-    const [selectedKBId, setSelectedKBId] = useState<string>("");
-    const [isAddingKB, setIsAddingKB] = useState(false);
-    const [removeKBTarget, setRemoveKBTarget] = useState<LinkedKnowledgeBase | null>(null);
-    const [isRemovingKB, setIsRemovingKB] = useState(false);
+    const [llmConfigs, setLlmConfigs] = useState<ModelConfigListItem[]>([]);
+    const [runtimeProfiles, setRuntimeProfiles] = useState<RuntimeProfileItem[]>([]);
+    const [agentVoicePolicy, setAgentVoicePolicy] = useState<AgentVoicePolicyConfig>({
+        enabled: true,
+        runtime_profile_id: null,
+        voice_mode_override: null,
+    });
+    const [isSavingVoicePolicy, setIsSavingVoicePolicy] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [agentData, personasData, allPersonas, allKnowledgeBases] = await Promise.all([
+                const [
+                    agentData,
+                    personasData,
+                    allPersonas,
+                    modelConfigsData,
+                    voiceProfiles,
+                    voicePolicy,
+                    agentIndustryPackContract,
+                ] = await Promise.all([
                     api.admin.getAgent(id),
                     api.admin.getAgentPersonas(id),
                     api.admin.getPersonas({ page_size: 100 }),
-                    api.admin.getKnowledgeBases({ page_size: 100 }),
+                    api.admin.getModelConfigs(),
+                    api.admin.getVoiceRuntimeProfiles({ only_active: true }),
+                    api.admin.getAgentVoicePolicy(id),
+                    api.admin.getAgentIndustryPackContract(),
                 ]);
                 setAgent(agentData);
+                setIndustryPackContract(agentIndustryPackContract);
                 setLinkedPersonas(personasData as LinkedPersona[]);
                 setAvailablePersonas(allPersonas.items || []);
-                setAvailableKnowledgeBases(allKnowledgeBases.items || []);
+                setRuntimeProfiles((voiceProfiles.items || []) as RuntimeProfileItem[]);
+                setAgentVoicePolicy({
+                    enabled: (voicePolicy as AgentVoicePolicyConfig).enabled ?? true,
+                    runtime_profile_id: (voicePolicy as AgentVoicePolicyConfig).runtime_profile_id || null,
+                    voice_mode_override: (voicePolicy as AgentVoicePolicyConfig).voice_mode_override || null,
+                });
 
-                // Load linked knowledge bases from agent data
-                const kbIds = agentData.default_knowledge_base_ids || [];
-                if (kbIds.length > 0) {
-                    const linkedKBs = (allKnowledgeBases.items || []).filter((kb: AdminKnowledgeBase) => kbIds.includes(kb.id));
-                    setLinkedKnowledgeBases(linkedKBs.map(kb => ({
-                        id: kb.id,
-                        name: kb.name,
-                        description: kb.description,
-                        category: kb.category,
-                        document_count: kb.document_count || 0,
-                    })));
-                }
+                const modelConfigs = modelConfigsData as ModelConfigListResponse | ModelConfigListItem[];
+                const llmModelList = Array.isArray(modelConfigs)
+                    ? modelConfigs.filter((item) => item.model_type === "llm")
+                    : modelConfigs.llm;
+                setLlmConfigs(llmModelList.filter((item) => item.is_active));
             } catch (err) {
-                console.error("Failed to load agent:", err);
+                debug.error("Failed to load agent:", err);
                 toast.error("加载失败");
             } finally {
                 setIsLoading(false);
@@ -146,13 +186,37 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
         if (!agent) return;
         setIsSaving(true);
         try {
-            await api.admin.updateAgent(id, agent);
+            await api.admin.updateAgent(id, {
+                name: agent.name,
+                description: agent.description,
+                icon: agent.icon,
+                category: agent.category,
+                welcome_message: agent.welcome_message,
+                capabilities_config: agent.capabilities_config,
+            });
             toast.success("保存成功");
         } catch (err) {
-            console.error("Failed to update agent:", err);
+            debug.error("Failed to update agent:", err);
             toast.error("保存失败");
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleSaveVoicePolicy = async () => {
+        setIsSavingVoicePolicy(true);
+        try {
+            await api.admin.updateAgentVoicePolicy(id, {
+                enabled: agentVoicePolicy.enabled,
+                runtime_profile_id: agentVoicePolicy.runtime_profile_id || null,
+                voice_mode_override: agentVoicePolicy.voice_mode_override || null,
+            });
+            toast.success("语音策略已保存");
+        } catch (err) {
+            debug.error("Failed to update voice policy:", err);
+            toast.error("语音策略保存失败");
+        } finally {
+            setIsSavingVoicePolicy(false);
         }
     };
 
@@ -177,7 +241,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             setSelectedPersonaId("");
             toast.success("角色关联成功");
         } catch (err) {
-            console.error("Failed to add persona:", err);
+            debug.error("Failed to add persona:", err);
             toast.error("关联失败");
         } finally {
             setIsAddingPersona(false);
@@ -194,7 +258,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             setRemoveTarget(null);
             toast.success("已移除角色");
         } catch (err) {
-            console.error("Failed to remove persona:", err);
+            debug.error("Failed to remove persona:", err);
             toast.error("移除失败");
         } finally {
             setIsRemoving(false);
@@ -214,7 +278,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             })));
             toast.success("已设为默认角色");
         } catch (err) {
-            console.error("Failed to set default:", err);
+            debug.error("Failed to set default:", err);
             toast.error("设置失败");
         }
     };
@@ -223,72 +287,6 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     const unlinkedPersonas = availablePersonas.filter(
         p => !linkedPersonas.some(lp => lp.persona_id === p.id)
     );
-
-    // Filter out already linked knowledge bases
-    const unlinkedKnowledgeBases = availableKnowledgeBases.filter(
-        kb => !linkedKnowledgeBases.some(lkb => lkb.id === kb.id)
-    );
-
-    // Handle add knowledge base
-    const handleAddKnowledgeBase = async () => {
-        if (!selectedKBId || !agent) {
-            toast.error("请选择一个知识库");
-            return;
-        }
-
-        setIsAddingKB(true);
-        try {
-            const newKBIds = [...linkedKnowledgeBases.map(kb => kb.id), selectedKBId];
-            await api.admin.updateAgent(id, {
-                default_knowledge_base_ids: newKBIds
-            } as Partial<AdminAgent>);
-
-            // Update local state
-            const addedKB = availableKnowledgeBases.find(kb => kb.id === selectedKBId);
-            if (addedKB) {
-                setLinkedKnowledgeBases(prev => [...prev, {
-                    id: addedKB.id,
-                    name: addedKB.name,
-                    description: addedKB.description,
-                    category: addedKB.category,
-                    document_count: addedKB.document_count || 0,
-                }]);
-            }
-
-            setIsAddKBOpen(false);
-            setSelectedKBId("");
-            toast.success("知识库关联成功");
-        } catch (err) {
-            console.error("Failed to add knowledge base:", err);
-            toast.error("关联失败");
-        } finally {
-            setIsAddingKB(false);
-        }
-    };
-
-    // Handle remove knowledge base
-    const handleRemoveKnowledgeBase = async () => {
-        if (!removeKBTarget || !agent) return;
-
-        setIsRemovingKB(true);
-        try {
-            const newKBIds = linkedKnowledgeBases
-                .filter(kb => kb.id !== removeKBTarget.id)
-                .map(kb => kb.id);
-            await api.admin.updateAgent(id, {
-                default_knowledge_base_ids: newKBIds
-            } as Partial<AdminAgent>);
-
-            setLinkedKnowledgeBases(prev => prev.filter(kb => kb.id !== removeKBTarget.id));
-            setRemoveKBTarget(null);
-            toast.success("已移除知识库");
-        } catch (err) {
-            console.error("Failed to remove knowledge base:", err);
-            toast.error("移除失败");
-        } finally {
-            setIsRemovingKB(false);
-        }
-    };
 
     if (isLoading) {
         return (
@@ -302,6 +300,13 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
         return <div className="p-8 text-center text-red-500">未找到智能体</div>;
     }
 
+    const llmSettings = (
+        ((agent.capabilities_config as CapabilitiesConfig)?.llm as CapabilityConfig | undefined) ?? {}
+    ) as CapabilityConfig;
+    const selectedModelConfigId = typeof llmSettings["model_config_id"] === "string"
+        ? (llmSettings["model_config_id"] as string)
+        : "";
+
     return (
         <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Remove Persona Confirm */}
@@ -314,18 +319,6 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                 variant="danger"
                 onConfirm={handleRemovePersona}
                 isLoading={isRemoving}
-            />
-
-            {/* Remove Knowledge Base Confirm */}
-            <ConfirmDialog
-                open={!!removeKBTarget}
-                onOpenChange={(open) => !open && setRemoveKBTarget(null)}
-                title="移除知识库"
-                description={`确定要从该智能体移除「${removeKBTarget?.name}」吗？`}
-                confirmText="移除"
-                variant="danger"
-                onConfirm={handleRemoveKnowledgeBase}
-                isLoading={isRemovingKB}
             />
 
             {/* Header */}
@@ -367,7 +360,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">描述</label>
                         <textarea
                             className="flex min-h-[120px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={agent.description}
+                            value={agent.description ?? ""}
                             onChange={(e) => setAgent({ ...agent, description: e.target.value })}
                         />
                     </div>
@@ -493,14 +486,11 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                             })}
                         </div>
 
-                        {/* 知识库检索提示 */}
-                        {(agent.capabilities_config as CapabilitiesConfig)?.knowledge_retrieval?.enabled && linkedKnowledgeBases.length === 0 && (
-                            <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                                <p className="text-xs text-amber-700">
-                                    ⚠️ 已启用知识库检索，但尚未关联知识库。请在右侧「知识库关联」中添加知识库。
-                                </p>
-                            </div>
-                        )}
+                        <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                            <p className="text-xs text-amber-700">
+                                角色与知识库策略已收敛到「角色中心」。智能体页仅负责能力开关与运行时技术参数。
+                            </p>
+                        </div>
                     </div>
                 </GlassCard>
 
@@ -510,69 +500,166 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         <h3 className="text-sm font-bold text-slate-800 mb-4">模型设置</h3>
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">模型版本</label>
-                                <select className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none">
-                                    <option>DeepSeek Chat</option>
-                                    <option>GPT-4o</option>
-                                    <option>GPT-3.5-turbo</option>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">LLM 配置</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={selectedModelConfigId}
+                                    onChange={(e) => {
+                                        const configId = e.target.value;
+                                        const capabilities = { ...(agent.capabilities_config as CapabilitiesConfig || {}) };
+                                        capabilities.llm = {
+                                            ...(capabilities.llm || {}),
+                                            enabled: true,
+                                        };
+
+                                        if (configId) {
+                                            capabilities.llm.model_config_id = configId;
+                                        } else {
+                                            delete capabilities.llm.model_config_id;
+                                        }
+
+                                        setAgent({ ...agent, capabilities_config: capabilities });
+                                    }}
+                                >
+                                    <option value="">系统默认模型（按全局默认）</option>
+                                    {llmConfigs.map((config) => (
+                                        <option key={config.id} value={config.id}>
+                                            {config.name} · {config.provider}/{config.model_name}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">采样温度</label>
-                                <div className="flex items-center gap-3">
-                                    <input type="range" min="0" max="1" step="0.1" defaultValue="0.7" className="flex-1 accent-slate-900" />
-                                    <span className="text-xs font-bold text-slate-600 w-8 text-right">0.7</span>
-                                </div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">说明</label>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    当前智能体可指定专属 LLM 配置；留空则使用系统默认。温度、超时等参数请在「系统设置 → 模型配置」中配置到对应模型。
+                                </p>
                             </div>
                         </div>
                     </GlassCard>
 
                     <GlassCard className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-bold text-slate-800">知识库关联</h3>
-                            {linkedKnowledgeBases.length > 0 && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-full h-7 px-2"
-                                    onClick={() => setIsAddKBOpen(true)}
-                                >
-                                    <Plus className="w-3 h-3" />
-                                </Button>
-                            )}
-                        </div>
-                        {linkedKnowledgeBases.length === 0 ? (
-                            <div
-                                className="text-center py-8 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all"
-                                onClick={() => setIsAddKBOpen(true)}
-                            >
-                                <Database className="w-6 h-6 text-slate-300 mx-auto mb-2" />
-                                <p className="text-xs font-bold text-slate-400">+ 关联知识库</p>
+                        <h3 className="text-sm font-bold text-slate-800 mb-4">语音策略（Realtime）</h3>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <span className="text-sm text-slate-700">启用 Agent 语音策略</span>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={agentVoicePolicy.enabled}
+                                        onChange={(e) =>
+                                            setAgentVoicePolicy((prev) => ({
+                                                ...prev,
+                                                enabled: e.target.checked,
+                                            }))
+                                        }
+                                    />
+                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
                             </div>
-                        ) : (
+
                             <div className="space-y-2">
-                                {linkedKnowledgeBases.map((kb) => (
-                                    <div
-                                        key={kb.id}
-                                        className="flex items-center gap-2 p-3 rounded-xl border border-slate-100 bg-slate-50/50 group hover:bg-white hover:border-slate-200 transition-all"
-                                    >
-                                        <Database className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-medium text-slate-800 truncate">{kb.name}</div>
-                                            <div className="text-[10px] text-slate-400">{kb.document_count} 文档</div>
-                                        </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-6 w-6 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={() => setRemoveKBTarget(kb)}
-                                        >
-                                            <X className="w-3 h-3" />
-                                        </Button>
-                                    </div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">运行时配置档</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={agentVoicePolicy.runtime_profile_id || ""}
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            runtime_profile_id: e.target.value || null,
+                                        }))
+                                    }
+                                >
+                                    <option value="">跟随系统默认</option>
+                                    {runtimeProfiles.map((profile) => (
+                                        <option key={profile.id} value={profile.id}>
+                                            {profile.name} · {profile.voice_mode === "stepfun_realtime" ? "Realtime" : "经典"}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">模式覆盖</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={agentVoicePolicy.voice_mode_override || ""}
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            voice_mode_override: (e.target.value as "legacy" | "stepfun_realtime" | "") || null,
+                                        }))
+                                    }
+                                >
+                                    <option value="">不覆盖（跟随配置档）</option>
+                                    <option value="stepfun_realtime">强制 Realtime</option>
+                                    <option value="legacy">强制经典链路</option>
+                                </select>
+                            </div>
+                            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                                <p className="text-xs text-blue-700 leading-relaxed">
+                                    业务提示词、知识库策略和检索规则已迁移到角色中心。此处仅保留运行时配置档与模式覆盖，不再支持业务策略覆盖。
+                                </p>
+                            </div>
+
+                            <Button
+                                className="rounded-full bg-slate-900 text-white"
+                                onClick={handleSaveVoicePolicy}
+                                disabled={isSavingVoicePolicy}
+                            >
+                                {isSavingVoicePolicy ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Save className="w-4 h-4 mr-2" />
+                                )}
+                                保存语音策略
+                            </Button>
+                        </div>
+                    </GlassCard>
+
+                    {industryPackContract ? (
+                        <GlassCard className="p-6 space-y-4">
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-bold text-slate-800">Industry Pack 运行合同</h3>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    智能体继续只负责 runtime shell；行业包语义仍由 persona / knowledge / scenario surfaces 组合。
+                                </p>
+                            </div>
+
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 space-y-2">
+                                <div className="text-[10px] font-bold uppercase text-slate-400">Authority model</div>
+                                <div className="text-sm font-semibold text-slate-900">
+                                    {industryPackContract.industry_pack.authority_model}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                {industryPackContract.runtime_authorities.map((authority) => (
+                                    <code key={authority} className="block rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-700 break-all">
+                                        {authority}
+                                    </code>
                                 ))}
                             </div>
-                        )}
+
+                            {industryPackContract.composition_rules.length > 0 ? (
+                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
+                                    {industryPackContract.composition_rules[0]}
+                                </div>
+                            ) : null}
+                        </GlassCard>
+                    ) : null}
+
+                    <GlassCard className="p-6">
+                        <div className="flex items-start gap-3">
+                            <Database className="w-5 h-5 text-blue-500 mt-0.5" />
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-800">知识库归属</h3>
+                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                    智能体级知识库入口已关闭。请在「角色管理」中为具体角色绑定知识库，运行时将按角色策略强制生效。
+                                </p>
+                            </div>
+                        </div>
                     </GlassCard>
                 </div>
             </div>
@@ -647,74 +734,6 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                 </DialogContent>
             </Dialog>
 
-            {/* Add Knowledge Base Dialog */}
-            <Dialog open={isAddKBOpen} onOpenChange={setIsAddKBOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>关联知识库</DialogTitle>
-                        <DialogDescription>选择知识库关联到该智能体，对话时将自动检索相关内容。</DialogDescription>
-                    </DialogHeader>
-                    <div className="py-6">
-                        {unlinkedKnowledgeBases.length === 0 ? (
-                            <div className="text-center py-8 text-slate-400">
-                                <p>没有可添加的知识库</p>
-                                <p className="text-xs mt-1">请先在知识库管理中创建知识库</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                {unlinkedKnowledgeBases.map((kb) => {
-                                    const isSelected = selectedKBId === kb.id;
-                                    return (
-                                        <div
-                                            key={kb.id}
-                                            onClick={() => setSelectedKBId(kb.id)}
-                                            className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${isSelected
-                                                ? "border-blue-500 bg-blue-50/50"
-                                                : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
-                                                }`}
-                                        >
-                                            <Database className={`w-8 h-8 ${isSelected ? "text-blue-500" : "text-slate-400"}`} />
-                                            <div className="flex-1">
-                                                <div className="font-bold text-slate-800">{kb.name}</div>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                                                        {kb.document_count || 0} 文档
-                                                    </span>
-                                                    {kb.description && (
-                                                        <span className="text-xs text-slate-400 truncate max-w-[150px]">
-                                                            {kb.description}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-blue-500 bg-blue-500" : "border-slate-300"
-                                                }`}>
-                                                {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            variant="ghost"
-                            className="rounded-full"
-                            onClick={() => setIsAddKBOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            className="rounded-full bg-slate-900 text-white"
-                            onClick={handleAddKnowledgeBase}
-                            disabled={!selectedKBId || isAddingKB}
-                        >
-                            {isAddingKB ? "关联中..." : "关联"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }

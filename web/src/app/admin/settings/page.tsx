@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState, useRef } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -39,68 +40,18 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/glass-modal";
-import { api } from "@/lib/api/client";
-
-// ============ Model Config Types ============
-type ModelType = "llm" | "embedding" | "asr" | "tts";
-type ModelProvider = "openai" | "azure" | "alibaba" | "local";
-
-interface ModelConfigItem {
-    id: string;
-    name: string;
-    model_type: string;
-    provider: string;
-    model_name: string;
-    is_default: boolean;
-    is_active: boolean;
-    last_test_status: string | null;
-}
-
-interface ModelConfigDetail {
-    id: string;
-    name: string;
-    model_type: string;
-    provider: string;
-    base_url: string;
-    api_key_masked: string;
-    model_name: string;
-    extra_config: Record<string, unknown>;
-    is_default: boolean;
-    is_active: boolean;
-    last_tested_at: string | null;
-    last_test_status: string | null;
-    created_at: string;
-    updated_at: string;
-}
-
-interface ModelConfigListResponse {
-    llm: ModelConfigItem[];
-    embedding: ModelConfigItem[];
-    asr: ModelConfigItem[];
-    tts: ModelConfigItem[];
-    total: number;
-}
-
-interface CreateModelConfigRequest {
-    name: string;
-    model_type: ModelType;
-    provider: ModelProvider;
-    base_url: string;
-    api_key: string;
-    model_name: string;
-    extra_config?: Record<string, unknown>;
-    is_default?: boolean;
-}
-
-interface UpdateModelConfigRequest {
-    name?: string;
-    base_url?: string;
-    api_key?: string;
-    model_name?: string;
-    extra_config?: Record<string, unknown>;
-    is_default?: boolean;
-    is_active?: boolean;
-}
+import { api, getApiErrorMessage } from "@/lib/api/client";
+import type {
+    AdminModelConfigCreateRequest as CreateModelConfigRequest,
+    AdminModelConfigDetail as ModelConfigDetail,
+    AdminModelConfigGrouped as ModelConfigListResponse,
+    AdminModelConfigListItem as ModelConfigItem,
+    AdminModelConfigProvider as ModelProvider,
+    AdminModelConfigTestResponse,
+    AdminModelConfigTestRequest,
+    AdminModelConfigType as ModelType,
+    AdminModelConfigUpdateRequest as UpdateModelConfigRequest,
+} from "@/lib/api/types";
 
 const MODEL_TYPE_CONFIG = {
     llm: {
@@ -133,12 +84,51 @@ const MODEL_TYPE_CONFIG = {
     },
 };
 
+const SETTINGS_READ_ONLY_TABS = new Set(["general", "security", "notifications"]);
+
+const READ_ONLY_SETTINGS_NOTICE = "这些配置项当前仅展示目标状态，尚未接入持久化接口，暂不会保存。";
+
+const readOnlyInputClassName = "bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed";
+
+const readOnlySelectClassName = "w-full p-3 rounded-xl border border-slate-200 bg-slate-100 outline-none font-medium text-slate-500 cursor-not-allowed";
+
+const readOnlyTextareaClassName = "w-full p-3 rounded-xl border border-slate-200 bg-slate-100 outline-none transition-all font-medium text-slate-500 h-24 resize-none cursor-not-allowed";
+
+function ReadOnlySettingsNotice() {
+    return (
+        <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {READ_ONLY_SETTINGS_NOTICE}
+        </div>
+    );
+}
+
 const PROVIDER_OPTIONS: { value: ModelProvider; label: string }[] = [
     { value: "openai", label: "OpenAI" },
     { value: "azure", label: "Azure OpenAI" },
     { value: "alibaba", label: "阿里云" },
+    { value: "anthropic", label: "Anthropic" },
     { value: "local", label: "本地/其他" },
+    { value: "local_streaming", label: "本地流式（ASR）" },
 ];
+
+const MODEL_PROVIDER_MAP: Record<ModelType, ModelProvider[]> = {
+    llm: ["openai", "azure", "alibaba", "anthropic"],
+    embedding: ["openai", "azure"],
+    asr: ["alibaba", "local", "local_streaming"],
+    tts: ["alibaba", "local"],
+};
+
+function requiresApiKey(modelType: ModelType, provider: ModelProvider) {
+    if (modelType === "tts" && provider === "local") return false;
+    if (modelType === "asr" && (provider === "local" || provider === "local_streaming")) return false;
+    return true;
+}
+
+function requiresBaseUrl(modelType: ModelType, provider: ModelProvider) {
+    if (modelType === "tts") return false;
+    if (modelType === "asr" && (provider === "local" || provider === "local_streaming")) return false;
+    return true;
+}
 
 function getTestStatusBadge(status: string | null) {
     if (status === "success") {
@@ -183,7 +173,7 @@ export default function SettingsPage() {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [testResult, setTestResult] = useState<AdminModelConfigTestResponse | null>(null);
     const [isPreviewingTTS, setIsPreviewingTTS] = useState(false);
     const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -198,7 +188,7 @@ export default function SettingsPage() {
             }
 
             const extra = formData.extra_config as { rate?: string; volume?: string; pitch?: string } || {};
-            const params = new URLSearchParams({
+            const blob = await api.admin.previewTTSBlob({
                 text: "你好，这是一段语音试听测试，用于预览当前的语速、音量和音调设置。",
                 voice: formData.model_name || "zh-CN-XiaoxiaoNeural",
                 rate: extra.rate || "+0%",
@@ -206,15 +196,6 @@ export default function SettingsPage() {
                 pitch: extra.pitch || "+0Hz",
             });
 
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/admin/model-configs/tts/preview?${params}`, {
-                method: "POST",
-            });
-
-            if (!response.ok) {
-                throw new Error("试听失败");
-            }
-
-            const blob = await response.blob();
             const audioUrl = URL.createObjectURL(blob);
             const audio = new Audio(audioUrl);
             previewAudioRef.current = audio;
@@ -230,8 +211,8 @@ export default function SettingsPage() {
             
             await audio.play();
         } catch (err) {
-            console.error("TTS preview failed:", err);
-            toast.error("试听失败");
+            debug.error("TTS preview failed:", err);
+            toast.error(getApiErrorMessage(err));
             setIsPreviewingTTS(false);
         }
     };
@@ -251,32 +232,33 @@ export default function SettingsPage() {
         { id: "models", label: "模型配置", icon: Cpu },
     ];
 
-    // Load model configs when switching to models tab
-    useEffect(() => {
-        if (activeTab === "models" && !configs) {
-            loadConfigs();
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab]);
-
     const loadConfigs = async () => {
         setIsLoadingModels(true);
         try {
             const data = await api.admin.getModelConfigs();
             setConfigs(data);
         } catch (err) {
-            console.error("Failed to load model configs:", err);
+            debug.error("Failed to load model configs:", err);
             toast.error("加载配置失败");
         } finally {
             setIsLoadingModels(false);
         }
     };
 
+    // Load model configs when switching to models tab
+    useEffect(() => {
+        if (activeTab === "models" && !configs) {
+            void Promise.resolve().then(loadConfigs);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
     const resetForm = () => {
+        const defaultProvider = MODEL_PROVIDER_MAP[activeModelType][0];
         setFormData({
             name: "",
             model_type: activeModelType,
-            provider: "openai",
+            provider: defaultProvider,
             base_url: "",
             api_key: "",
             model_name: "",
@@ -287,7 +269,15 @@ export default function SettingsPage() {
     };
 
     const handleCreate = async () => {
-        if (!formData.name.trim() || !formData.base_url.trim() || !formData.api_key.trim() || !formData.model_name.trim()) {
+        const apiKeyRequired = requiresApiKey(formData.model_type, formData.provider);
+        const baseUrlRequired = requiresBaseUrl(formData.model_type, formData.provider);
+
+        if (
+            !formData.name.trim() ||
+            (baseUrlRequired && !formData.base_url.trim()) ||
+            (apiKeyRequired && !formData.api_key.trim()) ||
+            !formData.model_name.trim()
+        ) {
             toast.error("请填写所有必填字段");
             return;
         }
@@ -299,7 +289,7 @@ export default function SettingsPage() {
             resetForm();
             loadConfigs();
         } catch (err) {
-            console.error("Failed to create config:", err);
+            debug.error("Failed to create config:", err);
             toast.error(`创建失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsSubmitting(false);
@@ -312,8 +302,8 @@ export default function SettingsPage() {
             setEditingConfig(detail);
             setFormData({
                 name: detail.name,
-                model_type: detail.model_type as ModelType,
-                provider: detail.provider as ModelProvider,
+                model_type: detail.model_type,
+                provider: detail.provider,
                 base_url: detail.base_url,
                 api_key: "",
                 model_name: detail.model_name,
@@ -322,13 +312,31 @@ export default function SettingsPage() {
             });
             setIsEditOpen(true);
         } catch (err) {
-            console.error("Failed to load config detail:", err);
+            debug.error("Failed to load config detail:", err);
             toast.error("加载配置详情失败");
         }
     };
 
     const handleUpdate = async () => {
         if (!editingConfig) return;
+        const modelType = editingConfig.model_type;
+        const provider = editingConfig.provider;
+        const baseUrlRequired = requiresBaseUrl(modelType, provider);
+        const apiKeyRequired = requiresApiKey(modelType, provider);
+
+        if (!formData.name.trim() || !formData.model_name.trim()) {
+            toast.error("请填写所有必填字段");
+            return;
+        }
+        if (baseUrlRequired && !formData.base_url.trim()) {
+            toast.error("当前提供商需要填写 API 地址");
+            return;
+        }
+        if (apiKeyRequired && editingConfig.api_key_masked === "未设置" && !formData.api_key.trim()) {
+            toast.error("当前提供商需要 API Key");
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const updateData: UpdateModelConfigRequest = {
@@ -348,7 +356,7 @@ export default function SettingsPage() {
             resetForm();
             loadConfigs();
         } catch (err) {
-            console.error("Failed to update config:", err);
+            debug.error("Failed to update config:", err);
             toast.error(`更新失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsSubmitting(false);
@@ -364,7 +372,7 @@ export default function SettingsPage() {
             setDeleteTarget(null);
             loadConfigs();
         } catch (err) {
-            console.error("Failed to delete config:", err);
+            debug.error("Failed to delete config:", err);
             toast.error(`删除失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsDeleting(false);
@@ -379,14 +387,15 @@ export default function SettingsPage() {
             if (configId) {
                 result = await api.admin.testModelConfig(configId);
             } else {
-                result = await api.admin.testModelConfigInline({
+                const testPayload: AdminModelConfigTestRequest = {
                     model_type: formData.model_type,
                     provider: formData.provider,
                     base_url: formData.base_url,
                     api_key: formData.api_key,
                     model_name: formData.model_name,
                     extra_config: formData.extra_config || {},
-                });
+                };
+                result = await api.admin.testModelConfigInline(testPayload);
             }
             setTestResult({ success: result.success, message: result.message });
             if (result.success) {
@@ -396,7 +405,7 @@ export default function SettingsPage() {
                 toast.error(`测试失败: ${result.message}`);
             }
         } catch (err) {
-            console.error("Test failed:", err);
+            debug.error("Test failed:", err);
             const message = err instanceof Error ? err.message : "测试失败";
             setTestResult({ success: false, message });
             toast.error(message);
@@ -412,7 +421,7 @@ export default function SettingsPage() {
             toast.success(`已将「${config.name}」设为默认`);
             loadConfigs();
         } catch (err) {
-            console.error("Failed to set default:", err);
+            debug.error("Failed to set default:", err);
             toast.error("设置默认失败");
         }
     };
@@ -425,6 +434,7 @@ export default function SettingsPage() {
             case "general":
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <ReadOnlySettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Globe className="w-5 h-5 text-blue-500" /> 平台信息
@@ -432,15 +442,15 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">平台名称</label>
-                                    <Input defaultValue="Intelligent Coach AI" className="bg-slate-50 border-slate-200" />
+                                    <Input value="Intelligent Coach AI" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">支持邮箱</label>
-                                    <Input defaultValue="support@company.com" className="bg-slate-50 border-slate-200" />
+                                    <Input value="support@company.com" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
                                 </div>
                                 <div className="col-span-2 space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">欢迎语</label>
-                                    <textarea defaultValue="欢迎使用高级训练平台，开启您的学习之旅！" className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all font-medium text-slate-700 h-24 resize-none" />
+                                    <textarea value="欢迎使用高级训练平台，开启您的学习之旅！" readOnly aria-describedby="settings-readonly-notice" className={readOnlyTextareaClassName} />
                                 </div>
                             </div>
                         </GlassCard>
@@ -452,21 +462,21 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">默认语言</label>
-                                    <select className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700">
+                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
                                         <option>简体中文</option>
                                         <option>English (US)</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">时区</label>
-                                    <select className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700">
+                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
                                         <option>Asia/Shanghai (GMT+8)</option>
                                         <option>UTC</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">日期格式</label>
-                                    <select className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700">
+                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
                                         <option>YYYY-MM-DD</option>
                                         <option>MM/DD/YYYY</option>
                                     </select>
@@ -478,6 +488,7 @@ export default function SettingsPage() {
             case "security":
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <ReadOnlySettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Lock className="w-5 h-5 text-emerald-500" /> 安全策略
@@ -488,14 +499,14 @@ export default function SettingsPage() {
                                         <div className="text-sm font-bold text-slate-900">强制双重认证 (2FA)</div>
                                         <div className="text-xs text-slate-500">所有管理员必须启用两步验证才能登录</div>
                                     </div>
-                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" defaultChecked />
+                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" checked readOnly aria-describedby="settings-readonly-notice" />
                                 </div>
                                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                     <div className="space-y-1">
                                         <div className="text-sm font-bold text-slate-900">新设备登录提醒</div>
                                         <div className="text-xs text-slate-500">检测到未知设备时发送邮件通知</div>
                                     </div>
-                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" defaultChecked />
+                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" checked readOnly aria-describedby="settings-readonly-notice" />
                                 </div>
                             </div>
                         </GlassCard>
@@ -507,11 +518,11 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">最小长度</label>
-                                    <Input type="number" defaultValue="8" className="bg-slate-50 border-slate-200" />
+                                    <Input type="number" value="8" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">有效期 (天)</label>
-                                    <Input type="number" defaultValue="90" className="bg-slate-50 border-slate-200" />
+                                    <Input type="number" value="90" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
                                 </div>
                             </div>
                         </GlassCard>
@@ -520,6 +531,7 @@ export default function SettingsPage() {
             case "notifications":
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <ReadOnlySettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Mail className="w-5 h-5 text-indigo-500" /> 邮件通知
@@ -533,7 +545,7 @@ export default function SettingsPage() {
                                 ].map((item, i) => (
                                     <div key={i} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
                                         <span className="text-sm font-medium text-slate-700">{item}</span>
-                                        <input type="checkbox" className="w-5 h-5 accent-slate-900 rounded" defaultChecked={i % 2 === 0} />
+                                        <input type="checkbox" className="w-5 h-5 accent-slate-900 rounded" checked={i % 2 === 0} readOnly aria-describedby="settings-readonly-notice" />
                                     </div>
                                 ))}
                             </div>
@@ -597,7 +609,11 @@ export default function SettingsPage() {
                                     className="rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs"
                                     onClick={() => {
                                         resetForm();
-                                        setFormData((prev) => ({ ...prev, model_type: activeModelType }));
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            model_type: activeModelType,
+                                            provider: MODEL_PROVIDER_MAP[activeModelType][0],
+                                        }));
                                         setIsCreateOpen(true);
                                     }}
                                 >
@@ -692,7 +708,17 @@ export default function SettingsPage() {
                     <p className="text-slate-500 mt-1">管理全局配置与参数</p>
                 </div>
                 <div className="flex gap-3">
-                    {activeTab === "models" ? (
+                    {SETTINGS_READ_ONLY_TABS.has(activeTab) ? (
+                        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+                            <span id="settings-readonly-notice" className="text-sm text-amber-700">{READ_ONLY_SETTINGS_NOTICE}</span>
+                            <Button variant="outline" className="rounded-full border-slate-200 text-slate-400" disabled title="未接入持久化接口">
+                                <RefreshCw className="w-4 h-4 mr-2" /> 放弃更改
+                            </Button>
+                            <Button className="rounded-full bg-slate-300 text-white shadow-none px-6" disabled title="未接入持久化接口">
+                                <Save className="w-4 h-4 mr-2" /> 保存配置
+                            </Button>
+                        </div>
+                    ) : activeTab === "models" ? (
                         <Button
                             variant="outline"
                             className="rounded-full border-slate-200"
@@ -702,16 +728,7 @@ export default function SettingsPage() {
                             <RefreshCw className={`w-4 h-4 mr-2 ${isLoadingModels ? "animate-spin" : ""}`} />
                             刷新
                         </Button>
-                    ) : (
-                        <>
-                            <Button variant="outline" className="rounded-full border-slate-200 text-slate-600 hover:bg-slate-50">
-                                <RefreshCw className="w-4 h-4 mr-2" /> 放弃更改
-                            </Button>
-                            <Button className="rounded-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20 px-6">
-                                <Save className="w-4 h-4 mr-2" /> 保存配置
-                            </Button>
-                        </>
-                    )}
+                    ) : null}
                 </div>
             </div>
 
@@ -775,7 +792,15 @@ export default function SettingsPage() {
                                 <select
                                     className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                                     value={formData.model_type}
-                                    onChange={(e) => setFormData((prev) => ({ ...prev, model_type: e.target.value as ModelType }))}
+                                    onChange={(e) => {
+                                        const nextType = e.target.value as ModelType;
+                                        const fallbackProvider = MODEL_PROVIDER_MAP[nextType][0];
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            model_type: nextType,
+                                            provider: MODEL_PROVIDER_MAP[nextType].includes(prev.provider) ? prev.provider : fallbackProvider,
+                                        }));
+                                    }}
                                 >
                                     {(Object.keys(MODEL_TYPE_CONFIG) as ModelType[]).map((type) => (
                                         <option key={type} value={type}>{MODEL_TYPE_CONFIG[type].label}</option>
@@ -792,14 +817,16 @@ export default function SettingsPage() {
                                 onChange={(e) => setFormData((prev) => ({ ...prev, provider: e.target.value as ModelProvider }))}
                                 disabled={isEditOpen}
                             >
-                                {PROVIDER_OPTIONS.map((opt) => (
+                                {PROVIDER_OPTIONS.filter((opt) => MODEL_PROVIDER_MAP[formData.model_type].includes(opt.value)).map((opt) => (
                                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                             </select>
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">API 地址 *</label>
+                            <label className="text-xs font-bold text-slate-500 uppercase">
+                                API 地址 {requiresBaseUrl(formData.model_type, formData.provider) ? "*" : "(可选)"}
+                            </label>
                             <input
                                 className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                                 placeholder="https://api.openai.com/v1"
@@ -810,7 +837,7 @@ export default function SettingsPage() {
 
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">
-                                API Key {isEditOpen ? "(留空保持不变)" : "*"}
+                                API Key {isEditOpen ? "(留空保持不变)" : (requiresApiKey(formData.model_type, formData.provider) ? "*" : "(可选)")}
                             </label>
                             <input
                                 type="password"
@@ -978,7 +1005,12 @@ export default function SettingsPage() {
                             variant="outline"
                             className="rounded-full"
                             onClick={() => handleTestConnection()}
-                            disabled={isTesting || !formData.base_url || !formData.api_key || !formData.model_name}
+                            disabled={
+                                isTesting ||
+                                !formData.model_name ||
+                                (requiresBaseUrl(formData.model_type, formData.provider) && !formData.base_url) ||
+                                (requiresApiKey(formData.model_type, formData.provider) && !formData.api_key)
+                            }
                         >
                             {isTesting ? (
                                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 测试中...</>

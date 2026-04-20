@@ -1,6 +1,161 @@
 # CLAUDE.md
+你处于 **ULTRAWORK MODE**。当该模式激活时，**第一句必须且只能先输出**：`ULTRAWORK MODE ENABLED!`
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+随后在所有响应中严格遵守以下规则：
+
+## 1. 输出格式与长度
+- 默认回答长度：**3–6 句**，或 **不超过 5 个要点**
+- 对于纯“是/否”问题：**不超过 2 句**
+- 对于复杂的多文件任务：按以下结构输出：
+  1. 1 段简短概述
+  2. 最多 5 个要点，顺序固定为：
+     - What
+     - Where
+     - Risks
+     - Next
+     - Open
+- 避免冗长叙述，优先使用简洁要点
+- 除非会改变语义，否则**不要重复改写用户请求**
+
+## 2. 任务边界
+- **只实现用户明确要求的内容**
+- 不添加任何额外功能、组件、优化、重构或装饰性修改
+- 若存在歧义，优先采用**最简单且合理**的解释
+- 不得擅自扩大任务范围
+
+## 3. 开始执行前的最低要求
+在实施任何修改前，必须确认你已经完成以下准备：
+- 已准确理解用户真实意图
+- 已检查代码库中的现有实现模式、命名方式和结构约定
+- 已形成清晰的执行计划（可以不展示）
+- 已优先通过检索和阅读代码解决歧义，而不是先提问
+
+## 4. 不确定性处理
+当需求不清晰、信息不足或上下文缺失时，按以下顺序处理：
+1. **先使用工具探索**，例如 grep、读取文件、代码搜索、探索型代理
+2. 如果探索后仍无法完全确认，明确说明你采用的解释，并继续执行
+3. **只有在无法继续推进时**才提出澄清问题
+
+额外要求：
+- 不得编造精确数据、行号、文件位置或引用来源
+- 不确定时，使用“基于当前提供的上下文”这类限定表达，避免绝对化表述
+
+## 5. 自行处理与委派的决策规则
+根据任务规模决定是自己完成还是委派给其他代理：
+
+### 自己完成
+适用于以下情况：
+- 修改少于 **10 行**
+- 只涉及 **单个文件**
+- 代码模式明显、实现路径直接
+- 或者虽然规模中等，但满足以下条件：
+  - 单一领域
+  - 模式清晰
+  - 总修改量少于 **100 行**
+
+### 委派处理
+适用于以下情况：
+- 涉及多个文件
+- 领域陌生或需要专项知识
+- 修改量预计超过 **100 行**
+- 需要广泛了解代码库结构
+- 需要查阅外部库文档或官方资料
+- 任务包含 **5 步及以上** 且步骤之间存在依赖关系
+
+### 决策补充
+- 如果委派带来的额外成本高于任务本身，优先自己完成
+- 如果你已经掌握充分上下文，优先自己完成
+- 如果任务明显依赖专项能力（如前端 UI/UX、Git 操作、外部库规则），优先委派
+- 如果需要从多个来源获取信息，应并行启动后台代理
+
+## 6. 可用资源及适用场景
+仅在能明显提升效率或准确性时使用以下资源：
+
+- **explore agent**：用于查找代码库中的实现模式、模块关系、约定和文件位置
+- **librarian agent**：用于查找外部库、框架、官方文档、生产级示例和最佳实践
+- **oracle agent**：在架构设计或调试问题上连续两次尝试仍受阻时使用
+- **plan agent**：仅用于 5 步及以上、存在依赖关系的复杂任务
+- **task category / skills**：用于匹配特定专业领域的执行
+
+## 7. 工具使用原则
+- 涉及用户项目、实时信息或外部依赖时，优先使用工具，不依赖记忆推断
+- 对互不依赖的检索、文件读取、代码搜索和文档查询应尽量并行
+- 每次完成写入或修改后，必须用极简格式补充说明：
+  - 改了什么
+  - 改在哪个路径
+  - 是否需要后续操作
+
+## 8. 上下文收集流程
+收集上下文时，必须同时运行两条轨道：
+
+### 轨道 A：直接检索
+立即使用本地工具获取快速上下文，例如：
+- grep
+- read_file
+- LSP
+- AST-grep
+
+适用于：
+- 已知文件位置
+- 已知关键符号
+- 明确要验证的模式
+
+### 轨道 B：后台深度探索
+并行启动后台代理，用于：
+- 深入理解代码库结构
+- 查找类似实现
+- 查询官方文档和生产模式
+- 补足直接检索无法快速获得的信息
+
+### 执行要求
+- 默认同时启用两条轨道，而不是二选一
+- 先启动后台探索，再立即进行本地直接检索
+- 当后台结果返回后，将其与本地检索结果合并，再做最终判断
+
+## 9. 复杂任务的计划要求
+只有当任务满足以下条件时，才调用计划型代理：
+- 至少 **5 个步骤**
+- 步骤之间存在依赖关系
+- 不能通过短链路直接完成
+
+并且：
+- 必须在上下文收集完成之后再制定计划
+- 计划应服务于执行，不得替代执行
+
+## 10. 实施要求
+- 修改应尽量**小而精确**
+- 严格遵循现有代码风格、目录结构、命名和实现模式
+- 若委派给其他代理，必须提供完整上下文、目标、限制条件和成功标准
+- 不做与用户请求无关的顺手修复
+
+## 11. 验证要求
+完成修改后，至少进行以下验证：
+
+1. 对修改过的文件运行 `lsp_diagnostics`
+2. 如果项目存在测试，应运行相关测试
+3. 如果存在构建流程，应执行构建命令
+
+## 12. 质量标准
+仅当满足以下证据时，才能视为结果合格：
+
+- **Build**：构建命令返回 **exit code 0**
+- **Test**：相关测试全部通过
+- **Lint / Diagnostics**：修改文件无新增错误
+- **Pattern Match**：实现方式与代码库现有模式一致
+
+## 13. 完成判定
+仅当以下条件全部满足，任务才算完成：
+1. 用户要求的功能已完整实现，而非部分实现或降级版本
+2. 修改文件的 `lsp_diagnostics` 无错误
+3. 测试通过；若存在既有失败，需明确说明不是本次引入
+4. 代码与现有代码库模式保持一致
+
+## 14. 最终原则
+- 只交付用户要求的内容
+- 不多做，也不少做
+- 不猜测，不编造，不越界
+- 优先准确，其次高效，再次简洁
+---
 
 ## Project Overview
 
@@ -42,6 +197,58 @@ cp backend/.env.example backend/.env
 # 前端环境变量
 cp web/.env.example web/.env.local
 # 编辑 web/.env.local 配置 API 地址等
+```
+
+**关键环境变量** (完整配置见 `backend/.env.example`):
+
+```bash
+# ============================================
+# 阿里云配置 (TTS/ASR)
+# ============================================
+DASHSCOPE_API_KEY=sk-your-api-key-here
+MODEL_CONFIG_ENCRYPTION_KEY=your-fernet-key
+
+# TTS 提供商选择: aliyun | edge | browser
+TTS_PROVIDER=aliyun
+TTS_VOICE=longxiaochun              # 龙小春 (温柔女声)
+TTS_SAMPLE_RATE=16000
+
+# TTS 降级配置
+TTS_ENABLE_FALLBACK=true
+TTS_FALLBACK_CHAIN=aliyun,edge,browser
+TTS_TIMEOUT=10
+TTS_CONNECTION_POOL_SIZE=10
+TTS_ENABLE_WARMUP=true
+
+# ============================================
+# StepFun Realtime（双轨语音模式）
+# ============================================
+STEPFUN_API_KEY=sk-your-stepfun-api-key
+STEPFUN_REALTIME_URL=wss://api.stepfun.com/v1/realtime
+STEPFUN_REALTIME_MODEL=step-audio-2  # step-audio-2 | step-audio-2-mini
+DEFAULT_VOICE_MODE=stepfun_realtime  # legacy | stepfun_realtime
+STEPFUN_REALTIME_VOICE=qingchunshaonv
+STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE=24000
+
+# ============================================
+# 数据库与缓存
+# ============================================
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost/db
+REDIS_URL=redis://localhost:6379/0
+CHROMADB_PERSIST_DIR=./data/chromadb
+
+# ============================================
+# Auth（受控登录）
+# ============================================
+AUTH_SHARED_PASSWORD=change-me
+AUTH_USER_PASSWORDS_JSON={}         # 可选：按账号覆盖口令
+
+# ============================================
+# 日志与调试
+# ============================================
+LOG_LEVEL=INFO
+WEBSOCKET_DEBUG=false
+ENABLE_TRACING=true
 ```
 
 ### Backend
@@ -122,294 +329,214 @@ docker-compose up -d --build
 
 ```
 backend/src/
-├── main.py                    # FastAPI 应用入口
+├── main.py                    # FastAPI 应用入口 (19655 lines)
 ├── agent/                     # Agent 平台核心
 │   ├── api/                   # Agent, Persona 管理 API
 │   ├── capabilities/          # 能力模块 (ASR, TTS, LLM, Scoring)
-│   ├── models.py              # Agent 数据模型
+│   │   ├── knowledge_retrieval.py
+│   │   ├── fuzzy_detection.py
+│   │   ├── realtime_scoring.py
+│   │   ├── sales_stage.py
+│   │   └── runner.py
+│   ├── models.py
 │   └── services/              # Agent 业务逻辑
 ├── presentation_coach/        # PPT 演练场景 (独立)
 │   ├── api/                   # PPT 上传、会话管理 API
 │   ├── services/              # Coach, PointTracker, InterruptionDetector
+│   │   ├── coach_service.py
+│   │   ├── feedback_service.py
+│   │   ├── ppt_parser.py
+│   │   ├── presentation_ai_policy_service.py
+│   │   └── prompt_role_resolver.py
 │   └── websocket/             # PPT 演练 WebSocket
+│       ├── presentation_handler.py
+│       └── presentation_stepfun_realtime_handler.py
 ├── sales_bot/                 # 销售对练场景 (独立)
 │   ├── api/                   # 场景管理 API
-│   ├── services/              # BotService, ContextManager
+│   ├── services/              # BotService, ContextManager, SummaryService
+│   │   ├── voice_runtime_policy.py
+│   │   ├── voice_instruction_compiler.py
+│   │   └── ...
 │   └── websocket/             # 销售对练 WebSocket
+│       ├── base_sales_handler.py    # 销售handler基类
+│       ├── enhanced_handler.py      # 增强版handler (TTS降级)
+│       ├── simple_handler.py        # 简化版handler
+│       ├── stepfun_realtime_handler.py
+│       └── components/              # 组件化模块
+│           ├── stepfun_event_payloads.py
+│           ├── stepfun_function_call_helpers.py
+│           ├── stepfun_helpers.py
+│           ├── stepfun_internal_knowledge_searcher.py
+│           ├── stepfun_knowledge_helpers.py
+│           ├── stepfun_message_helpers.py
+│           ├── stepfun_runtime_metrics_helpers.py
+│           ├── stepfun_tool_helpers.py
+│           └── stepfun_upstream_router.py
+├── prompt_templates/          # 提示词模板系统
+├── evaluation/                # 分阶段评估系统
 ├── admin/                     # 管理后台 API
-│   └── api/                   # users, analytics, model_configs
-├── common/                    # 共享模块 (不依赖业务)
+├── common/                    # 共享模块
 │   ├── ai/                    # LLM, Embedding, ConfigManager
-│   ├── audio/                 # ASR (FunASR), TTS (Edge-TTS)
-│   ├── auth/                  # JWT 认证
-│   ├── conversation/          # 对话引擎、回放
-│   ├── db/                    # SQLAlchemy 2.0 会话
+│   ├── audio/                 # ASR, TTS 服务
+│   │   ├── asr_service.py
+│   │   ├── asr_with_fallback.py
+│   │   ├── asr_alibaba.py
+│   │   ├── asr_local.py
+│   │   ├── tts_service.py
+│   │   ├── tts_factory.py
+│   │   └── aliyun_streaming_tts.py
+│   ├── auth/
+│   ├── cache/
+│   ├── conversation/
+│   ├── db/
 │   ├── error_handling/        # Result[T] 错误处理
 │   ├── knowledge/             # ChromaDB 向量存储
-│   ├── monitoring/            # 结构化日志 (structlog)
-│   └── websocket/             # BaseWebSocketHandler
-└── tests/                     # 测试目录
-    ├── unit/                  # 单元测试 (70%)
-    ├── integration/           # 集成测试 (20%)
-    ├── performance/           # 性能测试 (10%)
-    ├── contract/              # API 契约测试
-    └── conftest.py            # pytest 配置和 fixtures
+│   ├── logging/
+│   ├── rate_limit/
+│   ├── resilience/            # 熔断器
+│   ├── storage/               # 存储服务
+│   ├── validation/
+│   └── websocket/             # BaseWebSocketHandler, SessionManager
+└── tests/
 
-web/src/
-├── app/                       # Next.js App Router
-│   ├── (auth)/                # 认证页面
-│   ├── (dashboard)/           # 用户仪表板
-│   ├── (user)/                # 练习页面
-│   └── admin/                 # 管理后台
-├── components/
-│   ├── layout/                # 侧边栏、导航
-│   └── ui/                    # 原子组件 (glass-card, button, input)
-├── hooks/                     # use-practice-websocket, use-audio-recorder
-├── lib/
-│   ├── api/                   # API client (types.ts, client.ts)
-│   └── auth-handler.ts
-└── types/                     # TypeScript 类型定义
-
-docs/
-├── README.md                  # 文档索引
-├── api-contract/              # API 契约
-└── roadmap/                   # 规划文档
-
-.kiro/                         # AI 开发指导系统
-├── steering/                  # 编码规范 (自动加载)
-│   ├── QUICK-REFERENCE.md
-│   ├── backend-principles.md
-│   └── frontend-principles.md
-└── templates/                 # 代码模板
+web/src/app/
+├── (auth)/                    # 登录页面
+├── (dashboard)/               # 用户仪表板
+├── (user)/                    # 练习页面
+│   └── practice/[sessionId]/
+│       ├── page.tsx           # 练习主页
+│       └── report/page.tsx    # 练习报告
+└── admin/                     # 管理后台
+    ├── page.tsx               # 管理首页
+    ├── agents/                # Agent 管理
+    ├── personas/              # Persona 管理
+    ├── presentations/         # PPT 管理
+    ├── presentation-ai/       # PPT AI 策略管理
+    ├── prompts/               # 提示词管理
+    ├── voice-runtime/         # 语音运行时配置
+    ├── knowledge/             # 知识库管理
+    ├── users/                 # 用户管理
+    ├── records/               # 演练记录
+    ├── analytics/             # 数据分析
+    └── settings/              # 系统设置
 ```
 
 ## Active Technologies
 
 ### 后端
 - Python 3.11+ with async/await
-- FastAPI (异步 Web 框架)
-- SQLAlchemy 2.0+ (async ORM)
-- Pydantic 2.0+ (数据验证)
-- FunASR 1.1.18 (阿里通义实验室 ASR)
-- edge-tts (文本转语音)
-- LangChain (AI 编排)
-- ChromaDB (向量数据库)
-- aiosqlite (异步 SQLite)
-- structlog (结构化日志)
+- FastAPI, SQLAlchemy 2.0+, Pydantic 2.0+
+- FunASR / 阿里云 ASR, Edge-TTS / 阿里云流式 TTS
+- StepFun Realtime API (双轨语音)
+- ChromaDB, PostgreSQL, Redis
+- structlog, tenacity, aiohttp, dashscope
 
 ### 前端
-- Next.js 16.1.1 (React 框架)
-- React 19.2.3
-- TypeScript 5+
-- Tailwind CSS 4+ (内联 @theme)
-- Radix UI (无样式组件)
-- Zustand (状态管理)
-- Vitest (测试)
+- Next.js 16.1.1, React 19.2.3, TypeScript 5+
+- Tailwind CSS 4+, Radix UI, Zustand, Vitest
 
 ## Code Style
 
-### Python (Ruff + Black)
-- 88 字符行宽
-- 4 空格缩进
-- 双引号优先
-- 类型提示必需 (async def)
-- 使用 `ruff format` 格式化
+### Python (Ruff)
+- 88 字符行宽, 4 空格缩进, 双引号优先
+- 类型提示必需, 使用 `ruff format`
 
-### TypeScript/JavaScript
-- 2 空格缩进
-- 单引号优先
-- 分号必需
-- const/let 优先 (禁用 var)
+### TypeScript
+- 2 空格缩进, 单引号优先, 分号必需
 
-## 绝对禁止 (后端)
+## 禁止事项
 
 ```
-❌ print()                    → logger.info()
-❌ session.query(Model)       → select(Model)  [SQLAlchemy 2.0]
-❌ orm_mode = True            → from_attributes = True  [Pydantic v2]
-❌ @app.on_event("startup")   → lifespan 上下文
-❌ raise HTTPException(500)   → Result.fail("[ERROR_CODE]")
-❌ from sqlalchemy.orm import Session → AsyncSession
-❌ 硬编码密钥/配置            → 环境变量
-❌ 同步数据库操作             → async/await
-```
+后端:
+❌ print() → logger.info()
+❌ session.query(Model) → select(Model)
+❌ orm_mode = True → from_attributes = True
+❌ @app.on_event("startup") → lifespan
+❌ raise HTTPException(500) → Result.fail()
 
-## 绝对禁止 (前端)
-
-```
-❌ bg-white 大背景            → bg-stone-50 或使用 CSS 变量
-❌ text-black / #000000       → text-zinc-950
-❌ shadow-md/lg/xl            → 使用自定义 @theme shadow
-❌ 猜测 API 结构              → 先查 docs/api-contract/
-❌ 使用 alert/popup           → 状态指示器优雅降级
+前端:
+❌ bg-white → bg-stone-50
+❌ text-black → text-zinc-950
+❌ 猜测 API → 查 docs/api-contract/
+❌ alert/popup → 状态指示器
 ```
 
 ## 核心架构模式
 
-### 0. 测试驱动开发
-
-本项目遵循测试金字塔原则：
-- **70% 单元测试**: 测试单个函数和类
-- **20% 集成测试**: 测试模块间交互
-- **10% 性能测试**: 测试 50 并发、延迟等
-
-```python
-# 单元测试示例
-@pytest.mark.asyncio
-async def test_asr_transcribe_success():
-    asr = ASRService()
-    result = await asr.transcribe(b"fake_audio_data")
-    assert result.is_success
-    assert result.value == "expected_text"
-```
-
-### 1. 错误处理: Result[T] 模式
-
-所有函数返回 Result 类型而非抛出异常（用户可见代码）：
-
+### 错误处理: Result[T]
 ```python
 from common.error_handling.result import Result
 
-async def transcribe_audio(audio: bytes) -> Result[str]:
+async def process() -> Result[str]:
     try:
-        text = await asr_service.transcribe(audio)
-        return Result.ok(text)
-    except ASRServiceUnavailable:
-        return Result.fail("[USE_BROWSER_ASR]")  # 通知客户端切换
+        return Result.ok(await do_work())
+    except SomeError:
+        return Result.fail("[ERROR_CODE]")
 ```
 
-### 2. WebSocket 处理: BaseWebSocketHandler
-
-所有 WebSocket 继承自基类，使用队列处理消息：
-
+### WebSocket: BaseWebSocketHandler
 ```python
-from common.websocket.base_handler import BaseWebSocketHandler
-
-class PresentationWebSocketHandler(BaseWebSocketHandler):
-    def __init__(self):
-        super().__init__(scenario="presentation")
-
+class MyHandler(BaseWebSocketHandler):
     async def handle_message(self, message: dict):
-        # 处理消息，不阻塞
         pass
 ```
 
-### 3. 前端 API 客户端
-
-统一使用 `lib/api/client.ts` 进行 API 调用，自动处理认证和错误：
-
+### 前端 API 客户端
 ```typescript
 import { api } from '@/lib/api/client';
-
-const agents = await api.admin.getAgents({ page: 1, page_size: 20 });
-```
-
-## 前端设计系统
-
-### CSS 变量 (内联 @theme)
-
-```css
-/* 背景 */
---color-bg-main: #FAFAF9 (stone-50)
---color-bg-card: #FFFFFF
-
-/* 文字 */
---color-text-primary: #18181B (zinc-950)
---color-text-secondary: #71717A (zinc-500)
-
-/* 阴影 (自定义) */
---shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02)
---shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01)
-
-/* 圆角 */
---radius-subtle: 1rem (16px)
---radius-medium: 1.5rem (24px)
-```
-
-### 组件位置
-
-- `components/ui/` - 通用原子组件 (glass-card, button, input)
-- `components/layout/` - 布局组件 (sidebar, navigation)
-
-## 关键决策树
-
-```
-遇到问题时:
-├─ 前后端联调？ → 优先改前端
-├─ 样式问题？ → 修改 CSS 变量或组件
-├─ API 问题？ → 查 docs/api-contract/
-└─ 代码报错？ → 检查版本语法 (SQLAlchemy 2.0, Pydantic v2)
-
-新建文件时:
-├─ 后端 API → backend/src/{module}/api/
-├─ 能力模块 → backend/src/agent/capabilities/
-├─ WebSocket → backend/src/{module}/websocket/
-├─ 前端组件 → web/src/components/ui/
-├─ 前端页面 → web/src/app/
-└─ 测试文件 → backend/tests/{unit|integration}/
+const data = await api.module.getEndpoint();
 ```
 
 ## 开发前必读文档
 
 | 开发内容 | 必读文档 |
 |----------|----------|
-| 销售教练/对练功能 | `docs/roadmap/sales-coach-upgrade.md` |
-| 新页面/前端功能 | `docs/roadmap/frontend-pages-spec.md` |
-| 后端新 API/能力 | `docs/roadmap/backend-gap-analysis.md` |
+| 销售对练功能 | `docs/roadmap/sales-coach-upgrade.md` |
+| 前端页面 | `docs/roadmap/frontend-pages-spec.md` |
 | API 接口规范 | `docs/api-contract/` |
-
-## API 契约 (已完成实现)
-
-- `agents.md` - Agent 管理 API
-- `personas.md` - Persona 管理 API
-- `knowledge.md` - 知识库管理 API
-- `websocket.md` - WebSocket 消息协议
-- `replay.md` - 对话回放 API
-
-## 类型定义位置
-
-- `web/src/lib/api/types.ts` - 所有 API 类型定义
-- `backend/src/common/db/schemas.py` - Pydantic 模型
-
-## 性能边界条件
-
-| 指标 | 限制 | 超限处理 |
-|------|------|----------|
-| WebSocket 连接数 | 50/实例 | 拒绝新连接 |
-| 单会话时长 | 30 分钟 | 自动结束 |
-| LLM 响应超时 | 10 秒 | 返回预定义响应 |
+| 后端编码原则 | `.kiro/steering/backend-principles.md` |
+| 前端编码原则 | `.kiro/steering/frontend-principles.md` |
+| 快速参考 | `.kiro/steering/QUICK-REFERENCE.md` |
 
 ## 提交前检查
 
 ```
 □ ruff check 通过
+□ ruff format 已执行
+□ mypy 类型检查通过
 □ 无 print() 语句
 □ 使用 Result[T] 包装错误
 □ 前端无 alert/popup
-□ API 响应格式正确
+□ 单元测试通过
 ```
 
-## 日志与调试
+## 最近更新
 
-### 后端日志
-- 使用 `structlog` 进行结构化日志记录
-- 所有日志包含 `trace_id` 用于追踪请求链路
-- 日志级别通过 `LOG_LEVEL` 环境变量配置
-- 查看 WebSocket 日志: 设置 `WEBSOCKET_DEBUG=true`
+- **2026-02-16**: CLAUDE.md 更新
+  - 销售对练 WebSocket 组件化 (stepfun_* 模块拆分)
+  - PPT 演练增强 (presentation_ai_policy, prompt_role_resolver)
+  - TTS 服务工厂化 (tts_factory, aliyun_streaming_tts)
+  - 前端新增 presentation-ai 管理页面
 
-### 前端调试
-- 使用 `use-practice-websocket.ts` 中的状态进行调试
-- 浏览器 DevTools Network 标签页查看 WebSocket 消息
-- 使用 `--watch` 模式进行开发时自动热重载
+- **2026-02-15**: Claude Code 钩子系统 V2 优化
 
-### 常见问题排查
-| 问题 | 可能原因 | 解决方法 |
-|------|----------|----------|
-| WebSocket 连接失败 | 后端未启动/端口错误 | 检查后端是否在 3444 端口运行 |
-| ASR 转录超时 | 模型未下载/网络问题 | 首次运行会自动下载模型，请耐心等待 |
-| TTS 无声音 | 浏览器自动播放策略 | 确保用户已与页面交互（点击/触摸） |
-| 数据库连接失败 | SQLite 文件权限问题 | 检查 `backend/data/` 目录权限 |
+---
+
+## 自生长记录区
+
+### 架构决策
+
+| 日期 | 决策 | 影响 |
+|------|------|------|
+| 2026-02-16 | 销售 WebSocket 组件化 | 解耦事件/消息/工具处理逻辑 |
+| 2026-02-15 | V2 钩子系统 | 精确工具计数 + 自动反思 |
+| 2026-02-13 | StepFun 事件解耦 | 降低 handler 复杂度 |
+| 2026-02-06 | TTS 降级链 | 阿里云→Edge→浏览器 |
+| 2026-02-04 | 分阶段评估 | 触发器模式 |
+| 2026-01-20 | StepFun Realtime | 双轨语音模式 |
+
+---
 
 <!-- MANUAL ADDITIONS START -->
-<!-- 手动添加的内容放在这里，不会被自动更新覆盖 -->
+<!-- 手动添加的内容放在这里 -->
 <!-- MANUAL ADDITIONS END -->

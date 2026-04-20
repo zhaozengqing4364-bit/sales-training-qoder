@@ -1,0 +1,32 @@
+{
+  "template": "small-feature",
+  "templateName": "Small Feature",
+  "description": "",
+  "branch": "gsd/M001/S04",
+  "phases": [
+    {
+      "name": "scope",
+      "index": 0,
+      "status": "active"
+    },
+    {
+      "name": "plan",
+      "index": 1,
+      "status": "pending"
+    },
+    {
+      "name": "implement",
+      "index": 2,
+      "status": "pending"
+    },
+    {
+      "name": "verify",
+      "index": 3,
+      "status": "pending"
+    }
+  ],
+  "currentPhase": 0,
+  "startedAt": "2026-03-25T00:12:07.683Z",
+  "updatedAt": "2026-03-25T00:12:07.683Z",
+  "artifactDir": "/Users/zhaozengqing/github/销售训练qoder/.gsd/workflows/features/260325-2-small-feature"
+}

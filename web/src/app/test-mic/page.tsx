@@ -1,20 +1,58 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import * as React from "react";
 import { Mic, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AudioVisualizer, AudioLevel } from "@/components/ui/audio-visualizer";
+import { api } from "@/lib/api/client";
 
 export default function TestMicPage() {
     const [isRecording, setIsRecording] = React.useState(false);
     const [logs, setLogs] = React.useState<string[]>([]);
     const [stream, setStream] = React.useState<MediaStream | null>(null);
+    const [backendStatus, setBackendStatus] = React.useState<"checking" | "online" | "offline">("checking");
 
-    const addLog = (msg: string) => {
+    const addLog = React.useCallback((msg: string) => {
         const timestamp = new Date().toLocaleTimeString();
         setLogs(prev => [...prev.slice(-50), `[${timestamp}] ${msg}`]);
-        console.log(msg);
-    };
+        debug.log(msg);
+    }, []);
+
+    const runBackendDiagnostics = React.useCallback(async () => {
+        addLog("Checking backend connectivity...");
+        setBackendStatus("checking");
+
+        const [healthResult, statsResult, scenarioResult] = await Promise.allSettled([
+            api.internal.health(),
+            api.sessions.getStats(),
+            api.scenarios.list("sales"),
+        ]);
+
+        if (healthResult.status === "fulfilled") {
+            setBackendStatus("online");
+            addLog("✅ 后端健康检查通过");
+        } else {
+            setBackendStatus("offline");
+            addLog("❌ 后端健康检查失败");
+        }
+
+        if (statsResult.status === "fulfilled") {
+            addLog(`会话统计: 总会话=${statsResult.value.total_sessions}, 本周=${statsResult.value.weekly_sessions}`);
+        } else {
+            addLog("会话统计接口不可用");
+        }
+
+        if (scenarioResult.status === "fulfilled") {
+            addLog(`销售场景接口可用: ${scenarioResult.value.length} 个场景`);
+        } else {
+            addLog("销售场景接口不可用");
+        }
+    }, [addLog]);
+
+    React.useEffect(() => {
+        runBackendDiagnostics();
+    }, [runBackendDiagnostics]);
 
     const startRecording = async () => {
         try {
@@ -114,7 +152,23 @@ export default function TestMicPage() {
     return (
         <div className="min-h-screen bg-slate-50 p-8">
             <div className="max-w-2xl mx-auto">
-                <h1 className="text-2xl font-bold text-slate-900 mb-6">麦克风测试页面</h1>
+                <div className="mb-4 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                    开发工具 · 不属于学员训练主流程
+                </div>
+                <h1 className="text-2xl font-bold text-slate-900 mb-2">麦克风调试工具</h1>
+                <p className="text-sm text-slate-500 mb-6">
+                    仅供开发/支持排查设备与后端连通性时使用；正常学员练习请从 practice 主页面进入。
+                </p>
+
+                <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <div className="text-xs text-slate-500">后端连通状态</div>
+                        <div className={`text-sm font-bold mt-1 ${backendStatus === "online" ? "text-emerald-600" : backendStatus === "offline" ? "text-red-600" : "text-amber-600"}`}>
+                            {backendStatus === "online" ? "在线" : backendStatus === "offline" ? "离线" : "检测中"}
+                        </div>
+                    </div>
+                    <Button variant="outline" onClick={runBackendDiagnostics}>重新检测后端</Button>
+                </div>
                 
                 {/* 真实音频可视化 */}
                 <div className="mb-6 p-6 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
@@ -160,12 +214,16 @@ export default function TestMicPage() {
                     <Button variant="outline" onClick={() => setLogs([])}>
                         清空日志
                     </Button>
+
+                    <Button variant="outline" onClick={runBackendDiagnostics}>
+                        后端诊断
+                    </Button>
                 </div>
 
                 {/* 日志输出 */}
                 <div className="bg-slate-900 text-green-400 p-4 rounded-xl font-mono text-xs h-80 overflow-y-auto">
                     {logs.length === 0 ? (
-                        <div className="text-slate-500">点击"开始录音"测试麦克风...</div>
+                        <div className="text-slate-500">点击“开始录音”测试麦克风...</div>
                     ) : (
                         logs.map((log, i) => (
                             <div key={i} className="mb-1">{log}</div>

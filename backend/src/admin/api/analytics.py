@@ -1,7 +1,7 @@
 """
 Admin Analytics API - System-wide analytics endpoints for administrators
 
-Provides endpoints for system overview, trends, Agent statistics, 
+Provides endpoints for system overview, trends, Agent statistics,
 user leaderboard, and data export.
 
 References:
@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.analytics.admin_analytics_service import admin_analytics_service
-from common.auth.service import get_current_user
+from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
@@ -144,12 +144,12 @@ def error_response(error_code: str, message: str, trace_id: str | None = None) -
 async def get_analytics_overview(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     scenario_type: Literal["presentation", "sales"] | None = Query(None, description="Filter by scenario type"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
     Get system overview statistics
-    
+
     Returns aggregated statistics including:
     - Total users and active users
     - Total sessions and completion rate
@@ -180,7 +180,7 @@ async def get_analytics_overview(
     # Convert dataclass to dict
     from dataclasses import asdict
     data = asdict(result.value)
-    
+
     return success_response(data)
 
 
@@ -188,12 +188,12 @@ async def get_analytics_overview(
 async def get_trends_data(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     granularity: Literal["day", "week", "month"] = Query("day", description="Data granularity"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
     Get trend data for charts
-    
+
     Returns:
     - Daily/weekly/monthly trend data (sessions, scores, active users)
     - Score distribution (excellent, good, fair, poor)
@@ -226,12 +226,12 @@ async def get_trends_data(
 async def get_agent_stats(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     limit: int = Query(10, ge=1, le=50, description="Max items to return"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
     Get Agent and Persona usage statistics
-    
+
     Returns:
     - Agent usage ranking (by session count)
     - Persona usage ranking
@@ -265,12 +265,12 @@ async def get_agent_stats(
 async def get_leaderboard(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     limit: int = Query(50, ge=1, le=100, description="Max users to return"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
     Get user leaderboard
-    
+
     Returns users ranked by average score, including:
     - Rank, name, department
     - Total sessions and average/best score
@@ -300,16 +300,221 @@ async def get_leaderboard(
     return success_response({"leaderboard": result.value})
 
 
+@router.get("/operating-pack", response_model=dict)
+async def get_operating_pack(
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("7d", description="Time range filter"),
+    scenario_type: Literal["presentation", "sales"] | None = Query(None, description="Filter by scenario type"),
+    limit: int = Query(10, ge=1, le=50, description="Max users per operating list"),
+    inactive_days: int = Query(7, ge=1, le=90, description="Minimum inactivity days for risk list"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Get the weekly operating pack for cohort issue review.
+
+    Returns:
+    - Weekly summary counts on the projection-backed score basis
+    - Cohort and department blocker buckets
+    - Degradation / not-evaluable breakdowns
+    - Risk and improving manager lists aligned to the same evidence line
+    """
+    logger.info(
+        "Getting analytics operating pack",
+        extra={
+            "time_range": time_range,
+            "scenario_type": scenario_type,
+            "limit": limit,
+            "inactive_days": inactive_days,
+            "user_id": str(current_user.user_id),
+        },
+    )
+
+    result = await admin_analytics_service.get_operating_pack(
+        db=db,
+        time_range=time_range,
+        scenario_type=scenario_type,
+        limit=limit,
+        inactive_days=inactive_days,
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[OPERATING_PACK_FAILED]",
+            "Failed to load operating pack",
+        )
+
+    return success_response(result.value)
+
+
+@router.get("/runtime-metrics", response_model=dict)
+async def get_runtime_metrics(
+    time_range: Literal["1h", "24h", "7d", "30d", "90d"] = Query("30d", description="Time range filter"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get key runtime metrics for dashboard (FR39)
+
+    Returns:
+    - Recovery success rate (NFR8: >=99%)
+    - False trigger rate (NFR11: <1%)
+    - Completeness rate (NFR10: >=98%)
+    - Session metrics and voice mode distribution
+    """
+    from dataclasses import asdict
+
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
+
+    logger.info(
+        "Getting runtime metrics",
+        extra={
+            "time_range": time_range,
+            "user_id": str(current_user.user_id)
+        }
+    )
+
+    result = await runtime_metrics_service.get_runtime_metrics(
+        db=db,
+        time_range=time_range
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[RUNTIME_METRICS_FAILED]",
+            "Failed to load runtime metrics"
+        )
+
+    return success_response(asdict(result.value))
+
+
+@router.get("/policy-effectiveness", response_model=dict)
+async def get_policy_effectiveness(
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    limit: int = Query(10, ge=1, le=50, description="Max items to return"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get policy effectiveness metrics by Agent (FR39)
+
+    Returns metrics comparing different Agents and their policy effectiveness
+    """
+    from dataclasses import asdict
+
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
+
+    logger.info(
+        "Getting policy effectiveness",
+        extra={
+            "time_range": time_range,
+            "limit": limit,
+            "user_id": str(current_user.user_id)
+        }
+    )
+
+    result = await runtime_metrics_service.get_policy_effectiveness(
+        db=db,
+        time_range=time_range,
+        limit=limit
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[POLICY_EFFECTIVENESS_FAILED]",
+            "Failed to load policy effectiveness"
+        )
+
+    return success_response({
+        "effectiveness": [asdict(item) for item in result.value]
+    })
+
+
+@router.get("/voice-mode-comparison", response_model=dict)
+async def get_voice_mode_comparison(
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Compare performance between voice modes (StepFun vs Legacy) (FR39)
+
+    Returns comparison metrics for different voice modes
+    """
+    from dataclasses import asdict
+
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
+
+    logger.info(
+        "Getting voice mode comparison",
+        extra={
+            "time_range": time_range,
+            "user_id": str(current_user.user_id)
+        }
+    )
+
+    result = await runtime_metrics_service.get_voice_mode_comparison(
+        db=db,
+        time_range=time_range
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[VOICE_MODE_COMPARISON_FAILED]",
+            "Failed to load voice mode comparison"
+        )
+
+    return success_response({
+        "comparison": [asdict(item) for item in result.value]
+    })
+
+
+@router.get("/fallback-metrics", response_model=dict)
+async def get_fallback_metrics(
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get fallback and degradation metrics (FR39)
+
+    Returns metrics about TTS/ASR/LLM fallbacks and browser TTS usage
+    """
+    from dataclasses import asdict
+
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
+
+    logger.info(
+        "Getting fallback metrics",
+        extra={
+            "time_range": time_range,
+            "user_id": str(current_user.user_id)
+        }
+    )
+
+    result = await runtime_metrics_service.get_fallback_metrics(
+        db=db,
+        time_range=time_range
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[FALLBACK_METRICS_FAILED]",
+            "Failed to load fallback metrics"
+        )
+
+    return success_response(asdict(result.value))
+
+
 @router.get("/export")
 async def export_analytics(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     format: Literal["csv"] = Query("csv", description="Export format"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> StreamingResponse:
     """
     Export analytics data as CSV
-    
+
     Exports overview, trends, and leaderboard data to a CSV file.
     """
     logger.info(
@@ -333,7 +538,7 @@ async def export_analytics(
     # Overview section
     writer.writerow(["=== 系统概览 ==="])
     writer.writerow(["指标", "数值"])
-    
+
     if overview_result.is_success:
         from dataclasses import asdict
         overview = asdict(overview_result.value)
@@ -351,7 +556,7 @@ async def export_analytics(
     # Score distribution
     writer.writerow(["=== 分数分布 ==="])
     writer.writerow(["等级", "数量"])
-    
+
     if trends_result.is_success:
         dist = trends_result.value.get("score_distribution", {})
         writer.writerow(["优秀 (90-100)", dist.get("excellent", 0)])
@@ -364,7 +569,7 @@ async def export_analytics(
     # Trends section
     writer.writerow(["=== 趋势数据 ==="])
     writer.writerow(["日期", "练习次数", "平均分", "活跃用户"])
-    
+
     if trends_result.is_success:
         for point in trends_result.value.get("trend_data", []):
             writer.writerow([
@@ -379,7 +584,7 @@ async def export_analytics(
     # Leaderboard section
     writer.writerow(["=== 用户排行榜 ==="])
     writer.writerow(["排名", "姓名", "部门", "练习次数", "平均分", "最高分", "总时长(分钟)"])
-    
+
     if leaderboard_result.is_success:
         for entry in leaderboard_result.value:
             writer.writerow([

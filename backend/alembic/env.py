@@ -21,9 +21,13 @@ from agent.models import Agent, Persona, AgentPersona  # noqa: F401
 
 # Knowledge Base models (R5)
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument  # noqa: F401
+from common.knowledge.rag_profile_models import RagProfile  # noqa: F401
 
 # Conversation models (R9)
 from common.conversation.models import ConversationMessage  # noqa: F401
+
+# Model config models
+from common.ai.models import ModelConfig  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config
@@ -45,12 +49,12 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
-    
+
     This configures the context with just a URL
     and not an Engine, though an Engine is acceptable
     here as well. By skipping the Engine creation
     we don't even need a DBAPI to be available.
-    
+
     Calls to context.execute() here emit the given string to the
     script output.
     """
@@ -68,7 +72,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
-    
+
     In this scenario we need to create an Engine
     and associate a connection with the context.
     """

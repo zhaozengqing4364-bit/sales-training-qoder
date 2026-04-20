@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M012/S02/T01",
+  "timestamp": 1775705781970,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/components/layout/dashboard-shell.test.tsx\" \"src/app/(user)/practice/layout.test.tsx\"",
+      "exitCode": 0,
+      "durationMs": 1332,
+      "verdict": "pass"
+    }
+  ]
+}

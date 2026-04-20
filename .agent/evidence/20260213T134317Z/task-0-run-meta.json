@@ -1,0 +1,18 @@
+{
+  "run_id": "20260213T134317Z",
+  "branch": "parallel-task-3",
+  "sha": "1f718bbc5e57d4583263b6204fff625135b21759",
+  "started_at": "2026-02-13T13:43:17Z",
+  "mode": "readonly-audit",
+  "scope_lock": "AUDIT-001..AUDIT-029",
+  "blocked_policy": {
+    "definition": "External dependency unavailable or environment precondition unsatisfied",
+    "requires_unblock_condition": true,
+    "classify_as_fail_if_internal_defect_reproducible": true
+  },
+  "retry_policy": {
+    "full_scan_passes": 1,
+    "targeted_retries_max": 2,
+    "classification_after_retry_exhausted": "BLOCKED"
+  }
+}

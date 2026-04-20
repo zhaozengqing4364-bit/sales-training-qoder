@@ -10,11 +10,14 @@ References:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db.models import PracticeSession
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
@@ -23,6 +26,11 @@ from ..schemas import (
     CreatePersonaRequest,
     PersonaListItem,
     UpdatePersonaRequest,
+)
+from .persona_policy import (
+    PERSONA_POLICY_VERSION,
+    normalize_persona_policy,
+    sync_legacy_persona_fields,
 )
 
 logger = get_logger(__name__)
@@ -65,6 +73,13 @@ class PersonaService:
                 status=PersonaStatus.ACTIVE.value,
                 created_by=user_id,
             )
+            persona_policy = normalize_persona_policy(
+                data.persona_policy,
+                fallback_system_prompt=data.system_prompt,
+                fallback_kb_ids=data.knowledge_base_ids or [],
+            )
+            persona.persona_policy = persona_policy
+            sync_legacy_persona_fields(persona, persona_policy)
 
             self.db.add(persona)
             await self.db.flush()
@@ -73,7 +88,7 @@ class PersonaService:
             logger.info(f"Created Persona: {persona.id} - {persona.name}")
             return Result.ok(persona)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(f"Failed to create Persona: {e}")
             return Result.fail(f"[PERSONA_CREATE_FAILED] {str(e)}")
 
@@ -104,24 +119,70 @@ class PersonaService:
         result = await self.db.execute(stmt)
         personas = result.scalars().all()
 
-        items = []
-        for persona in personas:
-            agent_count_stmt = select(func.count()).where(
-                AgentPersona.persona_id == persona.id
-            )
-            agent_count = (await self.db.execute(agent_count_stmt)).scalar() or 0
+        persona_ids = [persona.id for persona in personas]
+        agent_counts: dict[str, int] = {}
+        usage_counts: dict[str, int] = {}
 
-            items.append(PersonaListItem(
-                id=persona.id,
-                name=persona.name,
-                description=persona.description,
-                icon=persona.icon,
-                category=persona.category,
-                difficulty=persona.difficulty,
-                is_public=persona.is_public,
-                usage_count=0,
-                agent_count=agent_count
-            ))
+        if persona_ids:
+            agent_count_rows = await self.db.execute(
+                select(AgentPersona.persona_id, func.count().label("agent_count"))
+                .where(AgentPersona.persona_id.in_(persona_ids))
+                .group_by(AgentPersona.persona_id)
+            )
+            agent_counts = {
+                str(row.persona_id): int(row.agent_count or 0)
+                for row in agent_count_rows.all()
+            }
+
+            usage_count_rows = await self.db.execute(
+                select(PracticeSession.persona_id, func.count().label("usage_count"))
+                .where(PracticeSession.persona_id.in_(persona_ids))
+                .group_by(PracticeSession.persona_id)
+            )
+            usage_counts = {
+                str(row.persona_id): int(row.usage_count or 0)
+                for row in usage_count_rows.all()
+                if row.persona_id is not None
+            }
+
+        items: list[PersonaListItem] = []
+        from support.services.runtime_status_service import RuntimeStatusService
+
+        runtime_service = RuntimeStatusService(self.db)
+        governance_indexes = await runtime_service.build_asset_governance_indexes()
+        seven_days_ago = datetime.now(UTC) - timedelta(days=7)
+
+        for persona in personas:
+            persona_id = str(persona.id)
+            updated_at = RuntimeStatusService._coerce_datetime(persona.updated_at)
+            policy_issue_types = self._collect_policy_issue_types(persona)
+            extra_anomalies = [
+                self._policy_issue_to_anomaly(issue_type, detected_at=updated_at)
+                for issue_type in policy_issue_types
+            ]
+            governance_summary = runtime_service.build_asset_governance_summary(
+                governance_indexes.get("persona", {}).get(persona_id),
+                last_changed_at=updated_at,
+                latest_change_type="persona_updated",
+                latest_change_label="角色配置更新",
+                change_count_7d=1 if updated_at and updated_at >= seven_days_ago else 0,
+                extra_anomalies=extra_anomalies,
+            )
+            items.append(
+                PersonaListItem(
+                    id=persona.id,
+                    name=persona.name,
+                    description=persona.description,
+                    icon=persona.icon,
+                    category=persona.category,
+                    difficulty=persona.difficulty,
+                    status=persona.status,
+                    is_public=persona.is_public,
+                    usage_count=usage_counts.get(persona_id, 0),
+                    agent_count=agent_counts.get(persona_id, 0),
+                    governance_summary=governance_summary,
+                )
+            )
 
         return items, total
 
@@ -134,6 +195,8 @@ class PersonaService:
         if not persona:
             return Result.fail("[PERSONA_NOT_FOUND]")
 
+        persona.persona_policy = self._build_normalized_policy(persona)
+        sync_legacy_persona_fields(persona, persona.persona_policy)
         return Result.ok(persona)
 
     async def update(
@@ -150,6 +213,13 @@ class PersonaService:
             return Result.fail("[PERSONA_NOT_FOUND]")
 
         update_data = data.model_dump(exclude_unset=True)
+        legacy_system_prompt = str(persona.system_prompt or "")
+        legacy_kb_ids = (
+            list(persona.knowledge_base_ids)
+            if isinstance(persona.knowledge_base_ids, list)
+            else []
+        )
+        incoming_persona_policy = update_data.pop("persona_policy", None)
 
         for field, value in update_data.items():
             if value is not None:
@@ -157,7 +227,48 @@ class PersonaService:
                     value = value.model_dump()
                 setattr(persona, field, value)
 
-        persona.updated_at = datetime.utcnow()
+        next_system_prompt = (
+            str(update_data.get("system_prompt") or legacy_system_prompt)
+            if "system_prompt" in update_data
+            else legacy_system_prompt
+        )
+        next_kb_ids = (
+            update_data.get("knowledge_base_ids")
+            if "knowledge_base_ids" in update_data
+            else legacy_kb_ids
+        )
+        next_kb_ids = next_kb_ids if isinstance(next_kb_ids, list) else legacy_kb_ids
+        touched_legacy_policy_fields = (
+            "system_prompt" in update_data
+            or "knowledge_base_ids" in update_data
+        )
+        if incoming_persona_policy is not None or touched_legacy_policy_fields:
+            existing_policy = (
+                dict(persona.persona_policy)
+                if isinstance(persona.persona_policy, dict)
+                else {}
+            )
+            raw_persona_policy = (
+                incoming_persona_policy
+                if incoming_persona_policy is not None
+                else existing_policy
+            )
+            if incoming_persona_policy is None:
+                # Let explicit legacy field updates take precedence over stale policy fields.
+                if "system_prompt" in update_data:
+                    raw_persona_policy.pop("system_prompt", None)
+                if "knowledge_base_ids" in update_data:
+                    raw_persona_policy.pop("knowledge_base_ids", None)
+
+            persona_policy = normalize_persona_policy(
+                raw_persona_policy,
+                fallback_system_prompt=next_system_prompt,
+                fallback_kb_ids=next_kb_ids,
+            )
+            persona.persona_policy = persona_policy
+            sync_legacy_persona_fields(persona, persona_policy)
+
+        persona.updated_at = datetime.now(UTC)
 
         await self.db.flush()
         await self.db.refresh(persona)
@@ -218,6 +329,19 @@ class PersonaService:
                 status=PersonaStatus.ACTIVE.value,
                 created_by=user_id,
             )
+            persona_policy = normalize_persona_policy(
+                original.persona_policy
+                if isinstance(original.persona_policy, dict)
+                else {},
+                fallback_system_prompt=original.system_prompt,
+                fallback_kb_ids=(
+                    original.knowledge_base_ids
+                    if isinstance(original.knowledge_base_ids, list)
+                    else []
+                ),
+            )
+            new_persona.persona_policy = persona_policy
+            sync_legacy_persona_fields(new_persona, persona_policy)
 
             self.db.add(new_persona)
             await self.db.flush()
@@ -226,6 +350,162 @@ class PersonaService:
             logger.info(f"Duplicated Persona: {original.id} -> {new_persona.id}")
             return Result.ok(new_persona)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(f"Failed to duplicate Persona: {e}")
             return Result.fail(f"[PERSONA_DUPLICATE_FAILED] {str(e)}")
+
+    async def audit_policy_health(self, sample_limit: int = 50) -> dict[str, Any]:
+        """Audit persona_policy consistency and report actionable issues."""
+        stmt = select(Persona).order_by(Persona.updated_at.desc())
+        result = await self.db.execute(stmt)
+        personas = result.scalars().all()
+
+        issue_type_counts: dict[str, int] = {}
+        issues: list[dict[str, Any]] = []
+        healthy_count = 0
+
+        for persona in personas:
+            raw_policy = persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
+            normalized_policy = self._build_normalized_policy(persona)
+            persona_issues = self._collect_policy_issue_types(persona)
+
+            raw_version = raw_policy.get("version") if isinstance(raw_policy, dict) else None
+            normalized_tool_policy = normalized_policy.get("tool_policy")
+            require_kb_grounding = (
+                isinstance(normalized_tool_policy, dict)
+                and bool(normalized_tool_policy.get("require_kb_grounding"))
+            )
+            normalized_customer_pressure = normalized_policy.get("customer_pressure")
+            pressure_source = (
+                normalized_customer_pressure.get("source")
+                if isinstance(normalized_customer_pressure, dict)
+                else None
+            )
+
+            if not persona_issues:
+                healthy_count += 1
+                continue
+
+            for issue_type in persona_issues:
+                issue_type_counts[issue_type] = issue_type_counts.get(issue_type, 0) + 1
+
+            if len(issues) < sample_limit:
+                issues.append(
+                    {
+                        "persona_id": persona.id,
+                        "persona_name": persona.name,
+                        "issue_types": persona_issues,
+                        "policy_version": raw_version,
+                        "require_kb_grounding": require_kb_grounding,
+                        "pressure_source": pressure_source,
+                    }
+                )
+
+        total = len(personas)
+        return {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "summary": {
+                "total": total,
+                "healthy": healthy_count,
+                "with_issues": max(0, total - healthy_count),
+            },
+            "issue_type_counts": issue_type_counts,
+            "sample_issues": issues,
+        }
+
+    @classmethod
+    def _collect_policy_issue_types(cls, persona: Persona) -> list[str]:
+        raw_policy = persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
+        normalized_policy = cls._build_normalized_policy(persona)
+        persona_issues: list[str] = []
+
+        if not isinstance(persona.persona_policy, dict) or not persona.persona_policy:
+            persona_issues.append("missing_policy")
+
+        raw_version = raw_policy.get("version") if isinstance(raw_policy, dict) else None
+        if raw_version != PERSONA_POLICY_VERSION:
+            persona_issues.append("version_mismatch")
+
+        normalized_prompt = str(normalized_policy.get("system_prompt") or "").strip()
+        legacy_prompt = str(persona.system_prompt or "").strip()
+        if not normalized_prompt:
+            persona_issues.append("empty_system_prompt")
+        if legacy_prompt != normalized_prompt:
+            persona_issues.append("legacy_prompt_drift")
+
+        normalized_kb_ids = cls._normalize_kb_ids(
+            normalized_policy.get("knowledge_base_ids")
+        )
+        legacy_kb_ids = cls._normalize_kb_ids(persona.knowledge_base_ids)
+        if normalized_kb_ids != legacy_kb_ids:
+            persona_issues.append("legacy_kb_drift")
+
+        normalized_tool_policy = normalized_policy.get("tool_policy")
+        require_kb_grounding = (
+            isinstance(normalized_tool_policy, dict)
+            and bool(normalized_tool_policy.get("require_kb_grounding"))
+        )
+        if require_kb_grounding and not normalized_kb_ids:
+            persona_issues.append("kb_lock_unbound")
+
+        normalized_customer_pressure = normalized_policy.get("customer_pressure")
+        pressure_source = (
+            normalized_customer_pressure.get("source")
+            if isinstance(normalized_customer_pressure, dict)
+            else None
+        )
+        if pressure_source == "legacy_sales_focus_extensions":
+            persona_issues.append("pressure_model_legacy_only")
+
+        return persona_issues
+
+    @staticmethod
+    def _policy_issue_to_anomaly(issue_type: str, *, detected_at: datetime | None) -> dict[str, Any]:
+        severity = (
+            "blocking"
+            if issue_type in {"missing_policy", "empty_system_prompt", "kb_lock_unbound"}
+            else "warning"
+        )
+        summary_map = {
+            "missing_policy": "角色缺少 persona_policy，运行时配置来源不完整。",
+            "version_mismatch": "角色策略版本与当前规范不一致。",
+            "empty_system_prompt": "角色缺少有效系统提示词。",
+            "legacy_prompt_drift": "角色 legacy prompt 与 persona_policy 不一致。",
+            "legacy_kb_drift": "角色 legacy 知识库绑定与 persona_policy 不一致。",
+            "kb_lock_unbound": "角色启用了知识库强制模式，但未绑定知识库。",
+            "pressure_model_legacy_only": "角色压力模型仍依赖 legacy 平铺字段。",
+        }
+        return {
+            "source": "asset",
+            "kind": f"policy_issue_{issue_type}",
+            "severity": severity,
+            "summary": summary_map.get(issue_type, issue_type),
+            "detected_at": detected_at,
+            "session_id": None,
+        }
+
+    @staticmethod
+    def _normalize_kb_ids(raw_ids: Any) -> list[str]:
+        if not isinstance(raw_ids, list):
+            return []
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for item in raw_ids:
+            normalized = str(item).strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    @staticmethod
+    def _build_normalized_policy(persona: Persona) -> dict[str, Any]:
+        return normalize_persona_policy(
+            persona.persona_policy if isinstance(persona.persona_policy, dict) else {},
+            fallback_system_prompt=str(persona.system_prompt or ""),
+            fallback_kb_ids=(
+                list(persona.knowledge_base_ids)
+                if isinstance(persona.knowledge_base_ids, list)
+                else []
+            ),
+        )

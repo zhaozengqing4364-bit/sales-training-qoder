@@ -9,8 +9,11 @@ References:
 - Design: Section 6 (Knowledge Service)
 - API Contract: docs/api-contract/knowledge.md
 """
+
 from __future__ import annotations
 
+import hashlib
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import (
@@ -23,15 +26,20 @@ from fastapi import (
     Query,
     UploadFile,
 )
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import User
+from common.db.schemas import AssetGovernanceSummary
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from common.storage.document import get_document_storage_service
+from support.services.runtime_status_service import RuntimeStatusService
 
-from .models import DocumentStatus
+from .models import DocumentStatus, KnowledgeDocument
 from .processor import get_document_processor
 from .schemas import (
     CreateKnowledgeBaseRequest,
@@ -56,8 +64,53 @@ logger = get_logger(__name__)
 
 admin_router = APIRouter(prefix="/admin/knowledge", tags=["admin-knowledge"])
 
-ALLOWED_FILE_TYPES = {"pdf", "docx", "txt", "md"}
+ALLOWED_FILE_TYPES = {"pdf", "docx", "txt", "md", "xlsx", "xls"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+
+
+async def _commit_or_error(
+    db: AsyncSession, detail: str = "[DATABASE_COMMIT_FAILED]"
+) -> JSONResponse | None:
+    """Commit current transaction and return standardized 500 response on failure."""
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Knowledge API database commit failed: {e}")
+        return build_server_error(
+            detail,
+            message="Database commit failed",
+            exc=e,
+        )
+    return None
+
+
+def _format_search_results(rows: list[dict[str, Any]]) -> list[SearchResult]:
+    """Normalize vector search rows into API schema objects."""
+    formatted_results: list[SearchResult] = []
+    for row in rows:
+        metadata = row.get("metadata", {})
+        formatted_results.append(
+            SearchResult(
+                content=row.get("content", ""),
+                score=row.get("score", 0.0),
+                metadata=SearchResultMetadata(
+                    document_id=metadata.get("document_id", ""),
+                    document_title=metadata.get("document_title", ""),
+                    chunk_index=metadata.get("chunk_index", 0),
+                ),
+            )
+        )
+    return formatted_results
+
+
+def _search_failure_status_code(detail: str | None) -> int:
+    normalized_detail = str(detail or "").strip()
+    if "[KNOWLEDGE_BASE_NOT_FOUND]" in normalized_detail:
+        return 404
+    if "[KNOWLEDGE_SEARCH_UNAVAILABLE]" in normalized_detail:
+        return 503
+    return 400
 
 
 async def process_document_background(
@@ -77,19 +130,101 @@ async def process_document_background(
     try:
         # Create new database session for background task
         engine = create_async_engine(db_url)
-        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async_session = sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
 
         async with async_session() as session:
             # Update status to processing
             service = KnowledgeService(session)
             await service.update_document_status(
-                doc_id=doc_id,
-                status=DocumentStatus.PROCESSING.value
+                doc_id=doc_id, status=DocumentStatus.PROCESSING.value
             )
             await session.commit()
 
-            # Process document
-            processor = get_document_processor()
+            # Process document — resolve settings from RAG profile
+            kb_result = await service.get_by_id(knowledge_base_id)
+            chunking_strategy = "element_boundary"
+            chunk_size = 500
+            chunk_overlap = 50
+
+            if kb_result.is_success and kb_result.value:
+                kb_obj = kb_result.value
+                # 1. Try active config version's chunking presets (new unified system)
+                chunking_resolved = False
+                if getattr(kb_obj, "chunking_preset_key", None):
+                    try:
+                        from sqlalchemy.orm import Session as SyncSession
+
+                        from common.knowledge_engine.config_repo import (
+                            KnowledgeAnswerConfigRepository,
+                        )
+
+                        sync_engine = engine.sync_engine if engine else None
+                        if sync_engine:
+                            sync_session = SyncSession(sync_engine)
+                            try:
+                                config_repo = KnowledgeAnswerConfigRepository(
+                                    sync_session
+                                )
+                                config_snapshot = config_repo.get_active_config()
+                                if config_snapshot and config_snapshot.chunking_presets:
+                                    preset = config_snapshot.chunking_presets.get(
+                                        kb_obj.chunking_preset_key
+                                    )
+                                    if preset:
+                                        chunking_strategy = preset.chunking_strategy
+                                        chunk_size = preset.chunk_size
+                                        chunk_overlap = preset.chunk_overlap
+                                        chunking_resolved = True
+                                        logger.debug(
+                                            "Chunking resolved from config version preset",
+                                            preset_key=preset.profile_key,
+                                            strategy=chunking_strategy,
+                                            chunk_size=chunk_size,
+                                        )
+                            finally:
+                                sync_session.close()
+                    except Exception:  # noqa: BLE001
+                        logger.debug("Config version chunking preset lookup failed")
+
+                # 2. Try RAG profile (legacy fallback)
+                if not chunking_resolved:
+                    try:
+                        from common.knowledge.rag_profile_service import (
+                            resolve_rag_profile,
+                        )
+
+                        profile = await resolve_rag_profile(session, kb_obj)
+                        if profile:
+                            chunking_strategy = profile.chunking_strategy
+                            chunk_size = profile.chunk_size
+                            chunk_overlap = profile.chunk_overlap
+                            chunking_resolved = True
+                    except Exception:  # noqa: BLE001
+                        logger.debug(
+                            "RAG profile resolution failed, trying KB settings"
+                        )
+
+                # 3. Fall back to KB settings if no profile resolved
+                if not chunking_resolved and kb_obj.settings:
+                    try:
+                        import json
+
+                        settings = kb_obj.settings
+                        if isinstance(settings, str):
+                            settings = json.loads(settings)
+                        chunking_strategy = (settings.get("chunking") or {}).get(
+                            "strategy", "element_boundary"
+                        )
+                    except Exception:  # noqa: BLE001
+                        chunking_strategy = "element_boundary"
+
+            processor = get_document_processor(
+                chunking_strategy=chunking_strategy,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
             result = await processor.process_document(
                 doc_id=doc_id,
                 file_path=file_path,
@@ -104,29 +239,57 @@ async def process_document_background(
                 doc_id=doc_id,
                 status=result["status"],
                 chunk_count=result["chunk_count"],
-                error_message=result.get("error_message")
+                error_message=result.get("error_message"),
             )
             await session.commit()
 
+            # Invalidate BM25 index so next keyword search rebuilds it
+            if result["status"] == "ready":
+                from common.knowledge.bm25_index import get_bm25_index_manager
+
+                get_bm25_index_manager().invalidate_collection(vector_collection)
+
+                # Invalidate semantic cache for this KB
+                try:
+                    from common.cache.redis_cache import get_cache
+                    from common.knowledge.semantic_cache import (
+                        get_semantic_search_cache,
+                    )
+
+                    await get_semantic_search_cache().invalidate_kb(
+                        get_cache(), knowledge_base_id
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.debug("Semantic cache invalidation skipped")
+
             logger.info(
-                f"Document processing completed: {doc_id}, status={result['status']}"
+                "Document processing completed",
+                document_id=doc_id,
+                status=result["status"],
+                chunk_count=result.get("chunk_count", 0),
+                phase_timings=result.get("phase_timings", {}),
+                parse_metrics=result.get("parse_metrics", {}),
+                parse_warnings=result.get("parse_warnings", []),
+                artifact_path=result.get("artifact_path"),
             )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         logger.error(f"Background document processing failed: {e}")
         # Try to mark document as failed
         if engine:
             try:
-                async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+                async_session = sessionmaker(
+                    engine, class_=AsyncSession, expire_on_commit=False
+                )
                 async with async_session() as session:
                     service = KnowledgeService(session)
                     await service.update_document_status(
                         doc_id=doc_id,
                         status=DocumentStatus.FAILED.value,
-                        error_message=f"Processing error: {str(e)}"
+                        error_message=f"Processing error: {str(e)}",
                     )
                     await session.commit()
-            except Exception as inner_e:
+            except (RuntimeError, ValueError, OSError) as inner_e:
                 logger.error(f"Failed to update document status after error: {inner_e}")
 
     finally:
@@ -138,16 +301,19 @@ async def process_document_background(
 async def create_knowledge_base(
     request: CreateKnowledgeBaseRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Create a new KnowledgeBase - R5.1"""
     service = KnowledgeService(db)
     result = await service.create(request)
 
     if not result.is_success:
-        raise HTTPException(status_code=400, detail=result.error)
+        raise HTTPException(status_code=400, detail=result.fallback)
 
     kb = result.value
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": KnowledgeBaseCreateResponse(
@@ -157,8 +323,8 @@ async def create_knowledge_base(
             vector_collection=kb.vector_collection,
             document_count=kb.document_count,
             status=kb.status,
-            created_at=kb.created_at
-        ).model_dump()
+            created_at=kb.created_at,
+        ).model_dump(),
     }
 
 
@@ -168,24 +334,151 @@ async def list_knowledge_bases(
     page_size: int = Query(20, ge=1, le=100),
     category: str | None = Query(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get paginated KnowledgeBase list - R5.2"""
     service = KnowledgeService(db)
-    items, total = await service.list(
-        page=page,
-        page_size=page_size,
-        category=category
-    )
+    items, total = await service.list(page=page, page_size=page_size, category=category)
+
+    knowledge_base_ids = [item.id for item in items]
+    governance_indexes: dict[str, dict[str, dict[str, Any]]] = {}
+    try:
+        governance_indexes = await RuntimeStatusService(
+            db
+        ).build_asset_governance_indexes()
+    except Exception as exc:
+        logger.warning(
+            f"governance_indexes computation failed, continuing without it: {exc}"
+        )
+    docs_by_kb: dict[str, list[KnowledgeDocument]] = {}
+    if knowledge_base_ids:
+        doc_result = await db.execute(
+            select(KnowledgeDocument).where(
+                KnowledgeDocument.knowledge_base_id.in_(knowledge_base_ids)
+            )
+        )
+        for document in doc_result.scalars().all():
+            docs_by_kb.setdefault(str(document.knowledge_base_id), []).append(document)
+
+    now = datetime.now(UTC)
+    seven_days_ago = now - timedelta(days=7)
+    enriched_items: list[Any] = []
+
+    for item in items:
+        documents = docs_by_kb.get(str(item.id), [])
+        item_updated_at = RuntimeStatusService._coerce_datetime(item.updated_at)
+        latest_document = max(
+            documents,
+            key=lambda document: RuntimeStatusService._coerce_datetime(
+                document.created_at
+            )
+            or datetime.min.replace(tzinfo=UTC),
+            default=None,
+        )
+        latest_document_created_at = (
+            RuntimeStatusService._coerce_datetime(latest_document.created_at)
+            if latest_document is not None
+            else None
+        )
+        last_changed_at = item_updated_at
+        latest_change_type = "knowledge_base_updated"
+        latest_change_label = "知识库配置更新"
+        if (
+            latest_document is not None
+            and latest_document_created_at is not None
+            and (
+                item_updated_at is None or latest_document_created_at >= item_updated_at
+            )
+        ):
+            last_changed_at = latest_document_created_at
+            latest_change_type = "document_uploaded"
+            latest_change_label = f"最近文档：{latest_document.title}"
+
+        change_count_7d = sum(
+            1
+            for document in documents
+            if (
+                RuntimeStatusService._coerce_datetime(document.created_at)
+                or datetime.min.replace(tzinfo=UTC)
+            )
+            >= seven_days_ago
+        )
+        if item_updated_at is not None and item_updated_at >= seven_days_ago:
+            change_count_7d += 1
+
+        extra_anomalies: list[dict[str, Any]] = []
+        failed_documents = [
+            document
+            for document in documents
+            if document.status == DocumentStatus.FAILED.value
+        ]
+        if failed_documents:
+            latest_failed_at = max(
+                (
+                    RuntimeStatusService._coerce_datetime(document.created_at)
+                    for document in failed_documents
+                ),
+                default=None,
+            )
+            extra_anomalies.append(
+                {
+                    "source": "asset",
+                    "kind": "document_failed",
+                    "severity": "warning",
+                    "summary": f"{len(failed_documents)} 个文档处理失败，需复核解析链路。",
+                    "detected_at": latest_failed_at,
+                    "session_id": None,
+                }
+            )
+
+        processing_documents = [
+            document
+            for document in documents
+            if document.status
+            in {DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value}
+        ]
+        if processing_documents:
+            latest_processing_at = max(
+                (
+                    RuntimeStatusService._coerce_datetime(document.created_at)
+                    for document in processing_documents
+                ),
+                default=None,
+            )
+            extra_anomalies.append(
+                {
+                    "source": "asset",
+                    "kind": "document_processing",
+                    "severity": "warning",
+                    "summary": f"{len(processing_documents)} 个文档仍在处理中。",
+                    "detected_at": latest_processing_at,
+                    "session_id": None,
+                }
+            )
+
+        governance_summary = RuntimeStatusService.build_asset_governance_summary(
+            governance_indexes.get("knowledge_base", {}).get(str(item.id)),
+            last_changed_at=last_changed_at,
+            latest_change_type=latest_change_type,
+            latest_change_label=latest_change_label,
+            change_count_7d=change_count_7d,
+            extra_anomalies=extra_anomalies,
+        )
+        enriched_items.append(
+            item.model_copy(
+                update={
+                    "governance_summary": AssetGovernanceSummary.model_validate(
+                        governance_summary
+                    )
+                }
+            )
+        )
 
     return {
         "success": True,
         "data": KnowledgeBaseListResponse(
-            knowledge_bases=items,
-            total=total,
-            page=page,
-            page_size=page_size
-        ).model_dump()
+            knowledge_bases=enriched_items, total=total, page=page, page_size=page_size
+        ).model_dump(),
     }
 
 
@@ -193,19 +486,19 @@ async def list_knowledge_bases(
 async def get_knowledge_base(
     kb_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get KnowledgeBase details - R5.3"""
     service = KnowledgeService(db)
     result = await service.get_by_id(kb_id)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.error)
+        raise HTTPException(status_code=404, detail=result.fallback)
 
     kb = result.value
     return {
         "success": True,
-        "data": KnowledgeBaseResponse.model_validate(kb).model_dump()
+        "data": KnowledgeBaseResponse.model_validate(kb).model_dump(),
     }
 
 
@@ -214,19 +507,22 @@ async def update_knowledge_base(
     kb_id: str,
     request: UpdateKnowledgeBaseRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Update KnowledgeBase - R5.3"""
     service = KnowledgeService(db)
     result = await service.update(kb_id, request)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.error)
+        raise HTTPException(status_code=404, detail=result.fallback)
 
     kb = result.value
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
-        "data": KnowledgeBaseResponse.model_validate(kb).model_dump()
+        "data": KnowledgeBaseResponse.model_validate(kb).model_dump(),
     }
 
 
@@ -234,7 +530,7 @@ async def update_knowledge_base(
 async def delete_knowledge_base(
     kb_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Delete KnowledgeBase - R5.4"""
     service = KnowledgeService(db)
@@ -249,17 +545,40 @@ async def delete_knowledge_base(
     result = await service.delete(kb_id)
 
     if not result.is_success:
-        if "[KNOWLEDGE_BASE_IN_USE]" in result.error:
-            raise HTTPException(status_code=400, detail=result.error)
-        raise HTTPException(status_code=404, detail=result.error)
+        if "[KNOWLEDGE_BASE_IN_USE]" in (result.fallback or ""):
+            raise HTTPException(status_code=400, detail=result.fallback)
+        raise HTTPException(status_code=404, detail=result.fallback)
 
-    return {
-        "success": True,
-        "data": {"deleted": True}
-    }
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
+    return {"success": True, "data": {"deleted": True}}
+
+
+@admin_router.patch("/{kb_id}/rag-profile", response_model=dict)
+async def assign_rag_profile(
+    kb_id: str,
+    body: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Assign or unassign a RAG profile to a knowledge base."""
+    rag_profile_id = body.get("rag_profile_id")
+
+    service = KnowledgeService(db)
+    result = await service.get_by_id(kb_id)
+    if not result.is_success:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    kb = result.value
+    kb.rag_profile_id = rag_profile_id
+    await db.commit()
+
+    return {"success": True, "data": {"rag_profile_id": rag_profile_id}}
 
 
 # ========== Document Endpoints ==========
+
 
 @admin_router.post("/{kb_id}/documents", response_model=dict, status_code=202)
 async def upload_document(
@@ -268,7 +587,7 @@ async def upload_document(
     file: UploadFile = File(...),
     title: str | None = Form(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Upload a document to KnowledgeBase - R5.3"""
     import uuid
@@ -302,6 +621,28 @@ async def upload_document(
         raise HTTPException(status_code=404, detail="[KNOWLEDGE_BASE_NOT_FOUND]")
 
     kb = kb_result.value
+    content_hash = hashlib.sha256(content).hexdigest()
+
+    # Deduplicate by content hash in same KB.
+    existing_doc = await service.get_document_by_content_hash(kb_id, content_hash)
+    if existing_doc is not None:
+        logger.info(
+            "Skipped duplicate knowledge document upload",
+            kb_id=kb_id,
+            existing_doc_id=existing_doc.id,
+            content_hash=content_hash,
+        )
+        return {
+            "success": True,
+            "data": KnowledgeDocumentUploadResponse(
+                id=existing_doc.id,
+                title=existing_doc.title,
+                file_type=existing_doc.file_type,
+                file_size=existing_doc.file_size,
+                status=existing_doc.status,
+                created_at=existing_doc.created_at,
+            ).model_dump(),
+        }
 
     # Generate document ID first
     doc_id = str(uuid.uuid4())
@@ -316,7 +657,11 @@ async def upload_document(
     )
 
     if not file_path:
-        raise HTTPException(status_code=500, detail="[FILE_SAVE_FAILED]")
+        return build_server_error(
+            "[FILE_SAVE_FAILED]",
+            message="Failed to save document file",
+            kb_id=kb_id,
+        )
 
     # Create document record with pre-generated ID
     doc_title = title or file.filename
@@ -326,18 +671,35 @@ async def upload_document(
         title=doc_title,
         file_type=file_ext,
         file_url=file_path,
-        file_size=file_size
+        file_size=file_size,
+        content_hash=content_hash,
     )
 
     if not result.is_success:
         # Cleanup file on failure
         await storage.delete_document(kb_id, doc_id, file_ext)
-        raise HTTPException(status_code=400, detail=result.error)
+        raise HTTPException(status_code=400, detail=result.fallback)
 
     doc = result.value
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        await storage.delete_document(kb_id, doc_id, file_ext)
+        logger.error(
+            f"Document upload commit failed, rolled back and cleaned file: {e}"
+        )
+        return build_server_error(
+            "[DOCUMENT_SAVE_FAILED]",
+            message="Failed to persist uploaded document",
+            exc=e,
+            kb_id=kb_id,
+            doc_id=doc_id,
+        )
 
     # Get database URL for background task
     from common.db.session import get_database_url
+
     db_url = get_database_url()
 
     # Schedule background processing
@@ -360,8 +722,8 @@ async def upload_document(
             file_type=doc.file_type,
             file_size=doc.file_size,
             status=doc.status,
-            created_at=doc.created_at
-        ).model_dump()
+            created_at=doc.created_at,
+        ).model_dump(),
     }
 
 
@@ -373,6 +735,8 @@ def _validate_file_content(content: bytes, file_ext: str) -> bool:
     magic_bytes = {
         "pdf": b"%PDF",
         "docx": b"PK\x03\x04",  # ZIP format (DOCX is a ZIP)
+        "xlsx": b"PK\x03\x04",  # ZIP format (XLSX is a ZIP)
+        "xls": b"\xd0\xcf\x11\xe0",  # Compound File Binary Format
         # txt and md don't have magic bytes, accept any content
     }
 
@@ -386,7 +750,7 @@ def _validate_file_content(content: bytes, file_ext: str) -> bool:
 
     expected = magic_bytes.get(file_ext)
     if expected:
-        return content[:len(expected)] == expected
+        return content[: len(expected)] == expected
 
     return True
 
@@ -397,24 +761,21 @@ async def list_documents(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get documents in a KnowledgeBase"""
     service = KnowledgeService(db)
     result = await service.list_documents(kb_id, page, page_size)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.error)
+        raise HTTPException(status_code=404, detail=result.fallback)
 
     items, total = result.value
     return {
         "success": True,
         "data": KnowledgeDocumentListResponse(
-            documents=items,
-            total=total,
-            page=page,
-            page_size=page_size
-        ).model_dump()
+            documents=items, total=total, page=page, page_size=page_size
+        ).model_dump(),
     }
 
 
@@ -423,19 +784,19 @@ async def get_document(
     kb_id: str,
     doc_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get document details"""
     service = KnowledgeService(db)
     result = await service.get_document(kb_id, doc_id)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.error)
+        raise HTTPException(status_code=404, detail=result.fallback)
 
     doc = result.value
     return {
         "success": True,
-        "data": KnowledgeDocumentResponse.model_validate(doc).model_dump()
+        "data": KnowledgeDocumentResponse.model_validate(doc).model_dump(),
     }
 
 
@@ -444,7 +805,7 @@ async def delete_document(
     kb_id: str,
     doc_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Delete document"""
     service = KnowledgeService(db)
@@ -459,12 +820,12 @@ async def delete_document(
     result = await service.delete_document(kb_id, doc_id)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.error)
+        raise HTTPException(status_code=404, detail=result.fallback)
 
-    return {
-        "success": True,
-        "data": {"deleted": True}
-    }
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
+    return {"success": True, "data": {"deleted": True}}
 
 
 @admin_router.get("/{kb_id}/documents/{doc_id}/preview", response_model=dict)
@@ -474,23 +835,21 @@ async def preview_document(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Preview document chunks - R5.5"""
     service = KnowledgeService(db)
     result = await service.get_document_chunks(kb_id, doc_id, page, page_size)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.error)
+        raise HTTPException(status_code=404, detail=result.fallback)
 
     chunks, total = result.value
 
     # Format chunks for response
     formatted_chunks = [
         DocumentChunk(
-            index=c["index"],
-            content=c["content"],
-            metadata=c.get("metadata", {})
+            index=c["index"], content=c["content"], metadata=c.get("metadata", {})
         )
         for c in chunks
     ]
@@ -498,9 +857,8 @@ async def preview_document(
     return {
         "success": True,
         "data": DocumentPreviewResponse(
-            chunks=formatted_chunks,
-            total_chunks=total
-        ).model_dump()
+            chunks=formatted_chunks, total_chunks=total
+        ).model_dump(),
     }
 
 
@@ -509,12 +867,47 @@ async def preview_document(
 internal_router = APIRouter(prefix="/internal/knowledge", tags=["internal-knowledge"])
 
 
+@admin_router.post("/{kb_id}/search", response_model=dict)
+async def search_knowledge_base_admin(
+    kb_id: str,
+    request: KnowledgeSearchRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Search knowledge base for admin tooling."""
+    service = KnowledgeService(db)
+    result = await service.search(
+        kb_id=kb_id,
+        query=request.query,
+        top_k=request.top_k,
+        similarity_threshold=request.similarity_threshold,
+    )
+
+    if not result.is_success:
+        detail = result.fallback or "[KNOWLEDGE_SEARCH_UNAVAILABLE]"
+        raise HTTPException(
+            status_code=_search_failure_status_code(detail),
+            detail=detail,
+        )
+
+    search_results = _format_search_results(result.value or [])
+    payload = KnowledgeSearchResponse(
+        results=search_results,
+        total=len(search_results),
+    ).model_dump()
+
+    return {
+        "success": True,
+        "data": payload,
+    }
+
+
 @internal_router.post("/{kb_id}/search", response_model=dict)
-async def search_knowledge_base(
+async def search_knowledge_base_internal(
     kb_id: str,
     request: KnowledgeSearchRequest,
     current_user: User = Depends(get_current_user),  # Add authentication
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Search knowledge base - Internal API (requires authentication)"""
     service = KnowledgeService(db)
@@ -522,41 +915,37 @@ async def search_knowledge_base(
         kb_id=kb_id,
         query=request.query,
         top_k=request.top_k,
-        similarity_threshold=request.similarity_threshold
+        similarity_threshold=request.similarity_threshold,
     )
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.error)
-
-    # Format results
-    search_results = [
-        SearchResult(
-            content=r["content"],
-            score=r["score"],
-            metadata=SearchResultMetadata(
-                document_id=r["metadata"]["document_id"],
-                document_title=r["metadata"]["document_title"],
-                chunk_index=r["metadata"]["chunk_index"]
-            )
+        detail = result.fallback or "[KNOWLEDGE_SEARCH_UNAVAILABLE]"
+        raise HTTPException(
+            status_code=_search_failure_status_code(detail),
+            detail=detail,
         )
-        for r in result.value
-    ]
 
-    return {
-        "success": True,
-        "data": KnowledgeSearchResponse(results=search_results).model_dump()
-    }
+    search_results = _format_search_results(result.value or [])
+    payload = KnowledgeSearchResponse(
+        results=search_results,
+        total=len(search_results),
+    ).model_dump()
+
+    return {"success": True, "data": payload}
 
 
 # ========== Document Reprocessing ==========
 
-@admin_router.post("/{kb_id}/documents/{doc_id}/reprocess", response_model=dict, status_code=202)
+
+@admin_router.post(
+    "/{kb_id}/documents/{doc_id}/reprocess", response_model=dict, status_code=202
+)
 async def reprocess_document(
     kb_id: str,
     doc_id: str,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Reprocess a failed or pending document"""
     service = KnowledgeService(db)
@@ -564,7 +953,7 @@ async def reprocess_document(
     # Get document
     doc_result = await service.get_document(kb_id, doc_id)
     if not doc_result.is_success:
-        raise HTTPException(status_code=404, detail=doc_result.error)
+        raise HTTPException(status_code=404, detail=doc_result.fallback)
 
     doc = doc_result.value
 
@@ -572,7 +961,7 @@ async def reprocess_document(
     if doc.status not in (DocumentStatus.FAILED.value, DocumentStatus.PENDING.value):
         raise HTTPException(
             status_code=400,
-            detail=f"[INVALID_STATUS] Cannot reprocess document with status: {doc.status}"
+            detail=f"[INVALID_STATUS] Cannot reprocess document with status: {doc.status}",
         )
 
     # Get KB for vector collection
@@ -586,16 +975,23 @@ async def reprocess_document(
     vector_store = get_knowledge_vector_store()
     await vector_store.delete_document_chunks(kb.vector_collection, doc_id)
 
+    storage = get_document_storage_service()
+    storage.delete_parse_artifact(doc.file_url)
+
     # Reset status
     await service.update_document_status(
         doc_id=doc_id,
         status=DocumentStatus.PENDING.value,
         chunk_count=0,
-        error_message=None
+        error_message=None,
     )
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
 
     # Get database URL for background task
     from common.db.session import get_database_url
+
     db_url = get_database_url()
 
     # Schedule background processing
@@ -612,5 +1008,5 @@ async def reprocess_document(
 
     return {
         "success": True,
-        "data": {"message": "Document reprocessing started", "document_id": doc_id}
+        "data": {"message": "Document reprocessing started", "document_id": doc_id},
     }

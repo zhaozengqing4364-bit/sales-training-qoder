@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M020/S01/T01",
+  "timestamp": 1776074758924,
+  "passed": false,
+  "discoverySource": "package-json",
+  "checks": [
+    {
+      "command": "npm run test",
+      "exitCode": 1,
+      "durationMs": 25023,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

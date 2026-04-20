@@ -1,12 +1,15 @@
 "use client";
+import { debug } from "@/lib/debug";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
 import { SessionItem } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, MoreHorizontal, Download, FileText, Eye, Activity, Calendar, Trash2 } from "lucide-react";
+import { Search, Filter, Download, FileText, Eye, Activity, Calendar, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import {
     Dialog,
     DialogContent,
@@ -25,7 +28,6 @@ import {
 import {
     MobileTableCard
 } from "@/components/ui/mobile-table-card";
-import { Input } from "@/components/ui/input";
 
 // Helper Functions
 const formatDuration = (seconds: number) => {
@@ -39,8 +41,11 @@ const formatTime = (isoString: string) => {
 };
 
 export default function RecordsPage() {
+    const toast = useToast();
     const [records, setRecords] = useState<SessionItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [deleteTarget, setDeleteTarget] = useState<SessionItem | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Filter & Search States
     const [searchQuery, setSearchQuery] = useState("");
@@ -48,7 +53,7 @@ export default function RecordsPage() {
     const [page, setPage] = useState(1);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
             const data = await api.admin.getTrainingRecords({
@@ -59,21 +64,26 @@ export default function RecordsPage() {
             });
             setRecords(data);
         } catch (err) {
-            console.error("Failed to load records:", err);
+            debug.error("Failed to load records:", err);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [categoryFilter, page, searchQuery]);
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("确定要删除这条训练记录吗？")) return;
-        
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
+
+        setIsDeleting(true);
         try {
-            await api.admin.deleteTrainingRecord(id);
-            setRecords(prev => prev.filter(r => r.id !== id));
+            await api.admin.deleteTrainingRecord(deleteTarget.id);
+            setRecords(prev => prev.filter((record) => record.id !== deleteTarget.id));
+            toast.success("删除成功");
+            setDeleteTarget(null);
         } catch (err) {
-            console.error("Failed to delete record:", err);
-            alert("删除失败");
+            debug.error("Failed to delete record:", err);
+            toast.error("删除失败");
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -84,7 +94,7 @@ export default function RecordsPage() {
 
     useEffect(() => {
         loadData();
-    }, [page, searchQuery, categoryFilter]);
+    }, [loadData]);
 
     if (isLoading) {
         return <div className="p-8 text-center text-slate-500">加载中...</div>;
@@ -92,6 +102,21 @@ export default function RecordsPage() {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setDeleteTarget(null);
+                    }
+                }}
+                title="删除训练记录"
+                description={deleteTarget ? `确定要删除「${deleteTarget.title}」吗？` : "确定要删除这条训练记录吗？"}
+                confirmText="删除"
+                variant="danger"
+                onConfirm={handleDelete}
+                isLoading={isDeleting}
+            />
+
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -178,7 +203,7 @@ export default function RecordsPage() {
                                     <div className="flex flex-wrap gap-2">
                                         {[
                                             { id: 'all', label: '全部' },
-                                            { id: 'sales_bot', label: '销售对练' },
+                                            { id: 'sales', label: '销售对练' },
                                             { id: 'presentation', label: 'PPT 演示' },
                                         ].map(c => (
                                             <Badge 
@@ -216,7 +241,7 @@ export default function RecordsPage() {
                             }
                             icon={
                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold
-                                    ${record.scenario_type === 'sales_bot' ? 'bg-blue-50 text-blue-600' :
+                                    ${record.scenario_type === 'sales' ? 'bg-blue-50 text-blue-600' :
                                         record.scenario_type === 'presentation' ? 'bg-purple-50 text-purple-600' :
                                             'bg-slate-100 text-slate-500'}`}>
                                     <FileText className="w-5 h-5" />
@@ -230,7 +255,13 @@ export default function RecordsPage() {
                             ]}
                             actions={
                                 <div className="absolute top-4 right-4">
-                                    <Button onClick={() => handleDelete(record.id)} variant="ghost" size="icon" className="text-slate-400 hover:text-red-600 rounded-full">
+                                    <Button
+                                        onClick={() => setDeleteTarget(record)}
+                                        aria-label={`删除记录 ${record.title}`}
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-slate-400 hover:text-red-600 rounded-full"
+                                    >
                                         <Trash2 className="w-4 h-4" />
                                     </Button>
                                 </div>
@@ -270,7 +301,7 @@ export default function RecordsPage() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <Badge variant="secondary" className="bg-slate-50 text-slate-600 font-normal border-slate-200">
-                                            {record.scenario_type === 'sales_bot' ? '销售教练' : 'PPT演讲'}
+                                            {record.scenario_type === 'sales' ? '销售教练' : 'PPT演讲'}
                                         </Badge>
                                     </td>
                                     <td className="px-6 py-4">
@@ -349,7 +380,13 @@ export default function RecordsPage() {
                                                     </DialogContent>
                                                 </Dialog>
                                             </TooltipProvider>
-                                            <Button onClick={() => handleDelete(record.id)} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full">
+                                            <Button
+                                                onClick={() => setDeleteTarget(record)}
+                                                aria-label={`删除记录 ${record.title}`}
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full"
+                                            >
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
                                         </div>

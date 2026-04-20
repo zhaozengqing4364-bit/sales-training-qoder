@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M011/S01/T01",
+  "timestamp": 1774924753638,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_engine.py -q",
+      "exitCode": 0,
+      "durationMs": 536,
+      "verdict": "pass"
+    }
+  ]
+}

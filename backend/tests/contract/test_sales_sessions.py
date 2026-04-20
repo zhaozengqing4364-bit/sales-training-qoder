@@ -13,49 +13,57 @@ class TestSalesSessionsContract:
     async def test_create_sales_session(
         self,
         async_client: AsyncClient,
-        auth_headers: dict
+        contract_auth_headers: dict,
     ):
-        """Test POST /api/v1/practice/sessions with sales scenario"""
+        """Legacy sales_persona input should be explicitly rejected."""
         response = await async_client.post(
             "/api/v1/practice/sessions",
-            headers=auth_headers,
+            headers=contract_auth_headers,
             json={
                 "scenario_type": "sales",
                 "sales_persona": "impatient_ceo"
             }
         )
-        # May be 201 (created), 400 (invalid), or 404 (not found)
-        assert response.status_code in [201, 400, 404]
+        assert response.status_code == 400
+        body = response.json()
+        assert body.get("trace_id")
+        assert body.get("success") is False
+        assert body.get("error") == "[FIELD_DEPRECATED_PERSONA_CENTERED]"
+        assert "sales_persona" in body.get("message", "")
 
     async def test_create_sales_session_with_persona(
         self,
         async_client: AsyncClient,
-        auth_headers: dict
+        contract_auth_headers: dict,
     ):
-        """Test POST /api/v1/practice/sessions with specific persona"""
+        """All legacy personas should return the same deprecation contract error."""
         personas = ["impatient_ceo", "skeptical_buyer", "price_focused", "technical_cto"]
 
         for persona in personas:
             response = await async_client.post(
                 "/api/v1/practice/sessions",
-                headers=auth_headers,
+                headers=contract_auth_headers,
                 json={
                     "scenario_type": "sales",
                     "sales_persona": persona
                 }
             )
-            # At least the request should be valid format
-            assert response.status_code in [201, 400, 404]
+            assert response.status_code == 400
+            body = response.json()
+            assert body.get("trace_id")
+            assert body.get("success") is False
+            assert body.get("error") == "[FIELD_DEPRECATED_PERSONA_CENTERED]"
 
     async def test_get_sales_session(
         self,
         async_client: AsyncClient,
-        auth_headers: dict,
-        test_session_id: str
+        contract_auth_headers: dict,
+        test_session_id: str,
     ):
         """Test GET /api/v1/practice/sessions/{id} for sales session"""
         response = await async_client.get(
             f"/api/v1/practice/sessions/{test_session_id}",
-            headers=auth_headers
+            headers=contract_auth_headers
         )
-        assert response.status_code in [200, 404]
+        assert response.status_code == 404
+        assert response.json().get("trace_id")

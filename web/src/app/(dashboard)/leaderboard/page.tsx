@@ -1,89 +1,282 @@
-import { GlassCard } from "@/components/ui/glass-card";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, Medal, User } from "lucide-react";
+import { GlassCard } from "@/components/ui/glass-card";
+import { api, getApiErrorMessage } from "@/lib/api/client";
+import { ArrowRight, Loader2, Trophy, User } from "lucide-react";
+
+type TimePeriod = "weekly" | "monthly" | "all_time";
+type ScenarioFilter = "all" | "sales" | "presentation";
+
+type LeaderboardEntry = {
+    rank: number;
+    user_id: string;
+    username: string;
+    total_sessions: number;
+    average_score: number;
+    best_score: number;
+};
+
+type MyRank = {
+    rank: number | null;
+    total_sessions: number;
+    average_score: number;
+};
+
+type LeaderboardMeta = {
+    evaluableSessions: number;
+    notEvaluableSessions: number;
+};
+
+const TIME_PERIOD_OPTIONS: Array<{ value: TimePeriod; label: string }> = [
+    { value: "weekly", label: "本周" },
+    { value: "monthly", label: "本月" },
+    { value: "all_time", label: "总榜" },
+];
+
+const SCENARIO_OPTIONS: Array<{ value: ScenarioFilter; label: string }> = [
+    { value: "all", label: "全部场景" },
+    { value: "sales", label: "销售对练" },
+    { value: "presentation", label: "PPT 演练" },
+];
+
+function rankBadge(rank: number): string {
+    if (rank === 1) return "🥇";
+    if (rank === 2) return "🥈";
+    if (rank === 3) return "🥉";
+    return "🎯";
+}
 
 export default function LeaderboardPage() {
-    const top3 = [
-        { rank: 2, name: "李四", score: 92, count: 15, avatar: "bg-slate-200" },
-        { rank: 1, name: "张三", score: 95, count: 20, avatar: "bg-yellow-100" },
-        { rank: 3, name: "王五", score: 88, count: 12, avatar: "bg-orange-100" },
-    ];
+    const [timePeriod, setTimePeriod] = useState<TimePeriod>("weekly");
+    const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>("all");
+    const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+    const [myRank, setMyRank] = useState<MyRank | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [reloadVersion, setReloadVersion] = useState(0);
+    const [leaderboardMeta, setLeaderboardMeta] = useState<LeaderboardMeta>({
+        evaluableSessions: 0,
+        notEvaluableSessions: 0,
+    });
 
-    const list = [
-        { rank: 4, name: "赵六", score: 85, count: 10, change: "up" },
-        { rank: 5, name: "你", score: 82, count: 8, change: "down", isMe: true },
-        { rank: 6, name: "钱七", score: 80, count: 7, change: "same" },
-    ];
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadData = async () => {
+            setIsLoading(true);
+            const scenarioType =
+                scenarioFilter === "all" ? undefined : scenarioFilter;
+            const leaderboardResult = await api.dashboard
+                .getPublicLeaderboard({
+                    scenario_type: scenarioType,
+                    time_period: timePeriod,
+                    include_me: true,
+                    limit: 20,
+                })
+                .catch((error) => ({ error }));
+
+            if (cancelled) return;
+
+            if (leaderboardResult && "error" in leaderboardResult) {
+                setEntries([]);
+                setMyRank(null);
+                setLeaderboardMeta({
+                    evaluableSessions: 0,
+                    notEvaluableSessions: 0,
+                });
+                setLoadError(getApiErrorMessage(leaderboardResult.error));
+                setIsLoading(false);
+                return;
+            }
+
+            setLoadError(null);
+            setEntries(leaderboardResult.entries || []);
+            setLeaderboardMeta({
+                evaluableSessions: leaderboardResult.evaluable_sessions ?? 0,
+                notEvaluableSessions: leaderboardResult.not_evaluable_sessions ?? 0,
+            });
+
+            if (leaderboardResult.my_rank) {
+                setMyRank({
+                    rank: leaderboardResult.my_rank.rank,
+                    total_sessions: leaderboardResult.my_rank.total_sessions,
+                    average_score: leaderboardResult.my_rank.average_score,
+                });
+                setIsLoading(false);
+                return;
+            }
+
+            const fallbackMyRank = await api.dashboard
+                .getMyRank({
+                    scenario_type: scenarioType,
+                    time_period: timePeriod,
+                })
+                .catch(() => null);
+
+            if (cancelled) return;
+
+            if (fallbackMyRank) {
+                setMyRank({
+                    rank: fallbackMyRank.rank,
+                    total_sessions: fallbackMyRank.total_sessions,
+                    average_score: fallbackMyRank.average_score,
+                });
+            } else {
+                setMyRank(null);
+            }
+
+            setIsLoading(false);
+        };
+
+        loadData();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [timePeriod, scenarioFilter, reloadVersion]);
+
+    const topEntries = useMemo(() => entries.slice(0, 3), [entries]);
+    const remainingEntries = useMemo(() => entries.slice(3), [entries]);
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <header className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-slate-900">排行榜</h1>
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+            <header className="flex justify-between items-center gap-4 flex-wrap">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">排行榜</h1>
+                    <p className="text-sm text-slate-500 mt-1">
+                        均分与排名只纳入可评估的已完成训练，证据不足会话会单独记账，不会混入榜单。
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                        当前榜单纳入 {leaderboardMeta.evaluableSessions} 次可评估训练，{leaderboardMeta.notEvaluableSessions} 次证据不足训练未计入排名。
+                    </p>
+                </div>
                 <div className="flex bg-white p-1 rounded-full shadow-sm border border-slate-100">
-                    <button className="px-4 py-1.5 rounded-full bg-slate-900 text-white text-sm font-medium shadow-md">本周</button>
-                    <button className="px-4 py-1.5 rounded-full text-slate-500 text-sm font-medium hover:bg-slate-50">本月</button>
-                    <button className="px-4 py-1.5 rounded-full text-slate-500 text-sm font-medium hover:bg-slate-50">总榜</button>
+                    {TIME_PERIOD_OPTIONS.map((option) => (
+                        <button
+                            key={option.value}
+                            onClick={() => setTimePeriod(option.value)}
+                            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                                timePeriod === option.value
+                                    ? "bg-slate-900 text-white shadow-md"
+                                    : "text-slate-500 hover:bg-slate-50"
+                            }`}
+                        >
+                            {option.label}
+                        </button>
+                    ))}
                 </div>
             </header>
 
-            {/* Top 3 */}
-            <div className="flex flex-col md:flex-row items-center md:items-end justify-center gap-6 md:gap-4 py-8">
-                {/* Rank 1 (Mobile: First, Desktop: Center/Second) */}
-                <GlassCard className="order-1 md:order-2 w-full md:w-1/3 max-w-[280px] p-8 flex flex-col items-center relative z-10 md:-mb-4 bg-gradient-to-t from-yellow-50/50 to-white/90 border-yellow-100 ring-4 ring-yellow-50/50 md:ring-0">
-                    <div className="absolute -top-6 text-4xl animate-bounce">👑</div>
-                    <div className="w-20 h-20 rounded-full bg-yellow-100 border-4 border-white shadow-xl mb-4 flex items-center justify-center text-2xl">🥇</div>
-                    <div className="text-xl font-bold text-slate-900">张三</div>
-                    <div className="text-4xl font-black text-yellow-600 mt-2">95<span className="text-sm font-normal text-yellow-500/60">分</span></div>
-                    <div className="text-xs text-slate-400 mt-1">20次练习</div>
-                </GlassCard>
-
-                {/* Rank 2 (Mobile: Second, Desktop: Left/First) */}
-                <GlassCard className="order-2 md:order-1 w-full md:w-1/3 max-w-[240px] p-6 flex flex-col items-center bg-gradient-to-t from-slate-100/50 to-white/80 scale-95 md:scale-100">
-                    <div className="w-16 h-16 rounded-full bg-slate-200 border-4 border-white shadow-lg mb-4 flex items-center justify-center text-xl">🥈</div>
-                    <div className="text-lg font-bold text-slate-900">李四</div>
-                    <div className="text-2xl font-black text-slate-700 mt-2">92<span className="text-sm font-normal text-slate-400">分</span></div>
-                    <div className="text-xs text-slate-400 mt-1">15次练习</div>
-                </GlassCard>
-
-                {/* Rank 3 (Mobile: Third, Desktop: Right/Third) */}
-                <GlassCard className="order-3 md:order-3 w-full md:w-1/3 max-w-[240px] p-6 flex flex-col items-center bg-gradient-to-t from-orange-50/30 to-white/80 scale-95 md:scale-100">
-                    <div className="w-16 h-16 rounded-full bg-orange-100 border-4 border-white shadow-lg mb-4 flex items-center justify-center text-xl">🥉</div>
-                    <div className="text-lg font-bold text-slate-900">王五</div>
-                    <div className="text-2xl font-black text-slate-700 mt-2">88<span className="text-sm font-normal text-slate-400">分</span></div>
-                    <div className="text-xs text-slate-400 mt-1">12次练习</div>
-                </GlassCard>
+            <div className="flex bg-white p-1 rounded-full shadow-sm border border-slate-100 w-fit">
+                {SCENARIO_OPTIONS.map((option) => (
+                    <button
+                        key={option.value}
+                        onClick={() => setScenarioFilter(option.value)}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                            scenarioFilter === option.value
+                                ? "bg-blue-600 text-white shadow-md"
+                                : "text-slate-500 hover:bg-slate-50"
+                        }`}
+                    >
+                        {option.label}
+                    </button>
+                ))}
             </div>
 
-            {/* List */}
-            <GlassCard className="p-0 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50/50">
-                    <div className="w-12 md:w-16 text-center">排名</div>
-                    <div className="flex-1">用户</div>
-                    <div className="w-16 md:w-24 text-center">平均分</div>
-                    <div className="w-16 md:w-24 text-center hidden sm:block">练习次数</div>
-                    <div className="w-12 md:w-16 text-center hidden sm:block">趋势</div>
-                </div>
-                <div className="divide-y divide-slate-100">
-                    {list.map(item => (
-                        <div key={item.rank} className={`flex items-center p-4 hover:bg-slate-50 transition-colors ${item.isMe ? 'bg-blue-50/50 hover:bg-blue-50' : ''}`}>
-                            <div className="w-12 md:w-16 text-center font-bold text-slate-500">{item.rank}</div>
-                            <div className="flex-1 flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0"><User className="w-4 h-4 text-slate-500" /></div>
-                                <span className={`font-medium truncate ${item.isMe ? 'text-blue-700 font-bold' : 'text-slate-700'}`}>
-                                    {item.name} {item.isMe && <Badge variant="blue" className="ml-2 scale-75 origin-left">我</Badge>}
-                                </span>
-                            </div>
-                            <div className="w-16 md:w-24 text-center font-bold text-slate-900">{item.score}</div>
-                            <div className="w-16 md:w-24 text-center text-slate-500 hidden sm:block">{item.count}</div>
-                            <div className="w-12 md:w-16 text-center text-xs hidden sm:block">
-                                {item.change === 'up' && <span className="text-emerald-500">▲ 2</span>}
-                                {item.change === 'down' && <span className="text-red-500">▼ 1</span>}
-                                {item.change === 'same' && <span className="text-slate-300">-</span>}
-                            </div>
+            {myRank && (
+                <GlassCard className="p-4 flex items-center justify-between">
+                    <div className="text-sm text-slate-500">我的排名</div>
+                    <div className="flex items-center gap-4 text-sm">
+                        <Badge variant="blue">#{myRank.rank ?? "--"}</Badge>
+                        <span className="text-slate-700">{myRank.total_sessions} 次练习</span>
+                        <span className="font-semibold text-slate-900">均分 {Math.round(myRank.average_score || 0)}</span>
+                    </div>
+                </GlassCard>
+            )}
+
+            {isLoading ? (
+                <GlassCard className="p-10 flex items-center justify-center text-slate-500 gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    正在加载排行榜...
+                </GlassCard>
+            ) : loadError ? (
+                <GlassCard className="p-10 text-center text-amber-700 bg-amber-50 border border-amber-200">
+                    <div>排行榜暂时无法加载：{loadError}</div>
+                    <button
+                        type="button"
+                        onClick={() => setReloadVersion((version) => version + 1)}
+                        className="mt-4 rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-bold text-amber-800 shadow-sm hover:bg-amber-100"
+                    >
+                        重试排行榜
+                    </button>
+                </GlassCard>
+            ) : entries.length === 0 ? (
+                <GlassCard className="p-10 text-center">
+                    <p className="text-sm font-semibold text-slate-900">暂无排行榜数据</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                        当前筛选范围还没有可评估训练进入榜单；至少完成一次有足够对话证据的训练后，均分和排名会自动刷新。
+                    </p>
+                    <div className="mt-5 flex justify-center">
+                        <Link
+                            href="/training"
+                            className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                        >
+                            去训练大厅
+                            <ArrowRight className="w-4 h-4" />
+                        </Link>
+                    </div>
+                </GlassCard>
+            ) : (
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {topEntries.map((entry) => (
+                            <GlassCard key={entry.user_id} className="p-6 text-center">
+                                <div className="text-4xl mb-2">{rankBadge(entry.rank)}</div>
+                                <div className="text-lg font-bold text-slate-900">{entry.username}</div>
+                                <div className="text-3xl font-black text-blue-600 mt-2">
+                                    {Math.round(entry.average_score)}
+                                    <span className="text-sm font-normal text-slate-400 ml-1">分</span>
+                                </div>
+                                <div className="text-xs text-slate-400 mt-1">{entry.total_sessions} 次练习</div>
+                            </GlassCard>
+                        ))}
+                    </div>
+
+                    <GlassCard className="p-0 overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 flex text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50/50">
+                            <div className="w-16 text-center">排名</div>
+                            <div className="flex-1">用户</div>
+                            <div className="w-24 text-center">平均分</div>
+                            <div className="w-24 text-center hidden sm:block">最佳分</div>
+                            <div className="w-24 text-center hidden sm:block">练习次数</div>
                         </div>
-                    ))}
-                </div>
-            </GlassCard>
+                        <div className="divide-y divide-slate-100">
+                            {remainingEntries.map((entry) => (
+                                <div key={entry.user_id} className="flex items-center p-4 hover:bg-slate-50 transition-colors">
+                                    <div className="w-16 text-center font-bold text-slate-500">{entry.rank}</div>
+                                    <div className="flex-1 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
+                                            <User className="w-4 h-4 text-slate-500" />
+                                        </div>
+                                        <span className="font-medium text-slate-700 truncate">{entry.username}</span>
+                                    </div>
+                                    <div className="w-24 text-center font-bold text-slate-900">{Math.round(entry.average_score)}</div>
+                                    <div className="w-24 text-center text-slate-500 hidden sm:block">{Math.round(entry.best_score)}</div>
+                                    <div className="w-24 text-center text-slate-500 hidden sm:block">{entry.total_sessions}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </GlassCard>
+                </>
+            )}
+
+            <div className="text-xs text-slate-400 flex items-center gap-2">
+                <Trophy className="w-3 h-3" />
+                若某次训练因证据不足暂不可评估，它会保留在训练记录里，但不会拉高或拉低排行榜均分。
+            </div>
         </div>
-    )
+    );
 }

@@ -9,10 +9,8 @@ Implements Constitution Principles:
 import hashlib
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import wraps
-
-from common.error_handling.result import Result
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +56,7 @@ class ResponseCache:
         entry = self._cache[key]
 
         # Check if expired
-        if datetime.utcnow() > entry["expires"]:
+        if datetime.now(UTC) > entry["expires"]:
             del self._cache[key]
             return None
 
@@ -76,7 +74,7 @@ class ResponseCache:
             **kwargs: Arguments that form the unique key
         """
         key = self._generate_key(prefix, **kwargs)
-        expires = datetime.utcnow() + timedelta(seconds=ttl or self.default_ttl)
+        expires = datetime.now(UTC) + timedelta(seconds=ttl or self.default_ttl)
 
         self._cache[key] = {
             "value": value,
@@ -99,7 +97,7 @@ class ResponseCache:
 
     def cleanup_expired(self) -> int:
         """Remove expired entries, returns count removed"""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         expired_keys = [
             key for key, entry in self._cache.items()
             if now > entry["expires"]

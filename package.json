@@ -1,0 +1,8 @@
+{
+  "name": "sales-training-qoder-root",
+  "private": true,
+  "packageManager": "pnpm@10.20.0",
+  "scripts": {
+    "test": "node scripts/run-vitest-root.mjs"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M014/S04/T02",
+  "timestamp": 1775925309955,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"",
+      "exitCode": 0,
+      "durationMs": 1765,
+      "verdict": "pass"
+    }
+  ],
+  "postExecutionChecks": [
+    {
+      "category": "pattern",
+      "target": "web/src/app/(user)/practice/[sessionId]/page.tsx",
+      "passed": true,
+      "message": "File web/src/app/(user)/practice/[sessionId]/page.tsx mixes async/await with .then() promise chaining — consider using consistent async style",
+      "blocking": false
+    }
+  ]
+}

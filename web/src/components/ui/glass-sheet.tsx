@@ -23,18 +23,43 @@ export function GlassSheet({
     className,
 }: GlassSheetProps) {
     const [mounted, setMounted] = React.useState(false);
+    const panelRef = React.useRef<HTMLDivElement>(null);
+    const previousFocusRef = React.useRef<HTMLElement | null>(null);
 
     React.useEffect(() => {
         setMounted(true);
         if (isOpen) {
+            previousFocusRef.current = document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
             document.body.style.overflow = "hidden";
+            window.setTimeout(() => {
+                panelRef.current?.focus();
+            }, 0);
         } else {
             document.body.style.overflow = "unset";
+            previousFocusRef.current?.focus();
         }
         return () => {
             document.body.style.overflow = "unset";
         };
     }, [isOpen]);
+
+    React.useEffect(() => {
+        if (!isOpen) return;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                onClose();
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [isOpen, onClose]);
 
     if (!mounted) return null;
 
@@ -67,6 +92,10 @@ export function GlassSheet({
 
                     {/* Sheet Content */}
                     <motion.div
+                        ref={panelRef}
+                        role="dialog"
+                        aria-modal="true"
+                        tabIndex={-1}
                         variants={variants}
                         initial="closed"
                         animate="open"
@@ -83,6 +112,7 @@ export function GlassSheet({
                         <Button
                             variant="ghost"
                             size="icon"
+                            aria-label="关闭面板"
                             onClick={onClose}
                             className="absolute right-4 top-4 rounded-full hover:bg-white/50 text-slate-500"
                         >

@@ -1,20 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import packageJson from "../../../package.json";
+import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { DashboardSkeleton } from "@/components/dashboard-skeleton";
+import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { SwipeableItem } from "@/components/ui/swipeable-item";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import {
-    TrendingUp, Filter, MoreHorizontal,
-    Calendar, CheckCircle2, Zap, BarChart3, ArrowRight, Headphones
+    TrendingUp,
+    Filter,
+    CheckCircle2,
+    Zap,
+    ArrowRight,
+    Presentation,
 } from "lucide-react";
 import Link from "next/link";
+import { api } from "@/lib/api/client";
+import { DashboardStats, Recommendation, SessionItem } from "@/lib/api/types";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -23,10 +32,9 @@ import {
     DialogTrigger,
 } from "@/components/ui/glass-modal";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api/client";
-import { DashboardStats, SessionItem, Recommendation } from "@/lib/api/types";
 
-// Helper Functions
+const DASHBOARD_HISTORY_FALLBACK_PREFIX = "session-";
+
 const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -37,109 +45,364 @@ const formatTimeAgo = (isoString: string) => {
     const date = new Date(isoString);
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
+
     if (diffInSeconds < 60) return "刚刚";
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}分钟前`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}小时前`;
-    return "昨天"; // Simplified for mock
+    if (diffInSeconds < 172800) return "昨天";
+    return `${Math.floor(diffInSeconds / 86400)}天前`;
 };
+
+const DEFAULT_STATS: DashboardStats = {
+    weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
+    last_session: { score: 0, percentile: 50, trend: "stable" },
+    score_basis: "session_evidence_projection_evaluable_only",
+    evaluable_sessions: 0,
+    not_evaluable_sessions: 0,
+    effectiveness: {
+        pass_rate_3min_flow: 0,
+        pass_rate_5turn_defense: 0,
+        pass_rate_4step_structure: 0,
+        next_day_retry_rate: 0,
+    },
+};
+
+function formatScoreBasisCopy(stats: DashboardStats): string {
+    const evaluableSessions = stats.evaluable_sessions ?? 0;
+    const notEvaluableSessions = stats.not_evaluable_sessions ?? 0;
+    return `均分仅统计 ${evaluableSessions} 次可评估训练，${notEvaluableSessions} 次证据不足训练不会计入均分。`;
+}
+
+const DEFAULT_RECOMMENDATION: Recommendation = {
+    title: "开始练习",
+    reason: "欢迎使用训练系统，开始一次练习来提升您的技能吧！",
+    action_label: "开始训练",
+    target_path: "/training",
+};
+
+function getGreeting(): string {
+    const hour = new Date().getHours();
+    if (hour < 12) return "早安";
+    if (hour < 18) return "午安";
+    return "晚安";
+}
+
+function getVersionBadge(): string {
+    return `v${packageJson.version}`;
+}
+
+function getDisplayName(currentUser: ReturnType<typeof useCurrentUser>["data"]): string {
+    return currentUser?.display_name || currentUser?.name || currentUser?.email?.split("@")[0] || "用户";
+}
+
+function getRecommendationSourceCopy(recommendation: Recommendation): string | null {
+    if (recommendation.recommendation_kind === "presentation_page_retry") {
+        return recommendation.focus_page
+            ? `推荐来源：上次 PPT 报告的第 ${recommendation.focus_page} 页缺口与必讲点覆盖。`
+            : "推荐来源：上次 PPT 报告的页级缺口与必讲点覆盖。";
+    }
+    if (recommendation.recommendation_kind === "sales_retry" || recommendation.score_basis) {
+        return "推荐来源：上次可评估训练报告的主问题与下一轮目标。";
+    }
+    return null;
+}
+
+function isTodayRetryRecommendation(recommendation: Recommendation): boolean {
+    return Boolean(
+        recommendation.is_due_today
+        || recommendation.recommendation_kind === "sales_retry"
+        || recommendation.recommendation_kind === "presentation_page_retry",
+    );
+}
+
+function formatSuggestedDuration(recommendation: Recommendation): string | null {
+    if (typeof recommendation.suggested_duration === "string" && recommendation.suggested_duration.trim()) {
+        return recommendation.suggested_duration.trim();
+    }
+    if (typeof recommendation.suggested_duration === "number" && Number.isFinite(recommendation.suggested_duration)) {
+        return `${recommendation.suggested_duration} 分钟`;
+    }
+    if (typeof recommendation.suggested_duration_minutes === "number" && Number.isFinite(recommendation.suggested_duration_minutes)) {
+        return `${recommendation.suggested_duration_minutes} 分钟`;
+    }
+    return null;
+}
+
+function resolveDashboardSessionId(item: Pick<SessionItem, "id" | "session_id">): string | null {
+    const sessionId = item.session_id?.trim();
+    if (sessionId) {
+        return sessionId;
+    }
+
+    const fallbackId = item.id?.trim();
+    if (fallbackId && !fallbackId.startsWith(DASHBOARD_HISTORY_FALLBACK_PREFIX)) {
+        return fallbackId;
+    }
+
+    return null;
+}
+
+function getDashboardHistoryActions(item: SessionItem): {
+    historyHref: string;
+    reportHref: string | null;
+    reportLabel: string;
+    disabledReason: string | null;
+} {
+    // Dashboard 首页只保留“查看报告”深链，不重新引入导出报告 affordance。
+    const sessionId = resolveDashboardSessionId(item);
+    const supportsSharedReportRoute = item.scenario_type === "sales" || item.scenario_type === "presentation";
+
+    if (!sessionId) {
+        return {
+            historyHref: "/history",
+            reportHref: null,
+            reportLabel: "报告暂不可用",
+            disabledReason: "缺少会话编号，请到历史页核对这条记录。",
+        };
+    }
+
+    if (!supportsSharedReportRoute) {
+        return {
+            historyHref: "/history",
+            reportHref: null,
+            reportLabel: "报告暂不可用",
+            disabledReason: "当前记录类型请到历史页查看，首页暂不提供快捷入口。",
+        };
+    }
+
+    if (item.status !== "completed") {
+        return {
+            historyHref: "/history",
+            reportHref: null,
+            reportLabel: "报告生成中",
+            disabledReason: "会话完成并生成统一训练证据后即可查看报告。",
+        };
+    }
+
+    return {
+        historyHref: "/history",
+        reportHref: `/practice/${sessionId}/report`,
+        reportLabel: "查看报告",
+        disabledReason: null,
+    };
+}
+
+function getOnboardingTitle(hasHistory: boolean): string {
+    return hasHistory ? "继续按这 3 步推进训练" : "第一次来，先这样开始";
+}
 
 export default function HomePage() {
     const router = useRouter();
-    // State for modals
+    const { data: currentUser } = useCurrentUser();
+    const displayName = getDisplayName(currentUser);
+    const versionBadge = getVersionBadge();
     const [isWeeklyStatsOpen, setIsWeeklyStatsOpen] = useState(false);
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
-    
-    // Data State
+
     const [isLoading, setIsLoading] = useState(true);
-    const [stats, setStats] = useState<DashboardStats | null>(null);
-    const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+    const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
+    const [recommendation, setRecommendation] = useState<Recommendation>(DEFAULT_RECOMMENDATION);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
+    const [dashboardDegradedSections, setDashboardDegradedSections] = useState<string[]>([]);
+    const [dashboardReloadVersion, setDashboardReloadVersion] = useState(0);
 
     const handleDeleteHistory = (id: string) => {
-        setHistoryItems(prev => prev.filter(item => item.id !== id));
+        setHistoryItems((prev) => prev.filter((item) => item.id !== id));
     };
 
-    // Load Data from API
     useEffect(() => {
         const loadDashboardData = async () => {
-            try {
-                setIsLoading(true);
-                // Parallel fetching for better performance
-                const [statsData, recData, historyData] = await Promise.all([
-                    api.dashboard.getStats(),
-                    api.dashboard.getRecommendation(),
-                    api.dashboard.getHistory()
-                ]);
+            setIsLoading(true);
+            const [statsResult, recResult, historyResult] = await Promise.allSettled([
+                api.dashboard.getStats(),
+                api.dashboard.getRecommendation(),
+                api.dashboard.getHistory(),
+            ]);
 
-                setStats(statsData);
-                setRecommendation(recData);
-                setHistoryItems(historyData);
-            } catch (error) {
-                console.error("Failed to load dashboard data:", error);
-                // In a real app, you might show a toast error here
-            } finally {
-                setIsLoading(false);
+            const degradedSections: string[] = [];
+
+            if (statsResult.status === "fulfilled") {
+                setStats(statsResult.value);
+            } else {
+                setStats(DEFAULT_STATS);
+                degradedSections.push("训练统计");
             }
+
+            if (recResult.status === "fulfilled") {
+                setRecommendation(recResult.value);
+            } else {
+                setRecommendation(DEFAULT_RECOMMENDATION);
+                degradedSections.push("推荐入口");
+            }
+
+            if (historyResult.status === "fulfilled") {
+                setHistoryItems(historyResult.value);
+            } else {
+                setHistoryItems([]);
+                degradedSections.push("最近记录");
+            }
+
+            setDashboardDegradedSections(degradedSections);
+            setIsLoading(false);
         };
 
-        loadDashboardData();
-    }, []);
+        void loadDashboardData();
+    }, [dashboardReloadVersion]);
 
-    if (isLoading || !stats || !recommendation) {
+    const resolvedHistoryItems = historyItems.map((item) => ({
+        item,
+        historyActions: getDashboardHistoryActions(item),
+    }));
+    const reportShortcut = [...resolvedHistoryItems]
+        .filter(({ historyActions }) => historyActions.reportHref)
+        .sort((left, right) => {
+            const leftTime = Date.parse(left.item.start_time);
+            const rightTime = Date.parse(right.item.start_time);
+
+            if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
+                return 0;
+            }
+            if (Number.isNaN(leftTime)) {
+                return 1;
+            }
+            if (Number.isNaN(rightTime)) {
+                return -1;
+            }
+
+            return rightTime - leftTime;
+        })[0];
+    const hasHistory = historyItems.length > 0;
+    const isStatsDegraded = dashboardDegradedSections.includes("训练统计");
+    const isRecommendationDegraded = dashboardDegradedSections.includes("推荐入口");
+    const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
+    const displayRecommendation: Recommendation = isRecommendationDegraded
+        ? {
+            title: "今日复练任务暂不可用",
+            reason: "推荐接口暂时无法读取，不代表今天没有复练任务；可先进入训练大厅或稍后重试。",
+            action_label: "去训练大厅",
+            target_path: "/training",
+        }
+        : recommendation;
+    const recommendationSourceCopy = isRecommendationDegraded
+        ? "推荐状态：接口读取失败，未用默认训练入口伪装成真实推荐。"
+        : getRecommendationSourceCopy(displayRecommendation);
+    const shouldShowTodayRetryCard = !isRecommendationDegraded && isTodayRetryRecommendation(displayRecommendation);
+    const suggestedDurationCopy = formatSuggestedDuration(displayRecommendation);
+    const todayRetryDetails = [
+        displayRecommendation.due_reason ? `到期原因：${displayRecommendation.due_reason}` : null,
+        displayRecommendation.focus ? `本次焦点：${displayRecommendation.focus}` : null,
+        suggestedDurationCopy ? `建议时长：${suggestedDurationCopy}` : null,
+    ].filter((detail): detail is string => Boolean(detail));
+    const onboardingSteps = [
+        {
+            key: "train",
+            badge: "第 1 步",
+            title: displayRecommendation.title,
+            description: displayRecommendation.reason,
+            href: displayRecommendation.target_path,
+            actionLabel: displayRecommendation.action_label,
+            icon: Zap,
+            accentClassName: "bg-blue-50 text-blue-700 border-blue-100",
+            buttonClassName: "rounded-full bg-slate-900 text-white hover:bg-slate-800",
+        },
+        {
+            key: "history",
+            badge: "第 2 步",
+            title: "去历史页复盘",
+            description: "完整记录、筛选与复练线索统一收口在历史页。",
+            href: "/history",
+            actionLabel: "去历史页",
+            icon: Presentation,
+            accentClassName: "bg-violet-50 text-violet-700 border-violet-100",
+            buttonClassName: "rounded-full",
+        },
+        {
+            key: "report",
+            badge: "第 3 步",
+            title: reportShortcut ? "打开最近一次可用报告" : "完成训练后看统一报告",
+            description: reportShortcut
+                ? `最近一次可用报告：${reportShortcut.item.title}`
+                : "报告生成后，可从最近记录或历史页进入统一报告。",
+            href: reportShortcut?.historyActions.reportHref ?? "/history",
+            actionLabel: "报告入口",
+            icon: CheckCircle2,
+            accentClassName: "bg-emerald-50 text-emerald-700 border-emerald-100",
+            buttonClassName: "rounded-full",
+        },
+    ];
+    const versionDialogHighlights = [
+        {
+            title: displayRecommendation.title,
+            description: displayRecommendation.reason,
+            icon: Zap,
+            iconClassName: "bg-blue-100 text-blue-600",
+        },
+        {
+            title: hasHistory ? "最近记录入口已就绪" : "先完成第一次训练",
+            description: hasHistory
+                ? `首页当前已加载 ${historyItems.length} 条最近记录，可直接去历史页或统一报告继续复盘。`
+                : "完成第一次训练后，首页会出现历史页和统一报告的快捷入口。",
+            icon: Presentation,
+            iconClassName: "bg-violet-100 text-violet-600",
+        },
+        {
+            title: "首页只保留真实闭环入口",
+            description: reportShortcut
+                ? "这个版本支持继续训练、查看历史，以及直接打开最近一次可用报告。"
+                : "这个版本支持先训练、再去历史页/统一报告复盘，不再放装饰性空壳按钮。",
+            icon: CheckCircle2,
+            iconClassName: "bg-emerald-100 text-emerald-600",
+        },
+    ];
+
+    if (isLoading) {
         return <DashboardSkeleton />;
     }
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
-
-            {/* Dynamic Header */}
             <header className="flex items-end justify-between px-2">
                 <div>
                     <div className="flex items-center gap-2 mb-3">
                         <Dialog>
                             <DialogTrigger asChild>
                                 <button className="bg-yellow-100/50 text-yellow-700 border border-yellow-200/50 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider hover:bg-yellow-100 transition-colors">
-                                    抢先体验 v2.4.0
+                                    {versionBadge}
                                 </button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>版本 2.4.0 更新日志</DialogTitle>
-                                    <DialogDescription>发布于 2026年1月10日</DialogDescription>
+                                    <DialogTitle>当前版本可用入口</DialogTitle>
+                                    <DialogDescription>{versionBadge} 当前只展示真实可用的训练、历史与报告入口。</DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4 py-4">
-                                    <div className="flex gap-3">
-                                        <div className="mt-1 bg-amber-100 p-1 rounded-full h-fit"><Headphones className="w-3 h-3 text-amber-600" /></div>
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-900">新板块：客户服务训练</div>
-                                            <p className="text-xs text-slate-500">模拟高压投诉场景，提升危机处理能力。</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <div className="mt-1 bg-blue-100 p-1 rounded-full h-fit"><Zap className="w-3 h-3 text-blue-600" /></div>
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-900">新角色：谈判教练</div>
-                                            <p className="text-xs text-slate-500">练习薪资谈判与合同商议。</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <div className="mt-1 bg-emerald-100 p-1 rounded-full h-fit"><CheckCircle2 className="w-3 h-3 text-emerald-600" /></div>
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-900">性能优化</div>
-                                            <p className="text-xs text-slate-500">语音合成响应速度大幅提升。</p>
-                                        </div>
-                                    </div>
+                                    {versionDialogHighlights.map((highlight) => {
+                                        const Icon = highlight.icon;
+                                        return (
+                                            <div key={highlight.title} className="flex gap-3">
+                                                <div className={cn("mt-1 p-1 rounded-full h-fit", highlight.iconClassName)}>
+                                                    <Icon className="w-3 h-3" />
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-bold text-slate-900">{highlight.title}</div>
+                                                    <p className="text-xs text-slate-500">{highlight.description}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                                 <DialogFooter>
-                                    <Button variant="ghost" onClick={() => setIsWeeklyStatsOpen(false)} className="rounded-full">稍后再说</Button>
-                                    <Button onClick={() => router.push('/training/customer-service')} className="rounded-full bg-slate-900 text-white px-6">立即体验</Button>
+                                    <DialogClose asChild>
+                                        <Button variant="ghost" className="rounded-full">稍后再看</Button>
+                                    </DialogClose>
+                                    <DialogClose asChild>
+                                        <Button onClick={() => router.push(displayRecommendation.target_path)} className="rounded-full bg-slate-900 text-white px-6">{displayRecommendation.action_label}</Button>
+                                    </DialogClose>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
                     </div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tight leading-tight">
-                        早安, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 cursor-pointer hover:opacity-80 transition-opacity">亚历山大</span> 👋
+                        {getGreeting()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 cursor-pointer hover:opacity-80 transition-opacity">{displayName}</span> 👋
                     </h1>
                     <p className="text-slate-500 mt-2 text-lg font-medium">查看您的训练概览与最新进展。</p>
                 </div>
@@ -151,7 +414,7 @@ export default function HomePage() {
                                 <div className="flex flex-col items-end">
                                     <span className="text-[10px] uppercase font-bold text-slate-400 group-hover:text-blue-500 transition-colors">本周练习</span>
                                     <span className="text-base font-bold text-slate-900">
-                                        {(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)} 小时
+                                        {isStatsDegraded ? "统计暂不可用" : `${(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)} 小时`}
                                     </span>
                                 </div>
                                 <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
@@ -162,208 +425,315 @@ export default function HomePage() {
                         <DialogContent className="max-w-2xl">
                             <DialogHeader>
                                 <DialogTitle>本周训练报告</DialogTitle>
-                                <DialogDescription>您的训练状态非常棒！</DialogDescription>
+                                <DialogDescription>{isStatsDegraded ? "训练统计接口暂时无法读取，请稍后重试。" : "您的训练状态非常棒！"}</DialogDescription>
                             </DialogHeader>
-                            <div className="grid grid-cols-3 gap-4 py-6">
-                                <div className="p-4 bg-slate-50 rounded-2xl">
-                                    <div className="text-xs font-bold text-slate-400 uppercase">总时长</div>
-                                    <div className="text-2xl font-black text-slate-900 mt-1">
-                                        {(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)}h
+                            {isStatsDegraded ? (
+                                <div className="my-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                                    训练统计模块失败时不展示 0 小时、0 场或 0% 复练率，避免把接口失败误读成真实空数据。
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="grid grid-cols-3 gap-4 py-6">
+                                        <div className="p-4 bg-slate-50 rounded-2xl">
+                                            <div className="text-xs font-bold text-slate-400 uppercase">总时长</div>
+                                            <div className="text-2xl font-black text-slate-900 mt-1">
+                                                {(stats.weekly_activity.total_duration_minutes / 60).toFixed(1)}h
+                                            </div>
+                                            <div className={cn("text-xs font-bold mt-1", stats.weekly_activity.trend_direction === "up" ? "text-emerald-600" : "text-red-600")}>
+                                                {stats.weekly_activity.trend_direction === "up" ? "+" : ""}{stats.weekly_activity.trend_percentage}% 较上周
+                                            </div>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl">
+                                            <div className="text-xs font-bold text-slate-400 uppercase">训练场次</div>
+                                            <div className="text-2xl font-black text-slate-900 mt-1">{stats.weekly_activity.session_count}</div>
+                                            <div className="text-xs text-slate-500 font-bold mt-1">平均 {stats.weekly_activity.session_count > 0 ? Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count) : 0}分钟 / 场</div>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl">
+                                            <div className="text-xs font-bold text-slate-400 uppercase">次日复练率</div>
+                                            <div className="text-xl font-black text-blue-600 mt-1">
+                                                {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className={cn("text-xs font-bold mt-1", stats.weekly_activity.trend_direction === 'up' ? "text-emerald-600" : "text-red-600")}>
-                                        {stats.weekly_activity.trend_direction === 'up' ? '+' : ''}{stats.weekly_activity.trend_percentage}% 较上周
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
+                                            <p className="text-[11px] text-blue-700 font-semibold">3分钟连续表达通过率</p>
+                                            <p className="text-xl font-black text-blue-900 mt-1">
+                                                {(stats.effectiveness?.pass_rate_3min_flow ?? 0).toFixed(1)}%
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
+                                            <p className="text-[11px] text-emerald-700 font-semibold">5轮追问稳定通过率</p>
+                                            <p className="text-xl font-black text-emerald-900 mt-1">
+                                                {(stats.effectiveness?.pass_rate_5turn_defense ?? 0).toFixed(1)}%
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                                            <p className="text-[11px] text-amber-700 font-semibold">四段结构完整率</p>
+                                            <p className="text-xl font-black text-amber-900 mt-1">
+                                                {(stats.effectiveness?.pass_rate_4step_structure ?? 0).toFixed(1)}%
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl bg-violet-50 border border-violet-100 p-3">
+                                            <p className="text-[11px] text-violet-700 font-semibold">次日复练率</p>
+                                            <p className="text-xl font-black text-violet-900 mt-1">
+                                                {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl">
-                                    <div className="text-xs font-bold text-slate-400 uppercase">训练场次</div>
-                                    <div className="text-2xl font-black text-slate-900 mt-1">{stats.weekly_activity.session_count}</div>
-                                    <div className="text-xs text-slate-500 font-bold mt-1">平均 {Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count)}分钟 / 场</div>
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl">
-                                    <div className="text-xs font-bold text-slate-400 uppercase">重点领域</div>
-                                    <div className="text-xl font-black text-blue-600 mt-1">异议处理</div>
-                                </div>
-                            </div>
-                            <div className="h-48 bg-slate-50 rounded-2xl flex items-center justify-center border border-dashed border-slate-200">
-                                <span className="text-slate-400 font-medium flex items-center gap-2">
-                                    <BarChart3 className="w-4 h-4" /> 活动图表可视化占位符
-                                </span>
-                            </div>
+                                </>
+                            )}
                             <DialogFooter>
-                                <Button variant="outline" className="rounded-full">下载报告</Button>
-                                <Button className="rounded-full bg-slate-900 text-white">设定目标</Button>
+                                <Button variant="outline" className="rounded-full" onClick={() => setIsWeeklyStatsOpen(false)}>关闭</Button>
+                                <Link href="/history">
+                                    <Button className="rounded-full bg-slate-900 text-white">查看历史报告</Button>
+                                </Link>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
                 </div>
             </header>
 
-            {/* Dashboard Highlights / Call to Action */}
+            {dashboardDegradedSections.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <span>{dashboardDegradedSections.join("、")}暂不可用，页面已保留可用入口；请稍后重试或前往对应页面查看。</span>
+                    <button
+                        type="button"
+                        onClick={() => setDashboardReloadVersion((version) => version + 1)}
+                        className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-800 shadow-sm hover:bg-amber-100"
+                    >
+                        重试首页数据
+                    </button>
+                </div>
+            )}
+
+            <section className="grid grid-cols-1 xl:grid-cols-[0.9fr_2.1fr] gap-4">
+                <GlassCard className="p-6 bg-white/80 border-none shadow-sm ring-1 ring-slate-100">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                            <Zap className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">最小上手指引</p>
+                            <h2 className="text-xl font-bold text-slate-900 mt-1">{getOnboardingTitle(hasHistory)}</h2>
+                        </div>
+                    </div>
+                    <p className="text-sm leading-6 text-slate-600">
+                        {displayRecommendation.reason}
+                    </p>
+                    <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-xs leading-6 text-slate-500">
+                        先训练，再去历史页和统一报告复盘；首页不再放看起来能点、实际没有闭环的装饰性按钮。
+                    </div>
+                </GlassCard>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {onboardingSteps.map((step) => {
+                        const Icon = step.icon;
+                        return (
+                            <GlassCard key={step.key} className="p-5 bg-white/80 border-none shadow-sm ring-1 ring-slate-100 flex flex-col gap-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide", step.accentClassName)}>
+                                            {step.badge}
+                                        </span>
+                                        <h3 className="text-base font-bold text-slate-900 mt-3">{step.title}</h3>
+                                    </div>
+                                    <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", step.accentClassName)}>
+                                        <Icon className="w-5 h-5" />
+                                    </div>
+                                </div>
+                                <p className="text-sm leading-6 text-slate-600 min-h-[72px]">{step.description}</p>
+                                <Link href={step.href}>
+                                    <Button variant={step.key === "train" ? "primary" : "outline"} className={step.buttonClassName}>
+                                        {step.actionLabel} <ArrowRight className="ml-2 w-4 h-4" />
+                                    </Button>
+                                </Link>
+                            </GlassCard>
+                        );
+                    })}
+                </div>
+            </section>
+
+            <LearnerHelpCard />
+
+            {isStatsDegraded ? (
+                <section>
+                    <GlassCard className="p-5 border border-amber-200 bg-amber-50/80">
+                        <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">训练统计暂不可用</p>
+                        <p className="mt-2 text-sm text-amber-800">统计模块加载失败时，首页不会显示 0% 通过率或 0% 次日复练率；请稍后重试首页数据。</p>
+                    </GlassCard>
+                </section>
+            ) : stats.effectiveness && (
+                <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">3分钟连续表达通过率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_3min_flow.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">5轮追问稳定通过率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_5turn_defense.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">四段结构完整率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_4step_structure.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">次日复练率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.next_day_retry_rate.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                </section>
+            )}
+
             <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <GlassCard className="col-span-1 md:col-span-2 p-8 bg-gradient-to-r from-slate-900 to-slate-800 text-white border-none relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none" />
                     <div className="relative z-10 flex flex-col justify-between h-full gap-6">
                         <div>
                             <div className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-200 text-xs font-bold uppercase tracking-wider mb-4 border border-blue-500/30">
-                                系统推荐
+                                {shouldShowTodayRetryCard ? "今日复练任务" : "系统推荐"}
                             </div>
-                            <h2 className="text-2xl font-bold mb-2">{recommendation.title}</h2>
+                            <h2 className="text-2xl font-bold mb-2">{displayRecommendation.title}</h2>
                             <p className="text-slate-300 text-sm leading-relaxed max-w-lg">
-                                {recommendation.reason}
+                                {displayRecommendation.reason}
                             </p>
+                            {todayRetryDetails.length > 0 && (
+                                <ul className="mt-3 space-y-1 text-xs text-blue-100/90">
+                                    {todayRetryDetails.map((detail) => (
+                                        <li key={detail}>• {detail}</li>
+                                    ))}
+                                </ul>
+                            )}
+                            {recommendationSourceCopy && (
+                                <p className="text-xs text-blue-100/80 mt-3">
+                                    {recommendationSourceCopy}
+                                </p>
+                            )}
                         </div>
-                        <Link href={recommendation.target_path}>
+                        <Link href={displayRecommendation.target_path}>
                             <Button className="w-fit rounded-full bg-white text-slate-900 hover:bg-blue-50 font-bold">
-                                {recommendation.action_label} <ArrowRight className="ml-2 w-4 h-4" />
+                                {displayRecommendation.action_label} <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
                         </Link>
                     </div>
                 </GlassCard>
 
                 <GlassCard className="col-span-1 p-6 flex flex-col justify-center items-center text-center gap-4">
-                     <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
+                    <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
                         <TrendingUp className="w-8 h-8" />
                     </div>
                     <div>
-                        <div className="text-3xl font-black text-slate-900">{stats.last_session.score}</div>
+                        <div className="text-3xl font-black text-slate-900">{isStatsDegraded ? "暂不可用" : (stats.last_session?.score ?? 0)}</div>
                         <div className="text-xs font-bold text-slate-400 uppercase mt-1">上次得分</div>
                     </div>
-                     <p className="text-xs text-slate-500 px-4">您的表现优于 {stats.last_session.percentile}% 的用户，继续保持！</p>
+                    <p className="text-xs text-slate-500 px-4">
+                        {isStatsDegraded ? "训练统计接口失败时不展示默认 0 分，避免误导为真实成绩。" : formatScoreBasisCopy(stats)}
+                    </p>
                 </GlassCard>
             </section>
 
-            {/* Recent Activity */}
             <section>
-                <div className="flex items-center justify-between mb-6 px-2">
+                <div className="flex items-center justify-between mb-6 px-2 gap-3 flex-wrap">
                     <h2 className="text-xl font-bold text-slate-900 flex items-center gap-3">
                         最近记录
                     </h2>
-                    <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-                        <DialogTrigger asChild>
+                    <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center">
+                        {/* 首页不承载假筛选弹窗，复杂筛选统一深链到历史页。 */}
+                        <span className="text-xs text-slate-400">高级筛选请在历史页进行</span>
+                        <Link href="/history">
                             <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-900 hover:bg-white/50">
-                                <Filter className="w-4 h-4 mr-2" /> 筛选
+                                <Filter className="w-4 h-4 mr-2" /> 去历史页筛选
                             </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>筛选记录</DialogTitle>
-                            </DialogHeader>
-                            <div className="py-6 space-y-4">
-                                <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">日期范围</label>
-                                    <div className="flex gap-2">
-                                        <Button variant="outline" className="flex-1 justify-start font-normal"><Calendar className="w-4 h-4 mr-2 text-slate-400" /> 开始日期</Button>
-                                        <Button variant="outline" className="flex-1 justify-start font-normal"><Calendar className="w-4 h-4 mr-2 text-slate-400" /> 结束日期</Button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">训练类型</label>
-                                    <div className="flex gap-2 flex-wrap">
-                                        <Badge variant="blue" className="cursor-pointer">全部</Badge>
-                                        <Badge variant="neutral" className="cursor-pointer bg-slate-100 hover:bg-slate-200">销售对练</Badge>
-                                        <Badge variant="neutral" className="cursor-pointer bg-slate-100 hover:bg-slate-200">PPT 演示</Badge>
-                                    </div>
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button className="rounded-full bg-slate-900 text-white w-full">应用筛选</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                        </Link>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {historyItems.length === 0 ? (
                         <div className="col-span-full">
                             <EmptyState
-                                title="暂无历史记录"
-                                description="开始您的第一次 AI 角色扮演，记录将显示在这里。"
-                                actionLabel="开始训练"
-                                onAction={() => router.push('/training')}
+                                title={isHistoryDegraded ? "最近记录暂不可用" : "暂无历史记录"}
+                                description={isHistoryDegraded ? "训练历史接口暂时无法读取，不代表你没有训练记录；可进入历史页重试查看。" : "开始您的第一次 AI 角色扮演，记录将显示在这里。"}
+                                actionLabel={isHistoryDegraded ? "去历史页重试" : "开始训练"}
+                                onAction={() => router.push(isHistoryDegraded ? "/history" : "/training")}
                             />
                         </div>
                     ) : (
-                        historyItems.map((item) => (
-                            <SwipeableItem key={item.id} onDelete={() => handleDeleteHistory(item.id)}>
-                                <Dialog>
-                                    <DialogTrigger asChild>
-                                        <GlassCard className="p-0 flex flex-col hover:shadow-lg transition-all cursor-pointer group bg-white border-none shadow-sm ring-1 ring-slate-100">
-                                            <div className="p-5 flex justify-between items-start pb-4">
-                                                <div className="flex gap-4">
-                                                    <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg group-hover:scale-110 transition-transform",
-                                                        // UI mapping logic
-                                                        item.scenario_type === 'sales_bot' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
-                                                    )}>
-                                                        {item.scenario_type === 'sales_bot' ? 'S' : 'P'}
-                                                    </div>
-                                                    <div className="text-left">
-                                                        <h4 className="font-bold text-base text-slate-900">{item.title}</h4>
-                                                        <p className="text-xs text-slate-500 mt-1 font-medium">
-                                                            {formatTimeAgo(item.start_time)} • 持续 {formatDuration(item.duration_seconds)}
-                                                        </p>
+                        resolvedHistoryItems.map(({ item, historyActions }) => {
+                            return (
+                                <SwipeableItem key={item.id} onDelete={() => handleDeleteHistory(item.id)}>
+                                    <GlassCard className="p-0 flex flex-col hover:shadow-lg transition-all bg-white border-none shadow-sm ring-1 ring-slate-100">
+                                        <div className="p-5 flex justify-between items-start pb-4 gap-4">
+                                            <div className="flex gap-4">
+                                                <div
+                                                    className={cn(
+                                                        "w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg transition-transform",
+                                                        item.scenario_type === "sales" ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600",
+                                                    )}
+                                                >
+                                                    {item.scenario_type === "sales" ? "S" : "P"}
+                                                </div>
+                                                <div className="text-left">
+                                                    <h4 className="font-bold text-base text-slate-900">{item.title}</h4>
+                                                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                                                        {formatTimeAgo(item.start_time)} • 持续 {formatDuration(item.duration_seconds)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <Link href={historyActions.historyHref}>
+                                                <Button variant="ghost" size="sm" className="rounded-full text-slate-500 hover:text-slate-700">
+                                                    查看历史
+                                                </Button>
+                                            </Link>
+                                        </div>
+
+                                        <div className="px-5 pb-5 space-y-4">
+                                            <div className="bg-slate-50 rounded-xl p-3 flex gap-4">
+                                                <div className="flex-1">
+                                                    <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">综合评分</div>
+                                                    <div className="text-2xl font-black text-slate-900">{item.overall_score}</div>
+                                                </div>
+                                                <div className="w-px bg-slate-200 my-1" />
+                                                <div className="flex-1 pl-4">
+                                                    <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">趋势</div>
+                                                    <div className={cn("text-sm font-bold flex items-center gap-1 text-emerald-600")}>
+                                                        --
                                                     </div>
                                                 </div>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-slate-600"><MoreHorizontal className="w-4 h-4" /></Button>
                                             </div>
 
-                                            <div className="px-5 pb-5">
-                                                <div className="bg-slate-50 rounded-xl p-3 flex gap-4">
-                                                    <div className="flex-1">
-                                                        <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">综合评分</div>
-                                                        <div className="text-2xl font-black text-slate-900">{item.overall_score}</div>
-                                                    </div>
-                                                    <div className="w-px bg-slate-200 my-1"></div>
-                                                    <div className="flex-1 pl-4">
-                                                        <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">趋势</div>
-                                                        <div className={cn("text-sm font-bold flex items-center gap-1 text-emerald-600")}>
-                                                            {item.score_trend || "--"}
-                                                        </div>
-                                                    </div>
+                                            <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                <div className="space-y-1">
+                                                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400">快捷入口</div>
+                                                    <p className="text-sm text-slate-600">
+                                                        {historyActions.disabledReason || "可直接打开统一报告；更多筛选与完整记录请前往历史页。"}
+                                                    </p>
                                                 </div>
-                                            </div>
-                                        </GlassCard>
-                                    </DialogTrigger>
-                                    <DialogContent className="max-w-2xl">
-                                        <DialogHeader>
-                                            <DialogTitle className="flex items-center gap-3">
-                                                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center text-sm",
-                                                    item.scenario_type === 'sales_bot' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
-                                                )}>
-                                                    {item.scenario_type === 'sales_bot' ? 'S' : 'P'}
-                                                </div>
-                                                {item.scenario_type === 'sales_bot' ? '会话分析' : '演示分析'}
-                                            </DialogTitle>
-                                            <DialogDescription>ID: #{item.id} • {formatTimeAgo(item.start_time)}</DialogDescription>
-                                        </DialogHeader>
-                                        <div className="grid grid-cols-2 gap-6 py-4">
-                                            <div className="space-y-4">
-                                                <h4 className="font-bold text-slate-900 border-b pb-2">得分详情</h4>
-                                                {/* Simplified placeholder for breakdown */}
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-sm text-slate-600">综合得分</span>
-                                                        <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                            <div className="h-full bg-emerald-500" style={{ width: `${item.overall_score}%` }}></div>
-                                                        </div>
-                                                        <span className="text-sm font-bold text-emerald-600">{item.overall_score}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-4">
-                                                <h4 className="font-bold text-slate-900 border-b pb-2">AI 点评</h4>
-                                                <div className="p-3 rounded-xl text-xs leading-relaxed bg-slate-50 text-slate-600">
-                                                    &quot;{item.feedback_summary || "暂无具体反馈。"}&quot;
+                                                <div className="flex flex-wrap gap-2 sm:justify-end">
+                                                    <Link href={historyActions.historyHref}>
+                                                        <Button variant="outline" className="rounded-full">历史页</Button>
+                                                    </Link>
+                                                    {historyActions.reportHref ? (
+                                                        <Link href={historyActions.reportHref}>
+                                                            <Button className="rounded-full bg-slate-900 text-white">{historyActions.reportLabel}</Button>
+                                                        </Link>
+                                                    ) : (
+                                                        <Button disabled className="rounded-full">{historyActions.reportLabel}</Button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
-                                        <DialogFooter>
-                                            <Button variant="outline" className="rounded-full">分享分析</Button>
-                                            <Button className="rounded-full bg-slate-900 text-white">查看详情</Button>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-                            </SwipeableItem>
-                        ))
+                                    </GlassCard>
+                                </SwipeableItem>
+                            );
+                        })
                     )}
                 </div>
             </section>

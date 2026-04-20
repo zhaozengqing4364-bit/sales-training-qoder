@@ -1,15 +1,17 @@
 "use client";
+import { debug } from "@/lib/debug";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Play, User } from "lucide-react";
-import { api } from "@/lib/api/client";
+import { ArrowLeft, Sparkles, Play, User, Presentation } from "lucide-react";
+import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
+import { RetryFocusIntent } from "@/lib/api/types";
+import { TrainingVoiceMode, useTrainingPreferences } from "@/hooks/use-training-preferences";
 
-// 难度配置
 const DIFFICULTY_CONFIG: Record<string, { label: string; className: string }> = {
     easy: { label: "简单", className: "text-emerald-600 border-emerald-200 bg-emerald-50" },
     medium: { label: "中等", className: "text-blue-600 border-blue-200 bg-blue-50" },
@@ -21,7 +23,7 @@ interface Persona {
     id: string;
     name: string;
     description: string;
-    icon: string;
+    icon?: string;
     difficulty: string;
     is_default?: boolean;
 }
@@ -30,58 +32,261 @@ interface AgentDetail {
     id: string;
     name: string;
     description: string;
-    icon: string;
+    icon?: string;
     category: string;
     welcome_message?: string;
     personas: Persona[];
 }
 
+interface PresentationOption {
+    presentation_id: string;
+    title: string;
+    page_count: number;
+    total_pages?: number;
+    version_number: number;
+    status: "processing" | "ready" | "failed";
+}
+
+const CREATE_SESSION_RETRY_DELAYS_MS = [200, 500, 1200] as const;
+
+function isRetryableCreateSessionError(error: unknown): boolean {
+    if (error instanceof ApiRequestError) {
+        return error.status === 0 || error.status >= 500;
+    }
+    return true;
+}
+
+function getPresentationStatusLabel(status: PresentationOption["status"]): string {
+    switch (status) {
+        case "ready":
+            return "可用";
+        case "processing":
+            return "处理中";
+        case "failed":
+            return "失败";
+        default:
+            return status;
+    }
+}
+
+function parseFocusIntent(raw: string | null): RetryFocusIntent | null {
+    if (!raw) return null;
+
+    try {
+        const parsed = JSON.parse(raw) as Partial<RetryFocusIntent>;
+        const hasMainIssue = typeof parsed.main_issue === "object" && parsed.main_issue !== null;
+        const hasNextGoal = typeof parsed.next_goal === "object" && parsed.next_goal !== null;
+        if (!hasMainIssue && !hasNextGoal) {
+            return null;
+        }
+
+        return {
+            version: String(parsed.version || "sales_core_combination_v1"),
+            source_session_id: String(parsed.source_session_id || "sales-core-combination"),
+            main_issue: parsed.main_issue || null,
+            next_goal: parsed.next_goal || null,
+        };
+    } catch {
+        return null;
+    }
+}
+
 export default function AgentPersonaSelectPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const agentId = params.agentId as string;
+    const requestedPersonaId = searchParams.get("persona_id");
+    const focusIntent = useMemo(() => parseFocusIntent(searchParams.get("focus_intent")), [searchParams]);
+    const { trainingPreferences, saveTrainingPreferences } = useTrainingPreferences();
+    const shouldUseRememberedDefaults = !focusIntent;
 
     const [agent, setAgent] = useState<AgentDetail | null>(null);
     const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
+    const [voiceMode, setVoiceMode] = useState<TrainingVoiceMode>(() => trainingPreferences.voiceMode);
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
+    const [startError, setStartError] = useState<string | null>(null);
+    const [availablePresentations, setAvailablePresentations] = useState<PresentationOption[]>([]);
+    const [selectedPresentationId, setSelectedPresentationId] = useState<string>("");
+    const [isLoadingPresentations, setIsLoadingPresentations] = useState(false);
+    const [presentationLoadError, setPresentationLoadError] = useState<string | null>(null);
 
     useEffect(() => {
         const loadAgent = async () => {
             try {
-                // 获取智能体详情和关联的角色列表
                 const data = await api.agents.getAgentWithPersonas(agentId);
-                setAgent(data);
-                // 默认选中第一个或标记为默认的角色
-                const defaultPersona = data.personas.find((p: Persona) => p.is_default) || data.personas[0];
+                setAgent(data as AgentDetail);
+                const requestedPersona = requestedPersonaId
+                    ? data.personas.find((p: Persona) => p.id === requestedPersonaId)
+                    : null;
+                const rememberedPersona = shouldUseRememberedDefaults && trainingPreferences.agentId === agentId && trainingPreferences.personaId
+                    ? data.personas.find((p: Persona) => p.id === trainingPreferences.personaId)
+                    : null;
+                const defaultPersona = requestedPersona
+                    || rememberedPersona
+                    || data.personas.find((p: Persona) => p.is_default)
+                    || data.personas[0];
                 if (defaultPersona) {
                     setSelectedPersona(defaultPersona.id);
                 }
             } catch (error) {
-                console.error("Failed to load agent:", error);
+                debug.error("Failed to load agent:", error);
             } finally {
                 setIsLoading(false);
             }
         };
-        loadAgent();
-    }, [agentId]);
+        void loadAgent();
+    }, [
+        agentId,
+        requestedPersonaId,
+        shouldUseRememberedDefaults,
+        trainingPreferences.agentId,
+        trainingPreferences.personaId,
+    ]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPresentations = async () => {
+            if (!agent || agent.category !== "presentation") {
+                setAvailablePresentations([]);
+                setSelectedPresentationId("");
+                setPresentationLoadError(null);
+                return;
+            }
+
+            setIsLoadingPresentations(true);
+            setPresentationLoadError(null);
+
+            try {
+                const presentations = await api.presentations.list({
+                    limit: 100,
+                });
+
+                if (cancelled) {
+                    return;
+                }
+
+                const normalized = presentations as PresentationOption[];
+                const rememberedPresentation = shouldUseRememberedDefaults
+                    && trainingPreferences.agentId === agentId
+                    && trainingPreferences.presentationId
+                    ? normalized.find((item) => (
+                        item.presentation_id === trainingPreferences.presentationId
+                        && item.status === "ready"
+                    ))
+                    : null;
+                const preferredSelection = rememberedPresentation?.presentation_id
+                    || normalized.find((item) => item.status === "ready")?.presentation_id
+                    || normalized[0]?.presentation_id
+                    || "";
+                setAvailablePresentations(normalized);
+                setSelectedPresentationId((prev) => {
+                    if (prev && normalized.some((item) => item.presentation_id === prev)) {
+                        return prev;
+                    }
+                    return preferredSelection;
+                });
+            } catch (error) {
+                if (cancelled) {
+                    return;
+                }
+                setAvailablePresentations([]);
+                setSelectedPresentationId("");
+                setPresentationLoadError(getApiErrorMessage(error));
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingPresentations(false);
+                }
+            }
+        };
+
+        void loadPresentations();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        agent,
+        agentId,
+        shouldUseRememberedDefaults,
+        trainingPreferences.agentId,
+        trainingPreferences.presentationId,
+    ]);
+
+    const selectedPresentation = useMemo(() => (
+        availablePresentations.find((item) => item.presentation_id === selectedPresentationId) || null
+    ), [availablePresentations, selectedPresentationId]);
 
     const handleStartPractice = async () => {
         if (!selectedPersona || !agent) return;
-        
+
         setIsStarting(true);
+        setStartError(null);
         try {
-            // 创建练习会话
             const scenarioType = agent.category === "presentation" ? "presentation" : "sales";
-            const session = await api.practice.createSession({
-                scenario_type: scenarioType,
+            if (scenarioType === "presentation") {
+                if (!selectedPresentationId) {
+                    setStartError("请先选择一个标准PPT");
+                    setIsStarting(false);
+                    return;
+                }
+                if (!selectedPresentation || selectedPresentation.status !== "ready") {
+                    setStartError("所选标准PPT尚未就绪，请等待其变为可用状态后再开始练习。");
+                    setIsStarting(false);
+                    return;
+                }
+            }
+
+            const sessionPayload = {
                 agent_id: agentId,
                 persona_id: selectedPersona,
+                scenario_type: scenarioType,
+                presentation_id: scenarioType === "presentation" ? selectedPresentationId : undefined,
+                voice_mode: voiceMode,
+                focus_intent: scenarioType === "sales" && focusIntent ? focusIntent : undefined,
+            } as const;
+
+            saveTrainingPreferences({
+                agentId,
+                personaId: selectedPersona,
+                presentationId: scenarioType === "presentation" ? selectedPresentationId : null,
+                voiceMode,
             });
-            // 跳转到练习页面
-            router.push(`/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}`);
+
+            let session: Awaited<ReturnType<typeof api.practice.createSession>> | null = null;
+            let lastError: unknown = null;
+            for (let attempt = 0; attempt <= CREATE_SESSION_RETRY_DELAYS_MS.length; attempt += 1) {
+                try {
+                    session = await api.practice.createSession(sessionPayload);
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    const retryable = isRetryableCreateSessionError(error);
+                    if (!retryable || attempt === CREATE_SESSION_RETRY_DELAYS_MS.length) {
+                        throw error;
+                    }
+                    const delayMs = CREATE_SESSION_RETRY_DELAYS_MS[attempt];
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
+                }
+            }
+
+            if (!session) {
+                throw lastError ?? new Error("创建会话失败");
+            }
+
+            const presentationParam =
+                scenarioType === "presentation" && selectedPresentationId
+                    ? `&presentation_id=${encodeURIComponent(selectedPresentationId)}`
+                    : "";
+            router.push(
+                `/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}&scenario_type=${scenarioType}&voice_mode=${voiceMode}${presentationParam}`,
+            );
         } catch (error) {
-            console.error("Failed to create session:", error);
+            debug.error("Failed to create session:", error);
+            setStartError(getApiErrorMessage(error));
+        } finally {
             setIsStarting(false);
         }
     };
@@ -113,9 +318,8 @@ export default function AgentPersonaSelectPage() {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
-            {/* 返回按钮 */}
-            <Button 
-                variant="ghost" 
+            <Button
+                variant="ghost"
                 className="w-fit pl-0 text-slate-500 hover:text-slate-900 hover:bg-transparent gap-2"
                 onClick={() => router.back()}
             >
@@ -123,7 +327,6 @@ export default function AgentPersonaSelectPage() {
                 返回
             </Button>
 
-            {/* 智能体信息 */}
             <GlassCard className="p-6">
                 <div className="flex items-start gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center text-3xl">
@@ -133,13 +336,24 @@ export default function AgentPersonaSelectPage() {
                         <h1 className="text-2xl font-bold text-slate-900">{agent.name}</h1>
                         <p className="text-slate-500 mt-1">{agent.description}</p>
                         {agent.welcome_message && (
-                            <p className="text-sm text-slate-400 mt-2 italic">"{agent.welcome_message}"</p>
+                            <p className="text-sm text-slate-400 mt-2 italic">&ldquo;{agent.welcome_message}&rdquo;</p>
                         )}
                     </div>
                 </div>
             </GlassCard>
 
-            {/* 角色选择 */}
+            {agent.category === "sales" && focusIntent ? (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                    <div className="font-bold">本轮训练重点已带入</div>
+                    {focusIntent.main_issue?.issue_text ? (
+                        <div className="mt-1">问题焦点：{focusIntent.main_issue.issue_text}</div>
+                    ) : null}
+                    {focusIntent.next_goal?.goal_text ? (
+                        <div className="mt-1">训练目标：{focusIntent.next_goal.goal_text}</div>
+                    ) : null}
+                </div>
+            ) : null}
+
             <div>
                 <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                     <User className="w-5 h-5" />
@@ -162,21 +376,29 @@ export default function AgentPersonaSelectPage() {
                             return (
                                 <div
                                     key={persona.id}
-                                    onClick={() => setSelectedPersona(persona.id)}
+                                    onClick={() => {
+                                        setSelectedPersona(persona.id);
+                                        saveTrainingPreferences({
+                                            agentId,
+                                            personaId: persona.id,
+                                            presentationId: selectedPresentationId || null,
+                                            voiceMode,
+                                        });
+                                    }}
                                     className="cursor-pointer"
                                 >
-                                    <GlassCard 
+                                    <GlassCard
                                         className={cn(
                                             "p-5 transition-all border-2",
-                                            isSelected 
-                                                ? "border-indigo-500 bg-indigo-50/30" 
-                                                : "border-transparent hover:border-slate-200"
+                                            isSelected
+                                                ? "border-indigo-500 bg-indigo-50/30"
+                                                : "border-transparent hover:border-slate-200",
                                         )}
                                     >
                                         <div className="flex items-start justify-between mb-3">
                                             <span className="text-3xl">{persona.icon || "👤"}</span>
-                                            <Badge 
-                                                variant="secondary" 
+                                            <Badge
+                                                variant="secondary"
                                                 className={cn("border", diffConfig.className)}
                                             >
                                                 {diffConfig.label}
@@ -184,7 +406,7 @@ export default function AgentPersonaSelectPage() {
                                         </div>
                                         <h3 className="font-bold text-slate-900 mb-1">{persona.name}</h3>
                                         <p className="text-sm text-slate-500 line-clamp-2">{persona.description}</p>
-                                        
+
                                         {isSelected && (
                                             <div className="mt-3 pt-3 border-t border-indigo-100 flex items-center gap-1 text-xs text-indigo-600 font-medium">
                                                 <Sparkles className="w-3 h-3" />
@@ -199,13 +421,147 @@ export default function AgentPersonaSelectPage() {
                 )}
             </div>
 
-            {/* 开始按钮 */}
+            {agent.category === "presentation" && (
+                <div>
+                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <Presentation className="w-5 h-5" />
+                        选择演练PPT
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-4">
+                        会展示标准PPT的当前版本与材料状态；仅可对可用状态发起新的演练。
+                    </p>
+                    <GlassCard className="p-5 space-y-3">
+                        {isLoadingPresentations ? (
+                            <p className="text-sm text-slate-500">正在加载标准PPT...</p>
+                        ) : presentationLoadError ? (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                加载演练PPT失败：{presentationLoadError}
+                            </div>
+                        ) : availablePresentations.length === 0 ? (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                                当前没有标准PPT，请先到管理后台上传并处理为可用状态。
+                            </div>
+                        ) : (
+                            <>
+                                <label className="block space-y-2">
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                                        演练文稿
+                                    </span>
+                                    <select
+                                        value={selectedPresentationId}
+                                        onChange={(event) => {
+                                            const nextPresentationId = event.target.value;
+                                            setSelectedPresentationId(nextPresentationId);
+                                            saveTrainingPreferences({
+                                                agentId,
+                                                personaId: selectedPersona,
+                                                presentationId: nextPresentationId,
+                                                voiceMode,
+                                            });
+                                        }}
+                                        className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                                    >
+                                        {availablePresentations.map((presentation) => {
+                                            const pageCount = presentation.page_count || presentation.total_pages || 0;
+                                            const statusLabel = getPresentationStatusLabel(presentation.status);
+                                            return (
+                                                <option key={presentation.presentation_id} value={presentation.presentation_id}>
+                                                    {presentation.title}（v{presentation.version_number} · {statusLabel} · {pageCount} 页）
+                                                </option>
+                                            );
+                                        })}
+                                    </select>
+                                </label>
+
+                                {selectedPresentation ? (
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                                        <p>当前版本：v{selectedPresentation.version_number}</p>
+                                        <p>材料状态：{getPresentationStatusLabel(selectedPresentation.status)}</p>
+                                        <p>页数：{selectedPresentation.page_count || selectedPresentation.total_pages || 0} 页</p>
+                                    </div>
+                                ) : null}
+
+                                {selectedPresentation && selectedPresentation.status !== "ready" ? (
+                                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                                        当前版本尚未就绪，请等待材料处理完成后再开始新的演练。
+                                    </div>
+                                ) : null}
+                            </>
+                        )}
+                    </GlassCard>
+                </div>
+            )}
+
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+                知识库绑定已迁移到角色中心。请在角色页选择并维护知识库，当前页不再编辑智能体级知识库。
+            </div>
+
+            <div>
+                <h2 className="text-lg font-bold text-slate-800 mb-3">语音模式</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                    两种模式都使用同一套销售评分维度与下一轮建议，差异只在语音链路。
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setVoiceMode("legacy");
+                            saveTrainingPreferences({
+                                agentId,
+                                personaId: selectedPersona,
+                                presentationId: selectedPresentationId || null,
+                                voiceMode: "legacy",
+                            });
+                        }}
+                        className={cn(
+                            "rounded-2xl border p-4 text-left transition-all",
+                            voiceMode === "legacy"
+                                ? "border-indigo-500 bg-indigo-50/40"
+                                : "border-slate-200 bg-white hover:border-slate-300",
+                        )}
+                    >
+                        <div className="font-semibold text-slate-900">经典模式</div>
+                        <div className="text-sm text-slate-500 mt-1">ASR → LLM → TTS，稳定兼容现有语音链路；练中仍按同一套销售维度评分。</div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setVoiceMode("stepfun_realtime");
+                            saveTrainingPreferences({
+                                agentId,
+                                personaId: selectedPersona,
+                                presentationId: selectedPresentationId || null,
+                                voiceMode: "stepfun_realtime",
+                            });
+                        }}
+                        className={cn(
+                            "rounded-2xl border p-4 text-left transition-all",
+                            voiceMode === "stepfun_realtime"
+                                ? "border-indigo-500 bg-indigo-50/40"
+                                : "border-slate-200 bg-white hover:border-slate-300",
+                        )}
+                    >
+                        <div className="font-semibold text-slate-900">Realtime 模式（默认推荐）</div>
+                        <div className="text-sm text-slate-500 mt-1">StepFun 端到端语音模型；练中同样输出相同的销售维度评分与建议。</div>
+                    </button>
+                </div>
+            </div>
+
             {agent.personas.length > 0 && (
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-50 via-slate-50/95 to-transparent md:static md:bg-none md:p-0">
                     <div className="max-w-md mx-auto md:max-w-none">
+                        {startError ? (
+                            <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                {startError}
+                            </div>
+                        ) : null}
                         <Button
                             size="lg"
-                            disabled={!selectedPersona || isStarting}
+                            disabled={
+                                !selectedPersona
+                                || isStarting
+                                || (agent.category === "presentation" && (!selectedPresentationId || selectedPresentation?.status !== "ready"))
+                            }
                             onClick={handleStartPractice}
                             className="w-full md:w-auto rounded-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 px-8 text-lg font-semibold shadow-lg"
                         >

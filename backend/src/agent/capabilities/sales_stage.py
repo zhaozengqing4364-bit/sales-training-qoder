@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 class SalesStageCapability(BaseCapability):
     """
     销售阶段识别能力
-    
+
     识别5个销售阶段：
     1. opening - 开场破冰
     2. discovery - 需求挖掘
@@ -176,7 +176,7 @@ class SalesStageCapability(BaseCapability):
                 feedback=self._generate_feedback(stage_info, stage_changed)
             )
 
-        except Exception as e:
+        except (RuntimeError, ValueError, KeyError) as e:
             logger.error(
                 f"Sales stage analysis failed: {e}",
                 session_id=context.session_id

@@ -1,0 +1,75 @@
+{
+  "agent": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/admin/agents",
+      "body": {
+        "name": "错误分类智能体",
+        "category": "customer_service",
+        "capabilities_config": {}
+      }
+    },
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "[AGENT_CATEGORY_RESTRICTED]",
+      "message": "当前仅支持创建「销售」与「演讲」两类智能体。",
+      "trace_id": "adb3a19b62d0cc10f0b614c7b663eafe"
+    }
+  },
+  "admin_voice_runtime": {
+    "request": {
+      "method": "PUT",
+      "path": "/api/v1/admin/voice-runtime/profiles/{profile_id}",
+      "body": {
+        "name": "不存在的配置"
+      }
+    },
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "[VOICE_RUNTIME_PROFILE_NOT_FOUND]",
+      "message": "运行时配置不存在。",
+      "trace_id": "16e528c2e7f0ff2e2e23e59f1075e67d"
+    }
+  },
+  "prompt": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/prompt-templates/undefined"
+    },
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "[PROMPT_TEMPLATE_ID_INVALID]",
+      "message": "模板ID无效，请检查请求参数。",
+      "trace_id": "3520d2fd2946b6a471f20542ada55196"
+    }
+  },
+  "presentation": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/presentations/{presentation_id}"
+    },
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "[PRESENTATION_NOT_FOUND]",
+      "message": "演示文稿不存在。",
+      "trace_id": "9d4f159da5df78e7c91684f6f39889a7"
+    }
+  },
+  "evaluation": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/evaluation/sessions/{session_id}/report"
+    },
+    "status": 403,
+    "body": {
+      "success": false,
+      "error": "[ACCESS_DENIED]",
+      "message": "你没有权限访问该会话。",
+      "trace_id": "2920b5516a280953bca11867369fb448"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M007/S04/T02",
+  "timestamp": 1774697704799,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k \"report_generation or scoring\"\nbackend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"same_session or knowledge_check or replay\"\nbackend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_replay_api.py -k \"finalization or scoring or replay_unlock\"\nnpm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+      "exitCode": 0,
+      "durationMs": 18543,
+      "verdict": "pass"
+    }
+  ]
+}

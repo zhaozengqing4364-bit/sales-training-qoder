@@ -50,7 +50,6 @@ class ForbiddenWordMatcher:
             List of {"phrase": str, "suggested_alternative": str, "match": str}
         """
         matches = []
-        transcript_lower = transcript.lower()
 
         for phrase, config in self.patterns.items():
             pattern = config["pattern"]

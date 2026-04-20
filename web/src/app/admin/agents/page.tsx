@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
@@ -32,11 +33,6 @@ const STATUS_OPTIONS: { value: AgentStatus; label: string; color: string; dotCol
     { value: "archived", label: "已归档", color: "text-amber-600", dotColor: "bg-amber-500" },
 ];
 
-function getStatusLabel(status: string) {
-    const option = STATUS_OPTIONS.find(o => o.value === status);
-    return option?.label || status;
-}
-
 function getStatusStyle(status: string) {
     const option = STATUS_OPTIONS.find(o => o.value === status);
     return option || STATUS_OPTIONS[1];
@@ -45,8 +41,6 @@ function getStatusStyle(status: string) {
 export default function AgentsPage() {
     const toast = useToast();
     const [agents, setAgents] = useState<AdminAgent[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     // Filter & Search States
     const [searchQuery, setSearchQuery] = useState("");
@@ -78,8 +72,6 @@ export default function AgentsPage() {
     }, [statusDropdownId]);
 
     const loadData = async () => {
-        setIsLoading(true);
-        setError(null);
         try {
             const data = await api.admin.getAgents({
                 search: searchQuery || undefined,
@@ -89,11 +81,8 @@ export default function AgentsPage() {
             });
             setAgents(data.items || []);
         } catch (err) {
-            console.error("Failed to load agents:", err);
-            setError(err instanceof Error ? err.message : "加载失败");
+            debug.error("Failed to load agents:", err);
             setAgents([]);
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -124,7 +113,7 @@ export default function AgentsPage() {
             toast.success("智能体创建成功");
             loadData();
         } catch (err) {
-            console.error("Failed to create agent:", err);
+            debug.error("Failed to create agent:", err);
             toast.error(`创建失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsCreating(false);
@@ -141,7 +130,7 @@ export default function AgentsPage() {
             toast.success("删除成功");
             setDeleteTarget(null);
         } catch (err) {
-            console.error("Failed to delete agent:", err);
+            debug.error("Failed to delete agent:", err);
             toast.error(`删除失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsDeleting(false);
@@ -168,7 +157,7 @@ export default function AgentsPage() {
             setStatusDropdownId(null);
             loadData();
         } catch (err) {
-            console.error("Failed to change status:", err);
+            debug.error("Failed to change status:", err);
             toast.error(`状态更新失败: ${err instanceof Error ? err.message : "未知错误"}`);
         }
     };
@@ -232,8 +221,6 @@ export default function AgentsPage() {
                                     >
                                         <option value="sales">销售</option>
                                         <option value="presentation">演讲</option>
-                                        <option value="interview">面试</option>
-                                        <option value="customer_service">客服</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">

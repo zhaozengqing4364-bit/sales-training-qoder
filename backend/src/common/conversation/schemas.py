@@ -14,6 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from common.db.schemas import AudioAuditPayloadSchema, PresentationReview
 
 # ========== Type Aliases for API ==========
 MessageRoleType = str  # "user" | "assistant"
@@ -41,12 +42,30 @@ class ScoreDimensionSchema(BaseModel):
 
 
 class ScoreSnapshotSchema(BaseModel):
-    """Score snapshot at a specific turn - R8"""
-    overall: int = Field(..., ge=0, le=100, description="Overall score 0-100")
+    """Score snapshot at a specific turn - R8."""
+
+    overall: float | None = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Legacy overall score 0-100",
+    )
+    overall_score: float | None = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Canonical overall score 0-100",
+    )
     dimensions: list[ScoreDimensionSchema] = Field(
         default_factory=list,
-        description="Dimension scores"
+        description="Legacy dimension scores",
     )
+    dimension_scores: dict[str, float] | None = Field(
+        default=None,
+        description="Canonical dimension score mapping",
+    )
+    stage_name: str | None = Field(None, description="Stage label for this score snapshot")
+    suggestions: list[str] = Field(default_factory=list, description="Optional score suggestions")
 
 
 class TimelineMarkerSchema(BaseModel):
@@ -69,6 +88,109 @@ class StageSummarySchema(BaseModel):
     stage: SalesStageType = Field(..., description="Stage ID")
     duration_ms: int = Field(..., ge=0, description="Duration in milliseconds")
     score: int = Field(..., ge=0, le=100, description="Average score for this stage")
+
+
+class VoicePolicyRuntimeBindingSchema(BaseModel):
+    """Compact industry-pack binding summary reused by replay/report evidence."""
+
+    industry_pack_strategy: str = Field(..., description="How the industry pack is composed")
+    customer_pressure_source: str = Field(..., description="Resolved customer-pressure source")
+    sales_focus: str = Field(default="", description="Primary pressure focus")
+    value_axes: list[str] = Field(default_factory=list, description="Active value axes")
+    objection_axes: list[str] = Field(default_factory=list, description="Active objection axes")
+    question_strategy: str = Field(default="", description="Follow-up question strategy")
+    revisit_on_evasion: bool = Field(default=False, description="Whether evasions trigger follow-up")
+    require_evidence: bool = Field(default=False, description="Whether the persona requires evidence")
+    expected_customer_questions: list[str] = Field(default_factory=list, description="Example customer pressure questions")
+    knowledge_base_ids: list[str] = Field(default_factory=list, description="Bound knowledge base IDs")
+    runtime_impacts: list[str] = Field(default_factory=list, description="Runtime and evidence surfaces affected")
+
+
+class VoicePolicySnapshotReferenceSchema(BaseModel):
+    """Voice policy baseline reference captured at session creation time."""
+
+    voice_mode: str | None = Field(None, description="Resolved voice mode")
+    runtime_profile_id: str | None = Field(None, description="Resolved runtime profile ID")
+    instruction_contract_hash: str | None = Field(
+        None,
+        description="Hash of compiled instruction contract captured at session start",
+    )
+    network_access_mode: str | None = Field(
+        None,
+        description="Tool network access mode resolved at session start",
+    )
+    tool_policy: dict[str, Any] = Field(default_factory=dict, description="Resolved tool policy")
+    knowledge_base_ids: list[str] = Field(default_factory=list, description="Bound knowledge base IDs")
+    source: dict[str, str] = Field(default_factory=dict, description="Policy resolution source map")
+    resolved_at: str | None = Field(None, description="ISO8601 policy resolution timestamp")
+    runtime_binding: VoicePolicyRuntimeBindingSchema | None = Field(
+        None,
+        description="Compact industry-pack binding summary frozen into report/replay evidence",
+    )
+    agent_persona_override_config: dict[str, Any] | None = Field(
+        None,
+        description="Agent-persona association override config snapshot",
+    )
+
+
+class ReplayContextMessageSchema(BaseModel):
+    """Compact neighboring message preview used by replay/highlight learning evidence."""
+
+    id: str | None = Field(None, description="Neighbor message UUID")
+    role: MessageRoleType | None = Field(None, description="Neighbor message role")
+    content: str | None = Field(None, description="Neighbor message content")
+    timestamp: datetime | None = Field(None, description="Neighbor message timestamp")
+
+
+class ReplayHighlightContextSchema(BaseModel):
+    """Nearby replay context around a highlighted turn."""
+
+    prev_message: ReplayContextMessageSchema | None = Field(
+        None,
+        description="Previous message near the highlighted turn",
+    )
+    next_message: ReplayContextMessageSchema | None = Field(
+        None,
+        description="Next message near the highlighted turn",
+    )
+
+
+class ReplayLearningStageSchema(BaseModel):
+    """Structured stage descriptor for replay learning evidence."""
+
+    key: SalesStageType = Field(..., description="Canonical stage key")
+    name: str = Field(..., description="Display label for the stage")
+
+
+class ReplayLearningEvidenceSchema(BaseModel):
+    """Structured learning evidence attached to replay/highlight turns."""
+
+    reason: str | None = Field(None, description="Why this turn matters")
+    issue_family: str | None = Field(None, description="Linked issue family from session evidence")
+    objection_family: str | None = Field(
+        None,
+        description="Optional raw objection family from transcript metadata",
+    )
+    stage: ReplayLearningStageSchema | None = Field(
+        None,
+        description="Stage associated with this learning moment",
+    )
+    nearby_context: ReplayHighlightContextSchema = Field(
+        default_factory=ReplayHighlightContextSchema,
+        description="Previous/next messages near this turn",
+    )
+    suggested_response: str | None = Field(
+        None,
+        description="Suggested better response derived from existing evidence",
+    )
+    linked_issue: dict[str, Any] | None = Field(
+        None,
+        description="Session-level issue linked to this highlight",
+    )
+    linked_goal: dict[str, Any] | None = Field(
+        None,
+        description="Session-level next goal linked to this highlight",
+    )
 
 
 # ========== ConversationMessage Schemas ==========
@@ -95,10 +217,15 @@ class ConversationMessageResponse(ConversationMessageBase):
         None,
         description="Detected fuzzy words"
     )
+    transcript_metadata: dict[str, Any] | None = Field(
+        None,
+        description="Transcript normalization metadata"
+    )
     sales_stage: SalesStageType | None = Field(
         None,
         description="Sales stage at this turn"
     )
+    stage_name: str | None = Field(None, description="Display label for the sales stage")
     score_snapshot: ScoreSnapshotSchema | None = Field(
         None,
         description="Score snapshot at this turn"
@@ -112,6 +239,10 @@ class ConversationMessageResponse(ConversationMessageBase):
         description="Highlight type: good|bad|neutral"
     )
     highlight_reason: str | None = Field(None, description="Reason for highlight")
+    learning_evidence: ReplayLearningEvidenceSchema | None = Field(
+        None,
+        description="Structured learning evidence for highlighted turns",
+    )
 
 
 class ConversationMessageDetailResponse(ConversationMessageResponse):
@@ -149,11 +280,26 @@ class HighlightResponse(BaseModel):
         None,
         description="Suggested better response"
     )
+    sales_stage: SalesStageType | None = Field(
+        None,
+        description="Sales stage for the highlighted turn",
+    )
+    stage_name: str | None = Field(None, description="Display label for the sales stage")
+    context: ReplayHighlightContextSchema = Field(
+        default_factory=ReplayHighlightContextSchema,
+        description="Previous/next messages around the highlight",
+    )
+    learning_evidence: ReplayLearningEvidenceSchema | None = Field(
+        None,
+        description="Structured learning evidence for this highlight",
+    )
 
 
 class HighlightsResponse(BaseModel):
     """Highlights list response - R10.3"""
     highlights: list[HighlightResponse]
+    total_good: int = Field(default=0, ge=0, description="Count of good highlights")
+    total_bad: int = Field(default=0, ge=0, description="Count of bad highlights")
 
 
 # ========== ReplayData Schemas ==========
@@ -161,9 +307,43 @@ class HighlightsResponse(BaseModel):
 class ReplayDataResponse(BaseModel):
     """Complete replay data response - R10.2"""
     session_id: str = Field(..., description="Session UUID")
+    scenario_type: str | None = Field(None, description="Session scenario type")
+    presentation_id: str | None = Field(None, description="Presentation UUID for presentation sessions")
     agent_name: str | None = Field(None, description="Agent name")
     persona_name: str | None = Field(None, description="Persona name")
+    voice_policy_snapshot_ref: VoicePolicySnapshotReferenceSchema | None = Field(
+        None,
+        description="Session voice policy baseline reference",
+    )
     total_duration_ms: int = Field(..., ge=0, description="Total duration in milliseconds")
+    overall_score: float = Field(..., ge=0, le=100, description="Normalized session overall score")
+    effectiveness_snapshot: dict[str, Any] | None = Field(
+        None,
+        description="Normalized session effectiveness snapshot",
+    )
+    pass_flags: dict[str, bool] | None = Field(None, description="Session pass/fail flags")
+    main_capability_passed: bool | None = Field(None, description="Whether the main capability passed")
+    overall_result: str | None = Field(None, description="Overall result bucket")
+    main_issue: dict[str, Any] | None = Field(None, description="Primary issue surfaced from session evidence")
+    next_goal: dict[str, Any] | None = Field(None, description="Next goal surfaced from session evidence")
+    evaluable: bool | None = Field(None, description="Whether the session evidence is evaluable")
+    not_evaluable_reason: str | None = Field(None, description="Reason when evaluable is false")
+    evidence_completeness: dict[str, Any] | None = Field(
+        None,
+        description="Projection completeness diagnostics",
+    )
+    canonical_evaluation_kernel: dict[str, Any] | None = Field(
+        None,
+        description="Scenario-aware canonical evaluation kernel shared across read surfaces",
+    )
+    compatibility_readers: dict[str, Any] | None = Field(
+        None,
+        description="Legacy-compatible projections derived from the canonical evaluation kernel",
+    )
+    presentation_review: PresentationReview | None = Field(
+        None,
+        description="Page-level PPT review payload for presentation sessions",
+    )
     messages: list[ConversationMessageResponse] = Field(
         ...,
         description="All conversation messages"
@@ -175,6 +355,18 @@ class ReplayDataResponse(BaseModel):
     stage_summary: list[StageSummarySchema] = Field(
         default_factory=list,
         description="Summary by sales stage"
+    )
+    audio_audit: AudioAuditPayloadSchema | None = Field(
+        None,
+        description="Raw audio recording audit evidence for the session",
+    )
+    conclusion_evidence: dict[str, Any] | None = Field(
+        None,
+        description="Structured provenance for main_issue, next_goal, and claim_truth conclusions",
+    )
+    evidence_degradation: dict[str, Any] | None = Field(
+        None,
+        description="Layered degradation taxonomy (retrieval, transcript, audio, enhanced_report)",
     )
 
 
@@ -243,4 +435,5 @@ class ConversationErrorResponse(BaseModel):
     success: bool = False
     error: str = Field(..., description="Error code like [SESSION_NOT_FOUND]")
     error_code: str = Field(..., description="Error code for programmatic handling")
+    message: str = Field(..., description="Human-readable error message")
     trace_id: str | None = None

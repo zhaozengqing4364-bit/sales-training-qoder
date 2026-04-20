@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M009/S01/T01",
+  "timestamp": 1774817064653,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "cd backend",
+      "exitCode": 0,
+      "durationMs": 6,
+      "verdict": "pass"
+    },
+    {
+      "command": "venv/bin/python -m pytest -c pyproject.toml tests/unit/test_oss_signing_service.py tests/unit/test_audio_segment_api.py -v",
+      "exitCode": 0,
+      "durationMs": 4905,
+      "verdict": "pass"
+    }
+  ]
+}

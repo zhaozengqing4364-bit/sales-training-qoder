@@ -74,11 +74,11 @@ class MockAudioProcessor {
 // ============================================================================
 
 describe('AudioWorklet Processor Logic', () => {
-  let mockPostMessage: ReturnType<typeof vi.fn>
+  let mockPostMessage: ReturnType<typeof vi.fn<(data: unknown) => void>>
   let processor: MockAudioProcessor
 
   beforeEach(() => {
-    mockPostMessage = vi.fn()
+    mockPostMessage = vi.fn<(data: unknown) => void>()
     processor = new MockAudioProcessor({ postMessage: mockPostMessage })
   })
 
@@ -171,7 +171,7 @@ describe('Property 2: AudioWorklet Communication', () => {
         // Generate random audio samples (values between -1 and 1)
         fc.array(fc.float({ min: -1, max: 1, noNaN: true }), { minLength: 1024, maxLength: 4096 }),
         (audioSamples) => {
-          const mockPostMessage = vi.fn()
+          const mockPostMessage = vi.fn<(data: unknown) => void>()
           const processor = new MockAudioProcessor({ postMessage: mockPostMessage })
           
           // Process the audio samples
@@ -216,7 +216,7 @@ describe('Property 2: AudioWorklet Communication', () => {
         // Generate exactly 1024 samples to fill one buffer
         fc.array(fc.float({ min: -1, max: 1, noNaN: true }), { minLength: 1024, maxLength: 1024 }),
         (audioSamples) => {
-          const mockPostMessage = vi.fn()
+          const mockPostMessage = vi.fn<(data: unknown) => void>()
           const processor = new MockAudioProcessor({ postMessage: mockPostMessage })
           
           const input = new Float32Array(audioSamples)
@@ -245,7 +245,7 @@ describe('Property 2: AudioWorklet Communication', () => {
           { minLength: 8, maxLength: 20 }
         ),
         (audioChunks) => {
-          const mockPostMessage = vi.fn()
+          const mockPostMessage = vi.fn<(data: unknown) => void>()
           const processor = new MockAudioProcessor({ postMessage: mockPostMessage })
           
           let totalSamples = 0
@@ -277,7 +277,7 @@ describe('Property 2: AudioWorklet Communication', () => {
       fc.property(
         fc.integer({ min: 1, max: 10 }),
         (multiplier) => {
-          const mockPostMessage = vi.fn()
+          const mockPostMessage = vi.fn<(data: unknown) => void>()
           const processor = new MockAudioProcessor({ postMessage: mockPostMessage })
           
           // Create input that is exact multiple of buffer size

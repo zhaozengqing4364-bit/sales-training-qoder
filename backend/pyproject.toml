@@ -2,15 +2,23 @@
 name = "ai-practice-backend"
 version = "1.0.0"
 requires-python = ">=3.11"
+dependencies = [
+    "haystack-ai>=2.0.0",
+    # Targeted pytest collection imports retrieval/auth modules directly.
+    "rank_bm25>=0.2.2",
+    "PyJWT[crypto]>=2.10.1",
+]
 
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501", "N806", "N803"]
 src = ["src"]
 
-[tool.ruff.isort]
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501", "N806", "N803", "UP042", "N818"]
+
+[tool.ruff.lint.isort]
 known-first-party = ["src"]
 
 [tool.black]
@@ -46,4 +54,9 @@ pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=src --cov-report=html --cov-report=term-missing"
+addopts = "-v --cov=src --cov-report=html --cov-report=term-missing --import-mode=importlib"
+markers = [
+    "contract: API contract tests",
+    "integration: Integration tests",
+    "performance: Performance and latency tests",
+]

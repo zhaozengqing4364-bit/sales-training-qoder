@@ -32,7 +32,6 @@ const DIFFICULTY_CONFIG: Record<string, { label: string; className: string }> = 
 const THEME_HOVER_MAP: Record<string, string> = {
     sales: "group-hover:border-blue-100 group-hover:text-blue-600",
     presentation: "group-hover:border-purple-100 group-hover:text-purple-600",
-    "customer-service": "group-hover:border-amber-100 group-hover:text-amber-600",
     interview: "group-hover:border-emerald-100 group-hover:text-emerald-600",
 };
 
@@ -52,7 +51,6 @@ export interface AgentCardProps {
 }
 
 export function AgentCard({
-    id,
     name,
     description,
     role,

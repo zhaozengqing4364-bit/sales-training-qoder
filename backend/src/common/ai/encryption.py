@@ -42,15 +42,15 @@ class KeyEncryption:
         key = encryption_key or os.getenv("MODEL_CONFIG_ENCRYPTION_KEY")
 
         if not key:
-            logger.warning(
+            logger.error(
                 "MODEL_CONFIG_ENCRYPTION_KEY not set. "
-                "Generating temporary key (NOT for production!)"
+                "Model configuration encryption is unavailable."
             )
-            key = Fernet.generate_key().decode()
+            raise ValueError("MODEL_CONFIG_ENCRYPTION_KEY is required")
 
         try:
             self._fernet = Fernet(key.encode() if isinstance(key, str) else key)
-        except Exception as e:
+        except (ValueError, RuntimeError) as e:
             logger.error(f"Invalid encryption key: {e}")
             raise ValueError("Invalid encryption key format") from e
 
@@ -70,7 +70,7 @@ class KeyEncryption:
         try:
             encrypted = self._fernet.encrypt(plain_text.encode())
             return Result.ok(encrypted.decode())
-        except Exception as e:
+        except (ValueError, RuntimeError) as e:
             logger.error(f"Encryption failed: {e}")
             return Result.fail(f"[ENCRYPTION_ERROR] {str(e)}")
 
@@ -93,7 +93,7 @@ class KeyEncryption:
         except InvalidToken:
             logger.error("Decryption failed: Invalid token")
             return Result.fail("[DECRYPTION_ERROR] Invalid token or key")
-        except Exception as e:
+        except (ValueError, RuntimeError) as e:
             logger.error(f"Decryption failed: {e}")
             return Result.fail(f"[DECRYPTION_ERROR] {str(e)}")
 
@@ -160,7 +160,11 @@ def encrypt_api_key(plain_key: str) -> Result[str]:
     Returns:
         Result with encrypted key or error
     """
-    return get_encryption().encrypt(plain_key)
+    try:
+        return get_encryption().encrypt(plain_key)
+    except ValueError as e:
+        logger.error(f"Encryption unavailable: {e}")
+        return Result.fail("[ENCRYPTION_ERROR] Encryption key not configured")
 
 
 def decrypt_api_key(encrypted_key: str) -> Result[str]:
@@ -173,7 +177,11 @@ def decrypt_api_key(encrypted_key: str) -> Result[str]:
     Returns:
         Result with decrypted key or error
     """
-    return get_encryption().decrypt(encrypted_key)
+    try:
+        return get_encryption().decrypt(encrypted_key)
+    except ValueError as e:
+        logger.error(f"Decryption unavailable: {e}")
+        return Result.fail("[DECRYPTION_ERROR] Encryption key not configured")
 
 
 def mask_api_key(key: str) -> str:

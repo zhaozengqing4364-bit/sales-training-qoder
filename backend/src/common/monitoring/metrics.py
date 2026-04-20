@@ -106,11 +106,37 @@ tts_requests_total = Counter(
     ['status']
 )
 
+tts_request_duration_seconds = Histogram(
+    'tts_request_duration_seconds',
+    'TTS request latency',
+    ['provider'],
+    buckets=[0.1, 0.2, 0.5, 1, 2, 5]
+)
+
+# Voice policy monitoring metrics
+voice_policy_rollbacks_total = Counter(
+    'voice_policy_rollbacks_total',
+    'Total voice policy rollbacks',
+    ['service_type', 'from_provider', 'to_provider']
+)
+
+voice_policy_state_changes_total = Counter(
+    'voice_policy_state_changes_total',
+    'Total voice policy state changes',
+    ['service_type', 'from_state', 'to_state']
+)
+
 # Error metrics
 errors_total = Counter(
     'errors_total',
     'Total errors',
     ['service', 'error_type']
+)
+
+frontend_analytics_events_total = Counter(
+    'frontend_analytics_events_total',
+    'Total frontend analytics events accepted by backend observability routes',
+    ['event_type', 'status']
 )
 
 # System metrics
@@ -209,6 +235,12 @@ def track_asr_request(status: str, duration: float):
     asr_request_duration_seconds.observe(duration)
 
 
+def track_tts_request(status: str, provider: str, duration: float):
+    """Track TTS request metrics"""
+    tts_requests_total.labels(status=status).inc()
+    tts_request_duration_seconds.labels(provider=provider).observe(duration)
+
+
 def track_websocket_connection(scenario_type: str, delta: int):
     """Track active WebSocket connections"""
     websocket_connections_active.labels(scenario_type=scenario_type).inc(delta)
@@ -233,6 +265,60 @@ def track_error(service: str, error_type: str):
         service=service,
         error_type=error_type
     ).inc()
+
+
+def track_frontend_analytics_event(event_type: str, status: str = 'accepted'):
+    """Track frontend analytics beacons that reach the backend truth line."""
+    frontend_analytics_events_total.labels(
+        event_type=event_type,
+        status=status,
+    ).inc()
+
+
+def track_voice_policy_rollback(
+    service_type: str,
+    from_provider: str,
+    to_provider: str,
+    reason: str
+):
+    """Track voice policy rollback metrics"""
+    voice_policy_rollbacks_total.labels(
+        service_type=service_type,
+        from_provider=from_provider,
+        to_provider=to_provider,
+    ).inc()
+    logger.info(
+        f"Voice policy rollback: {service_type} {from_provider} -> {to_provider}",
+        extra={
+            "service_type": service_type,
+            "from_provider": from_provider,
+            "to_provider": to_provider,
+            "reason": reason,
+        },
+    )
+
+
+def track_voice_policy_state_change(
+    service_type: str,
+    from_state: str,
+    to_state: str,
+    reason: str
+):
+    """Track voice policy state changes"""
+    voice_policy_state_changes_total.labels(
+        service_type=service_type,
+        from_state=from_state,
+        to_state=to_state,
+    ).inc()
+    logger.info(
+        f"Voice policy state change: {service_type} {from_state} -> {to_state}",
+        extra={
+            "service_type": service_type,
+            "from_state": from_state,
+            "to_state": to_state,
+            "reason": reason,
+        },
+    )
 
 
 def get_metrics() -> bytes:

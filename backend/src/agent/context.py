@@ -10,7 +10,7 @@ References:
 """
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from common.monitoring.logger import get_logger
@@ -69,7 +69,7 @@ class AgentContext:
     def __post_init__(self):
         """Initialize default values after dataclass creation."""
         if self.start_time is None:
-            self.start_time = datetime.utcnow()
+            self.start_time = datetime.now(UTC)
         if self.trace_id is None:
             self.trace_id = str(uuid.uuid4())
 
@@ -133,7 +133,7 @@ class AgentContext:
             "role": role,
             "content": content,
             "turn_number": self.turn_count,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             **metadata,
         }
         self.conversation_history.append(message)
@@ -181,7 +181,7 @@ class AgentContext:
         """
         if self.start_time is None:
             return 0
-        delta = datetime.utcnow() - self.start_time
+        delta = datetime.now(UTC) - self.start_time
         return int(delta.total_seconds() * 1000)
 
     def get_knowledge_base_ids(self) -> list[str]:

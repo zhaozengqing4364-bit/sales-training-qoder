@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M001/S04/T02",
+  "timestamp": 1774264242408,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "cd backend && pytest tests/contract/test_presentations.py tests/integration/test_presentation_flow.py",
+      "exitCode": 0,
+      "durationMs": 15000,
+      "verdict": "pass"
+    },
+    {
+      "command": "cd web && npm test -- --run 'src/app/admin/presentations/[id]/page.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx'",
+      "exitCode": 0,
+      "durationMs": 8000,
+      "verdict": "pass"
+    }
+  ],
+  "retryAttempt": 2,
+  "maxRetries": 2
+}

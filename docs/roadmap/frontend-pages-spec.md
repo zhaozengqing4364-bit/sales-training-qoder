@@ -1370,9 +1370,9 @@ xl: 1280px  - 桌面
 
 | 状态 | 说明 | 存储位置 |
 |------|------|----------|
-| user | 当前用户信息 | Context + localStorage |
-| auth | 认证状态 | Context + localStorage |
-| settings | 用户设置 | Context + localStorage |
+| user | 当前用户信息 | Server Session + Query Cache |
+| auth | 认证状态 | HttpOnly Cookie + Server Auth Boundary |
+| settings | 用户设置 | Query Cache + 按需持久化 |
 
 ### 7.2 页面状态
 

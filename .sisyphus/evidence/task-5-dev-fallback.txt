@@ -1,0 +1,42 @@
+T5 explicit dev fallback evidence
+Date: 2026-04-15
+Scope: closure evidence only; no auth code changes were needed in this run.
+
+Observed auth surfaces
+- `backend/src/common/auth/api.py:/auth/providers` reports an explicit `dev_fallback` block with `enabled`, `login_url`, and message fields.
+- `/api/v1/auth/dev-login` is intentionally environment-gated and remains separate from the WeCom SSO path.
+- `web/src/app/(auth)/login/page.tsx` shows the dev fallback only when the provider payload enables it and labels it as development-only behavior.
+
+Command 1
+$ backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -k "providers_report_explicit_dev_fallback or dev_login_is_explicitly_disabled_outside_development or dev_login_sets_http_only_cookie_and_allows_cookie_auth" -q
+
+Observed outcome
+- `3 passed, 19 deselected, 2 warnings in 2.73s`
+- Covered behaviors:
+  - `/auth/providers` exposes explicit dev fallback metadata when WeCom is not configured.
+  - `/auth/dev-login` returns `403` + `[DEV_LOGIN_DISABLED]` outside development.
+  - `/auth/dev-login` sets an `HttpOnly` session cookie and `/users/me` succeeds in development.
+- Warning text was the same non-blocking coverage noise seen in the broader backend invocation.
+
+Command 2
+$ cd web && npx vitest run "src/app/(auth)/login/page.test.tsx"
+
+Observed outcome
+- `Test Files  1 passed (1)`
+- `Tests  5 passed (5)`
+- `Duration  1.46s`
+- Covered behaviors:
+  - WeCom renders unavailable when not configured.
+  - The explicit `开发者快速登录` fallback is rendered from provider metadata.
+  - Clicking the fallback posts to the advertised `/api/v1/auth/dev-login` URL and redirects home.
+
+Conclusion
+- The dev fallback remains explicit, deterministic, and clearly non-production.
+- No tiny auth-only fix was required during this evidence pass.
+
+Post-close addendum — auth-local LSP cleanup
+- Date: 2026-04-15
+- Tiny fix required after initial evidence closure: auth helper typing/control-flow annotations only; no dev-fallback runtime behavior changed.
+- Reverification command:
+  - `$ cd web && npx vitest run "src/app/(auth)/login/page.test.tsx"`
+  - Observed outcome: `Test Files  1 passed (1)` / `Tests  5 passed (5)` / `Duration  1.29s`

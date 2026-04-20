@@ -11,6 +11,7 @@ import os
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession
@@ -113,7 +114,7 @@ class AudioArchivalJob:
                         }
                     )
 
-                except Exception as e:
+                except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
                     logger.error(
                         "Failed to archive audio file",
                         extra={"session_id": str(session.session_id), "error": str(e)},
@@ -137,7 +138,7 @@ class AudioArchivalJob:
 
             return Result(value=stats)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
             logger.error(
                 "Failed to run audio archival job",
                 extra={"error": str(e)},
@@ -195,7 +196,7 @@ class AudioArchivalJob:
                                 extra={"file_path": file_path}
                             )
 
-                        except Exception as e:
+                        except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
                             logger.error(
                                 "Failed to remove orphaned file",
                                 extra={"file_path": file_path, "error": str(e)}
@@ -214,7 +215,7 @@ class AudioArchivalJob:
 
             return Result(value=stats)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
             logger.error(
                 "Failed to cleanup orphaned audio",
                 extra={"error": str(e)},
@@ -271,7 +272,7 @@ class AudioArchivalJob:
 
             return Result(value=stats)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
             logger.error(
                 "Failed to get storage stats",
                 extra={"error": str(e)},

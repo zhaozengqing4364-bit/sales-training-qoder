@@ -19,6 +19,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             <Comp
                 ref={ref}
                 disabled={disabled || isLoading}
+                aria-disabled={disabled || isLoading}
                 className={cn(
                     "inline-flex items-center justify-center rounded-full font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]",
                     {

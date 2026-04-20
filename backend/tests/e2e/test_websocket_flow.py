@@ -23,26 +23,34 @@ class TestWebSocketFlow:
         """Test handling of text message type."""
         handler.websocket = AsyncMock()
         handler.session_id = session_id
+        handler.session_status = "in_progress"
         handler.manager = MagicMock()
         handler.manager.send_json = AsyncMock()
 
-        with patch.object(handler, "_process_user_text") as mock_process:
-            mock_process.return_value = None
+        with patch.object(handler, "_launch_response_task", new=AsyncMock()) as mock_launch:
+            mock_launch.return_value = True
             await handler.handle_message({
                 "type": "text",
                 "data": {"text": "Hello"},
             })
-            mock_process.assert_called_once_with("Hello")
+            mock_launch.assert_awaited_once_with("Hello", source="text")
 
     @pytest.mark.asyncio
     async def test_should_handle_pause_message(self, handler, session_id):
         """Test handling of pause control message."""
         handler.websocket = AsyncMock()
         handler.session_id = session_id
+        handler.session_status = "in_progress"
         handler.manager = MagicMock()
         handler.manager.send_json = AsyncMock()
+        handler._stop_streaming_asr = AsyncMock()
 
-        await handler.handle_message({"type": "pause", "data": {}})
+        with patch.object(
+            handler,
+            "_apply_lifecycle_action",
+            new=AsyncMock(return_value=MagicMock(to_status="paused")),
+        ):
+            await handler.handle_message({"type": "pause", "data": {}})
 
         handler.manager.send_json.assert_called()
         call_args = handler.manager.send_json.call_args[0]
@@ -54,20 +62,26 @@ class TestWebSocketFlow:
         """Test handling of resume control message."""
         handler.websocket = AsyncMock()
         handler.session_id = session_id
+        handler.session_status = "paused"
         handler.manager = MagicMock()
         handler.manager.send_json = AsyncMock()
-
-        await handler.handle_message({"type": "resume", "data": {}})
+        with patch.object(
+            handler,
+            "_apply_lifecycle_action",
+            new=AsyncMock(return_value=MagicMock(to_status="in_progress")),
+        ):
+            await handler.handle_message({"type": "resume", "data": {}})
 
         handler.manager.send_json.assert_called()
         call_args = handler.manager.send_json.call_args[0]
         assert call_args[1]["type"] == "status"
         assert call_args[1]["data"]["ai_state"] == "listening"
 
-    def test_should_set_persona(self, handler):
+    @pytest.mark.asyncio
+    async def test_should_set_persona(self, handler):
         """Test persona can be set."""
-        handler.set_persona("skeptical_buyer")
-        assert handler.persona == "skeptical_buyer"
+        await handler.set_persona("skeptical_buyer")
+        assert handler.persona_id == "skeptical_buyer"
 
     @pytest.mark.asyncio
     async def test_should_send_status_message(self, handler, session_id):

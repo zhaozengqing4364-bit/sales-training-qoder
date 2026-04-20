@@ -1,0 +1,43 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - img [ref=e8]
+          - generic [ref=e11]:
+            - generic [ref=e12]: AI 销售教练
+            - generic [ref=e13]: 平台
+        - navigation "主导航" [ref=e14]:
+          - generic [ref=e15]: 菜单
+          - menubar [ref=e16]:
+            - menuitem "首页" [ref=e17] [cursor=pointer]:
+              - img [ref=e19]
+              - generic [ref=e22]: 首页
+            - menuitem "训练模式" [ref=e23] [cursor=pointer]:
+              - img [ref=e24]
+              - generic [ref=e29]: 训练模式
+            - menuitem "排行榜" [ref=e30] [cursor=pointer]:
+              - img [ref=e31]
+              - generic [ref=e32]: 排行榜
+          - generic [ref=e35]: 系统
+          - menubar [ref=e36]:
+            - menuitem "运行状态" [ref=e37] [cursor=pointer]:
+              - img [ref=e38]
+              - generic [ref=e40]: 运行状态
+            - menuitem "管理后台" [ref=e41] [cursor=pointer]:
+              - img [ref=e42]
+              - generic [ref=e45]: 管理后台
+        - generic [ref=e46]:
+          - generic [ref=e47] [cursor=pointer]:
+            - img [ref=e49]
+            - generic [ref=e52]:
+              - generic [ref=e53]: Developer
+              - generic [ref=e54]: Development
+            - img [ref=e56]
+          - button "折叠侧边栏" [ref=e59]:
+            - img [ref=e60]
+            - generic [ref=e63]: 折叠侧边栏
+    - main [ref=e64]
+  - button "Open Next.js Dev Tools" [ref=e92] [cursor=pointer]:
+    - img [ref=e93]
+  - alert [ref=e96]

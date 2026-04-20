@@ -6,22 +6,139 @@ Implements Constitution Principles:
 - V. Cost control - Efficient queries
 """
 
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.analytics.analytics_service import analytics_service
 from common.analytics.history_service import history_service
 from common.analytics.leaderboard_service import leaderboard_service
-from common.auth.service import get_current_user
+from common.api.server_error import build_server_error
+from common.auth.service import get_current_admin_user, get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from common.jobs.audio_archival import audio_archival_job
 from common.monitoring.logger import get_logger
+from common.monitoring.metrics import track_frontend_analytics_event
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+class FrontendErrorEvent(BaseModel):
+    error: str
+    stack: str | None = None
+    component_stack: str | None = Field(default=None, alias="componentStack")
+    url: str
+    user_agent: str | None = Field(default=None, alias="userAgent")
+    timestamp: str
+    source: str | None = None
+    boundary: str | None = None
+
+
+class FrontendPerformanceEvent(BaseModel):
+    name: str
+    value: float
+    rating: str | None = None
+    delta: float | None = None
+    id: str | None = None
+    url: str
+    timestamp: str
+
+
+class FrontendCustomEvent(BaseModel):
+    name: str
+    value: float
+    metadata: dict[str, Any] | None = None
+    url: str
+    timestamp: str
+
+
+@router.post("/analytics/error", status_code=202)
+async def ingest_frontend_error(event: FrontendErrorEvent):
+    """Accept frontend route and boundary error beacons on a real backend sink."""
+    track_frontend_analytics_event("error")
+    logger.warning(
+        "Accepted frontend analytics/error beacon",
+        source=event.source or "frontend.unknown",
+        boundary=event.boundary or "",
+        url=event.url,
+        error=event.error,
+        component_stack_present=bool(event.component_stack),
+        user_agent=event.user_agent or "",
+        observed_at=event.timestamp,
+    )
+    return {"accepted": True, "event_type": "error"}
+
+
+@router.post("/analytics/performance", status_code=202)
+async def ingest_frontend_performance_metric(event: FrontendPerformanceEvent):
+    """Accept Web Vitals beacons on a real backend sink."""
+    track_frontend_analytics_event("performance")
+    logger.info(
+        "Accepted frontend analytics/performance beacon",
+        metric_name=event.name,
+        metric_value=event.value,
+        rating=event.rating or "",
+        delta=event.delta,
+        metric_id=event.id or "",
+        url=event.url,
+        observed_at=event.timestamp,
+    )
+    return {"accepted": True, "event_type": "performance"}
+
+
+@router.post("/analytics/custom", status_code=202)
+async def ingest_frontend_custom_metric(event: FrontendCustomEvent):
+    """Accept custom frontend metrics on a real backend sink."""
+    track_frontend_analytics_event("custom")
+    logger.info(
+        "Accepted frontend analytics/custom beacon",
+        metric_name=event.name,
+        metric_value=event.value,
+        metadata=event.metadata or {},
+        url=event.url,
+        observed_at=event.timestamp,
+    )
+    return {"accepted": True, "event_type": "custom"}
+
+
+def _normalize_scenario_type(scenario_type: str | None) -> str | None:
+    """Normalize scenario aliases for leaderboard APIs."""
+    if not scenario_type:
+        return None
+    if scenario_type == "sales_bot":
+        return "sales"
+    return scenario_type
+
+
+def _normalize_time_period(time_period: str) -> str:
+    """Normalize time-period aliases to service canonical values."""
+    aliases = {
+        "day": "daily",
+        "daily": "daily",
+        "week": "weekly",
+        "weekly": "weekly",
+        "month": "monthly",
+        "monthly": "monthly",
+        "all": "all_time",
+        "all_time": "all_time",
+    }
+    return aliases.get(time_period, "all_time")
+
+
+def _server_error(
+    error_code: str,
+    message: str,
+    *,
+    exc: Exception | None = None,
+    **context: object,
+):
+    return build_server_error(error_code, message=message, exc=exc, **context)
 
 
 # Leaderboard endpoints
@@ -29,27 +146,37 @@ router = APIRouter()
 async def get_leaderboard(
     scenario_type: str | None = None,
     time_period: str = "all_time",
+    include_me: bool = Query(False),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get leaderboard rankings"""
     try:
+        normalized_scenario_type = _normalize_scenario_type(scenario_type)
+        normalized_time_period = _normalize_time_period(time_period)
         result = await leaderboard_service.calculate_leaderboard(
             db=db,
-            scenario_type=scenario_type,
-            time_period=time_period,
-            limit=limit
+            scenario_type=normalized_scenario_type,
+            time_period=normalized_time_period,
+            limit=limit,
         )
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch leaderboard")
+            return _server_error(
+                "[LEADERBOARD_FETCH_FAILED]",
+                "Failed to fetch leaderboard",
+                scenario_type=normalized_scenario_type,
+                time_period=normalized_time_period,
+            )
 
         stats = result.value
-
-        return {
-            "scenario_type": scenario_type,
-            "time_period": time_period,
+        response_payload = {
+            "scenario_type": normalized_scenario_type,
+            "time_period": stats.time_period,
+            "score_basis": stats.score_basis,
+            "evaluable_sessions": stats.evaluable_sessions,
+            "not_evaluable_sessions": stats.not_evaluable_sessions,
             "total_users": stats.total_users,
             "entries": [
                 {
@@ -59,42 +186,74 @@ async def get_leaderboard(
                     "total_sessions": entry.total_sessions,
                     "average_score": entry.average_score,
                     "best_score": entry.best_score,
+                    "score_basis": entry.score_basis,
+                    "evaluable_sessions": entry.total_sessions,
+                    "not_evaluable_sessions": 0,
                 }
                 for entry in stats.entries
             ],
         }
 
+        if include_me:
+            my_rank_result = await leaderboard_service.get_user_rank(
+                db=db,
+                user_id=current_user.user_id,
+                scenario_type=normalized_scenario_type,
+                time_period=normalized_time_period,
+            )
+            if my_rank_result.is_success:
+                response_payload["my_rank"] = my_rank_result.value
+
+        return response_payload
+
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get leaderboard: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch leaderboard")
+        return _server_error(
+            "[LEADERBOARD_FETCH_FAILED]",
+            "Failed to fetch leaderboard",
+            exc=e,
+        )
 
 
 @router.get("/analytics/leaderboard/my-rank")
 async def get_my_rank(
     scenario_type: str | None = None,
+    time_period: str = "all_time",
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get current user's rank"""
     try:
+        normalized_scenario_type = _normalize_scenario_type(scenario_type)
+        normalized_time_period = _normalize_time_period(time_period)
         result = await leaderboard_service.get_user_rank(
             db=db,
             user_id=current_user.user_id,
-            scenario_type=scenario_type
+            scenario_type=normalized_scenario_type,
+            time_period=normalized_time_period,
         )
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch rank")
+            return _server_error(
+                "[LEADERBOARD_RANK_FETCH_FAILED]",
+                "Failed to fetch rank",
+                scenario_type=normalized_scenario_type,
+                time_period=normalized_time_period,
+            )
 
         return result.value
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get user rank: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch rank")
+        return _server_error(
+            "[LEADERBOARD_RANK_FETCH_FAILED]",
+            "Failed to fetch rank",
+            exc=e,
+        )
 
 
 # Dashboard analytics endpoints
@@ -103,18 +262,21 @@ async def get_dashboard_stats(
     scenario_type: str | None = None,
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get dashboard analytics statistics (admin only)"""
     try:
         result = await analytics_service.get_dashboard_stats(
-            db=db,
-            scenario_type=scenario_type,
-            days=days
+            db=db, scenario_type=scenario_type, days=days
         )
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch dashboard stats")
+            return _server_error(
+                "[ANALYTICS_DASHBOARD_FETCH_FAILED]",
+                "Failed to fetch dashboard stats",
+                scenario_type=scenario_type,
+                days=days,
+            )
 
         stats = result.value
 
@@ -138,13 +300,23 @@ async def get_dashboard_stats(
                 "sessions_with_high_vagueness": stats.sessions_with_high_vagueness,
                 "sessions_with_forbidden_words": stats.sessions_with_forbidden_words,
             },
+            "effectiveness": {
+                "pass_rate_3min_flow": stats.pass_rate_3min_flow,
+                "pass_rate_5turn_defense": stats.pass_rate_5turn_defense,
+                "pass_rate_4step_structure": stats.pass_rate_4step_structure,
+                "next_day_retry_rate": stats.next_day_retry_rate,
+            },
         }
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get dashboard stats: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch dashboard stats")
+        return _server_error(
+            "[ANALYTICS_DASHBOARD_FETCH_FAILED]",
+            "Failed to fetch dashboard stats",
+            exc=e,
+        )
 
 
 @router.get("/analytics/score-distribution")
@@ -152,18 +324,21 @@ async def get_score_distribution(
     scenario_type: str | None = None,
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get score distribution"""
     try:
         result = await analytics_service.get_score_distribution(
-            db=db,
-            scenario_type=scenario_type,
-            days=days
+            db=db, scenario_type=scenario_type, days=days
         )
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch distribution")
+            return _server_error(
+                "[ANALYTICS_DISTRIBUTION_FETCH_FAILED]",
+                "Failed to fetch distribution",
+                scenario_type=scenario_type,
+                days=days,
+            )
 
         dist = result.value
 
@@ -180,9 +355,13 @@ async def get_score_distribution(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get score distribution: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch distribution")
+        return _server_error(
+            "[ANALYTICS_DISTRIBUTION_FETCH_FAILED]",
+            "Failed to fetch distribution",
+            exc=e,
+        )
 
 
 @router.get("/analytics/trends")
@@ -190,146 +369,198 @@ async def get_trend_data(
     scenario_type: str | None = None,
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get trend data for charts"""
     try:
         result = await analytics_service.get_trend_data(
-            db=db,
-            scenario_type=scenario_type,
-            days=days
+            db=db, scenario_type=scenario_type, days=days
         )
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch trend data")
+            return _server_error(
+                "[ANALYTICS_TREND_FETCH_FAILED]",
+                "Failed to fetch trend data",
+                scenario_type=scenario_type,
+                days=days,
+            )
 
         return result.value
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get trend data: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch trend data")
+        return _server_error(
+            "[ANALYTICS_TREND_FETCH_FAILED]",
+            "Failed to fetch trend data",
+            exc=e,
+        )
 
 
 # Practice history endpoints
-@router.get("/practice/history")
-async def get_practice_history(
+@router.get("/analytics/practice/history")
+async def get_analytics_practice_history(
     scenario_type: str | None = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get current user's practice history"""
+    """Get current user's practice history snapshot for analytics views."""
     try:
+        normalized_scenario_type = _normalize_scenario_type(scenario_type)
         result = await history_service.get_user_history(
             db=db,
             user_id=current_user.user_id,
-            scenario_type=scenario_type,
+            scenario_type=normalized_scenario_type,
             limit=limit,
-            offset=offset
+            offset=offset,
         )
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch history")
+            return _server_error(
+                "[ANALYTICS_HISTORY_FETCH_FAILED]",
+                "Failed to fetch history",
+                scenario_type=normalized_scenario_type,
+                limit=limit,
+                offset=offset,
+            )
 
         sessions = result.value
 
+        items = [
+            {
+                "session_id": session.session_id,
+                "scenario_id": session.scenario_id,
+                "scenario_name": session.scenario_name,
+                "scenario_type": session.scenario_type,
+                "start_time": session.start_time.isoformat() if session.start_time else None,
+                "end_time": session.end_time.isoformat() if session.end_time else None,
+                "status": session.status,
+                "overall_score": session.overall_score,
+                "logic_score": session.logic_score,
+                "accuracy_score": session.accuracy_score,
+                "completeness_score": session.completeness_score,
+                "duration_seconds": session.duration_seconds,
+                "agent_name": session.agent_name,
+                "persona_name": session.persona_name,
+                "title": session.title,
+                "effectiveness_snapshot": session.effectiveness_snapshot,
+                "feedback_summary": session.feedback_summary,
+                "evaluable": session.evaluable,
+                "not_evaluable_reason": session.not_evaluable_reason,
+                "evidence_completeness": session.evidence_completeness,
+                "stage_summary": session.stage_summary,
+                "main_issue": session.main_issue,
+                "next_goal": session.next_goal,
+            }
+            for session in sessions
+        ]
+
         return {
-            "sessions": [
-                {
-                    "session_id": str(session.session_id),
-                    "scenario_id": str(session.scenario_id),
-                    "start_time": session.start_time.isoformat(),
-                    "end_time": session.end_time.isoformat() if session.end_time else None,
-                    "status": session.status,
-                    "overall_score": (
-                        (session.logic_score or 0) * 0.4 +
-                        (session.accuracy_score or 0) * 0.3 +
-                        (session.completeness_score or 0) * 0.3
-                    ),
-                }
-                for session in sessions
-            ],
-            "total": len(sessions),
+            "items": items,
+            "sessions": items,
+            "total": len(items),
         }
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get practice history: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch history")
+        return _server_error(
+            "[ANALYTICS_HISTORY_FETCH_FAILED]",
+            "Failed to fetch history",
+            exc=e,
+        )
 
 
 @router.get("/practice/history/statistics")
 async def get_history_statistics(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Get current user's practice statistics"""
     try:
         result = await history_service.get_statistics(
-            db=db,
-            user_id=current_user.user_id
+            db=db, user_id=current_user.user_id
         )
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch statistics")
+            return _server_error(
+                "[PRACTICE_HISTORY_STATISTICS_FETCH_FAILED]",
+                "Failed to fetch statistics",
+            )
 
         return result.value
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get history statistics: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch statistics")
+        return _server_error(
+            "[PRACTICE_HISTORY_STATISTICS_FETCH_FAILED]",
+            "Failed to fetch statistics",
+            exc=e,
+        )
 
 
 @router.get("/practice/history/trends")
 async def get_score_trends(
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get current user's score trends"""
     try:
         result = await history_service.get_score_trends(
-            db=db,
-            user_id=current_user.user_id,
-            days=days
+            db=db, user_id=current_user.user_id, days=days
         )
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch trends")
+            return _server_error(
+                "[PRACTICE_HISTORY_TRENDS_FETCH_FAILED]",
+                "Failed to fetch trends",
+                days=days,
+            )
 
         return {"trends": result.value}
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get score trends: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch trends")
+        return _server_error(
+            "[PRACTICE_HISTORY_TRENDS_FETCH_FAILED]",
+            "Failed to fetch trends",
+            exc=e,
+        )
 
 
 # Storage stats endpoint (admin)
 @router.get("/analytics/storage")
 async def get_storage_stats(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get audio storage statistics (admin only)"""
     try:
-        # TODO: Add admin role check
+        # Role guard handled via get_current_admin_user dependency.
         result = await audio_archival_job.get_storage_stats(db=db)
 
         if not result.is_success:
-            raise HTTPException(status_code=500, detail="Failed to fetch storage stats")
+            return _server_error(
+                "[ANALYTICS_STORAGE_FETCH_FAILED]",
+                "Failed to fetch storage stats",
+            )
 
         return result.value
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get storage stats: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch storage stats")
+        return _server_error(
+            "[ANALYTICS_STORAGE_FETCH_FAILED]",
+            "Failed to fetch storage stats",
+            exc=e,
+        )

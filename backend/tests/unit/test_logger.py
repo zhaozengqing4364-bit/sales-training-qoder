@@ -2,6 +2,8 @@
 Unit tests for structured logging (T026-T027)
 Constitution Principle VII: Observability - All logs contain trace_id
 """
+from fastapi import FastAPI
+
 from common.monitoring.logger import (
     configure_logging,
     get_logger,
@@ -45,7 +47,7 @@ class TestStructuredLogger:
 
         trace_id = get_trace_id()
         assert trace_id is not None
-        assert len(trace_id) == 8  # First 8 chars of UUID
+        assert len(trace_id) == 32
 
     def test_set_trace_id_updates_context(self):
         """Should update trace_id in context"""
@@ -79,3 +81,27 @@ class TestStructuredLogger:
             action="upload_ppt",
             duration_ms=150,
         )
+
+
+def test_initialize_otel_skips_when_disabled(monkeypatch):
+    """Should skip OTel initialization when disabled."""
+    from common.monitoring.otel import initialize_otel
+
+    monkeypatch.delenv("OTEL_ENABLED", raising=False)
+
+    app = FastAPI()
+    assert initialize_otel(app) is False
+
+
+def test_initialize_otel_gracefully_degrades_when_dependencies_missing(monkeypatch):
+    """Should not raise when OTel dependencies are absent."""
+    import common.monitoring.otel as otel_module
+
+    def _missing_module(name: str):
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setenv("OTEL_ENABLED", "true")
+    monkeypatch.setattr(otel_module.importlib, "import_module", _missing_module)
+
+    app = FastAPI()
+    assert otel_module.initialize_otel(app) is False

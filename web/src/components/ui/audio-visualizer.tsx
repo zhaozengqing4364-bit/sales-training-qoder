@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,6 @@ export function AudioVisualizer({
     className,
     color = "bg-indigo-500",
 }: AudioVisualizerProps) {
-    const canvasRef = React.useRef<HTMLCanvasElement>(null);
     const audioContextRef = React.useRef<AudioContext | null>(null);
     const analyserRef = React.useRef<AnalyserNode | null>(null);
     const sourceRef = React.useRef<MediaStreamAudioSourceNode | null>(null);
@@ -102,7 +102,7 @@ export function AudioVisualizer({
                 
                 draw();
             } catch (err) {
-                console.error("Failed to setup audio visualizer:", err);
+                debug.error("Failed to setup audio visualizer:", err);
             }
         };
 

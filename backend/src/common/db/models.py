@@ -6,11 +6,13 @@ Generated from data-model.md
 - 使用 String(36) 存储 UUID 以兼容 SQLite 和 PostgreSQL
 - 在应用层使用 uuid.UUID 类型进行转换
 """
+
 import enum
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Column,
@@ -20,12 +22,18 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
+    text,
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+
+def _jsonb_compatible_type():
+    return JSON().with_variant(postgresql.JSONB(astext_type=Text()), "postgresql")
 
 
 class ScenarioType(str, enum.Enum):
@@ -47,10 +55,30 @@ class SessionStatus(str, enum.Enum):
     SCORING = "scoring"
 
 
+class ReportGenerationStatus(str, enum.Enum):
+    """Status of report generation for a session."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class InterruptionType(str, enum.Enum):
     FORBIDDEN_WORD = "forbidden_word"
     MISSING_POINT = "missing_point"
     VAGUE_RESPONSE = "vague_response"
+
+
+class ManagerInterventionDueState(str, enum.Enum):
+    PENDING = "pending"
+    DUE = "due"
+    RESOLVED = "resolved"
+
+
+class ManagerInterventionReminderStatus(str, enum.Enum):
+    NOT_SENT = "not_sent"
+    SENT = "sent"
 
 
 class User(Base):
@@ -61,33 +89,102 @@ class User(Base):
     name = Column(String(100), nullable=False)
     department = Column(String(100))
     email = Column(String(255), unique=True)
-    role = Column(String(20), default="user", nullable=False)  # user, admin
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_login = Column(DateTime)
+    hashed_password = Column(String(255), nullable=True)
+    role = Column(String(20), default="user", nullable=False)  # user, admin, support
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    last_login = Column(DateTime(timezone=True))
     is_active = Column(Boolean, default=True)
 
     __table_args__ = (
-        CheckConstraint("role IN ('user', 'admin')", name="ck_user_role"),
+        CheckConstraint("role IN ('user', 'admin', 'support')", name="ck_user_role"),
     )
 
     # Relationships
     practice_sessions = relationship("PracticeSession", back_populates="user")
     leaderboard_entries = relationship("LeaderboardEntry", back_populates="user")
+    password_reset_tokens = relationship(
+        "PasswordResetToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class PasswordResetToken(Base):
+    """Durable password-reset lifecycle row.
+
+    Formal auth-recovery work should extend this model + its Alembic history
+    (`026_password_reset_tokens`, `027_reset_lifecycle_delivery`, and
+    `028_reset_single_active_token`) instead of reintroducing
+    `used_at` is reserved for successful consumption, while `invalidated_at`
+    records superseded/expired tokens that must still remain auditable.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(64), nullable=False, unique=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    invalidation_reason = Column(String(32), nullable=True)
+    delivery_status = Column(String(20), nullable=False, default="pending", index=True)
+    delivery_attempted_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_error = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "delivery_status IN ('pending', 'sent', 'failed')",
+            name="ck_password_reset_tokens_delivery_status",
+        ),
+        CheckConstraint(
+            "invalidation_reason IS NULL OR invalidation_reason IN ('superseded', 'expired')",
+            name="ck_password_reset_tokens_invalidation_reason",
+        ),
+        Index("idx_password_reset_tokens_user_created", "user_id", "created_at"),
+        Index(
+            "uq_password_reset_tokens_single_active_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("used_at IS NULL AND invalidated_at IS NULL"),
+            postgresql_where=text("used_at IS NULL AND invalidated_at IS NULL"),
+        ),
+    )
+
+    user = relationship("User", back_populates="password_reset_tokens")
 
 
 class Scenario(Base):
     __tablename__ = "scenarios"
 
-    scenario_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    scenario_id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
     scenario_type = Column(String(20), nullable=False)
     name = Column(String(100), nullable=False)
     description = Column(String)
     persona_prompt = Column(String)  # For sales bot
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
-        CheckConstraint("scenario_type IN ('presentation', 'sales')", name="ck_scenario_type"),
+        CheckConstraint(
+            "scenario_type IN ('presentation', 'sales')", name="ck_scenario_type"
+        ),
     )
 
     # Relationships
@@ -97,11 +194,15 @@ class Scenario(Base):
 class Presentation(Base):
     __tablename__ = "presentations"
 
-    presentation_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    presentation_id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
     title = Column(String(200), nullable=False)
     file_url = Column(String(500), nullable=False)
     file_size_bytes = Column(Integer)
-    upload_date = Column(DateTime, default=datetime.utcnow)
+    upload_date = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
     version_number = Column(Integer, default=1)
     status = Column(String(20), default="processing", index=True)
     uploaded_by_admin_id = Column(String(36), ForeignKey("users.user_id"))
@@ -109,13 +210,21 @@ class Presentation(Base):
     ocr_progress = Column(Float, default=0)
 
     __table_args__ = (
-        CheckConstraint("status IN ('processing', 'ready', 'failed')", name="ck_presentation_status"),
+        CheckConstraint(
+            "status IN ('processing', 'ready', 'failed')", name="ck_presentation_status"
+        ),
     )
 
     # Relationships
-    pages = relationship("Page", back_populates="presentation", cascade="all, delete-orphan")
+    pages = relationship(
+        "Page", back_populates="presentation", cascade="all, delete-orphan"
+    )
     # Note: RequiredTalkingPoint is accessed through Page, not directly
-    forbidden_words = relationship("ForbiddenWord", foreign_keys="ForbiddenWord.presentation_id", cascade="all, delete-orphan")
+    forbidden_words = relationship(
+        "ForbiddenWord",
+        foreign_keys="ForbiddenWord.presentation_id",
+        cascade="all, delete-orphan",
+    )
     practice_sessions = relationship("PracticeSession", back_populates="presentation")
 
 
@@ -123,7 +232,9 @@ class Page(Base):
     __tablename__ = "pages"
 
     page_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    presentation_id = Column(String(36), ForeignKey("presentations.presentation_id"), nullable=False)
+    presentation_id = Column(
+        String(36), ForeignKey("presentations.presentation_id"), nullable=False
+    )
     page_number = Column(Integer, nullable=False)
     ocr_extracted_text = Column(String)
     image_url = Column(String(500))
@@ -131,13 +242,17 @@ class Page(Base):
     needs_manual_review = Column(Boolean, default=False)
 
     __table_args__ = (
-        UniqueConstraint("presentation_id", "page_number", name="uq_page_presentation_number"),
+        UniqueConstraint(
+            "presentation_id", "page_number", name="uq_page_presentation_number"
+        ),
         Index("idx_pages_presentation", "presentation_id"),
     )
 
     # Relationships
     presentation = relationship("Presentation", back_populates="pages")
-    required_talking_points = relationship("RequiredTalkingPoint", cascade="all, delete-orphan")
+    required_talking_points = relationship(
+        "RequiredTalkingPoint", cascade="all, delete-orphan"
+    )
     forbidden_words = relationship("ForbiddenWord", cascade="all, delete-orphan")
 
 
@@ -145,12 +260,16 @@ class RequiredTalkingPoint(Base):
     __tablename__ = "required_talking_points"
 
     point_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    page_id = Column(String(36), ForeignKey("pages.page_id"), nullable=False, index=True)
+    page_id = Column(
+        String(36), ForeignKey("pages.page_id"), nullable=False, index=True
+    )
     description = Column(String, nullable=False)
     created_by = Column(String(10), nullable=False)
     is_ai_generated = Column(Boolean, default=False)
     confirmed_by_admin = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
         CheckConstraint("created_by IN ('admin', 'ai')", name="ck_point_created_by"),
@@ -175,7 +294,7 @@ class ForbiddenWord(Base):
         CheckConstraint(
             "(presentation_id IS NOT NULL AND page_id IS NULL) OR "
             "(presentation_id IS NULL AND page_id IS NOT NULL)",
-            name="ck_forbidden_word_mutually_exclusive"
+            name="ck_forbidden_word_mutually_exclusive",
         ),
     )
 
@@ -184,18 +303,43 @@ class PracticeSession(Base):
     __tablename__ = "practice_sessions"
 
     session_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
-    scenario_id = Column(String(36), ForeignKey("scenarios.scenario_id"), nullable=False)
+    user_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    scenario_id = Column(
+        String(36), ForeignKey("scenarios.scenario_id"), nullable=False
+    )
     presentation_id = Column(String(36), ForeignKey("presentations.presentation_id"))
 
     # Agent Platform fields (R12: Session Management Enhancement)
     # Nullable for backward compatibility with existing sessions
     # SET NULL on delete to preserve session history when Agent/Persona is deleted
-    agent_id = Column(String(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True, index=True)
-    persona_id = Column(String(36), ForeignKey("personas.id", ondelete="SET NULL"), nullable=True, index=True)
+    agent_id = Column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    persona_id = Column(
+        String(36),
+        ForeignKey("personas.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    voice_mode = Column(String(32), nullable=False, default="legacy", index=True)
+    voice_runtime_profile_id = Column(
+        String(36),
+        ForeignKey("voice_runtime_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    voice_policy_snapshot = Column(JSON, nullable=True)
+    effectiveness_snapshot = Column(JSON, nullable=True)
 
-    start_time = Column(DateTime, default=datetime.utcnow, index=True)
-    end_time = Column(DateTime)
+    start_time = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    end_time = Column(DateTime(timezone=True))
     status = Column(String(20), default="preparing", index=True)
     current_page = Column(Integer)
     logic_score = Column(Float)
@@ -207,36 +351,121 @@ class PracticeSession(Base):
     llm_tokens_used = Column(Integer, default=0)
     interruption_count = Column(Integer, default=0)
 
+    # Report generation status (Story 3.1)
+    report_status = Column(String(20), default="pending", index=True)
+    report_generated_at = Column(DateTime(timezone=True))
+    report_error = Column(Text, nullable=True)
+
     __table_args__ = (
-        CheckConstraint("status IN ('preparing', 'in_progress', 'paused', 'completed', 'scoring')", name="ck_session_status"),
+        CheckConstraint(
+            "status IN ('preparing', 'in_progress', 'paused', 'completed', 'scoring')",
+            name="ck_session_status",
+        ),
+        CheckConstraint(
+            "voice_mode IN ('legacy', 'stepfun_realtime')", name="ck_session_voice_mode"
+        ),
         CheckConstraint("logic_score BETWEEN 0 AND 100", name="ck_logic_score"),
         CheckConstraint("accuracy_score BETWEEN 0 AND 100", name="ck_accuracy_score"),
-        CheckConstraint("completeness_score BETWEEN 0 AND 100", name="ck_completeness_score"),
+        CheckConstraint(
+            "completeness_score BETWEEN 0 AND 100", name="ck_completeness_score"
+        ),
+        CheckConstraint(
+            "report_status IN ('pending', 'processing', 'completed', 'failed')",
+            name="ck_report_status",
+        ),
         Index("idx_sessions_user", "user_id"),
         Index("idx_sessions_status", "status"),
         Index("idx_sessions_start", "start_time"),
         Index("idx_sessions_agent", "agent_id"),
         Index("idx_sessions_persona", "persona_id"),
+        Index("idx_sessions_report_status", "report_status"),
     )
 
     # Relationships
     user = relationship("User", back_populates="practice_sessions")
     scenario = relationship("Scenario", back_populates="practice_sessions")
     presentation = relationship("Presentation", back_populates="practice_sessions")
-    interruption_events = relationship("InterruptionEvent", cascade="all, delete-orphan")
+    interruption_events = relationship(
+        "InterruptionEvent", cascade="all, delete-orphan"
+    )
     # Agent Platform relationships
     agent = relationship("Agent", back_populates="sessions")
     persona = relationship("Persona", back_populates="sessions")
     # Conversation messages (R9: Conversation Message Storage)
-    messages = relationship("ConversationMessage", back_populates="session", cascade="all, delete-orphan")
+    messages = relationship(
+        "ConversationMessage", back_populates="session", cascade="all, delete-orphan"
+    )
+    # Audio segments for browser-direct OSS upload audit trail
+    audio_segments = relationship(
+        "SessionAudioSegment", back_populates="session", cascade="all, delete-orphan"
+    )
+
+
+class ConversationMessage(Base):
+    """Conversation message persisted for replay and report pages."""
+
+    __tablename__ = "conversation_messages"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    turn_number = Column(Integer, nullable=False)
+    role = Column(String(20), nullable=False)  # user|assistant
+    content = Column(Text, nullable=False)
+    audio_url = Column(String(500), nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    timestamp = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    fuzzy_words = Column(JSON, nullable=True)
+    transcript_metadata = Column(JSON, nullable=True)
+    sales_stage = Column(String(50), nullable=True)
+    score_snapshot = Column(JSON, nullable=True)
+    ai_feedback = Column(Text, nullable=True)
+    is_highlight = Column(Boolean, default=False, nullable=False)
+    highlight_type = Column(String(20), nullable=True)
+    highlight_reason = Column(String(200), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('user', 'assistant')",
+            name="ck_conversation_message_role",
+        ),
+        CheckConstraint(
+            "highlight_type IS NULL OR highlight_type IN ('good', 'bad', 'neutral')",
+            name="ck_conversation_message_highlight_type",
+        ),
+        CheckConstraint(
+            "sales_stage IS NULL OR sales_stage IN ('opening', 'discovery', 'presentation', 'objection', 'closing')",
+            name="ck_conversation_message_sales_stage",
+        ),
+        Index("ix_conversation_messages_session_turn", "session_id", "turn_number"),
+        Index("idx_conversation_messages_session", "session_id"),
+        Index("idx_conversation_messages_timestamp", "timestamp"),
+        Index("idx_conversation_messages_is_highlight", "is_highlight"),
+    )
+
+    session = relationship("PracticeSession", back_populates="messages")
 
 
 class InterruptionEvent(Base):
     __tablename__ = "interruption_events"
 
     event_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id = Column(String(36), ForeignKey("practice_sessions.session_id"), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id"),
+        nullable=False,
+        index=True,
+    )
+    timestamp = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
     interruption_type = Column(String(30), nullable=False)
     trigger_content = Column(String)
     ai_response = Column(String, nullable=False)
@@ -245,12 +474,72 @@ class InterruptionEvent(Base):
     was_effective = Column(Boolean)
 
     __table_args__ = (
-        CheckConstraint("interruption_type IN ('forbidden_word', 'missing_point', 'vague_response')", name="ck_interruption_type"),
+        CheckConstraint(
+            "interruption_type IN ('forbidden_word', 'missing_point', 'vague_response')",
+            name="ck_interruption_type",
+        ),
         Index("idx_interruptions_session", "session_id"),
     )
 
     # Relationships
     session = relationship("PracticeSession", back_populates="interruption_events")
+
+
+class ManagerIntervention(Base):
+    __tablename__ = "manager_interventions"
+
+    intervention_id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    manager_user_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    user_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    issue_family = Column(String(64), nullable=False, index=True)
+    note = Column(Text)
+    due_state = Column(String(20), nullable=False, default="pending", index=True)
+    reminder_status = Column(String(20), nullable=False, default="not_sent")
+    reminder_sent_at = Column(DateTime(timezone=True))
+    resolving_session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id"),
+        nullable=True,
+        index=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "due_state IN ('pending', 'due', 'resolved')",
+            name="ck_manager_intervention_due_state",
+        ),
+        CheckConstraint(
+            "reminder_status IN ('not_sent', 'sent')",
+            name="ck_manager_intervention_reminder_status",
+        ),
+        CheckConstraint(
+            "(resolving_session_id IS NULL AND due_state IN ('pending', 'due')) OR "
+            "(resolving_session_id IS NOT NULL AND due_state = 'resolved')",
+            name="ck_manager_intervention_resolution_state",
+        ),
+        Index("idx_manager_interventions_user_created", "user_id", "created_at"),
+        Index(
+            "idx_manager_interventions_manager_created", "manager_user_id", "created_at"
+        ),
+    )
 
 
 class LeaderboardEntry(Base):
@@ -263,12 +552,22 @@ class LeaderboardEntry(Base):
     average_score = Column(Float, nullable=False)
     total_sessions = Column(Integer, default=1)
     rank = Column(Integer, index=True)
-    last_updated = Column(DateTime, default=datetime.utcnow)
+    last_updated = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
-        CheckConstraint("scenario_type IN ('presentation', 'sales')", name="ck_leaderboard_scenario_type"),
+        CheckConstraint(
+            "scenario_type IN ('presentation', 'sales')",
+            name="ck_leaderboard_scenario_type",
+        ),
         CheckConstraint("average_score BETWEEN 0 AND 100", name="ck_leaderboard_score"),
-        UniqueConstraint("user_id", "scenario_type", "presentation_id", name="uq_leaderboard_user_scenario"),
+        UniqueConstraint(
+            "user_id",
+            "scenario_type",
+            "presentation_id",
+            name="uq_leaderboard_user_scenario",
+        ),
         Index("idx_leaderboard_scenario", "scenario_type"),
         Index("idx_leaderboard_rank", "rank"),
     )
@@ -279,6 +578,7 @@ class LeaderboardEntry(Base):
 
 class SystemLogStatus(str, enum.Enum):
     """System log status types"""
+
     SUCCESS = "success"
     FAILED = "failed"
     WARNING = "warning"
@@ -294,6 +594,7 @@ class SystemLog(Base):
     - Requirements: 7.1, 7.2, 7.3
     - Design: Section "System Logs API"
     """
+
     __tablename__ = "system_logs"
 
     log_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -301,14 +602,17 @@ class SystemLog(Base):
     user_id = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     user_identifier = Column(String(255), nullable=False)  # email or "system"
     ip_address = Column(String(45), nullable=True)
-    status = Column(String(20), nullable=False, default="success")  # success, failed, warning
+    status = Column(
+        String(20), nullable=False, default="success"
+    )  # success, failed, warning
     details = Column(String, nullable=True)  # JSON string for additional details
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('success', 'failed', 'warning')",
-            name="ck_system_log_status"
+            "status IN ('success', 'failed', 'warning')", name="ck_system_log_status"
         ),
         Index("idx_system_logs_created_at", "created_at"),
         Index("idx_system_logs_user_id", "user_id"),
@@ -317,3 +621,753 @@ class SystemLog(Base):
 
     # Relationships
     user = relationship("User", backref="system_logs")
+
+
+class PromptTemplate(Base):
+    """Prompt template for AI interactions."""
+
+    __tablename__ = "prompt_templates"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    prompt_type = Column(String(50), nullable=False)
+    category = Column(String(100), nullable=False, default="common")
+    template = Column(Text, nullable=False)
+    variables = Column(JSON, nullable=True, default=list)
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_default = Column(Boolean, nullable=False, default=False)
+    is_system = Column(Boolean, nullable=False, default=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        Index("idx_prompt_templates_type", "prompt_type"),
+        Index("idx_prompt_templates_active", "is_active"),
+    )
+
+
+class ScenarioPrompt(Base):
+    """Link between scenarios and prompt templates."""
+
+    __tablename__ = "scenario_prompts"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    scenario_type = Column(String(50), nullable=False)
+    scenario_id = Column(String(255), nullable=True)
+    prompt_type = Column(String(50), nullable=False)
+    template_id = Column(String(36), ForeignKey("prompt_templates.id"), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    template = relationship("PromptTemplate")
+
+    __table_args__ = (
+        Index("idx_scenario_prompts_type", "scenario_type", "prompt_type"),
+    )
+
+
+class StagedEvaluationResult(Base):
+    """Staged evaluation result for a practice session.
+    Matches actual DB schema.
+    """
+
+    __tablename__ = "staged_evaluation_results"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String(36), nullable=False)
+    stage_number = Column(Integer, nullable=False)
+    start_turn = Column(Integer, nullable=False, default=0)
+    end_turn = Column(Integer, nullable=False, default=0)
+    scores = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+    )
+    strengths = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
+    weaknesses = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
+    suggestions = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
+    summary = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        Index("idx_staged_eval_session", "session_id"),
+        Index("idx_staged_eval_stage", "session_id", "stage_number", unique=True),
+        {"extend_existing": True},
+    )
+
+
+class ComprehensiveReport(Base):
+    """Comprehensive evaluation report for a practice session.
+    Matches actual DB schema.
+    """
+
+    __tablename__ = "comprehensive_reports"
+
+    session_id = Column(String(36), primary_key=True)
+    overall_score = Column(Float, nullable=False, default=0.0, server_default=text("0"))
+    dimension_scores = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
+    key_strengths = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
+    key_improvements = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
+    recommendations = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
+    detailed_feedback = Column(Text, nullable=True)
+    stage_summaries = Column(
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = {"extend_existing": True}
+
+
+class VerificationCheckType(str, enum.Enum):
+    """Types of verification checks for release gates"""
+
+    MIGRATION = "migration"  # Database migration check
+    UNIT_TESTS = "unit_tests"  # Unit test execution
+    COVERAGE = "coverage"  # Code coverage gate
+    INTEGRATION_TESTS = "integration_tests"  # Integration test gate
+    CONTRACT = "contract"  # API contract test
+    PERFORMANCE = "performance"  # Performance benchmark
+    HEALTH = "health"  # Health checks
+    SECURITY = "security"  # Security checks
+    DOCUMENTATION = "documentation"  # Documentation checks
+    MANUAL = "manual"  # Manual checklist item
+
+
+class VerificationStatus(str, enum.Enum):
+    """Status of a verification check"""
+
+    PENDING = "pending"
+    PASSED = "passed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class ReleaseVerificationRecord(Base):
+    """
+    ReleaseVerificationRecord - Records release gate verification results
+
+    Tracks verification checks for release candidates to ensure
+    quality gates are passed before deployment.
+
+    References:
+    - Requirements: FR40 - Release gate check results recording and tracking
+    - NFR19: Contract test pass rate 100% required for release
+    """
+
+    __tablename__ = "release_verification_records"
+
+    record_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    release_version = Column(String(50), nullable=False, index=True)
+    release_candidate_id = Column(String(100), nullable=False, index=True)
+
+    # Check details
+    check_type = Column(String(20), nullable=False)
+    check_name = Column(String(200), nullable=False)
+    check_description = Column(Text, nullable=True)
+
+    # Result
+    status = Column(String(20), nullable=False, default="pending")
+    passed = Column(Boolean, nullable=False, default=False)
+    details = Column(JSON, nullable=True)  # Additional check-specific data
+    error_message = Column(Text, nullable=True)
+
+    # Audit trail
+    executed_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    executed_at = Column(DateTime(timezone=True), nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+
+    # Traceability
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "check_type IN ("
+            "'migration', "
+            "'unit_tests', "
+            "'coverage', "
+            "'integration_tests', "
+            "'contract', "
+            "'performance', "
+            "'health', "
+            "'security', "
+            "'documentation', "
+            "'manual'"
+            ")",
+            name="ck_verification_check_type",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'passed', 'failed', 'skipped')",
+            name="ck_verification_status",
+        ),
+        Index("idx_verification_release_version", "release_version"),
+        Index("idx_verification_candidate", "release_candidate_id"),
+        Index("idx_verification_status", "status"),
+        Index("idx_verification_type", "check_type"),
+    )
+
+    # Relationships
+    executor = relationship("User", foreign_keys=[executed_by])
+
+
+class ReleaseVerificationSummary(Base):
+    """
+    ReleaseVerificationSummary - Overall verification summary for a release candidate
+
+    Aggregates all verification checks for a release candidate to provide
+    a go/no-go decision summary.
+    """
+
+    __tablename__ = "release_verification_summaries"
+
+    summary_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    release_version = Column(String(50), nullable=False, unique=True, index=True)
+    release_candidate_id = Column(String(100), nullable=False, unique=True)
+
+    # Summary counts
+    total_checks = Column(Integer, nullable=False, default=0)
+    passed_checks = Column(Integer, nullable=False, default=0)
+    failed_checks = Column(Integer, nullable=False, default=0)
+    skipped_checks = Column(Integer, nullable=False, default=0)
+    pending_checks = Column(Integer, nullable=False, default=0)
+
+    # Overall decision
+    overall_status = Column(
+        String(20), nullable=False, default="pending"
+    )  # pending, passed, failed
+    go_no_go_decision = Column(String(10), nullable=True)  # go, no_go, conditional
+    decision_reason = Column(Text, nullable=True)
+
+    # Audit
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+    finalized_at = Column(DateTime(timezone=True), nullable=True)
+    finalized_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "overall_status IN ('pending', 'passed', 'failed')",
+            name="ck_verification_summary_status",
+        ),
+        CheckConstraint(
+            "go_no_go_decision IS NULL OR go_no_go_decision IN ('go', 'no_go', 'conditional')",
+            name="ck_go_no_go_decision",
+        ),
+        Index("idx_verification_summary_version", "release_version"),
+    )
+
+    # Relationships
+    finalizer = relationship("User", foreign_keys=[finalized_by])
+
+
+class UploadStatus(str, enum.Enum):
+    """Upload status for audio segments."""
+
+    PENDING = "pending"
+    UPLOADED = "uploaded"
+    FAILED = "failed"
+
+
+class SessionAudioSegment(Base):
+    """Audio segment metadata for browser-direct OSS uploads.
+
+    Each row represents one audio chunk uploaded during a training session.
+    The actual audio bytes live in Alibaba Cloud OSS; this table only stores
+    metadata and upload status.
+    """
+
+    __tablename__ = "session_audio_segments"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    segment_sequence = Column(Integer, nullable=False)
+    object_key = Column(String(500), nullable=False)
+    content_type = Column(String(100), nullable=False, default="audio/webm")
+    size_bytes = Column(Integer, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    upload_status = Column(String(20), nullable=False, default="pending")
+    error_message = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "upload_status IN ('pending', 'uploaded', 'failed')",
+            name="ck_audio_segment_upload_status",
+        ),
+        UniqueConstraint(
+            "session_id",
+            "segment_sequence",
+            name="uq_audio_segment_session_sequence",
+        ),
+        Index("idx_audio_segments_session", "session_id"),
+    )
+
+    # Relationships
+    session = relationship("PracticeSession", back_populates="audio_segments")
+
+
+class KnowledgeConfigVersion(Base):
+    """Versioned control-plane snapshot for the knowledge answering engine."""
+
+    __tablename__ = "knowledge_config_versions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    version_name = Column(String(120), nullable=False, unique=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    notes = Column(Text, nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'active', 'archived')",
+            name="ck_knowledge_config_version_status",
+        ),
+        Index("idx_knowledge_config_versions_status", "status"),
+    )
+
+
+class KnowledgeQueryProfile(Base):
+    """Configures query rewrite behavior for one knowledge intent/profile."""
+
+    __tablename__ = "knowledge_query_profiles"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    config_version_id = Column(
+        String(36),
+        ForeignKey("knowledge_config_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profile_key = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    rewrite_strategy = Column(String(50), nullable=False)
+    max_rewrite_queries = Column(Integer, nullable=False, default=1)
+    stop_after_first_success = Column(Boolean, nullable=False, default=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "config_version_id",
+            "profile_key",
+            name="uq_knowledge_query_profile_version_key",
+        ),
+        Index("idx_knowledge_query_profiles_profile_key", "profile_key"),
+    )
+
+
+class KnowledgeIntentRule(Base):
+    """Maps user-query patterns to knowledge query profiles."""
+
+    __tablename__ = "knowledge_intent_rules"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    config_version_id = Column(
+        String(36),
+        ForeignKey("knowledge_config_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    intent_key = Column(String(100), nullable=False)
+    priority = Column(Integer, nullable=False, default=100)
+    match_type = Column(String(50), nullable=False)
+    pattern = Column(Text, nullable=False)
+    profile_key = Column(String(100), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("idx_knowledge_intent_rules_priority", "priority"),
+        Index("idx_knowledge_intent_rules_intent_key", "intent_key"),
+    )
+
+
+class KnowledgeEntityAlias(Base):
+    """Deterministic alias mapping used before retrieval planning."""
+
+    __tablename__ = "knowledge_entity_aliases"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    config_version_id = Column(
+        String(36),
+        ForeignKey("knowledge_config_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    canonical_entity = Column(String(255), nullable=False)
+    alias = Column(String(255), nullable=False)
+    entity_type = Column(String(50), nullable=False)
+    confidence = Column(Float, nullable=False, default=1.0)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_knowledge_entity_alias_confidence",
+        ),
+        UniqueConstraint(
+            "config_version_id", "alias", name="uq_knowledge_entity_alias_version_alias"
+        ),
+        Index("idx_knowledge_entity_aliases_canonical_entity", "canonical_entity"),
+    )
+
+
+class KnowledgeRankingProfile(Base):
+    """Business-owned reranking weights for retrieved candidates."""
+
+    __tablename__ = "knowledge_ranking_profiles"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    config_version_id = Column(
+        String(36),
+        ForeignKey("knowledge_config_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profile_key = Column(String(100), nullable=False)
+    title_exact_boost = Column(Float, nullable=False, default=0.0)
+    entity_match_boost = Column(Float, nullable=False, default=0.0)
+    doc_type_weights_json = Column(JSON, nullable=False, default=dict)
+    section_weights_json = Column(JSON, nullable=False, default=dict)
+    min_pass_score = Column(Float, nullable=False, default=0.0)
+    min_pass_score_keyword = Column(Float, nullable=False, default=0.0)
+    # Unified scoring weights (elevated from hardcoded values in _rerank_results)
+    base_weight = Column(Float, nullable=False, default=0.50)
+    coverage_weight = Column(Float, nullable=False, default=0.20)
+    phrase_bonus = Column(Float, nullable=False, default=0.15)
+    title_bonus_max = Column(Float, nullable=False, default=0.10)
+    ratio_bonus_max = Column(Float, nullable=False, default=0.05)
+    cross_encoder_weight = Column(Float, nullable=False, default=0.0)
+    diversity_penalty = Column(Float, nullable=False, default=0.12)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "config_version_id",
+            "profile_key",
+            name="uq_knowledge_ranking_profile_version_key",
+        ),
+        Index("idx_knowledge_ranking_profiles_profile_key", "profile_key"),
+    )
+
+
+class KnowledgeChunkingPreset(Base):
+    """Named chunking configuration that belongs to a config version."""
+
+    __tablename__ = "knowledge_chunking_presets"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    config_version_id = Column(
+        String(36),
+        ForeignKey("knowledge_config_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profile_key = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    chunking_strategy = Column(String(50), nullable=False, default="element_boundary")
+    chunk_size = Column(Integer, nullable=False, default=500)
+    chunk_overlap = Column(Integer, nullable=False, default=50)
+    is_default = Column(Boolean, nullable=False, default=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "config_version_id", "profile_key", name="uq_chunking_preset_version_key"
+        ),
+        Index("idx_knowledge_chunking_presets_profile_key", "profile_key"),
+    )
+
+
+class KnowledgeAnswerabilityProfile(Base):
+    """Thresholds for deciding whether evidence is sufficient to answer."""
+
+    __tablename__ = "knowledge_answerability_profiles"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    config_version_id = Column(
+        String(36),
+        ForeignKey("knowledge_config_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profile_key = Column(String(100), nullable=False)
+    required_slots_json = Column(JSON, nullable=False, default=list)
+    optional_slots_json = Column(JSON, nullable=False, default=list)
+    sufficient_threshold = Column(Float, nullable=False, default=1.0)
+    partial_threshold = Column(Float, nullable=False, default=0.0)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "config_version_id",
+            "profile_key",
+            name="uq_knowledge_answerability_profile_version_key",
+        ),
+        Index("idx_knowledge_answerability_profiles_profile_key", "profile_key"),
+    )
+
+
+class KnowledgeAnswerRun(Base):
+    """Top-level audit row for one knowledge-answering attempt."""
+
+    __tablename__ = "knowledge_answer_runs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    config_version_id = Column(
+        String(36),
+        ForeignKey("knowledge_config_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    entrypoint = Column(String(100), nullable=False)
+    query_text = Column(Text, nullable=False)
+    answerability = Column(String(20), nullable=False, default="insufficient")
+    final_status = Column(String(20), nullable=False, default="completed")
+    blocked_reason = Column(String(100), nullable=True)
+    citations_json = Column(JSON, nullable=False, default=list)
+    retrieval_summary_json = Column(JSON, nullable=False, default=dict)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "answerability IN ('sufficient', 'partial', 'insufficient', 'blocked')",
+            name="ck_knowledge_answer_run_answerability",
+        ),
+        CheckConstraint(
+            "final_status IN ('completed', 'blocked', 'failed')",
+            name="ck_knowledge_answer_run_final_status",
+        ),
+        Index("idx_knowledge_answer_runs_session_created", "session_id", "created_at"),
+    )
+
+
+class KnowledgeAnswerRunStep(Base):
+    """Step-level payload audit for one knowledge-answer run."""
+
+    __tablename__ = "knowledge_answer_run_steps"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    answer_run_id = Column(
+        String(36),
+        ForeignKey("knowledge_answer_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_name = Column(String(100), nullable=False)
+    step_order = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="completed")
+    input_payload = Column(JSON, nullable=False, default=dict)
+    output_payload = Column(JSON, nullable=False, default=dict)
+    duration_ms = Column(Integer, nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('completed', 'failed', 'skipped')",
+            name="ck_knowledge_answer_run_step_status",
+        ),
+        UniqueConstraint(
+            "answer_run_id", "step_order", name="uq_knowledge_answer_run_steps_order"
+        ),
+        Index("idx_knowledge_answer_run_steps_run", "answer_run_id"),
+    )

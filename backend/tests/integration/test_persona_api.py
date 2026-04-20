@@ -10,6 +10,7 @@ References:
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -60,7 +61,8 @@ async def test_user(db_session):
     user = User(
         wechat_user_id="test_wechat_id",
         name="Test User",
-        email="test@example.com"
+        email="test@example.com",
+        role="admin",
     )
     db_session.add(user)
     await db_session.commit()
@@ -84,18 +86,36 @@ async def async_client(db_session, test_user):
 
 
 @pytest_asyncio.fixture
-async def auth_headers(async_client):
-    """Get authentication headers"""
-    try:
-        response = await async_client.post("/api/v1/auth/dev-login")
-        if response.status_code == 200:
-            data = response.json()
-            token = data.get("data", {}).get("access_token")
-            if token:
-                return {"Authorization": f"Bearer {token}"}
-    except Exception:
-        pass
-    return {"Authorization": "Bearer dev_test_token"}
+async def auth_headers(test_user):
+    """Get authentication headers for admin fixture user."""
+    from common.auth.service import create_access_token
+
+    token = create_access_token(data={"sub": str(test_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def non_admin_user(db_session):
+    """Create a non-admin user for RBAC tests."""
+    user = User(
+        wechat_user_id="normal_wechat_id",
+        name="Normal User",
+        email="normal@example.com",
+        role="user",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def non_admin_headers(non_admin_user):
+    """JWT auth header for non-admin user."""
+    from common.auth.service import create_access_token
+
+    token = create_access_token(data={"sub": str(non_admin_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
@@ -138,6 +158,21 @@ class TestAdminPersonaAPI:
         assert data["data"]["name"] == "怀疑型客户"
         assert data["data"]["status"] == "active"
         assert "id" in data["data"]
+
+    async def test_admin_routes_require_admin_role(
+        self,
+        async_client,
+        non_admin_headers,
+        sample_persona_data,
+    ):
+        """Should reject non-admin access for admin persona routes."""
+        response = await async_client.post(
+            "/api/v1/admin/personas",
+            json=sample_persona_data,
+            headers=non_admin_headers,
+        )
+
+        assert response.status_code == 403
     
     async def test_list_personas(self, async_client, auth_headers, sample_persona_data):
         """Should list personas with pagination - R3.2"""
@@ -249,6 +284,100 @@ class TestAdminPersonaAPI:
         assert data["success"] is True
         assert data["data"]["name"] == "Updated Name"
         assert data["data"]["difficulty"] == "medium"
+
+    async def test_update_persona_persists_across_sessions(
+        self,
+        async_client,
+        auth_headers,
+        sample_persona_data,
+        test_engine,
+    ):
+        """Should persist persona update to DB across independent sessions."""
+        create_response = await async_client.post(
+            "/api/v1/admin/personas",
+            json=sample_persona_data,
+            headers=auth_headers,
+        )
+        persona_id = create_response.json()["data"]["id"]
+
+        new_description = "跨会话持久化描述"
+        update_response = await async_client.put(
+            f"/api/v1/admin/personas/{persona_id}",
+            json={"description": new_description},
+            headers=auth_headers,
+        )
+        assert update_response.status_code == 200
+
+        verify_sessionmaker = sessionmaker(
+            test_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        async with verify_sessionmaker() as verify_session:
+            row = await verify_session.execute(
+                select(Persona).where(Persona.id == persona_id)
+            )
+            persona = row.scalar_one()
+            assert persona.description == new_description
+
+    async def test_update_persona_status_to_inactive(self, async_client, auth_headers, sample_persona_data):
+        """Should support persona disable flow by updating status to inactive."""
+        create_response = await async_client.post(
+            "/api/v1/admin/personas",
+            json=sample_persona_data,
+            headers=auth_headers
+        )
+        persona_id = create_response.json()["data"]["id"]
+
+        update_response = await async_client.put(
+            f"/api/v1/admin/personas/{persona_id}",
+            json={"status": "inactive"},
+            headers=auth_headers
+        )
+
+        assert update_response.status_code == 200
+        update_data = update_response.json()
+        assert update_data["success"] is True
+        assert update_data["data"]["status"] == "inactive"
+
+        get_response = await async_client.get(
+            f"/api/v1/admin/personas/{persona_id}",
+            headers=auth_headers
+        )
+        assert get_response.status_code == 200
+        assert get_response.json()["data"]["status"] == "inactive"
+
+    async def test_list_personas_filter_by_status(self, async_client, auth_headers, sample_persona_data):
+        """Should filter personas by active/inactive status."""
+        first_create = await async_client.post(
+            "/api/v1/admin/personas",
+            json=sample_persona_data,
+            headers=auth_headers
+        )
+        first_persona_id = first_create.json()["data"]["id"]
+
+        await async_client.post(
+            "/api/v1/admin/personas",
+            json={**sample_persona_data, "name": "Second Persona"},
+            headers=auth_headers
+        )
+
+        await async_client.put(
+            f"/api/v1/admin/personas/{first_persona_id}",
+            json={"status": "inactive"},
+            headers=auth_headers
+        )
+
+        response = await async_client.get(
+            "/api/v1/admin/personas?status=inactive",
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["total"] >= 1
+        assert data["data"]["personas"][0]["id"] == first_persona_id
     
     async def test_delete_persona(self, async_client, auth_headers, sample_persona_data):
         """Should delete persona without agent links - R3.5"""
@@ -335,3 +464,121 @@ class TestAdminPersonaAPI:
         )
         
         assert response.status_code == 404
+
+    async def test_get_persona_derives_structured_pressure_model_from_legacy_extensions(
+        self,
+        async_client,
+        auth_headers,
+        sample_persona_data,
+    ):
+        """Should expose a structured customer-pressure model for legacy policy rows."""
+        create_response = await async_client.post(
+            "/api/v1/admin/personas",
+            json={
+                **sample_persona_data,
+                "persona_policy": {
+                    "sales_focus": " value_translation ",
+                    "value_axes": [" 客户收益 ", "ROI", "ROI"],
+                    "objection_axes": ["价格", "竞品", ""],
+                    "expected_customer_questions": [
+                        " 你怎么证明 ROI？ ",
+                        "你怎么证明 ROI？",
+                    ],
+                },
+            },
+            headers=auth_headers,
+        )
+        persona_id = create_response.json()["data"]["id"]
+
+        response = await async_client.get(
+            f"/api/v1/admin/personas/{persona_id}",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        policy = response.json()["data"]["persona_policy"]
+        assert policy["customer_pressure"] == {
+            "source": "explicit",
+            "pressure_direction": {
+                "sales_focus": "value_translation",
+                "value_axes": ["客户收益", "ROI"],
+                "objection_axes": ["价格", "竞品"],
+            },
+            "follow_up_behavior": {
+                "question_strategy": "single_issue",
+                "revisit_on_evasion": True,
+                "require_evidence": True,
+                "expected_customer_questions": ["你怎么证明 ROI？"],
+            },
+        }
+        assert policy["sales_focus"] == "value_translation"
+        assert policy["value_axes"] == ["客户收益", "ROI"]
+        assert policy["objection_axes"] == ["价格", "竞品"]
+        assert policy["expected_customer_questions"] == ["你怎么证明 ROI？"]
+
+    async def test_persona_policy_health_flags_legacy_pressure_model_rows(
+        self,
+        async_client,
+        auth_headers,
+        db_session,
+    ):
+        """Should surface legacy-only pressure rows as audit issues."""
+        legacy_persona = Persona(
+            name="Legacy Pressure Persona",
+            description="still uses flat sales focus fields",
+            category="customer",
+            difficulty="medium",
+            status="active",
+            system_prompt="legacy prompt",
+            knowledge_base_ids=["kb-legacy"],
+            persona_policy={
+                "version": 1,
+                "system_prompt": "legacy prompt",
+                "knowledge_base_ids": ["kb-legacy"],
+                "sales_focus": " value_translation ",
+                "value_axes": ["客户收益", "ROI"],
+                "objection_axes": ["价格", "竞品"],
+                "expected_customer_questions": ["你怎么证明 ROI？"],
+            },
+        )
+        db_session.add(legacy_persona)
+        await db_session.commit()
+
+        response = await async_client.get(
+            "/api/v1/admin/personas/policy-health",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["issue_type_counts"]["pressure_model_legacy_only"] >= 1
+        assert any(
+            issue["persona_id"] == legacy_persona.id
+            and "pressure_model_legacy_only" in issue["issue_types"]
+            for issue in data["sample_issues"]
+        )
+
+    async def test_get_persona_industry_pack_contract(
+        self,
+        async_client,
+        auth_headers,
+    ):
+        """Should expose field ownership for persona/customer-pressure/knowledge bundles."""
+        response = await async_client.get(
+            "/api/v1/admin/personas/industry-pack-contract",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["contract_version"] == 1
+        assert data["owned_fields"]["persona"] == [
+            "persona_policy.system_prompt",
+            "traits",
+            "behavior_config",
+            "tts_config",
+            "difficulty",
+        ]
+        assert "customer_pressure" in data["owned_fields"]
+        assert "knowledge_bundle" in data["owned_fields"]
+        assert data["runtime_targets"]["customer_pressure"]["compiled_instruction_section"] == "销售追问焦点"

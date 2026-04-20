@@ -1,0 +1,28 @@
+{
+  "template_version": "1.0",
+  "derived_from": "AUDIT-001",
+  "template": {
+    "id": "AUDIT-XXX",
+    "verdict": "PASS|FAIL|BLOCKED",
+    "passes": false,
+    "confidence": "high|medium|low",
+    "trace": {
+      "page": "",
+      "button_label": "",
+      "frontend_handler": "",
+      "http_method": "",
+      "api_path": "",
+      "db_table": ""
+    },
+    "evidence": {
+      "command": "",
+      "output_path": "",
+      "code_refs": [],
+      "db_refs": [],
+      "expected": "",
+      "actual": "",
+      "repro_steps": [],
+      "unblock_condition": ""
+    }
+  }
+}

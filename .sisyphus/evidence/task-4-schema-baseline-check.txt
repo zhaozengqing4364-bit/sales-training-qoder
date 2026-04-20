@@ -1,0 +1,26 @@
+T4 schema baseline check
+Date: 2026-04-15
+
+PASS - Main artifact exists: .sisyphus/evidence/task-4-schema-baseline.md
+PASS - Canonical tables covered: practice_sessions(report control-plane), staged_evaluation_results, comprehensive_reports
+PASS - Main evidence sources cited: ORM, Alembic 006/009/013, session.py, legacy_schema_repair.py, runtime services, drifted tests
+PASS - Canonical PK decisions recorded:
+  - staged_evaluation_results.id = PK
+  - comprehensive_reports.session_id = PK
+PASS - Canonical index decisions recorded:
+  - staged_evaluation_results idx_staged_eval_session
+  - staged_evaluation_results idx_staged_eval_stage UNIQUE
+  - practice_sessions idx_sessions_report_status
+PASS - Runtime repair inventory recorded:
+  - create_all = relevant drift amplifier
+  - legacy_schema_repair = no direct report/evaluation repair
+PASS - T6 handoff recorded:
+  - reconcile column sets
+  - reconcile timestamp names
+  - backfill before NOT NULL tightening
+  - update drifted tests
+
+Key confirmed drift to cite in T6:
+1. ORM lacks staged_evaluation_results.weaknesses while runtime generates and aggregates it.
+2. Alembic 006/009 still describe legacy report/eval columns that current runtime does not use.
+3. create_all can create current ORM shape without Alembic-era indexes/legacy columns.

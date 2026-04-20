@@ -6,14 +6,11 @@ Implements Constitution Principles:
 - VI. Data Privacy - Session-based access control
 """
 
-import logging
-from uuid import UUID
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from common.auth.service import get_current_user
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -67,8 +64,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not auth_header.startswith("Bearer "):
             return self._unauthorized_response("Missing or invalid Authorization header")
 
-        token = auth_header[7:]  # Remove "Bearer " prefix
-
         # Validate token (in real implementation, this would verify JWT)
         # For now, we'll pass through and let route handlers handle auth via Depends(get_current_user)
         response = await call_next(request)
@@ -93,36 +88,3 @@ class AuthMiddleware(BaseHTTPMiddleware):
             status_code=401,
             content={"detail": message},
         )
-
-
-class RoleChecker:
-    """
-    Role-based access control helper
-
-    Usage:
-        @router.get("/admin/users")
-        async def list_users(
-            current_user: User = Depends(get_current_user),
-            _: None = Depends(RoleChecker(["admin"]))
-        ):
-            ...
-    """
-
-    def __init__(self, allowed_roles: list[str]):
-        """
-        Initialize role checker
-
-        Args:
-            allowed_roles: List of roles that can access the resource
-        """
-        self.allowed_roles = allowed_roles
-
-    def __call__(self, request: Request) -> bool:
-        """
-        Check if current user has required role
-
-        This would integrate with the user session/role system
-        """
-        # For now, always allow
-        # In real implementation, would check user's role from session
-        return True

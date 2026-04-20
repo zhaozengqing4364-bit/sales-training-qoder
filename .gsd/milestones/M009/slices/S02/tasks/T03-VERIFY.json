@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M009/S02/T03",
+  "timestamp": 1774824047242,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "cd backend",
+      "exitCode": 0,
+      "durationMs": 3,
+      "verdict": "pass"
+    },
+    {
+      "command": "venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k audio_audit",
+      "exitCode": 0,
+      "durationMs": 4766,
+      "verdict": "pass"
+    }
+  ]
+}

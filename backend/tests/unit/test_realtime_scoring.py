@@ -1,13 +1,22 @@
 """
-Unit tests for RealtimeScoringCapability
+Unit tests for RealtimeScoringCapability.
 """
 from __future__ import annotations
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from agent.capabilities.realtime_scoring import RealtimeScoringCapability
 from agent.context import AgentContext
+
+SALES_DIMENSIONS = [
+    "价值表达",
+    "客户收益连接",
+    "证据使用",
+    "异议处理",
+    "推进下一步",
+]
 
 
 @pytest.fixture
@@ -23,7 +32,7 @@ def context() -> AgentContext:
         persona_config={},
         turn_count=1,
         start_time=datetime.now(),
-        trace_id="test-trace-123"
+        trace_id="test-trace-123",
     )
 
 
@@ -33,175 +42,160 @@ def capability() -> RealtimeScoringCapability:
 
 
 class TestRealtimeScoringCapability:
-    
     @pytest.mark.asyncio
-    async def test_execute_with_valid_text_returns_overall_score(self, capability, context):
-        """Should return overall score between 0-100 when executing with valid text"""
-        # Arrange
+    async def test_execute_returns_canonical_sales_dimensions(self, capability, context):
         await capability.on_session_start(context)
-        
-        # Act
-        result = await capability.execute(context, "这是一段测试文本")
-        
-        # Assert
-        assert result.success is True
-        assert "overall" in result.data
-        assert 0 <= result.data["overall"] <= 100
-    
-    @pytest.mark.asyncio
-    async def test_execute_with_valid_text_returns_dimension_scores(self, capability, context):
-        """Should return 5 dimension scores with name, score, and trend"""
-        # Arrange
-        await capability.on_session_start(context)
-        
-        # Act
-        result = await capability.execute(context, "测试文本")
-        
-        # Assert
-        assert "dimensions" in result.data
-        assert len(result.data["dimensions"]) == 5
-        for dim in result.data["dimensions"]:
-            assert "name" in dim
-            assert "score" in dim
-            assert "trend" in dim
-    
-    @pytest.mark.asyncio
-    async def test_execute_with_positive_keywords_returns_higher_score(self, capability, context):
-        """Should return higher scores when text contains positive keywords"""
-        # Arrange
-        await capability.on_session_start(context)
-        
-        # Act
-        result = await capability.execute(
-            context, 
-            "根据数据和案例研究，我们的方案能提供价值"
-        )
-        
-        # Assert
-        assert result.success is True
-        assert result.data["overall"] >= 70
-    
-    @pytest.mark.asyncio
-    async def test_execute_with_negative_keywords_returns_success(self, capability, context):
-        """Should return success even with negative keywords in text"""
-        # Arrange
-        await capability.on_session_start(context)
-        
-        # Act
+
         result = await capability.execute(
             context,
-            "大概可能也许不太清楚"
+            "我们能帮助你们把线索响应时间从24小时缩短到2小时。",
         )
-        
-        # Assert
+
         assert result.success is True
-    
+        assert result.data["overall_score"] == pytest.approx(result.data["overall"], abs=0.5)
+        assert list(result.data["dimension_scores"].keys()) == SALES_DIMENSIONS
+        assert [dim["name"] for dim in result.data["dimensions"]] == SALES_DIMENSIONS
+        for dimension in result.data["dimensions"]:
+            assert 0 <= dimension["score"] <= 100
+            assert dimension["trend"] in {"up", "down", "stable"}
+
     @pytest.mark.asyncio
-    async def test_execute_multiple_times_calculates_trend(self, capability, context):
-        """Should calculate trend (up/down/stable) after multiple executions"""
-        # Arrange
+    async def test_execute_rewards_value_benefit_evidence_and_next_step_language(
+        self,
+        capability,
+        context,
+    ):
         await capability.on_session_start(context)
-        await capability.execute(context, "普通文本")
-        
-        # Act
+        context.state["current_stage"] = "presentation"
+
         result = await capability.execute(
             context,
-            "根据数据案例，我们的方案有明确价值"
+            (
+                "结合你们华东团队线索转化慢的问题，我们把跟进SOP压缩到2天，"
+                "预计三个月把赢单率提升18%，ROI在一个季度内回正。"
+                "像零售客户A一样，他们上线后复购率提升了12个百分点。"
+                "如果你认可这个方向，我们本周可以安排试点评估和负责人对齐。"
+            ),
         )
-        
-        # Assert
-        assert result.success is True
-        for dim in result.data["dimensions"]:
-            assert dim["trend"] in ["up", "down", "stable"]
-    
+
+        scores = result.data["dimension_scores"]
+        assert scores["价值表达"] >= 80
+        assert scores["客户收益连接"] >= 80
+        assert scores["证据使用"] >= 80
+        assert scores["推进下一步"] >= 75
+
     @pytest.mark.asyncio
-    async def test_execute_with_any_text_returns_feedback(self, capability, context):
-        """Should return non-empty feedback string"""
-        # Arrange
+    async def test_execute_objection_stage_rewards_acknowledge_and_reframe(self, capability, context):
         await capability.on_session_start(context)
-        
-        # Act
-        result = await capability.execute(context, "测试")
-        
-        # Assert
-        assert "feedback" in result.data
-        assert len(result.data["feedback"]) > 0
-    
-    @pytest.mark.asyncio
-    async def test_execute_multiple_times_tracks_score_history(self, capability, context):
-        """Should track score history in context state"""
-        # Arrange
-        await capability.on_session_start(context)
-        
-        # Act
-        await capability.execute(context, "第一轮")
-        await capability.execute(context, "第二轮")
-        
-        # Assert
-        history = context.state.get("score_history", [])
-        assert len(history) == 2
-    
-    @pytest.mark.asyncio
-    async def test_on_session_end_returns_stats(self, capability, context):
-        """Should return average_score and final_score on session end"""
-        # Arrange
-        await capability.on_session_start(context)
-        await capability.execute(context, "测试")
-        
-        # Act
-        stats = await capability.on_session_end(context)
-        
-        # Assert
-        assert "average_score" in stats
-        assert "final_score" in stats
-    
-    @pytest.mark.asyncio
-    async def test_execute_with_dict_input_returns_success(self, capability, context):
-        """Should handle dict input with content and role fields"""
-        # Arrange
-        await capability.on_session_start(context)
-        
-        # Act
+        context.state["current_stage"] = "objection"
+
         result = await capability.execute(
             context,
-            {"content": "测试内容", "role": "user"}
+            (
+                "我理解你现在最担心的是价格和竞品替代风险。"
+                "但关键不是便宜，而是三个月内减少40%的人工复盘成本。"
+                "我们有同类客户的上线案例和数据证明，你们也可以先从低风险试点开始。"
+            ),
         )
-        
-        # Assert
-        assert result.success is True
-    
+
+        scores = result.data["dimension_scores"]
+        assert scores["异议处理"] >= 80
+        assert scores["证据使用"] >= 70
+        assert scores["客户收益连接"] >= 70
+        assert isinstance(result.data["feedback"], str) and result.data["feedback"]
+
     @pytest.mark.asyncio
-    async def test_execute_with_empty_input_returns_success(self, capability, context):
-        """Should handle empty string input gracefully"""
-        # Arrange
-        await capability.on_session_start(context)
-        
-        # Act
-        result = await capability.execute(context, "")
-        
-        # Assert
-        assert result.success is True
-    
-    @pytest.mark.asyncio
-    async def test_execute_with_persona_weights_returns_success(self, context):
-        """Should use Persona scoring weights if available in config"""
-        # Arrange
+    async def test_execute_respects_persona_scoring_weights_for_overall_score(self, context):
+        weights = {
+            "价值表达": 0.10,
+            "客户收益连接": 0.10,
+            "证据使用": 0.10,
+            "异议处理": 0.10,
+            "推进下一步": 0.60,
+        }
         context.persona_config = {
             "scoring_weights": [
-                {"name": "自定义维度", "weight": 1.0}
+                {"name": name, "weight": weight} for name, weight in weights.items()
             ]
         }
-        cap = RealtimeScoringCapability({"enabled": True})
-        await cap.on_session_start(context)
-        
-        # Act
-        result = await cap.execute(context, "测试")
-        
-        # Assert
+        capability = RealtimeScoringCapability({"enabled": True})
+        await capability.on_session_start(context)
+
+        result = await capability.execute(
+            context,
+            "建议今天确认试点负责人、目标客户名单和下周复盘时间。",
+        )
+
+        scores = result.data["dimension_scores"]
+        expected_overall = sum(scores[name] * weight for name, weight in weights.items())
         assert result.success is True
-    
+        assert result.data["overall_score"] == pytest.approx(expected_overall, abs=0.5)
+
+    @pytest.mark.asyncio
+    async def test_execute_tracks_score_history_with_canonical_snapshot(self, capability, context):
+        await capability.on_session_start(context)
+
+        await capability.execute(context, "第一轮先讲产品价值。")
+        await capability.execute(context, "第二轮补上客户收益和证据。")
+
+        history = context.state.get("score_history", [])
+        assert len(history) == 2
+        assert list(history[-1]["dimension_scores"].keys()) == SALES_DIMENSIONS
+        assert "overall_score" in history[-1]
+
+    @pytest.mark.asyncio
+    async def test_execute_emits_canonical_kernel_and_compatibility_readers(self, capability, context):
+        await capability.on_session_start(context)
+
+        result = await capability.execute(
+            context,
+            "我们已经有同类客户在 6 个月内回本，本周可以先安排试点和负责人对齐。",
+        )
+
+        kernel = result.data["canonical_evaluation_kernel"]
+        compat = result.data["compatibility_readers"]
+
+        assert kernel["schema_version"] == "evaluation_kernel_v1"
+        assert kernel["scenario_type"] == "sales"
+        assert [item["dimension_id"] for item in kernel["dimensions"]] == [
+            "value_expression",
+            "customer_benefit_connection",
+            "evidence_usage",
+            "objection_handling",
+            "next_step_commitment",
+        ]
+        assert kernel["rollups"]["logic"]["score"] == pytest.approx(
+            compat["practice_session_rollup_fields_v1"]["logic_score"]
+        )
+        assert compat["sales_realtime_score_snapshot_v1"]["overall_score"] == pytest.approx(
+            result.data["overall_score"]
+        )
+        assert list(
+            compat["sales_realtime_score_snapshot_v1"]["dimension_scores"].keys()
+        ) == SALES_DIMENSIONS
+        assert kernel["methodology"]["contract_id"] == "sales_methodology_rubric_v1"
+        assert kernel["methodology"]["surface_id"] == "realtime"
+        assert compat["sales_methodology_rubric_v1"] == kernel["methodology"]
+        assert [
+            item["rubric_id"] for item in kernel["methodology"]["rubric_assessments"]
+        ] == [
+            "discovery_qualification",
+            "value_story",
+            "evidence_proof",
+            "objection_reframe",
+            "next_step_commitment",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_on_session_end_returns_stats(self, capability, context):
+        await capability.on_session_start(context)
+        await capability.execute(context, "我们能帮助你们降低成本并安排下周试点。")
+
+        stats = await capability.on_session_end(context)
+
+        assert "average_score" in stats
+        assert "final_score" in stats
+
     def test_capability_metadata_returns_correct_values(self, capability):
-        """Should return correct capability_id and name"""
-        # Assert
         assert capability.capability_id == "realtime_scoring"
         assert capability.name == "实时评分"

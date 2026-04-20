@@ -9,11 +9,13 @@ References:
 """
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from agent.capabilities.base import BaseCapability, CapabilityConfig, CapabilityResult
 from agent.capabilities.registry import CapabilityRegistry
 from agent.context import AgentContext
+from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 if TYPE_CHECKING:
@@ -111,23 +113,11 @@ class KnowledgeRetrievalCapability(BaseCapability):
             all_results: list[dict[str, Any]] = []
 
             if self._knowledge_service:
-                search_result = await self._knowledge_service.search_multiple(
+                all_results = await self._search_knowledge(
+                    context=context,
                     kb_ids=kb_ids,
                     query=query,
-                    top_k=self._top_k,
-                    similarity_threshold=self._threshold
                 )
-                if search_result.is_success:
-                    all_results = search_result.value
-                else:
-                    # Log the failure reason for debugging
-                    logger.warning(
-                        "Knowledge search returned failure",
-                        session_id=context.session_id,
-                        error=getattr(search_result, 'error', 'Unknown error'),
-                        kb_ids=kb_ids,
-                        query_preview=query[:50] if query else ""
-                    )
             else:
                 logger.warning(
                     "Knowledge service not available",
@@ -159,7 +149,7 @@ class KnowledgeRetrievalCapability(BaseCapability):
                 }
             )
 
-        except Exception as e:
+        except (RuntimeError, ValueError, KeyError) as e:
             logger.error(
                 f"Knowledge retrieval failed: {e}",
                 session_id=context.session_id
@@ -168,6 +158,90 @@ class KnowledgeRetrievalCapability(BaseCapability):
                 success=False,
                 fallback="[KNOWLEDGE_RETRIEVAL_FAILED]"
             )
+
+    async def _search_knowledge(
+        self,
+        context: AgentContext,
+        kb_ids: list[str],
+        query: str,
+    ) -> list[dict[str, Any]]:
+        """检索知识库内容，兼容 search_multiple 与 search 接口。"""
+        if not self._knowledge_service:
+            return []
+
+        # 优先使用 search_multiple（当前生产接口）
+        search_multiple = getattr(self._knowledge_service, "search_multiple", None)
+        if callable(search_multiple):
+            try:
+                multiple_raw = search_multiple(
+                    kb_ids=kb_ids,
+                    query=query,
+                    top_k=self._top_k,
+                    similarity_threshold=self._threshold,
+                )
+                if inspect.isawaitable(multiple_raw):
+                    multiple_raw = await multiple_raw
+
+                normalized, recognized = self._normalize_search_response(multiple_raw)
+                if recognized:
+                    normalized.sort(key=lambda x: x.get("score", 0), reverse=True)
+                    return normalized[: self._top_k]
+            except Exception as e:
+                logger.warning(
+                    "search_multiple failed, fallback to search",
+                    session_id=context.session_id,
+                    error=str(e),
+                )
+
+        # 回退：逐个 KB 调用 search（兼容旧接口和单元测试 mock）
+        search_single = getattr(self._knowledge_service, "search", None)
+        if not callable(search_single):
+            return []
+
+        merged_results: list[dict[str, Any]] = []
+
+        for kb_id in kb_ids:
+            try:
+                single_raw = search_single(
+                    kb_id=kb_id,
+                    query=query,
+                    top_k=self._top_k,
+                    similarity_threshold=self._threshold,
+                )
+                if inspect.isawaitable(single_raw):
+                    single_raw = await single_raw
+
+                normalized, _ = self._normalize_search_response(single_raw)
+                merged_results.extend(normalized)
+            except Exception as e:
+                logger.warning(
+                    "search failed for knowledge base",
+                    session_id=context.session_id,
+                    knowledge_base_id=kb_id,
+                    error=str(e),
+                )
+
+        merged_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return merged_results[: self._top_k]
+
+    def _normalize_search_response(self, raw_result: Any) -> tuple[list[dict[str, Any]], bool]:
+        """标准化检索结果；返回 (results, 是否识别为有效格式)。"""
+        if raw_result is None:
+            return [], True
+
+        if isinstance(raw_result, Result):
+            if not raw_result.is_success:
+                return [], True
+
+            value = raw_result.value
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)], True
+            return [], True
+
+        if isinstance(raw_result, list):
+            return [item for item in raw_result if isinstance(item, dict)], True
+
+        return [], False
 
     def _get_knowledge_base_ids(self, context: AgentContext) -> list[str]:
         """获取合并后的知识库 ID 列表"""
