@@ -1558,6 +1558,33 @@ describe("ReportPage", () => {
         );
     });
 
+    it("routes page retry without presentation configuration back to presentation training", async () => {
+        getReportMock.mockResolvedValue({
+            ...basePresentationReport,
+            retry_entry: {
+                scenario_type: "presentation" as const,
+                presentation_id: null,
+                agent_id: null,
+                persona_id: null,
+            },
+        });
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced report unavailable"));
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("PPT 复盘报告")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "补练第 2 页" }));
+
+        expect(createSessionMock).not.toHaveBeenCalled();
+        expect(pushMock).toHaveBeenCalledWith("/training/presentation");
+        expect(screen.getAllByText("当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。").length).toBeGreaterThan(0);
+    });
+
     it("keeps PPT degraded guidance visible when highlights are unavailable", async () => {
         getReportMock.mockResolvedValue(basePresentationReport);
         getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
@@ -1681,12 +1708,21 @@ describe("ReportPage", () => {
         expect(screen.getByText("如果客户追问负责人，我这边暂时只能说后面再确认。"))
             .toBeTruthy();
 
-        const pageRetryLink = screen.getByRole("link", { name: "补练第 2 页" });
-        expect(pageRetryLink.getAttribute("href")).toBe(
-            "/practice/session-1/replay?focus=presentation_page&page=2&page_anchor_status=resolved",
-        );
-        expect(screen.getByRole("link", { name: "带着这些问题补练第 2 页" }).getAttribute("href")).toBe(
-            "/practice/session-1/replay?focus=presentation_page&page=2&page_anchor_status=resolved",
+        const pageReplayLinks = screen.getAllByRole("link", { name: "查看第 2 页回放" });
+        expect(pageReplayLinks.some((link) => link.getAttribute("href") === "/practice/session-1/replay?focus=presentation_page&page=2&page_anchor_status=resolved")).toBe(true);
+
+        fireEvent.click(screen.getByRole("button", { name: "补练第 2 页" }));
+
+        await waitFor(() => {
+            expect(createSessionMock).toHaveBeenCalledWith({
+                scenario_type: "presentation",
+                agent_id: undefined,
+                persona_id: undefined,
+                presentation_id: "presentation-1",
+            });
+        });
+        expect(pushMock).toHaveBeenCalledWith(
+            "/practice/retry-1?scenario_type=presentation&presentation_id=presentation-1&focus=presentation_page&page=2&source_session_id=session-1",
         );
     });
 

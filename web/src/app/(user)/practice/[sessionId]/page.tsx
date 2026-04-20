@@ -58,6 +58,26 @@ type PracticePreflightBrief = {
     roleCopy: string;
 };
 
+type PresentationPageFocus = {
+    pageNumber: number;
+};
+
+function parsePresentationPageFocus(
+    searchParams: URLSearchParams,
+    scenarioType: "sales" | "presentation",
+): PresentationPageFocus | null {
+    if (scenarioType !== "presentation" || searchParams.get("focus") !== "presentation_page") {
+        return null;
+    }
+
+    const pageNumber = Number(searchParams.get("page"));
+    if (!Number.isInteger(pageNumber) || pageNumber <= 0) {
+        return null;
+    }
+
+    return { pageNumber };
+}
+
 function buildFallbackPreflightBrief(scenarioType: "sales" | "presentation"): PracticePreflightBrief {
     if (scenarioType === "presentation") {
         return {
@@ -337,6 +357,10 @@ export default function PracticeSessionPage() {
 
     const scenarioType = lockedScenarioType;
     const voiceMode = lockedVoiceMode;
+    const presentationPageFocus = React.useMemo(
+        () => parsePresentationPageFocus(runtimeSearchParams, scenarioType),
+        [runtimeSearchParams, scenarioType],
+    );
     const focusIssueTypeLabel = React.useMemo(
         () => formatIssueTypeLabel(focusIntent?.main_issue?.issue_type ?? null),
         [focusIntent],
@@ -400,7 +424,9 @@ export default function PracticeSessionPage() {
                     ? presentation.title.trim()
                     : "当前 PPT";
                 setPreflightBrief({
-                    trainingGoal: `围绕《${presentationTitle}》完成一轮演讲表达，开口前先想清楚开场、重点页和收尾推进。`,
+                    trainingGoal: presentationPageFocus
+                        ? `本轮重点页：第 ${presentationPageFocus.pageNumber} 页。围绕《${presentationTitle}》先补齐这一页的必讲点、缺失点或案例证据。`
+                        : `围绕《${presentationTitle}》完成一轮演讲表达，开口前先想清楚开场、重点页和收尾推进。`,
                     evaluationCopy: "系统会重点看流畅连贯、内容准确、专业表达、互动问答与整体表现。",
                     roleCopy: "你将面对会关注表达清晰度、页级重点覆盖和临场问答的评委/听众角色。",
                 });
@@ -414,7 +440,7 @@ export default function PracticeSessionPage() {
         return () => {
             isCancelled = true;
         };
-    }, [lockedAgentId, lockedPersonaId, lockedPresentationId, scenarioType]);
+    }, [lockedAgentId, lockedPersonaId, lockedPresentationId, presentationPageFocus, scenarioType]);
 
     // AI 是否正在忙碌（说话或思考中），用于一来一回交互模式
     const aiIsBusy = isPlayingAudio || aiState === "thinking" || aiState === "speaking";
@@ -957,6 +983,13 @@ export default function PracticeSessionPage() {
                             </span>
                             <p className="text-sm font-semibold text-slate-900">开始前先看本次练习重点</p>
                         </div>
+                        {presentationPageFocus && (
+                            <div className="mt-3 rounded-xl border border-purple-100 bg-purple-50/80 p-3">
+                                <p className="text-xs font-semibold text-purple-700">本轮重点页</p>
+                                <p className="mt-1 text-sm text-purple-950">第 {presentationPageFocus.pageNumber} 页</p>
+                                <p className="mt-2 text-xs text-purple-800">先补齐这一页的必讲点、缺失点或案例证据，再推进后续页。</p>
+                            </div>
+                        )}
                         <div className="mt-3 grid gap-3 md:grid-cols-3">
                             <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                                 <p className="text-xs font-semibold text-slate-500">训练目标</p>
@@ -1188,6 +1221,7 @@ export default function PracticeSessionPage() {
                     scenarioType={scenarioType}
                     presentationId={lockedPresentationId}
                     currentSlide={currentSlide}
+                    presentationFocusPage={presentationPageFocus?.pageNumber ?? null}
                     points={points}
                     forbiddenWords={forbiddenWords}
                     scores={scores}
@@ -1216,6 +1250,7 @@ export default function PracticeSessionPage() {
                         scenarioType={scenarioType}
                         presentationId={lockedPresentationId}
                         currentSlide={currentSlide}
+                        presentationFocusPage={presentationPageFocus?.pageNumber ?? null}
                         points={points}
                         forbiddenWords={forbiddenWords}
                         scores={scores}

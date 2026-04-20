@@ -389,4 +389,28 @@ describe("RightPanelContent", () => {
         expect(screen.getByText("改进建议")).toBeTruthy();
         expect(screen.getByText("先补一个 ROI 证据，再回应价格异议")).toBeTruthy();
     });
+
+    it("shows the target presentation page without changing the slide navigator", () => {
+        render(
+            <RightPanelContent
+                {...baseProps}
+                scenarioType="presentation"
+                presentationId="presentation-1"
+                currentSlide={{
+                    current_page: 1,
+                    total_pages: 5,
+                    content: "第一页内容",
+                }}
+                presentationFocusPage={3}
+                scores={null}
+                actionCard={null}
+                fuzzyDetections={[]}
+            />,
+        );
+
+        expect(screen.getByText("本轮重点页")).toBeTruthy();
+        expect(screen.getByText("第 3 页")).toBeTruthy();
+        expect(screen.getByText("本轮优先补齐这一页的必讲点、缺失点或案例证据。")).toBeTruthy();
+    });
+
 });

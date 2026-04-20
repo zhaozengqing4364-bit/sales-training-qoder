@@ -14,6 +14,7 @@ const {
     useContinuousAudioUploaderMock,
     usePracticeRuntimeLockMock,
     usePracticeSessionLifecycleMock,
+    searchParamsMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     replaceMock: vi.fn(),
@@ -24,6 +25,7 @@ const {
     useContinuousAudioUploaderMock: vi.fn(),
     usePracticeRuntimeLockMock: vi.fn(),
     usePracticeSessionLifecycleMock: vi.fn(),
+    searchParamsMock: { current: "scenario_type=sales&voice_mode=legacy" },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -35,7 +37,7 @@ vi.mock("next/navigation", () => ({
         replace: replaceMock,
     }),
     usePathname: () => "/practice/session-current",
-    useSearchParams: () => new URLSearchParams("scenario_type=sales&voice_mode=legacy"),
+    useSearchParams: () => new URLSearchParams(searchParamsMock.current),
 }));
 
 vi.mock("next/link", () => ({
@@ -67,11 +69,12 @@ vi.mock("@/components/ui/glass-sheet", () => ({
 }));
 
 vi.mock("@/components/practice/RightPanelContent", () => ({
-    RightPanelContent: ({ liveSessionSummary, actionCompletionStatus }: { liveSessionSummary?: { main_issue?: { issue_text?: string | null } | null; focus_type?: string | null } | null; actionCompletionStatus?: { label: string } | null }) => (
+    RightPanelContent: ({ liveSessionSummary, actionCompletionStatus, presentationFocusPage }: { liveSessionSummary?: { main_issue?: { issue_text?: string | null } | null; focus_type?: string | null } | null; actionCompletionStatus?: { label: string } | null; presentationFocusPage?: number | null }) => (
         <div data-testid="right-panel-content">
             {liveSessionSummary?.focus_type ? <span>{`live-focus:${liveSessionSummary.focus_type}`}</span> : null}
             {liveSessionSummary?.main_issue?.issue_text ? <span>{liveSessionSummary.main_issue.issue_text}</span> : null}
             {actionCompletionStatus?.label ? <span>{actionCompletionStatus.label}</span> : null}
+            {presentationFocusPage ? <span>{`panel-focus-page:${presentationFocusPage}`}</span> : null}
         </div>
     ),
 }));
@@ -122,6 +125,7 @@ async function flushPreflightEffects() {
 describe("PracticeSessionPage carry-forward retry focus", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        searchParamsMock.current = "scenario_type=sales&voice_mode=legacy";
         Element.prototype.scrollIntoView = vi.fn();
 
         usePracticeWebSocketMock.mockReturnValue({
@@ -264,6 +268,48 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         const mobileQuickActions = screen.getByRole("navigation", { name: "移动快捷入口" });
         expect(mobileQuickActions).toBeTruthy();
         expect(within(mobileQuickActions).getByRole("link", { name: /训练大厅/ }).getAttribute("href")).toBe("/training");
+    });
+
+    it("shows a presentation page focus in preflight and the learner panel", async () => {
+        searchParamsMock.current = "scenario_type=presentation&presentation_id=presentation-1&focus=presentation_page&page=2&source_session_id=session-previous";
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "presentation",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: undefined,
+            lockedPersonaId: undefined,
+            lockedPresentationId: "presentation-1",
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(await screen.findByText("开始前先看本次练习重点")).toBeTruthy();
+        expect(screen.getAllByText("本轮重点页").length).toBeGreaterThan(0);
+        expect(screen.getByText("第 2 页")).toBeTruthy();
+        expect(screen.getAllByText(/先补齐这一页的必讲点、缺失点或案例证据/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText("panel-focus-page:2").length).toBeGreaterThan(0);
+    });
+
+    it("ignores invalid presentation page focus values", async () => {
+        searchParamsMock.current = "scenario_type=presentation&presentation_id=presentation-1&focus=presentation_page&page=bad";
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "presentation",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: undefined,
+            lockedPersonaId: undefined,
+            lockedPresentationId: "presentation-1",
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(await screen.findByText("开始前先看本次练习重点")).toBeTruthy();
+        expect(screen.queryByText("本轮重点页")).toBeNull();
+        expect(screen.queryByText(/panel-focus-page/)).toBeNull();
     });
 
     it("hides the preflight brief after the learner already has conversation history", async () => {

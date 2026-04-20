@@ -67,6 +67,26 @@ function buildPresentationPageReplayPath(sessionId: string, pageNumber: number):
     return `/practice/${sessionId}/replay?${params.toString()}`;
 }
 
+function buildPresentationPagePracticePath({
+    sessionId,
+    presentationId,
+    pageNumber,
+    sourceSessionId,
+}: {
+    sessionId: string;
+    presentationId: string;
+    pageNumber: number;
+    sourceSessionId: string;
+}): string {
+    const params = new URLSearchParams();
+    params.set("scenario_type", "presentation");
+    params.set("presentation_id", presentationId);
+    params.set("focus", "presentation_page");
+    params.set("page", String(pageNumber));
+    params.set("source_session_id", sourceSessionId);
+    return `/practice/${sessionId}?${params.toString()}`;
+}
+
 function formatSnapshotTime(value?: string | null): string {
     if (!value) return "--";
     const date = new Date(value);
@@ -900,6 +920,35 @@ export default function ComprehensiveReportPage() {
         }
     };
 
+    const handleRetryFromPresentationPage = async (pageNumber: number) => {
+        const retry = retryEntry;
+        setRetryHint(null);
+
+        if (retryBlockedHint || retry?.scenario_type !== "presentation" || !retry.presentation_id) {
+            setRetryHint(retryBlockedHint || "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。");
+            router.push("/training/presentation");
+            return;
+        }
+
+        try {
+            const created = await api.practice.createSession({
+                scenario_type: "presentation",
+                agent_id: retry.agent_id || undefined,
+                persona_id: retry.persona_id || undefined,
+                presentation_id: retry.presentation_id,
+            });
+            router.push(buildPresentationPagePracticePath({
+                sessionId: created.session_id,
+                presentationId: retry.presentation_id,
+                pageNumber,
+                sourceSessionId: sessionId,
+            }));
+        } catch (err) {
+            debug.warn("[Report] Presentation page retry session creation failed", { sessionId, pageNumber, error: err });
+            setRetryHint(getApiErrorMessage(err));
+        }
+    };
+
     const handleRetryFromHighlightReview = async () => {
         const retry = retryEntry;
         setRetryHint(null);
@@ -1297,10 +1346,17 @@ export default function ComprehensiveReportPage() {
                                                 </span>
                                                 <Link
                                                     href={buildPresentationPageReplayPath(sessionId, pageSummary.page_number)}
+                                                    className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                                >
+                                                    查看第 {pageSummary.page_number} 页回放
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleRetryFromPresentationPage(pageSummary.page_number)}
                                                     className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                                                 >
                                                     补练第 {pageSummary.page_number} 页
-                                                </Link>
+                                                </button>
                                             </div>
                                         </div>
                                         <p className="text-sm text-zinc-700 mb-3">{pageSummary.summary}</p>
@@ -1328,13 +1384,20 @@ export default function ComprehensiveReportPage() {
                                                         {pageSummary.issue_clusters?.length || 0} 个
                                                     </span>
                                                 </div>
-                                                <div className="mb-3">
+                                                <div className="mb-3 flex flex-wrap gap-2">
                                                     <Link
                                                         href={buildPresentationPageReplayPath(sessionId, pageSummary.page_number)}
+                                                        className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                                    >
+                                                        查看第 {pageSummary.page_number} 页回放
+                                                    </Link>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleRetryFromPresentationPage(pageSummary.page_number)}
                                                         className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
                                                     >
                                                         带着这些问题补练第 {pageSummary.page_number} 页
-                                                    </Link>
+                                                    </button>
                                                 </div>
                                                 <div className="space-y-3">
                                                     {(pageSummary.issue_clusters || []).map((issue, index) => {

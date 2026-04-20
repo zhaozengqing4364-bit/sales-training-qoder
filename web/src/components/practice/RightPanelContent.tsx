@@ -41,6 +41,7 @@ interface RightPanelContentProps {
     scenarioType: "sales" | "presentation";
     presentationId?: string;
     currentSlide: SlideUpdate | null;
+    presentationFocusPage?: number | null;
     points: PointCovered[];
     forbiddenWords: ForbiddenWordDetection[];
     scores: ScoreUpdate | null;
@@ -57,6 +58,7 @@ export const RightPanelContent = React.memo(function RightPanelContent({
     scenarioType,
     presentationId,
     currentSlide,
+    presentationFocusPage,
     points,
     forbiddenWords,
     scores,
@@ -82,6 +84,13 @@ export const RightPanelContent = React.memo(function RightPanelContent({
     if (scenarioType === "presentation") {
         return (
             <div className="space-y-4">
+                {presentationFocusPage && (
+                    <div className="rounded-2xl border border-purple-100 bg-purple-50/80 p-4 text-sm text-purple-900">
+                        <p className="text-xs font-semibold text-purple-700">本轮重点页</p>
+                        <p className="mt-1 font-bold">第 {presentationFocusPage} 页</p>
+                        <p className="mt-2 text-xs text-purple-800">本轮优先补齐这一页的必讲点、缺失点或案例证据。</p>
+                    </div>
+                )}
                 <SlideViewer
                     presentationId={presentationId}
                     currentPage={currentSlide?.current_page || 1}
