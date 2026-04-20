@@ -7,6 +7,8 @@ import {
   AlertCircle,
   MessageCircle,
   ChevronRight,
+  BookmarkCheck,
+  BookmarkPlus,
   Play,
   Pause,
   Volume2,
@@ -27,8 +29,11 @@ interface HighlightCardProps {
   aiFeedback?: string | null;
   score?: number | null;
   audioUrl?: string | null;
+  reviewSelected?: boolean;
+  reviewSelectionDisabled?: boolean;
   onViewContext?: () => void;
   onJumpToMessage?: () => void;
+  onToggleReviewItem?: () => void;
 }
 
 export function HighlightCard({
@@ -42,8 +47,11 @@ export function HighlightCard({
   aiFeedback,
   score,
   audioUrl,
+  reviewSelected = false,
+  reviewSelectionDisabled = false,
   onViewContext,
   onJumpToMessage,
+  onToggleReviewItem,
 }: HighlightCardProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -225,6 +233,38 @@ export function HighlightCard({
             <p className="text-xs text-orange-600 mb-1">更优回应</p>
             <p className="text-sm text-slate-700 bg-white/50 p-2 rounded">
               {suggestedResponse}
+            </p>
+          </div>
+        )}
+
+        {onToggleReviewItem && (
+          <div className="pl-6 pt-2 border-t border-orange-100">
+            <Button
+              type="button"
+              variant={reviewSelected ? "primary" : "outline"}
+              size="sm"
+              aria-pressed={reviewSelected}
+              disabled={reviewSelectionDisabled && !reviewSelected}
+              className="min-h-[36px]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleReviewItem();
+              }}
+            >
+              {reviewSelected ? (
+                <>
+                  <BookmarkCheck className="w-4 h-4 mr-1" />
+                  已加入复习清单
+                </>
+              ) : (
+                <>
+                  <BookmarkPlus className="w-4 h-4 mr-1" />
+                  {reviewSelectionDisabled ? "清单已满" : "加入复习清单"}
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-slate-500 mt-2">
+              最多选择 3 个待改进片段，用于下一轮集中再练。
             </p>
           </div>
         )}
