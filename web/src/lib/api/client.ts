@@ -1797,18 +1797,39 @@ export const api = {
             return Array.isArray(result?.trends) ? result.trends : [];
         },
 
-        getPublicLeaderboard: async (params?: { scenario_type?: string; time_period?: string; include_me?: boolean; limit?: number }) => {
+        getPublicLeaderboard: async (params?: {
+            scenario_type?: string;
+            time_period?: string;
+            leaderboard_mode?: "score" | "improvement" | "issue_type" | string;
+            issue_type?: string;
+            include_me?: boolean;
+            limit?: number;
+        }) => {
             const queryParams = new URLSearchParams();
             if (params?.scenario_type) queryParams.set("scenario_type", params.scenario_type);
             if (params?.time_period) queryParams.set("time_period", params.time_period);
+            if (params?.leaderboard_mode) queryParams.set("leaderboard_mode", params.leaderboard_mode);
+            if (params?.issue_type) queryParams.set("issue_type", params.issue_type);
             if (params?.include_me) queryParams.set("include_me", "true");
             if (params?.limit) queryParams.set("limit", String(params.limit));
             return apiFetch<{
                 scenario_type?: string | null;
                 time_period: string;
+                leaderboard_mode?: string;
                 score_basis?: string;
                 evaluable_sessions?: number;
                 not_evaluable_sessions?: number;
+                eligibility?: {
+                    score_basis?: string;
+                    min_evaluable_sessions?: number;
+                    explanation?: string;
+                };
+                issue_type?: string | null;
+                issue_type_buckets?: Array<{
+                    issue_type: string;
+                    count?: number;
+                    evaluable_sessions?: number;
+                }>;
                 total_users: number;
                 entries: Array<{
                     rank: number;
@@ -1817,6 +1838,11 @@ export const api = {
                     total_sessions: number;
                     average_score: number;
                     best_score: number;
+                    improvement_score?: number;
+                    first_score?: number;
+                    latest_score?: number;
+                    sample_size?: number;
+                    issue_type?: string | null;
                     score_basis?: string;
                     evaluable_sessions?: number;
                     not_evaluable_sessions?: number;
@@ -1826,6 +1852,11 @@ export const api = {
                     rank: number | null;
                     total_sessions: number;
                     average_score: number;
+                    improvement_score?: number;
+                    first_score?: number;
+                    latest_score?: number;
+                    sample_size?: number;
+                    issue_type?: string | null;
                     score_basis?: string;
                     evaluable_sessions?: number;
                     not_evaluable_sessions?: number;
@@ -1839,12 +1870,21 @@ export const api = {
         },
 
         getMyRank: async (
-            params?: string | { scenario_type?: string; time_period?: string }
+            params?: string | {
+                scenario_type?: string;
+                time_period?: string;
+                leaderboard_mode?: "score" | "improvement" | "issue_type" | string;
+                issue_type?: string;
+            }
         ) => {
             const scenarioType =
                 typeof params === "string" ? params : params?.scenario_type;
             const timePeriod =
                 typeof params === "string" ? undefined : params?.time_period;
+            const leaderboardMode =
+                typeof params === "string" ? undefined : params?.leaderboard_mode;
+            const issueType =
+                typeof params === "string" ? undefined : params?.issue_type;
 
             const queryParams = new URLSearchParams();
             if (scenarioType) {
@@ -1853,6 +1893,12 @@ export const api = {
             if (timePeriod) {
                 queryParams.set("time_period", timePeriod);
             }
+            if (leaderboardMode) {
+                queryParams.set("leaderboard_mode", leaderboardMode);
+            }
+            if (issueType) {
+                queryParams.set("issue_type", issueType);
+            }
 
             const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
             return apiFetch<{
@@ -1860,6 +1906,11 @@ export const api = {
                 rank: number | null;
                 total_sessions: number;
                 average_score: number;
+                improvement_score?: number;
+                first_score?: number;
+                latest_score?: number;
+                sample_size?: number;
+                issue_type?: string | null;
                 score_basis?: string;
                 evaluable_sessions?: number;
                 not_evaluable_sessions?: number;
