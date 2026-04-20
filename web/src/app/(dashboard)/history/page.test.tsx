@@ -437,9 +437,10 @@ describe("HistoryPage", () => {
 
         render(<HistoryPage />);
 
-        expect(await screen.findByText("需要帮助或反馈？")).toBeTruthy();
-        expect(screen.getByText(/统一入口在侧边栏底部的“帮助与反馈”里；手机端先打开左上角菜单。/)).toBeTruthy();
-        expect(screen.getByText(/当前 learner 默认只看到训练、历史、个人中心；运行状态和管理后台只对管理员或支持角色开放。/)).toBeTruthy();
+        expect(await screen.findByText("历史记录看不全时还能做什么？")).toBeTruthy();
+        expect(screen.getByText(/历史页只展示已同步的训练证据/)).toBeTruthy();
+        expect(screen.getByText(/如果历史列表为空，先完成一次可评估训练/)).toBeTruthy();
+        expect(screen.getByRole("link", { name: /开始训练/ }).getAttribute("href")).toBe("/training");
         expect(screen.queryByText(/7 x 24/)).toBeNull();
     });
 

@@ -254,7 +254,7 @@ export default function HistoryPage() {
                 </GlassCard>
             )}
 
-            <LearnerHelpCard />
+            <LearnerHelpCard context="history" />
 
             {!isLoading && !historyLoadError && (
                 <GlassCard className="p-5 border border-blue-100 bg-blue-50/60">

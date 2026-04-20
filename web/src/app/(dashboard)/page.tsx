@@ -667,7 +667,7 @@ export default function HomePage() {
                 </div>
             </section>
 
-            <LearnerHelpCard />
+            <LearnerHelpCard context="dashboard" />
 
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <GlassCard className="p-5 border border-orange-100 bg-orange-50/70">

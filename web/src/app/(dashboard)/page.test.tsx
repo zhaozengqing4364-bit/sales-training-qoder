@@ -40,7 +40,7 @@ vi.mock("@/components/ui/glass-card", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-    Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    Button: ({ children, asChild: _asChild, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => (
         <button {...props}>{children}</button>
     ),
 }));

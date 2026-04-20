@@ -38,7 +38,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-    Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
+    Button: ({ children, asChild: _asChild, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => (
         <button type="button" {...props}>
             {children}
         </button>
@@ -254,6 +254,8 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByText("围绕「企业版销售教练」进行销售对练，开口前先想好价值主张和下一步推进。", { exact: true })).toBeTruthy();
         expect(screen.getByText("系统会重点看价值翻译、证据支撑和异议推进的完成度。", { exact: true })).toBeTruthy();
         expect(screen.getByText("谨慎型采购经理：会反复确认投入产出、落地周期和风险控制。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("练习中遇到异常怎么办？")).toBeTruthy();
+        expect(screen.getByText(/麦克风或连接异常时，先按故障面板动作重试/)).toBeTruthy();
     });
 
     it("hides the preflight brief after the learner already has conversation history", async () => {

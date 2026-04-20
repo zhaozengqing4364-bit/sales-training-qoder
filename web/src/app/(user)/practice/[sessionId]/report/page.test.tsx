@@ -488,6 +488,8 @@ describe("ReportPage", () => {
         render(<ReportPage />);
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("76");
+        expect(screen.getByText("报告看不懂或证据不足时怎么办？")).toBeTruthy();
+        expect(screen.getByText(/先看主问题、下一轮目标和高光复习清单/)).toBeTruthy();
         expect(screen.getByText("销售能力总览")).toBeTruthy();
         expect(screen.getByText("价值表达")).toBeTruthy();
         expect(screen.getByText("证据与收益")).toBeTruthy();

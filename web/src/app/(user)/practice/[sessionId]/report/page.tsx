@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { HighlightList } from "@/components/highlights";
+import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { AudioAuditCardWithSession as AudioAuditCard } from "@/components/audio/AudioAuditCard";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -1105,6 +1106,8 @@ export default function ComprehensiveReportPage() {
                     </p>
                 </div>
             </GlassCard>
+
+            <LearnerHelpCard context="report" className="mb-6" />
 
             {report.evaluable === false && (
                 <GlassCard className="p-6 mb-6 border border-amber-200 bg-amber-50/80">
