@@ -800,6 +800,10 @@ export default function ComprehensiveReportPage() {
     const nextGoalReplayHint = formatReplayAnchorHint(nextGoalReplayAnchor);
     const issueReplayAvailable = hasReplayAnchorTarget(issueReplayAnchor);
     const nextGoalReplayAvailable = hasReplayAnchorTarget(nextGoalReplayAnchor);
+    const highlightReviewSelectedIds = useMemo(
+        () => highlightReviewItems.map((item) => item.id),
+        [highlightReviewItems],
+    );
 
     const goHome = () => {
         router.push("/");
@@ -812,6 +816,34 @@ export default function ComprehensiveReportPage() {
     }) => {
         router.push(buildReplayDeepLink(sessionId, options));
     }, [router, sessionId]);
+
+    const persistHighlightReviewState = useCallback((items: HighlightReviewItem[]) => {
+        persistHighlightReviewItems(sessionId, items);
+        return items;
+    }, [sessionId]);
+
+    const toggleHighlightReviewItem = useCallback((highlight: HighlightItem) => {
+        if (highlight.highlight_type !== "bad") {
+            return;
+        }
+
+        setHighlightReviewItems((currentItems) => {
+            const exists = currentItems.some((item) => item.id === highlight.id);
+            const nextItems = exists
+                ? currentItems.filter((item) => item.id !== highlight.id)
+                : currentItems.length >= HIGHLIGHT_REVIEW_LIMIT
+                    ? currentItems
+                    : [...currentItems, buildHighlightReviewItem(sessionId, highlight)];
+
+            return persistHighlightReviewState(nextItems);
+        });
+    }, [persistHighlightReviewState, sessionId]);
+
+    const removeHighlightReviewItem = useCallback((highlightId: string) => {
+        setHighlightReviewItems((currentItems) => (
+            persistHighlightReviewState(currentItems.filter((item) => item.id !== highlightId))
+        ));
+    }, [persistHighlightReviewState]);
 
     const handleRetryFromGoal = async () => {
         const retry = retryEntry;
@@ -854,6 +886,64 @@ export default function ComprehensiveReportPage() {
             router.push(`/practice/${created.session_id}?${nextParams.toString()}`);
         } catch (err) {
             debug.warn("[Report] Retry session creation failed", { sessionId, error: err });
+            setRetryHint(getApiErrorMessage(err));
+        }
+    };
+
+    const handleRetryFromHighlightReview = async () => {
+        const retry = retryEntry;
+        setRetryHint(null);
+
+        if (highlightReviewItems.length === 0) {
+            setRetryHint("请先选择 1-3 个待改进高光片段，再带入下一轮训练。");
+            return;
+        }
+
+        if (retryBlockedHint) {
+            setRetryHint(retryBlockedHint);
+            router.push(retryFallbackPath);
+            return;
+        }
+
+        if (!retry?.scenario_type) {
+            setRetryHint("当前报告缺少再练配置，请先返回训练页重新创建会话。");
+            router.push("/training/sales");
+            return;
+        }
+
+        if (
+            retry.scenario_type === "sales"
+            && (!retry.agent_id || !retry.persona_id)
+        ) {
+            setRetryHint("当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。");
+            router.push("/training/sales");
+            return;
+        }
+
+        try {
+            const focusIntent = buildHighlightReviewFocusIntent({
+                baseIntent: retry.focus_intent ?? null,
+                report,
+                sessionId,
+                reviewItems: highlightReviewItems,
+            });
+            const created = await api.practice.createSession({
+                scenario_type: retry.scenario_type as "sales" | "presentation",
+                agent_id: retry.agent_id || undefined,
+                persona_id: retry.persona_id || undefined,
+                presentation_id: retry.presentation_id || undefined,
+                focus_intent: focusIntent,
+            });
+            const nextParams = new URLSearchParams();
+            nextParams.set("scenario_type", retry.scenario_type);
+            nextParams.set("review_source", "highlight_review");
+            nextParams.set("source_session_id", sessionId);
+            if (retry.agent_id) nextParams.set("agent_id", retry.agent_id);
+            if (retry.persona_id) nextParams.set("persona_id", retry.persona_id);
+            if (retry.presentation_id) nextParams.set("presentation_id", retry.presentation_id);
+            router.push(`/practice/${created.session_id}?${nextParams.toString()}`);
+        } catch (err) {
+            debug.warn("[Report] Highlight review retry session creation failed", { sessionId, error: err });
             setRetryHint(getApiErrorMessage(err));
         }
     };
@@ -1842,6 +1932,9 @@ export default function ComprehensiveReportPage() {
                         highlights={highlightsData.highlights}
                         totalGood={highlightsData.total_good}
                         totalBad={highlightsData.total_bad}
+                        reviewSelectedIds={highlightReviewSelectedIds}
+                        reviewLimit={HIGHLIGHT_REVIEW_LIMIT}
+                        onToggleReviewItem={toggleHighlightReviewItem}
                         onJumpToMessage={(turnNumber) => openReplayDeepLink({
                             focus: "learning_evidence",
                             turnNumber,
@@ -1851,6 +1944,94 @@ export default function ComprehensiveReportPage() {
             ) : (
                 <GlassCard className="p-4 mb-6 border border-zinc-200 bg-zinc-50/70">
                     <p className="text-sm text-zinc-600">本次训练暂未识别出高光片段。</p>
+                </GlassCard>
+            )}
+
+            {highlightReviewItems.length > 0 && (
+                <GlassCard className="p-6 mb-6 border border-indigo-100 bg-indigo-50/40">
+                    <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
+                        <div>
+                            <div className="flex items-center gap-2 mb-2">
+                                <BookmarkCheck className="w-5 h-5 text-indigo-600" />
+                                <h2 className="text-lg font-semibold text-zinc-900">高光复习清单</h2>
+                                <span className="rounded-full border border-indigo-200 bg-white/80 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                                    {highlightReviewItems.length}/{HIGHLIGHT_REVIEW_LIMIT}
+                                </span>
+                            </div>
+                            <p className="text-sm text-zinc-600">
+                                已选择的待改进片段会随下一轮再练传入，包含原片段和 suggested_response。
+                            </p>
+                        </div>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleRetryFromHighlightReview}
+                            className="whitespace-nowrap"
+                        >
+                            带清单再练
+                        </Button>
+                    </div>
+
+                    <div className="space-y-3">
+                        {highlightReviewItems.map((item, index) => (
+                            <div
+                                key={item.id}
+                                className="rounded-xl border border-indigo-100 bg-white/85 p-4"
+                            >
+                                <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                                            片段 {index + 1}
+                                        </span>
+                                        <span className="text-xs text-zinc-500">第 {item.turn_number} 轮</span>
+                                        {item.stage_name && (
+                                            <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-600">
+                                                {item.stage_name}
+                                            </span>
+                                        )}
+                                        {item.issue_label && (
+                                            <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700">
+                                                {item.issue_label}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => openReplayDeepLink({
+                                                focus: "learning_evidence",
+                                                turnNumber: item.turn_number,
+                                            })}
+                                        >
+                                            回放片段
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => removeHighlightReviewItem(item.id)}
+                                        >
+                                            移除
+                                        </Button>
+                                    </div>
+                                </div>
+                                <p className="text-sm text-zinc-800 leading-6">{item.content}</p>
+                                {item.reason && (
+                                    <p className="text-xs text-amber-700 mt-2">复盘原因：{item.reason}</p>
+                                )}
+                                {item.suggested_response && (
+                                    <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/80 p-3">
+                                        <p className="text-xs font-semibold text-emerald-700 mb-1">带入再练的更优回应</p>
+                                        <p className="text-sm text-emerald-900">{item.suggested_response}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {retryHint && (
+                        <p className="text-xs text-amber-700 mt-3">{retryHint}</p>
+                    )}
                 </GlassCard>
             )}
 

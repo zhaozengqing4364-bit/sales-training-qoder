@@ -98,4 +98,50 @@ describe("HighlightList", () => {
         expect(screen.getByText("暂无高光片段")).toBeTruthy();
         expect(screen.getByText("完成练习后将自动生成关键 moments")).toBeTruthy();
     });
+
+    it("lets learners add only bad highlights to the local review list", () => {
+        const onToggleReviewItem = vi.fn();
+
+        render(
+            <HighlightList
+                highlights={[badHighlight as never]}
+                totalGood={0}
+                totalBad={1}
+                reviewSelectedIds={[]}
+                onToggleReviewItem={onToggleReviewItem}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: /加入复习清单/ }));
+
+        expect(onToggleReviewItem).toHaveBeenCalledWith(badHighlight);
+    });
+
+    it("shows selected and full states for the review list action", () => {
+        const { rerender } = render(
+            <HighlightList
+                highlights={[badHighlight as never]}
+                totalGood={0}
+                totalBad={1}
+                reviewSelectedIds={["turn-2"]}
+                onToggleReviewItem={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole("button", { name: /已加入复习清单/ }).getAttribute("aria-pressed"))
+            .toBe("true");
+
+        rerender(
+            <HighlightList
+                highlights={[badHighlight as never]}
+                totalGood={0}
+                totalBad={1}
+                reviewSelectedIds={["a", "b", "c"]}
+                onToggleReviewItem={vi.fn()}
+            />,
+        );
+
+        expect((screen.getByRole("button", { name: /清单已满/ }) as HTMLButtonElement).disabled)
+            .toBe(true);
+    });
 });

@@ -39,16 +39,28 @@ vi.mock("@/components/highlights", () => ({
     HighlightList: ({
         highlights,
         onJumpToMessage,
+        reviewSelectedIds = [],
+        onToggleReviewItem,
     }: {
-        highlights: Array<{ id: string; turn_number: number }>;
+        highlights: Array<{ id: string; turn_number: number; highlight_type?: string }>;
         onJumpToMessage?: (turnNumber: number) => void;
+        reviewSelectedIds?: string[];
+        onToggleReviewItem?: (highlight: { id: string; turn_number: number; highlight_type?: string }) => void;
     }) => (
         <div data-testid="highlight-list">
             <div>高光数:{highlights.length}</div>
+            <div>复习清单已选:{reviewSelectedIds.join(",") || "无"}</div>
             {highlights[0] ? (
-                <button type="button" onClick={() => onJumpToMessage?.(highlights[0].turn_number)}>
-                    跳到高光回放
-                </button>
+                <>
+                    <button type="button" onClick={() => onJumpToMessage?.(highlights[0].turn_number)}>
+                        跳到高光回放
+                    </button>
+                    {onToggleReviewItem && highlights[0].highlight_type === "bad" ? (
+                        <button type="button" onClick={() => onToggleReviewItem(highlights[0])}>
+                            加入复习清单
+                        </button>
+                    ) : null}
+                </>
             ) : null}
         </div>
     ),
@@ -377,6 +389,7 @@ describe("ReportPage", () => {
         getComprehensiveReportMock.mockReset();
         generateComprehensiveReportMock.mockReset();
         getSegmentAudioBlobUrlMock.mockReset();
+        localStorage.clear();
 
         getReplayMock.mockResolvedValue(baseReplayData);
         getKnowledgeCheckMock.mockRejectedValue(new Error("knowledge check unavailable"));
@@ -893,6 +906,123 @@ describe("ReportPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "跳到高光回放" }));
         expect(pushMock).toHaveBeenCalledWith(
             "/practice/session-1/replay?focus=learning_evidence&turn=6",
+        );
+    });
+
+    it("shows a local highlight review list and carries suggested responses into retry", async () => {
+        const reviewHighlight = {
+            id: "highlight-review-1",
+            turn_number: 6,
+            role: "user",
+            content: "我们还是担心 ROI，但我先介绍功能。",
+            timestamp: "2026-03-25T00:00:00Z",
+            highlight_type: "bad",
+            highlight_reason: "客户已经明确追问 ROI，回答仍停留在功能介绍。",
+            ai_feedback: "需要用案例或数据补足证据。",
+            suggested_response: "先补一条制造业客户 18% 回款周期缩短案例，再确认客户是否认可。",
+            sales_stage: "objection",
+            stage_name: "异议处理",
+            context: {},
+            audio_url: null,
+            score: 62,
+            learning_evidence: {
+                reason: "这是最适合下一轮集中复练的 ROI 证据缺口。",
+                issue_family: "evidence_gap",
+                objection_family: "roi",
+                stage: {
+                    key: "objection",
+                    name: "异议处理",
+                },
+                nearby_context: {},
+                suggested_response: "先补一条制造业客户 18% 回款周期缩短案例，再确认客户是否认可。",
+                linked_issue: null,
+                linked_goal: null,
+            },
+        };
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            retry_entry: {
+                scenario_type: "sales",
+                agent_id: "agent-1",
+                persona_id: "persona-1",
+                presentation_id: null,
+                focus_intent: {
+                    version: "retry_focus_v1",
+                    source_session_id: "session-1",
+                    main_issue: baseReport.main_issue,
+                    next_goal: {
+                        goal_type: "evidence_backing",
+                        goal_text: "先补 ROI 证据，再推进一个明确的下一步动作。",
+                        rule: "至少给出一条证据并确认下一步。",
+                    },
+                },
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再推进一个明确的下一步动作。",
+                rule: "至少给出一条证据并确认下一步。",
+            },
+        });
+        getHighlightsMock.mockResolvedValue({
+            highlights: [reviewHighlight],
+            total_good: 0,
+            total_bad: 1,
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 82,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("高光数:1")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "加入复习清单" }));
+
+        expect(await screen.findByText("高光复习清单")).toBeTruthy();
+        expect(screen.getByText("我们还是担心 ROI，但我先介绍功能。")).toBeTruthy();
+        expect(screen.getByText("先补一条制造业客户 18% 回款周期缩短案例，再确认客户是否认可。"))
+            .toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "带清单再练" }));
+
+        await waitFor(() => {
+            expect(createSessionMock).toHaveBeenCalledWith({
+                scenario_type: "sales",
+                agent_id: "agent-1",
+                persona_id: "persona-1",
+                presentation_id: undefined,
+                focus_intent: expect.objectContaining({
+                    version: "retry_focus_v1",
+                    source_session_id: "session-1",
+                    highlight_review: {
+                        version: "highlight_review_v1",
+                        selected_count: 1,
+                        items: [
+                            expect.objectContaining({
+                                id: "highlight-review-1",
+                                source_session_id: "session-1",
+                                turn_number: 6,
+                                content: "我们还是担心 ROI，但我先介绍功能。",
+                                issue_label: "证据支撑",
+                                suggested_response: "先补一条制造业客户 18% 回款周期缩短案例，再确认客户是否认可。",
+                            }),
+                        ],
+                    },
+                }),
+            });
+        });
+        expect(pushMock).toHaveBeenCalledWith(
+            "/practice/retry-1?scenario_type=sales&review_source=highlight_review&source_session_id=session-1&agent_id=agent-1&persona_id=persona-1",
         );
     });
 
