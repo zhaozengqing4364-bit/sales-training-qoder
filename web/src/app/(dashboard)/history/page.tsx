@@ -25,6 +25,7 @@ import {
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
+    buildHistoryIssueReviewGroups,
     extractSessionLearningCue,
     formatEvidenceCompletenessNote,
     formatNotEvaluableReason,
@@ -202,6 +203,11 @@ export default function HistoryPage() {
         [stats.total_practice_time_minutes],
     );
 
+    const issueReviewGroups = useMemo(
+        () => buildHistoryIssueReviewGroups(history),
+        [history],
+    );
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             <div>
@@ -249,6 +255,77 @@ export default function HistoryPage() {
             )}
 
             <LearnerHelpCard />
+
+            {!isLoading && !historyLoadError && (
+                <GlassCard className="p-5 border border-blue-100 bg-blue-50/60">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div>
+                            <p className="text-xs font-semibold text-blue-700">按问题复练</p>
+                            <h2 className="text-lg font-bold text-slate-900 mt-1">最常卡住的 3 类问题</h2>
+                            <p className="text-sm text-slate-600 mt-1">
+                                仅聚合已完成且证据足够的训练；证据不足记录只用于解释，不进入复练榜。
+                            </p>
+                        </div>
+                        <Link href="/training/sales">
+                            <Button variant="outline" className="gap-1 bg-white/80">
+                                去销售训练
+                                <ArrowRight className="w-4 h-4" />
+                            </Button>
+                        </Link>
+                    </div>
+
+                    {issueReviewGroups.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                            {issueReviewGroups.map((issue) => (
+                                <div
+                                    key={issue.issueType}
+                                    data-testid={`history-issue-review-${issue.issueType}`}
+                                    className="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm"
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="font-bold text-slate-900">{issue.issueLabel}</div>
+                                        <Badge variant="blue" className="text-[11px]">
+                                            出现 {issue.count} 次
+                                        </Badge>
+                                    </div>
+                                    {issue.latestIssueText && (
+                                        <p className="mt-3 text-sm text-slate-700 line-clamp-2">
+                                            {issue.latestIssueText}
+                                        </p>
+                                    )}
+                                    {issue.latestRecoveryRule && (
+                                        <p className="mt-2 text-xs text-slate-500 line-clamp-2">
+                                            下一轮动作：{issue.latestRecoveryRule}
+                                        </p>
+                                    )}
+                                    {issue.latestGoalText && issue.latestGoalText !== issue.latestRecoveryRule && (
+                                        <p className="mt-1 text-xs text-slate-500 line-clamp-2">
+                                            目标：{issue.latestGoalText}
+                                        </p>
+                                    )}
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        <Link href={issue.reportHref}>
+                                            <Button variant="outline" size="sm" className="bg-white">
+                                                最近报告
+                                            </Button>
+                                        </Link>
+                                        <Link href={issue.retryHref}>
+                                            <Button size="sm" className="gap-1">
+                                                按问题再练
+                                                <ArrowRight className="w-3 h-3" />
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="mt-4 rounded-2xl border border-dashed border-blue-200 bg-white/70 p-4 text-sm text-slate-600">
+                            暂无可用于按问题复练的记录。完成一次可评估训练后，这里会按主问题聚合最常卡住的类型。
+                        </div>
+                    )}
+                </GlassCard>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <GlassCard className="p-4">
