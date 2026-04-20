@@ -816,6 +816,125 @@ export function extractSessionLearningCue(input: {
     };
 }
 
+export interface HistoryIssueReviewSource {
+    session_id: string;
+    scenario_type?: "sales" | "presentation" | string | null;
+    start_time?: string | null;
+    status?: string | null;
+    evaluable?: boolean | null;
+    main_issue?: SessionMainIssue | null;
+    next_goal?: SessionNextGoal | null;
+}
+
+export interface HistoryIssueReviewGroup {
+    issueType: string;
+    issueLabel: string;
+    count: number;
+    latestSessionId: string;
+    latestStartTime: string | null;
+    latestIssueText: string | null;
+    latestRecoveryRule: string | null;
+    latestGoalText: string | null;
+    reportHref: string;
+    retryHref: string;
+}
+
+function getHistoryIssueTimestamp(value?: string | null): number {
+    if (!value) {
+        return 0;
+    }
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function isRetryEligibleHistoryIssueSession(
+    session: HistoryIssueReviewSource,
+): session is HistoryIssueReviewSource & { main_issue: SessionMainIssue } {
+    const issueType = cleanText(session.main_issue?.issue_type);
+    return Boolean(
+        issueType
+        && session.status === "completed"
+        && session.evaluable !== false,
+    );
+}
+
+function buildHistoryIssueRetryHref(session: HistoryIssueReviewSource & { main_issue: SessionMainIssue }): string {
+    const focusIntent = {
+        version: "history_issue_retry_v1",
+        source_session_id: session.session_id,
+        main_issue: session.main_issue,
+        ...(session.next_goal ? { next_goal: session.next_goal } : {}),
+    };
+    const focusIntentParam = encodeURIComponent(JSON.stringify(focusIntent));
+    return `/training/sales?focus_intent=${focusIntentParam}`;
+}
+
+export function buildHistoryIssueReviewGroups(
+    sessions: HistoryIssueReviewSource[],
+    limit = 3,
+): HistoryIssueReviewGroup[] {
+    const groups = new Map<string, HistoryIssueReviewGroup>();
+
+    for (const session of sessions) {
+        if (!isRetryEligibleHistoryIssueSession(session)) {
+            continue;
+        }
+
+        const issueType = cleanText(session.main_issue.issue_type);
+        if (!issueType) {
+            continue;
+        }
+
+        const existing = groups.get(issueType);
+        const latestTimestamp = getHistoryIssueTimestamp(session.start_time);
+        const existingTimestamp = getHistoryIssueTimestamp(existing?.latestStartTime);
+        const shouldReplaceLatest = !existing || latestTimestamp >= existingTimestamp;
+        const issueLabel = formatIssueTypeLabel(issueType) || issueType;
+
+        if (!existing) {
+            groups.set(issueType, {
+                issueType,
+                issueLabel,
+                count: 1,
+                latestSessionId: session.session_id,
+                latestStartTime: session.start_time || null,
+                latestIssueText: cleanText(session.main_issue.issue_text),
+                latestRecoveryRule: cleanText(session.main_issue.recovery_rule),
+                latestGoalText: cleanText(session.next_goal?.goal_text),
+                reportHref: `/practice/${session.session_id}/report`,
+                retryHref: buildHistoryIssueRetryHref(session),
+            });
+            continue;
+        }
+
+        existing.count += 1;
+
+        if (shouldReplaceLatest) {
+            existing.latestSessionId = session.session_id;
+            existing.latestStartTime = session.start_time || null;
+            existing.latestIssueText = cleanText(session.main_issue.issue_text);
+            existing.latestRecoveryRule = cleanText(session.main_issue.recovery_rule);
+            existing.latestGoalText = cleanText(session.next_goal?.goal_text);
+            existing.reportHref = `/practice/${session.session_id}/report`;
+            existing.retryHref = buildHistoryIssueRetryHref(session);
+        }
+    }
+
+    return Array.from(groups.values())
+        .sort((left, right) => {
+            if (right.count !== left.count) {
+                return right.count - left.count;
+            }
+            const timestampDelta = getHistoryIssueTimestamp(right.latestStartTime)
+                - getHistoryIssueTimestamp(left.latestStartTime);
+            if (timestampDelta !== 0) {
+                return timestampDelta;
+            }
+            return left.issueLabel.localeCompare(right.issueLabel, "zh-CN");
+        })
+        .slice(0, Math.max(0, limit));
+}
+
 export function formatPresentationIssueLabel(issueType?: string | null): string | null {
     if (!issueType) {
         return null;
