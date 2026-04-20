@@ -428,7 +428,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         await flushPreflightEffects();
 
         expect(screen.getByLabelText("练习故障与恢复面板")).toBeTruthy();
-        expect(screen.getByText("当前有 5 项需要处理的练习状态")).toBeTruthy();
+        expect(screen.getByText("当前有 6 项需要处理的练习状态")).toBeTruthy();
         expect(screen.getByText("连接失败，请检查网络。", { exact: true })).toBeTruthy();
         expect(screen.getByText("会话配置缺少客户画像，请返回训练入口重新选择。", { exact: true })).toBeTruthy();
         expect(screen.getByText("结束失败，请再试一次。报告生成超时，请稍后再试。", { exact: true })).toBeTruthy();
