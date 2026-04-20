@@ -600,7 +600,17 @@ export default function PracticeSessionPage() {
         sessionMetaError,
         wsError,
     ]);
-    const audioUploadStatusLabel = continuousUploader.uploadStatus === "uploading"
+    const audioUploadStatusLabel = audioEvidenceStatus.status === "flushing"
+        ? "保存收尾中"
+        : audioEvidenceStatus.status === "completed"
+        ? "留痕已保存"
+        : audioEvidenceStatus.status === "failed"
+        ? "留痕失败"
+        : audioEvidenceStatus.status === "timed_out"
+        ? "留痕超时"
+        : continuousUploader.pendingUploads > 0
+        ? `留痕保存中(${continuousUploader.pendingUploads})`
+        : continuousUploader.uploadStatus === "uploading"
         ? "留痕保存中"
         : continuousUploader.uploadStatus === "error"
         ? "留痕失败"
@@ -791,7 +801,7 @@ export default function PracticeSessionPage() {
                             {isEndingSession ? (
                                 <>
                                     <span className="w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    生成报告中...
+                                    {audioEvidenceStatus.status === "flushing" ? "保存音频中..." : "生成报告中..."}
                                 </>
                             ) : (
                                 <>
@@ -884,89 +894,7 @@ export default function PracticeSessionPage() {
                     </div>
                 )}
 
-                {/* 错误提示 */}
-                {practiceError && (
-                    <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex flex-col gap-3 text-sm text-red-600 md:flex-row md:items-start">
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 min-w-0">
-                                <AlertCircle className="w-4 h-4 shrink-0" />
-                                <span className="min-w-0 break-words">{practiceError}</span>
-                            </div>
-                            {lifecycleErrorGuidance && (
-                                <p className="mt-2 text-xs leading-5 text-red-500">下一步：{lifecycleErrorGuidance}</p>
-                            )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 md:ml-auto">
-                            {lifecycleError && !isSessionTerminal && lifecycleRetryLabel && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={lifecycleError.action === "start"
-                                        ? handleStartSession
-                                        : lifecycleError.action === "end"
-                                        ? handleEndSession
-                                        : handleTogglePauseResume}
-                                    disabled={lifecycleError.action === "start"
-                                        ? connectionState !== "connected"
-                                        : lifecycleError.action === "end"
-                                        ? isEndingSession || connectionState !== "connected"
-                                        : !canToggleLifecycle}
-                                    className="h-8 rounded-full border-red-200 text-red-700 hover:bg-red-100"
-                                >
-                                    {lifecycleError.action === "start" ? (
-                                        <RefreshCw className="w-3 h-3 mr-1" />
-                                    ) : lifecycleError.action === "end" ? (
-                                        <Square className="w-3 h-3 mr-1 fill-current" />
-                                    ) : lifecycleError.action === "resume" ? (
-                                        <Play className="w-3 h-3 mr-1 fill-current" />
-                                    ) : (
-                                        <Pause className="w-3 h-3 mr-1" />
-                                    )}
-                                    {lifecycleRetryLabel}
-                                </Button>
-                            )}
-                            {connectionState === "failed" && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={connect}
-                                    className="h-8 rounded-full border-red-200 text-red-700 hover:bg-red-100"
-                                >
-                                    <RefreshCw className="w-3 h-3 mr-1" />
-                                    重新连接
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {audioUploadError && (
-                    <div className="mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-start">
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                    <AlertCircle className="h-4 w-4 shrink-0" />
-                                    <span className="font-medium">录音留痕上传失败</span>
-                                </div>
-                                <p className="mt-2 leading-5">
-                                    实时对话仍可继续，但回放或报告的音频证据可能缺失。原因：{audioUploadError}
-                                </p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 md:ml-auto">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={handleRestartAudioUpload}
-                                    disabled={!isRecording || continuousUploader.isUploading}
-                                    className="h-8 rounded-full border-amber-300 text-amber-800 hover:bg-amber-100"
-                                >
-                                    <RefreshCw className="mr-1 h-3 w-3" />
-                                    重试留痕
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                <PracticeFaultPanel faults={practiceFaults} />
 
                 {/* 网络慢提示 */}
                 {isNetworkSlow && (
@@ -1153,7 +1081,11 @@ export default function PracticeSessionPage() {
                                 : pendingLifecycleAction
                                 ? "正在更新会话状态..."
                                 : isSessionTerminal
-                                ? "会话已结束，正在生成/查看结果"
+                                ? audioEvidenceStatus.status === "flushing"
+                                    ? audioEvidenceStatus.message
+                                    : audioEvidenceStatus.status === "failed" || audioEvidenceStatus.status === "timed_out"
+                                    ? audioEvidenceStatus.message
+                                    : "会话已结束，正在生成/查看结果"
                                 : isSessionPaused
                                 ? "会话已暂停，点击顶部继续按钮恢复"
                                 : isPlayingAudio
