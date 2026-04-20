@@ -59,6 +59,96 @@ function buildFallbackPreflightBrief(scenarioType: "sales" | "presentation"): Pr
     };
 }
 
+type PracticeFaultSeverity = "error" | "warning" | "info";
+
+type PracticeFault = {
+    id: string;
+    severity: PracticeFaultSeverity;
+    title: string;
+    message: string;
+    guidance?: string | null;
+    action?: React.ReactNode;
+};
+
+const PRACTICE_FAULT_STYLES: Record<PracticeFaultSeverity, {
+    container: string;
+    badge: string;
+    icon: string;
+}> = {
+    error: {
+        container: "border-red-100 bg-red-50 text-red-700",
+        badge: "bg-red-100 text-red-700",
+        icon: "text-red-500",
+    },
+    warning: {
+        container: "border-amber-200 bg-amber-50 text-amber-800",
+        badge: "bg-amber-100 text-amber-800",
+        icon: "text-amber-600",
+    },
+    info: {
+        container: "border-sky-100 bg-sky-50 text-sky-800",
+        badge: "bg-sky-100 text-sky-800",
+        icon: "text-sky-600",
+    },
+};
+
+function PracticeFaultPanel({ faults }: { faults: PracticeFault[] }) {
+    if (faults.length === 0) {
+        return null;
+    }
+
+    return (
+        <section
+            aria-label="练习故障与恢复面板"
+            className="mx-4 mt-4 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm"
+        >
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                    故障面板
+                </span>
+                <p className="text-sm font-semibold text-slate-900">
+                    当前有 {faults.length} 项需要处理的练习状态
+                </p>
+            </div>
+            <div className="mt-3 grid gap-2">
+                {faults.map((fault) => {
+                    const styles = PRACTICE_FAULT_STYLES[fault.severity];
+
+                    return (
+                        <article
+                            key={fault.id}
+                            className={cn(
+                                "rounded-xl border p-3",
+                                styles.container,
+                            )}
+                        >
+                            <div className="flex flex-col gap-3 md:flex-row md:items-start">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <AlertCircle className={cn("h-4 w-4 shrink-0", styles.icon)} />
+                                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", styles.badge)}>
+                                            {fault.title}
+                                        </span>
+                                    </div>
+                                    <p className="mt-2 text-sm leading-5">{fault.message}</p>
+                                    {fault.guidance && (
+                                        <p className="mt-1 text-xs leading-5 opacity-80">下一步：{fault.guidance}</p>
+                                    )}
+                                </div>
+                                {fault.action && (
+                                    <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+                                        {fault.action}
+                                    </div>
+                                )}
+                            </div>
+                        </article>
+                    );
+                })}
+            </div>
+        </section>
+    );
+}
+
 export default function PracticeSessionPage() {
     const params = useParams();
     const router = useRouter();
@@ -331,6 +421,7 @@ export default function PracticeSessionPage() {
         handleEndSession,
         handleStartSession,
         handleTogglePauseResume,
+        audioEvidenceStatus,
         isEndingSession,
         isSessionPaused,
         isSessionTerminal,
@@ -342,14 +433,8 @@ export default function PracticeSessionPage() {
         sessionStatus,
         isRecordingRef,
         stopRecording,
+        flushAudioEvidence: continuousUploader.flushAndStop,
     });
-
-    // 会话进入终态时停止持续上传器
-    React.useEffect(() => {
-        if (isSessionTerminal && continuousUploader.isUploading) {
-            void continuousUploader.stopUpload();
-        }
-    }, [isSessionTerminal, continuousUploader]);
 
     const lifecycleErrorMessage = lifecycleError?.message ?? null;
     const lifecycleErrorGuidance = lifecycleError?.guidance ?? null;
@@ -362,10 +447,155 @@ export default function PracticeSessionPage() {
         : lifecycleError?.action === "pause"
         ? "重试暂停"
         : null;
-    const practiceError = lifecycleErrorMessage || wsError || audioError || sessionMetaError;
     const audioUploadError = continuousUploader.uploadStatus === "error"
         ? continuousUploader.lastError || "录音留痕上传失败"
         : null;
+    const audioEvidenceEndState = audioEvidenceStatus.status === "failed" || audioEvidenceStatus.status === "timed_out"
+        ? audioEvidenceStatus
+        : null;
+    const practiceFaults = React.useMemo<PracticeFault[]>(() => {
+        const faults: PracticeFault[] = [];
+
+        if (wsError || connectionState === "failed" || connectionState === "reconnecting") {
+            const isFailed = connectionState === "failed";
+            faults.push({
+                id: "connection",
+                severity: isFailed ? "error" : "warning",
+                title: isFailed ? "连接失败" : "连接恢复中",
+                message: wsError || (isFailed ? "实时连接失败。" : "网络波动，正在自动重连。"),
+                guidance: isFailed ? "点击重新连接恢复会话；如果仍失败，可刷新页面后重新进入。" : "自动重连期间请先不要结束页面，系统会尽量恢复当前会话。",
+                action: isFailed ? (
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={connect}
+                        className="h-8 rounded-full border-red-200 text-red-700 hover:bg-red-100"
+                    >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        重新连接
+                    </Button>
+                ) : null,
+            });
+        }
+
+        if (sessionMetaError) {
+            faults.push({
+                id: "session-meta",
+                severity: "error",
+                title: "会话配置",
+                message: sessionMetaError,
+                guidance: "请返回训练入口重新选择智能体、客户画像或 PPT 后再进入练习。",
+            });
+        }
+
+        if (lifecycleErrorMessage) {
+            faults.push({
+                id: `lifecycle-${lifecycleError?.action ?? "unknown"}`,
+                severity: "error",
+                title: "会话状态",
+                message: lifecycleErrorMessage,
+                guidance: lifecycleErrorGuidance,
+                action: lifecycleError && !isSessionTerminal && lifecycleRetryLabel ? (
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={lifecycleError.action === "start"
+                            ? handleStartSession
+                            : lifecycleError.action === "end"
+                            ? handleEndSession
+                            : handleTogglePauseResume}
+                        disabled={lifecycleError.action === "start"
+                            ? connectionState !== "connected"
+                            : lifecycleError.action === "end"
+                            ? isEndingSession || connectionState !== "connected"
+                            : !canToggleLifecycle}
+                        className="h-8 rounded-full border-red-200 text-red-700 hover:bg-red-100"
+                    >
+                        {lifecycleError.action === "start" ? (
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                        ) : lifecycleError.action === "end" ? (
+                            <Square className="w-3 h-3 mr-1 fill-current" />
+                        ) : lifecycleError.action === "resume" ? (
+                            <Play className="w-3 h-3 mr-1 fill-current" />
+                        ) : (
+                            <Pause className="w-3 h-3 mr-1" />
+                        )}
+                        {lifecycleRetryLabel}
+                    </Button>
+                ) : null,
+            });
+        }
+
+        if (audioError || hasPermission === false) {
+            faults.push({
+                id: "microphone",
+                severity: "warning",
+                title: "麦克风",
+                message: audioError || "浏览器还没有麦克风权限。",
+                guidance: audioError
+                    ? "请检查浏览器权限、设备占用和 HTTPS 访问条件，处理后再重新录音。"
+                    : "点击麦克风按钮重新请求权限，或在浏览器地址栏允许麦克风。",
+            });
+        }
+
+        if (audioUploadError) {
+            faults.push({
+                id: "audio-upload",
+                severity: "warning",
+                title: "音频留痕",
+                message: `实时对话仍可继续，但回放或报告的音频证据可能缺失。原因：${audioUploadError}`,
+                guidance: "如果仍在录音，可点击重试留痕；系统会保留已成功登记的分片。",
+                action: (
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleRestartAudioUpload}
+                        disabled={!isRecording || continuousUploader.isUploading}
+                        className="h-8 rounded-full border-amber-300 text-amber-800 hover:bg-amber-100"
+                    >
+                        <RefreshCw className="mr-1 h-3 w-3" />
+                        重试留痕
+                    </Button>
+                ),
+            });
+        }
+
+        if (audioEvidenceEndState?.message) {
+            faults.push({
+                id: "audio-evidence-end",
+                severity: "warning",
+                title: audioEvidenceEndState.status === "timed_out" ? "留痕超时" : "留痕失败",
+                message: audioEvidenceEndState.error
+                    ? `${audioEvidenceEndState.message} 原因：${audioEvidenceEndState.error}`
+                    : audioEvidenceEndState.message,
+                guidance: "报告会继续生成；查看报告或回放时请结合证据完整度解释本轮结果。",
+            });
+        }
+
+        return faults;
+    }, [
+        audioError,
+        audioEvidenceEndState,
+        audioUploadError,
+        canToggleLifecycle,
+        connect,
+        connectionState,
+        continuousUploader.isUploading,
+        handleEndSession,
+        handleRestartAudioUpload,
+        handleStartSession,
+        handleTogglePauseResume,
+        hasPermission,
+        isEndingSession,
+        isRecording,
+        isSessionTerminal,
+        lifecycleError,
+        lifecycleErrorGuidance,
+        lifecycleErrorMessage,
+        lifecycleRetryLabel,
+        sessionMetaError,
+        wsError,
+    ]);
     const audioUploadStatusLabel = continuousUploader.uploadStatus === "uploading"
         ? "留痕保存中"
         : continuousUploader.uploadStatus === "error"
