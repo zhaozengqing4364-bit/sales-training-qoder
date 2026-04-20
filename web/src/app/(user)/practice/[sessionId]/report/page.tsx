@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
     AlertTriangle,
@@ -56,6 +57,14 @@ import {
     type SessionClaimTruthTone,
 } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
+
+function buildPresentationPageReplayPath(sessionId: string, pageNumber: number): string {
+    const params = new URLSearchParams();
+    params.set("focus", "presentation_page");
+    params.set("page", String(pageNumber));
+    params.set("page_anchor_status", "resolved");
+    return `/practice/${sessionId}/replay?${params.toString()}`;
+}
 
 function formatSnapshotTime(value?: string | null): string {
     if (!value) return "--";
@@ -1279,9 +1288,17 @@ export default function ComprehensiveReportPage() {
                                                     第 {pageSummary.stage_number} 段 · 回合 {pageSummary.start_turn}-{pageSummary.end_turn}
                                                 </p>
                                             </div>
-                                            <span className={cn("text-sm font-semibold", getScoreColor(pageSummary.average_score))}>
-                                                {pageSummary.average_score.toFixed(0)}分
-                                            </span>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className={cn("text-sm font-semibold", getScoreColor(pageSummary.average_score))}>
+                                                    {pageSummary.average_score.toFixed(0)}分
+                                                </span>
+                                                <Link
+                                                    href={buildPresentationPageReplayPath(sessionId, pageSummary.page_number)}
+                                                    className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                                >
+                                                    补练第 {pageSummary.page_number} 页
+                                                </Link>
+                                            </div>
                                         </div>
                                         <p className="text-sm text-zinc-700 mb-3">{pageSummary.summary}</p>
                                         {pageSummary.key_points.length > 0 && (
@@ -1307,6 +1324,14 @@ export default function ComprehensiveReportPage() {
                                                     <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
                                                         {pageSummary.issue_clusters?.length || 0} 个
                                                     </span>
+                                                </div>
+                                                <div className="mb-3">
+                                                    <Link
+                                                        href={buildPresentationPageReplayPath(sessionId, pageSummary.page_number)}
+                                                        className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                                                    >
+                                                        带着这些问题补练第 {pageSummary.page_number} 页
+                                                    </Link>
                                                 </div>
                                                 <div className="space-y-3">
                                                     {(pageSummary.issue_clusters || []).map((issue, index) => {

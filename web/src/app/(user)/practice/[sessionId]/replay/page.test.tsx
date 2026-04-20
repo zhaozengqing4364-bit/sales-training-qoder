@@ -1032,6 +1032,7 @@ describe("SessionReplayPage", () => {
     expect(screen.queryByText("主张证据状态")).toBeNull();
     expect(screen.getAllByText("第二页补充了 ROI 结果，但客户案例展开不够具体。").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("第 2 页仍缺少 1 个必讲点，需要补齐再进入下一页。").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("建议讲法：先补齐客户案例，再用当前页要点串联讲解。")).toBeTruthy();
     expect(screen.getAllByText("如果客户追问负责人，我这边暂时只能说后面再确认。").length).toBeGreaterThanOrEqual(1);
 
     fireEvent.click(screen.getAllByRole("button", { name: "定位到第 4 轮" })[0]);

@@ -1678,6 +1678,14 @@ describe("ReportPage", () => {
             .toBeTruthy();
         expect(screen.getByText("如果客户追问负责人，我这边暂时只能说后面再确认。"))
             .toBeTruthy();
+
+        const pageRetryLink = screen.getByRole("link", { name: "补练第 2 页" });
+        expect(pageRetryLink.getAttribute("href")).toBe(
+            "/practice/session-1/replay?focus=presentation_page&page=2&page_anchor_status=resolved",
+        );
+        expect(screen.getByRole("link", { name: "带着这些问题补练第 2 页" }).getAttribute("href")).toBe(
+            "/practice/session-1/replay?focus=presentation_page&page=2&page_anchor_status=resolved",
+        );
     });
 
     it("shows presentation-specific degraded copy instead of falling back to sales UI when page metadata is missing", async () => {

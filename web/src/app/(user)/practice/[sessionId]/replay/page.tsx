@@ -210,6 +210,36 @@ function resolvePresentationLandingPage(
   return totalPages >= 1 ? 1 : null;
 }
 
+function buildPresentationPagePracticeGuidance(
+  pageSummary?: {
+    key_points?: string[] | null;
+    missing_required_points?: string[] | null;
+    issue_clusters?: unknown[] | null;
+  } | null,
+): string | null {
+  if (!pageSummary) return null;
+
+  const missingPoints = Array.isArray(pageSummary.missing_required_points)
+    ? pageSummary.missing_required_points.filter(Boolean)
+    : [];
+  if (missingPoints.length > 0) {
+    return `建议讲法：先补齐${missingPoints.join("、")}，再用当前页要点串联讲解。`;
+  }
+
+  const keyPoints = Array.isArray(pageSummary.key_points)
+    ? pageSummary.key_points.filter(Boolean)
+    : [];
+  if ((pageSummary.issue_clusters?.length || 0) > 0) {
+    return "建议讲法：围绕当前页要点复述一遍，并避开该页问题簇中的偏差。";
+  }
+
+  if (keyPoints.length > 0) {
+    return `建议讲法：按${keyPoints.join("、")}的顺序完成一次简洁复述。`;
+  }
+
+  return null;
+}
+
 function buildPresentationSlideFallback(
   pageSummary?: {
     summary?: string | null;
@@ -699,6 +729,7 @@ export default function SessionReplayPage() {
     (pageSummary) => pageSummary.page_number === activePresentationPage,
   ) ?? null;
   const presentationSlideContent = buildPresentationSlideFallback(selectedPresentationSummary);
+  const selectedPresentationPageGuidance = buildPresentationPagePracticeGuidance(selectedPresentationSummary);
 
   const handleJumpToMessage = useCallback((turnNumber: number) => {
     setActiveTurnNumber(turnNumber);
@@ -1104,6 +1135,11 @@ export default function SessionReplayPage() {
                   {selectedPresentationSummary.missing_required_points.length > 0 ? (
                     <p className="text-xs text-amber-700">
                       仍待补充：{selectedPresentationSummary.missing_required_points.join("、")}
+                    </p>
+                  ) : null}
+                  {selectedPresentationPageGuidance ? (
+                    <p className="text-xs font-medium text-blue-700">
+                      {selectedPresentationPageGuidance}
                     </p>
                   ) : null}
                 </div>
