@@ -8,6 +8,8 @@ Implements Constitution Principles:
 Response Format:
 - All endpoints return {"success": true/false, "data": ..., "trace_id": ...}
 """
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
@@ -16,7 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.analytics.history_service import history_service
 from common.auth.service import get_current_user
-from common.db.models import ManagerIntervention, User
+from common.db.models import ManagerIntervention, User, UserTrainingPreference
+from common.db.schemas import (
+    UserTrainingPreferencesResponse,
+    UserTrainingPreferencesUpdate,
+)
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
 
@@ -100,6 +106,28 @@ def _serialize_open_intervention(
         "created_at": intervention.created_at.isoformat(),
         "updated_at": intervention.updated_at.isoformat(),
     }
+
+
+def _normalize_training_preference_id(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _serialize_training_preferences(
+    preferences: UserTrainingPreference | None,
+) -> UserTrainingPreferencesResponse:
+    if preferences is None:
+        return UserTrainingPreferencesResponse()
+
+    return UserTrainingPreferencesResponse(
+        voice_mode=preferences.voice_mode,
+        agent_id=preferences.agent_id,
+        persona_id=preferences.persona_id,
+        presentation_id=preferences.presentation_id,
+        updated_at=preferences.updated_at,
+    )
 
 
 def _build_user_me_response(current_user: User) -> UserMeResponse:
@@ -208,6 +236,63 @@ async def update_current_user_info(
         logger.error(f"Failed to update user info: {str(e)}")
         await db.rollback()
         return error_response("[USER_UPDATE_FAILED]", "更新用户信息失败")
+
+
+@router.get("/users/me/training-preferences")
+async def get_my_training_preferences(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return current user's saved training preferences only."""
+    try:
+        result = await db.execute(
+            select(UserTrainingPreference).where(
+                UserTrainingPreference.user_id == str(current_user.user_id)
+            )
+        )
+        preferences = result.scalar_one_or_none()
+        return success_response(_serialize_training_preferences(preferences).model_dump())
+    except (SQLAlchemyError, ValueError) as e:
+        logger.error(f"Failed to get training preferences: {str(e)}")
+        return error_response("[TRAINING_PREFERENCES_FAILED]", "获取训练偏好失败")
+
+
+@router.patch("/users/me/training-preferences")
+async def update_my_training_preferences(
+    request: UserTrainingPreferencesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upsert current user's training preferences; user_id is never accepted."""
+    try:
+        result = await db.execute(
+            select(UserTrainingPreference).where(
+                UserTrainingPreference.user_id == str(current_user.user_id)
+            )
+        )
+        preferences = result.scalar_one_or_none()
+        now = datetime.now(UTC)
+        if preferences is None:
+            preferences = UserTrainingPreference(
+                user_id=str(current_user.user_id),
+                created_at=now,
+            )
+            db.add(preferences)
+
+        preferences.voice_mode = request.voice_mode
+        preferences.agent_id = _normalize_training_preference_id(request.agent_id)
+        preferences.persona_id = _normalize_training_preference_id(request.persona_id)
+        preferences.presentation_id = _normalize_training_preference_id(request.presentation_id)
+        preferences.updated_at = now
+
+        await db.commit()
+        await db.refresh(preferences)
+
+        return success_response(_serialize_training_preferences(preferences).model_dump())
+    except (SQLAlchemyError, ValueError) as e:
+        logger.error(f"Failed to update training preferences: {str(e)}")
+        await db.rollback()
+        return error_response("[TRAINING_PREFERENCES_UPDATE_FAILED]", "更新训练偏好失败")
 
 
 @router.get("/users/me/interventions/open")

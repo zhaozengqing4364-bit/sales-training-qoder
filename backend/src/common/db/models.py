@@ -109,6 +109,44 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    training_preferences = relationship(
+        "UserTrainingPreference",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class UserTrainingPreference(Base):
+    __tablename__ = "user_training_preferences"
+
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    voice_mode = Column(String(32), nullable=True)
+    agent_id = Column(String(36), nullable=True)
+    persona_id = Column(String(36), nullable=True)
+    presentation_id = Column(String(36), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "voice_mode IS NULL OR voice_mode IN ('legacy', 'stepfun_realtime')",
+            name="ck_user_training_preferences_voice_mode",
+        ),
+    )
+
+    user = relationship("User", back_populates="training_preferences")
 
 
 class PasswordResetToken(Base):

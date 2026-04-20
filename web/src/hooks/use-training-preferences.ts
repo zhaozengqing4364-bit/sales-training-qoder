@@ -1,4 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { api } from "@/lib/api/client";
 
 export const TRAINING_PREFERENCES_STORAGE_KEY = "training_preferences_v1";
 export const TRAINING_VOICE_MODES = ["legacy", "stepfun_realtime"] as const;
@@ -136,6 +138,24 @@ export function mergeTrainingPreferences({
     return DEFAULT_TRAINING_PREFERENCES;
 }
 
+function writeTrainingPreferences(
+    preferences: TrainingPreferences,
+    storage: Pick<Storage, "setItem"> | null = getBrowserStorage(),
+): void {
+    if (!storage) {
+        return;
+    }
+
+    try {
+        storage.setItem(
+            TRAINING_PREFERENCES_STORAGE_KEY,
+            JSON.stringify(preferences),
+        );
+    } catch {
+        // Ignore cache write failures; the in-memory state remains authoritative.
+    }
+}
+
 export function readTrainingPreferences(
     storage: Pick<Storage, "getItem"> | null = getBrowserStorage(),
 ): TrainingPreferences {
@@ -183,21 +203,67 @@ export function persistTrainingPreferences(
     return normalizedPatch;
 }
 
+type TrainingPreferencesRemoteGateway = {
+    getTrainingPreferences: () => Promise<unknown>;
+    updateTrainingPreferences: (preferences: TrainingPreferences) => Promise<unknown>;
+};
+
+const defaultRemoteGateway: TrainingPreferencesRemoteGateway = {
+    getTrainingPreferences: () => api.user.getTrainingPreferences(),
+    updateTrainingPreferences: (preferences) => api.user.updateTrainingPreferences(preferences),
+};
+
 export interface UseTrainingPreferencesReturn {
     trainingPreferences: TrainingPreferences;
     saveTrainingPreferences: (patch: TrainingPreferencePatch) => TrainingPreferences;
 }
 
-export function useTrainingPreferences(): UseTrainingPreferencesReturn {
+export function useTrainingPreferences(
+    remoteGateway: TrainingPreferencesRemoteGateway | null = defaultRemoteGateway,
+): UseTrainingPreferencesReturn {
     const [trainingPreferences, setTrainingPreferences] = useState<TrainingPreferences>(() => (
         readTrainingPreferences()
     ));
 
+    useEffect(() => {
+        if (!remoteGateway) {
+            return;
+        }
+        let cancelled = false;
+        void remoteGateway.getTrainingPreferences()
+            .then((remotePreferences) => {
+                if (cancelled) {
+                    return;
+                }
+                const localPreferences = readTrainingPreferences();
+                const mergedPreferences = mergeTrainingPreferences({
+                    remote: remotePreferences,
+                    local: localPreferences,
+                });
+                setTrainingPreferences(mergedPreferences);
+                if (mergedPreferences.source === "remote") {
+                    writeTrainingPreferences(mergedPreferences);
+                }
+            })
+            .catch(() => {
+                // Remote preferences are best-effort; local/default preferences stay usable.
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [remoteGateway]);
+
     const saveTrainingPreferences = useCallback((patch: TrainingPreferencePatch) => {
         const nextPreferences = persistTrainingPreferences(patch);
         setTrainingPreferences(nextPreferences);
+        if (remoteGateway) {
+            void remoteGateway.updateTrainingPreferences(nextPreferences).catch(() => {
+                // Local preferences remain authoritative when remote persistence fails.
+            });
+        }
         return nextPreferences;
-    }, []);
+    }, [remoteGateway]);
 
     return {
         trainingPreferences,

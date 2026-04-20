@@ -13,6 +13,8 @@ const {
     getAgentWithPersonasMock,
     listPresentationsMock,
     createSessionMock,
+    getTrainingPreferencesMock,
+    updateTrainingPreferencesMock,
 } = vi.hoisted(() => ({
     backMock: vi.fn(),
     pushMock: vi.fn(),
@@ -20,6 +22,8 @@ const {
     getAgentWithPersonasMock: vi.fn(),
     listPresentationsMock: vi.fn(),
     createSessionMock: vi.fn(),
+    getTrainingPreferencesMock: vi.fn(),
+    updateTrainingPreferencesMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -49,6 +53,11 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.practice,
                 createSession: createSessionMock,
             },
+            user: {
+                ...actual.api.user,
+                getTrainingPreferences: getTrainingPreferencesMock,
+                updateTrainingPreferences: updateTrainingPreferencesMock,
+            },
         },
     };
 });
@@ -67,6 +76,10 @@ describe("AgentPersonaSelectPage", () => {
         getAgentWithPersonasMock.mockReset();
         listPresentationsMock.mockReset();
         createSessionMock.mockReset();
+        getTrainingPreferencesMock.mockReset();
+        updateTrainingPreferencesMock.mockReset();
+        getTrainingPreferencesMock.mockResolvedValue(null);
+        updateTrainingPreferencesMock.mockResolvedValue(null);
         searchParamsMock.mockReset();
         searchParamsMock.mockReturnValue(new URLSearchParams());
 

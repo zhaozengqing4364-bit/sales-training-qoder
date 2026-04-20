@@ -131,6 +131,24 @@ class UserResponse(UserBase):
     is_active: bool = True
 
 
+class UserTrainingPreferencesResponse(BaseModel):
+    voice_mode: str | None = None
+    agent_id: str | None = None
+    persona_id: str | None = None
+    presentation_id: str | None = None
+    updated_at: datetime | None = None
+
+
+class UserTrainingPreferencesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    voice_mode: Literal["legacy", "stepfun_realtime"] | None = None
+    agent_id: str | None = Field(None, max_length=36)
+    persona_id: str | None = Field(None, max_length=36)
+    presentation_id: str | None = Field(None, max_length=36)
+    updated_at: datetime | None = None
+
+
 # ========== Auth Schemas ==========
 class WechatLoginRequest(BaseModel):
     code: str

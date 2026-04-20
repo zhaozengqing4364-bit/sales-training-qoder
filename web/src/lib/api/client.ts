@@ -1655,6 +1655,55 @@ export const api = {
             return normalizeCurrentUser(profile);
         },
 
+        getTrainingPreferences: async () => {
+            const result = await apiFetch<{
+                voice_mode?: "legacy" | "stepfun_realtime" | null;
+                agent_id?: string | null;
+                persona_id?: string | null;
+                presentation_id?: string | null;
+                updated_at?: string | null;
+            }>("/users/me/training-preferences");
+            return {
+                voiceMode: result.voice_mode ?? undefined,
+                agentId: result.agent_id ?? null,
+                personaId: result.persona_id ?? null,
+                presentationId: result.presentation_id ?? null,
+                updatedAt: result.updated_at ?? null,
+            };
+        },
+
+        updateTrainingPreferences: async (data: {
+            voiceMode?: "legacy" | "stepfun_realtime" | null;
+            agentId?: string | null;
+            personaId?: string | null;
+            presentationId?: string | null;
+            updatedAt?: string | null;
+        }) => {
+            const result = await apiFetch<{
+                voice_mode?: "legacy" | "stepfun_realtime" | null;
+                agent_id?: string | null;
+                persona_id?: string | null;
+                presentation_id?: string | null;
+                updated_at?: string | null;
+            }>("/users/me/training-preferences", {
+                method: "PATCH",
+                body: JSON.stringify({
+                    voice_mode: data.voiceMode ?? null,
+                    agent_id: data.agentId ?? null,
+                    persona_id: data.personaId ?? null,
+                    presentation_id: data.presentationId ?? null,
+                    updated_at: data.updatedAt ?? null,
+                }),
+            });
+            return {
+                voiceMode: result.voice_mode ?? undefined,
+                agentId: result.agent_id ?? null,
+                personaId: result.persona_id ?? null,
+                presentationId: result.presentation_id ?? null,
+                updatedAt: result.updated_at ?? null,
+            };
+        },
+
         // Story 3.2: Get user history with report summary
         getMyHistory: async (params?: {
             page?: number;

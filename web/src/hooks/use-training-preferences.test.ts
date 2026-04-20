@@ -1,5 +1,19 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { getTrainingPreferencesMock, updateTrainingPreferencesMock } = vi.hoisted(() => ({
+    getTrainingPreferencesMock: vi.fn(),
+    updateTrainingPreferencesMock: vi.fn(),
+}));
+
+vi.mock("@/lib/api/client", () => ({
+    api: {
+        user: {
+            getTrainingPreferences: getTrainingPreferencesMock,
+            updateTrainingPreferences: updateTrainingPreferencesMock,
+        },
+    },
+}));
 
 import {
     DEFAULT_TRAINING_PREFERENCES,
@@ -16,6 +30,10 @@ describe("useTrainingPreferences", () => {
     beforeEach(() => {
         localStorage.clear();
         vi.restoreAllMocks();
+        getTrainingPreferencesMock.mockReset();
+        updateTrainingPreferencesMock.mockReset();
+        getTrainingPreferencesMock.mockResolvedValue(null);
+        updateTrainingPreferencesMock.mockResolvedValue(null);
     });
 
     it("normalizes malformed storage values to safe defaults", () => {
@@ -142,6 +160,64 @@ describe("useTrainingPreferences", () => {
         });
     });
 
+
+
+    it("hydrates newer remote preferences and caches them locally", async () => {
+        localStorage.setItem(TRAINING_PREFERENCES_STORAGE_KEY, JSON.stringify({
+            voiceMode: "legacy",
+            agentId: "agent-local",
+            personaId: "persona-local",
+            presentationId: null,
+            updatedAt: "2026-04-20T09:00:00.000Z",
+            source: "local",
+        }));
+        getTrainingPreferencesMock.mockResolvedValueOnce({
+            voiceMode: "stepfun_realtime",
+            agentId: "agent-remote",
+            personaId: "persona-remote",
+            presentationId: "ppt-remote",
+            updatedAt: "2026-04-20T10:00:00.000Z",
+        });
+
+        const { result } = renderHook(() => useTrainingPreferences());
+
+        expect(result.current.trainingPreferences.agentId).toBe("agent-local");
+        await waitFor(() => {
+            expect(result.current.trainingPreferences).toEqual({
+                voiceMode: "stepfun_realtime",
+                agentId: "agent-remote",
+                personaId: "persona-remote",
+                presentationId: "ppt-remote",
+                updatedAt: "2026-04-20T10:00:00.000Z",
+                source: "remote",
+            });
+        });
+        expect(readTrainingPreferences()).toEqual(result.current.trainingPreferences);
+    });
+
+    it("keeps local preferences when remote loading fails and best-effort saves remotely", () => {
+        getTrainingPreferencesMock.mockRejectedValueOnce(new Error("unauthorized"));
+        updateTrainingPreferencesMock.mockRejectedValueOnce(new Error("offline"));
+        localStorage.setItem(TRAINING_PREFERENCES_STORAGE_KEY, JSON.stringify({
+            voiceMode: "legacy",
+            agentId: "agent-local",
+            personaId: "persona-local",
+            presentationId: null,
+            updatedAt: "2026-04-20T09:00:00.000Z",
+            source: "local",
+        }));
+
+        const { result } = renderHook(() => useTrainingPreferences());
+
+        expect(result.current.trainingPreferences.agentId).toBe("agent-local");
+        act(() => {
+            result.current.saveTrainingPreferences({ personaId: "persona-next" });
+        });
+
+        expect(result.current.trainingPreferences.personaId).toBe("persona-next");
+        expect(updateTrainingPreferencesMock).toHaveBeenCalledWith(result.current.trainingPreferences);
+    });
+
     it("hydrates from localStorage and saves updates through the hook", () => {
         localStorage.setItem(TRAINING_PREFERENCES_STORAGE_KEY, JSON.stringify({
             voiceMode: "legacy",
@@ -150,7 +226,7 @@ describe("useTrainingPreferences", () => {
             presentationId: null,
         }));
 
-        const { result } = renderHook(() => useTrainingPreferences());
+        const { result } = renderHook(() => useTrainingPreferences(null));
 
         expect(result.current.trainingPreferences).toEqual({
             voiceMode: "legacy",
