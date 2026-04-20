@@ -49,6 +49,11 @@ function createLeaderboardEntry(overrides: Partial<{
     total_sessions: number;
     average_score: number;
     best_score: number;
+    improvement_score: number;
+    first_score: number;
+    latest_score: number;
+    sample_size: number;
+    issue_type: string | null;
 }> = {}) {
     return {
         rank: 1,
@@ -124,6 +129,8 @@ describe("LeaderboardPage", () => {
             expect(getPublicLeaderboardMock).toHaveBeenCalledWith({
                 scenario_type: undefined,
                 time_period: "weekly",
+                leaderboard_mode: "score",
+                issue_type: undefined,
                 include_me: true,
                 limit: 20,
             });
@@ -137,11 +144,11 @@ describe("LeaderboardPage", () => {
             screen.getByText("若某次训练因证据不足暂不可评估，它会保留在训练记录里，但不会拉高或拉低排行榜均分。"),
         ).toBeTruthy();
         expect(screen.getByText("当前榜单纳入 14 次可评估训练，3 次证据不足训练未计入排名。")).toBeTruthy();
-        expect(screen.getByText("我的排名")).toBeTruthy();
+        expect(screen.getByText("我的排名 · 综合分榜")).toBeTruthy();
         expect(screen.getByText(/均分 80/)).toBeTruthy();
-        expect(screen.getByText("我的附近排名")).toBeTruthy();
+        expect(screen.getByText("我的附近排名 · 综合分榜")).toBeTruthy();
         expect(screen.getByText("同分邻近用户")).toBeTruthy();
-        expect(screen.getByText("基于当前榜单页中与你名次相邻或均分接近的用户生成；只使用已完成且可评估训练。")).toBeTruthy();
+        expect(screen.getByText("基于当前综合分榜中与你名次相邻或均分接近的用户生成；只使用已完成且可评估训练。")).toBeTruthy();
         expect(screen.getAllByText("赵六").length).toBeGreaterThan(0);
         expect(screen.getByText(/与你均分差 1\.1 分/)).toBeTruthy();
         expect(screen.queryByText(/weighted-score/i)).toBeNull();
@@ -170,8 +177,10 @@ describe("LeaderboardPage", () => {
         expect(getMyRankMock).toHaveBeenCalledWith({
             scenario_type: undefined,
             time_period: "weekly",
+            leaderboard_mode: "score",
+            issue_type: undefined,
         });
-        expect(screen.queryByText("我的排名")).toBeNull();
+        expect(screen.queryByText(/我的排名/)).toBeNull();
     });
 
     it("distinguishes leaderboard request failures from a genuinely empty leaderboard", async () => {
@@ -189,7 +198,7 @@ describe("LeaderboardPage", () => {
             await screen.findByText("排行榜暂时无法加载：leaderboard failed"),
         ).toBeTruthy();
         expect(screen.queryByText("暂无排行榜数据")).toBeNull();
-        expect(screen.queryByText("我的排名")).toBeNull();
+        expect(screen.queryByText(/我的排名/)).toBeNull();
         expect(getMyRankMock).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole("button", { name: "重试排行榜" }));
@@ -236,9 +245,11 @@ describe("LeaderboardPage", () => {
             expect(getMyRankMock).toHaveBeenCalledWith({
                 scenario_type: undefined,
                 time_period: "weekly",
+                leaderboard_mode: "score",
+                issue_type: undefined,
             });
         });
-        expect(await screen.findByText("我的排名")).toBeTruthy();
+        expect(await screen.findByText("我的排名 · 综合分榜")).toBeTruthy();
         expect(screen.getAllByText(/均分 78/).length).toBeGreaterThan(0);
 
         fireEvent.click(screen.getByRole("button", { name: "总榜" }));
@@ -247,6 +258,8 @@ describe("LeaderboardPage", () => {
             expect(getPublicLeaderboardMock).toHaveBeenLastCalledWith({
                 scenario_type: undefined,
                 time_period: "all_time",
+                leaderboard_mode: "score",
+                issue_type: undefined,
                 include_me: true,
                 limit: 20,
             });
@@ -258,6 +271,8 @@ describe("LeaderboardPage", () => {
             expect(getPublicLeaderboardMock).toHaveBeenLastCalledWith({
                 scenario_type: "presentation",
                 time_period: "all_time",
+                leaderboard_mode: "score",
+                issue_type: undefined,
                 include_me: true,
                 limit: 20,
             });
@@ -293,8 +308,211 @@ describe("LeaderboardPage", () => {
         render(<LeaderboardPage />);
 
         expect(await screen.findByText("我的附近排名暂不在本页范围")).toBeTruthy();
-        expect(screen.getByText(/你当前排名 #28，均分 61/)).toBeTruthy();
+        expect(screen.getByText(/你当前在综合分榜排名 #28，均分 61/)).toBeTruthy();
         expect(screen.getAllByRole("link", { name: /去训练大厅/ }).some((link) => link.getAttribute("href") === "/training")).toBe(true);
+    });
+
+    it("switches to improvement mode and keeps nearby rank based on current mode params", async () => {
+        render(<LeaderboardPage />);
+
+        await screen.findByText("张三");
+
+        getPublicLeaderboardMock.mockResolvedValueOnce({
+            time_period: "weekly",
+            leaderboard_mode: "improvement",
+            eligibility: {
+                score_basis: "session_evidence_projection_evaluable_only",
+                min_evaluable_sessions: 2,
+                explanation: "进步榜至少需要 2 次可评估训练",
+            },
+            evaluable_sessions: 9,
+            not_evaluable_sessions: 2,
+            total_users: 3,
+            entries: [
+                createLeaderboardEntry({
+                    rank: 1,
+                    user_id: "user-boost-1",
+                    username: "进步王",
+                    average_score: 86,
+                    best_score: 90,
+                    improvement_score: 16,
+                    first_score: 70,
+                    latest_score: 86,
+                    sample_size: 3,
+                }),
+                createLeaderboardEntry({
+                    rank: 3,
+                    user_id: "user-boost-3",
+                    username: "稳步提升",
+                    average_score: 83,
+                    best_score: 88,
+                    improvement_score: 13,
+                    first_score: 70,
+                    latest_score: 83,
+                    sample_size: 2,
+                }),
+            ],
+            my_rank: {
+                user_id: "me",
+                rank: 2,
+                total_sessions: 3,
+                average_score: 85,
+                improvement_score: 14,
+                first_score: 71,
+                latest_score: 85,
+                sample_size: 3,
+            },
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "进步榜" }));
+
+        await waitFor(() => {
+            expect(getPublicLeaderboardMock).toHaveBeenLastCalledWith({
+                scenario_type: undefined,
+                time_period: "weekly",
+                leaderboard_mode: "improvement",
+                issue_type: undefined,
+                include_me: true,
+                limit: 20,
+            });
+        });
+
+        expect(await screen.findByText("进步王")).toBeTruthy();
+        expect(screen.getByText("我的排名 · 进步榜")).toBeTruthy();
+        expect(screen.getByText(/进步 \+14/)).toBeTruthy();
+        expect(screen.getAllByText(/\+16/).length).toBeGreaterThan(0);
+        expect(screen.getByText(/当前 86 · 3 次样本/)).toBeTruthy();
+        expect(screen.getByText("同进步幅度邻近用户")).toBeTruthy();
+        expect(screen.getByText("基于当前进步榜中与你名次相邻或进步接近的用户生成；只使用已完成且可评估训练。")).toBeTruthy();
+        expect(screen.getByText(/与你进步差 1\.0 分/)).toBeTruthy();
+    });
+
+    it("shows a sample-insufficient explanation for empty improvement mode", async () => {
+        render(<LeaderboardPage />);
+
+        await screen.findByText("张三");
+
+        getPublicLeaderboardMock.mockResolvedValueOnce({
+            time_period: "weekly",
+            leaderboard_mode: "improvement",
+            eligibility: {
+                score_basis: "session_evidence_projection_evaluable_only",
+                min_evaluable_sessions: 2,
+                explanation: "进步榜至少需要 2 次可评估训练",
+            },
+            evaluable_sessions: 1,
+            not_evaluable_sessions: 4,
+            total_users: 0,
+            entries: [],
+            my_rank: {
+                user_id: "me",
+                rank: null,
+                total_sessions: 1,
+                average_score: 72,
+                improvement_score: 0,
+                sample_size: 1,
+                message: "sample insufficient",
+            },
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "进步榜" }));
+
+        expect(await screen.findByText("进步榜样本不足")).toBeTruthy();
+        expect(screen.getByText("进步榜至少需要 2 次可评估训练")).toBeTruthy();
+        expect(screen.getByText(/当前账号还没有至少 2 次可评估训练进入进步榜/)).toBeTruthy();
+        expect(screen.queryByText("暂无排行榜数据")).toBeNull();
+    });
+
+    it("shows issue buckets first, then requests the selected issue-type leaderboard", async () => {
+        render(<LeaderboardPage />);
+
+        await screen.findByText("张三");
+
+        getPublicLeaderboardMock.mockResolvedValueOnce({
+            time_period: "weekly",
+            leaderboard_mode: "issue_type",
+            evaluable_sessions: 8,
+            not_evaluable_sessions: 1,
+            total_users: 0,
+            entries: [],
+            issue_type_buckets: [
+                { issue_type: "evidence_gap", count: 4, evaluable_sessions: 8 },
+                { issue_type: "objection_handling_gap", count: 2, evaluable_sessions: 3 },
+            ],
+            my_rank: null,
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "同目标榜" }));
+
+        await waitFor(() => {
+            expect(getPublicLeaderboardMock).toHaveBeenLastCalledWith({
+                scenario_type: undefined,
+                time_period: "weekly",
+                leaderboard_mode: "issue_type",
+                issue_type: undefined,
+                include_me: true,
+                limit: 20,
+            });
+        });
+        expect(await screen.findByText("先选择一个训练目标")).toBeTruthy();
+        expect(screen.getByRole("button", { name: /证据支撑/ })).toBeTruthy();
+        expect(screen.getByRole("button", { name: /异议处理/ })).toBeTruthy();
+
+        getPublicLeaderboardMock.mockResolvedValueOnce({
+            time_period: "weekly",
+            leaderboard_mode: "issue_type",
+            issue_type: "evidence_gap",
+            evaluable_sessions: 8,
+            not_evaluable_sessions: 1,
+            total_users: 2,
+            entries: [
+                createLeaderboardEntry({
+                    rank: 1,
+                    user_id: "issue-1",
+                    username: "证据高手",
+                    average_score: 88,
+                    best_score: 92,
+                    issue_type: "evidence_gap",
+                }),
+                createLeaderboardEntry({
+                    rank: 3,
+                    user_id: "issue-3",
+                    username: "案例补强者",
+                    average_score: 84,
+                    best_score: 89,
+                    issue_type: "evidence_gap",
+                }),
+            ],
+            issue_type_buckets: [
+                { issue_type: "evidence_gap", count: 4, evaluable_sessions: 8 },
+                { issue_type: "objection_handling_gap", count: 2, evaluable_sessions: 3 },
+            ],
+            my_rank: {
+                user_id: "me",
+                rank: 2,
+                total_sessions: 4,
+                average_score: 86,
+                issue_type: "evidence_gap",
+            },
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /证据支撑/ }));
+
+        await waitFor(() => {
+            expect(getPublicLeaderboardMock).toHaveBeenLastCalledWith({
+                scenario_type: undefined,
+                time_period: "weekly",
+                leaderboard_mode: "issue_type",
+                issue_type: "evidence_gap",
+                include_me: true,
+                limit: 20,
+            });
+        });
+
+        expect(await screen.findByText("证据高手")).toBeTruthy();
+        expect(screen.getByText("我的排名 · 同目标榜")).toBeTruthy();
+        expect(screen.getByText("我的附近排名 · 同目标榜")).toBeTruthy();
+        expect(screen.getByText("基于当前同目标榜中与你名次相邻或均分接近的用户生成；只使用已完成且可评估训练。")).toBeTruthy();
     });
 
 });
