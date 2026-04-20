@@ -18,7 +18,6 @@ export default function PresentationTrainingPage() {
     const [presentations, setPresentations] = useState<PresentationOption[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
-    const [failedSections, setFailedSections] = useState<string[]>([]);
     const [reloadVersion, setReloadVersion] = useState(0);
 
     useEffect(() => {
@@ -27,7 +26,6 @@ export default function PresentationTrainingPage() {
         const loadAgents = async () => {
             setIsLoading(true);
             setLoadError(null);
-            setFailedSections([]);
             try {
                 const [agentResult, presentationResult] = await Promise.allSettled([
                     api.agents.getList("presentation"),
@@ -38,27 +36,24 @@ export default function PresentationTrainingPage() {
                     return;
                 }
 
-                const failed: string[] = [];
+                const failedSections: string[] = [];
                 if (agentResult.status === "fulfilled") {
                     setAgents(agentResult.value);
                 } else {
                     setAgents([]);
-                    failed.push("演讲智能体");
+                    failedSections.push("演讲智能体");
                 }
 
                 if (presentationResult.status === "fulfilled") {
                     setPresentations(presentationResult.value);
                 } else {
                     setPresentations([]);
-                    failed.push("PPT");
+                    failedSections.push("PPT 列表");
                 }
                 setFailedSections(failed);
 
-                if (
-                    agentResult.status === "rejected"
-                    && presentationResult.status === "rejected"
-                ) {
-                    setLoadError("演讲训练场景加载失败，请稍后重试");
+                if (failedSections.length > 0) {
+                    setLoadError(`部分演讲训练数据加载失败（${failedSections.join("、")}），请重试。`);
                 } else {
                     setLoadError(null);
                 }
@@ -109,26 +104,18 @@ export default function PresentationTrainingPage() {
                 </div>
             </div>
 
-            {failedSections.length > 0 && (
-                <GlassCard className="border-amber-100/70 bg-amber-50/60 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <p className="text-sm text-amber-800">
-                            {failedSections.join("、")}暂不可用，页面不会把加载失败伪装成“暂无场景”；可重试或返回训练大厅。
-                        </p>
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                className="rounded-full border-amber-300 text-amber-800 hover:bg-amber-100"
-                                onClick={() => setReloadVersion((version) => version + 1)}
-                            >
-                                重试演讲入口
-                            </Button>
-                            <Button className="rounded-full" onClick={() => router.push("/training")}>
-                                返回训练大厅
-                            </Button>
-                        </div>
-                    </div>
-                </GlassCard>
+            {loadError && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-3">
+                    <p className="text-sm text-amber-800">{loadError}</p>
+                    <Button
+                        variant="outline"
+                        className="border-amber-300 text-amber-800 hover:bg-amber-100"
+                        onClick={() => setReloadVersion((version) => version + 1)}
+                        disabled={isLoading}
+                    >
+                        重试
+                    </Button>
+                </div>
             )}
 
             {/* Scenarios Grid */}
@@ -189,7 +176,9 @@ export default function PresentationTrainingPage() {
                 ) : (
                     <GlassCard className="col-span-full p-12 text-center">
                         <p className="text-slate-500">
-                            {loadError || "暂无演讲训练场景，请联系管理员添加演讲智能体或上传可用 PPT"}
+                            {loadError
+                                ? "演讲训练入口暂不可用，不代表没有可练内容；请重试或返回训练大厅。"
+                                : "暂无演讲训练场景，请联系管理员添加演讲智能体或上传可用 PPT"}
                         </p>
                     </GlassCard>
                 )}
