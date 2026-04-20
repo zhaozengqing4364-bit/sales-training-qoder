@@ -6,6 +6,7 @@ Implements Constitution Principles:
 - V. Cost control - Efficient queries
 """
 
+import inspect
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -27,6 +28,109 @@ from common.monitoring.metrics import track_frontend_analytics_event
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+LEADERBOARD_MODES = {"score", "improvement", "issue_type"}
+
+
+def _normalize_leaderboard_mode(leaderboard_mode: str | None) -> str:
+    """Normalize and validate public leaderboard mode params."""
+    mode = (leaderboard_mode or "score").strip().lower()
+    if mode not in LEADERBOARD_MODES:
+        allowed_modes = ", ".join(sorted(LEADERBOARD_MODES))
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "[INVALID_LEADERBOARD_MODE]",
+                "message": f"leaderboard_mode must be one of: {allowed_modes}",
+            },
+        )
+    return mode
+
+
+def _supported_service_kwargs(service_method, **kwargs: object) -> dict[str, object]:
+    """Pass Phase 6E params when the service supports them; stay compatible until then."""
+    try:
+        parameters = inspect.signature(service_method).parameters
+    except (TypeError, ValueError):
+        return kwargs
+
+    if any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    ):
+        return kwargs
+
+    return {key: value for key, value in kwargs.items() if key in parameters}
+
+
+def _value(source: object, field_name: str, default: object = None) -> object:
+    """Read dataclass/object or dict fields for service response compatibility."""
+    if isinstance(source, dict):
+        return source.get(field_name, default)
+    return getattr(source, field_name, default)
+
+
+def _leaderboard_eligibility(leaderboard_mode: str) -> dict[str, object]:
+    """Describe the shared eligibility gate exposed by the leaderboard API."""
+    return {
+        "completed_sessions_only": True,
+        "evaluable_sessions_only": True,
+        "score_fields_required": True,
+        "minimum_evaluable_sessions": 2 if leaderboard_mode == "improvement" else 1,
+        "issue_type_required_for_entries": leaderboard_mode == "issue_type",
+    }
+
+
+def _serialize_leaderboard_entry(entry: object) -> dict[str, object]:
+    """Serialize score entries plus optional Phase 6E mode-specific fields."""
+    payload: dict[str, object] = {
+        "rank": _value(entry, "rank"),
+        "user_id": str(_value(entry, "user_id")),
+        "username": _value(entry, "username", "Anonymous") or "Anonymous",
+        "total_sessions": _value(
+            entry,
+            "total_sessions",
+            _value(entry, "sample_size", 0),
+        ),
+        "average_score": _value(entry, "average_score", 0),
+        "best_score": _value(entry, "best_score", 0),
+        "score_basis": _value(entry, "score_basis"),
+        "evaluable_sessions": _value(
+            entry,
+            "evaluable_sessions",
+            _value(entry, "total_sessions", _value(entry, "sample_size", 0)),
+        ),
+        "not_evaluable_sessions": _value(entry, "not_evaluable_sessions", 0),
+    }
+
+    for optional_field in (
+        "leaderboard_score",
+        "improvement_score",
+        "first_score",
+        "latest_score",
+        "sample_size",
+        "issue_type",
+        "issue_type_label",
+        "issue_type_sessions",
+    ):
+        optional_value = _value(entry, optional_field)
+        if optional_value is not None:
+            payload[optional_field] = optional_value
+
+    return payload
+
+
+def _rank_payload_with_mode(
+    rank_payload: dict[str, object],
+    leaderboard_mode: str,
+    issue_type: str | None,
+) -> dict[str, object]:
+    """Ensure rank responses echo the selected mode before/after service rollout."""
+    payload = dict(rank_payload)
+    payload.setdefault("leaderboard_mode", leaderboard_mode)
+    if issue_type is not None:
+        payload.setdefault("issue_type", issue_type)
+    return payload
 
 
 class FrontendErrorEvent(BaseModel):
@@ -435,7 +539,9 @@ async def get_analytics_practice_history(
                 "scenario_id": session.scenario_id,
                 "scenario_name": session.scenario_name,
                 "scenario_type": session.scenario_type,
-                "start_time": session.start_time.isoformat() if session.start_time else None,
+                "start_time": session.start_time.isoformat()
+                if session.start_time
+                else None,
                 "end_time": session.end_time.isoformat() if session.end_time else None,
                 "status": session.status,
                 "overall_score": session.overall_score,
