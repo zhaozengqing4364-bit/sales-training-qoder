@@ -630,83 +630,6 @@ export default function ComprehensiveReportPage() {
     const nextGoalReplayHint = formatReplayAnchorHint(nextGoalReplayAnchor);
     const issueReplayAvailable = hasReplayAnchorTarget(issueReplayAnchor);
     const nextGoalReplayAvailable = hasReplayAnchorTarget(nextGoalReplayAnchor);
-            .then((data) => {
-                if (cancelled) return;
-                setHighlightsData(data);
-                debug.log("[Report] Highlights loaded", {
-                    sessionId,
-                    scenarioType: report.scenario_type,
-                    highlightCount: data.highlights.length,
-                });
-            })
-            .catch((err) => {
-                if (cancelled) return;
-                setHighlightsData(null);
-                setHighlightsUnavailableHint(
-                    report.scenario_type === "presentation"
-                        ? "高光片段暂不可用，PPT 基础复盘不受影响。"
-                        : "高光片段暂不可用，基础评估结果不受影响。",
-                );
-                debug.warn("[Report] Highlights unavailable; keeping unified evidence", {
-                    sessionId,
-                    scenarioType: report.scenario_type,
-                    error: err,
-                });
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setHighlightsLoading(false);
-                }
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [sessionId, report]);
-
-    const isPresentationScenario = report?.scenario_type === "presentation";
-    const presentationReview = isPresentationScenario ? report?.presentation_review ?? null : null;
-    const presentationDegradedNote = formatPresentationDegradedNote(
-        presentationReview,
-        report?.evidence_completeness,
-    );
-    const presentationIssueItems = useMemo(
-        () => buildPresentationIssueItems(presentationReview),
-        [presentationReview],
-    );
-    const presentationIssueClusterCount = useMemo(() => {
-        const diagnosticCount = presentationReview?.diagnostics?.page_issue_cluster_count;
-        if (typeof diagnosticCount === "number") {
-            return diagnosticCount;
-        }
-        return (presentationReview?.page_summaries || []).reduce(
-            (count, pageSummary) => count + (pageSummary.issue_clusters?.length || 0),
-            0,
-        );
-    }, [presentationReview]);
-    const retryEntry = report?.retry_entry;
-    const retryBlockedHint = (
-        retryEntry?.scenario_type === "sales"
-        && (!retryEntry.agent_id || !retryEntry.persona_id)
-    )
-        ? "当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。"
-        : (
-            retryEntry?.scenario_type === "presentation"
-            && !retryEntry.presentation_id
-        )
-            ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
-            : null;
-    const retryFallbackPath = getRetryFallbackPath(retryEntry);
-    const retryNeedsManualSelection = Boolean(retryBlockedHint || !retryEntry?.scenario_type);
-    const retryActionLabel = retryNeedsManualSelection
-        ? (retryEntry?.scenario_type === "presentation" ? "去演讲训练页重新选择" : "去销售训练页重新选择")
-        : "按目标再练一轮";
-    const issueReplayAnchor = replayData?.main_issue?.replay_anchor ?? null;
-    const nextGoalReplayAnchor = replayData?.next_goal?.replay_anchor ?? null;
-    const issueReplayHint = formatReplayAnchorHint(issueReplayAnchor);
-    const nextGoalReplayHint = formatReplayAnchorHint(nextGoalReplayAnchor);
-    const issueReplayAvailable = hasReplayAnchorTarget(issueReplayAnchor);
-    const nextGoalReplayAvailable = hasReplayAnchorTarget(nextGoalReplayAnchor);
 
     const goHome = () => {
         router.push("/");
@@ -773,9 +696,12 @@ export default function ComprehensiveReportPage() {
         completenessScore: report?.completeness_score,
         overallScore: report?.overall_score,
     });
+    const reportLogicScore = reportRollups.logic;
+    const reportAccuracyScore = reportRollups.accuracy;
+    const reportCompletenessScore = reportRollups.completeness;
     const reportOverallScore = reportRollups.overall ?? 0;
 
-    const dimensionScores = useMemo(() => {
+    const dimensionScores = (() => {
         if (!report) {
             return [];
         }
@@ -789,11 +715,11 @@ export default function ComprehensiveReportPage() {
         }
 
         return buildSalesDimensionScores({
-            logic: reportRollups.logic,
-            accuracy: reportRollups.accuracy,
-            completeness: reportRollups.completeness,
+            logic: reportLogicScore,
+            accuracy: reportAccuracyScore,
+            completeness: reportCompletenessScore,
         });
-    }, [presentationReview, reportRollups.accuracy, reportRollups.completeness, reportRollups.logic, report]);
+    })();
 
     const practiceSuggestions = useMemo(() => {
         if (presentationReview?.recommendations?.length) {
