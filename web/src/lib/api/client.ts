@@ -1513,6 +1513,69 @@ async function apiUpload<T>(
     }
 }
 
+async function apiFetchBlob(
+    endpoint: string,
+    options: ApiFetchOptions = {},
+): Promise<Blob> {
+    const url = `${resolveApiBaseUrl()}${endpoint}`;
+    const requestId = `blob_${++requestCounter}`;
+    const { skipSessionExpiredHandling = false, ...requestOptions } = options;
+    const controller = new AbortController();
+    const externalSignal = requestOptions.signal;
+    const signal = externalSignal || controller.signal;
+
+    if (externalSignal) {
+        externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+
+    activeRequests.set(requestId, controller);
+
+    try {
+        const resolvedCredentials = requestOptions.credentials || "include";
+        const headers = attachCsrfHeader(
+            createHeaders(requestOptions.headers, false),
+            {
+                method: requestOptions.method,
+                credentials: resolvedCredentials,
+            },
+        );
+        const response = await fetchWithLoopbackRetry(url, {
+            ...requestOptions,
+            signal,
+            credentials: resolvedCredentials,
+            headers,
+        });
+
+        if (!response.ok) {
+            const responseJson = await response.json().catch(() => ({}));
+            if (response.status === 401 && !skipSessionExpiredHandling) {
+                triggerSessionExpiredOnce();
+            }
+            throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
+        }
+
+        return response.blob();
+    } catch (error) {
+        if (error instanceof ApiRequestError) {
+            throw error;
+        }
+
+        if (error instanceof Error && error.name === "AbortError") {
+            throw error;
+        }
+
+        throw new ApiRequestError({
+            status: 0,
+            errorCode: "[NETWORK_ERROR]",
+            message: error instanceof Error && error.message.trim()
+                ? error.message
+                : "请求失败，请稍后重试。",
+        });
+    } finally {
+        activeRequests.delete(requestId);
+    }
+}
+
 /**
  * M019/S03/T01 domain client seam inventory
  *
@@ -3032,6 +3095,25 @@ export const api = {
             return apiFetch<Record<string, unknown>>("/admin/model-configs/tts/preview", {
                 method: "POST",
                 body: JSON.stringify(payload),
+            });
+        },
+
+        previewTTSBlob: async (params: {
+            text: string;
+            voice?: string;
+            rate?: string;
+            volume?: string;
+            pitch?: string;
+        }) => {
+            const searchParams = new URLSearchParams();
+            Object.entries(params).forEach(([key, value]) => {
+                if (typeof value === "string" && value.trim()) {
+                    searchParams.set(key, value);
+                }
+            });
+
+            return apiFetchBlob(`/admin/model-configs/tts/preview?${searchParams}`, {
+                method: "POST",
             });
         },
 
