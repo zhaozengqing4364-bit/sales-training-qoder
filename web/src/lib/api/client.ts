@@ -253,6 +253,7 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[REPORT_NOT_FOUND]": "目标报告尚未生成或已不存在。",
     "[REPORT_FETCH_FAILED]": "报告暂时无法读取，请稍后重试。",
     "[REPORT_GENERATION_FAILED]": "报告生成失败，请稍后重试。",
+    "[TTS_PREVIEW_FAILED]": "语音试听失败，请稍后重试。",
 };
 
 type NormalizedApiErrorPayload = {
@@ -1364,6 +1365,61 @@ async function apiFetch<T>(
         });
     } finally {
         activeRequests.delete(requestId);
+    }
+}
+
+async function apiFetchBlob(
+    endpoint: string,
+    options: ApiFetchOptions = {},
+): Promise<Blob> {
+    const url = `${resolveApiBaseUrl()}${endpoint}`;
+    const { skipSessionExpiredHandling = false, ...requestOptions } = options;
+    const resolvedCredentials = requestOptions.credentials || "include";
+    const headers = attachCsrfHeader(
+        createHeaders(requestOptions.headers),
+        {
+            method: requestOptions.method,
+            credentials: resolvedCredentials,
+        },
+    );
+
+    try {
+        const response = await fetchWithLoopbackRetry(url, {
+            ...requestOptions,
+            credentials: resolvedCredentials,
+            headers,
+        });
+
+        if (!response.ok) {
+            const responseJson = await response.json().catch(() => ({}));
+            const normalized = normalizeApiErrorPayload(response.status, responseJson);
+
+            if (response.status === 401 && !skipSessionExpiredHandling) {
+                triggerSessionExpiredOnce();
+            }
+
+            throw new ApiRequestError(normalized);
+        }
+
+        return response.blob();
+    } catch (error) {
+        if (error instanceof ApiRequestError) {
+            throw error;
+        }
+
+        if (error instanceof Error && error.name === "AbortError") {
+            throw error;
+        }
+
+        const message = error instanceof Error && error.message.trim()
+            ? error.message
+            : "请求失败，请稍后重试。";
+
+        throw new ApiRequestError({
+            status: 0,
+            errorCode: "[NETWORK_ERROR]",
+            message,
+        });
     }
 }
 
@@ -2716,6 +2772,26 @@ export const api = {
             return apiFetch<AdminModelConfigTestResponse>("/admin/model-configs/test", {
                 method: "POST",
                 body: JSON.stringify(data),
+            });
+        },
+
+        previewTTSBlob: async (params: {
+            text: string;
+            voice?: string;
+            rate?: string;
+            volume?: string;
+            pitch?: string;
+        }) => {
+            const searchParams = new URLSearchParams({
+                text: params.text,
+                voice: params.voice || "zh-CN-XiaoxiaoNeural",
+                rate: params.rate || "+0%",
+                volume: params.volume || "+0%",
+                pitch: params.pitch || "+0Hz",
+            });
+
+            return apiFetchBlob(`/admin/model-configs/tts/preview?${searchParams}`, {
+                method: "POST",
             });
         },
 

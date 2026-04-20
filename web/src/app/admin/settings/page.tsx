@@ -40,7 +40,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/glass-modal";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     AdminModelConfigCreateRequest as CreateModelConfigRequest,
     AdminModelConfigDetail as ModelConfigDetail,
@@ -188,7 +188,7 @@ export default function SettingsPage() {
             }
 
             const extra = formData.extra_config as { rate?: string; volume?: string; pitch?: string } || {};
-            const params = new URLSearchParams({
+            const blob = await api.admin.previewTTSBlob({
                 text: "你好，这是一段语音试听测试，用于预览当前的语速、音量和音调设置。",
                 voice: formData.model_name || "zh-CN-XiaoxiaoNeural",
                 rate: extra.rate || "+0%",
@@ -196,15 +196,6 @@ export default function SettingsPage() {
                 pitch: extra.pitch || "+0Hz",
             });
 
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1"}/admin/model-configs/tts/preview?${params}`, {
-                method: "POST",
-            });
-
-            if (!response.ok) {
-                throw new Error("试听失败");
-            }
-
-            const blob = await response.blob();
             const audioUrl = URL.createObjectURL(blob);
             const audio = new Audio(audioUrl);
             previewAudioRef.current = audio;
@@ -221,7 +212,7 @@ export default function SettingsPage() {
             await audio.play();
         } catch (err) {
             debug.error("TTS preview failed:", err);
-            toast.error("试听失败");
+            toast.error(getApiErrorMessage(err));
             setIsPreviewingTTS(false);
         }
     };
