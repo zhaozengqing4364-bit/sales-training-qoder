@@ -50,8 +50,6 @@ export default function PresentationTrainingPage() {
                     setPresentations([]);
                     failedSections.push("PPT 列表");
                 }
-                setFailedSections(failed);
-
                 if (failedSections.length > 0) {
                     setLoadError(`部分演讲训练数据加载失败（${failedSections.join("、")}），请重试。`);
                 } else {
@@ -61,7 +59,6 @@ export default function PresentationTrainingPage() {
                 debug.error("Failed to load presentation agents:", err);
                 if (!cancelled) {
                     setLoadError("演讲训练场景加载失败，请稍后重试");
-                    setFailedSections(["演讲智能体", "PPT"]);
                     setAgents([]);
                     setPresentations([]);
                 }

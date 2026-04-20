@@ -35,7 +35,7 @@ def test_dashboard_next_goal_recommendation_links_to_focused_sales_retry():
     recommendation = _build_next_goal_recommendation(session)
 
     assert recommendation is not None
-    assert recommendation.title == "按上次主问题再练一轮"
+    assert recommendation.title == "今日复练：按上次主问题再练一轮"
     assert recommendation.action_label == "按目标再练一轮"
     assert recommendation.score_basis == "session_evidence_projection_evaluable_only"
     assert recommendation.target_path.startswith(
@@ -96,7 +96,7 @@ def test_dashboard_presentation_recommendation_points_to_most_actionable_page():
     assert recommendation.recommendation_kind == "presentation_page_retry"
     assert recommendation.scenario_type == "presentation"
     assert recommendation.focus_page == 5
-    assert recommendation.title == "补练 PPT 第 5 页"
+    assert recommendation.title == "今日复练：补练 PPT 第 5 页"
     assert "补充客户案例" in recommendation.reason
     assert recommendation.action_label == "查看逐页复练任务"
     assert recommendation.target_path == (

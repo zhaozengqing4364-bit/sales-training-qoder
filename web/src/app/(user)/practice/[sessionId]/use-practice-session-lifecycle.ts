@@ -8,7 +8,6 @@ import type { SessionStatus } from "@/lib/api/types";
 import type { AudioEvidenceFlushResult } from "@/hooks/use-continuous-audio-uploader";
 import type { ConnectionState } from "@/hooks/use-practice-websocket";
 import { debug } from "@/lib/debug";
-import type { AudioFlushResult, AudioFlushStatus } from "@/hooks/use-continuous-audio-uploader";
 
 interface UsePracticeSessionLifecycleParams {
     sessionId: string;
@@ -123,6 +122,7 @@ export function usePracticeSessionLifecycle({
     });
     const hasStartedSessionRef = React.useRef(false);
     const hasNavigatedToReportRef = React.useRef(false);
+    const hasStoppedRecordingForEndRef = React.useRef(false);
 
     const isSessionTerminal = sessionStatus === "completed" || sessionStatus === "scoring";
     const isSessionPaused = sessionStatus === "paused";
@@ -135,6 +135,7 @@ export function usePracticeSessionLifecycle({
     React.useEffect(() => {
         hasStartedSessionRef.current = false;
         hasNavigatedToReportRef.current = false;
+        hasStoppedRecordingForEndRef.current = false;
         setIsEndingSession(false);
         setPendingLifecycleAction(null);
         setLifecycleError(null);
@@ -183,8 +184,10 @@ export function usePracticeSessionLifecycle({
         setLifecycleError(null);
 
         const finishAndNavigate = async () => {
-            if (isRecordingRef.current) {
+            if (isRecordingRef.current && !hasStoppedRecordingForEndRef.current) {
                 stopRecording();
+                isRecordingRef.current = false;
+                hasStoppedRecordingForEndRef.current = true;
             }
 
             if (flushAudioEvidence) {
@@ -252,8 +255,10 @@ export function usePracticeSessionLifecycle({
         setLifecycleError(null);
         setIsEndingSession(true);
 
-        if (isRecordingRef.current) {
+        if (isRecordingRef.current && !hasStoppedRecordingForEndRef.current) {
             stopRecording();
+            isRecordingRef.current = false;
+            hasStoppedRecordingForEndRef.current = true;
         }
 
         try {
@@ -280,8 +285,6 @@ export function usePracticeSessionLifecycle({
         isSessionPaused,
         isSessionTerminal,
         lifecycleError,
-        audioEvidenceFlushMessage,
-        audioEvidenceFlushStatus,
         pendingLifecycleAction,
     };
 }
