@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { AnalyticsAgents } from "@/lib/api/types";
+import { ArrowRight } from "lucide-react";
 import {
     BarChart,
     Bar,
@@ -41,8 +43,20 @@ export function AgentRankingChart({ data }: AgentRankingChartProps) {
 
     if (combinedData.length === 0) {
         return (
-            <div className="h-72 flex items-center justify-center text-slate-400">
-                暂无 Agent 使用数据
+            <div className="h-72 flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 text-center">
+                <div>
+                    <p className="text-sm font-semibold text-slate-900">暂无 Agent 使用数据</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                        当前范围还没有已完成且可评估的训练使用到智能体或客户角色；完成训练并生成稳定证据后，这里会显示使用次数与平均分。
+                    </p>
+                    <Link
+                        href="/admin/records"
+                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                    >
+                        查看训练记录
+                        <ArrowRight className="w-4 h-4" />
+                    </Link>
+                </div>
             </div>
         );
     }

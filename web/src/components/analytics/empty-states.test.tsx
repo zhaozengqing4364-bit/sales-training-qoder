@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { AgentRankingChart } from "./AgentRankingChart";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { ScoreDistributionChart } from "./ScoreDistributionChart";
 import { TrendsChart } from "./TrendsChart";
@@ -35,5 +36,21 @@ describe("analytics empty states", () => {
         expect(screen.getByText("暂无排行榜数据")).toBeTruthy();
         expect(screen.getByText(/当前范围还没有用户完成可评估训练/)).toBeTruthy();
         expect(screen.getByRole("link", { name: /去训练大厅/ }).getAttribute("href")).toBe("/training");
+    });
+
+    it("explains missing agent usage evidence and links admins to records", () => {
+        render(
+            <AgentRankingChart
+                data={{
+                    agent_stats: [],
+                    persona_stats: [],
+                    scenario_distribution: {},
+                }}
+            />,
+        );
+
+        expect(screen.getByText("暂无 Agent 使用数据")).toBeTruthy();
+        expect(screen.getByText(/还没有已完成且可评估的训练使用到智能体或客户角色/)).toBeTruthy();
+        expect(screen.getByRole("link", { name: /查看训练记录/ }).getAttribute("href")).toBe("/admin/records");
     });
 });
