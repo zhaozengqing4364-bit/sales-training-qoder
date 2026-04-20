@@ -10,6 +10,7 @@ import { ArrowLeft, Sparkles, Play, User, Presentation } from "lucide-react";
 import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { RetryFocusIntent } from "@/lib/api/types";
+import { TrainingVoiceMode, useTrainingPreferences } from "@/hooks/use-training-preferences";
 
 const DIFFICULTY_CONFIG: Record<string, { label: string; className: string }> = {
     easy: { label: "简单", className: "text-emerald-600 border-emerald-200 bg-emerald-50" },
@@ -46,7 +47,6 @@ interface PresentationOption {
     status: "processing" | "ready" | "failed";
 }
 
-type VoiceMode = "legacy" | "stepfun_realtime";
 const CREATE_SESSION_RETRY_DELAYS_MS = [200, 500, 1200] as const;
 
 function isRetryableCreateSessionError(error: unknown): boolean {
@@ -98,10 +98,12 @@ export default function AgentPersonaSelectPage() {
     const agentId = params.agentId as string;
     const requestedPersonaId = searchParams.get("persona_id");
     const focusIntent = useMemo(() => parseFocusIntent(searchParams.get("focus_intent")), [searchParams]);
+    const { trainingPreferences, saveTrainingPreferences } = useTrainingPreferences();
+    const shouldUseRememberedDefaults = !focusIntent;
 
     const [agent, setAgent] = useState<AgentDetail | null>(null);
     const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
-    const [voiceMode, setVoiceMode] = useState<VoiceMode>("stepfun_realtime");
+    const [voiceMode, setVoiceMode] = useState<TrainingVoiceMode>(() => trainingPreferences.voiceMode);
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
     const [startError, setStartError] = useState<string | null>(null);
@@ -118,7 +120,13 @@ export default function AgentPersonaSelectPage() {
                 const requestedPersona = requestedPersonaId
                     ? data.personas.find((p: Persona) => p.id === requestedPersonaId)
                     : null;
-                const defaultPersona = requestedPersona || data.personas.find((p: Persona) => p.is_default) || data.personas[0];
+                const rememberedPersona = shouldUseRememberedDefaults && trainingPreferences.agentId === agentId && trainingPreferences.personaId
+                    ? data.personas.find((p: Persona) => p.id === trainingPreferences.personaId)
+                    : null;
+                const defaultPersona = requestedPersona
+                    || rememberedPersona
+                    || data.personas.find((p: Persona) => p.is_default)
+                    || data.personas[0];
                 if (defaultPersona) {
                     setSelectedPersona(defaultPersona.id);
                 }
@@ -129,7 +137,13 @@ export default function AgentPersonaSelectPage() {
             }
         };
         void loadAgent();
-    }, [agentId, requestedPersonaId]);
+    }, [
+        agentId,
+        requestedPersonaId,
+        shouldUseRememberedDefaults,
+        trainingPreferences.agentId,
+        trainingPreferences.personaId,
+    ]);
 
     useEffect(() => {
         let cancelled = false;
@@ -155,7 +169,16 @@ export default function AgentPersonaSelectPage() {
                 }
 
                 const normalized = presentations as PresentationOption[];
-                const preferredSelection = normalized.find((item) => item.status === "ready")?.presentation_id
+                const rememberedPresentation = shouldUseRememberedDefaults
+                    && trainingPreferences.agentId === agentId
+                    && trainingPreferences.presentationId
+                    ? normalized.find((item) => (
+                        item.presentation_id === trainingPreferences.presentationId
+                        && item.status === "ready"
+                    ))
+                    : null;
+                const preferredSelection = rememberedPresentation?.presentation_id
+                    || normalized.find((item) => item.status === "ready")?.presentation_id
                     || normalized[0]?.presentation_id
                     || "";
                 setAvailablePresentations(normalized);
@@ -184,7 +207,13 @@ export default function AgentPersonaSelectPage() {
         return () => {
             cancelled = true;
         };
-    }, [agent]);
+    }, [
+        agent,
+        agentId,
+        shouldUseRememberedDefaults,
+        trainingPreferences.agentId,
+        trainingPreferences.presentationId,
+    ]);
 
     const selectedPresentation = useMemo(() => (
         availablePresentations.find((item) => item.presentation_id === selectedPresentationId) || null
@@ -218,6 +247,13 @@ export default function AgentPersonaSelectPage() {
                 voice_mode: voiceMode,
                 focus_intent: scenarioType === "sales" && focusIntent ? focusIntent : undefined,
             } as const;
+
+            saveTrainingPreferences({
+                agentId,
+                personaId: selectedPersona,
+                presentationId: scenarioType === "presentation" ? selectedPresentationId : null,
+                voiceMode,
+            });
 
             let session: Awaited<ReturnType<typeof api.practice.createSession>> | null = null;
             let lastError: unknown = null;
@@ -340,7 +376,15 @@ export default function AgentPersonaSelectPage() {
                             return (
                                 <div
                                     key={persona.id}
-                                    onClick={() => setSelectedPersona(persona.id)}
+                                    onClick={() => {
+                                        setSelectedPersona(persona.id);
+                                        saveTrainingPreferences({
+                                            agentId,
+                                            personaId: persona.id,
+                                            presentationId: selectedPresentationId || null,
+                                            voiceMode,
+                                        });
+                                    }}
                                     className="cursor-pointer"
                                 >
                                     <GlassCard
@@ -405,7 +449,16 @@ export default function AgentPersonaSelectPage() {
                                     </span>
                                     <select
                                         value={selectedPresentationId}
-                                        onChange={(event) => setSelectedPresentationId(event.target.value)}
+                                        onChange={(event) => {
+                                            const nextPresentationId = event.target.value;
+                                            setSelectedPresentationId(nextPresentationId);
+                                            saveTrainingPreferences({
+                                                agentId,
+                                                personaId: selectedPersona,
+                                                presentationId: nextPresentationId,
+                                                voiceMode,
+                                            });
+                                        }}
                                         className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                                     >
                                         {availablePresentations.map((presentation) => {
@@ -451,7 +504,15 @@ export default function AgentPersonaSelectPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
                         type="button"
-                        onClick={() => setVoiceMode("legacy")}
+                        onClick={() => {
+                            setVoiceMode("legacy");
+                            saveTrainingPreferences({
+                                agentId,
+                                personaId: selectedPersona,
+                                presentationId: selectedPresentationId || null,
+                                voiceMode: "legacy",
+                            });
+                        }}
                         className={cn(
                             "rounded-2xl border p-4 text-left transition-all",
                             voiceMode === "legacy"
@@ -464,7 +525,15 @@ export default function AgentPersonaSelectPage() {
                     </button>
                     <button
                         type="button"
-                        onClick={() => setVoiceMode("stepfun_realtime")}
+                        onClick={() => {
+                            setVoiceMode("stepfun_realtime");
+                            saveTrainingPreferences({
+                                agentId,
+                                personaId: selectedPersona,
+                                presentationId: selectedPresentationId || null,
+                                voiceMode: "stepfun_realtime",
+                            });
+                        }}
                         className={cn(
                             "rounded-2xl border p-4 text-left transition-all",
                             voiceMode === "stepfun_realtime"
