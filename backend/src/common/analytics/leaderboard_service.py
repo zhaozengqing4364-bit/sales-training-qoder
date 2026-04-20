@@ -642,7 +642,7 @@ class LeaderboardService:
         query = (
             select(
                 issue_type_expr.label("issue_type"),
-                func.count(func.distinct(PracticeSession.user_id)).label("count"),
+                func.count(func.distinct(PracticeSession.user_id)).label("user_count"),
                 func.count(PracticeSession.session_id).label("evaluable_sessions"),
             )
             .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
@@ -659,7 +659,7 @@ class LeaderboardService:
         return [
             {
                 "issue_type": row.issue_type,
-                "count": int(row.count or 0),
+                "count": int(row.user_count or 0),
                 "evaluable_sessions": int(row.evaluable_sessions or 0),
             }
             for row in result.all()
