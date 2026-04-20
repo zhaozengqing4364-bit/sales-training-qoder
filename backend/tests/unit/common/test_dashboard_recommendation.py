@@ -1,6 +1,9 @@
 """Unit tests for learner dashboard recommendation helpers."""
 
-from common.api.dashboard import _build_next_goal_recommendation
+from common.api.dashboard import (
+    _build_next_goal_recommendation,
+    _build_presentation_page_recommendation,
+)
 from common.db.models import PracticeSession, Scenario
 
 
@@ -64,3 +67,38 @@ def test_dashboard_next_goal_recommendation_recovers_when_sales_pairing_missing(
     assert recommendation is not None
     assert recommendation.target_path == "/training/sales"
     assert "缺少完整智能体或客户画像配置" in recommendation.reason
+
+
+def test_dashboard_presentation_recommendation_points_to_most_actionable_page():
+    session = PracticeSession(session_id="session-ppt-1")
+
+    recommendation = _build_presentation_page_recommendation(
+        session,
+        {
+            "page_summaries": [
+                {
+                    "page_number": 2,
+                    "average_score": 72,
+                    "missing_required_points": ["讲清楚落地周期"],
+                    "issue_clusters": [],
+                },
+                {
+                    "page_number": 5,
+                    "average_score": 68,
+                    "missing_required_points": ["补充客户案例", "说明 ROI"],
+                    "issue_clusters": [{"issue_type": "missing_point"}],
+                },
+            ],
+        },
+    )
+
+    assert recommendation is not None
+    assert recommendation.recommendation_kind == "presentation_page_retry"
+    assert recommendation.scenario_type == "presentation"
+    assert recommendation.focus_page == 5
+    assert recommendation.title == "补练 PPT 第 5 页"
+    assert "补充客户案例" in recommendation.reason
+    assert recommendation.action_label == "查看逐页复练任务"
+    assert recommendation.target_path == (
+        "/practice/session-ppt-1/report?focus=presentation_page&page=5"
+    )

@@ -18,6 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
+from common.conversation.session_evidence import (
+    ensure_effectiveness_snapshot as ensure_session_evidence_snapshot,
+)
 from common.db.models import PracticeSession, Scenario, User
 from common.db.schemas import (
     ScenarioType,
@@ -818,126 +821,13 @@ class PracticeSessionLifecycleApplicationService:
 
 
 def ensure_effectiveness_snapshot(session: PracticeSession) -> dict[str, Any]:
-    """Ensure session has effectiveness snapshot, creating one if absent."""
-    if isinstance(session.effectiveness_snapshot, dict) and session.effectiveness_snapshot:
-        existing_snapshot = session.effectiveness_snapshot
-        has_required_keys = all(
-            key in existing_snapshot
-            for key in ("pass_flags", "overall_result", "main_issue", "next_goal")
-        )
-        if has_required_keys:
-            return existing_snapshot
-
-        fallback_metrics, fallback_main_passed, fallback_evaluable, fallback_reason = (
-            _derive_effectiveness_metrics(session)
-        )
-        metrics = existing_snapshot.get("metrics")
-        if not isinstance(metrics, dict):
-            metrics = fallback_metrics
-        else:
-            filler_rate_raw = metrics.get(
-                "filler_rate_per_100_words",
-                fallback_metrics.get("filler_rate_per_100_words", 0.0),
-            )
-            try:
-                filler_rate = float(filler_rate_raw)
-            except (TypeError, ValueError):
-                filler_rate = float(
-                    fallback_metrics.get("filler_rate_per_100_words", 0.0)
-                )
-            metrics = {
-                **metrics,
-                "filler_rate_per_100_words": filler_rate,
-            }
-        main_capability_passed = existing_snapshot.get("main_capability_passed")
-        if not isinstance(main_capability_passed, bool):
-            main_capability_passed = fallback_main_passed
-        evaluable = existing_snapshot.get("evaluable")
-        if not isinstance(evaluable, bool):
-            evaluable = fallback_evaluable
-        not_evaluable_reason = existing_snapshot.get("not_evaluable_reason")
-        if not isinstance(not_evaluable_reason, str):
-            not_evaluable_reason = fallback_reason
-
-        merged_snapshot = {
-            **existing_snapshot,
-            **evaluate_effectiveness_snapshot(
-                metrics=metrics,
-                main_capability_passed=main_capability_passed,
-                evaluable=evaluable,
-                not_evaluable_reason=not_evaluable_reason,
-            ),
-        }
-        session.effectiveness_snapshot = merged_snapshot
-        return merged_snapshot
-
-    metrics, main_capability_passed, evaluable, not_evaluable_reason = (
-        _derive_effectiveness_metrics(session)
-    )
-    snapshot = evaluate_effectiveness_snapshot(
-        metrics=metrics,
-        main_capability_passed=main_capability_passed,
-        evaluable=evaluable,
-        not_evaluable_reason=not_evaluable_reason,
-    )
-    session.effectiveness_snapshot = snapshot
-    return snapshot
+    """Compatibility wrapper for the canonical session evidence snapshot path."""
+    return ensure_session_evidence_snapshot(session)
 
 
 def _is_true_env(name: str, default: str = "false") -> bool:
     value = os.getenv(name, default)
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _coerce_utc_timestamp(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
-
-
-def duration_seconds_between(
-    start_time: datetime | None,
-    end_time: datetime | None,
-) -> int | None:
-    if start_time is None or end_time is None:
-        return None
-    start_time_utc = _coerce_utc_timestamp(start_time)
-    end_time_utc = _coerce_utc_timestamp(end_time)
-    return max(0, int((end_time_utc - start_time_utc).total_seconds()))
-
-
-def _derive_effectiveness_metrics(
-    session: PracticeSession,
-) -> tuple[dict[str, Any], bool, bool, str | None]:
-    logic = float(session.logic_score or 0.0)
-    accuracy = float(session.accuracy_score or 0.0)
-    completeness = float(session.completeness_score or 0.0)
-    duration_seconds = int(session.total_duration_seconds or 0)
-    if (
-        duration_seconds <= 0
-        and session.start_time is not None
-        and session.end_time is not None
-    ):
-        derived_duration_seconds = duration_seconds_between(
-            session.start_time, session.end_time
-        )
-        if derived_duration_seconds is not None:
-            duration_seconds = derived_duration_seconds
-
-    has_scores = any(score > 0 for score in (logic, accuracy, completeness))
-    evaluable = has_scores and duration_seconds > 0
-    not_evaluable_reason = None if evaluable else "INSUFFICIENT_SESSION_METRICS"
-
-    overall_score = (logic + accuracy + completeness) / 3.0
-    metrics = build_sales_effectiveness_metrics(
-        overall_score=overall_score,
-        logic_score=logic,
-        accuracy_score=accuracy,
-        completeness_score=completeness,
-        duration_seconds=duration_seconds,
-    )
-    main_capability_passed = overall_score >= 70.0
-    return metrics, main_capability_passed, evaluable, not_evaluable_reason
 
 
 def _session_has_persisted_scores(session: PracticeSession) -> bool:
@@ -1171,6 +1061,5 @@ __all__ = [
     "PracticeSessionCreateService",
     "PracticeSessionLifecycleApplicationService",
     "PracticeSessionUpdateResult",
-    "duration_seconds_between",
     "ensure_effectiveness_snapshot",
 ]

@@ -82,11 +82,13 @@ class FileValidator:
         self,
         max_size: int = DEFAULT_MAX_SIZE,
         allowed_extensions: set[str] | None = None,
+        allowed_mime_types: set[str] | None = None,
     ):
         self.max_size = max_size
         self.allowed_extensions = (
             allowed_extensions or self.ALLOWED_PRESENTATION_EXTENSIONS
         )
+        self.allowed_mime_types = allowed_mime_types or self.ALLOWED_MIME_TYPES
 
     async def validate(self, file: UploadFile) -> tuple[bytes, str]:
         """
@@ -138,6 +140,12 @@ class FileValidator:
 
         # Validate content type (basic check)
         content_type = file.content_type or "application/octet-stream"
+        if content_type not in self.allowed_mime_types:
+            raise HTTPException(400, f"不支持的文件 MIME 类型: {content_type}")
+
+        header_error = self._validate_file_header(content, ext)
+        if header_error:
+            raise HTTPException(400, header_error)
 
         # Reset file position for future reads
         await file.seek(0)
@@ -182,6 +190,18 @@ class FileValidator:
 
         return filename
 
+    def _validate_file_header(self, content: bytes, ext: str) -> str | None:
+        """Validate common presentation file signatures."""
+        if ext == ".pdf" and not content.startswith(b"%PDF"):
+            return "文件内容不是有效的 PDF。"
+        if ext == ".pptx" and not content.startswith(b"PK"):
+            return "文件内容不是有效的 PPTX。"
+        if ext == ".ppt" and not (
+            content.startswith(b"\xd0\xcf\x11\xe0") or content.startswith(b"PK")
+        ):
+            return "文件内容不是有效的 PPT。"
+        return None
+
 
 # Convenience validator instances
 presentation_validator = FileValidator(
@@ -192,6 +212,13 @@ presentation_validator = FileValidator(
 image_validator = FileValidator(
     max_size=5 * 1024 * 1024,  # 5MB
     allowed_extensions={".jpg", ".jpeg", ".png", ".gif", ".webp"},
+    allowed_mime_types={
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "application/octet-stream",
+    },
 )
 
 

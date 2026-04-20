@@ -37,10 +37,11 @@ TRAINING_RECORDS_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
         "query_shape": (
             "one paginated PracticeSession/Scenario/User join for the page",
             "one count query for the same filters",
-            "session_to_response then issues up to two extra SELECTs per row to resolve agent and persona names",
+            "one batched Agent metadata lookup for all agent ids on the page",
+            "one batched Persona metadata lookup for all persona ids on the page",
         ),
-        "risk": "confirmed_row_level_n_plus_one",
-        "n_plus_one_risk": "confirmed: page size N can trigger up to 2N extra queries for Agent/Persona lookup even though the page rows are already known",
+        "risk": "row_level_n_plus_one_fixed_with_page_batched_metadata",
+        "n_plus_one_risk": "fixed: page size N now triggers at most one Agent and one Persona metadata query after the paged session query",
         "slow_query_candidates": (
             "admin search uses User.name ILIKE / Scenario.name ILIKE and can become expensive on larger tables",
         ),
@@ -57,10 +58,10 @@ TRAINING_RECORDS_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
         ),
         "query_shape": (
             "one PracticeSession/Scenario/User join for the record",
-            "then the same per-record agent/persona metadata selects through session_to_response",
+            "then one bounded batched Agent/Persona metadata lookup for that single record",
         ),
-        "risk": "small_volume_same_pattern",
-        "n_plus_one_risk": "same lookup pattern as list_training_records, but bounded to a single record",
+        "risk": "bounded_single_record_metadata_lookup",
+        "n_plus_one_risk": "not applicable for a single record; the code path shares the batched map loader for consistency",
         "evidence_level": "code_path_confirmed_but_lower_priority_than_list_endpoint",
     },
 )
@@ -136,30 +137,16 @@ async def session_to_response(
     session: PracticeSession,
     scenario: Scenario | None,
     user: User | None,
-    db: AsyncSession
+    agent_names: dict[str, str] | None = None,
+    persona_names: dict[str, str] | None = None,
 ) -> TrainingRecordResponse:
     """Convert PracticeSession to TrainingRecordResponse"""
-    # Get agent and persona names if available
-    agent_name = None
-    persona_name = None
-
-    if session.agent_id:
-        from agent.models import Agent
-        agent_result = await db.execute(
-            select(Agent).where(Agent.id == session.agent_id)
-        )
-        agent = agent_result.scalar_one_or_none()
-        if agent:
-            agent_name = agent.name
-
-    if session.persona_id:
-        from agent.models import Persona
-        persona_result = await db.execute(
-            select(Persona).where(Persona.id == session.persona_id)
-        )
-        persona = persona_result.scalar_one_or_none()
-        if persona:
-            persona_name = persona.name
+    agent_names = agent_names or {}
+    persona_names = persona_names or {}
+    agent_name = agent_names.get(str(session.agent_id)) if session.agent_id else None
+    persona_name = (
+        persona_names.get(str(session.persona_id)) if session.persona_id else None
+    )
 
     return TrainingRecordResponse(
         id=str(session.session_id),
@@ -174,6 +161,40 @@ async def session_to_response(
         agent_name=agent_name,
         persona_name=persona_name
     )
+
+
+async def load_agent_persona_name_maps(
+    sessions: list[PracticeSession],
+    db: AsyncSession,
+) -> tuple[dict[str, str], dict[str, str]]:
+    agent_ids = {
+        str(session.agent_id)
+        for session in sessions
+        if getattr(session, "agent_id", None)
+    }
+    persona_ids = {
+        str(session.persona_id)
+        for session in sessions
+        if getattr(session, "persona_id", None)
+    }
+
+    from agent.models import Agent, Persona
+
+    agent_names: dict[str, str] = {}
+    if agent_ids:
+        agent_rows = await db.execute(select(Agent.id, Agent.name).where(Agent.id.in_(agent_ids)))
+        agent_names = {str(agent_id): name for agent_id, name in agent_rows.all()}
+
+    persona_names: dict[str, str] = {}
+    if persona_ids:
+        persona_rows = await db.execute(
+            select(Persona.id, Persona.name).where(Persona.id.in_(persona_ids))
+        )
+        persona_names = {
+            str(persona_id): name for persona_id, name in persona_rows.all()
+        }
+
+    return agent_names, persona_names
 
 
 @router.get("", response_model=dict)
@@ -247,12 +268,20 @@ async def list_training_records(
     # Execute query
     result = await db.execute(query)
     rows = result.all()
+    sessions = [row[0] for row in rows]
+    agent_names, persona_names = await load_agent_persona_name_maps(sessions, db)
 
     # Convert to response format
     items = []
     for row in rows:
         session, scenario, user = row
-        item = await session_to_response(session, scenario, user, db)
+        item = await session_to_response(
+            session,
+            scenario,
+            user,
+            agent_names=agent_names,
+            persona_names=persona_names,
+        )
         items.append(item)
 
     response = TrainingRecordListResponse(
@@ -285,7 +314,14 @@ async def get_training_record(
         raise HTTPException(status_code=404, detail="[TRAINING_RECORD_NOT_FOUND]")
 
     session, scenario, user = row
-    item = await session_to_response(session, scenario, user, db)
+    agent_names, persona_names = await load_agent_persona_name_maps([session], db)
+    item = await session_to_response(
+        session,
+        scenario,
+        user,
+        agent_names=agent_names,
+        persona_names=persona_names,
+    )
 
     return success_response(item.model_dump())
 

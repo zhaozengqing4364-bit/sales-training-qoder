@@ -95,6 +95,18 @@ function getDisplayName(currentUser: ReturnType<typeof useCurrentUser>["data"]):
     return currentUser?.display_name || currentUser?.name || currentUser?.email?.split("@")[0] || "用户";
 }
 
+function getRecommendationSourceCopy(recommendation: Recommendation): string | null {
+    if (recommendation.recommendation_kind === "presentation_page_retry") {
+        return recommendation.focus_page
+            ? `推荐来源：上次 PPT 报告的第 ${recommendation.focus_page} 页缺口与必讲点覆盖。`
+            : "推荐来源：上次 PPT 报告的页级缺口与必讲点覆盖。";
+    }
+    if (recommendation.recommendation_kind === "sales_retry" || recommendation.score_basis) {
+        return "推荐来源：上次可评估训练报告的主问题与下一轮目标。";
+    }
+    return null;
+}
+
 function resolveDashboardSessionId(item: Pick<SessionItem, "id" | "session_id">): string | null {
     const sessionId = item.session_id?.trim();
     if (sessionId) {
@@ -239,6 +251,7 @@ export default function HomePage() {
         })[0];
     const hasHistory = historyItems.length > 0;
     const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
+    const recommendationSourceCopy = getRecommendationSourceCopy(recommendation);
     const onboardingSteps = [
         {
             key: "train",
@@ -536,9 +549,9 @@ export default function HomePage() {
                             <p className="text-slate-300 text-sm leading-relaxed max-w-lg">
                                 {recommendation.reason}
                             </p>
-                            {recommendation.score_basis && (
+                            {recommendationSourceCopy && (
                                 <p className="text-xs text-blue-100/80 mt-3">
-                                    推荐来源：上次可评估训练报告的主问题与下一轮目标。
+                                    {recommendationSourceCopy}
                                 </p>
                             )}
                         </div>

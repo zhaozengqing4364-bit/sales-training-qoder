@@ -69,7 +69,7 @@ from common.auth.service import (
 
 # Conversation Replay API
 from common.conversation.api import router as replay_router
-from common.db.models import PracticeSession, Scenario
+from common.db.models import PracticeSession, Scenario, User
 from common.db.session import (
     STARTUP_DB_AUTHORITY,
     AsyncSessionLocal,
@@ -697,7 +697,6 @@ async def _handle_presentation_websocket(
     else:
         handler = PresentationWebSocketHandler()
 
-    session_manager = get_session_manager()
     try:
         payload = verify_token(token)
         if payload and isinstance(payload.get("sub"), str):
@@ -718,6 +717,25 @@ async def _handle_presentation_websocket(
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
+    session_owner_id = await _resolve_presentation_session_owner_id(
+        resolved_session_id
+    )
+    if (
+        session_owner_id
+        and session_owner_id != user_id
+        and not await _is_admin_user_id(user_id)
+    ):
+        logger.warning(
+            "Rejected /ws/presentation connection due to owner mismatch",
+            session_id=resolved_session_id,
+            request_user_id=user_id,
+            session_owner_id=session_owner_id,
+        )
+        await websocket.accept()
+        await websocket.close(code=4003, reason="ACCESS_DENIED")
+        return
+
+    session_manager = get_session_manager()
     await session_manager.register_session(
         resolved_session_id,
         handler,
@@ -732,6 +750,39 @@ async def _handle_presentation_websocket(
         )
     finally:
         await session_manager.unregister_session(resolved_session_id)
+
+
+async def _resolve_presentation_session_owner_id(session_id: str) -> str | None:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(PracticeSession.user_id).where(
+                    PracticeSession.session_id == session_id
+                )
+            )
+            owner_id = result.scalar_one_or_none()
+            return str(owner_id) if owner_id else None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to resolve presentation session owner before websocket connect",
+            session_id=session_id,
+            error=str(exc),
+        )
+        return None
+
+
+async def _is_admin_user_id(user_id: str) -> bool:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User.role).where(User.user_id == user_id))
+            return str(result.scalar_one_or_none() or "").lower() == "admin"
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to resolve websocket user role before presentation access check",
+            user_id=user_id,
+            error=str(exc),
+        )
+        return False
 
 
 @app.websocket("/ws/presentation")

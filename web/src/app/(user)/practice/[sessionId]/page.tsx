@@ -329,6 +329,7 @@ export default function PracticeSessionPage() {
     const {
         canToggleLifecycle,
         handleEndSession,
+        handleStartSession,
         handleTogglePauseResume,
         isEndingSession,
         isSessionPaused,
@@ -352,7 +353,9 @@ export default function PracticeSessionPage() {
 
     const lifecycleErrorMessage = lifecycleError?.message ?? null;
     const lifecycleErrorGuidance = lifecycleError?.guidance ?? null;
-    const lifecycleRetryLabel = lifecycleError?.action === "end"
+    const lifecycleRetryLabel = lifecycleError?.action === "start"
+        ? "重试启动"
+        : lifecycleError?.action === "end"
         ? "重试结束"
         : lifecycleError?.action === "resume"
         ? "重试继续"
@@ -360,12 +363,42 @@ export default function PracticeSessionPage() {
         ? "重试暂停"
         : null;
     const practiceError = lifecycleErrorMessage || wsError || audioError || sessionMetaError;
+    const audioUploadError = continuousUploader.uploadStatus === "error"
+        ? continuousUploader.lastError || "录音留痕上传失败"
+        : null;
+    const audioUploadStatusLabel = continuousUploader.uploadStatus === "uploading"
+        ? "留痕保存中"
+        : continuousUploader.uploadStatus === "error"
+        ? "留痕失败"
+        : continuousUploader.uploadStatus === "stopped"
+        ? "留痕已停止"
+        : "留痕待开始";
+    const connectionStatusLabel = CONNECTION_STATUS_LABELS[connectionState];
+    const lifecycleStatusLabel = SESSION_STATUS_LABELS[sessionStatus];
+    const microphoneStatusLabel = audioError
+        ? "麦克风异常"
+        : hasPermission === false
+        ? "需授权麦克风"
+        : isRecording
+        ? "录音中"
+        : "麦克风就绪";
+    const aiStatusLabel = isPlayingAudio
+        ? "AI 说话中"
+        : aiState === "thinking"
+        ? "AI 思考中"
+        : aiState === "speaking"
+        ? "AI 回复中"
+        : "AI 待命";
     const canToggleRecordingBase =
         connectionState === "connected"
         && sessionStatus === "in_progress"
         && pendingLifecycleAction === null;
     const canRecord = canToggleRecordingBase && hasPermission !== false;
     const canRequestPermission = canToggleRecordingBase && hasPermission === false;
+    const handleRestartAudioUpload = React.useCallback(async () => {
+        await continuousUploader.stopUpload();
+        await continuousUploader.startUpload();
+    }, [continuousUploader]);
 
     // 统一的录音切换函数 - 点击一次开始，再点击一次结束
     const toggleRecording = React.useCallback(() => {
@@ -638,13 +671,21 @@ export default function PracticeSessionPage() {
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={lifecycleError.action === "end" ? handleEndSession : handleTogglePauseResume}
-                                    disabled={lifecycleError.action === "end"
+                                    onClick={lifecycleError.action === "start"
+                                        ? handleStartSession
+                                        : lifecycleError.action === "end"
+                                        ? handleEndSession
+                                        : handleTogglePauseResume}
+                                    disabled={lifecycleError.action === "start"
+                                        ? connectionState !== "connected"
+                                        : lifecycleError.action === "end"
                                         ? isEndingSession || connectionState !== "connected"
                                         : !canToggleLifecycle}
                                     className="h-8 rounded-full border-red-200 text-red-700 hover:bg-red-100"
                                 >
-                                    {lifecycleError.action === "end" ? (
+                                    {lifecycleError.action === "start" ? (
+                                        <RefreshCw className="w-3 h-3 mr-1" />
+                                    ) : lifecycleError.action === "end" ? (
                                         <Square className="w-3 h-3 mr-1 fill-current" />
                                     ) : lifecycleError.action === "resume" ? (
                                         <Play className="w-3 h-3 mr-1 fill-current" />
@@ -665,6 +706,34 @@ export default function PracticeSessionPage() {
                                     重新连接
                                 </Button>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {audioUploadError && (
+                    <div className="mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start">
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                    <AlertCircle className="h-4 w-4 shrink-0" />
+                                    <span className="font-medium">录音留痕上传失败</span>
+                                </div>
+                                <p className="mt-2 leading-5">
+                                    实时对话仍可继续，但回放或报告的音频证据可能缺失。原因：{audioUploadError}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleRestartAudioUpload}
+                                    disabled={!isRecording || continuousUploader.isUploading}
+                                    className="h-8 rounded-full border-amber-300 text-amber-800 hover:bg-amber-100"
+                                >
+                                    <RefreshCw className="mr-1 h-3 w-3" />
+                                    重试留痕
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -811,6 +880,27 @@ export default function PracticeSessionPage() {
                             <div className="hidden md:block absolute right-0 text-xs text-slate-500">
                                 空格键 / 点击切换录音
                             </div>
+                        </div>
+
+                        <div
+                            aria-label="训练实时状态"
+                            className="grid w-full max-w-2xl grid-cols-2 gap-2 px-4 text-xs text-slate-600 md:grid-cols-5"
+                        >
+                            {[
+                                ["连接", connectionStatusLabel],
+                                ["会话", lifecycleStatusLabel],
+                                ["麦克风", microphoneStatusLabel],
+                                ["留痕", audioUploadStatusLabel],
+                                ["AI", aiStatusLabel],
+                            ].map(([label, value]) => (
+                                <div
+                                    key={label}
+                                    className="flex min-h-8 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white/80 px-2.5 py-1.5"
+                                >
+                                    <span className="shrink-0 text-slate-400">{label}</span>
+                                    <span className="min-w-0 truncate font-medium text-slate-700">{value}</span>
+                                </div>
+                            ))}
                         </div>
 
                         <p className="text-xs text-slate-500 font-medium">

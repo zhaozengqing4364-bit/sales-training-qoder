@@ -64,6 +64,37 @@ describe("usePracticeSessionLifecycle", () => {
         expect(controlLifecycle).not.toHaveBeenCalled();
     });
 
+    it("surfaces automatic start failures and allows retry", async () => {
+        startSession
+            .mockRejectedValueOnce(new Error("会话状态异常"))
+            .mockResolvedValueOnce(undefined);
+
+        const { result } = renderHook(() =>
+            usePracticeSessionLifecycle({
+                sessionId: "session-start",
+                connectionState: "connected",
+                sessionStatus: "preparing",
+                isRecordingRef: { current: false },
+                stopRecording: vi.fn(),
+            }),
+        );
+
+        await waitFor(() => {
+            expect(result.current.lifecycleError).toEqual({
+                action: "start",
+                message: "启动训练失败，可重试。会话状态异常",
+                guidance: "请先确认连接正常，再点击“重试启动”；如果仍失败，可刷新页面后重新进入训练。",
+            });
+        });
+
+        await act(async () => {
+            await result.current.handleStartSession();
+        });
+
+        expect(startSession).toHaveBeenCalledTimes(2);
+        expect(result.current.lifecycleError).toBeNull();
+    });
+
     it("pauses and resumes through REST lifecycle only", async () => {
         const { result, rerender } = renderHook(
             ({ sessionStatus }) =>

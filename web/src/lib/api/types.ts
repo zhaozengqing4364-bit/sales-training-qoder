@@ -156,6 +156,10 @@ export interface Recommendation {
     action_label: string;
     target_path: string;
     score_basis?: string | null;
+    recommendation_kind?: "sales_retry" | "presentation_page_retry" | string | null;
+    scenario_type?: "sales" | "presentation" | string | null;
+    source_session_id?: string | null;
+    focus_page?: number | null;
 }
 
 // Agent types

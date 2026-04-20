@@ -11,6 +11,7 @@ const {
     getPresentationMock,
     usePracticeWebSocketMock,
     useAudioRecorderMock,
+    useContinuousAudioUploaderMock,
     usePracticeRuntimeLockMock,
     usePracticeSessionLifecycleMock,
 } = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const {
     getPresentationMock: vi.fn(),
     usePracticeWebSocketMock: vi.fn(),
     useAudioRecorderMock: vi.fn(),
+    useContinuousAudioUploaderMock: vi.fn(),
     usePracticeRuntimeLockMock: vi.fn(),
     usePracticeSessionLifecycleMock: vi.fn(),
 }));
@@ -74,6 +76,10 @@ vi.mock("@/hooks/use-practice-websocket", () => ({
 
 vi.mock("@/hooks/use-audio-recorder", () => ({
     useAudioRecorder: (...args: unknown[]) => useAudioRecorderMock(...args),
+}));
+
+vi.mock("@/hooks/use-continuous-audio-uploader", () => ({
+    useContinuousAudioUploader: (...args: unknown[]) => useContinuousAudioUploaderMock(...args),
 }));
 
 vi.mock("./runtime-lock", () => ({
@@ -154,12 +160,21 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         usePracticeSessionLifecycleMock.mockReturnValue({
             canToggleLifecycle: true,
             handleEndSession: vi.fn(),
+            handleStartSession: vi.fn(),
             handleTogglePauseResume: vi.fn(),
             isEndingSession: false,
             isSessionPaused: false,
             isSessionTerminal: false,
             lifecycleError: null,
             pendingLifecycleAction: null,
+        });
+        useContinuousAudioUploaderMock.mockReturnValue({
+            isUploading: false,
+            segmentCount: 0,
+            lastError: null,
+            uploadStatus: "idle",
+            startUpload: vi.fn(),
+            stopUpload: vi.fn(),
         });
 
         getAgentWithPersonasMock.mockResolvedValue({
@@ -326,6 +341,119 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByText("暂停失败，请再试一次。", { exact: true })).toBeTruthy();
         expect(screen.getByText("下一步：你可以先继续当前对话，稍后再暂停；如果按钮持续无响应，再结束本次练习后重新进入。", { exact: true })).toBeTruthy();
         expect(screen.getByRole("button", { name: "重试暂停" })).toBeTruthy();
+    });
+
+    it("surfaces automatic start failure with a retry action", async () => {
+        const handleStartSession = vi.fn();
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "connected",
+            isConnected: true,
+            sessionStatus: "preparing",
+            aiState: "idle",
+            messages: [],
+            fuzzyDetections: [],
+            salesStage: null,
+            scores: null,
+            liveSessionSummary: null,
+            actionCard: null,
+            coachHealth: null,
+            error: null,
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+        });
+        usePracticeSessionLifecycleMock.mockReturnValue({
+            canToggleLifecycle: false,
+            handleEndSession: vi.fn(),
+            handleStartSession,
+            handleTogglePauseResume: vi.fn(),
+            isEndingSession: false,
+            isSessionPaused: false,
+            isSessionTerminal: false,
+            lifecycleError: {
+                action: "start",
+                message: "启动训练失败，可重试。",
+                guidance: "请先确认连接正常，再点击“重试启动”；如果仍失败，可刷新页面后重新进入训练。",
+            },
+            pendingLifecycleAction: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.getByText("启动训练失败，可重试。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("下一步：请先确认连接正常，再点击“重试启动”；如果仍失败，可刷新页面后重新进入训练。", { exact: true })).toBeTruthy();
+        const retryButton = screen.getByRole("button", { name: "重试启动" });
+        expect(retryButton).toBeTruthy();
+        await act(async () => {
+            retryButton.click();
+        });
+        expect(handleStartSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows audio evidence upload failure without blocking the live conversation", async () => {
+        const restartUpload = vi.fn();
+        const stopUpload = vi.fn();
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        useAudioRecorderMock.mockReturnValue({
+            isRecording: true,
+            hasPermission: true,
+            error: null,
+            stream: null,
+            startRecording: vi.fn(),
+            stopRecording: vi.fn(),
+            requestPermission: vi.fn(),
+        });
+        useContinuousAudioUploaderMock.mockReturnValue({
+            isUploading: false,
+            segmentCount: 2,
+            lastError: "OSS PUT 失败",
+            uploadStatus: "error",
+            startUpload: restartUpload,
+            stopUpload,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.getByText("录音留痕上传失败", { exact: true })).toBeTruthy();
+        expect(screen.getByText("实时对话仍可继续，但回放或报告的音频证据可能缺失。原因：OSS PUT 失败", { exact: true })).toBeTruthy();
+        expect(screen.getByText("留痕失败", { exact: true })).toBeTruthy();
+        const retryButton = screen.getByRole("button", { name: "重试留痕" });
+        await act(async () => {
+            retryButton.click();
+        });
+        expect(stopUpload).toHaveBeenCalledTimes(1);
+        expect(restartUpload).toHaveBeenCalledTimes(1);
     });
 
     it("shows end-failure guidance with retry and reconnect actions when the interruption needs recovery", async () => {

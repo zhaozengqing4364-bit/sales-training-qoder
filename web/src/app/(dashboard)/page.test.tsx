@@ -172,6 +172,28 @@ describe("HomePage dashboard header", () => {
         expect(retryLinks.some((link) => link.getAttribute("href") === "/agents/agent-1?persona_id=persona-1&focus_intent=%7B%7D")).toBe(true);
     });
 
+    it("surfaces PPT page-level recommendations as a concrete review task", async () => {
+        getRecommendationMock.mockResolvedValue({
+            title: "补练 PPT 第 5 页",
+            reason: "第 5 页有必讲点未覆盖：补充客户案例",
+            action_label: "查看逐页复练任务",
+            target_path: "/practice/session-ppt-1/report?focus=presentation_page&page=5",
+            recommendation_kind: "presentation_page_retry",
+            scenario_type: "presentation",
+            source_session_id: "session-ppt-1",
+            focus_page: 5,
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getAllByText("补练 PPT 第 5 页").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("第 5 页有必讲点未覆盖：补充客户案例").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("推荐来源：上次 PPT 报告的第 5 页缺口与必讲点覆盖。").length).toBeGreaterThan(0);
+        const taskLinks = screen.getAllByRole("link", { name: "查看逐页复练任务" });
+        expect(taskLinks.some((link) => link.getAttribute("href") === "/practice/session-ppt-1/report?focus=presentation_page&page=5")).toBe(true);
+    });
+
     it("falls back to the email prefix and switches to an evening greeting when no name is present", async () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date("2026-04-09T20:00:00+08:00"));

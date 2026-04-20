@@ -15,7 +15,11 @@ from common.db.models import PracticeSession, SessionAudioSegment
 from common.db.schemas import ScenarioType, SessionReport
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
 from common.monitoring.logger import get_logger
-from common.oss.signing import OssConfigError, get_oss_signing_service
+from common.oss.signing import (
+    OssConfigError,
+    OssSigningService,
+    get_oss_signing_service,
+)
 from common.services.practice_session_service import (
     PracticeRetryEntryAssembler,
     PracticeServiceError,
@@ -459,6 +463,43 @@ class PracticeAudioSegmentService:
             "expires_at": presigned.expires_at,
         }
 
+    async def create_pending_audio_segment(
+        self,
+        *,
+        session_id: str,
+        segment_sequence: int,
+        object_key: str,
+        content_type: str,
+    ) -> None:
+        existing = await self.db.execute(
+            select(SessionAudioSegment).where(
+                SessionAudioSegment.session_id == session_id,
+                SessionAudioSegment.segment_sequence == segment_sequence,
+            )
+        )
+        segment = existing.scalar_one_or_none()
+
+        if segment and segment.upload_status == "uploaded":
+            return
+
+        if segment:
+            segment.object_key = object_key
+            segment.content_type = content_type
+            segment.upload_status = "pending"
+            segment.error_message = None
+        else:
+            self.db.add(
+                SessionAudioSegment(
+                    session_id=session_id,
+                    segment_sequence=segment_sequence,
+                    object_key=object_key,
+                    content_type=content_type,
+                    upload_status="pending",
+                )
+            )
+
+        await self.db.commit()
+
     async def register_audio_segment(
         self,
         *,
@@ -469,6 +510,21 @@ class PracticeAudioSegmentService:
         size_bytes: int | None,
         duration_ms: int | None,
     ) -> dict[str, Any]:
+        expected_object_key = OssSigningService.build_object_key(
+            session_id,
+            segment_sequence,
+        )
+        if object_key != expected_object_key:
+            raise PracticeServiceError(
+                "[AUDIO_OBJECT_KEY_MISMATCH]",
+                status_code=422,
+                message="object_key does not match the session segment key",
+                details={
+                    "expected_object_key": expected_object_key,
+                    "segment_sequence": segment_sequence,
+                },
+            )
+
         existing = await self.db.execute(
             select(SessionAudioSegment).where(
                 SessionAudioSegment.session_id == session_id,
@@ -481,6 +537,8 @@ class PracticeAudioSegmentService:
             segment.object_key = object_key
             segment.upload_status = "uploaded"
             segment.error_message = None
+            if not segment.content_type:
+                segment.content_type = "audio/webm"
             if size_bytes is not None:
                 segment.size_bytes = size_bytes
             if duration_ms is not None:

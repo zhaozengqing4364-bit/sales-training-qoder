@@ -176,7 +176,7 @@ class TestGenerateUploadUrl:
         mod._instance = None
 
     @pytest.mark.asyncio
-    async def test_success(self, _client, _auth, _session_id):
+    async def test_success(self, _client, _auth, _session_id, _db):
         with patch.dict(os.environ, _TEST_OSS_ENV, clear=False):
             import common.oss.signing as mod
             mod._instance = None  # reset singleton
@@ -200,6 +200,17 @@ class TestGenerateUploadUrl:
                 assert "expires_at" in data
 
             mod._instance = None
+
+        result = await _db.execute(
+            select(SessionAudioSegment).where(
+                SessionAudioSegment.session_id == _session_id,
+                SessionAudioSegment.segment_sequence == 0,
+            )
+        )
+        segment = result.scalar_one()
+        assert segment.object_key == f"audio/{_session_id}/seg_0000.webm"
+        assert segment.upload_status == "pending"
+        assert segment.content_type == "audio/webm"
 
     @pytest.mark.asyncio
     async def test_session_not_found(self, _client, _auth):
@@ -339,6 +350,31 @@ class TestRegisterAudioSegment:
             headers=_auth,
         )
         assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_rejects_cross_session_object_key(self, _client, _auth, _session_id, _db):
+        other_session_id = str(uuid.uuid4())
+        resp = await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments",
+            json={
+                "segment_sequence": 0,
+                "object_key": f"audio/{other_session_id}/seg_0000.webm",
+                "size_bytes": 123,
+            },
+            headers=_auth,
+        )
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["error"] == "[AUDIO_OBJECT_KEY_MISMATCH]"
+
+        result = await _db.execute(
+            select(SessionAudioSegment).where(
+                SessionAudioSegment.session_id == _session_id,
+                SessionAudioSegment.segment_sequence == 0,
+            )
+        )
+        assert result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
     async def test_session_not_found(self, _client, _auth):

@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from common.analytics.history_service import PROJECTION_SCORE_BASIS, history_service
 from common.auth.service import get_current_user
+from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
@@ -67,6 +68,10 @@ class Recommendation(BaseModel):
     action_label: str
     target_path: str
     score_basis: str | None = None
+    recommendation_kind: str | None = None
+    scenario_type: str | None = None
+    source_session_id: str | None = None
+    focus_page: int | None = None
 
 
 def _encode_focus_intent(focus_intent: dict | None) -> str | None:
@@ -138,6 +143,77 @@ def _build_next_goal_recommendation(session: PracticeSession) -> Recommendation 
         action_label="按目标再练一轮",
         target_path=target_path,
         score_basis=PROJECTION_SCORE_BASIS,
+        recommendation_kind="sales_retry",
+        scenario_type="sales",
+        source_session_id=str(session.session_id),
+    )
+
+
+def _count_page_issues(page_summary: dict) -> int:
+    issue_clusters = page_summary.get("issue_clusters")
+    return len(issue_clusters) if isinstance(issue_clusters, list) else 0
+
+
+def _count_missing_points(page_summary: dict) -> int:
+    missing_points = page_summary.get("missing_required_points")
+    return len(missing_points) if isinstance(missing_points, list) else 0
+
+
+def _build_presentation_page_recommendation(
+    session: PracticeSession,
+    presentation_review: dict | None,
+) -> Recommendation | None:
+    if not isinstance(presentation_review, dict):
+        return None
+
+    page_summaries = presentation_review.get("page_summaries")
+    if not isinstance(page_summaries, list) or not page_summaries:
+        return None
+
+    candidates = [
+        page
+        for page in page_summaries
+        if isinstance(page, dict)
+        and int(page.get("page_number") or 0) > 0
+        and (_count_missing_points(page) > 0 or _count_page_issues(page) > 0)
+    ]
+    if not candidates:
+        return None
+
+    target_page = max(
+        candidates,
+        key=lambda page: (
+            _count_missing_points(page),
+            _count_page_issues(page),
+            -float(page.get("average_score") or 0.0),
+        ),
+    )
+    page_number = int(target_page.get("page_number") or 0)
+    missing_points = target_page.get("missing_required_points")
+    first_missing_point = (
+        str(missing_points[0])
+        if isinstance(missing_points, list) and missing_points
+        else ""
+    )
+    issue_count = _count_page_issues(target_page)
+
+    if first_missing_point:
+        reason = f"第 {page_number} 页有必讲点未覆盖：{first_missing_point}"
+    else:
+        reason = f"第 {page_number} 页集中出现 {issue_count} 个表达或内容问题，建议先复盘这一页。"
+
+    return Recommendation(
+        title=f"补练 PPT 第 {page_number} 页",
+        reason=reason,
+        action_label="查看逐页复练任务",
+        target_path=(
+            f"/practice/{quote(str(session.session_id))}/report"
+            f"?focus=presentation_page&page={page_number}"
+        ),
+        recommendation_kind="presentation_page_retry",
+        scenario_type="presentation",
+        source_session_id=str(session.session_id),
+        focus_page=page_number,
     )
 
 
@@ -440,6 +516,26 @@ async def get_recommendation(
                 target_path="/training"
             )
         elif last_completed:
+            last_scenario = getattr(last_completed, "scenario", None)
+            last_scenario_type = str(
+                getattr(last_scenario, "scenario_type", None) or "sales"
+            ).lower()
+            if last_scenario_type == "presentation":
+                projection_result = await SessionEvidenceService(db).get_projection(
+                    session_id=str(last_completed.session_id),
+                    session=last_completed,
+                    scenario_type="presentation",
+                )
+                if projection_result.is_success:
+                    presentation_recommendation = _build_presentation_page_recommendation(
+                        last_completed,
+                        projection_result.value.presentation_review,
+                    )
+                    if presentation_recommendation is not None:
+                        return success_response(
+                            presentation_recommendation.model_dump()
+                        )
+
             next_goal_recommendation = _build_next_goal_recommendation(last_completed)
             if next_goal_recommendation is not None:
                 return success_response(next_goal_recommendation.model_dump())

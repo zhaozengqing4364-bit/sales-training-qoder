@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
-from common.db.models import Presentation, User
+from common.db.models import Page, Presentation, User
 
 
 async def _create_user(test_db: AsyncSession, *, role: str, name: str) -> User:
@@ -37,7 +37,7 @@ def _auth_headers(user: User) -> dict[str, str]:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_delete_presentation_enforces_owner_or_admin(
+async def test_delete_presentation_enforces_admin_only(
     async_client,
     test_db: AsyncSession,
 ) -> None:
@@ -69,11 +69,6 @@ async def test_delete_presentation_enforces_owner_or_admin(
         headers=_auth_headers(other_user),
     )
     assert forbidden_response.status_code == 403
-    forbidden_body = forbidden_response.json()
-    assert forbidden_body["success"] is False
-    assert forbidden_body["error"] == "[PRESENTATION_DELETE_FORBIDDEN]"
-    assert forbidden_body["message"] == "你没有权限删除该演示文稿。"
-    assert forbidden_body.get("trace_id")
 
     still_exists = (
         await test_db.execute(
@@ -89,7 +84,7 @@ async def test_delete_presentation_enforces_owner_or_admin(
         f"/api/v1/presentations/{presentation_for_uploader.presentation_id}",
         headers=_auth_headers(uploader),
     )
-    assert owner_delete_response.status_code == 204
+    assert owner_delete_response.status_code == 403
 
     admin_delete_response = await async_client.delete(
         f"/api/v1/presentations/{presentation_for_admin.presentation_id}",
@@ -112,5 +107,69 @@ async def test_delete_presentation_enforces_owner_or_admin(
             )
         )
     ).scalar_one_or_none()
-    assert deleted_owner_record is None
+    assert deleted_owner_record is not None
     assert deleted_admin_record is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_presentation_governance_writes_require_admin(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    learner = await _create_user(test_db, role="user", name="Learner User")
+    presentation = Presentation(
+        presentation_id=str(uuid.uuid4()),
+        title="Governed Deck",
+        file_url="/tmp/governed.pptx",
+        status="ready",
+        uploaded_by_admin_id=learner.user_id,
+        total_pages=1,
+    )
+    page = Page(
+        page_id=str(uuid.uuid4()),
+        presentation_id=presentation.presentation_id,
+        page_number=1,
+        ocr_extracted_text="Page text",
+    )
+    test_db.add_all([presentation, page])
+    await test_db.commit()
+
+    talking_point_response = await async_client.post(
+        f"/api/v1/presentations/{presentation.presentation_id}/pages/1/talking-points",
+        headers=_auth_headers(learner),
+        json={"description": "Cover the core value proposition."},
+    )
+    assert talking_point_response.status_code == 403
+
+    forbidden_word_response = await async_client.post(
+        f"/api/v1/presentations/{presentation.presentation_id}/forbidden-words",
+        headers=_auth_headers(learner),
+        json={"phrase": "maybe", "suggested_alternative": "specifically"},
+    )
+    assert forbidden_word_response.status_code == 403
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_presentation_upload_rejects_disguised_file_for_admin(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    admin_user = await _create_user(test_db, role="admin", name="Upload Admin")
+
+    response = await async_client.post(
+        "/api/v1/presentations",
+        headers=_auth_headers(admin_user),
+        data={"title": "Disguised PPT"},
+        files={
+            "file": (
+                "disguised.pptx",
+                b"not a zip payload",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert "PPTX" in response.text

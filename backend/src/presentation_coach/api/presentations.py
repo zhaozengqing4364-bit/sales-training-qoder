@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from common.api.response import error_response
 from common.api.server_error import build_server_error
-from common.auth.service import get_current_user
+from common.auth.service import get_current_admin_user, get_current_user
 from common.db.models import (
     ForbiddenWord,
     Page,
@@ -34,6 +34,7 @@ from common.db.schemas import (
 )
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
+from common.validation.file_validator import presentation_validator
 from presentation_coach.services.ppt_parser import get_ppt_parser
 from support.services.runtime_status_service import RuntimeStatusService
 
@@ -515,7 +516,7 @@ async def list_presentations(
 async def upload_presentation(
     title: str = Form(...),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a new PPT presentation with automatic parsing"""
@@ -523,10 +524,10 @@ async def upload_presentation(
     file_path: Path | None = None
     try:
         file_id = str(uuid.uuid4())
-        source_filename = _normalize_source_filename(file.filename, file_id)
+        content, safe_filename = await presentation_validator.validate(file)
+        source_filename = _normalize_source_filename(safe_filename, file_id)
         file_path = _storage_file_path(file_id, source_filename)
 
-        content = await file.read()
         _atomic_write_bytes(file_path, content)
 
         presentation = Presentation(
@@ -640,7 +641,7 @@ async def replace_presentation(
     presentation_id: str,
     file: UploadFile = File(...),
     title: str | None = Form(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Replace a standard PPT in place while preserving presentation_id."""
@@ -684,9 +685,9 @@ async def replace_presentation(
                 },
             )
 
-        content = await file.read()
+        content, safe_filename = await presentation_validator.validate(file)
         source_filename = _normalize_source_filename(
-            file.filename,
+            safe_filename,
             str(presentation.presentation_id),
         )
         next_version = int(cast(int | None, presentation.version_number) or 0) + 1
@@ -814,7 +815,7 @@ async def get_presentation(
 @router.delete("/presentations/{presentation_id}")
 async def delete_presentation(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a presentation"""
@@ -829,18 +830,7 @@ async def delete_presentation(
             message="演示文稿不存在。",
         )
 
-    is_uploader = presentation.uploaded_by_admin_id == current_user.user_id
-    is_admin = getattr(current_user, "role", "") == "admin"
-    if not is_uploader and not is_admin:
-        return _presentation_error_response(
-            status_code=403,
-            error_code="[PRESENTATION_DELETE_FORBIDDEN]",
-            message="你没有权限删除该演示文稿。",
-            details={
-                "presentation_id": presentation_id,
-                "current_user_id": str(current_user.user_id),
-            },
-        )
+    _ = current_user
 
     await db.delete(presentation)
     await db.commit()
@@ -947,7 +937,7 @@ async def add_talking_point(
     presentation_id: str,
     page_number: int,
     point: RequiredTalkingPointCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Add required talking point to a page"""
@@ -1004,7 +994,7 @@ async def get_forbidden_words(
 async def add_forbidden_word(
     presentation_id: str,
     word: ForbiddenWordCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Add forbidden word to presentation"""

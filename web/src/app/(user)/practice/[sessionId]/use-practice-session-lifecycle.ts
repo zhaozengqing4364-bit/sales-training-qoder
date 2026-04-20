@@ -17,13 +17,23 @@ interface UsePracticeSessionLifecycleParams {
 }
 
 export interface PracticeLifecycleError {
-    action: "pause" | "resume" | "end";
+    action: "start" | "pause" | "resume" | "end";
     message: string;
     guidance: string;
 }
 
-function buildLifecycleError(action: "pause" | "resume" | "end", error: unknown): PracticeLifecycleError {
+function buildLifecycleError(action: PracticeLifecycleError["action"], error: unknown): PracticeLifecycleError {
     const backendMessage = getApiErrorMessage(error).trim();
+
+    if (action === "start") {
+        return {
+            action,
+            message: backendMessage && backendMessage !== "请求失败，请稍后重试。"
+                ? `启动训练失败，可重试。${backendMessage}`
+                : "启动训练失败，可重试。",
+            guidance: "请先确认连接正常，再点击“重试启动”；如果仍失败，可刷新页面后重新进入训练。",
+        };
+    }
 
     if (action === "pause") {
         return {
@@ -80,6 +90,22 @@ export function usePracticeSessionLifecycle({
         setLifecycleError(null);
     }, [sessionId]);
 
+    const handleStartSession = React.useCallback(async () => {
+        hasStartedSessionRef.current = true;
+        setLifecycleError(null);
+
+        try {
+            await api.practice.startSession(sessionId);
+        } catch (error) {
+            hasStartedSessionRef.current = false;
+            debug.warn("[PracticeSession] Failed to start session via REST lifecycle", {
+                sessionId,
+                error,
+            });
+            setLifecycleError(buildLifecycleError("start", error));
+        }
+    }, [sessionId]);
+
     React.useEffect(() => {
         if (connectionState !== "connected") {
             hasStartedSessionRef.current = false;
@@ -90,15 +116,8 @@ export function usePracticeSessionLifecycle({
             return;
         }
 
-        hasStartedSessionRef.current = true;
-
-        void api.practice.startSession(sessionId).catch((error) => {
-            debug.warn("[PracticeSession] Failed to start session via REST lifecycle", {
-                sessionId,
-                error,
-            });
-        });
-    }, [connectionState, sessionId, sessionStatus]);
+        void handleStartSession();
+    }, [connectionState, handleStartSession, sessionStatus]);
 
     React.useEffect(() => {
         if (!isSessionTerminal || hasNavigatedToReportRef.current) {
@@ -170,6 +189,7 @@ export function usePracticeSessionLifecycle({
     return {
         canToggleLifecycle,
         handleEndSession,
+        handleStartSession,
         handleTogglePauseResume,
         isEndingSession,
         isSessionPaused,
