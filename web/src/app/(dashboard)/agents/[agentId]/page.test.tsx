@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TRAINING_PREFERENCES_STORAGE_KEY } from "@/hooks/use-training-preferences";
+
 import AgentPersonaSelectPage from "./page";
 
 const {
@@ -59,6 +61,7 @@ vi.mock("@/components/ui/glass-card", () => ({
 
 describe("AgentPersonaSelectPage", () => {
     beforeEach(() => {
+        localStorage.clear();
         backMock.mockReset();
         pushMock.mockReset();
         getAgentWithPersonasMock.mockReset();
@@ -106,6 +109,12 @@ describe("AgentPersonaSelectPage", () => {
     });
 
     it("preselects the requested sales persona and creates sessions with 80/20 focus intent", async () => {
+        localStorage.setItem(TRAINING_PREFERENCES_STORAGE_KEY, JSON.stringify({
+            agentId: "agent-1",
+            personaId: "persona-cold",
+            presentationId: null,
+            voiceMode: "stepfun_realtime",
+        }));
         const focusIntent = {
             version: "sales_core_combination_v1",
             source_session_id: "sales-core-combination-c7",
@@ -170,6 +179,83 @@ describe("AgentPersonaSelectPage", () => {
         expect(pushMock).toHaveBeenCalledWith(
             "/practice/session-123?agent_id=agent-1&persona_id=persona-strong&scenario_type=sales&voice_mode=stepfun_realtime",
         );
+    });
+
+    it("uses the last local training preference for non-recommended entry points", async () => {
+        localStorage.setItem(TRAINING_PREFERENCES_STORAGE_KEY, JSON.stringify({
+            agentId: "agent-1",
+            personaId: "persona-returning",
+            presentationId: null,
+            voiceMode: "legacy",
+        }));
+        getAgentWithPersonasMock.mockResolvedValueOnce({
+            id: "agent-1",
+            name: "销售陪练",
+            description: "帮助学员练习销售对话。",
+            category: "sales",
+            personas: [
+                {
+                    id: "persona-default",
+                    name: "默认角色",
+                    description: "默认入口角色。",
+                    difficulty: "medium",
+                    is_default: true,
+                },
+                {
+                    id: "persona-returning",
+                    name: "上次角色",
+                    description: "上次选择的对练角色。",
+                    difficulty: "hard",
+                },
+            ],
+        });
+
+        render(<AgentPersonaSelectPage />);
+
+        await screen.findByText("销售陪练");
+        fireEvent.click(screen.getByRole("button", { name: /开始对练/i }));
+
+        await waitFor(() => {
+            expect(createSessionMock).toHaveBeenCalledTimes(1);
+        });
+        expect(createSessionMock).toHaveBeenCalledWith({
+            agent_id: "agent-1",
+            persona_id: "persona-returning",
+            scenario_type: "sales",
+            presentation_id: undefined,
+            voice_mode: "legacy",
+            focus_intent: undefined,
+        });
+        expect(pushMock).toHaveBeenCalledWith(
+            "/practice/session-123?agent_id=agent-1&persona_id=persona-returning&scenario_type=sales&voice_mode=legacy",
+        );
+    });
+
+    it("saves the latest voice, persona, agent, and presentation choices locally", async () => {
+        render(<AgentPersonaSelectPage />);
+
+        await screen.findByText("标准路演教练");
+        await screen.findByText(/当前版本：v3/i);
+
+        fireEvent.click(screen.getByRole("button", { name: /经典模式/i }));
+        fireEvent.click(screen.getByRole("button", { name: /开始对练/i }));
+
+        await waitFor(() => {
+            expect(createSessionMock).toHaveBeenCalledTimes(1);
+        });
+        expect(JSON.parse(localStorage.getItem(TRAINING_PREFERENCES_STORAGE_KEY) || "{}")).toEqual({
+            agentId: "agent-1",
+            personaId: "persona-1",
+            presentationId: "ppt-1",
+            voiceMode: "legacy",
+        });
+        expect(createSessionMock).toHaveBeenCalledWith({
+            agent_id: "agent-1",
+            persona_id: "persona-1",
+            scenario_type: "presentation",
+            presentation_id: "ppt-1",
+            voice_mode: "legacy",
+        });
     });
 
     it("explains that both voice modes use the same sales scoring rubric", async () => {
