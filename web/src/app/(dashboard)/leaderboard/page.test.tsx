@@ -377,11 +377,11 @@ describe("LeaderboardPage", () => {
             });
         });
 
-        expect(await screen.findByText("进步王")).toBeTruthy();
+        expect((await screen.findAllByText("进步王")).length).toBeGreaterThan(0);
         expect(screen.getByText("我的排名 · 进步榜")).toBeTruthy();
         expect(screen.getByText(/进步 \+14/)).toBeTruthy();
         expect(screen.getAllByText(/\+16/).length).toBeGreaterThan(0);
-        expect(screen.getByText(/当前 86 · 3 次样本/)).toBeTruthy();
+        expect(screen.getAllByText(/当前 86 · 3 次样本/).length).toBeGreaterThan(0);
         expect(screen.getByText("同进步幅度邻近用户")).toBeTruthy();
         expect(screen.getByText("基于当前进步榜中与你名次相邻或进步接近的用户生成；只使用已完成且可评估训练。")).toBeTruthy();
         expect(screen.getByText(/与你进步差 1\.0 分/)).toBeTruthy();
@@ -509,7 +509,7 @@ describe("LeaderboardPage", () => {
             });
         });
 
-        expect(await screen.findByText("证据高手")).toBeTruthy();
+        expect((await screen.findAllByText("证据高手")).length).toBeGreaterThan(0);
         expect(screen.getByText("我的排名 · 同目标榜")).toBeTruthy();
         expect(screen.getByText("我的附近排名 · 同目标榜")).toBeTruthy();
         expect(screen.getByText("基于当前同目标榜中与你名次相邻或均分接近的用户生成；只使用已完成且可评估训练。")).toBeTruthy();
