@@ -122,6 +122,8 @@ export interface SessionItem {
     voice_policy_snapshot?: Record<string, unknown> | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
     effectiveness_snapshot?: Record<string, unknown> | null;
+    evaluable?: boolean | null;
+    not_evaluable_reason?: SessionNotEvaluableReason | string | null;
     feedback_summary?: string;
 }
 

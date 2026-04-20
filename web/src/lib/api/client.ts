@@ -390,6 +390,8 @@ type HistoryApiItem = {
     start_time?: string;
     status?: string;
     effectiveness_snapshot?: Record<string, unknown> | null;
+    evaluable?: boolean | null;
+    not_evaluable_reason?: string | null;
     feedback_summary?: string;
     [key: string]: unknown;
 };
@@ -1714,6 +1716,18 @@ export const api = {
                     item.effectiveness_snapshot && typeof item.effectiveness_snapshot === "object"
                         ? item.effectiveness_snapshot
                         : null,
+                evaluable:
+                    typeof item.evaluable === "boolean"
+                        ? item.evaluable
+                        : item.effectiveness_snapshot && typeof item.effectiveness_snapshot === "object" && typeof item.effectiveness_snapshot.evaluable === "boolean"
+                            ? item.effectiveness_snapshot.evaluable
+                            : null,
+                not_evaluable_reason:
+                    typeof item.not_evaluable_reason === "string"
+                        ? item.not_evaluable_reason
+                        : item.effectiveness_snapshot && typeof item.effectiveness_snapshot === "object" && typeof item.effectiveness_snapshot.not_evaluable_reason === "string"
+                            ? item.effectiveness_snapshot.not_evaluable_reason
+                            : null,
                 feedback_summary:
                     typeof item.feedback_summary === "string" ? item.feedback_summary : undefined,
                 runtime_profile_id:

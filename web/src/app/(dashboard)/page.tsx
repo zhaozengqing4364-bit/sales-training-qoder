@@ -16,10 +16,12 @@ import {
     Zap,
     ArrowRight,
     Presentation,
+    Trophy,
+    Flame,
 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api/client";
-import { DashboardStats, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
+import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
     Dialog,
@@ -93,6 +95,90 @@ function getVersionBadge(): string {
 
 function getDisplayName(currentUser: ReturnType<typeof useCurrentUser>["data"]): string {
     return currentUser?.display_name || currentUser?.name || currentUser?.email?.split("@")[0] || "用户";
+}
+
+type MomentumSessionSource = Pick<SessionItem, "start_time" | "status" | "evaluable" | "effectiveness_snapshot">;
+
+type LearnerMomentum = {
+    streakDays: number;
+    weeklyEligibleSessions: number;
+    weeklyGoal: number;
+};
+
+const WEEKLY_GOAL_SESSIONS = 3;
+
+function getLocalDateKey(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function startOfLocalDay(value: Date): Date {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function startOfLocalWeek(value: Date): Date {
+    const start = startOfLocalDay(value);
+    const day = start.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    start.setDate(start.getDate() + mondayOffset);
+    return start;
+}
+
+function isEvaluableMomentumSession(session: MomentumSessionSource): boolean {
+    const snapshotEvaluable = typeof session.effectiveness_snapshot?.evaluable === "boolean"
+        ? session.effectiveness_snapshot.evaluable
+        : null;
+
+    return session.status === "completed" && (session.evaluable === true || snapshotEvaluable === true);
+}
+
+function buildLearnerMomentum(
+    sessions: MomentumSessionSource[],
+    now = new Date(),
+): LearnerMomentum {
+    const eligibleSessions = sessions
+        .filter(isEvaluableMomentumSession)
+        .map((session) => ({ ...session, startedAt: new Date(session.start_time) }))
+        .filter((session) => Number.isFinite(session.startedAt.getTime()));
+
+    const eligibleDateKeys = Array.from(new Set(eligibleSessions.map((session) => getLocalDateKey(session.startedAt))))
+        .sort((left, right) => right.localeCompare(left));
+    let streakDays = 0;
+
+    if (eligibleDateKeys.length > 0) {
+        let cursor = startOfLocalDay(new Date(`${eligibleDateKeys[0]}T00:00:00`));
+        const dateKeySet = new Set(eligibleDateKeys);
+
+        while (dateKeySet.has(getLocalDateKey(cursor))) {
+            streakDays += 1;
+            cursor = new Date(cursor);
+            cursor.setDate(cursor.getDate() - 1);
+        }
+    }
+
+    const weekStart = startOfLocalWeek(now).getTime();
+    const weekEnd = weekStart + 7 * 24 * 60 * 60 * 1000;
+    const weeklyEligibleSessions = eligibleSessions.filter((session) => {
+        const time = session.startedAt.getTime();
+        return time >= weekStart && time < weekEnd;
+    }).length;
+
+    return {
+        streakDays,
+        weeklyEligibleSessions,
+        weeklyGoal: WEEKLY_GOAL_SESSIONS,
+    };
+}
+
+function mapHistorySummaryToMomentumSource(session: HistorySessionSummary): MomentumSessionSource {
+    return {
+        start_time: session.start_time,
+        status: session.status === "completed" ? "completed" : "in_progress",
+        evaluable: session.evaluable,
+        effectiveness_snapshot: session.effectiveness_snapshot,
+    };
 }
 
 function formatInterventionIssueFamily(issueFamily: string): string {
@@ -211,6 +297,7 @@ export default function HomePage() {
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
     const [dashboardDegradedSections, setDashboardDegradedSections] = useState<string[]>([]);
     const [openIntervention, setOpenIntervention] = useState<LearnerOpenIntervention | null>(null);
+    const [momentumSessions, setMomentumSessions] = useState<MomentumSessionSource[]>([]);
     const [dashboardReloadVersion, setDashboardReloadVersion] = useState(0);
 
     const handleDeleteHistory = (id: string) => {
@@ -220,11 +307,12 @@ export default function HomePage() {
     useEffect(() => {
         const loadDashboardData = async () => {
             setIsLoading(true);
-            const [statsResult, recResult, historyResult, interventionResult] = await Promise.allSettled([
+            const [statsResult, recResult, historyResult, interventionResult, momentumHistoryResult] = await Promise.allSettled([
                 api.dashboard.getStats(),
                 api.dashboard.getRecommendation(),
-                api.dashboard.getHistory(),
+                api.dashboard.getHistory(30),
                 api.user.getOpenIntervention(),
+                api.user.getMyHistory({ page: 1, page_size: 50 }),
             ]);
 
             const degradedSections: string[] = [];
@@ -244,13 +332,20 @@ export default function HomePage() {
             }
 
             if (historyResult.status === "fulfilled") {
-                setHistoryItems(historyResult.value);
+                setHistoryItems(historyResult.value.slice(0, 5));
             } else {
                 setHistoryItems([]);
                 degradedSections.push("最近记录");
             }
 
             setOpenIntervention(interventionResult.status === "fulfilled" ? interventionResult.value : null);
+            if (momentumHistoryResult.status === "fulfilled") {
+                setMomentumSessions(momentumHistoryResult.value.sessions.map(mapHistorySummaryToMomentumSource));
+            } else if (historyResult.status === "fulfilled") {
+                setMomentumSessions(historyResult.value);
+            } else {
+                setMomentumSessions([]);
+            }
 
             setDashboardDegradedSections(degradedSections);
             setIsLoading(false);
@@ -285,6 +380,13 @@ export default function HomePage() {
     const isStatsDegraded = dashboardDegradedSections.includes("训练统计");
     const isRecommendationDegraded = dashboardDegradedSections.includes("推荐入口");
     const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
+    const learnerMomentum = buildLearnerMomentum(momentumSessions);
+    const weeklyProgressPercent = Math.min(100, Math.round((learnerMomentum.weeklyEligibleSessions / learnerMomentum.weeklyGoal) * 100));
+    const momentumAchievementCopy = learnerMomentum.weeklyEligibleSessions >= learnerMomentum.weeklyGoal
+        ? "本周轻成就已点亮"
+        : learnerMomentum.streakDays >= 3
+            ? "连续练习节奏稳定"
+            : "完成 3 次可评估训练点亮本周轻成就";
     const displayRecommendation: Recommendation = isRecommendationDegraded
         ? {
             title: "今日复练任务暂不可用",
@@ -566,6 +668,48 @@ export default function HomePage() {
             </section>
 
             <LearnerHelpCard />
+
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <GlassCard className="p-5 border border-orange-100 bg-orange-50/70">
+                    <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-orange-100 text-orange-700 flex items-center justify-center">
+                            <Flame className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-700">连续练习</p>
+                            <h2 className="mt-1 text-2xl font-black text-slate-900">{learnerMomentum.streakDays} 天</h2>
+                        </div>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                        只统计已完成且可评估的训练；证据不足或未完成训练不会计入连续天数。
+                    </p>
+                </GlassCard>
+
+                <GlassCard className="p-5 border border-emerald-100 bg-emerald-50/70">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                                <Trophy className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">本周目标</p>
+                                <h2 className="mt-1 text-2xl font-black text-slate-900">
+                                    {Math.min(learnerMomentum.weeklyEligibleSessions, learnerMomentum.weeklyGoal)}/{learnerMomentum.weeklyGoal}
+                                </h2>
+                            </div>
+                        </div>
+                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-emerald-700">
+                            {momentumAchievementCopy}
+                        </span>
+                    </div>
+                    <div className="mt-4 h-2 rounded-full bg-white/80 overflow-hidden">
+                        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${weeklyProgressPercent}%` }} />
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                        本周目标进度只纳入 completed/evaluable 训练，避免把未完成或证据不足记录包装成成就。
+                    </p>
+                </GlassCard>
+            </section>
 
             {openIntervention && (
                 <section>

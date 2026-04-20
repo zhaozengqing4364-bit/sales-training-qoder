@@ -10,12 +10,14 @@ const {
     getRecommendationMock,
     getHistoryMock,
     getOpenInterventionMock,
+    getMyHistoryMock,
     useCurrentUserMock,
 } = vi.hoisted(() => ({
     getStatsMock: vi.fn(),
     getRecommendationMock: vi.fn(),
     getHistoryMock: vi.fn(),
     getOpenInterventionMock: vi.fn(),
+    getMyHistoryMock: vi.fn(),
     useCurrentUserMock: vi.fn(),
 }));
 
@@ -87,6 +89,7 @@ vi.mock("@/lib/api/client", async () => {
             user: {
                 ...actual.api.user,
                 getOpenIntervention: getOpenInterventionMock,
+                getMyHistory: getMyHistoryMock,
             },
         },
     };
@@ -110,6 +113,7 @@ describe("HomePage dashboard header", () => {
         getRecommendationMock.mockReset();
         getHistoryMock.mockReset();
         getOpenInterventionMock.mockReset();
+        getMyHistoryMock.mockReset();
         useCurrentUserMock.mockReset();
 
         getStatsMock.mockResolvedValue({
@@ -133,6 +137,7 @@ describe("HomePage dashboard header", () => {
         });
         getHistoryMock.mockResolvedValue([]);
         getOpenInterventionMock.mockResolvedValue(null);
+        getMyHistoryMock.mockResolvedValue({ sessions: [], total: 0, page: 1, page_size: 50, total_pages: 0 });
         useCurrentUserMock.mockReturnValue({ data: null });
     });
 
@@ -540,6 +545,109 @@ describe("HomePage dashboard header", () => {
 
         expect(screen.queryByText("主管给你的本周重点")).toBeNull();
         expect(screen.getByText("第一次来，先这样开始")).toBeTruthy();
+    });
+
+    it("shows streak and weekly goal using only completed evaluable practice", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-04-20T10:00:00+08:00"));
+        getMyHistoryMock.mockResolvedValueOnce({
+            sessions: [
+                {
+                    session_id: "eligible-today",
+                    scenario_name: "销售对练",
+                    scenario_type: "sales",
+                    persona_name: null,
+                    agent_name: "销售教练",
+                    start_time: "2026-04-20T01:00:00.000Z",
+                    duration_seconds: 300,
+                    overall_score: 88,
+                    report_status: "completed",
+                    report_generated_at: "2026-04-20T01:10:00.000Z",
+                    status: "completed",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    stage_summary: [],
+                },
+                {
+                    session_id: "eligible-today-second",
+                    scenario_name: "演讲训练",
+                    scenario_type: "presentation",
+                    persona_name: null,
+                    agent_name: "演讲教练",
+                    start_time: "2026-04-20T03:00:00.000Z",
+                    duration_seconds: 420,
+                    overall_score: 86,
+                    report_status: "completed",
+                    report_generated_at: "2026-04-20T03:10:00.000Z",
+                    status: "completed",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    stage_summary: [],
+                },
+                {
+                    session_id: "eligible-yesterday",
+                    scenario_name: "销售对练",
+                    scenario_type: "sales",
+                    persona_name: null,
+                    agent_name: "销售教练",
+                    start_time: "2026-04-19T01:00:00.000Z",
+                    duration_seconds: 300,
+                    overall_score: 82,
+                    report_status: "completed",
+                    report_generated_at: "2026-04-19T01:10:00.000Z",
+                    status: "completed",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    stage_summary: [],
+                },
+                {
+                    session_id: "not-evaluable",
+                    scenario_name: "销售对练",
+                    scenario_type: "sales",
+                    persona_name: null,
+                    agent_name: "销售教练",
+                    start_time: "2026-04-18T01:00:00.000Z",
+                    duration_seconds: 300,
+                    overall_score: 0,
+                    report_status: "completed",
+                    report_generated_at: "2026-04-18T01:10:00.000Z",
+                    status: "completed",
+                    evaluable: false,
+                    not_evaluable_reason: "INSUFFICIENT_TURN_DATA",
+                    stage_summary: [],
+                },
+                {
+                    session_id: "unfinished",
+                    scenario_name: "销售对练",
+                    scenario_type: "sales",
+                    persona_name: null,
+                    agent_name: "销售教练",
+                    start_time: "2026-04-17T01:00:00.000Z",
+                    duration_seconds: 300,
+                    overall_score: 90,
+                    report_status: "completed",
+                    report_generated_at: "2026-04-17T01:10:00.000Z",
+                    status: "in_progress",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    stage_summary: [],
+                },
+            ],
+            total: 5,
+            page: 1,
+            page_size: 50,
+            total_pages: 1,
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("连续练习")).toBeTruthy();
+        expect(screen.getByText("2 天")).toBeTruthy();
+        expect(screen.getByText("本周目标")).toBeTruthy();
+        expect(screen.getByText("2/3")).toBeTruthy();
+        expect(screen.getByText("完成 3 次可评估训练点亮本周轻成就")).toBeTruthy();
+        expect(screen.getByText("本周目标进度只纳入 completed/evaluable 训练，避免把未完成或证据不足记录包装成成就。")).toBeTruthy();
     });
 
 });

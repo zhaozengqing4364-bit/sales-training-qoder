@@ -4,13 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api/client";
-import { TrainingCategory } from "@/lib/api/types";
+import { HistorySessionSummary, TrainingCategory } from "@/lib/api/types";
 import {
     ArrowRight,
     Layers,
     Mic,
     Presentation,
     Sparkles,
+    Target,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -24,6 +25,13 @@ type CategoryViewModel = {
     agentCount: number;
     tags: string[];
     status: "active" | "coming_soon" | "inactive";
+};
+
+type CategoryAbilitySummary = {
+    completionCount: number;
+    recentScore: number | null;
+    focusLabel: string;
+    focusDetail: string;
 };
 
 const CATEGORY_UI_META: Record<
@@ -72,6 +80,68 @@ const FALLBACK_CATEGORIES: TrainingCategory[] = [
     },
 ];
 
+function normalizeCategoryId(value: string): string {
+    return value.replace(/-/g, "_");
+}
+
+function isCompletedEvaluableHistorySession(session: HistorySessionSummary): boolean {
+    return session.status === "completed" && session.evaluable === true && typeof session.overall_score === "number";
+}
+
+function pickAbilityFocus(session: HistorySessionSummary | null, categoryId: string): { label: string; detail: string } {
+    if (!session) {
+        return {
+            label: "待生成能力地图",
+            detail: "完成一次可评估训练后，这里会显示最需要复练的能力。",
+        };
+    }
+
+    const goalType = session.next_goal?.goal_type?.trim();
+    const goalText = session.next_goal?.goal_text?.trim();
+    const issueType = session.main_issue?.issue_type?.trim();
+    const issueText = session.main_issue?.issue_text?.trim();
+    const categoryFallback = categoryId === "presentation" ? "表达结构" : "销售推进";
+
+    if (goalType || goalText) {
+        return {
+            label: `待复练：${goalType || categoryFallback}`,
+            detail: goalText || "下一轮按最近报告目标继续巩固。",
+        };
+    }
+
+    if (issueType || issueText) {
+        return {
+            label: `最弱能力：${issueType || categoryFallback}`,
+            detail: issueText || "最近报告提示这个能力需要优先补强。",
+        };
+    }
+
+    return {
+        label: `最弱能力：${categoryFallback}`,
+        detail: "最近可评估训练已有分数，但报告暂未给出明确问题标签。",
+    };
+}
+
+function buildCategoryAbilitySummary(
+    category: CategoryViewModel,
+    sessions: HistorySessionSummary[],
+): CategoryAbilitySummary {
+    const categoryId = normalizeCategoryId(category.id);
+    const categorySessions = sessions
+        .filter((session) => normalizeCategoryId(session.scenario_type || "sales") === categoryId)
+        .filter(isCompletedEvaluableHistorySession)
+        .sort((left, right) => new Date(right.start_time).getTime() - new Date(left.start_time).getTime());
+    const latestSession = categorySessions[0] ?? null;
+    const focus = pickAbilityFocus(latestSession, categoryId);
+
+    return {
+        completionCount: categorySessions.length,
+        recentScore: latestSession?.overall_score ?? null,
+        focusLabel: focus.label,
+        focusDetail: focus.detail,
+    };
+}
+
 function mapCategoryToViewModel(category: TrainingCategory): CategoryViewModel {
     const categoryId = category.id.replace(/-/g, "_");
     const meta = CATEGORY_UI_META[categoryId] || {
@@ -96,8 +166,10 @@ function mapCategoryToViewModel(category: TrainingCategory): CategoryViewModel {
 
 export default function TrainingCategoriesPage() {
     const [categories, setCategories] = useState<TrainingCategory[]>([]);
+    const [historySessions, setHistorySessions] = useState<HistorySessionSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isDegraded, setIsDegraded] = useState(false);
+    const [isAbilityMapDegraded, setIsAbilityMapDegraded] = useState(false);
     const [reloadVersion, setReloadVersion] = useState(0);
 
     useEffect(() => {
@@ -106,15 +178,33 @@ export default function TrainingCategoriesPage() {
         const loadCategories = async () => {
             setIsLoading(true);
             try {
-                const result = await api.training.getCategories();
+                const [categoryResult, historyResult] = await Promise.allSettled([
+                    api.training.getCategories(),
+                    api.user.getMyHistory({ page: 1, page_size: 50 }),
+                ]);
                 if (!cancelled) {
-                    setCategories(result.length ? result : FALLBACK_CATEGORIES);
-                    setIsDegraded(false);
+                    if (categoryResult.status === "fulfilled") {
+                        setCategories(categoryResult.value.length ? categoryResult.value : FALLBACK_CATEGORIES);
+                        setIsDegraded(false);
+                    } else {
+                        setCategories(FALLBACK_CATEGORIES);
+                        setIsDegraded(true);
+                    }
+
+                    if (historyResult.status === "fulfilled") {
+                        setHistorySessions(historyResult.value.sessions || []);
+                        setIsAbilityMapDegraded(false);
+                    } else {
+                        setHistorySessions([]);
+                        setIsAbilityMapDegraded(true);
+                    }
                 }
             } catch {
                 if (!cancelled) {
                     setCategories(FALLBACK_CATEGORIES);
+                    setHistorySessions([]);
                     setIsDegraded(true);
+                    setIsAbilityMapDegraded(true);
                 }
             } finally {
                 if (!cancelled) {
@@ -131,6 +221,9 @@ export default function TrainingCategoriesPage() {
     }, [reloadVersion]);
 
     const viewModels = useMemo(() => categories.map(mapCategoryToViewModel), [categories]);
+    const categoryAbilitySummaries = useMemo(() => new Map(
+        viewModels.map((category) => [category.id, buildCategoryAbilitySummary(category, historySessions)]),
+    ), [historySessions, viewModels]);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -161,12 +254,20 @@ export default function TrainingCategoriesPage() {
                 </div>
             )}
 
+            {isAbilityMapDegraded && (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                    能力地图暂不可用，不影响进入训练；页面不会用空历史伪装成真实能力结论。
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {isLoading
                     ? Array.from({ length: 2 }).map((_, index) => (
                           <div key={index} className="h-[360px] rounded-3xl bg-white/50 animate-pulse border border-white/60" />
                       ))
                     : viewModels.map((category) => {
+                          const abilitySummary = categoryAbilitySummaries.get(category.id)
+                              ?? buildCategoryAbilitySummary(category, []);
                           const CardContent = (
                               <GlassCard
                                   hoverEffect={category.status === "active"}
@@ -194,6 +295,30 @@ export default function TrainingCategoriesPage() {
                                                   {tag}
                                               </Badge>
                                           ))}
+                                      </div>
+
+                                      <div className="mt-6 rounded-2xl border border-slate-100 bg-white/70 p-4">
+                                          <div className="flex items-center justify-between gap-3">
+                                              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">训练能力地图</p>
+                                              <Target className="w-4 h-4 text-slate-400" />
+                                          </div>
+                                          <div className="mt-3 grid grid-cols-2 gap-3">
+                                              <div>
+                                                  <p className="text-[11px] font-semibold text-slate-500">最近表现</p>
+                                                  <p className="mt-1 text-lg font-black text-slate-900">
+                                                      {abilitySummary.recentScore === null ? "--" : `${abilitySummary.recentScore.toFixed(1)} 分`}
+                                                  </p>
+                                              </div>
+                                              <div>
+                                                  <p className="text-[11px] font-semibold text-slate-500">完成次数</p>
+                                                  <p className="mt-1 text-lg font-black text-slate-900">{abilitySummary.completionCount}</p>
+                                              </div>
+                                          </div>
+                                          <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2">
+                                              <p className="text-xs font-bold text-slate-700">{abilitySummary.focusLabel}</p>
+                                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{abilitySummary.focusDetail}</p>
+                                          </div>
+                                          <p className="mt-2 text-[11px] text-slate-400">只统计 completed/evaluable 训练。</p>
                                       </div>
                                   </div>
 
