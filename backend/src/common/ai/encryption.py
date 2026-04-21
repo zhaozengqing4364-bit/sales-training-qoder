@@ -28,7 +28,7 @@ class KeyEncryption:
 
     To generate a new key:
         from cryptography.fernet import Fernet
-        print(Fernet.generate_key().decode())
+        Fernet.generate_key().decode()
     """
 
     def __init__(self, encryption_key: str | None = None):

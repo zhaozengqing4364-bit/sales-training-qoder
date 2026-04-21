@@ -168,7 +168,7 @@ async def parse_llm_response(
         ... )
         >>> if result.is_success:
         ...     evaluation = result.value
-        >>>     print(evaluation.scores)
+        >>>     logger.info("scores=%s", evaluation.scores)
     """
     try:
         # Parse JSON string if input is str

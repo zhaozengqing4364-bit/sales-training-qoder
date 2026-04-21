@@ -2,16 +2,18 @@
 
 Worker: `worker-1`  
 Task: `9`  
-Scope slice: Q-08/Q-09/Q-10/Q-11/Q-12/Q-13.
+Scope slice: Q-05/Q-08/Q-09/Q-10/Q-11/Q-12/Q-13/Q-29.
 
 ## Implemented
 
+- Q-05: `KnowledgeRetrievalCapability` now runs legacy single-KB fallback searches concurrently after `search_multiple` failure while preserving per-KB error isolation.
 - Q-08: `CapabilityRunner` now degrades `ConnectionError`/`OSError` to failure results and propagates `asyncio.CancelledError` instead of disguising cancellation.
 - Q-09: `BaseWebSocketHandler` now initializes a bounded message queue with validated env defaults and emits a backpressure message when full.
 - Q-10: `BaseSalesHandler` no longer catches `asyncio.CancelledError` in mixed runtime exception handlers; cancellation is raised after cleanup-safe contexts.
 - Q-11: `BaseSalesHandler._launch_response_task` uses an async lock around response task check/assignment and clears the active task under the same lock.
 - Q-12: `PresentationWebSocketHandler._get_active_websocket` no longer falls back to another session when the current session is missing.
 - Q-13: PCM TTS duration calculation now uses sample rate, bytes-per-sample, and channels via shared helper and validated defaults.
+- Q-29: source `print(` usages in Lane A/backend source surfaces were replaced with logger usage or doc examples that do not call print.
 
 ## Config / Governance
 
@@ -29,9 +31,9 @@ No business rules, scoring thresholds, recommendation logic, badges, notificatio
 
 - PASS: `git diff --check`
 - PASS: `cd backend && ruff check src/common/config.py src/common/audio/pcm_duration.py src/agent/capabilities/runner.py src/common/websocket/base_handler.py src/sales_bot/websocket/base_sales_handler.py src/sales_bot/websocket/components/tts_component.py src/presentation_coach/websocket/presentation_handler.py tests/unit/test_capability_base.py tests/unit/test_websocket_handler.py tests/unit/test_presentation_handler_persistence.py tests/unit/sales_bot/websocket/test_tts_component_duration.py tests/unit/sales_bot/websocket/test_base_sales_handler_safety.py --quiet`
-- PASS: `cd backend && DATABASE_URL='sqlite+aiosqlite:///./test_lane_a.db' PYTHONPATH=src .venv-test/bin/python -m pytest tests/unit/test_capability_base.py tests/unit/test_websocket_handler.py tests/unit/test_presentation_handler_persistence.py tests/unit/sales_bot/websocket/test_tts_component_duration.py tests/unit/sales_bot/websocket/test_base_sales_handler_safety.py -q --no-cov` → `103 passed, 1 warning`
+- PASS: `cd backend && DATABASE_URL='sqlite+aiosqlite:///./test_lane_a.db' PYTHONPATH=src .venv-test/bin/python -m pytest tests/unit/test_knowledge_retrieval.py tests/unit/test_capability_base.py tests/unit/test_websocket_handler.py tests/unit/test_presentation_handler_persistence.py tests/unit/sales_bot/websocket/test_tts_component_duration.py tests/unit/sales_bot/websocket/test_base_sales_handler_safety.py -q --no-cov` → `115 passed, 1 warning`
 - PASS: `cd backend && .venv-test/bin/python -m py_compile <modified source/test files>`
 
 ## Deferred Lane A Items
 
-Remaining Lane A items Q-03/Q-04/Q-05/Q-07/Q-23/Q-24/Q-25/Q-29/Q-30 are not claimed complete in this slice and need follow-up targeted tasks/tests.
+Remaining Lane A items Q-03/Q-04/Q-07/Q-23/Q-24/Q-25/Q-30 are not claimed complete in this slice and need follow-up targeted tasks/tests.

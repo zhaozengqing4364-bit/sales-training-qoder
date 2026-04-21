@@ -9,12 +9,14 @@ Lane A owns Q-03/Q-04/Q-05/Q-07/Q-08/Q-09/Q-10/Q-11/Q-12/Q-13/Q-23/Q-24/Q-25/Q-2
 
 This slice starts with high-safety, low-cross-lane runtime fixes:
 
+- Q-05 parallel single-KB fallback after `search_multiple` failure.
 - Q-08 capability runner infrastructure exception degradation and cancellation propagation.
 - Q-09 bounded base websocket message queue with configured backpressure.
 - Q-10 sales websocket `CancelledError` propagation.
 - Q-11 response pipeline task launch lock.
 - Q-12 PPT websocket session isolation.
 - Q-13 PCM TTS duration formula with validated defaults.
+- Q-29 remove source `print(` usage from backend source surfaces.
 
 ## Configuration / Governance Notes
 
@@ -30,6 +32,7 @@ These are runtime safety/resource settings. Future admin UI work should expose t
 
 Targeted tests first:
 
+- `backend/tests/unit/test_knowledge_retrieval.py`
 - `backend/tests/unit/test_capability_base.py`
 - `backend/tests/unit/test_websocket_handler.py`
 - `backend/tests/unit/test_presentation_handler_persistence.py`

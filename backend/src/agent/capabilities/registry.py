@@ -197,7 +197,7 @@ class CapabilityRegistry:
         Example:
             all_caps = CapabilityRegistry.get_all()
             for cap_id, cap_class in all_caps.items():
-                print(f"{cap_id}: {cap_class.name}")
+                logger.info("%s: %s", cap_id, cap_class.name)
         """
         with cls._lock:
             return cls._capabilities.copy()
@@ -249,7 +249,7 @@ class CapabilityRegistry:
         Example:
             all_metadata = CapabilityRegistry.list_metadata()
             for meta in all_metadata:
-                print(f"{meta['name']}: {meta['description']}")
+                logger.info("%s: %s", meta["name"], meta["description"])
         """
         with cls._lock:
             return [
