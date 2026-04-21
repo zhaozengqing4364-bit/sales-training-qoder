@@ -8,6 +8,7 @@ import packageJson from "../../../package.json";
 const {
     getStatsMock,
     getRecommendationMock,
+    getGrowthMock,
     getHistoryMock,
     getOpenInterventionMock,
     getMyHistoryMock,
@@ -15,6 +16,7 @@ const {
 } = vi.hoisted(() => ({
     getStatsMock: vi.fn(),
     getRecommendationMock: vi.fn(),
+    getGrowthMock: vi.fn(),
     getHistoryMock: vi.fn(),
     getOpenInterventionMock: vi.fn(),
     getMyHistoryMock: vi.fn(),
@@ -86,6 +88,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.dashboard,
                 getStats: getStatsMock,
                 getRecommendation: getRecommendationMock,
+                getGrowth: getGrowthMock,
                 getHistory: getHistoryMock,
             },
             user: {
@@ -113,6 +116,7 @@ describe("HomePage dashboard header", () => {
         vi.useRealTimers();
         getStatsMock.mockReset();
         getRecommendationMock.mockReset();
+        getGrowthMock.mockReset();
         getHistoryMock.mockReset();
         getOpenInterventionMock.mockReset();
         getMyHistoryMock.mockReset();
@@ -138,6 +142,11 @@ describe("HomePage dashboard header", () => {
             target_path: "/training",
         });
         getHistoryMock.mockResolvedValue([]);
+        getGrowthMock.mockResolvedValue({
+            achievements: { unlocked: [] },
+            notifications: { items: [], unread_count: 0 },
+            goal: null,
+        });
         getOpenInterventionMock.mockResolvedValue(null);
         getMyHistoryMock.mockResolvedValue({ sessions: [], total: 0, page: 1, page_size: 50, total_pages: 0 });
         useCurrentUserMock.mockReturnValue({ data: null });
