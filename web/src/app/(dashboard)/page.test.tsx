@@ -227,6 +227,58 @@ describe("HomePage dashboard header", () => {
         expect(taskLinks.some((link) => link.getAttribute("href") === "/practice/session-ppt-1/report?focus=presentation_page&page=5")).toBe(true);
     });
 
+    it("renders badge wall, goal progress, and AI coach notifications from growth dashboard", async () => {
+        getGrowthMock.mockResolvedValue({
+            achievements: {
+                unlocked: [
+                    {
+                        achievement_id: "achievement-1",
+                        code: "first_evaluable_session",
+                        name: "首次有效训练",
+                        description: "完成第一场可评估训练。",
+                        icon_key: "trophy",
+                        unlocked_at: "2026-04-21T06:00:00Z",
+                    },
+                ],
+            },
+            notifications: {
+                unread_count: 1,
+                items: [
+                    {
+                        notification_id: "notification-1",
+                        type: "ai_coach",
+                        title: "AI 教练建议：先练产品知识与证据",
+                        content: "最近一次可评估训练中，产品知识与证据为 52 分。",
+                        action_label: "按建议训练",
+                        action_path: "/practice/session-1/report",
+                        is_read: false,
+                    },
+                ],
+            },
+            goal: {
+                goal_id: "goal-1",
+                goal_type: "weekly_sessions",
+                period: "weekly",
+                target_count: 3,
+                current_progress: 2,
+                progress_ratio: 2 / 3,
+                start_date: "2026-04-20",
+                end_date: "2026-04-26",
+                is_active: true,
+            },
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("徽章墙")).toBeTruthy();
+        expect(screen.getByText("首次有效训练")).toBeTruthy();
+        expect(screen.getByText("2/3")).toBeTruthy();
+        expect(screen.getByText("通知与 AI 教练")).toBeTruthy();
+        expect(screen.getByText("AI 教练建议：先练产品知识与证据")).toBeTruthy();
+        expect(getGrowthMock).toHaveBeenCalled();
+    });
+
     it("falls back to the email prefix and switches to an evening greeting when no name is present", async () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date("2026-04-09T20:00:00+08:00"));
