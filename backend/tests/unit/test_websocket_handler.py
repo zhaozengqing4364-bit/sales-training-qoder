@@ -159,6 +159,50 @@ class TestBaseWebSocketHandler:
         assert handler.manager is not None
         assert handler.message_queue is None
         assert handler.running is False
+        assert handler.MAX_MESSAGE_QUEUE_SIZE == 300
+
+    async def test_enqueue_message_drops_newest_when_queue_full(
+        self,
+        handler,
+        mock_websocket,
+    ):
+        """Verify base handler queue is bounded and emits backpressure."""
+        handler.MAX_MESSAGE_QUEUE_SIZE = 1
+        handler.BACKPRESSURE_POLICY = "drop_newest"
+        handler.message_queue = asyncio.Queue(maxsize=1)
+        handler.session_id = "test-session"
+
+        first = await handler._enqueue_message({"type": "first"}, mock_websocket)
+        second = await handler._enqueue_message({"type": "second"}, mock_websocket)
+
+        assert first is True
+        assert second is False
+        assert handler.message_queue.qsize() == 1
+        assert handler.message_queue.get_nowait()["type"] == "first"
+        backpressure_sent = any(
+            call[0][0].get("type") == "backpressure"
+            and call[0][0]["data"]["reason"] == "message_queue_full"
+            for call in mock_websocket.send_json.call_args_list
+        )
+        assert backpressure_sent
+
+    async def test_enqueue_message_can_drop_oldest_when_configured(
+        self,
+        handler,
+        mock_websocket,
+    ):
+        """Verify configured drop_oldest policy keeps the newest message."""
+        handler.MAX_MESSAGE_QUEUE_SIZE = 1
+        handler.BACKPRESSURE_POLICY = "drop_oldest"
+        handler.message_queue = asyncio.Queue(maxsize=1)
+        handler.session_id = "test-session"
+
+        await handler._enqueue_message({"type": "first"}, mock_websocket)
+        accepted = await handler._enqueue_message({"type": "second"}, mock_websocket)
+
+        assert accepted is False
+        assert handler.message_queue.qsize() == 1
+        assert handler.message_queue.get_nowait()["type"] == "second"
 
     async def test_handle_connection_accepts_websocket(
         self, handler, mock_websocket

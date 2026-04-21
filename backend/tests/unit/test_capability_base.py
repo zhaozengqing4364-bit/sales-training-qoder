@@ -10,9 +10,10 @@ Tests for:
 References:
 - Requirements: R6, R7, R8 (Capability modules)
 - Design: Section 1-3 (AgentContext, CapabilityRegistry, CapabilityRunner)
-"""
-import pytest
+import asyncio
 from typing import Any
+
+import pytest
 
 from agent.capabilities.base import BaseCapability, CapabilityResult
 from agent.capabilities.registry import CapabilityRegistry
@@ -537,6 +538,53 @@ class TestCapabilityRunner:
         assert results[0].fallback == "[CAPABILITY_RUNTIME_ERROR]"
 
     @pytest.mark.asyncio
+    async def test_run_all_converts_connection_errors(self, sample_context):
+        """Should degrade infrastructure failures without breaking the pipeline."""
+
+        @CapabilityRegistry.register
+        class ConnectionFailingCapability(BaseCapability):
+            capability_id = "connection_failing_cap"
+
+            async def execute(self, context, input_data):
+                raise ConnectionError("knowledge service disconnected")
+
+        runner = CapabilityRunner(
+            agent_config={
+                "capabilities_config": {
+                    "connection_failing_cap": {"enabled": True},
+                }
+            }
+        )
+
+        results = await runner.run_all(sample_context, "test")
+
+        assert len(results) == 1
+        assert results[0].success is False
+        assert results[0].fallback == "[CAPABILITY_CONNECTION_ERROR]"
+
+    @pytest.mark.asyncio
+    async def test_run_all_propagates_cancelled_error(self, sample_context):
+        """Should not disguise task cancellation as a capability failure."""
+
+        @CapabilityRegistry.register
+        class CancelledCapability(BaseCapability):
+            capability_id = "cancelled_cap"
+
+            async def execute(self, context, input_data):
+                raise asyncio.CancelledError()
+
+        runner = CapabilityRunner(
+            agent_config={
+                "capabilities_config": {
+                    "cancelled_cap": {"enabled": True},
+                }
+            }
+        )
+
+        with pytest.raises(asyncio.CancelledError):
+            await runner.run_all(sample_context, "test")
+
+    @pytest.mark.asyncio
     async def test_run_all_empty_returns_empty_list(self, sample_context):
         """Should return empty list when no capabilities."""
         runner = CapabilityRunner(agent_config={})
@@ -564,6 +612,31 @@ class TestCapabilityRunner:
         result = await runner.run_one("run_one_cap", sample_context, "test")
         assert result.success is True
         assert result.data["ran"] is True
+
+    @pytest.mark.asyncio
+    async def test_run_one_converts_os_errors(self, sample_context):
+        """Should return a failure result for expected OS/service failures."""
+
+        @CapabilityRegistry.register
+        class OSErrorCapability(BaseCapability):
+            capability_id = "os_error_cap"
+
+            async def execute(self, context, input_data):
+                raise OSError("socket reset")
+
+        runner = CapabilityRunner(
+            agent_config={
+                "capabilities_config": {
+                    "os_error_cap": {"enabled": True},
+                }
+            }
+        )
+
+        result = await runner.run_one("os_error_cap", sample_context, "test")
+
+        assert result is not None
+        assert result.success is False
+        assert result.fallback == "[CAPABILITY_ERROR]"
 
     @pytest.mark.asyncio
     async def test_run_one_returns_none_for_unknown(self, sample_context):

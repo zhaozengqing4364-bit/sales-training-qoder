@@ -55,6 +55,21 @@ def handler() -> PresentationWebSocketHandler:
     instance.manager.send_json = original_send_json
 
 
+def test_get_active_websocket_does_not_fallback_to_other_session(
+    handler: PresentationWebSocketHandler,
+):
+    """A missing current session must not reuse another session websocket."""
+    other_websocket = Mock()
+    own_websocket = Mock()
+    handler.session_id = "current-session"
+    handler.websocket = own_websocket
+    handler.manager.active_connections["presentation"]["other-session"] = (
+        other_websocket
+    )
+
+    assert handler._get_active_websocket() is None
+
+
 @pytest.mark.asyncio
 async def test_save_conversation_message_tracks_turns(
     handler: PresentationWebSocketHandler,
