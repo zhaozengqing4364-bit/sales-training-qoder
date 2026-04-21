@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ const AUTH_ERROR_MESSAGE_MAP: Record<string, string> = {
     "wecom-user-disabled": "当前企业微信账号已被停用，请联系管理员。",
     "wecom-callback-failed": "企业微信登录失败，请稍后重试。",
 };
+const REMEMBER_EMAIL_STORAGE_KEY = "qoder.login.rememberEmail.v1";
 
 function buildApiUrl(path: string): string {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -93,6 +94,8 @@ export default function LoginPage() {
     const router = useRouter();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [rememberEmail, setRememberEmail] = useState(false);
     const [isPasswordLoginLoading, setIsPasswordLoginLoading] = useState(false);
     const [isDevLoginLoading, setIsDevLoginLoading] = useState(false);
     const [error, setError] = useState("");
@@ -104,6 +107,12 @@ export default function LoginPage() {
 
     useEffect(() => {
         let active = true;
+        const rememberedEmail = window.localStorage.getItem(REMEMBER_EMAIL_STORAGE_KEY);
+        if (rememberedEmail) {
+            setEmail(rememberedEmail);
+            setRememberEmail(true);
+        }
+
         const authErrorMessage = getAuthErrorMessageFromLocation();
         if (authErrorMessage) {
             setError(authErrorMessage);
@@ -163,6 +172,11 @@ export default function LoginPage() {
 
         try {
             await api.auth.login({ email, password });
+            if (rememberEmail && normalizedEmail) {
+                window.localStorage.setItem(REMEMBER_EMAIL_STORAGE_KEY, normalizedEmail);
+            } else {
+                window.localStorage.removeItem(REMEMBER_EMAIL_STORAGE_KEY);
+            }
             router.push("/");
         } catch (err: unknown) {
             setError(getApiErrorMessage(err));
@@ -302,17 +316,40 @@ export default function LoginPage() {
                                 </Link>
                             </div>
                             <label className="sr-only" htmlFor="login-password">密码</label>
-                            <Input
-                                id="login-password"
-                                type="password"
-                                name="password"
-                                autoComplete="current-password"
-                                placeholder="••••••••"
-                                className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
+                            <div className="relative">
+                                <Input
+                                    id="login-password"
+                                    type={showPassword ? "text" : "password"}
+                                    name="password"
+                                    autoComplete="current-password"
+                                    placeholder="••••••••"
+                                    className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full pl-6 pr-14"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                                    aria-pressed={showPassword}
+                                    onClick={() => setShowPassword((current) => !current)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                                >
+                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-2xl border border-slate-200/70 bg-white/50 p-3">
+                            <input
+                                id="remember-email"
+                                type="checkbox"
+                                checked={rememberEmail}
+                                onChange={(event) => setRememberEmail(event.target.checked)}
+                                className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
                             />
+                            <label htmlFor="remember-email" className="text-sm text-slate-600">
+                                记住邮箱，下次自动填入；登录有效期仍由后端会话配置决定。
+                            </label>
                         </div>
                         <Button
                             type="submit"

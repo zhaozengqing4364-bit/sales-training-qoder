@@ -64,6 +64,7 @@ describe("LoginPage", () => {
         loginMock.mockReset();
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
+        window.localStorage.clear();
 
         const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = String(input);
@@ -114,6 +115,25 @@ describe("LoginPage", () => {
 
         expect(screen.getByLabelText("邮箱地址")).toBeTruthy();
         expect(screen.getByLabelText("密码")).toBeTruthy();
+        expect(screen.getByLabelText(/记住邮箱/)).toBeTruthy();
+    });
+
+    it("lets learners reveal and hide the password without changing the value", () => {
+        render(<LoginPage />);
+
+        const passwordInput = screen.getByLabelText("密码") as HTMLInputElement;
+        fireEvent.change(passwordInput, {
+            target: { value: "secret-password" },
+        });
+
+        expect(passwordInput.type).toBe("password");
+
+        fireEvent.click(screen.getByRole("button", { name: "显示密码" }));
+        expect(passwordInput.type).toBe("text");
+        expect(passwordInput.value).toBe("secret-password");
+
+        fireEvent.click(screen.getByRole("button", { name: "隐藏密码" }));
+        expect(passwordInput.type).toBe("password");
     });
 
     it("preserves a typed email when handing off to forgot-password", () => {
@@ -155,6 +175,47 @@ describe("LoginPage", () => {
 
         expect(setItemSpy).not.toHaveBeenCalledWith("token", expect.any(String));
         expect(setItemSpy).not.toHaveBeenCalledWith("user", expect.any(String));
+    });
+
+    it("stores only the remembered email preference when the checkbox is selected", async () => {
+        loginMock.mockResolvedValue({
+            token: "legacy-token",
+            user: {
+                id: "user-1",
+                name: "管理员",
+                email: "admin@test.com",
+                role: "admin",
+            },
+        });
+
+        render(<LoginPage />);
+
+        fireEvent.change(screen.getByLabelText("邮箱地址"), {
+            target: { value: " admin@test.com " },
+        });
+        fireEvent.change(screen.getByLabelText("密码"), {
+            target: { value: "password" },
+        });
+        fireEvent.click(screen.getByLabelText(/记住邮箱/));
+        fireEvent.click(screen.getByRole("button", { name: /^登录/ }));
+
+        await waitFor(() => {
+            expect(pushMock).toHaveBeenCalledWith("/");
+        });
+
+        expect(window.localStorage.getItem("qoder.login.rememberEmail.v1")).toBe("admin@test.com");
+        expect(window.localStorage.getItem("token")).toBeNull();
+        expect(window.localStorage.getItem("user")).toBeNull();
+    });
+
+    it("hydrates the remembered email without pretending to extend the backend session", () => {
+        window.localStorage.setItem("qoder.login.rememberEmail.v1", "remembered@test.com");
+
+        render(<LoginPage />);
+
+        expect(screen.getByLabelText("邮箱地址")).toHaveValue("remembered@test.com");
+        expect(screen.getByLabelText(/记住邮箱/)).toBeChecked();
+        expect(screen.getByText(/登录有效期仍由后端会话配置决定/)).toBeTruthy();
     });
 
     it("uses the explicit dev-login fallback and redirects home", async () => {
