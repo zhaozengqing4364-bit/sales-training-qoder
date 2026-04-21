@@ -30,6 +30,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.analytics.report_trends import ReportTrendService
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.conversation.models import ConversationMessage
@@ -68,6 +69,7 @@ from common.effectiveness import (
     evaluate_effectiveness_snapshot,
 )
 from common.monitoring.logger import get_logger, get_trace_id
+from common.recommendations.next_practice import NextPracticeRecommendationService
 from common.services.practice_service import (
     PracticeRuntimeDescriptorService,
     PracticeServiceError,
@@ -939,6 +941,64 @@ async def end_session(
         )
 
     return success_response(report)
+
+
+@router.get("/practice/sessions/{session_id}/report-trends")
+async def get_session_report_trends(
+    session_id: str,
+    limit: int = Query(5, ge=1, le=12),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get recent same-scenario evaluable score trends for a report page."""
+
+    result = await ReportTrendService().get_session_report_trends(
+        db=db,
+        requester=current_user,
+        session_id=session_id,
+        limit=limit,
+    )
+    if not result.is_success:
+        error_text = result.fallback or "[REPORT_TRENDS_FAILED]"
+        if "[SESSION_NOT_FOUND]" in error_text:
+            return error_response("[SESSION_NOT_FOUND]", status_code=404)
+        if "[ACCESS_DENIED]" in error_text:
+            return error_response("[ACCESS_DENIED]", status_code=403)
+        return build_server_error(
+            "[REPORT_TRENDS_FAILED]",
+            message="报告趋势暂时无法读取",
+            session_id=session_id,
+        )
+    return success_response(result.value)
+
+
+@router.get("/practice/sessions/{session_id}/next-recommendation")
+async def get_session_next_recommendation(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get ruleset-backed next-practice recommendation for one completed report."""
+
+    result = await db.execute(
+        select(PracticeSession)
+        .options(selectinload(PracticeSession.scenario))
+        .where(PracticeSession.session_id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        return error_response("[SESSION_NOT_FOUND]", status_code=404)
+    if not _can_read_session(session, current_user):
+        return error_response("[ACCESS_DENIED]", status_code=403)
+
+    recommendation_result = NextPracticeRecommendationService().build_for_session(session)
+    if not recommendation_result.is_success:
+        return build_server_error(
+            "[NEXT_PRACTICE_RECOMMENDATION_FAILED]",
+            message="下一轮推荐暂时无法读取",
+            session_id=session_id,
+        )
+    return success_response(recommendation_result.value)
 
 
 @router.get("/practice/sessions/{session_id}/report")
