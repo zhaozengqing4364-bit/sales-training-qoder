@@ -6,7 +6,6 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { MobileQuickActions } from "@/components/layout/mobile-quick-actions";
-import { SwipeableItem } from "@/components/ui/swipeable-item";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import {
@@ -301,10 +300,6 @@ export default function HomePage() {
     const [openIntervention, setOpenIntervention] = useState<LearnerOpenIntervention | null>(null);
     const [momentumSessions, setMomentumSessions] = useState<MomentumSessionSource[]>([]);
     const [dashboardReloadVersion, setDashboardReloadVersion] = useState(0);
-
-    const handleDeleteHistory = (id: string) => {
-        setHistoryItems((prev) => prev.filter((item) => item.id !== id));
-    };
 
     useEffect(() => {
         let cancelled = false;
@@ -888,7 +883,7 @@ export default function HomePage() {
                     ) : (
                         resolvedHistoryItems.map(({ item, historyActions }) => {
                             return (
-                                <SwipeableItem key={item.id} onDelete={() => handleDeleteHistory(item.id)}>
+                                <div key={item.id}>
                                     <GlassCard className="p-0 flex flex-col hover:shadow-lg transition-all bg-white border-none shadow-sm ring-1 ring-slate-100">
                                         <div className="p-5 flex justify-between items-start pb-4 gap-4">
                                             <div className="flex gap-4">
@@ -951,7 +946,7 @@ export default function HomePage() {
                                             </div>
                                         </div>
                                     </GlassCard>
-                                </SwipeableItem>
+                                </div>
                             );
                         })
                     )}
