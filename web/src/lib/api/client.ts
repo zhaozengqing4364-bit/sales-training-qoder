@@ -7,6 +7,7 @@
 
 import {
     DashboardStats,
+    GrowthDashboardResponse,
     SessionItem,
     PracticeSessionRuntime,
     Recommendation,
@@ -1731,6 +1732,17 @@ export const api = {
 
         getRecommendation: async () => {
             return apiFetch<Recommendation>("/recommendations/latest");
+        },
+
+        getGrowth: async () => {
+            return apiFetch<GrowthDashboardResponse>("/growth/dashboard");
+        },
+
+        markNotificationRead: async (notificationId: string) => {
+            return apiFetch<GrowthDashboardResponse["notifications"]["items"][number]>(
+                `/growth/notifications/${notificationId}/read`,
+                { method: "POST" },
+            );
         },
 
         getHistory: async (limit = 5, scenarioType?: "sales" | "presentation") => {
