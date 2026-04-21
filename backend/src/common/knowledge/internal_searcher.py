@@ -7,12 +7,6 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-from common.knowledge_engine.compat import (
-    attach_rollout_diagnostics,
-    execute_knowledge_answer_engine,
-    resolve_knowledge_answer_rollout_mode,
-)
-from common.knowledge_engine.config_repo import KnowledgeAnswerConfigRepository
 from common.knowledge.retrieval_helpers import (
     build_answerability_assessment,
     build_kb_not_ready_payload,
@@ -29,6 +23,12 @@ from common.knowledge.retrieval_helpers import (
     resolve_retrieval_params,
     transform_search_rows,
 )
+from common.knowledge_engine.compat import (
+    attach_rollout_diagnostics,
+    execute_knowledge_answer_engine,
+    resolve_knowledge_answer_rollout_mode,
+)
+from common.knowledge_engine.config_repo import KnowledgeAnswerConfigRepository
 
 
 async def search_internal_knowledge(

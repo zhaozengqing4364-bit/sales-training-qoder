@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from common.db.session import AsyncSessionLocal
-from common.knowledge.service import KnowledgeService
 from common.knowledge.internal_searcher import search_internal_knowledge
 from common.knowledge.retrieval_helpers import (
     is_product_overview_query,
     resolve_grounding_context_limits,
 )
+from common.knowledge.service import KnowledgeService
 
 
 @dataclass(frozen=True)
