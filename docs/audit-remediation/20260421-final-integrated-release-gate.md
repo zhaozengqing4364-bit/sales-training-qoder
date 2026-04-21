@@ -228,3 +228,31 @@ Fresh verification after the fix:
 | Whitespace | `git diff --check` | PASS |
 
 Remaining known follow-up is unchanged: full `cd backend && ruff check src tests --quiet` still fails on historical broad test lint debt outside the current final-gate blocker fix scope.
+
+---
+
+## 9. Final closeout verification PASS
+
+- Follow-up mode: `$ralph`
+- Scope: final closeout verification only; no new feature work.
+- Verification timestamp: 2026-04-21 16:54 CST / 08:54 UTC
+- Result: **PASS for the requested final closeout command set**
+
+### 9.1 Fresh command evidence
+
+| # | Command | Result |
+| --- | --- | --- |
+| 1 | `git status --short --branch` | PASS: clean worktree on `main...origin/main [ahead 154]` before report update |
+| 2 | `git diff --check` | PASS |
+| 3 | `cd backend && ruff check src tests --quiet` | PASS |
+| 4 | `cd backend && .venv-test/bin/python -m pytest tests/integration/test_presentation_flow.py tests/integration/test_presentation_report_flow.py -q --no-cov` | PASS: 6 passed, 2 warnings |
+| 5 | `cd backend && .venv-test/bin/python -m pytest tests/unit/common/test_auth_transport_matrix.py tests/unit/test_history_service_evidence_projection.py tests/unit/test_session_runtime_authority.py tests/unit/test_stepfun_realtime_persistence.py tests/contract/test_audio_audit_contract.py tests/contract/test_presentations.py tests/unit/test_capability_base.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_websocket_handler.py tests/unit/test_knowledge_retrieval.py tests/unit/test_presentation_ai_policy_service.py -q --no-cov` | PASS: 154 passed, 1 warning |
+| 6 | `pnpm --dir web exec tsc --noEmit --pretty false` | PASS |
+| 7 | `pnpm --dir web exec eslint 'src/app/(dashboard)/page.tsx' 'src/app/(dashboard)/training/page.tsx' 'src/app/(user)/practice/[sessionId]/page.tsx' 'src/app/(user)/practice/[sessionId]/report/page.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.tsx' 'src/app/admin/page.tsx' 'src/app/(auth)/login/page.tsx' 'src/app/(user)/practice/[sessionId]/use-recording-state-machine.ts' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts' 'src/hooks/use-practice-websocket.ts' 'src/app/(user)/practice/[sessionId]/use-practice-recording-hotkeys.ts' --quiet` | PASS |
+| 8 | `pnpm --dir web exec vitest run 'src/app/(dashboard)/page.test.tsx' 'src/app/(dashboard)/training/page.test.tsx' 'src/app/(user)/practice/[sessionId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/page.test.tsx' 'src/app/(auth)/login/page.test.tsx' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/app/(user)/practice/[sessionId]/use-practice-recording-hotkeys.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/websocket/transport.test.ts' --reporter=dot` | PASS: 12 files, 172 tests |
+
+### 9.2 Notes
+
+- Web Vitest still logs expected test-time warnings for React `act(...)` guidance in login tests and an intentional replay completion-gated error path. These warnings do not fail the suite.
+- Backend integration presentation flow still emits expected warnings from ChromaDB/Python 3.14 deprecation and a known SQLAlchemy concurrent-delete warning inside the race proof test. These warnings do not fail the suite.
+- This closeout verification did not add product features and did not change business logic.
