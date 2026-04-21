@@ -22,7 +22,7 @@ Command log: `docs/audit-remediation/20260421-phase-0-command-log.txt`
 | Worktree | `/Users/zhaozengqing/github/销售训练qoder/.omx/team/read-omx-context-full-audit-de/worktrees/worker-1` |
 | Initial HEAD before Phase 0 docs | `2fb85a4f1cd717b6a2eaf5bd0964f06503a41d89` |
 | HEAD observed during baseline command run | `2ffe1c499710cf7bc684927f8f17bd7574ee32d2` (`omx(team): auto-checkpoint worker-1 [1]`) |
-| Final Phase 0 commit | `6db62bb` (`Establish audit remediation control before implementation`) |
+| Final Phase 0 commit | The commit containing this file (`Establish audit remediation control before implementation`). |
 | `git status --short --branch` during baseline | `## HEAD (no branch)` plus the command log file untracked at that moment |
 | `web/node_modules` | missing |
 | root `node_modules` | missing |
