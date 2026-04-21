@@ -523,8 +523,10 @@ async def _load_active_config_snapshot(
                 lambda sync_session: KnowledgeAnswerConfigRepository(sync_session).get_active_config()
             )
             if asyncio.iscoroutine(maybe_config):
-                return await cast(Awaitable[Any], maybe_config)
-            return maybe_config
+                return await cast(
+                    Awaitable[KnowledgeAnswerConfigSnapshot | None], maybe_config
+                )
+            return cast(KnowledgeAnswerConfigSnapshot | None, maybe_config)
         return KnowledgeAnswerConfigRepository(db).get_active_config()
     except Exception:
         return None
