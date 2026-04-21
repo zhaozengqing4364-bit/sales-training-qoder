@@ -97,6 +97,21 @@ def _env_choice(name: str, default: str, allowed: set[str]) -> str:
     return value if value in allowed else default
 
 
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Read a bounded integer env config with safe fallback."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, value))
+
+
+def _env_choice(name: str, default: str, allowed: set[str]) -> str:
+    """Read an allowlisted string env config with safe fallback."""
+    value = os.getenv(name, default).strip().lower()
+    return value if value in allowed else default
+
+
 class Settings:
     """Application settings"""
 
@@ -212,6 +227,36 @@ class Settings:
         maximum=4,
     )
     TTS_CHANNELS: int = _env_int("TTS_CHANNELS", 1, minimum=1, maximum=2)
+    PRESENTATION_FEEDBACK_SESSION_TTL_SECONDS: int = _env_int(
+        "PRESENTATION_FEEDBACK_SESSION_TTL_SECONDS",
+        86400,
+        minimum=60,
+        maximum=604800,
+    )
+    PRESENTATION_FEEDBACK_MAX_SESSIONS: int = _env_int(
+        "PRESENTATION_FEEDBACK_MAX_SESSIONS",
+        10000,
+        minimum=100,
+        maximum=100000,
+    )
+    CACHE_MEMORY_MAX_ENTRIES: int = _env_int(
+        "CACHE_MEMORY_MAX_ENTRIES",
+        10000,
+        minimum=100,
+        maximum=1000000,
+    )
+    SALES_BOT_SESSION_TTL_SECONDS: int = _env_int(
+        "SALES_BOT_SESSION_TTL_SECONDS",
+        3600,
+        minimum=60,
+        maximum=86400,
+    )
+    SALES_BOT_MAX_ACTIVE_SESSIONS: int = _env_int(
+        "SALES_BOT_MAX_ACTIVE_SESSIONS",
+        1000,
+        minimum=1,
+        maximum=100000,
+    )
 
     # Service Preloading
     PRELOAD_SERVICES: bool = os.getenv("PRELOAD_SERVICES", "false").lower() == "true"

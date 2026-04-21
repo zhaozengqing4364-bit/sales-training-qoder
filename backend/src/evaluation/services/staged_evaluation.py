@@ -52,6 +52,29 @@ class StageConfig:
     description: str
     evaluation_prompt_type: str
     triggers: list[Any] = field(default_factory=list)
+    start_turn: int | None = None
+    end_turn: int | None = None
+
+
+def _coerce_turn_index(value: Any, total_turns: int) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0, min(total_turns, parsed))
+
+
+def _message_matches_stage(message: dict[str, Any], stage_markers: set[Any]) -> bool:
+    for key in ("stage_number", "stage", "stage_id", "stage_name", "current_stage"):
+        value = message.get(key)
+        if value in stage_markers or str(value) in stage_markers:
+            return True
+    metadata = message.get("metadata")
+    if isinstance(metadata, dict):
+        return _message_matches_stage(metadata, stage_markers)
+    return False
 
 
 class StagedEvaluationService:
@@ -100,9 +123,11 @@ class StagedEvaluationService:
             Result with stage evaluation
         """
         try:
-            # Get stage-specific conversation segment
-            start_turn = stage_config.stage_number * 2  # Simplified logic
-            end_turn = len(conversation_history)
+            # Get stage-specific conversation segment from real boundaries.
+            start_turn, end_turn = self._resolve_stage_turn_bounds(
+                stage_config,
+                conversation_history,
+            )
 
             stage_conversation = conversation_history[start_turn:end_turn]
 
@@ -204,6 +229,37 @@ class StagedEvaluationService:
 
         except Exception as e:
             return Result.fail(f"[STAGE_EVALUATION_ERROR:{str(e)}]")
+
+    @staticmethod
+    def _resolve_stage_turn_bounds(
+        stage_config: StageConfig,
+        conversation_history: list[dict],
+    ) -> tuple[int, int]:
+        """Resolve stage bounds from explicit config or message stage metadata."""
+        total_turns = len(conversation_history)
+        explicit_start = _coerce_turn_index(stage_config.start_turn, total_turns)
+        explicit_end = _coerce_turn_index(stage_config.end_turn, total_turns)
+        if explicit_start is not None or explicit_end is not None:
+            start_turn = explicit_start if explicit_start is not None else 0
+            end_turn = explicit_end if explicit_end is not None else total_turns
+            if end_turn < start_turn:
+                end_turn = start_turn
+            return start_turn, end_turn
+
+        stage_markers = {
+            stage_config.stage_number,
+            str(stage_config.stage_number),
+            stage_config.name,
+        }
+        matching_indices = [
+            index
+            for index, message in enumerate(conversation_history)
+            if _message_matches_stage(message, stage_markers)
+        ]
+        if matching_indices:
+            return min(matching_indices), max(matching_indices) + 1
+
+        return 0, total_turns
 
     async def check_triggers(
         self,
