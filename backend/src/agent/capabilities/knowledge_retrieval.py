@@ -9,6 +9,7 @@ References:
 """
 from __future__ import annotations
 
+import asyncio
 import inspect
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -198,9 +199,7 @@ class KnowledgeRetrievalCapability(BaseCapability):
         if not callable(search_single):
             return []
 
-        merged_results: list[dict[str, Any]] = []
-
-        for kb_id in kb_ids:
+        async def search_one(kb_id: str) -> list[dict[str, Any]]:
             try:
                 single_raw = search_single(
                     kb_id=kb_id,
@@ -212,7 +211,7 @@ class KnowledgeRetrievalCapability(BaseCapability):
                     single_raw = await single_raw
 
                 normalized, _ = self._normalize_search_response(single_raw)
-                merged_results.extend(normalized)
+                return normalized
             except Exception as e:
                 logger.warning(
                     "search failed for knowledge base",
@@ -220,6 +219,23 @@ class KnowledgeRetrievalCapability(BaseCapability):
                     knowledge_base_id=kb_id,
                     error=str(e),
                 )
+                return []
+
+        merged_results: list[dict[str, Any]] = []
+        search_results = await asyncio.gather(
+            *(search_one(kb_id) for kb_id in kb_ids),
+            return_exceptions=True,
+        )
+        for kb_id, result in zip(kb_ids, search_results, strict=False):
+            if isinstance(result, Exception):
+                logger.warning(
+                    "search failed for knowledge base",
+                    session_id=context.session_id,
+                    knowledge_base_id=kb_id,
+                    error=str(result),
+                )
+                continue
+            merged_results.extend(result)
 
         merged_results.sort(key=lambda x: x.get("score", 0), reverse=True)
         return merged_results[: self._top_k]
