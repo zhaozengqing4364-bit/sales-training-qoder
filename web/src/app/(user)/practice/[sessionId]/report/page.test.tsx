@@ -7,6 +7,8 @@ import { ApiRequestError } from "@/lib/api/client";
 const {
     pushMock,
     getReportMock,
+    getReportTrendsMock,
+    getNextRecommendationMock,
     getReplayMock,
     getKnowledgeCheckMock,
     getHighlightsMock,
@@ -17,6 +19,8 @@ const {
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     getReportMock: vi.fn(),
+    getReportTrendsMock: vi.fn(),
+    getNextRecommendationMock: vi.fn(),
     getReplayMock: vi.fn(),
     getKnowledgeCheckMock: vi.fn(),
     getHighlightsMock: vi.fn(),
@@ -75,6 +79,8 @@ vi.mock("@/lib/api/client", async () => {
             sessions: {
                 ...actual.api.sessions,
                 getReport: getReportMock,
+                getReportTrends: getReportTrendsMock,
+                getNextRecommendation: getNextRecommendationMock,
                 getReplay: getReplayMock,
                 getKnowledgeCheck: getKnowledgeCheckMock,
                 getHighlights: getHighlightsMock,
@@ -382,6 +388,8 @@ describe("ReportPage", () => {
     beforeEach(() => {
         pushMock.mockReset();
         getReportMock.mockReset();
+        getReportTrendsMock.mockReset();
+        getNextRecommendationMock.mockReset();
         getReplayMock.mockReset();
         getKnowledgeCheckMock.mockReset();
         getHighlightsMock.mockReset();
@@ -392,6 +400,57 @@ describe("ReportPage", () => {
         localStorage.clear();
 
         getReplayMock.mockResolvedValue(baseReplayData);
+        getReportTrendsMock.mockResolvedValue({
+            session_id: "session-1",
+            scenario_type: "sales",
+            score_basis: "session_evidence_projection_evaluable_only",
+            points: [
+                {
+                    session_id: "session-0",
+                    date: "2026-03-20T00:00:00Z",
+                    scenario_type: "sales",
+                    logic_score: 60,
+                    accuracy_score: 62,
+                    completeness_score: 64,
+                    overall_score: 62,
+                    is_current: false,
+                },
+                {
+                    session_id: "session-1",
+                    date: "2026-03-21T00:00:00Z",
+                    scenario_type: "sales",
+                    logic_score: 68,
+                    accuracy_score: 74,
+                    completeness_score: 70,
+                    overall_score: 72,
+                    is_current: true,
+                },
+            ],
+            delta_vs_previous: {
+                logic_score: 8,
+                accuracy_score: 12,
+                completeness_score: 6,
+                overall_score: 10,
+            },
+            explanation: null,
+        });
+        getNextRecommendationMock.mockResolvedValue({
+            title: "补强产品知识与证据表达",
+            reason: "上次可评估训练中「产品知识与证据」为 55 分，低于 60 分阈值。",
+            action_label: "练产品知识专项",
+            target_path: "/training/sales?focus=product_knowledge",
+            recommendation_kind: "next_practice_ruleset",
+            scenario_type: "sales",
+            source_session_id: "session-1",
+            rule_version: "growth_recommendation_rules_v1",
+            explanation: "上次可评估训练中「产品知识与证据」为 55 分，低于 60 分阈值。",
+            evidence_summary: {
+                weak_dimension: "product_knowledge",
+                score_field: "accuracy_score",
+                score: 55,
+                threshold: 60,
+            },
+        });
         getKnowledgeCheckMock.mockRejectedValue(new Error("knowledge check unavailable"));
         getHighlightsMock.mockResolvedValue({
             highlights: [],
@@ -400,6 +459,25 @@ describe("ReportPage", () => {
         });
         createSessionMock.mockResolvedValue({ session_id: "retry-1" });
         getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
+    });
+
+    it("renders evaluable-only trend comparison and ruleset recommendation on report", async () => {
+        getReportMock.mockResolvedValue(baseReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("同场景趋势对比")).toBeTruthy();
+        expect(await screen.findByText("较上次 +10.0 分")).toBeTruthy();
+        expect(await screen.findByText("推荐下次练什么")).toBeTruthy();
+        expect(await screen.findByText("补强产品知识与证据表达")).toBeTruthy();
+        expect(getReportTrendsMock).toHaveBeenCalledWith("session-1", 5);
+        expect(getNextRecommendationMock).toHaveBeenCalledWith("session-1");
     });
 
     it("renders learner-facing degraded audio wording when partial audio is reported", async () => {

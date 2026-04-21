@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api/client";
-import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
+import { DashboardStats, GrowthDashboardResponse, HistorySessionSummary, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
     Dialog,
@@ -79,6 +79,12 @@ const DEFAULT_RECOMMENDATION: Recommendation = {
     reason: "欢迎使用训练系统，开始一次练习来提升您的技能吧！",
     action_label: "开始训练",
     target_path: "/training",
+};
+
+const DEFAULT_GROWTH: GrowthDashboardResponse = {
+    achievements: { unlocked: [] },
+    notifications: { items: [], unread_count: 0 },
+    goal: null,
 };
 
 function getGreeting(): string {
@@ -296,6 +302,7 @@ export default function HomePage() {
     const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
     const [recommendation, setRecommendation] = useState<Recommendation>(DEFAULT_RECOMMENDATION);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
+    const [growth, setGrowth] = useState<GrowthDashboardResponse>(DEFAULT_GROWTH);
     const [dashboardDegradedSections, setDashboardDegradedSections] = useState<string[]>([]);
     const [openIntervention, setOpenIntervention] = useState<LearnerOpenIntervention | null>(null);
     const [momentumSessions, setMomentumSessions] = useState<MomentumSessionSource[]>([]);
@@ -320,6 +327,7 @@ export default function HomePage() {
             setIsStatsLoading(true);
             setIsRecommendationLoading(true);
             setIsHistoryLoading(true);
+            setGrowth(DEFAULT_GROWTH);
 
             void api.dashboard.getStats()
                 .then((value) => {
@@ -349,6 +357,18 @@ export default function HomePage() {
                 })
                 .finally(() => {
                     if (!cancelled) setIsRecommendationLoading(false);
+                });
+
+            void api.dashboard.getGrowth()
+                .then((value) => {
+                    if (cancelled) return;
+                    setGrowth(value);
+                    markSection("成长中心", false);
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setGrowth(DEFAULT_GROWTH);
+                    markSection("成长中心", true);
                 });
 
             void api.dashboard.getHistory(30)
@@ -415,6 +435,7 @@ export default function HomePage() {
     const hasHistory = historyItems.length > 0;
     const isStatsDegraded = dashboardDegradedSections.includes("训练统计");
     const isRecommendationDegraded = dashboardDegradedSections.includes("推荐入口");
+    const isGrowthDegraded = dashboardDegradedSections.includes("成长中心");
     const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
     const isStatsUnavailable = isStatsLoading || isStatsDegraded;
     const isRecommendationUnavailable = isRecommendationLoading || isRecommendationDegraded;
@@ -851,6 +872,91 @@ export default function HomePage() {
                     <p className="text-xs text-slate-500 px-4">
                         {isStatsUnavailable ? (isStatsLoading ? "训练统计仍在加载，暂不展示默认 0 分。" : "训练统计接口失败时不展示默认 0 分，避免误导为真实成绩。") : formatScoreBasisCopy(stats)}
                     </p>
+                </GlassCard>
+            </section>
+
+            <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <GlassCard className="p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Trophy className="h-5 w-5 text-amber-500" />
+                        <h2 className="text-lg font-bold text-slate-900">徽章墙</h2>
+                    </div>
+                    {growth.achievements.unlocked.length > 0 ? (
+                        <div className="space-y-3">
+                            {growth.achievements.unlocked.slice(0, 3).map((achievement) => (
+                                <div key={achievement.code} className="rounded-2xl border border-amber-100 bg-amber-50/60 p-3">
+                                    <p className="text-sm font-bold text-amber-900">{achievement.name}</p>
+                                    <p className="mt-1 text-xs text-amber-700">{achievement.description}</p>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500">
+                            {isGrowthDegraded ? "徽章暂不可用，完成训练仍会保留原始记录。" : "完成可评估训练后解锁徽章。"}
+                        </p>
+                    )}
+                </GlassCard>
+
+                <GlassCard className="p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Flame className="h-5 w-5 text-rose-500" />
+                        <h2 className="text-lg font-bold text-slate-900">练习目标</h2>
+                    </div>
+                    {growth.goal ? (
+                        <>
+                            <div className="flex items-end justify-between gap-3">
+                                <div>
+                                    <p className="text-3xl font-black text-slate-900">{growth.goal.current_progress}/{growth.goal.target_count}</p>
+                                    <p className="text-xs text-slate-500 mt-1">{growth.goal.period === "weekly" ? "本周期目标" : "本月目标"}</p>
+                                </div>
+                                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                    {Math.round(growth.goal.progress_ratio * 100)}%
+                                </span>
+                            </div>
+                            <div className="mt-4 h-2 rounded-full bg-slate-100">
+                                <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.min(100, Math.round(growth.goal.progress_ratio * 100))}%` }} />
+                            </div>
+                        </>
+                    ) : (
+                        <p className="text-sm text-slate-500">
+                            {isGrowthDegraded ? "目标暂不可用。" : "设置练习目标后，这里会显示完成进度。"}
+                        </p>
+                    )}
+                </GlassCard>
+
+                <GlassCard className="p-6">
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                        <div className="flex items-center gap-2">
+                            <Zap className="h-5 w-5 text-blue-500" />
+                            <h2 className="text-lg font-bold text-slate-900">通知与 AI 教练</h2>
+                        </div>
+                        {growth.notifications.unread_count > 0 && (
+                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                {growth.notifications.unread_count}
+                            </span>
+                        )}
+                    </div>
+                    {growth.notifications.items.length > 0 ? (
+                        <div className="space-y-3">
+                            {growth.notifications.items.slice(0, 2).map((notification) => (
+                                <div key={notification.notification_id} className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+                                    <p className="text-sm font-bold text-blue-950">{notification.title}</p>
+                                    <p className="mt-1 text-xs leading-5 text-blue-800">{notification.content}</p>
+                                    {notification.action_path && notification.action_label && (
+                                        <Link href={notification.action_path}>
+                                            <Button variant="ghost" size="sm" className="mt-2 h-auto rounded-full px-0 text-blue-700">
+                                                {notification.action_label}
+                                            </Button>
+                                        </Link>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500">
+                            {isGrowthDegraded ? "通知暂不可用。" : "暂无未读通知；AI 教练只会基于真实可评估训练触达。"}
+                        </p>
+                    )}
                 </GlassCard>
             </section>
 

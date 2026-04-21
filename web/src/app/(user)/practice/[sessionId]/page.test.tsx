@@ -9,6 +9,9 @@ const {
     replaceMock,
     getAgentWithPersonasMock,
     getPresentationMock,
+    getPresentationProgressMock,
+    savePresentationProgressMock,
+    sendMessageMock,
     usePracticeWebSocketMock,
     useAudioRecorderMock,
     useContinuousAudioUploaderMock,
@@ -20,6 +23,9 @@ const {
     replaceMock: vi.fn(),
     getAgentWithPersonasMock: vi.fn(),
     getPresentationMock: vi.fn(),
+    getPresentationProgressMock: vi.fn(),
+    savePresentationProgressMock: vi.fn(),
+    sendMessageMock: vi.fn(),
     usePracticeWebSocketMock: vi.fn(),
     useAudioRecorderMock: vi.fn(),
     useContinuousAudioUploaderMock: vi.fn(),
@@ -104,6 +110,8 @@ vi.mock("@/lib/api/client", () => ({
         },
         presentations: {
             get: (...args: unknown[]) => getPresentationMock(...args),
+            getProgress: (...args: unknown[]) => getPresentationProgressMock(...args),
+            saveProgress: (...args: unknown[]) => savePresentationProgressMock(...args),
         },
     },
 }));
@@ -219,6 +227,12 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
             total_pages: 12,
             pages: [],
         });
+        getPresentationProgressMock.mockResolvedValue(null);
+        savePresentationProgressMock.mockResolvedValue({
+            presentation_id: "presentation-1",
+            last_page_number: 1,
+        });
+        sendMessageMock.mockReset();
     });
 
     afterEach(() => {
@@ -258,6 +272,36 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByText("修正动作：先复述痛点，再补一个客户案例。")).toBeTruthy();
         expect(screen.getByText("下一轮先把 ROI 证据讲清楚。")).toBeTruthy();
         expect(screen.getByText("判定条件：客户能复述价值和 ROI 逻辑。")).toBeTruthy();
+    });
+
+    it("offers a backend-saved PPT resume prompt and sends page_change", async () => {
+        searchParamsMock.current = "scenario_type=presentation&presentation_id=presentation-1&voice_mode=legacy";
+        getPresentationProgressMock.mockResolvedValue({
+            source: "user_presentation_progress",
+            presentation_id: "presentation-1",
+            user_id: "user-1",
+            last_page_number: 6,
+            last_practice_at: "2026-04-21T06:00:00Z",
+        });
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "presentation",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: undefined,
+            lockedPersonaId: undefined,
+            lockedPresentationId: "presentation-1",
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(await screen.findByText("PPT 续练提示")).toBeTruthy();
+        const continueButton = screen.getByRole("button", { name: "继续第 6 页" });
+        fireEvent.click(continueButton);
+
+        expect(sendMessageMock).toHaveBeenCalledWith("page_change", { page_number: 6 });
+        expect(getPresentationProgressMock).toHaveBeenCalledWith("presentation-1");
     });
 
     it("renders a minimal sales preflight brief before the learner starts speaking", async () => {
@@ -402,7 +446,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
             startSpeaking: vi.fn(),
             sendInterrupt: vi.fn(),
             unlockAudio: vi.fn(),
-            sendMessage: vi.fn(),
+            sendMessage: sendMessageMock,
             connect: vi.fn(),
         });
 

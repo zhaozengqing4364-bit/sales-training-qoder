@@ -47,7 +47,7 @@ from agent.api.agent_personas import admin_router as agent_persona_admin_router
 from agent.api.agents import admin_router as agent_admin_router
 from agent.api.agents import user_router as agent_user_router
 from agent.api.personas import admin_router as persona_admin_router
-from common.api import analytics, dashboard, practice, training, users
+from common.api import analytics, dashboard, growth, practice, training, users
 from common.api.knowledge_debug import router as knowledge_debug_router
 from common.auth.api import error_response, get_auth_config_diagnostics
 from common.auth.api import router as auth_router
@@ -471,6 +471,12 @@ app.include_router(
 )
 app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["dashboard"])
+app.include_router(
+    growth.router,
+    prefix="/api/v1",
+    tags=["growth"],
+    dependencies=[Depends(require_role(["admin", "user"]))],
+)
 app.include_router(
     training.router,
     prefix="/api/v1",

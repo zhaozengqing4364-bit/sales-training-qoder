@@ -32,6 +32,56 @@ export interface DashboardStats {
     not_evaluable_sessions?: number;
 }
 
+export interface GrowthAchievement {
+    achievement_id: string;
+    code: string;
+    name: string;
+    description: string;
+    icon_key: string;
+    unlocked_at?: string | null;
+    evidence?: Record<string, unknown> | null;
+}
+
+export interface GrowthNotification {
+    notification_id: string;
+    type: "system" | "tip" | "reminder" | "achievement" | "ai_coach" | string;
+    title: string;
+    content: string;
+    action_label?: string | null;
+    action_path?: string | null;
+    source?: string | null;
+    evidence?: Record<string, unknown> | null;
+    is_read: boolean;
+    created_at?: string | null;
+}
+
+export interface GrowthGoal {
+    goal_id: string;
+    goal_type: "weekly_sessions" | "monthly_presentations" | string;
+    period: "weekly" | "monthly" | string;
+    target_count: number;
+    current_progress: number;
+    progress_ratio: number;
+    start_date: string;
+    end_date: string;
+    is_active: boolean;
+}
+
+export interface GrowthDashboardResponse {
+    achievements: {
+        unlocked: GrowthAchievement[];
+    };
+    notifications: {
+        items: GrowthNotification[];
+        unread_count: number;
+    };
+    goal: GrowthGoal | null;
+    rules?: {
+        achievement_ruleset_version?: string | null;
+        ai_coach_ruleset_version?: string | null;
+    };
+}
+
 export interface VoicePolicyRuntimeBinding {
     industry_pack_strategy: string;
     customer_pressure_source: string;
@@ -161,6 +211,11 @@ export interface Recommendation {
     recommendation_kind?: "sales_retry" | "presentation_page_retry" | string | null;
     scenario_type?: "sales" | "presentation" | string | null;
     source_session_id?: string | null;
+    rule_version?: string | null;
+    ruleset_source?: string | null;
+    explanation?: string | null;
+    weak_dimension?: string | null;
+    evidence_summary?: Record<string, unknown> | null;
     focus_page?: number | null;
     due_reason?: string | null;
     focus?: string | null;
@@ -2070,6 +2125,41 @@ export interface PracticeSessionReport extends SessionEvidenceContract {
     presentation_review?: PresentationReview | null;
     retry_entry?: RetryEntry | null;
     audio_audit?: AudioAuditPayload | null;
+}
+
+export interface ReportTrendPoint {
+    session_id: string;
+    date: string;
+    scenario_type: "sales" | "presentation" | string;
+    logic_score: number;
+    accuracy_score: number;
+    completeness_score: number;
+    overall_score: number;
+    is_current: boolean;
+}
+
+export interface ReportTrendsResponse {
+    session_id: string;
+    scenario_type: "sales" | "presentation" | string;
+    score_basis: string;
+    points: ReportTrendPoint[];
+    delta_vs_previous: {
+        logic_score: number;
+        accuracy_score: number;
+        completeness_score: number;
+        overall_score: number;
+    } | null;
+    explanation?: string | null;
+}
+
+export interface PresentationProgress {
+    source: "user_presentation_progress" | string;
+    user_id: string;
+    presentation_id: string;
+    last_page_number: number;
+    last_session_id?: string | null;
+    last_practice_at?: string | null;
+    updated_at?: string | null;
 }
 
 export interface HistorySessionSummary extends SessionEvidenceContract {

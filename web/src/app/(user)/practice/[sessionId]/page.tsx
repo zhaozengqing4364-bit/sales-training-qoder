@@ -489,6 +489,65 @@ export default function PracticeSessionPage() {
         };
     }, [lockedAgentId, lockedPersonaId, lockedPresentationId, presentationPageFocus, scenarioType]);
 
+    React.useEffect(() => {
+        if (scenarioType !== "presentation" || !lockedPresentationId || presentationPageFocus) {
+            setPresentationProgress(null);
+            return;
+        }
+
+        let isCancelled = false;
+        api.presentations.getProgress(lockedPresentationId)
+            .then((progress) => {
+                if (isCancelled) {
+                    return;
+                }
+                const lastPageNumber = Number(progress?.last_page_number || 0);
+                setPresentationProgress(lastPageNumber > 1 ? {
+                    last_page_number: lastPageNumber,
+                    last_practice_at: progress?.last_practice_at ?? null,
+                } : null);
+            })
+            .catch((error) => {
+                if (isCancelled) {
+                    return;
+                }
+                setPresentationProgress(null);
+                debug.warn("[Practice] Presentation progress unavailable", {
+                    sessionId,
+                    presentationId: lockedPresentationId,
+                    error,
+                });
+            });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [lockedPresentationId, presentationPageFocus, scenarioType, sessionId]);
+
+    const currentPresentationPage = currentSlide?.current_page || null;
+    React.useEffect(() => {
+        if (
+            scenarioType !== "presentation"
+            || !lockedPresentationId
+            || !currentPresentationPage
+            || currentPresentationPage < 1
+        ) {
+            return;
+        }
+
+        void api.presentations.saveProgress(lockedPresentationId, {
+            last_page_number: currentPresentationPage,
+            session_id: sessionId,
+        }).catch((error) => {
+            debug.warn("[Practice] Presentation progress save failed", {
+                sessionId,
+                presentationId: lockedPresentationId,
+                pageNumber: currentPresentationPage,
+                error,
+            });
+        });
+    }, [currentPresentationPage, lockedPresentationId, scenarioType, sessionId]);
+
     // AI 是否正在忙碌（说话或思考中），用于一来一回交互模式
     const aiIsBusy = isPlayingAudio || aiState === "thinking" || aiState === "speaking";
     const userMessageCount = React.useMemo(
@@ -1040,6 +1099,34 @@ export default function PracticeSessionPage() {
                                     )}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {presentationProgress && !isSessionTerminal && (
+                    <div className="mx-4 mt-4 rounded-2xl border border-purple-100 bg-purple-50/80 p-4 text-purple-900 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold text-purple-700">PPT 续练提示</p>
+                                <p className="mt-1 text-sm font-bold">
+                                    上次练到第 {presentationProgress.last_page_number} 页，要从这里继续吗？
+                                </p>
+                                <p className="mt-1 text-xs text-purple-800">
+                                    进度来自后端保存的当前账号记录，换设备也会同步。
+                                </p>
+                            </div>
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => {
+                                    sendMessage("page_change", {
+                                        page_number: presentationProgress.last_page_number,
+                                    });
+                                    setPresentationProgress(null);
+                                }}
+                            >
+                                继续第 {presentationProgress.last_page_number} 页
+                            </Button>
                         </div>
                     </div>
                 )}

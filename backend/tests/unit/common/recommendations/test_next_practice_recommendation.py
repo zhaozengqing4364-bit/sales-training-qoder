@@ -1,5 +1,3 @@
-import pytest
-
 from common.db.models import PracticeSession, Scenario, SessionStatus
 from common.recommendations.next_practice import NextPracticeRecommendationService
 

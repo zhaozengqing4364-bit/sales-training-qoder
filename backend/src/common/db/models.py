@@ -16,6 +16,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -120,6 +121,21 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    achievements = relationship(
+        "UserAchievement",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    notifications = relationship(
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    goals = relationship(
+        "UserGoal",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserTrainingPreference(Base):
@@ -208,6 +224,168 @@ class UserPresentationProgress(Base):
 
     user = relationship("User", back_populates="presentation_progress")
     presentation = relationship("Presentation", back_populates="user_progress")
+
+
+class Achievement(Base):
+    """Configurable achievement rule definition for retention loops."""
+
+    __tablename__ = "achievements"
+
+    achievement_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    code = Column(String(80), nullable=False, unique=True, index=True)
+    name = Column(String(120), nullable=False)
+    description = Column(Text, nullable=False)
+    icon_key = Column(String(60), nullable=False, default="trophy")
+    condition_json = Column(JSON, nullable=False, default=dict)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    user_achievements = relationship(
+        "UserAchievement",
+        back_populates="achievement",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserAchievement(Base):
+    """Idempotent achievement unlock for a user."""
+
+    __tablename__ = "user_achievements"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    achievement_id = Column(
+        String(36),
+        ForeignKey("achievements.achievement_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    evidence_json = Column(JSON, nullable=False, default=dict)
+    unlocked_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "achievement_id",
+            name="uq_user_achievements_user_achievement",
+        ),
+        Index("idx_user_achievements_user_unlocked", "user_id", "unlocked_at"),
+    )
+
+    user = relationship("User", back_populates="achievements")
+    achievement = relationship("Achievement", back_populates="user_achievements")
+
+
+class Notification(Base):
+    """In-app notification with read/unread, expiry, and evidence metadata."""
+
+    __tablename__ = "notifications"
+
+    notification_id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    type = Column(String(30), nullable=False, index=True)
+    title = Column(String(160), nullable=False)
+    content = Column(Text, nullable=False)
+    action_label = Column(String(80), nullable=True)
+    action_path = Column(String(500), nullable=True)
+    source = Column(String(160), nullable=True, index=True)
+    evidence_json = Column(JSON, nullable=False, default=dict)
+    is_read = Column(Boolean, nullable=False, default=False, index=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "type IN ('system', 'tip', 'reminder', 'achievement', 'ai_coach')",
+            name="ck_notification_type",
+        ),
+        Index("idx_notifications_user_read_created", "user_id", "is_read", "created_at"),
+    )
+
+    user = relationship("User", back_populates="notifications")
+
+
+class UserGoal(Base):
+    """User-configurable practice goal."""
+
+    __tablename__ = "user_goals"
+
+    goal_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    goal_type = Column(String(40), nullable=False)
+    period = Column(String(20), nullable=False, default="weekly")
+    target_count = Column(Integer, nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "goal_type IN ('weekly_sessions', 'monthly_presentations')",
+            name="ck_user_goal_type",
+        ),
+        CheckConstraint(
+            "period IN ('weekly', 'monthly')",
+            name="ck_user_goal_period",
+        ),
+        CheckConstraint("target_count > 0", name="ck_user_goal_target_positive"),
+        Index("idx_user_goals_user_active", "user_id", "is_active"),
+    )
+
+    user = relationship("User", back_populates="goals")
 
 
 class PasswordResetToken(Base):
