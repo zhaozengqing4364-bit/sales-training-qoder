@@ -36,6 +36,9 @@ from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from common.validation.file_validator import presentation_validator
 from presentation_coach.services.ppt_parser import get_ppt_parser
+from presentation_coach.services.user_presentation_progress import (
+    UserPresentationProgressService,
+)
 from support.services.runtime_status_service import RuntimeStatusService
 
 logger = get_logger(__name__)
@@ -810,6 +813,75 @@ async def get_presentation(
         )
 
     return presentation
+
+
+@router.get("/presentations/{presentation_id}/progress")
+async def get_presentation_progress(
+    presentation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get current user's durable resume marker for a presentation."""
+
+    result = await UserPresentationProgressService().get_progress(
+        db=db,
+        user_id=str(current_user.user_id),
+        presentation_id=presentation_id,
+    )
+    if not result.is_success:
+        return _presentation_error_response(
+            status_code=500,
+            error_code="[PRESENTATION_PROGRESS_GET_FAILED]",
+            message="PPT 进度暂时无法读取。",
+        )
+    return result.value
+
+
+@router.put("/presentations/{presentation_id}/progress")
+async def save_presentation_progress(
+    presentation_id: str,
+    body: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save current user's last page for future PPT resume prompts."""
+
+    last_page_number = body.get("last_page_number")
+    session_id = body.get("session_id")
+    if not isinstance(last_page_number, int):
+        return _presentation_error_response(
+            status_code=422,
+            error_code="[INVALID_PRESENTATION_PAGE]",
+            message="last_page_number must be an integer.",
+        )
+
+    result = await UserPresentationProgressService().save_progress(
+        db=db,
+        user_id=str(current_user.user_id),
+        presentation_id=presentation_id,
+        last_page_number=last_page_number,
+        session_id=str(session_id) if session_id else None,
+    )
+    if not result.is_success:
+        error_text = result.fallback or "[PRESENTATION_PROGRESS_SAVE_FAILED]"
+        if "[PRESENTATION_NOT_FOUND]" in error_text:
+            return _presentation_error_response(
+                status_code=404,
+                error_code="[PRESENTATION_NOT_FOUND]",
+                message="演示文稿不存在。",
+            )
+        if "[INVALID_PRESENTATION_PAGE]" in error_text:
+            return _presentation_error_response(
+                status_code=422,
+                error_code="[INVALID_PRESENTATION_PAGE]",
+                message="PPT 页码超出可用范围。",
+            )
+        return _presentation_error_response(
+            status_code=500,
+            error_code="[PRESENTATION_PROGRESS_SAVE_FAILED]",
+            message="PPT 进度暂时无法保存。",
+        )
+    return result.value
 
 
 @router.delete("/presentations/{presentation_id}")
