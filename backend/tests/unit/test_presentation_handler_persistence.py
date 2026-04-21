@@ -371,6 +371,7 @@ async def test_send_realtime_feedback_forbidden_word_emits_two_events(
 ):
     """Forbidden word feedback should emit feedback + forbidden_word events."""
     websocket = Mock()
+    handler.session_id = "session-789"
     handler.manager.active_connections["presentation"]["session-789"] = websocket
     handler.manager.send_json = AsyncMock()
 
