@@ -660,6 +660,83 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(ws?.send).toHaveBeenCalledTimes(1);
     });
 
+    it("deduplicates repeated AI messages across reconnect within the configured window", async () => {
+        const actualHandlers = await vi.importActual<typeof import("./websocket/message-handlers")>(
+            "./websocket/message-handlers",
+        );
+        vi.mocked(handleWebSocketMessage).mockImplementation((event, deps) =>
+            actualHandlers.handleWebSocketMessage(event, deps),
+        );
+
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-reconnect-dedupe",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "response",
+                timestamp: "2026-04-21T00:00:00Z",
+                message_id: "welcome-1",
+                data: { text: "欢迎回来，我们继续练习。" },
+            });
+        });
+
+        expect(result.current.messages.map(message => message.message)).toEqual([
+            "欢迎回来，我们继续练习。",
+        ]);
+
+        act(() => {
+            ws?.emitClose(1006, "network-drop");
+        });
+        act(() => {
+            vi.advanceTimersByTime(1000);
+        });
+
+        const retryWs = MockWebSocket.instances.at(-1);
+        expect(retryWs).toBeDefined();
+        expect(retryWs).not.toBe(ws);
+
+        act(() => {
+            if (!retryWs) return;
+            retryWs.readyState = MockWebSocket.OPEN;
+            retryWs.onopen?.(new Event("open"));
+            emitJsonMessage(retryWs, {
+                type: "response",
+                timestamp: "2026-04-21T00:00:02Z",
+                message_id: "welcome-1",
+                data: { text: "欢迎回来，我们继续练习。" },
+            });
+        });
+
+        expect(result.current.messages.map(message => message.message)).toEqual([
+            "欢迎回来，我们继续练习。",
+        ]);
+
+        act(() => {
+            vi.advanceTimersByTime(301000);
+            emitJsonMessage(retryWs!, {
+                type: "response",
+                timestamp: "2026-04-21T00:05:03Z",
+                message_id: "welcome-1",
+                data: { text: "欢迎回来，我们继续练习。" },
+            });
+        });
+
+        expect(result.current.messages.map(message => message.message)).toEqual([
+            "欢迎回来，我们继续练习。",
+            "欢迎回来，我们继续练习。",
+        ]);
+    });
+
     it("clears stale action-card hints on reconnect while preserving the objection proof prompt in scores", async () => {
         const actualHandlers = await vi.importActual<typeof import("./websocket/message-handlers")>(
             "./websocket/message-handlers",

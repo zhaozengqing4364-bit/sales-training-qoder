@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionStatus } from "@/lib/api/types";
 import { usePracticeSessionLifecycle } from "./use-practice-session-lifecycle";
@@ -45,6 +45,10 @@ describe("usePracticeSessionLifecycle", () => {
         controlLifecycle.mockResolvedValue(undefined);
         endSession.mockResolvedValue(undefined);
         generateComprehensiveReport.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it("starts preparing sessions via REST once websocket is connected", async () => {
@@ -179,7 +183,8 @@ describe("usePracticeSessionLifecycle", () => {
         });
     });
 
-    it("waits for server terminal status before navigating to the report page", async () => {
+    it("waits for server terminal status and then shows a learner-controlled report transition", async () => {
+        vi.useFakeTimers();
         const stopRecording = vi.fn();
         const { result, rerender } = renderHook(
             ({ sessionStatus }) =>
@@ -210,11 +215,20 @@ describe("usePracticeSessionLifecycle", () => {
         rerender({ sessionStatus: "scoring" as SessionStatus });
 
         await waitFor(() => {
-            expect(routerPush).toHaveBeenCalledWith("/practice/session-3/report");
+            expect(result.current.reportTransition.status).toBe("ready");
         });
+        expect(result.current.reportTransition.secondsRemaining).toBe(5);
+        expect(routerPush).not.toHaveBeenCalled();
+
+        act(() => {
+            vi.advanceTimersByTime(5000);
+        });
+
+        expect(routerPush).toHaveBeenCalledWith("/practice/session-3/report");
     });
 
     it("waits for bounded audio evidence flush before navigating to the report page", async () => {
+        vi.useFakeTimers();
         const stopRecording = vi.fn();
         let resolveFlush: ((value: { status: "completed"; pendingUploads: number; error: null }) => void) | null = null;
         const flushAudioEvidence = vi.fn(() => new Promise<{ status: "completed"; pendingUploads: number; error: null }>((resolve) => {
@@ -248,6 +262,7 @@ describe("usePracticeSessionLifecycle", () => {
             expect(flushAudioEvidence).toHaveBeenCalledTimes(1);
         });
         expect(stopRecording).toHaveBeenCalledTimes(1);
+        expect(result.current.reportTransition.status).toBe("preparing");
         expect(result.current.audioEvidenceStatus).toEqual({
             status: "flushing",
             message: "正在保存最后一段音频证据，完成后进入报告页。",
@@ -260,16 +275,24 @@ describe("usePracticeSessionLifecycle", () => {
         });
 
         await waitFor(() => {
-            expect(routerPush).toHaveBeenCalledWith("/practice/session-flush/report");
+            expect(result.current.reportTransition.status).toBe("ready");
         });
         expect(result.current.audioEvidenceStatus).toEqual({
             status: "completed",
             message: "音频证据已保存，正在进入报告页。",
             error: null,
         });
+        expect(routerPush).not.toHaveBeenCalled();
+
+        act(() => {
+            vi.advanceTimersByTime(5000);
+        });
+
+        expect(routerPush).toHaveBeenCalledWith("/practice/session-flush/report");
     });
 
     it("continues to the report with an explicit audio evidence timeout explanation", async () => {
+        vi.useFakeTimers();
         const flushAudioEvidence = vi.fn().mockResolvedValue({
             status: "timed_out",
             pendingUploads: 1,
@@ -296,13 +319,56 @@ describe("usePracticeSessionLifecycle", () => {
         rerender({ sessionStatus: "completed" as SessionStatus });
 
         await waitFor(() => {
-            expect(routerPush).toHaveBeenCalledWith("/practice/session-flush-timeout/report");
+            expect(result.current.reportTransition.status).toBe("ready");
         });
         expect(result.current.audioEvidenceStatus).toEqual({
             status: "timed_out",
             message: "音频证据保存超时，本次报告可能缺少最后一段录音留痕。",
             error: "segment 3 still pending",
         });
+        expect(routerPush).not.toHaveBeenCalled();
+
+        act(() => {
+            vi.advanceTimersByTime(5000);
+        });
+
+        expect(routerPush).toHaveBeenCalledWith("/practice/session-flush-timeout/report");
+    });
+
+    it("lets the learner stay on the completed practice page instead of auto-opening the report", async () => {
+        vi.useFakeTimers();
+        const { result, rerender } = renderHook(
+            ({ sessionStatus }) =>
+                usePracticeSessionLifecycle({
+                    sessionId: "session-stay",
+                    connectionState: "connected",
+                    sessionStatus,
+                    isRecordingRef: { current: false },
+                    stopRecording: vi.fn(),
+                }),
+            {
+                initialProps: {
+                    sessionStatus: "in_progress" as SessionStatus,
+                },
+            },
+        );
+
+        rerender({ sessionStatus: "completed" as SessionStatus });
+
+        await waitFor(() => {
+            expect(result.current.reportTransition.status).toBe("ready");
+        });
+
+        act(() => {
+            result.current.stayOnPracticePage();
+        });
+        expect(result.current.reportTransition.status).toBe("staying");
+
+        act(() => {
+            vi.advanceTimersByTime(60000);
+        });
+
+        expect(routerPush).not.toHaveBeenCalled();
     });
 
     it("stays on the practice page and preserves actionable backend detail when ending fails", async () => {
