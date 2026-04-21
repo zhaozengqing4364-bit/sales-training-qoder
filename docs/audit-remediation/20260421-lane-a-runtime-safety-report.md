@@ -2,12 +2,13 @@
 
 Worker: `worker-1`  
 Task: `9`  
-Scope slice: Q-03/Q-05/Q-08/Q-09/Q-10/Q-11/Q-12/Q-13/Q-29.
+Scope slice: Q-03/Q-05/Q-07/Q-08/Q-09/Q-10/Q-11/Q-12/Q-13/Q-29.
 
 ## Implemented
 
 - Q-03: `PresentationFeedbackService` now tracks last access, clears expired session-scoped state by TTL, and evicts least-recently-used sessions over the configured cap.
 - Q-05: `KnowledgeRetrievalCapability` now runs legacy single-KB fallback searches concurrently after `search_multiple` failure while preserving per-KB error isolation.
+- Q-07: `StagedEvaluationService` now resolves evaluation slices from explicit stage bounds or message stage metadata, falling back to full history instead of `stage_number * 2`.
 - Q-08: `CapabilityRunner` now degrades `ConnectionError`/`OSError` to failure results and propagates `asyncio.CancelledError` instead of disguising cancellation.
 - Q-09: `BaseWebSocketHandler` now initializes a bounded message queue with validated env defaults and emits a backpressure message when full.
 - Q-10: `BaseSalesHandler` no longer catches `asyncio.CancelledError` in mixed runtime exception handlers; cancellation is raised after cleanup-safe contexts.
@@ -37,8 +38,10 @@ No business rules, scoring thresholds, recommendation logic, badges, notificatio
 - PASS: `cd backend && DATABASE_URL='sqlite+aiosqlite:///./test_lane_a.db' PYTHONPATH=src .venv-test/bin/python -m pytest tests/unit/test_presentation_feedback_service_policy.py -q --no-cov` → `5 passed`
 - PASS: `cd backend && ruff check src/common/config.py src/common/audio/pcm_duration.py src/agent/capabilities/runner.py src/agent/capabilities/knowledge_retrieval.py src/agent/capabilities/registry.py src/common/websocket/base_handler.py src/common/ai/encryption.py src/common/services/password_reset.py src/evaluation/schemas.py src/sales_bot/websocket/base_sales_handler.py src/sales_bot/websocket/components/tts_component.py src/presentation_coach/websocket/presentation_handler.py tests/unit/test_capability_base.py tests/unit/test_websocket_handler.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_knowledge_retrieval.py tests/unit/sales_bot/websocket/test_tts_component_duration.py tests/unit/sales_bot/websocket/test_base_sales_handler_safety.py --quiet`
 - PASS: `cd backend && DATABASE_URL='sqlite+aiosqlite:///./test_lane_a.db' PYTHONPATH=src .venv-test/bin/python -m pytest tests/unit/test_knowledge_retrieval.py tests/unit/test_capability_base.py tests/unit/test_websocket_handler.py tests/unit/test_presentation_handler_persistence.py tests/unit/sales_bot/websocket/test_tts_component_duration.py tests/unit/sales_bot/websocket/test_base_sales_handler_safety.py -q --no-cov` → `115 passed, 1 warning`
+- PASS: `cd backend && ruff check src/evaluation/services/staged_evaluation.py tests/unit/evaluation/test_staged_evaluation_service.py --quiet`
+- PASS: `cd backend && DATABASE_URL='sqlite+aiosqlite:///./test_lane_a.db' PYTHONPATH=src .venv-test/bin/python -m pytest tests/unit/evaluation/test_staged_evaluation_service.py -q --no-cov` → `25 passed`
 - PASS: `cd backend && .venv-test/bin/python -m py_compile <modified source/test files>`
 
 ## Deferred Lane A Items
 
-Remaining Lane A items Q-04/Q-07/Q-23/Q-24/Q-25/Q-30 are not claimed complete in this slice and need follow-up targeted tasks/tests.
+Remaining Lane A items Q-04/Q-23/Q-24/Q-25/Q-30 are not claimed complete in this slice and need follow-up targeted tasks/tests.

@@ -11,6 +11,7 @@ This slice starts with high-safety, low-cross-lane runtime fixes:
 
 - Q-03 PresentationFeedbackService TTL/max_sessions cleanup.
 - Q-05 parallel single-KB fallback after `search_multiple` failure.
+- Q-07 staged evaluation real conversation-slice bounds.
 - Q-08 capability runner infrastructure exception degradation and cancellation propagation.
 - Q-09 bounded base websocket message queue with configured backpressure.
 - Q-10 sales websocket `CancelledError` propagation.
@@ -33,6 +34,7 @@ These are runtime safety/resource settings. Future admin UI work should expose t
 
 Targeted tests first:
 
+- `backend/tests/unit/evaluation/test_staged_evaluation_service.py`
 - `backend/tests/unit/test_presentation_feedback_service_policy.py`
 - `backend/tests/unit/test_knowledge_retrieval.py`
 - `backend/tests/unit/test_capability_base.py`
