@@ -991,6 +991,11 @@ describe("ReportPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "加入复习清单" }));
 
         expect(await screen.findByText("高光复习清单")).toBeTruthy();
+        const persistedReview = JSON.parse(
+            localStorage.getItem("qoder.highlightReviewList.v1:session-1") || "{}",
+        );
+        expect(persistedReview.schema_version).toBe("highlight_review_v1");
+        expect(persistedReview.items).toHaveLength(1);
         expect(screen.getByText("我们还是担心 ROI，但我先介绍功能。")).toBeTruthy();
         expect(screen.getByText("先补一条制造业客户 18% 回款周期缩短案例，再确认客户是否认可。"))
             .toBeTruthy();
@@ -1026,6 +1031,47 @@ describe("ReportPage", () => {
         expect(pushMock).toHaveBeenCalledWith(
             "/practice/retry-1?scenario_type=sales&review_source=highlight_review&source_session_id=session-1&agent_id=agent-1&persona_id=persona-1",
         );
+    });
+
+    it("drops stale highlight review localStorage when the schema version does not match", async () => {
+        localStorage.setItem(
+            "qoder.highlightReviewList.v1:session-1",
+            JSON.stringify({
+                schema_version: "legacy_highlight_review",
+                items: [
+                    {
+                        id: "legacy-highlight",
+                        source_session_id: "session-1",
+                        turn_number: 3,
+                        content: "旧格式高光",
+                    },
+                ],
+            }),
+        );
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 82,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        await waitFor(() => {
+            expect(getReportMock).toHaveBeenCalledWith("session-1");
+        });
+        expect(localStorage.getItem("qoder.highlightReviewList.v1:session-1")).toBeNull();
     });
 
     it("renders conclusion provenance and four-layer degradation from the canonical report payload", async () => {
