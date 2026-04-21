@@ -1,6 +1,6 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PracticeSessionPage from "./page";
 
@@ -122,50 +122,61 @@ async function flushPreflightEffects() {
     });
 }
 
+function buildPracticeWebSocketMock(overrides: Record<string, unknown> = {}) {
+    return {
+        connectionState: "connected",
+        isConnected: true,
+        sessionStatus: "in_progress",
+        aiState: "idle",
+        messages: [],
+        fuzzyDetections: [],
+        salesStage: null,
+        scores: null,
+        liveSessionSummary: null,
+        actionCard: null,
+        coachHealth: null,
+        error: null,
+        isPlayingAudio: false,
+        interimTranscript: "",
+        audioUnlocked: true,
+        isNetworkSlow: false,
+        currentSlide: null,
+        points: [],
+        forbiddenWords: [],
+        sendAudio: vi.fn(),
+        sendAudioBinary: vi.fn(),
+        sendAudioEnd: vi.fn(),
+        startSpeaking: vi.fn(),
+        sendInterrupt: vi.fn(),
+        unlockAudio: vi.fn(),
+        sendMessage: vi.fn(),
+        connect: vi.fn(),
+        ...overrides,
+    };
+}
+
+function buildAudioRecorderMock(overrides: Record<string, unknown> = {}) {
+    return {
+        isRecording: false,
+        hasPermission: true,
+        error: null,
+        stream: null,
+        startRecording: vi.fn(),
+        stopRecording: vi.fn(),
+        requestPermission: vi.fn(),
+        ...overrides,
+    };
+}
+
 describe("PracticeSessionPage carry-forward retry focus", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         searchParamsMock.current = "scenario_type=sales&voice_mode=legacy";
         Element.prototype.scrollIntoView = vi.fn();
 
-        usePracticeWebSocketMock.mockReturnValue({
-            connectionState: "connected",
-            isConnected: true,
-            sessionStatus: "in_progress",
-            aiState: "idle",
-            messages: [],
-            fuzzyDetections: [],
-            salesStage: null,
-            scores: null,
-            liveSessionSummary: null,
-            actionCard: null,
-            error: null,
-            isPlayingAudio: false,
-            interimTranscript: "",
-            audioUnlocked: true,
-            isNetworkSlow: false,
-            currentSlide: null,
-            points: [],
-            forbiddenWords: [],
-            sendAudio: vi.fn(),
-            sendAudioBinary: vi.fn(),
-            sendAudioEnd: vi.fn(),
-            startSpeaking: vi.fn(),
-            sendInterrupt: vi.fn(),
-            unlockAudio: vi.fn(),
-            sendMessage: vi.fn(),
-            connect: vi.fn(),
-        });
+        usePracticeWebSocketMock.mockReturnValue(buildPracticeWebSocketMock());
 
-        useAudioRecorderMock.mockReturnValue({
-            isRecording: false,
-            hasPermission: true,
-            error: null,
-            stream: null,
-            startRecording: vi.fn(),
-            stopRecording: vi.fn(),
-            requestPermission: vi.fn(),
-        });
+        useAudioRecorderMock.mockReturnValue(buildAudioRecorderMock());
 
         usePracticeSessionLifecycleMock.mockReturnValue({
             canToggleLifecycle: true,
@@ -208,6 +219,10 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
             total_pages: 12,
             pages: [],
         });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it("renders the targeted retry callout when runtime lock exposes focus intent", async () => {
