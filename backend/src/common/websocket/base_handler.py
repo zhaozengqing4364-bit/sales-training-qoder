@@ -10,6 +10,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from common.auth.service import JWTError, resolve_websocket_token
+from common.config import settings
 from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
 from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.session_state_service import (
@@ -18,6 +19,9 @@ from common.websocket.session_state_service import (
 )
 
 logger = get_logger(__name__)
+
+DEFAULT_MESSAGE_QUEUE_SIZE = 300
+WEBSOCKET_QUEUE_OVERFLOW_CODE = "[WS_QUEUE_OVERFLOW]"
 
 
 def _get_websocket_header_value(websocket: WebSocket, header_name: str) -> str:
@@ -113,12 +117,63 @@ class BaseWebSocketHandler:
     def __init__(self, scenario: str):
         self.scenario = scenario
         self.manager = get_connection_manager()
-        self.message_queue: asyncio.Queue = None
+        self.message_queue: asyncio.Queue | None = None
         self.running = False
         self.websocket: WebSocket | None = None
         self.session_id: str | None = None
         self.state_service = get_session_state_service()
         self.user_id: str | None = None
+        self.max_message_queue_size = self._get_configured_queue_size()
+
+    @staticmethod
+    def _get_configured_queue_size() -> int:
+        """Return the validated inbound message queue size."""
+        configured = getattr(
+            settings,
+            "WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE",
+            DEFAULT_MESSAGE_QUEUE_SIZE,
+        )
+        if isinstance(configured, int) and 1 <= configured <= 5000:
+            return configured
+        logger.warning(
+            "Invalid WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE=%r; using default %s",
+            configured,
+            DEFAULT_MESSAGE_QUEUE_SIZE,
+        )
+        return DEFAULT_MESSAGE_QUEUE_SIZE
+
+    async def _enqueue_received_message(self, websocket: WebSocket, data: dict) -> None:
+        """Enqueue a received message without allowing unbounded memory growth."""
+        if self.message_queue is None:
+            logger.warning("Dropping websocket message before queue initialization")
+            return
+
+        try:
+            self.message_queue.put_nowait(data)
+        except asyncio.QueueFull:
+            logger.warning(
+                "WebSocket message queue overflow; dropping newest message",
+                scenario=self.scenario,
+                session_id=self.session_id,
+                queue_size=self.message_queue.qsize(),
+            )
+            await self.manager.send_json(
+                websocket,
+                {
+                    "type": "backpressure",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "data": {
+                        "code": WEBSOCKET_QUEUE_OVERFLOW_CODE,
+                        "policy": getattr(
+                            settings,
+                            "WEBSOCKET_BACKPRESSURE_POLICY",
+                            "drop_newest",
+                        ),
+                        "queue_size": self.message_queue.qsize(),
+                        "user_action": "retry_later",
+                    },
+                },
+            )
 
     async def handle_connection(
         self,
@@ -167,7 +222,7 @@ class BaseWebSocketHandler:
         await self.manager.connect(websocket, self.scenario, session_id)
 
         # Initialize message queue
-        self.message_queue = asyncio.Queue()
+        self.message_queue = asyncio.Queue(maxsize=self.max_message_queue_size)
         self.running = True
 
         # Restore state if reconnection
@@ -187,7 +242,7 @@ class BaseWebSocketHandler:
                         websocket.receive_json(),
                         timeout=30.0  # 30s timeout
                     )
-                    await self.message_queue.put(data)
+                    await self._enqueue_received_message(websocket, data)
 
                 except TimeoutError:
                     # Send heartbeat

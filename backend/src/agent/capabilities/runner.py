@@ -49,8 +49,17 @@ ERROR_CODE_MAP: dict[type, str] = {
     ValueError: "[CAPABILITY_INVALID_INPUT]",
     ConnectionError: "[CAPABILITY_CONNECTION_ERROR]",
     PermissionError: "[CAPABILITY_PERMISSION_DENIED]",
+    OSError: "[CAPABILITY_IO_ERROR]",
     RuntimeError: "[CAPABILITY_RUNTIME_ERROR]",
 }
+
+RECOVERABLE_CAPABILITY_ERRORS = (
+    ConnectionError,
+    OSError,
+    RuntimeError,
+    ValueError,
+    KeyError,
+)
 
 
 class CapabilityRunner:
@@ -213,7 +222,7 @@ class CapabilityRunner:
                     success=False,
                     fallback="[CAPABILITY_TIMEOUT]",
                 )
-            except (RuntimeError, ValueError, KeyError) as e:
+            except RECOVERABLE_CAPABILITY_ERRORS as e:
                 error_code = self._get_error_code(e)
                 logger.error(
                     f"Capability '{cap.capability_id}' failed: {e}",
@@ -288,7 +297,7 @@ class CapabilityRunner:
                         success=False,
                         fallback="[CAPABILITY_TIMEOUT]",
                     )
-                except (RuntimeError, ValueError, KeyError) as e:
+                except RECOVERABLE_CAPABILITY_ERRORS as e:
                     error_code = self._get_error_code(e)
                     logger.error(
                         f"Capability '{capability_id}' failed: {e}",

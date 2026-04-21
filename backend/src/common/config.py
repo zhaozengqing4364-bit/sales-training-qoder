@@ -3,6 +3,7 @@ Application Configuration
 Centralized configuration management for the AI Practice System
 """
 
+import logging
 import os
 from pathlib import Path
 
@@ -10,6 +11,60 @@ from dotenv import load_dotenv
 
 load_dotenv()
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
+
+logger = logging.getLogger(__name__)
+
+
+def _get_int_env(
+    name: str,
+    default: int,
+    *,
+    min_value: int,
+    max_value: int,
+) -> int:
+    """Read a bounded integer env var, falling back safely on bad values."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("Invalid integer env %s=%r; using default %s", name, raw, default)
+        return default
+
+    if value < min_value or value > max_value:
+        logger.warning(
+            "Out-of-range integer env %s=%r; expected %s-%s; using default %s",
+            name,
+            raw,
+            min_value,
+            max_value,
+            default,
+        )
+        return default
+
+    return value
+
+
+def _get_enum_env(name: str, default: str, allowed_values: set[str]) -> str:
+    """Read an enum env var with allowlist validation."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+
+    value = raw.strip()
+    if value not in allowed_values:
+        logger.warning(
+            "Invalid enum env %s=%r; allowed=%s; using default %s",
+            name,
+            raw,
+            sorted(allowed_values),
+            default,
+        )
+        return default
+
+    return value
 
 
 class Settings:
@@ -99,9 +154,38 @@ class Settings:
 
     # Performance
     MAX_WEBSOCKET_CONNECTIONS: int = int(os.getenv("MAX_WEBSOCKET_CONNECTIONS", "50"))
+    WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE: int = _get_int_env(
+        "WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE",
+        300,
+        min_value=1,
+        max_value=5000,
+    )
+    WEBSOCKET_BACKPRESSURE_POLICY: str = _get_enum_env(
+        "WEBSOCKET_BACKPRESSURE_POLICY",
+        "drop_newest",
+        {"drop_newest"},
+    )
     ASR_STREAMING_TIMEOUT_MS: int = int(os.getenv("ASR_STREAMING_TIMEOUT_MS", "5000"))
     INTERRUPTION_DETECTION_TIMEOUT_MS: int = int(
         os.getenv("INTERRUPTION_DETECTION_TIMEOUT_MS", "100")
+    )
+    TTS_DEFAULT_SAMPLE_RATE_HZ: int = _get_int_env(
+        "TTS_DEFAULT_SAMPLE_RATE_HZ",
+        16000,
+        min_value=8000,
+        max_value=48000,
+    )
+    TTS_BYTES_PER_SAMPLE: int = _get_int_env(
+        "TTS_BYTES_PER_SAMPLE",
+        2,
+        min_value=1,
+        max_value=4,
+    )
+    TTS_CHANNELS: int = _get_int_env(
+        "TTS_CHANNELS",
+        1,
+        min_value=1,
+        max_value=8,
     )
 
     # Service Preloading
