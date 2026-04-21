@@ -115,6 +115,11 @@ class User(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    presentation_progress = relationship(
+        "UserPresentationProgress",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserTrainingPreference(Base):
@@ -147,6 +152,62 @@ class UserTrainingPreference(Base):
     )
 
     user = relationship("User", back_populates="training_preferences")
+
+
+class UserPresentationProgress(Base):
+    """Per-user durable progress marker for resuming long PPT practice."""
+
+    __tablename__ = "user_presentation_progress"
+
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    presentation_id = Column(
+        String(36),
+        ForeignKey("presentations.presentation_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    last_page_number = Column(Integer, nullable=False)
+    last_session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    last_practice_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "last_page_number >= 1",
+            name="ck_user_presentation_progress_page_positive",
+        ),
+        Index(
+            "idx_user_presentation_progress_user_updated",
+            "user_id",
+            "updated_at",
+        ),
+    )
+
+    user = relationship("User", back_populates="presentation_progress")
+    presentation = relationship("Presentation", back_populates="user_progress")
 
 
 class PasswordResetToken(Base):
@@ -264,6 +325,11 @@ class Presentation(Base):
         cascade="all, delete-orphan",
     )
     practice_sessions = relationship("PracticeSession", back_populates="presentation")
+    user_progress = relationship(
+        "UserPresentationProgress",
+        back_populates="presentation",
+        cascade="all, delete-orphan",
+    )
 
 
 class Page(Base):
