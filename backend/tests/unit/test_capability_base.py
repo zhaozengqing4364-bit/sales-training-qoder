@@ -10,6 +10,7 @@ Tests for:
 References:
 - Requirements: R6, R7, R8 (Capability modules)
 - Design: Section 1-3 (AgentContext, CapabilityRegistry, CapabilityRunner)
+"""
 import asyncio
 from typing import Any
 
