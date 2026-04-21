@@ -19,7 +19,7 @@ export interface MessageHandlerDeps {
     useStreamingTTS: boolean;
     setState: Dispatch<SetStateAction<PracticeState>>;
     queueTTSAudio: (data: TTSAudioData) => void;
-    addAiMessageIfNew: (text: string, extraState?: Partial<PracticeState> & { knowledgeAnswerDiagnostics?: KnowledgeAnswerDiagnostics | null }) => void;
+    addAiMessageIfNew: (text: string, extraState?: Partial<PracticeState> & { knowledgeAnswerDiagnostics?: KnowledgeAnswerDiagnostics | null }, dedupeKey?: string) => void;
     streamingPlayer: UseStreamingAudioPlayerReturn;
     currentStreamIdRef: MutableRefObject<string | null>;
     currentRequestIdRef: MutableRefObject<number>;
@@ -33,6 +33,16 @@ export interface MessageHandlerDeps {
 }
 
 const MAX_CHAT_MESSAGES = 200;
+
+function buildAiMessageDedupeKey(message: WSMessage, text: string): string {
+    if (message.message_id) {
+        return `message:${message.message_id}`;
+    }
+    if (message.stream_id) {
+        return `stream:${message.stream_id}:${text}`;
+    }
+    return `text:${text}`;
+}
 
 function appendMessageCapped(
     existing: ChatMessage[],
@@ -472,17 +482,7 @@ export function handleWebSocketMessage(
 
             case "response": {
                 const data = message.data as { text: string };
-                const newMsg: ChatMessage = {
-                    id: `ai-${Date.now()}`,
-                    sender: "ai",
-                    message: data.text,
-                    timestamp: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-                };
-                setState(prev => ({
-                    ...prev,
-                    messages: appendMessageCapped(prev.messages, newMsg),
-                    aiState: "speaking",
-                }));
+                addAiMessageIfNew(data.text, { aiState: "speaking" }, buildAiMessageDedupeKey(message, data.text));
                 break;
             }
 
@@ -495,7 +495,7 @@ export function handleWebSocketMessage(
                 const aiMessage = (data.ai_message || data.message || "").trim();
 
                 if (aiMessage) {
-                    addAiMessageIfNew(aiMessage, { aiState: "speaking" });
+                    addAiMessageIfNew(aiMessage, { aiState: "speaking" }, buildAiMessageDedupeKey(message, aiMessage));
                 } else {
                     setState(prev => ({
                         ...prev,
@@ -524,7 +524,7 @@ export function handleWebSocketMessage(
                 }
                 
                 // P2-15: O(1) dedup check + add AI message
-                addAiMessageIfNew(data.text, { aiState: "speaking" });
+                addAiMessageIfNew(data.text, { aiState: "speaking" }, buildAiMessageDedupeKey(message, data.text));
                 queueTTSAudio(data);
                 break;
             }
@@ -609,7 +609,7 @@ export function handleWebSocketMessage(
                             ...(chunkData.knowledge_answer_diagnostics
                                 ? { knowledgeAnswerDiagnostics: chunkData.knowledge_answer_diagnostics }
                                 : {}),
-                        });
+                        }, buildAiMessageDedupeKey(message, chunkData.text));
                     }
                     streamingPlayer.end();
                     debug.log("[TTS Streaming] Stream ended, total duration:", chunkData.total_duration_ms, "ms");

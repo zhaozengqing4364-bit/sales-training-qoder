@@ -38,6 +38,13 @@ vi.mock("@/lib/api/client", () => ({
     getApiErrorMessage: (error: unknown) => (error instanceof Error ? error.message : "请求失败，请稍后重试。"),
 }));
 
+async function flushHookEffects() {
+    await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+}
+
 describe("usePracticeSessionLifecycle", () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -214,9 +221,8 @@ describe("usePracticeSessionLifecycle", () => {
 
         rerender({ sessionStatus: "scoring" as SessionStatus });
 
-        await waitFor(() => {
-            expect(result.current.reportTransition.status).toBe("ready");
-        });
+        await flushHookEffects();
+        expect(result.current.reportTransition.status).toBe("ready");
         expect(result.current.reportTransition.secondsRemaining).toBe(5);
         expect(routerPush).not.toHaveBeenCalled();
 
@@ -258,9 +264,8 @@ describe("usePracticeSessionLifecycle", () => {
 
         rerender({ sessionStatus: "scoring" as SessionStatus });
 
-        await waitFor(() => {
-            expect(flushAudioEvidence).toHaveBeenCalledTimes(1);
-        });
+        await flushHookEffects();
+        expect(flushAudioEvidence).toHaveBeenCalledTimes(1);
         expect(stopRecording).toHaveBeenCalledTimes(1);
         expect(result.current.reportTransition.status).toBe("preparing");
         expect(result.current.audioEvidenceStatus).toEqual({
@@ -274,9 +279,8 @@ describe("usePracticeSessionLifecycle", () => {
             resolveFlush?.({ status: "completed", pendingUploads: 0, error: null });
         });
 
-        await waitFor(() => {
-            expect(result.current.reportTransition.status).toBe("ready");
-        });
+        await flushHookEffects();
+        expect(result.current.reportTransition.status).toBe("ready");
         expect(result.current.audioEvidenceStatus).toEqual({
             status: "completed",
             message: "音频证据已保存，正在进入报告页。",
@@ -318,9 +322,8 @@ describe("usePracticeSessionLifecycle", () => {
 
         rerender({ sessionStatus: "completed" as SessionStatus });
 
-        await waitFor(() => {
-            expect(result.current.reportTransition.status).toBe("ready");
-        });
+        await flushHookEffects();
+        expect(result.current.reportTransition.status).toBe("ready");
         expect(result.current.audioEvidenceStatus).toEqual({
             status: "timed_out",
             message: "音频证据保存超时，本次报告可能缺少最后一段录音留痕。",
@@ -355,9 +358,8 @@ describe("usePracticeSessionLifecycle", () => {
 
         rerender({ sessionStatus: "completed" as SessionStatus });
 
-        await waitFor(() => {
-            expect(result.current.reportTransition.status).toBe("ready");
-        });
+        await flushHookEffects();
+        expect(result.current.reportTransition.status).toBe("ready");
 
         act(() => {
             result.current.stayOnPracticePage();

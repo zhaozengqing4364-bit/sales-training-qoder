@@ -27,6 +27,7 @@ export interface WSMessage {
     trace_id?: string;
     stream_id?: string;  // TTS流ID，用于识别消息属于哪个流
     request_id?: number;  // 请求ID，用于识别消息属于哪个请求
+    message_id?: string;  // 后端消息ID，用于跨重连去重
     priority?: "high" | "normal"; // 客户端发送优先级（兼容扩展字段）
     data: unknown;
 }

@@ -43,6 +43,7 @@ import {
 import { useStreamingAudioPlayer } from "./use-streaming-audio-player";
 import { debug } from "@/lib/debug";
 import { getSharedTraceId } from "@/lib/observability/trace-context";
+import { practiceUxConfig } from "@/lib/practice-ux-config";
 
 // ── Re-export every public type so existing consumers stay untouched ──
 export type {
@@ -170,18 +171,35 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     } = useAudioPlayback({ onTTSAudio, setState });
 
     // ── Message dedup (P2-15 + NEW-4) ──
-    const seenAiMessagesRef = useRef<Set<string>>(new Set());
+    const seenAiMessagesRef = useRef<Map<string, number>>(new Map());
 
-    // P1-7 + P2-15: Extracted helper for adding AI messages with O(1) Set-based dedup
-    const addAiMessageIfNew = useCallback((text: string, extraState?: Partial<PracticeState> & { knowledgeAnswerDiagnostics?: import("./websocket/types").KnowledgeAnswerDiagnostics | null }) => {
-        if (!text) return;
-        if (seenAiMessagesRef.current.has(text)) return;
-        // NEW-4 Fix: Cap Set size to prevent unbounded memory growth
-        if (seenAiMessagesRef.current.size >= 200) {
-            const first = seenAiMessagesRef.current.values().next().value;
-            if (first !== undefined) seenAiMessagesRef.current.delete(first);
+    const pruneSeenAiMessages = useCallback((now: number) => {
+        const expiresBefore = now - practiceUxConfig.messageDedupeWindowMs;
+        for (const [key, seenAt] of seenAiMessagesRef.current) {
+            if (seenAt < expiresBefore) {
+                seenAiMessagesRef.current.delete(key);
+            }
         }
-        seenAiMessagesRef.current.add(text);
+
+        while (seenAiMessagesRef.current.size >= practiceUxConfig.messageDedupeMaxEntries) {
+            const first = seenAiMessagesRef.current.keys().next().value;
+            if (first === undefined) break;
+            seenAiMessagesRef.current.delete(first);
+        }
+    }, []);
+
+    // P1-7 + P2-15: Extracted helper for adding AI messages with bounded cross-reconnect dedup
+    const addAiMessageIfNew = useCallback((
+        text: string,
+        extraState?: Partial<PracticeState> & { knowledgeAnswerDiagnostics?: import("./websocket/types").KnowledgeAnswerDiagnostics | null },
+        dedupeKey?: string,
+    ) => {
+        if (!text) return;
+        const now = Date.now();
+        pruneSeenAiMessages(now);
+        const cacheKey = dedupeKey || `text:${text.trim()}`;
+        if (seenAiMessagesRef.current.has(cacheKey)) return;
+        seenAiMessagesRef.current.set(cacheKey, now);
         const newMsg: ChatMessage = {
             id: `ai-${Date.now()}`,
             sender: "ai",
@@ -203,7 +221,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                         : nextMessages,
             };
         });
-    }, []);
+    }, [pruneSeenAiMessages]);
 
     // ── Stream tracking (Critical Fix #2) ──
     const currentStreamIdRef = useRef<string | null>(null);
@@ -641,8 +659,6 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
 
         manualDisconnectRef.current = false;
         isConnectingRef.current = true;
-        // NEW-4 Fix: Reset dedup set on reconnect so welcome messages are not swallowed
-        seenAiMessagesRef.current.clear();
         const connectingState: ConnectionState =
             reconnectAttempts.current > 0 ? "reconnecting" : "connecting";
         applyConnectionState(connectingState, null);
