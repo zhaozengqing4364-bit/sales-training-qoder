@@ -400,6 +400,7 @@ function getRetryFallbackPath(retry?: PracticeSessionReport["retry_entry"] | nul
 }
 
 const HIGHLIGHT_REVIEW_STORAGE_PREFIX = "qoder.highlightReviewList.v1";
+const HIGHLIGHT_REVIEW_SCHEMA_VERSION = "highlight_review_v1";
 const HIGHLIGHT_REVIEW_LIMIT = 3;
 
 type HighlightReviewItem = {
@@ -419,6 +420,12 @@ type HighlightReviewFocusIntent = NonNullable<NonNullable<PracticeSessionReport[
         selected_count: number;
         items: HighlightReviewItem[];
     };
+};
+
+type HighlightReviewStoragePayload = {
+    schema_version: typeof HIGHLIGHT_REVIEW_SCHEMA_VERSION;
+    updated_at: string;
+    items: HighlightReviewItem[];
 };
 
 function getHighlightReviewStorageKey(sessionId: string): string {
@@ -457,32 +464,46 @@ function buildHighlightReviewItem(sessionId: string, highlight: HighlightItem): 
     };
 }
 
+function isHighlightReviewItem(item: unknown): item is HighlightReviewItem {
+    const record = item && typeof item === "object" ? item as Record<string, unknown> : null;
+    return Boolean(
+        record
+        && typeof record.id === "string"
+        && typeof record.content === "string"
+        && typeof record.turn_number === "number"
+        && typeof record.source_session_id === "string",
+    );
+}
+
 function readHighlightReviewItems(sessionId: string): HighlightReviewItem[] {
     if (typeof window === "undefined") {
         return [];
     }
 
+    const storageKey = getHighlightReviewStorageKey(sessionId);
     try {
-        const raw = window.localStorage.getItem(getHighlightReviewStorageKey(sessionId));
+        const raw = window.localStorage.getItem(storageKey);
         if (!raw) {
             return [];
         }
 
         const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) {
+        const payload = parsed && typeof parsed === "object"
+            ? parsed as Partial<HighlightReviewStoragePayload>
+            : null;
+        if (
+            !payload
+            || payload.schema_version !== HIGHLIGHT_REVIEW_SCHEMA_VERSION
+            || !Array.isArray(payload.items)
+        ) {
+            window.localStorage.removeItem(storageKey);
             return [];
         }
 
-        return parsed
-            .filter((item): item is HighlightReviewItem => (
-                item
-                && typeof item.id === "string"
-                && typeof item.content === "string"
-                && typeof item.turn_number === "number"
-            ))
-            .slice(0, HIGHLIGHT_REVIEW_LIMIT);
+        return payload.items.filter(isHighlightReviewItem).slice(0, HIGHLIGHT_REVIEW_LIMIT);
     } catch (error) {
         debug.warn("[Report] Failed to read highlight review list", { sessionId, error });
+        window.localStorage.removeItem(storageKey);
         return [];
     }
 }
@@ -495,7 +516,11 @@ function persistHighlightReviewItems(sessionId: string, items: HighlightReviewIt
     try {
         window.localStorage.setItem(
             getHighlightReviewStorageKey(sessionId),
-            JSON.stringify(items.slice(0, HIGHLIGHT_REVIEW_LIMIT)),
+            JSON.stringify({
+                schema_version: HIGHLIGHT_REVIEW_SCHEMA_VERSION,
+                updated_at: new Date().toISOString(),
+                items: items.slice(0, HIGHLIGHT_REVIEW_LIMIT),
+            } satisfies HighlightReviewStoragePayload),
         );
     } catch (error) {
         debug.warn("[Report] Failed to persist highlight review list", { sessionId, error });
