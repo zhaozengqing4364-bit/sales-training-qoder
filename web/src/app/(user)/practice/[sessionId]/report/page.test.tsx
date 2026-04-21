@@ -461,6 +461,25 @@ describe("ReportPage", () => {
         getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
     });
 
+    it("renders evaluable-only trend comparison and ruleset recommendation on report", async () => {
+        getReportMock.mockResolvedValue(baseReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("同场景趋势对比")).toBeTruthy();
+        expect(await screen.findByText("较上次 +10.0 分")).toBeTruthy();
+        expect(await screen.findByText("推荐下次练什么")).toBeTruthy();
+        expect(await screen.findByText("补强产品知识与证据表达")).toBeTruthy();
+        expect(getReportTrendsMock).toHaveBeenCalledWith("session-1", 5);
+        expect(getNextRecommendationMock).toHaveBeenCalledWith("session-1");
+    });
+
     it("renders learner-facing degraded audio wording when partial audio is reported", async () => {
         getReportMock.mockResolvedValue({
             ...baseReport,
