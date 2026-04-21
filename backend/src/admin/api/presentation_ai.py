@@ -142,11 +142,15 @@ async def get_effective_policy(
     service = PresentationAIPolicyService(db)
 
     if session_id:
-        try:
-            data = await service.resolve_effective_policy_for_session(session_id=session_id)
-            return _success(data)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=f"[{exc}]") from exc
+        policy_result = await service.resolve_effective_policy_for_session_result(
+            session_id=session_id
+        )
+        if not policy_result.is_success:
+            raise HTTPException(
+                status_code=404,
+                detail=policy_result.fallback or "[SESSION_NOT_FOUND]",
+            )
+        return _success(policy_result.value)
 
     data = await service.resolve_effective_policy(
         scenario_id=scenario_id,

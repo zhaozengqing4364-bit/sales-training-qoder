@@ -163,11 +163,19 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         try:
             async with AsyncSessionLocal() as db:
                 policy_service = PresentationAIPolicyService(db)
-                try:
-                    effective = await policy_service.resolve_effective_policy_for_session(
+                policy_result = (
+                    await policy_service.resolve_effective_policy_for_session_result(
                         session_id=session_id
                     )
-                except ValueError:
+                )
+                if policy_result.is_success and policy_result.value is not None:
+                    effective = policy_result.value
+                else:
+                    logger.warning(
+                        "Presentation AI policy session lookup failed, using defaults",
+                        session_id=session_id,
+                        fallback=policy_result.fallback,
+                    )
                     effective = await policy_service.resolve_effective_policy()
         except Exception:
             logger.warning(
