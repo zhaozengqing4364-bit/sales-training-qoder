@@ -97,6 +97,21 @@ def _env_choice(name: str, default: str, allowed: set[str]) -> str:
     return value if value in allowed else default
 
 
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Read a bounded integer env config with safe fallback."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, value))
+
+
+def _env_choice(name: str, default: str, allowed: set[str]) -> str:
+    """Read an allowlisted string env config with safe fallback."""
+    value = os.getenv(name, default).strip().lower()
+    return value if value in allowed else default
+
+
 class Settings:
     """Application settings"""
 
