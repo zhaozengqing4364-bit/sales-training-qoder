@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -559,6 +559,7 @@ export default function SessionReplayPage() {
   const [presentationPageNotice, setPresentationPageNotice] = useState<ReplayAnchorNotice | null>(null);
   const [retryEntry, setRetryEntry] = useState<PracticeSessionReport["retry_entry"]>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const replayDeepLink = useMemo(
     () => parseReplayDeepLinkRequest(searchParams),
@@ -733,10 +734,20 @@ export default function SessionReplayPage() {
 
   const handleJumpToMessage = useCallback((turnNumber: number) => {
     setActiveTurnNumber(turnNumber);
-    const messageElement = document.querySelector(`[data-turn-number="${turnNumber}"]`);
-    if (messageElement instanceof HTMLElement && typeof messageElement.scrollIntoView === "function") {
+    const messageElement = messageRefs.current.get(turnNumber);
+    if (messageElement && typeof messageElement.scrollIntoView === "function") {
       messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
     }
+  }, []);
+
+  const registerMessageRef = useCallback((turnNumber: number) => (
+    node: HTMLDivElement | null,
+  ) => {
+    if (node) {
+      messageRefs.current.set(turnNumber, node);
+      return;
+    }
+    messageRefs.current.delete(turnNumber);
   }, []);
 
   const handleRetryFromGoal = useCallback(async () => {
@@ -1504,6 +1515,7 @@ export default function SessionReplayPage() {
               return (
                 <div
                   key={message.id}
+                  ref={registerMessageRef(message.turn_number)}
                   data-turn-number={message.turn_number}
                   className={cn(
                     "rounded-xl border border-slate-100 p-3 sm:p-4 transition-all duration-300",
