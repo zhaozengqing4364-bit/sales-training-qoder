@@ -213,8 +213,8 @@ describe("LoginPage", () => {
 
         render(<LoginPage />);
 
-        expect(screen.getByLabelText("邮箱地址")).toHaveValue("remembered@test.com");
-        expect(screen.getByLabelText(/记住邮箱/)).toBeChecked();
+        expect((screen.getByLabelText("邮箱地址") as HTMLInputElement).value).toBe("remembered@test.com");
+        expect((screen.getByLabelText(/记住邮箱/) as HTMLInputElement).checked).toBe(true);
         expect(screen.getByText(/登录有效期仍由后端会话配置决定/)).toBeTruthy();
     });
 
