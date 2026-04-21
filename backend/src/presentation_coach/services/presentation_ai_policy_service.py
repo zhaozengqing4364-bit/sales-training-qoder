@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import PresentationAIPolicy
 from common.db.models import PracticeSession
+from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 from presentation_coach.services.feedback_service import get_feedback_service
 
@@ -94,17 +95,27 @@ class PresentationAIPolicyService:
         scope_type: str,
         scope_id: str | None,
     ) -> tuple[str, str | None]:
+        scope_result = self._normalize_scope_result(scope_type, scope_id)
+        if not scope_result.is_success:
+            raise ValueError(scope_result.fallback or "[INVALID_SCOPE]")
+        return scope_result.value or ("global", None)
+
+    def _normalize_scope_result(
+        self,
+        scope_type: str,
+        scope_id: str | None,
+    ) -> Result[tuple[str, str | None]]:
         normalized_scope = str(scope_type or "").strip().lower()
         if normalized_scope not in ALLOWED_SCOPE_TYPES:
-            raise ValueError("invalid scope_type")
+            return Result.fail("[INVALID_SCOPE_TYPE]")
 
         normalized_scope_id = str(scope_id).strip() if scope_id is not None else None
         if normalized_scope == "global":
             normalized_scope_id = None
         elif not normalized_scope_id:
-            raise ValueError("scope_id is required for scenario/presentation scope")
+            return Result.fail("[SCOPE_ID_REQUIRED]")
 
-        return normalized_scope, normalized_scope_id
+        return Result.ok((normalized_scope, normalized_scope_id))
 
     def _default_policy_payload(self) -> dict[str, Any]:
         return {
@@ -355,6 +366,24 @@ class PresentationAIPolicyService:
             },
         }
 
+    async def get_scope_policy_result(
+        self,
+        *,
+        scope_type: str,
+        scope_id: str | None = None,
+    ) -> Result[dict[str, Any]]:
+        scope_result = self._normalize_scope_result(scope_type, scope_id)
+        if not scope_result.is_success:
+            return Result.fail(scope_result.fallback or "[INVALID_SCOPE]")
+
+        normalized_scope, normalized_scope_id = scope_result.value or ("global", None)
+        return Result.ok(
+            await self.get_scope_policy(
+                scope_type=normalized_scope,
+                scope_id=normalized_scope_id,
+            )
+        )
+
     async def upsert_scope_policy(
         self,
         *,
@@ -509,6 +538,30 @@ class PresentationAIPolicyService:
         )
         effective["session_id"] = session_id
         return effective
+
+    async def resolve_effective_policy_for_session_result(
+        self,
+        *,
+        session_id: str,
+    ) -> Result[dict[str, Any]]:
+        session_result = await self.db.execute(
+            select(
+                PracticeSession.scenario_id,
+                PracticeSession.presentation_id,
+            ).where(PracticeSession.session_id == session_id)
+        )
+        session_identity = session_result.first()
+        if not session_identity:
+            return Result.fail("[SESSION_NOT_FOUND]")
+
+        scenario_id = str(session_identity[0]) if session_identity[0] else None
+        presentation_id = str(session_identity[1]) if session_identity[1] else None
+        effective = await self.resolve_effective_policy(
+            scenario_id=scenario_id,
+            presentation_id=presentation_id,
+        )
+        effective["session_id"] = session_id
+        return Result.ok(effective)
 
     async def preview_policy_decision(
         self,
