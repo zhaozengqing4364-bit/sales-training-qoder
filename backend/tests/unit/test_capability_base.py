@@ -635,7 +635,7 @@ class TestCapabilityRunner:
 
         assert result is not None
         assert result.success is False
-        assert result.fallback == "[CAPABILITY_ERROR]"
+        assert result.fallback == "[CAPABILITY_IO_ERROR]"
 
     @pytest.mark.asyncio
     async def test_run_one_returns_none_for_unknown(self, sample_context):

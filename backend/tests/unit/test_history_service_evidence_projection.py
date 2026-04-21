@@ -354,6 +354,7 @@ def test_build_statistics_and_trends_use_projection_scores_and_skip_not_evaluabl
         "best_score": 87.0,
         "total_practice_time_seconds": 276,
         "total_practice_time_minutes": 4.6,
+        "score_basis": "session_evidence_projection_evaluable_only",
     }
 
     trends = HistoryService.build_trend_points(summaries)

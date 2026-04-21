@@ -51,7 +51,7 @@ async def _upload_presentation(
         files={
             "file": (
                 filename,
-                io.BytesIO(b"fake-pptx"),
+                io.BytesIO(b"PKfake-pptx"),
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             )
         },
@@ -112,7 +112,7 @@ class TestPresentationsContract:
             files={
                 "file": (
                     "v2.pptx",
-                    io.BytesIO(b"fake-pptx-v2"),
+                    io.BytesIO(b"PKfake-pptx-v2"),
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
             },
@@ -197,7 +197,7 @@ class TestPresentationsContract:
             files={
                 "file": (
                     "v2.pptx",
-                    io.BytesIO(b"fake-pptx-v2"),
+                    io.BytesIO(b"PKfake-pptx-v2"),
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
             },
@@ -283,7 +283,7 @@ class TestPresentationsContract:
         assert body.get("trace_id")
         assert body["detail"] == {
             "error": "[ROLE_REQUIRED]",
-            "message": "当前账号权限不足，无法执行该操作。",
+            "message": "[ADMIN_REQUIRED] 当前账号权限不足，无法执行该操作。",
         }
 
     async def test_resource_race_inventory_marks_replace_as_first_confirmed_proof_target(self):

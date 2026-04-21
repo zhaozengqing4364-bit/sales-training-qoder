@@ -49,7 +49,6 @@ from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
 from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.base_handler import BaseWebSocketHandler
 from common.websocket.session_manager import get_session_manager
-from sales_bot.websocket.components.tts_component import calculate_pcm_duration_ms
 
 logger = get_logger(__name__)
 

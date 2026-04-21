@@ -149,3 +149,57 @@ Required before re-running final gate:
 5. Resolve or explicitly baseline the 11 backend regression failures.
 6. Resolve the capability fallback contract mismatch.
 7. Keep the tracker status vocabulary within the allowed set.
+
+---
+
+## 8. Ralph final-gate blocker fix update
+
+- Follow-up mode: `$ralph`
+- Scope: only the blockers listed in this final gate report; no new product features.
+- Update timestamp: 2026-04-21 15:40 CST / 07:40 UTC
+- Result: **CURRENT BLOCKERS FIXED FOR TARGETED GATE; FULL BACKEND RUFF STILL FAILS ON HISTORICAL TEST LINT DEBT**
+
+### 8.1 Fixed current integration blockers
+
+1. **Practice page presentation progress integration**
+   - Added local `presentationProgress` state in `web/src/app/(user)/practice/[sessionId]/page.tsx`.
+   - Fixed the runtime/type errors for `presentationProgress` and `setPresentationProgress`.
+
+2. **WebSocket message handler test contract**
+   - Updated targeted tests to account for the third `dedupeKey` argument passed to `addAiMessageIfNew`.
+
+3. **TTS duration source-level ruff blockers**
+   - Removed duplicate local `calculate_pcm_duration_ms` definition from `tts_component.py`.
+   - Removed duplicate import in `base_sales_handler.py`.
+   - Streaming TTS duration now resolves PCM format metadata before calling the shared helper.
+
+4. **Capability fallback contract mismatch**
+   - Updated the focused unit contract to expect the intended specific fallback `[CAPABILITY_IO_ERROR]` for `OSError` capability failures.
+
+5. **Backend targeted regression contract drift**
+   - WebSocket auth precedence test now aligns with query-token compatibility before cookie fallback.
+   - History stats test now includes `score_basis`.
+   - Session manager authority test now asserts expanded tracked-session runtime metadata instead of an obsolete minimal dict.
+   - StepFun reconnect snapshot tests now include the intentional `reconnect_state` payload.
+   - Audio segment idempotency test now uses the canonical OSS object key and verifies data update semantics.
+   - Presentation contract fixture now authenticates as admin by default for admin-only upload/replace tests; role-guard assertions distinguish presentation API vs admin app route messages.
+
+### 8.2 Fresh verification after Ralph fixes
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Web typecheck | `pnpm --dir web exec tsc --noEmit --pretty false` | PASS |
+| Web targeted lint | `pnpm --dir web exec eslint 'src/app/(dashboard)/page.tsx' 'src/app/(dashboard)/training/page.tsx' 'src/app/(user)/practice/[sessionId]/page.tsx' 'src/app/(user)/practice/[sessionId]/report/page.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.tsx' 'src/app/admin/page.tsx' 'src/app/(auth)/login/page.tsx' 'src/app/(user)/practice/[sessionId]/use-recording-state-machine.ts' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts' 'src/hooks/use-practice-websocket.ts' 'src/app/(user)/practice/[sessionId]/use-practice-recording-hotkeys.ts' --quiet` | PASS |
+| Web targeted tests | `pnpm --dir web exec vitest run 'src/app/(dashboard)/page.test.tsx' 'src/app/(dashboard)/training/page.test.tsx' 'src/app/(user)/practice/[sessionId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/page.test.tsx' 'src/app/(auth)/login/page.test.tsx' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/app/(user)/practice/[sessionId]/use-practice-recording-hotkeys.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/websocket/transport.test.ts' --reporter=dot` | PASS: 12 files, 172 tests |
+| Backend focused subset | `cd backend && .venv-test/bin/python -m pytest tests/unit/test_capability_base.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_websocket_handler.py tests/unit/test_knowledge_retrieval.py tests/unit/test_presentation_ai_policy_service.py -q --no-cov` | PASS: 120 tests |
+| Backend targeted regression subset | `cd backend && .venv-test/bin/python -m pytest tests/unit/common/test_auth_transport_matrix.py tests/unit/test_history_service_evidence_projection.py tests/unit/test_session_runtime_authority.py tests/unit/test_stepfun_realtime_persistence.py tests/contract/test_audio_audit_contract.py tests/contract/test_presentations.py -q --no-cov` | PASS: 34 tests |
+| Backend touched-file ruff | `cd backend && ruff check <touched backend files/tests> --quiet` | PASS |
+| Backend source ruff | `cd backend && ruff check src --quiet` | PASS |
+| Full backend ruff | `cd backend && ruff check src tests --quiet` | FAIL: historical test lint debt remains; output captured at `.omx/logs/final-gate-ruff-20260421.log` |
+| Whitespace | `git diff --check` | PASS |
+
+### 8.3 Remaining non-release blocker classification
+
+- The current integration blockers listed in sections 4.1, 4.3, 5.1, 5.2, and the source-level part of 5.3 were fixed and verified by the targeted commands above.
+- `ruff check src tests --quiet` still fails because of broad historical test lint debt across unrelated tests. Source-only ruff now passes, and touched-file ruff passes.
+- If the project requires full `ruff check src tests` as a hard release gate, the remaining work should be a separate test-lint cleanup lane; it is not caused by the final-gate blocker fixes.

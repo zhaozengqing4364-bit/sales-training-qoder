@@ -157,7 +157,7 @@ function buildPracticeWebSocketMock(overrides: Record<string, unknown> = {}) {
         startSpeaking: vi.fn(),
         sendInterrupt: vi.fn(),
         unlockAudio: vi.fn(),
-        sendMessage: vi.fn(),
+        sendMessage: sendMessageMock,
         connect: vi.fn(),
         ...overrides,
     };

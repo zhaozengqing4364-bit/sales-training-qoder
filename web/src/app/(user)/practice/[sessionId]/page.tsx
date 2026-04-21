@@ -67,6 +67,11 @@ type PresentationPageFocus = {
     pageNumber: number;
 };
 
+type PresentationProgressHint = {
+    last_page_number: number;
+    last_practice_at?: string | null;
+};
+
 function parsePresentationPageFocus(
     searchParams: URLSearchParams,
     scenarioType: "sales" | "presentation",
@@ -226,6 +231,7 @@ export default function PracticeSessionPage() {
     const [sessionTime, setSessionTime] = React.useState(0);
     const [sessionStartedAtMs, setSessionStartedAtMs] = React.useState<number | null>(null);
     const [preflightBrief, setPreflightBrief] = React.useState<PracticePreflightBrief>(() => buildFallbackPreflightBrief(queryScenarioType));
+    const [presentationProgress, setPresentationProgress] = React.useState<PresentationProgressHint | null>(null);
     const messagesListRef = React.useRef<HTMLDivElement>(null);
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
     const shouldAutoScrollRef = React.useRef(true);

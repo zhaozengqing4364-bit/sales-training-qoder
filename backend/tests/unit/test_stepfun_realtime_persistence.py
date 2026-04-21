@@ -85,6 +85,12 @@ def test_create_state_snapshot_captures_minimal_runtime_recovery_fields_and_norm
             "last_action_signature": "sig-score-1",
             "last_action_turn": 4,
         },
+        "reconnect_state": {
+            "connection_epoch": 0,
+            "request_epoch": 9,
+            "last_disconnect_reason": None,
+            "last_error": None,
+        },
     }
 
     handler._latest_score_snapshot["overall"] = 20.0
@@ -155,6 +161,12 @@ async def test_restore_session_state_rehydrates_minimal_runtime_and_emits_reconn
             "last_action_signature": "sig-score-restore",
             "last_action_turn": 5,
         },
+        "reconnect_state": {
+            "connection_epoch": 1,
+            "request_epoch": 6,
+            "last_disconnect_reason": None,
+            "last_error": None,
+        },
     }
 
 
@@ -189,7 +201,13 @@ async def test_restore_session_state_emits_normalized_coach_health_snapshot() ->
             "status": "healthy",
             "reason": "capability_pipeline_failed",
             "message": "实时辅导正常。",
-        }
+        },
+        "reconnect_state": {
+            "connection_epoch": 1,
+            "request_epoch": 0,
+            "last_disconnect_reason": None,
+            "last_error": None,
+        },
     }
 
 
@@ -218,6 +236,12 @@ async def test_restore_session_state_omits_coach_health_after_recovery() -> None
     emitted_snapshot = handler._send_reconnection_success.await_args.args[0]
     assert emitted_snapshot.runtime_state == {
         "current_request_id": 3,
+        "reconnect_state": {
+            "connection_epoch": 1,
+            "request_epoch": 3,
+            "last_disconnect_reason": None,
+            "last_error": None,
+        },
     }
 
 

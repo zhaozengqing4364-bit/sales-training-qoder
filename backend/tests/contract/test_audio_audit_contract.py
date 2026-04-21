@@ -348,12 +348,14 @@ async def test_segment_registration_is_idempotent(
             m_oss2.Auth.return_value = MagicMock()
             m_oss2.Bucket.return_value = mock_bucket
 
+            object_key = oss_mod.OssSigningService.build_object_key(session_id, 0)
+
             # Register segment 0
             await async_client.post(
                 f"/api/v1/practice/sessions/{session_id}/audio-segments",
                 json={
                     "segment_sequence": 0,
-                    "object_key": "audio/original.webm",
+                    "object_key": object_key,
                     "size_bytes": 1000,
                 },
                 headers=owner_headers,
@@ -364,7 +366,7 @@ async def test_segment_registration_is_idempotent(
                 f"/api/v1/practice/sessions/{session_id}/audio-segments",
                 json={
                     "segment_sequence": 0,
-                    "object_key": "audio/updated.webm",
+                    "object_key": object_key,
                     "size_bytes": 2000,
                 },
                 headers=owner_headers,
@@ -378,7 +380,7 @@ async def test_segment_registration_is_idempotent(
             )
             segments = list_resp.json()["data"]
             assert len(segments) == 1
-            assert segments[0]["object_key"] == "audio/updated.webm"
+            assert segments[0]["object_key"] == object_key
             assert segments[0]["size_bytes"] == 2000
 
     oss_mod._instance = None

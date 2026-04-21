@@ -90,6 +90,7 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         expect(deps.addAiMessageIfNew).toHaveBeenCalledWith(
             "实习专家是一款企业内部智能演练平台。",
             expect.objectContaining({ aiState: "speaking" }),
+            expect.any(String),
         );
         expect(deps.queueTTSAudio).toHaveBeenCalledWith(
             expect.objectContaining({ playback_rate: 1.25 }),
@@ -499,6 +500,7 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         expect(deps.addAiMessageIfNew).toHaveBeenCalledWith(
             "请补充本页核心价值点。",
             { aiState: "speaking" },
+            expect.any(String),
         );
     });
 

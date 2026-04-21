@@ -6,7 +6,10 @@ import pytest
 
 from common.error_handling.result import Result
 from common.websocket.session_manager import SessionManager
-from common.websocket.session_state_service import SessionStateService, SessionStateSnapshot
+from common.websocket.session_state_service import (
+    SessionStateService,
+    SessionStateSnapshot,
+)
 
 
 class _FakeRedis:
@@ -50,12 +53,14 @@ async def test_session_manager_stats_expose_process_local_connection_authority()
             "survives_restart": True,
         },
     }
-    assert stats["tracked_sessions"] == [
-        {
-            "session_id": "session-a",
-            "user_id": "user-a",
-        }
-    ]
+    assert len(stats["tracked_sessions"]) == 1
+    tracked = stats["tracked_sessions"][0]
+    assert tracked["session_id"] == "session-a"
+    assert tracked["user_id"] == "user-a"
+    assert tracked["connected_at"] >= 0
+    assert tracked["last_activity_at"] >= 0
+    assert tracked["session_age_seconds"] >= 0
+    assert tracked["inactive_seconds"] >= 0
 
 
 @pytest.mark.asyncio
