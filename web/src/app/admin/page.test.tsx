@@ -58,6 +58,7 @@ describe("AdminDashboardPage", () => {
         });
 
         expect(await screen.findByText("管理首页真实度说明")).toBeTruthy();
+        expect(screen.queryByPlaceholderText("全局搜索...")).toBeNull();
         expect(screen.getByText("66.7%")).toBeTruthy();
         expect(screen.getByText("58.3%")).toBeTruthy();
         expect(screen.getAllByText("待接真实统计").length).toBeGreaterThanOrEqual(3);

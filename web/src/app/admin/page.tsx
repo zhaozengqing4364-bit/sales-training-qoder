@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Activity, Database, HardDrive, Search, Server, Users } from "lucide-react";
+import { Activity, Database, HardDrive, Server, Users } from "lucide-react";
 
 import { api } from "@/lib/api/client";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,6 @@ function toPercent(value: unknown): number {
 }
 
 export default function AdminDashboardPage() {
-    const [searchTerm, setSearchTerm] = useState("");
     const [liveMetrics, setLiveMetrics] = useState({
         backendStatus: "unknown" as "unknown" | "online" | "offline",
         passRate3minFlow: 0,
@@ -73,16 +72,6 @@ export default function AdminDashboardPage() {
                     <p className="text-slate-500 mt-2 font-medium">系统运行状态概览与管理</p>
                 </div>
                 <div className="flex gap-4 w-full md:w-auto">
-                    <div className="relative group flex-1 md:flex-none">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                        <input
-                            type="text"
-                            placeholder="全局搜索..."
-                            value={searchTerm}
-                            onChange={(event) => setSearchTerm(event.target.value)}
-                            className="h-11 pl-11 pr-4 bg-white/60 border border-slate-200/60 rounded-full text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all w-full md:w-72 shadow-sm"
-                        />
-                    </div>
                     <Link
                         href="/admin/analytics"
                         className="inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-medium text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800"
