@@ -15,6 +15,7 @@ from typing import Any
 
 from common.db.models import PracticeSession, SessionStatus
 from common.error_handling.result import Result
+from common.growth.safety_policies import GrowthSafetyPolicyService
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -66,6 +67,7 @@ class NextPracticeRecommendationService:
 
     def __init__(self, ruleset: dict[str, Any] | None = None) -> None:
         self.ruleset, self.ruleset_source = self._resolve_ruleset(ruleset)
+        self.growth_safety = GrowthSafetyPolicyService()
 
     @classmethod
     def _resolve_ruleset(
@@ -138,32 +140,47 @@ class NextPracticeRecommendationService:
             "score_basis": PROJECTION_SCORE_BASIS,
         }
 
+    def _with_growth_safety(
+        self, session: PracticeSession, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        adaptive = self.growth_safety.evaluate_adaptive_difficulty(session)
+        wecom_share = self.growth_safety.evaluate_wecom_share(session)
+        return {
+            **payload,
+            "growth_safety": {
+                "adaptive_difficulty": adaptive.value if adaptive.is_success else None,
+                "wecom_share": wecom_share.value if wecom_share.is_success else None,
+            },
+        }
+
     def _insufficient_payload(
         self, session: PracticeSession, explanation: str
     ) -> dict[str, Any]:
-        return {
-            **self._base_payload(session),
-            "recommendation_kind": "insufficient_evidence",
-            "title": "完成一次可评估训练后再推荐",
-            "reason": explanation,
-            "explanation": explanation,
-            "action_label": "继续训练",
-            "target_path": "/training",
-            "evidence_summary": {
-                "status": getattr(session, "status", None),
-                "evaluable": self._is_evaluable(session),
-                "score_basis": PROJECTION_SCORE_BASIS,
+        return self._with_growth_safety(
+            session,
+            {
+                **self._base_payload(session),
+                "recommendation_kind": "insufficient_evidence",
+                "title": "完成一次可评估训练后再推荐",
+                "reason": explanation,
+                "explanation": explanation,
+                "action_label": "继续训练",
+                "target_path": "/training",
+                "evidence_summary": {
+                    "status": getattr(session, "status", None),
+                    "evaluable": self._is_evaluable(session),
+                    "score_basis": PROJECTION_SCORE_BASIS,
+                },
             },
-        }
+        )
 
     def build_for_session(self, session: PracticeSession) -> Result[dict[str, Any]]:
         """Build a recommendation payload with ruleset/evidence metadata."""
 
         try:
-            if (
-                getattr(session, "status", None) != SessionStatus.COMPLETED.value
-                or not self._is_evaluable(session)
-            ):
+            if getattr(
+                session, "status", None
+            ) != SessionStatus.COMPLETED.value or not self._is_evaluable(session):
                 return Result.ok(
                     self._insufficient_payload(
                         session,
@@ -212,23 +229,26 @@ class NextPracticeRecommendationService:
                 fallback = self.ruleset["fallback"]
                 explanation = str(fallback["reason"])
                 return Result.ok(
-                    {
-                        **self._base_payload(session),
-                        "recommendation_kind": "next_practice_ruleset",
-                        "weak_dimension": None,
-                        "title": str(fallback["title"]),
-                        "reason": explanation,
-                        "explanation": explanation,
-                        "action_label": str(fallback["action_label"]),
-                        "target_path": str(fallback["target_path"]),
-                        "evidence_summary": {
-                            "lowest_dimension": weakest["key"],
-                            "score_field": weakest["score_field"],
-                            "score": round(float(weakest["score"]), 2),
-                            "threshold": threshold,
-                            "score_basis": PROJECTION_SCORE_BASIS,
+                    self._with_growth_safety(
+                        session,
+                        {
+                            **self._base_payload(session),
+                            "recommendation_kind": "next_practice_ruleset",
+                            "weak_dimension": None,
+                            "title": str(fallback["title"]),
+                            "reason": explanation,
+                            "explanation": explanation,
+                            "action_label": str(fallback["action_label"]),
+                            "target_path": str(fallback["target_path"]),
+                            "evidence_summary": {
+                                "lowest_dimension": weakest["key"],
+                                "score_field": weakest["score_field"],
+                                "score": round(float(weakest["score"]), 2),
+                                "threshold": threshold,
+                                "score_basis": PROJECTION_SCORE_BASIS,
+                            },
                         },
-                    }
+                    )
                 )
 
             reason_template = str(
@@ -241,23 +261,28 @@ class NextPracticeRecommendationService:
                 threshold=threshold,
             )
             return Result.ok(
-                {
-                    **self._base_payload(session),
-                    "recommendation_kind": "next_practice_ruleset",
-                    "weak_dimension": weakest["key"],
-                    "title": str(config.get("title") or f"提升{label}"),
-                    "reason": explanation,
-                    "explanation": explanation,
-                    "action_label": str(config.get("action_label") or "开始专项练习"),
-                    "target_path": str(config.get("target_path") or "/training"),
-                    "evidence_summary": {
+                self._with_growth_safety(
+                    session,
+                    {
+                        **self._base_payload(session),
+                        "recommendation_kind": "next_practice_ruleset",
                         "weak_dimension": weakest["key"],
-                        "score_field": weakest["score_field"],
-                        "score": round(float(weakest["score"]), 2),
-                        "threshold": threshold,
-                        "score_basis": PROJECTION_SCORE_BASIS,
+                        "title": str(config.get("title") or f"提升{label}"),
+                        "reason": explanation,
+                        "explanation": explanation,
+                        "action_label": str(
+                            config.get("action_label") or "开始专项练习"
+                        ),
+                        "target_path": str(config.get("target_path") or "/training"),
+                        "evidence_summary": {
+                            "weak_dimension": weakest["key"],
+                            "score_field": weakest["score_field"],
+                            "score": round(float(weakest["score"]), 2),
+                            "threshold": threshold,
+                            "score_basis": PROJECTION_SCORE_BASIS,
+                        },
                     },
-                }
+                )
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.error(

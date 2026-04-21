@@ -38,6 +38,8 @@ def test_next_practice_recommendation_targets_product_knowledge_when_score_low()
     assert payload["evidence_summary"]["score_basis"] == (
         "session_evidence_projection_evaluable_only"
     )
+    assert payload["growth_safety"]["adaptive_difficulty"]["status"] == "disabled"
+    assert payload["growth_safety"]["wecom_share"]["status"] == "blocked_by_governance"
 
 
 def test_next_practice_recommendation_targets_objection_handling_when_lowest():
@@ -65,3 +67,7 @@ def test_next_practice_recommendation_reports_insufficient_evidence_without_clai
     assert payload["recommendation_kind"] == "insufficient_evidence"
     assert payload["source_session_id"] == "session-recommendation"
     assert "完成且可评估" in payload["explanation"]
+    assert (
+        payload["growth_safety"]["adaptive_difficulty"]["status"]
+        == "blocked_by_evidence"
+    )
