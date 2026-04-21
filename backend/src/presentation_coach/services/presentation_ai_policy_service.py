@@ -520,24 +520,12 @@ class PresentationAIPolicyService:
         *,
         session_id: str,
     ) -> dict[str, Any]:
-        session_result = await self.db.execute(
-            select(
-                PracticeSession.scenario_id,
-                PracticeSession.presentation_id,
-            ).where(PracticeSession.session_id == session_id)
+        policy_result = await self.resolve_effective_policy_for_session_result(
+            session_id=session_id
         )
-        session_identity = session_result.first()
-        if not session_identity:
-            raise ValueError("session not found")
-
-        scenario_id = str(session_identity[0]) if session_identity[0] else None
-        presentation_id = str(session_identity[1]) if session_identity[1] else None
-        effective = await self.resolve_effective_policy(
-            scenario_id=scenario_id,
-            presentation_id=presentation_id,
-        )
-        effective["session_id"] = session_id
-        return effective
+        if not policy_result.is_success:
+            raise ValueError(policy_result.fallback or "[SESSION_NOT_FOUND]")
+        return policy_result.value or {}
 
     async def resolve_effective_policy_for_session_result(
         self,
