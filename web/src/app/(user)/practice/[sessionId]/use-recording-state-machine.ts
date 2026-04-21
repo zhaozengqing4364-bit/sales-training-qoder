@@ -76,8 +76,13 @@ export function useRecordingStateMachine(input: RecordingStateMachineInput) {
     const transitionRef = React.useRef<RecordingTransition>("idle");
     const [transition, dispatch] = React.useReducer(recordingTransitionReducer, "idle");
 
-    inputRef.current = input;
-    transitionRef.current = transition;
+    React.useEffect(() => {
+        inputRef.current = input;
+    }, [input]);
+
+    React.useEffect(() => {
+        transitionRef.current = transition;
+    }, [transition]);
 
     const beginTransition = React.useCallback((nextTransition: Exclude<RecordingTransition, "idle">): boolean => {
         if (transitionRef.current !== "idle") {

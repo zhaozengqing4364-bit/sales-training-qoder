@@ -23,6 +23,11 @@ import { api } from "@/lib/api/client";
 import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
 import { usePracticeRecordingHotkeys } from "./use-practice-recording-hotkeys";
 import { usePracticeSessionLifecycle } from "./use-practice-session-lifecycle";
+import { useRecordingStateMachine } from "./use-recording-state-machine";
+import {
+    PRACTICE_RECORDING_HOTKEY_SCOPE_ATTRIBUTE,
+    practiceUxConfig,
+} from "@/lib/practice-ux-config";
 import { formatGoalTypeLabel, formatIssueTypeLabel } from "@/lib/session-evidence";
 
 const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
@@ -219,11 +224,11 @@ export default function PracticeSessionPage() {
 
     const [isPanelOpen, setIsPanelOpen] = React.useState(false);
     const [sessionTime, setSessionTime] = React.useState(0);
+    const [sessionStartedAtMs, setSessionStartedAtMs] = React.useState<number | null>(null);
     const [preflightBrief, setPreflightBrief] = React.useState<PracticePreflightBrief>(() => buildFallbackPreflightBrief(queryScenarioType));
+    const messagesListRef = React.useRef<HTMLDivElement>(null);
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
-    
-    // 防止快速点击导致多个录音会话 (Critical Fix #1)
-    const isStartingRef = React.useRef(false);
+    const shouldAutoScrollRef = React.useRef(true);
 
     // WebSocket 连接
     const {
@@ -349,20 +354,51 @@ export default function PracticeSessionPage() {
         setLockedPresentationId(runtimePresentationId);
     }, [runtimePresentationId]);
 
-    // 计时器
+    // 计时器：以绝对开始时间计算，避免重连时归零或丢失时长。
     React.useEffect(() => {
-        if (!isConnected) return;
-        
-        const timer = setInterval(() => {
-            setSessionTime(prev => prev + 1);
-        }, 1000);
-        
-        return () => clearInterval(timer);
-    }, [isConnected]);
+        setSessionStartedAtMs(null);
+        setSessionTime(0);
+        shouldAutoScrollRef.current = true;
+    }, [sessionId]);
 
-    // 自动滚动到最新消息
     React.useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (!isConnected || sessionStartedAtMs !== null) {
+            return;
+        }
+
+        setSessionStartedAtMs(Date.now() - sessionTime * 1000);
+    }, [isConnected, sessionStartedAtMs, sessionTime]);
+
+    React.useEffect(() => {
+        if (sessionStartedAtMs === null) {
+            return;
+        }
+
+        const updateSessionTime = () => {
+            setSessionTime(Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000)));
+        };
+
+        updateSessionTime();
+        const timer = setInterval(updateSessionTime, 1000);
+        return () => clearInterval(timer);
+    }, [sessionStartedAtMs]);
+
+    const handleMessagesScroll = React.useCallback(() => {
+        const list = messagesListRef.current;
+        if (!list) {
+            shouldAutoScrollRef.current = true;
+            return;
+        }
+
+        const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+        shouldAutoScrollRef.current = distanceFromBottom <= practiceUxConfig.autoscrollBottomThresholdPx;
+    }, []);
+
+    // 自动滚动到最新消息：仅当用户仍在底部附近时滚动，不打断上滚阅读。
+    React.useEffect(() => {
+        if (shouldAutoScrollRef.current) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
     }, [messages]);
 
     const scenarioType = lockedScenarioType;
@@ -539,11 +575,14 @@ export default function PracticeSessionPage() {
         handleStartSession,
         handleTogglePauseResume,
         audioEvidenceStatus = { status: "idle", message: null, error: null },
+        reportTransition = { status: "idle", secondsRemaining: 0, message: null },
         isEndingSession,
         isSessionPaused,
         isSessionTerminal,
         lifecycleError,
         pendingLifecycleAction,
+        viewReportNow,
+        stayOnPracticePage,
     } = usePracticeSessionLifecycle({
         sessionId,
         connectionState,
@@ -750,57 +789,76 @@ export default function PracticeSessionPage() {
         : aiState === "speaking"
         ? "AI 回复中"
         : "AI 待命";
-    const canToggleRecordingBase =
-        connectionState === "connected"
-        && sessionStatus === "in_progress"
-        && pendingLifecycleAction === null;
-    const canRecord = canToggleRecordingBase && hasPermission !== false;
-    const canRequestPermission = canToggleRecordingBase && hasPermission === false;
+    const recordingStateMachine = useRecordingStateMachine({
+        connectionState,
+        sessionStatus,
+        hasPermission,
+        isRecording,
+        pendingLifecycleAction,
+    });
+    const canRecord = recordingStateMachine.canRecord;
+    const canRequestPermission = recordingStateMachine.canRequestPermission;
+
+    const stopRecordingAndUpload = React.useCallback(() => {
+        if (!recordingStateMachine.beginTransition("stopping")) {
+            return;
+        }
+
+        Promise.resolve(stopRecording())
+            .then(() => continuousUploader.stopUpload())
+            .finally(() => {
+                recordingStateMachine.endTransition();
+            });
+    }, [continuousUploader, recordingStateMachine, stopRecording]);
 
     // 统一的录音切换函数 - 点击一次开始，再点击一次结束
     const toggleRecording = React.useCallback(() => {
-        debug.log('[Recording] toggleRecording called, isRecording:', isRecordingRef.current, 'aiIsBusy:', aiIsBusyRef.current, 'isConnected:', isConnected, 'hasPermission:', hasPermission);
-        
-        if (connectionState !== "connected") return;
-        if (sessionStatus !== "in_progress") return;
-        if (pendingLifecycleAction) return;
+        const intent = recordingStateMachine.resolveToggleIntent();
+        debug.log('[Recording] toggleRecording intent:', intent.action, 'isRecording:', isRecordingRef.current, 'aiIsBusy:', aiIsBusyRef.current, 'hasPermission:', hasPermission);
 
-        if (hasPermission === false) {
-            void requestPermission().then((granted) => {
-                if (!granted) return;
-                if (isRecordingRef.current) return;
-                unlockAudio();
-                startRecording();
-                void continuousUploader.startUpload();
+        if (intent.action === "blocked") {
+            return;
+        }
+
+        if (intent.action === "stop") {
+            stopRecordingAndUpload();
+            return;
+        }
+
+        if (intent.action === "request_permission") {
+            if (!recordingStateMachine.beginTransition("requesting_permission")) {
+                return;
+            }
+
+            void requestPermission()
+                .then((granted) => {
+                    if (!granted || isRecordingRef.current) {
+                        return;
+                    }
+                    unlockAudio();
+                    return Promise.resolve(startRecording()).then(() => continuousUploader.startUpload());
+                })
+                .finally(() => {
+                    recordingStateMachine.endTransition();
+                });
+            return;
+        }
+
+        if (!recordingStateMachine.beginTransition("starting")) {
+            return;
+        }
+
+        unlockAudio();
+        void Promise.resolve(startRecording())
+            .then(() => continuousUploader.startUpload())
+            .finally(() => {
+                recordingStateMachine.endTransition();
             });
-            return;
-        }
-        
-        // 防止快速双击
-        if (isStartingRef.current) {
-            debug.log('[Recording] Blocked: already starting');
-            return;
-        }
-        
-        if (isRecordingRef.current) {
-            // 正在录音 → 停止
-            stopRecording();
-            void continuousUploader.stopUpload();
-        } else {
-            // 没在录音 → 开始
-            isStartingRef.current = true;
-            unlockAudio();
-            startRecording();
-            void continuousUploader.startUpload();
-            setTimeout(() => {
-                isStartingRef.current = false;
-            }, 300);
-        }
-    }, [connectionState, hasPermission, isConnected, pendingLifecycleAction, requestPermission, sessionStatus, unlockAudio, startRecording, stopRecording, continuousUploader]);
+    }, [continuousUploader, hasPermission, recordingStateMachine, requestPermission, startRecording, stopRecordingAndUpload, unlockAudio]);
 
     usePracticeRecordingHotkeys({
         onToggleRecording: toggleRecording,
-        onStopRecording: stopRecording,
+        onStopRecording: stopRecordingAndUpload,
         isRecordingRef,
     });
 
@@ -1018,6 +1076,36 @@ export default function PracticeSessionPage() {
                     </div>
                 )}
 
+                {reportTransition.status === "ready" && (
+                    <div className="mx-4 mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/90 p-4 text-emerald-900 shadow-sm">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="text-sm font-semibold">会话已结束，报告已准备好</p>
+                                <p className="mt-1 text-sm text-emerald-800">
+                                    {reportTransition.message || `你可以先查看最后一条对话，也可以等待 ${reportTransition.secondsRemaining} 秒后自动进入报告。`}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button size="sm" onClick={viewReportNow} className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800">
+                                    立即查看报告
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={stayOnPracticePage} className="rounded-full border-emerald-200 text-emerald-800 hover:bg-emerald-100">
+                                    留在当前页
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {reportTransition.status === "staying" && (
+                    <div className="mx-4 mt-4 rounded-2xl border border-slate-200 bg-white/90 p-4 text-slate-700 shadow-sm">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <p className="text-sm font-semibold text-slate-900">已停留在当前页，你可以继续查看最后的对话内容。</p>
+                            <Button size="sm" onClick={viewReportNow} className="rounded-full">查看报告</Button>
+                        </div>
+                    </div>
+                )}
+
                 <PracticeFaultPanel faults={practiceFaults} />
 
                 <LearnerHelpCard context="practice" className="mx-4 mt-4" />
@@ -1031,7 +1119,12 @@ export default function PracticeSessionPage() {
                 )}
 
                 {/* 聊天列表 */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-[220px] md:pb-[200px]">
+                <div
+                    ref={messagesListRef}
+                    aria-label="练习对话消息"
+                    onScroll={handleMessagesScroll}
+                    className="flex-1 overflow-y-auto p-4 md:p-6 pb-[220px] md:pb-[200px]"
+                >
                     <div className="max-w-3xl mx-auto">
                         {messages.length === 0 && isConnected && (
                             <div className="text-center text-slate-600 py-8">
@@ -1124,6 +1217,7 @@ export default function PracticeSessionPage() {
                             <Button
                                 ref={recordBtnRef}
                                 size="lg"
+                                {...{ [PRACTICE_RECORDING_HOTKEY_SCOPE_ATTRIBUTE]: "true" }}
                                 disabled={!(canRecord || canRequestPermission)}
                                 aria-label={
                                     isRecording

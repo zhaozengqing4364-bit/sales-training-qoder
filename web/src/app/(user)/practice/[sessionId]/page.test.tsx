@@ -1074,6 +1074,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         const connectedState = buildPracticeWebSocketMock();
         usePracticeWebSocketMock.mockReturnValue(connectedState);
         const { rerender } = render(<PracticeSessionPage />);
+        await flushPreflightEffects();
 
         act(() => {
             vi.advanceTimersByTime(2000);
