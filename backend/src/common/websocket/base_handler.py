@@ -136,9 +136,9 @@ class BaseWebSocketHandler:
         if isinstance(configured, int) and 1 <= configured <= 5000:
             return configured
         logger.warning(
-            "Invalid WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE=%r; using default %s",
-            configured,
-            DEFAULT_MESSAGE_QUEUE_SIZE,
+            "Invalid WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE; using default",
+            configured_value=configured,
+            default_value=DEFAULT_MESSAGE_QUEUE_SIZE,
         )
         return DEFAULT_MESSAGE_QUEUE_SIZE
 
