@@ -19,7 +19,6 @@ from jinja2 import BaseLoader, TemplateSyntaxError
 from jinja2.runtime import Undefined
 from jinja2.sandbox import SandboxedEnvironment
 
-
 PROMPT_TEMPLATE_DELIMITER_ESCAPES = (
     ("{{", "{ {"),
     ("}}", "} }"),

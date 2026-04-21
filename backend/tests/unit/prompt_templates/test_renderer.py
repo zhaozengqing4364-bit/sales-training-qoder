@@ -4,8 +4,8 @@ Tests for Prompt Renderer (Jinja2)
 TDD Tests for Task B4: Implement PromptRenderer
 """
 
+
 import pytest
-from uuid import uuid4
 
 from prompt_templates.renderer import PromptRenderer, RenderResult, render_template
 
@@ -120,6 +120,43 @@ class TestPromptRenderer:
         )
         assert result.success is True
         assert result.rendered == "Hello Guest!"
+
+    def test_untrusted_variable_delimiters_are_neutralized(self, renderer):
+        """User values must not introduce nested Jinja expressions/blocks."""
+        result = renderer.render(
+            "User said: {{ user_input }}",
+            {
+                "user_input": (
+                    "{{ 7 * 7 }} {% for item in secrets %}"
+                    "{{ item }}{% endfor %}"
+                )
+            },
+        )
+
+        assert result.success is True
+        assert "49" not in result.rendered
+        assert "{%" not in result.rendered
+        assert "{{" not in result.rendered
+        assert "{ { 7 * 7 } }" in result.rendered
+        assert "{ % for item in secrets % }" in result.rendered
+
+    def test_nested_prompt_variable_delimiters_are_sanitized_recursively(
+        self, renderer
+    ):
+        """Nested dict/list variable values are sanitized before rendering."""
+        result = renderer.render(
+            "Items: {{ items|join(', ') }} / Name: {{ user.name }}",
+            {
+                "items": ["safe", "{{ injected }}"],
+                "user": {"name": "{% if admin %}root{% endif %}"},
+            },
+        )
+
+        assert result.success is True
+        assert "{{" not in result.rendered
+        assert "{%" not in result.rendered
+        assert "safe, { { injected } }" in result.rendered
+        assert "{ % if admin % }root{ % endif % }" in result.rendered
 
 
 class TestRenderResult:
