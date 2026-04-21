@@ -245,6 +245,18 @@ class Settings:
         minimum=100,
         maximum=1000000,
     )
+    SALES_BOT_SESSION_TTL_SECONDS: int = _env_int(
+        "SALES_BOT_SESSION_TTL_SECONDS",
+        3600,
+        minimum=60,
+        maximum=86400,
+    )
+    SALES_BOT_MAX_ACTIVE_SESSIONS: int = _env_int(
+        "SALES_BOT_MAX_ACTIVE_SESSIONS",
+        1000,
+        minimum=1,
+        maximum=100000,
+    )
 
     # Service Preloading
     PRELOAD_SERVICES: bool = os.getenv("PRELOAD_SERVICES", "false").lower() == "true"

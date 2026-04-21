@@ -10,13 +10,10 @@ Implements Constitution Principles:
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 
-from langchain_classic.chains import ConversationChain
-from langchain_classic.memory import ConversationBufferMemory
-
-from common.ai.llm_service import get_llm_service
+from common.config import settings
 from common.error_handling.result import Result
 
 logger = logging.getLogger(__name__)
@@ -50,7 +47,12 @@ class SalesBotService:
     - Control conversation flow
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        session_ttl_seconds: int | None = None,
+        max_active_sessions: int | None = None,
+    ):
         self.persona_prompts = {
             Persona.IMPATIENT_CEO: (
                 "You are an impatient CEO. You are very busy and have no patience for long-winded answers. "
@@ -74,6 +76,70 @@ class SalesBotService:
             ),
         }
         self.active_sessions: dict[uuid.UUID, dict] = {}
+        self._session_ttl_seconds = session_ttl_seconds or (
+            settings.SALES_BOT_SESSION_TTL_SECONDS
+        )
+        self._max_active_sessions = max_active_sessions or (
+            settings.SALES_BOT_MAX_ACTIVE_SESSIONS
+        )
+
+    @staticmethod
+    def _now() -> datetime:
+        return datetime.now(UTC)
+
+    def _build_conversation_chain(self):
+        """Build the legacy LangChain chain lazily to avoid import/startup cost."""
+        from langchain_classic.chains import ConversationChain
+        from langchain_classic.memory import ConversationBufferMemory
+
+        from common.ai.llm_service import get_llm_service
+
+        memory = ConversationBufferMemory(
+            return_messages=True,
+            ai_prefix="Coach",
+            human_prefix="User",
+        )
+        return ConversationChain(
+            llm=get_llm_service().llm,
+            memory=memory,
+            verbose=False,
+        )
+
+    def _touch_session(self, session_id: uuid.UUID) -> None:
+        session = self.active_sessions.get(session_id)
+        if session is not None:
+            session["last_activity_at"] = self._now()
+
+    def cleanup_expired_sessions(self, now: datetime | None = None) -> list[uuid.UUID]:
+        """Clear inactive legacy bot sessions after the configured TTL."""
+        effective_now = now or self._now()
+        expires_before = effective_now - timedelta(seconds=self._session_ttl_seconds)
+        expired_session_ids = [
+            session_id
+            for session_id, session in self.active_sessions.items()
+            if session.get("last_activity_at") is not None
+            and session["last_activity_at"] < expires_before
+        ]
+        for session_id in expired_session_ids:
+            self.active_sessions.pop(session_id, None)
+        return expired_session_ids
+
+    def _enforce_session_limit(self) -> list[uuid.UUID]:
+        overflow_count = len(self.active_sessions) - self._max_active_sessions
+        if overflow_count <= 0:
+            return []
+        evicted_session_ids = [
+            session_id
+            for session_id, _ in sorted(
+                self.active_sessions.items(),
+                key=lambda item: item[1].get("last_activity_at") or datetime.min.replace(
+                    tzinfo=UTC
+                ),
+            )[:overflow_count]
+        ]
+        for session_id in evicted_session_ids:
+            self.active_sessions.pop(session_id, None)
+        return evicted_session_ids
 
     async def create_session(
         self,
@@ -87,21 +153,11 @@ class SalesBotService:
         Returns: session_id or Result.fail on error
         """
         try:
+            self.cleanup_expired_sessions()
             session_id = uuid.uuid4()
 
-            # Initialize LangChain conversation memory
-            memory = ConversationBufferMemory(
-                return_messages=True,
-                ai_prefix="Coach",
-                human_prefix="User"
-            )
-
-            # Create conversation chain
-            chain = ConversationChain(
-                llm=get_llm_service().llm,
-                memory=memory,
-                verbose=False
-            )
+            chain = self._build_conversation_chain()
+            now = self._now()
 
             self.active_sessions[session_id] = {
                 "user_id": user_id,
@@ -111,7 +167,9 @@ class SalesBotService:
                 "turn_count": 0,
                 "total_tokens": 0,
                 "start_time": None,  # Set when session starts
+                "last_activity_at": now,
             }
+            self._enforce_session_limit()
 
             logger.info(
                 "Sales bot session created",
@@ -132,6 +190,7 @@ class SalesBotService:
             )
             # Fallback: create a lightweight session without LLM chain
             fallback_session_id = uuid.uuid4()
+            now = self._now()
             self.active_sessions[fallback_session_id] = {
                 "user_id": user_id,
                 "scenario_id": scenario_id,
@@ -140,7 +199,9 @@ class SalesBotService:
                 "turn_count": 0,
                 "total_tokens": 0,
                 "start_time": None,
+                "last_activity_at": now,
             }
+            self._enforce_session_limit()
             return Result(value=fallback_session_id)
 
     async def start_session(self, session_id: uuid.UUID) -> Result[str]:
@@ -154,7 +215,8 @@ class SalesBotService:
                 return Result.fail(fallback="[SESSION_NOT_FOUND]")
 
             session = self.active_sessions[session_id]
-            session["start_time"] = datetime.now(UTC)
+            session["start_time"] = self._now()
+            self._touch_session(session_id)
 
             persona = session["persona"]
 
@@ -203,6 +265,7 @@ class SalesBotService:
                 return Result.fail(fallback="[SESSION_NOT_FOUND]")
 
             session = self.active_sessions[session_id]
+            self._touch_session(session_id)
             chain = session["chain"]
             persona = session["persona"]
 
