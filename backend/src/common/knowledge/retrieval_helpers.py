@@ -476,14 +476,17 @@ def transform_search_rows(
         if retrieval_mode:
             retrieval_modes.add(retrieval_mode)
 
-        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        raw_metadata = row.get("metadata")
+        metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
         result_item = {
             "knowledge_base_id": row.get("knowledge_base_id"),
             "knowledge_base_name": row.get("knowledge_base_name"),
             "score": row.get("score"),
             "snippet": snippet,
             "retrieval_mode": retrieval_mode or "vector",
-            "document_title": row.get("document_title") or row.get("source") or metadata.get("document_title"),
+            "document_title": row.get("document_title")
+            or row.get("source")
+            or metadata.get("document_title"),
         }
         if isinstance(row.get("score_breakdown"), dict):
             result_item["score_breakdown"] = dict(row["score_breakdown"])
