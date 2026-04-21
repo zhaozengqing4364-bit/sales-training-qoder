@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Add src to path for imports
@@ -386,11 +387,24 @@ async def csrf_protection_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+async def _check_database_readiness() -> str:
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(select(1))
+    except (OSError, RuntimeError, SQLAlchemyError) as exc:
+        logger.warning("Health readiness database check failed", error=str(exc))
+        return "error"
+    return "ok"
+
+
 # Health check
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return build_health_payload()
+    payload = build_health_payload(
+        checks={"database": await _check_database_readiness()}
+    )
+    return JSONResponse(status_code=200 if payload["ready"] else 503, content=payload)
 
 
 @app.get("/metrics", include_in_schema=False)
