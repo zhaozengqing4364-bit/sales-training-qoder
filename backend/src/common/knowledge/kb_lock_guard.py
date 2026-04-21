@@ -12,10 +12,8 @@ from typing import Any
 
 from common.db.session import AsyncSessionLocal
 from common.knowledge.service import KnowledgeService
-from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
-    search_internal_knowledge,
-)
-from sales_bot.websocket.components.stepfun_knowledge_helpers import (
+from common.knowledge.internal_searcher import search_internal_knowledge
+from common.knowledge.retrieval_helpers import (
     is_product_overview_query,
     resolve_grounding_context_limits,
 )
