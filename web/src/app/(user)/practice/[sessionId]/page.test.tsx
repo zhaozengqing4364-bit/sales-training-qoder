@@ -1058,4 +1058,186 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getAllByText("等待你在下一轮尝试").length).toBeGreaterThan(0);
     });
 
+    it("keeps elapsed practice time across a reconnect using the original start timestamp", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-04-21T00:00:00Z"));
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+
+        const connectedState = buildPracticeWebSocketMock();
+        usePracticeWebSocketMock.mockReturnValue(connectedState);
+        const { rerender } = render(<PracticeSessionPage />);
+
+        act(() => {
+            vi.advanceTimersByTime(2000);
+        });
+        expect(screen.getByText("00:02")).toBeTruthy();
+
+        usePracticeWebSocketMock.mockReturnValue(buildPracticeWebSocketMock({
+            connectionState: "reconnecting",
+            isConnected: false,
+        }));
+        rerender(<PracticeSessionPage />);
+
+        act(() => {
+            vi.advanceTimersByTime(3000);
+        });
+
+        usePracticeWebSocketMock.mockReturnValue(connectedState);
+        rerender(<PracticeSessionPage />);
+
+        act(() => {
+            vi.advanceTimersByTime(1000);
+        });
+
+        expect(screen.getByText("00:06")).toBeTruthy();
+    });
+
+    it("does not force-scroll when the learner has intentionally scrolled up in history", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        const scrollIntoView = vi.fn();
+        Element.prototype.scrollIntoView = scrollIntoView;
+
+        usePracticeWebSocketMock.mockReturnValue(buildPracticeWebSocketMock({
+            messages: [{
+                id: "msg-1",
+                sender: "ai",
+                message: "第一条欢迎消息",
+                timestamp: "10:00",
+            }],
+        }));
+
+        const { rerender } = render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+        scrollIntoView.mockClear();
+
+        const messageList = screen.getByLabelText("练习对话消息");
+        Object.defineProperty(messageList, "scrollHeight", { value: 1200, configurable: true });
+        Object.defineProperty(messageList, "clientHeight", { value: 400, configurable: true });
+        Object.defineProperty(messageList, "scrollTop", { value: 120, configurable: true });
+        fireEvent.scroll(messageList);
+
+        usePracticeWebSocketMock.mockReturnValue(buildPracticeWebSocketMock({
+            messages: [
+                {
+                    id: "msg-1",
+                    sender: "ai",
+                    message: "第一条欢迎消息",
+                    timestamp: "10:00",
+                },
+                {
+                    id: "msg-2",
+                    sender: "ai",
+                    message: "用户仍在上方阅读时到达的新消息",
+                    timestamp: "10:01",
+                },
+            ],
+        }));
+        rerender(<PracticeSessionPage />);
+
+        expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it("keeps auto-scroll enabled when the learner remains near the bottom", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        const scrollIntoView = vi.fn();
+        Element.prototype.scrollIntoView = scrollIntoView;
+
+        usePracticeWebSocketMock.mockReturnValue(buildPracticeWebSocketMock({
+            messages: [{
+                id: "msg-bottom-1",
+                sender: "ai",
+                message: "底部附近的消息",
+                timestamp: "10:00",
+            }],
+        }));
+
+        const { rerender } = render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+        scrollIntoView.mockClear();
+
+        const messageList = screen.getByLabelText("练习对话消息");
+        Object.defineProperty(messageList, "scrollHeight", { value: 1200, configurable: true });
+        Object.defineProperty(messageList, "clientHeight", { value: 400, configurable: true });
+        Object.defineProperty(messageList, "scrollTop", { value: 730, configurable: true });
+        fireEvent.scroll(messageList);
+
+        usePracticeWebSocketMock.mockReturnValue(buildPracticeWebSocketMock({
+            messages: [
+                {
+                    id: "msg-bottom-1",
+                    sender: "ai",
+                    message: "底部附近的消息",
+                    timestamp: "10:00",
+                },
+                {
+                    id: "msg-bottom-2",
+                    sender: "ai",
+                    message: "底部附近的新消息",
+                    timestamp: "10:01",
+                },
+            ],
+        }));
+        rerender(<PracticeSessionPage />);
+
+        expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    });
+
+    it("allows immediate retry after microphone permission is denied without a fixed 300ms dead zone", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        const requestPermission = vi.fn().mockResolvedValue(false);
+        const startRecording = vi.fn();
+        useAudioRecorderMock.mockReturnValue(buildAudioRecorderMock({
+            hasPermission: false,
+            requestPermission,
+            startRecording,
+        }));
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        const recordButton = screen.getByRole("button", { name: "点击重新请求麦克风权限" });
+        fireEvent.click(recordButton);
+        await waitFor(() => {
+            expect(requestPermission).toHaveBeenCalledTimes(1);
+        });
+
+        fireEvent.click(recordButton);
+        await waitFor(() => {
+            expect(requestPermission).toHaveBeenCalledTimes(2);
+        });
+        expect(startRecording).not.toHaveBeenCalled();
+    });
+
 });
