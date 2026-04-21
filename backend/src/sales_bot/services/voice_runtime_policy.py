@@ -74,6 +74,51 @@ DEPRECATED_RUNTIME_PROFILE_FIELDS = {"system_instruction_template"}
 DEPRECATED_AGENT_POLICY_FIELDS = {"instructions_override"}
 
 
+class ToolPolicyResolver:
+    """Single runtime enforcement point for tool/network/KB-lock policy."""
+
+    @staticmethod
+    def apply_runtime_enforcement(
+        tool_policy: dict[str, Any],
+        *,
+        has_bound_knowledge_base: bool,
+        source: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        resolved = dict(tool_policy)
+        source_updates = source if isinstance(source, dict) else {}
+
+        if not has_bound_knowledge_base:
+            resolved["enable_internal_retrieval"] = False
+            if not resolved["allow_web_search_without_kb"]:
+                resolved["enable_web_search"] = False
+                source_updates["tool_policy_enforcement"] = "no_kb_no_web"
+        else:
+            resolved["enable_internal_retrieval"] = True
+            resolved["enable_web_search"] = False
+            resolved["retrieval_priority"] = "kb_only"
+            source_updates["tool_policy_enforcement"] = "kb_internal_only"
+
+        if resolved["require_kb_grounding"]:
+            resolved["enable_internal_retrieval"] = True
+            resolved["enable_web_search"] = False
+            resolved["retrieval_priority"] = "kb_only"
+            if has_bound_knowledge_base:
+                source_updates["tool_policy_enforcement"] = "kb_lock_enforced"
+            else:
+                source_updates["tool_policy_enforcement"] = "kb_lock_unbound"
+            source_updates["kb_lock_enforcement"] = (
+                "kb_required_and_bound"
+                if has_bound_knowledge_base
+                else "kb_required_unbound"
+            )
+
+        if resolved["network_access_mode"] == "off":
+            resolved["enable_web_search"] = False
+            source_updates["network_access_enforcement"] = "network_off"
+
+        return resolved
+
+
 def _as_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -701,32 +746,11 @@ class VoiceRuntimePolicyService:
                 tool_policy["kb_lock_mode"] = "strict_audit"
                 source["kb_lock_mode_default"] = "legacy_strict_default"
 
-        if not has_bound_knowledge_base:
-            tool_policy["enable_internal_retrieval"] = False
-            if not tool_policy["allow_web_search_without_kb"]:
-                tool_policy["enable_web_search"] = False
-                source["tool_policy_enforcement"] = "no_kb_no_web"
-        else:
-            tool_policy["enable_internal_retrieval"] = True
-            tool_policy["enable_web_search"] = False
-            tool_policy["retrieval_priority"] = "kb_only"
-            source["tool_policy_enforcement"] = "kb_internal_only"
-        if tool_policy["require_kb_grounding"]:
-            tool_policy["enable_internal_retrieval"] = True
-            tool_policy["enable_web_search"] = False
-            tool_policy["retrieval_priority"] = "kb_only"
-            if has_bound_knowledge_base:
-                source["tool_policy_enforcement"] = "kb_lock_enforced"
-            else:
-                source["tool_policy_enforcement"] = "kb_lock_unbound"
-            source["kb_lock_enforcement"] = (
-                "kb_required_and_bound"
-                if has_bound_knowledge_base
-                else "kb_required_unbound"
-            )
-        if tool_policy["network_access_mode"] == "off":
-            tool_policy["enable_web_search"] = False
-            source["network_access_enforcement"] = "network_off"
+        tool_policy = ToolPolicyResolver.apply_runtime_enforcement(
+            tool_policy,
+            has_bound_knowledge_base=has_bound_knowledge_base,
+            source=source,
+        )
         policy["tool_policy"] = tool_policy
         policy["persona_policy"] = persona_policy
         policy["customer_pressure"] = customer_pressure
@@ -760,18 +784,10 @@ class VoiceRuntimePolicyService:
             [item for item in knowledge_base_ids if str(item).strip()]
         )
 
-        if tool_policy["network_access_mode"] == "off":
-            tool_policy["enable_web_search"] = False
-        if tool_policy["require_kb_grounding"]:
-            tool_policy["enable_internal_retrieval"] = True
-            tool_policy["enable_web_search"] = False
-            tool_policy["retrieval_priority"] = "kb_only"
-        if has_bound_knowledge_base:
-            tool_policy["enable_internal_retrieval"] = True
-            tool_policy["enable_web_search"] = False
-            tool_policy["retrieval_priority"] = "kb_only"
-        elif not tool_policy["allow_web_search_without_kb"]:
-            tool_policy["enable_web_search"] = False
+        tool_policy = ToolPolicyResolver.apply_runtime_enforcement(
+            tool_policy,
+            has_bound_knowledge_base=has_bound_knowledge_base,
+        )
 
         tools: list[dict[str, Any]] = []
 

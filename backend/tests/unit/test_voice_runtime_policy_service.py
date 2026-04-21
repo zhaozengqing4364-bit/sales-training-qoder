@@ -12,8 +12,70 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentVoicePolicy, Persona, VoiceRuntimeProfile
-from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from sales_bot.services.voice_runtime_policy import (
+    DEFAULT_TOOL_POLICY,
+    ToolPolicyResolver,
+    VoiceRuntimePolicyService,
+)
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
+
+
+def test_tool_policy_resolver_enforces_kb_lock_as_single_truth_source():
+    source: dict[str, str] = {}
+    resolved = ToolPolicyResolver.apply_runtime_enforcement(
+        {
+            **DEFAULT_TOOL_POLICY,
+            "enable_web_search": True,
+            "network_access_mode": "controlled",
+            "require_kb_grounding": True,
+            "retrieval_priority": "web_first",
+        },
+        has_bound_knowledge_base=False,
+        source=source,
+    )
+
+    assert resolved["enable_internal_retrieval"] is True
+    assert resolved["enable_web_search"] is False
+    assert resolved["retrieval_priority"] == "kb_only"
+    assert source["tool_policy_enforcement"] == "kb_lock_unbound"
+    assert source["kb_lock_enforcement"] == "kb_required_unbound"
+
+
+def test_tool_policy_resolver_allows_controlled_web_only_when_explicit_without_kb():
+    source: dict[str, str] = {}
+    resolved = ToolPolicyResolver.apply_runtime_enforcement(
+        {
+            **DEFAULT_TOOL_POLICY,
+            "enable_web_search": True,
+            "network_access_mode": "controlled",
+            "allow_web_search_without_kb": True,
+        },
+        has_bound_knowledge_base=False,
+        source=source,
+    )
+
+    assert resolved["enable_internal_retrieval"] is False
+    assert resolved["enable_web_search"] is True
+    assert "tool_policy_enforcement" not in source
+
+
+def test_tool_policy_resolver_keeps_bound_kb_internal_only():
+    source: dict[str, str] = {}
+    resolved = ToolPolicyResolver.apply_runtime_enforcement(
+        {
+            **DEFAULT_TOOL_POLICY,
+            "enable_web_search": True,
+            "network_access_mode": "controlled",
+            "retrieval_priority": "balanced",
+        },
+        has_bound_knowledge_base=True,
+        source=source,
+    )
+
+    assert resolved["enable_internal_retrieval"] is True
+    assert resolved["enable_web_search"] is False
+    assert resolved["retrieval_priority"] == "kb_only"
+    assert source["tool_policy_enforcement"] == "kb_internal_only"
 
 
 @pytest.mark.asyncio
