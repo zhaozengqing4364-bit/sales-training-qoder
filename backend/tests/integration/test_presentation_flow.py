@@ -13,6 +13,7 @@ from common.db.models import (
     PracticeSession,
     Presentation,
     RequiredTalkingPoint,
+    User,
 )
 from common.error_handling.result import Result
 from presentation_coach.services.coach_service import PresentationCoachService
@@ -78,6 +79,12 @@ class _AsyncBarrier:
         await asyncio.wait_for(self._released.wait(), timeout=timeout_seconds)
 
 
+async def _grant_admin_role(db: AsyncSession, user: User) -> None:
+    user.role = "admin"
+    await db.commit()
+    await db.refresh(user)
+
+
 async def _upload_presentation(
     async_client: AsyncClient,
     headers: dict[str, str],
@@ -92,7 +99,7 @@ async def _upload_presentation(
         files={
             "file": (
                 filename,
-                io.BytesIO(b"fake-pptx"),
+                io.BytesIO(b"PKfake-pptx"),
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             )
         },
@@ -109,10 +116,12 @@ class TestPresentationFlow:
         async_client: AsyncClient,
         auth_headers: dict[str, str],
         test_db: AsyncSession,
+        test_user: User,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ):
         """Replacing a standard PPT should keep the same presentation_id while new sessions read the rebuilt page content, talking points, and forbidden words."""
+        await _grant_admin_role(test_db, test_user)
         monkeypatch.setenv("PPT_STORAGE_PATH", str(tmp_path / "ppts"))
 
         from presentation_coach.api import presentations as presentations_api
@@ -184,7 +193,7 @@ class TestPresentationFlow:
             files={
                 "file": (
                     "deck-v2.pptx",
-                    io.BytesIO(b"fake-pptx-v2"),
+                    io.BytesIO(b"PKfake-pptx-v2"),
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
             },
@@ -253,10 +262,13 @@ class TestPresentationFlow:
         self,
         async_client: AsyncClient,
         auth_headers: dict[str, str],
+        test_db: AsyncSession,
+        test_user: User,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ):
         """A presentation already referenced by a non-terminal session should reject in-place replacement instead of mutating live material."""
+        await _grant_admin_role(test_db, test_user)
         monkeypatch.setenv("PPT_STORAGE_PATH", str(tmp_path / "ppts"))
 
         from presentation_coach.api import presentations as presentations_api
@@ -300,7 +312,7 @@ class TestPresentationFlow:
             files={
                 "file": (
                     "stable-v2.pptx",
-                    io.BytesIO(b"blocked-replace"),
+                    io.BytesIO(b"PKblocked-replace"),
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
             },
@@ -406,6 +418,14 @@ class TestPresentationFlow:
                     or (login_payload.get("data") or {}).get("access_token")
                 )
                 assert access_token
+                async with session_factory() as admin_session:
+                    dev_user = (
+                        await admin_session.execute(
+                            select(User).where(User.email == "dev@example.com")
+                        )
+                    ).scalar_one()
+                    dev_user.role = "admin"
+                    await admin_session.commit()
                 auth_headers = {"Authorization": f"Bearer {access_token}"}
 
                 original = await _upload_presentation(
@@ -424,7 +444,7 @@ class TestPresentationFlow:
                         files={
                             "file": (
                                 filename,
-                                io.BytesIO(filename.encode("utf-8")),
+                                io.BytesIO(b"PK" + filename.encode("utf-8")),
                                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                             )
                         },
@@ -476,10 +496,12 @@ class TestPresentationFlow:
         async_client: AsyncClient,
         auth_headers: dict[str, str],
         test_db: AsyncSession,
+        test_user: User,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ):
         """Deleting a presentation with a live session currently succeeds without any route-level blocker, and the session loses its presentation link in the focused test harness."""
+        await _grant_admin_role(test_db, test_user)
         monkeypatch.setenv("PPT_STORAGE_PATH", str(tmp_path / "ppts"))
 
         from presentation_coach.api import presentations as presentations_api

@@ -263,6 +263,23 @@ class PracticeReportService:
             if scenario_type_enum == ScenarioType.PRESENTATION
             else None
         )
+        logic_score = projection.logic_score
+        accuracy_score = projection.accuracy_score
+        completeness_score = projection.completeness_score
+        overall_score = projection.overall_score
+        if scenario_type_enum == ScenarioType.PRESENTATION:
+            (
+                logic_score,
+                accuracy_score,
+                completeness_score,
+                overall_score,
+            ) = self._presentation_review_scores(
+                presentation_review=presentation_review,
+                fallback_logic_score=logic_score,
+                fallback_accuracy_score=accuracy_score,
+                fallback_completeness_score=completeness_score,
+                fallback_overall_score=overall_score,
+            )
         suggestions = self._projection_suggestions(
             scenario_type_enum=scenario_type_enum,
             presentation_review=presentation_review,
@@ -271,10 +288,10 @@ class PracticeReportService:
         report = SessionReport(
             session_id=session.session_id,
             scenario_type=scenario_type_enum,
-            logic_score=projection.logic_score,
-            accuracy_score=projection.accuracy_score,
-            completeness_score=projection.completeness_score,
-            overall_score=projection.overall_score,
+            logic_score=logic_score,
+            accuracy_score=accuracy_score,
+            completeness_score=completeness_score,
+            overall_score=overall_score,
             suggestions=suggestions,
             audio_url=session.audio_url,
             transcript_url=session.transcript_url,
@@ -356,6 +373,61 @@ class PracticeReportService:
             ),
         )
         return report
+
+    @staticmethod
+    def _presentation_review_scores(
+        *,
+        presentation_review: dict[str, Any] | None,
+        fallback_logic_score: float,
+        fallback_accuracy_score: float,
+        fallback_completeness_score: float,
+        fallback_overall_score: float,
+    ) -> tuple[float, float, float, float]:
+        """Map canonical presentation-review dimensions to report rollups."""
+        if not isinstance(presentation_review, dict):
+            return (
+                fallback_logic_score,
+                fallback_accuracy_score,
+                fallback_completeness_score,
+                fallback_overall_score,
+            )
+
+        dimension_scores = presentation_review.get("dimension_scores")
+        if not isinstance(dimension_scores, list):
+            return (
+                fallback_logic_score,
+                fallback_accuracy_score,
+                fallback_completeness_score,
+                float(presentation_review.get("overall_score") or fallback_overall_score),
+            )
+
+        by_name: dict[str, float] = {}
+        for item in dimension_scores:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "")
+            try:
+                by_name[name] = float(item.get("score"))
+            except (TypeError, ValueError):
+                continue
+
+        completeness_dimensions = [
+            by_name[name]
+            for name in ["专业性", "生动性", "互动问答", "其他表现"]
+            if name in by_name
+        ]
+        completeness_score = (
+            sum(completeness_dimensions) / len(completeness_dimensions)
+            if completeness_dimensions
+            else fallback_completeness_score
+        )
+
+        return (
+            by_name.get("流畅连贯性", fallback_logic_score),
+            by_name.get("准确性", fallback_accuracy_score),
+            completeness_score,
+            float(presentation_review.get("overall_score") or fallback_overall_score),
+        )
 
     @staticmethod
     def _overall_score(session: PracticeSession) -> float:
