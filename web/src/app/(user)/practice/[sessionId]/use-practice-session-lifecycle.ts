@@ -8,6 +8,7 @@ import type { SessionStatus } from "@/lib/api/types";
 import type { AudioEvidenceFlushResult } from "@/hooks/use-continuous-audio-uploader";
 import type { ConnectionState } from "@/hooks/use-practice-websocket";
 import { debug } from "@/lib/debug";
+import { practiceUxConfig } from "@/lib/practice-ux-config";
 
 interface UsePracticeSessionLifecycleParams {
     sessionId: string;
@@ -30,6 +31,12 @@ export type PracticeAudioEvidenceStatus =
     | { status: "completed"; message: string; error: string | null }
     | { status: "failed"; message: string; error: string | null }
     | { status: "timed_out"; message: string; error: string | null };
+
+export type PracticeReportTransition =
+    | { status: "idle"; secondsRemaining: number; message: string | null }
+    | { status: "preparing"; secondsRemaining: number; message: string }
+    | { status: "ready"; secondsRemaining: number; message: string }
+    | { status: "staying"; secondsRemaining: number; message: string };
 
 function buildAudioEvidenceStatus(
     result: AudioEvidenceFlushResult,
@@ -120,6 +127,13 @@ export function usePracticeSessionLifecycle({
         message: null,
         error: null,
     });
+    const [reportTransition, setReportTransition] = React.useState<PracticeReportTransition>({
+        status: "idle",
+        secondsRemaining: 0,
+        message: null,
+    });
+    const reportNavigationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reportCountdownTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
     const hasStartedSessionRef = React.useRef(false);
     const hasNavigatedToReportRef = React.useRef(false);
     const hasStoppedRecordingForEndRef = React.useRef(false);
@@ -131,8 +145,34 @@ export function usePracticeSessionLifecycle({
         && (sessionStatus === "in_progress" || sessionStatus === "paused")
         && !isEndingSession
         && pendingLifecycleAction === null;
+    const clearReportTimers = React.useCallback(() => {
+        if (reportNavigationTimerRef.current) {
+            clearTimeout(reportNavigationTimerRef.current);
+            reportNavigationTimerRef.current = null;
+        }
+        if (reportCountdownTimerRef.current) {
+            clearInterval(reportCountdownTimerRef.current);
+            reportCountdownTimerRef.current = null;
+        }
+    }, []);
+
+    const viewReportNow = React.useCallback(() => {
+        clearReportTimers();
+        router.push(`/practice/${sessionId}/report`);
+    }, [clearReportTimers, router, sessionId]);
+
+    const stayOnPracticePage = React.useCallback(() => {
+        clearReportTimers();
+        setReportTransition({
+            status: "staying",
+            secondsRemaining: 0,
+            message: "已取消自动跳转，你可以继续查看最后的对话内容。",
+        });
+    }, [clearReportTimers]);
+
 
     React.useEffect(() => {
+        clearReportTimers();
         hasStartedSessionRef.current = false;
         hasNavigatedToReportRef.current = false;
         hasStoppedRecordingForEndRef.current = false;
@@ -144,7 +184,12 @@ export function usePracticeSessionLifecycle({
             message: null,
             error: null,
         });
-    }, [sessionId]);
+        setReportTransition({
+            status: "idle",
+            secondsRemaining: 0,
+            message: null,
+        });
+    }, [clearReportTimers, sessionId]);
 
     const handleStartSession = React.useCallback(async () => {
         hasStartedSessionRef.current = true;
@@ -182,8 +227,45 @@ export function usePracticeSessionLifecycle({
 
         hasNavigatedToReportRef.current = true;
         setLifecycleError(null);
+        setReportTransition({
+            status: "preparing",
+            secondsRemaining: 0,
+            message: "正在保存收尾证据，完成后可查看报告。",
+        });
 
-        const finishAndNavigate = async () => {
+        const scheduleReportTransition = () => {
+            const delaySeconds = practiceUxConfig.sessionEndRedirectDelaySeconds;
+            if (delaySeconds <= 0) {
+                viewReportNow();
+                return;
+            }
+
+            setReportTransition({
+                status: "ready",
+                secondsRemaining: delaySeconds,
+                message: `报告已准备好。你可以继续查看最后一条对话，或等待 ${delaySeconds} 秒后自动进入报告。`,
+            });
+
+            reportCountdownTimerRef.current = setInterval(() => {
+                setReportTransition((current) => {
+                    if (current.status !== "ready") {
+                        return current;
+                    }
+                    const nextSeconds = Math.max(0, current.secondsRemaining - 1);
+                    return {
+                        ...current,
+                        secondsRemaining: nextSeconds,
+                        message: `报告已准备好。你可以继续查看最后一条对话，或等待 ${nextSeconds} 秒后自动进入报告。`,
+                    };
+                });
+            }, 1000);
+
+            reportNavigationTimerRef.current = setTimeout(() => {
+                viewReportNow();
+            }, delaySeconds * 1000);
+        };
+
+        const finishAndPrepareReport = async () => {
             if (isRecordingRef.current && !hasStoppedRecordingForEndRef.current) {
                 stopRecording();
                 isRecordingRef.current = false;
@@ -215,11 +297,15 @@ export function usePracticeSessionLifecycle({
                 }
             }
 
-            router.push(`/practice/${sessionId}/report`);
+            scheduleReportTransition();
         };
 
-        void finishAndNavigate();
-    }, [flushAudioEvidence, isRecordingRef, isSessionTerminal, router, sessionId, stopRecording]);
+        void finishAndPrepareReport();
+
+        return () => {
+            // Timers stay active across normal re-renders; session reset/user actions clear them explicitly.
+        };
+    }, [flushAudioEvidence, isRecordingRef, isSessionTerminal, sessionId, stopRecording, viewReportNow]);
 
     const handleTogglePauseResume = React.useCallback(async () => {
         if (!canToggleLifecycle) {
@@ -281,6 +367,9 @@ export function usePracticeSessionLifecycle({
         handleStartSession,
         handleTogglePauseResume,
         audioEvidenceStatus,
+        reportTransition,
+        viewReportNow,
+        stayOnPracticePage,
         isEndingSession,
         isSessionPaused,
         isSessionTerminal,
