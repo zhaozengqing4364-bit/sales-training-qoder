@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from common.knowledge.retrieval_helpers import (
     build_answerability_assessment,
@@ -74,7 +74,7 @@ async def search_internal_knowledge(
     def _finalize_payload(
         payload: dict[str, Any],
         *,
-        path_mode: str,
+        path_mode: Literal["live", "compat"],
         live_audit_run_id: str | None = None,
         shadow_audit_run_id: str | None = None,
     ) -> dict[str, Any]:
@@ -153,7 +153,7 @@ async def search_internal_knowledge(
     enable_rerank, rerank_top_k = resolve_rerank_params(tool_policy)
     embedding_timeout_ms_raw = arguments_obj.get("embedding_timeout_ms")
     try:
-        embedding_timeout_ms = int(embedding_timeout_ms_raw)
+        embedding_timeout_ms = int(embedding_timeout_ms_raw or 0)
     except (TypeError, ValueError):
         embedding_timeout_ms = 0
     embedding_timeout_ms = max(0, min(10000, embedding_timeout_ms))
@@ -514,9 +514,12 @@ async def _load_active_config_snapshot(db: Any):
     try:
         run_sync = getattr(db, "run_sync", None)
         if callable(run_sync):
-            return await run_sync(
+            maybe_config = run_sync(
                 lambda sync_session: KnowledgeAnswerConfigRepository(sync_session).get_active_config()
             )
+            if asyncio.iscoroutine(maybe_config):
+                return await cast(Awaitable[Any], maybe_config)
+            return maybe_config
         return KnowledgeAnswerConfigRepository(db).get_active_config()
     except Exception:
         return None

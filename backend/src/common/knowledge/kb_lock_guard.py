@@ -403,8 +403,11 @@ async def evaluate_kb_lock_decision(
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            score_value = row.get("score")
+            if score_value is None:
+                continue
             try:
-                score = float(row.get("score"))
+                score = float(score_value)
             except (TypeError, ValueError):
                 continue
             has_scored_row = True
