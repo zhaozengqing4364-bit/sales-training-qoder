@@ -891,10 +891,6 @@ export default function PracticeSessionPage() {
         }
 
         if (intent.action === "request_permission") {
-            if (!recordingStateMachine.beginTransition("requesting_permission")) {
-                return;
-            }
-
             void requestPermission()
                 .then((granted) => {
                     if (!granted || isRecordingRef.current) {
@@ -902,9 +898,6 @@ export default function PracticeSessionPage() {
                     }
                     unlockAudio();
                     return Promise.resolve(startRecording()).then(() => continuousUploader.startUpload());
-                })
-                .finally(() => {
-                    recordingStateMachine.endTransition();
                 });
             return;
         }

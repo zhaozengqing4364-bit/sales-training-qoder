@@ -203,3 +203,28 @@ Required before re-running final gate:
 - The current integration blockers listed in sections 4.1, 4.3, 5.1, 5.2, and the source-level part of 5.3 were fixed and verified by the targeted commands above.
 - `ruff check src tests --quiet` still fails because of broad historical test lint debt across unrelated tests. Source-only ruff now passes, and touched-file ruff passes.
 - If the project requires full `ruff check src tests` as a hard release gate, the remaining work should be a separate test-lint cleanup lane; it is not caused by the final-gate blocker fixes.
+
+### 8.4 Ralph verification refresh after hook continuation
+
+- Refresh timestamp: 2026-04-21 15:55 CST / 07:55 UTC
+- Reason: OMX stop hook detected Ralph state was still active and required fresh verification before stopping.
+
+A fresh targeted web gate initially exposed one remaining Practice UX test failure:
+
+- `PracticeSessionPage` microphone permission retry test expected an immediate second permission request after denial.
+- Root cause: the permission-request path still used the recording transition guard, so a second click could be blocked while the rejected permission Promise was settling.
+- Fix: remove the transition guard from the `request_permission` branch only; start/stop recording transitions remain guarded by the state machine.
+
+Fresh verification after the fix:
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Web typecheck | `pnpm --dir web exec tsc --noEmit --pretty false` | PASS |
+| Web targeted lint | `pnpm --dir web exec eslint 'src/app/(dashboard)/page.tsx' 'src/app/(dashboard)/training/page.tsx' 'src/app/(user)/practice/[sessionId]/page.tsx' 'src/app/(user)/practice/[sessionId]/report/page.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.tsx' 'src/app/admin/page.tsx' 'src/app/(auth)/login/page.tsx' 'src/app/(user)/practice/[sessionId]/use-recording-state-machine.ts' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts' 'src/hooks/use-practice-websocket.ts' 'src/app/(user)/practice/[sessionId]/use-practice-recording-hotkeys.ts' --quiet` | PASS |
+| Web targeted tests | `pnpm --dir web exec vitest run 'src/app/(dashboard)/page.test.tsx' 'src/app/(dashboard)/training/page.test.tsx' 'src/app/(user)/practice/[sessionId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/page.test.tsx' 'src/app/(auth)/login/page.test.tsx' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/app/(user)/practice/[sessionId]/use-practice-recording-hotkeys.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/websocket/transport.test.ts' --reporter=dot` | PASS: 12 files, 172 tests |
+| Backend targeted regression subset | `cd backend && .venv-test/bin/python -m pytest tests/unit/common/test_auth_transport_matrix.py tests/unit/test_history_service_evidence_projection.py tests/unit/test_session_runtime_authority.py tests/unit/test_stepfun_realtime_persistence.py tests/contract/test_audio_audit_contract.py tests/contract/test_presentations.py -q --no-cov` | PASS: 34 tests |
+| Backend focused subset | `cd backend && .venv-test/bin/python -m pytest tests/unit/test_capability_base.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_websocket_handler.py tests/unit/test_knowledge_retrieval.py tests/unit/test_presentation_ai_policy_service.py -q --no-cov` | PASS: 120 tests |
+| Backend source ruff + touched backend ruff | `cd backend && ruff check src --quiet && ruff check <touched backend files/tests> --quiet` | PASS |
+| Whitespace | `git diff --check` | PASS |
+
+Remaining known follow-up is unchanged: full `cd backend && ruff check src tests --quiet` still fails on historical broad test lint debt outside the current final-gate blocker fix scope.
