@@ -227,6 +227,18 @@ class Settings:
         maximum=4,
     )
     TTS_CHANNELS: int = _env_int("TTS_CHANNELS", 1, minimum=1, maximum=2)
+    PRESENTATION_FEEDBACK_SESSION_TTL_SECONDS: int = _env_int(
+        "PRESENTATION_FEEDBACK_SESSION_TTL_SECONDS",
+        86400,
+        minimum=60,
+        maximum=604800,
+    )
+    PRESENTATION_FEEDBACK_MAX_SESSIONS: int = _env_int(
+        "PRESENTATION_FEEDBACK_MAX_SESSIONS",
+        10000,
+        minimum=100,
+        maximum=100000,
+    )
 
     # Service Preloading
     PRELOAD_SERVICES: bool = os.getenv("PRELOAD_SERVICES", "false").lower() == "true"

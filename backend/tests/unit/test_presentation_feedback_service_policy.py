@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from presentation_coach.services.aho_matcher import ForbiddenWordMatch
 from presentation_coach.services.feedback_service import (
     PresentationFeedbackRuleConfig,
@@ -103,3 +105,40 @@ def test_missing_points_interrupt_threshold_is_configurable() -> None:
     assert should_interrupt is True
     assert reason == "missing_point"
     assert "价值" in message
+
+
+def test_cleanup_expired_sessions_clears_all_session_maps() -> None:
+    service = PresentationFeedbackService(session_ttl_seconds=60, max_sessions=10)
+    now = datetime.now(UTC)
+    service._trackers["old-session"] = object()
+    service._deduplicators["old-session"] = object()
+    service._forbidden_matchers["old-session"] = object()
+    service._rule_configs["old-session"] = PresentationFeedbackRuleConfig()
+    service._page_contexts["old-session"] = {"page_number": 1}
+    service._last_accessed_at["old-session"] = now - timedelta(seconds=61)
+
+    expired = service.cleanup_expired_sessions(now=now)
+
+    assert expired == ["old-session"]
+    assert "old-session" not in service._trackers
+    assert "old-session" not in service._deduplicators
+    assert "old-session" not in service._forbidden_matchers
+    assert "old-session" not in service._rule_configs
+    assert "old-session" not in service._page_contexts
+    assert "old-session" not in service._last_accessed_at
+
+
+def test_enforce_session_limit_evicts_oldest_session_state() -> None:
+    service = PresentationFeedbackService(session_ttl_seconds=3600, max_sessions=2)
+    now = datetime.now(UTC)
+    for index, session_id in enumerate(("oldest", "middle", "newest")):
+        service._trackers[session_id] = object()
+        service._page_contexts[session_id] = {"page_number": index + 1}
+        service._last_accessed_at[session_id] = now + timedelta(seconds=index)
+
+    evicted = service._enforce_session_limit()
+
+    assert evicted == ["oldest"]
+    assert "oldest" not in service._trackers
+    assert "oldest" not in service._page_contexts
+    assert set(service._last_accessed_at) == {"middle", "newest"}

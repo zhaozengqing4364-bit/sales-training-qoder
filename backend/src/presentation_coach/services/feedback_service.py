@@ -6,9 +6,10 @@ Combines point tracking and forbidden word detection
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from common.config import settings
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 from presentation_coach.services.aho_matcher import (
@@ -133,12 +134,85 @@ class PresentationFeedbackService:
     Manages point tracking and forbidden word detection
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        session_ttl_seconds: int | None = None,
+        max_sessions: int | None = None,
+    ):
         self._trackers: dict[str, SemanticPointTracker] = {}
         self._deduplicators: dict[str, FeedbackDeduplicator] = {}
         self._forbidden_matchers: dict[str, Any] = {}
         self._rule_configs: dict[str, PresentationFeedbackRuleConfig] = {}
         self._page_contexts: dict[str, dict[str, Any]] = {}
+        self._last_accessed_at: dict[str, datetime] = {}
+        self._session_ttl_seconds = _to_int(
+            session_ttl_seconds,
+            settings.PRESENTATION_FEEDBACK_SESSION_TTL_SECONDS,
+            minimum=60,
+            maximum=604800,
+        )
+        self._max_sessions = _to_int(
+            max_sessions,
+            settings.PRESENTATION_FEEDBACK_MAX_SESSIONS,
+            minimum=1,
+            maximum=100000,
+        )
+
+    @staticmethod
+    def _now() -> datetime:
+        return datetime.now(UTC)
+
+    def _touch_session(self, session_id: str, now: datetime | None = None) -> None:
+        self._last_accessed_at[session_id] = now or self._now()
+
+    def _clear_session_data(self, session_id: str) -> None:
+        self._trackers.pop(session_id, None)
+        self._deduplicators.pop(session_id, None)
+        self._forbidden_matchers.pop(session_id, None)
+        self._rule_configs.pop(session_id, None)
+        self._page_contexts.pop(session_id, None)
+        self._last_accessed_at.pop(session_id, None)
+
+    def cleanup_expired_sessions(self, now: datetime | None = None) -> list[str]:
+        """Clear session-scoped feedback state older than the configured TTL."""
+        effective_now = now or self._now()
+        expires_before = effective_now - timedelta(seconds=self._session_ttl_seconds)
+        expired_session_ids = [
+            session_id
+            for session_id, last_accessed in self._last_accessed_at.items()
+            if last_accessed < expires_before
+        ]
+        for session_id in expired_session_ids:
+            self._clear_session_data(session_id)
+        if expired_session_ids:
+            logger.info(
+                "presentation_feedback_sessions_expired",
+                expired_count=len(expired_session_ids),
+            )
+        return expired_session_ids
+
+    def _enforce_session_limit(self) -> list[str]:
+        """Clear least-recently-used session state above the configured cap."""
+        overflow_count = len(self._last_accessed_at) - self._max_sessions
+        if overflow_count <= 0:
+            return []
+
+        oldest_session_ids = [
+            session_id
+            for session_id, _ in sorted(
+                self._last_accessed_at.items(),
+                key=lambda item: item[1],
+            )[:overflow_count]
+        ]
+        for session_id in oldest_session_ids:
+            self._clear_session_data(session_id)
+        logger.warning(
+            "presentation_feedback_session_limit_enforced",
+            evicted_count=len(oldest_session_ids),
+            max_sessions=self._max_sessions,
+        )
+        return oldest_session_ids
 
     @staticmethod
     def _build_page_signature(
@@ -194,6 +268,7 @@ class PresentationFeedbackService:
             Result indicating success
         """
         try:
+            self.cleanup_expired_sessions()
             normalized_rule_config = PresentationFeedbackRuleConfig.from_payload(
                 rule_config
             )
@@ -206,6 +281,8 @@ class PresentationFeedbackService:
             prev_context = self._page_contexts.get(session_id)
             if prev_context and prev_context.get("signature") == next_signature:
                 self._rule_configs[session_id] = normalized_rule_config
+                self._touch_session(session_id)
+                self._enforce_session_limit()
                 return Result.ok(True)
 
             # Create new tracker for this page
@@ -239,6 +316,8 @@ class PresentationFeedbackService:
                 "forbidden_words": forbidden_words,
                 "signature": next_signature,
             }
+            self._touch_session(session_id)
+            self._enforce_session_limit()
 
             logger.info(
                 f"Initialized page {page_number} for session {session_id}: "
@@ -267,6 +346,7 @@ class PresentationFeedbackService:
             Result containing feedback data
         """
         try:
+            self.cleanup_expired_sessions()
             tracker = self._trackers.get(session_id)
             matcher = self._forbidden_matchers.get(session_id)
             dedup = self._deduplicators.get(session_id)
@@ -277,6 +357,7 @@ class PresentationFeedbackService:
 
             if not tracker or not matcher:
                 return Result.fail("[NOT_INITIALIZED] Page not initialized")
+            self._touch_session(session_id)
 
             # Check point coverage
             point_results = await tracker.check_coverage(transcript)
@@ -298,7 +379,7 @@ class PresentationFeedbackService:
                 should_interrupt=should_interrupt,
                 interruption_reason=reason,
                 interruption_message=message,
-                timestamp=datetime.now(),
+                timestamp=self._now(),
             )
 
             return Result.ok(feedback)
@@ -377,6 +458,7 @@ class PresentationFeedbackService:
         tracker = self._trackers.get(session_id)
         if not tracker:
             return {"error": "Session not initialized"}
+        self._touch_session(session_id)
 
         return tracker.get_coverage_stats()
 
@@ -385,6 +467,7 @@ class PresentationFeedbackService:
         tracker = self._trackers.get(session_id)
         if not tracker:
             return []
+        self._touch_session(session_id)
 
         updates = []
         for idx, point in enumerate(tracker.required_points, start=1):
@@ -401,16 +484,7 @@ class PresentationFeedbackService:
 
     def clear_session(self, session_id: str) -> None:
         """Clear all session data"""
-        if session_id in self._trackers:
-            del self._trackers[session_id]
-        if session_id in self._deduplicators:
-            del self._deduplicators[session_id]
-        if session_id in self._forbidden_matchers:
-            del self._forbidden_matchers[session_id]
-        if session_id in self._rule_configs:
-            del self._rule_configs[session_id]
-        if session_id in self._page_contexts:
-            del self._page_contexts[session_id]
+        self._clear_session_data(session_id)
 
         logger.info(f"Cleared feedback service for session {session_id}")
 
