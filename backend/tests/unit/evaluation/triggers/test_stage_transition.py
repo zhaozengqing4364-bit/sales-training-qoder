@@ -1,10 +1,9 @@
 """
 Tests for StageTransitionTrigger
 """
-import pytest
 
-from evaluation.triggers.stage_transition import StageTransitionTrigger
 from evaluation.triggers.base_trigger import TriggerContext
+from evaluation.triggers.stage_transition import StageTransitionTrigger
 
 
 class TestStageTransitionTrigger:

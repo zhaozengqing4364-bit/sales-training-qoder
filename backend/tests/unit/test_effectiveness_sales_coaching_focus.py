@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from common.effectiveness import build_action_card, resolve_sales_coaching_focus
 
-
 DISCOVERY_STAGE = {
     "current_stage": "discovery",
     "stage_name": "需求挖掘",

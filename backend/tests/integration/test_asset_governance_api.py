@@ -12,7 +12,14 @@ from agent.models import Persona, VoiceRuntimeProfile
 from agent.schemas import PersonaListItem, PersonaResponse
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
-from common.db.models import Page, PracticeSession, Presentation, RequiredTalkingPoint, Scenario, User
+from common.db.models import (
+    Page,
+    PracticeSession,
+    Presentation,
+    RequiredTalkingPoint,
+    Scenario,
+    User,
+)
 from common.db.schemas import PresentationResponse
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument
 from common.knowledge.schemas import KnowledgeBaseListItem, KnowledgeBaseResponse

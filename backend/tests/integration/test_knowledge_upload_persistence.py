@@ -118,7 +118,7 @@ async def test_upload_document_visible_in_followup_list_request(
     upload_response = await async_client.post(
         f"/api/v1/admin/knowledge/{kb_id}/documents",
         headers=headers,
-        files={"file": ("产品介绍.txt", "石犀科技主营智能销售训练平台".encode("utf-8"), "text/plain")},
+        files={"file": ("产品介绍.txt", "石犀科技主营智能销售训练平台".encode(), "text/plain")},
         data={"title": "产品介绍"},
     )
 

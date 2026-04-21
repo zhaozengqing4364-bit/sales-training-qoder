@@ -4,7 +4,10 @@ import pytest
 
 from common.error_handling.result import Result
 from common.knowledge_engine.haystack_adapter import KnowledgeHaystackAdapter
-from common.knowledge_engine.retrieval_planner import KnowledgeRetrievalPlan, KnowledgeRetrievalStep
+from common.knowledge_engine.retrieval_planner import (
+    KnowledgeRetrievalPlan,
+    KnowledgeRetrievalStep,
+)
 
 
 @pytest.mark.asyncio

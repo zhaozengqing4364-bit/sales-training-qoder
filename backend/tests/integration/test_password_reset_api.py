@@ -5,12 +5,12 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 from common.db.models import User
 
 

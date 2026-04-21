@@ -10,20 +10,18 @@ Tests the complete release verification flow including:
 
 from __future__ import annotations
 
-import pytest
-import json
 from unittest.mock import AsyncMock, patch
-from datetime import datetime, timezone
 
+import pytest
+
+from common.analytics.release_verification_service import release_verification_service
 from common.analytics.verification_runner import (
-    VerificationRunner,
-    verification_runner,
-    TestExecutionResult,
+    DocumentationCheckResult,
     HealthCheckResult,
     SecurityCheckResult,
-    DocumentationCheckResult,
+    TestExecutionResult,
+    VerificationRunner,
 )
-from common.analytics.release_verification_service import release_verification_service
 
 
 @pytest.fixture
@@ -326,7 +324,7 @@ class TestQualityGateThresholds:
             missing_lines=350,
             by_module={},
         )):
-            result = await runner.run_all_checks(
+            await runner.run_all_checks(
                 db=mock_db_session,
                 release_candidate_id="rc-coverage-test",
             )
@@ -365,7 +363,7 @@ class TestQualityGateThresholds:
             skipped_tests=0,
             duration_ms=3000,
         )):
-            result = await runner.run_all_checks(
+            await runner.run_all_checks(
                 db=mock_db_session,
                 release_candidate_id="rc-contract-test",
             )
@@ -412,7 +410,7 @@ class TestQualityGateThresholds:
             },
             test_output="End-to-End P95: 350ms",
         )):
-            result = await runner.run_all_checks(
+            await runner.run_all_checks(
                 db=mock_db_session,
                 release_candidate_id="rc-perf-test",
             )

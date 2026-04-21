@@ -164,7 +164,7 @@ def test_build_session_runtime_diagnostics_keeps_flat_fields_when_recent_attempt
 # ---------------------------------------------------------------------------
 # Tests for build_retrieval_facts — shared retrieval-truth read model
 # ---------------------------------------------------------------------------
-from common.conversation.runtime_diagnostics import build_retrieval_facts
+from common.conversation.runtime_diagnostics import build_retrieval_facts  # noqa: E402
 
 
 class TestBuildRetrievalFacts:

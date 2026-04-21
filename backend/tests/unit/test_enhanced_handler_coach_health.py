@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from common.websocket.session_state_service import SessionStateSnapshot
 from sales_bot.websocket.enhanced_handler import EnhancedSalesHandler

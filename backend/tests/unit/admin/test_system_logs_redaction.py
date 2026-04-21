@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from admin.api.system_logs import log_to_response
 from common.db.models import SystemLog
@@ -27,7 +27,7 @@ def test_log_to_response_applies_admin_support_exposure_policy() -> None:
                 "ip_address": "203.0.113.42",
             }
         ),
-        created_at=datetime(2026, 4, 13, 12, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 4, 13, 12, 0, tzinfo=UTC),
     )
 
     response = log_to_response(log)

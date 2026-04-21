@@ -9,26 +9,23 @@ References:
 - API Contract: docs/api-contract/replay.md
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-# Import all models to ensure they're registered with Base.metadata
-from common.db.models import Base, User, Scenario, PracticeSession, SessionStatus
-from agent.models import Agent, AgentPersona, Persona
-from common.knowledge.models import KnowledgeBase, KnowledgeDocument
 from common.conversation.models import ConversationMessage
+
+# Import all models to ensure they're registered with Base.metadata
+from common.db.models import Base, PracticeSession, Scenario, SessionStatus, User
+from common.db.session import get_db
 from common.error_handling.result import Result
 from evaluation.services.report_generation_trigger import ReportGenerationTrigger
-
 from main import app
-from common.db.session import get_db
-
 
 # Test database URL
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -44,15 +41,15 @@ def _without_replay_anchor(value: dict[str, object] | None) -> dict[str, object]
 async def test_engine():
     """Create test database engine with all tables"""
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield engine
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     await engine.dispose()
 
 
@@ -64,7 +61,7 @@ async def db_session(test_engine):
         class_=AsyncSession,
         expire_on_commit=False
     )
-    
+
     async with async_session() as session:
         yield session
 
@@ -89,13 +86,13 @@ async def async_client(db_session, test_user):
     """Create async HTTP client for testing"""
     async def override_get_db():
         yield db_session
-    
+
     app.dependency_overrides[get_db] = override_get_db
-    
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-    
+
     app.dependency_overrides.clear()
 
 
@@ -119,13 +116,13 @@ async def completed_session(db_session, test_user):
     )
     db_session.add(scenario)
     await db_session.flush()
-    
+
     session = PracticeSession(
         user_id=test_user.user_id,
         scenario_id=scenario.scenario_id,
         status=SessionStatus.COMPLETED.value,
-        start_time=datetime.now(timezone.utc),
-        end_time=datetime.now(timezone.utc)
+        start_time=datetime.now(UTC),
+        end_time=datetime.now(UTC)
     )
     db_session.add(session)
     await db_session.commit()
@@ -166,12 +163,12 @@ async def in_progress_session(db_session, test_user):
     )
     db_session.add(scenario)
     await db_session.flush()
-    
+
     session = PracticeSession(
         user_id=test_user.user_id,
         scenario_id=scenario.scenario_id,
         status=SessionStatus.IN_PROGRESS.value,
-        start_time=datetime.now(timezone.utc)
+        start_time=datetime.now(UTC)
     )
     db_session.add(session)
     await db_session.commit()
@@ -190,7 +187,7 @@ async def sample_messages(db_session, completed_session):
             role="user" if i % 2 == 0 else "assistant",
             content=f"Test message {i + 1}",
             audio_url=f"https://storage.example.com/audio/msg-{i + 1}.mp3" if i == 0 else None,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration_ms=3000 + i * 500,
             sales_stage="opening" if i < 2 else "discovery",
             is_highlight=i == 1,
@@ -199,7 +196,7 @@ async def sample_messages(db_session, completed_session):
         )
         db_session.add(msg)
         messages.append(msg)
-    
+
     await db_session.commit()
     for msg in messages:
         await db_session.refresh(msg)
@@ -221,13 +218,13 @@ class TestReplayAPI:
     ):
         """Should return messages when session is completed"""
         # Arrange - fixtures provide completed session with messages
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/messages",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 200
         data = response.json()
@@ -244,13 +241,13 @@ class TestReplayAPI:
     ):
         """Should return 400 when session is not completed"""
         # Arrange - fixture provides in-progress session
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{in_progress_session.session_id}/messages",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 400
         body = response.json()
@@ -268,13 +265,13 @@ class TestReplayAPI:
         """Should return 404 when session does not exist"""
         # Arrange
         fake_session_id = str(uuid.uuid4())
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{fake_session_id}/messages",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 404
 
@@ -288,14 +285,14 @@ class TestReplayAPI:
     ):
         """Should paginate messages when page parameters are provided"""
         # Arrange - fixtures provide 3 messages
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/messages",
             params={"page": 1, "page_size": 2},
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 200
         data = response.json()
@@ -316,13 +313,13 @@ class TestReplayAPI:
         """Should return message detail when message exists"""
         # Arrange
         message = sample_messages[0]
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/messages/{message.id}",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 200
         data = response.json()
@@ -340,13 +337,13 @@ class TestReplayAPI:
         """Should return 404 when message does not exist"""
         # Arrange
         fake_message_id = str(uuid.uuid4())
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/messages/{fake_message_id}",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 404
 
@@ -362,13 +359,13 @@ class TestReplayAPI:
     ):
         """Should return replay data when session is completed"""
         # Arrange - fixtures provide completed session with messages
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/replay",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 200
         data = response.json()
@@ -425,7 +422,7 @@ class TestReplayAPI:
             turn_number=1,
             role="assistant",
             content="您现在最需要什么类型的 ROI 证明？",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration_ms=1800,
             sales_stage="discovery",
             is_highlight=False,
@@ -435,7 +432,7 @@ class TestReplayAPI:
             turn_number=2,
             role="user",
             content="我们内部还是想先看同行案例和回收周期。",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration_ms=2400,
             sales_stage="objection",
             fuzzy_words=[
@@ -464,7 +461,7 @@ class TestReplayAPI:
             turn_number=3,
             role="assistant",
             content="我下一轮先给您一个 3 个月回本的同行案例。",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration_ms=2600,
             sales_stage="objection",
             is_highlight=False,
@@ -563,7 +560,7 @@ class TestReplayAPI:
             turn_number=1,
             role="assistant",
             content="您现在最需要什么类型的 ROI 证明？",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration_ms=1800,
             sales_stage="discovery",
             is_highlight=False,
@@ -573,7 +570,7 @@ class TestReplayAPI:
             turn_number=2,
             role="user",
             content="我们内部还是想先看同行案例和回收周期。",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration_ms=2400,
             sales_stage="objection",
             ai_feedback="先确认对方需要案例，再补 ROI 和回收周期。",
@@ -661,7 +658,7 @@ class TestReplayAPI:
             turn_number=1,
             role="assistant",
             content="您目前更担心预算还是上线周期？",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration_ms=1800,
             sales_stage="discovery",
             is_highlight=False,
@@ -671,7 +668,7 @@ class TestReplayAPI:
             turn_number=2,
             role="user",
             content="最大的顾虑还是价格，你们为什么比别人贵？",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration_ms=2400,
             sales_stage="objection",
             is_highlight=False,
@@ -722,7 +719,7 @@ class TestReplayAPI:
             turn_number=0,
             role="user",
             content="legacy turn zero",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             is_highlight=False,
         )
         db_session.add(legacy_msg)
@@ -755,13 +752,13 @@ class TestReplayAPI:
     ):
         """Should return 400 for replay when session is not completed"""
         # Arrange - fixture provides in-progress session
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{in_progress_session.session_id}/replay",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 400
 
@@ -787,8 +784,8 @@ class TestReplayAPI:
             scenario_id=scenario.scenario_id,
             status=SessionStatus.SCORING.value,
             report_status="processing",
-            start_time=datetime.now(timezone.utc),
-            end_time=datetime.now(timezone.utc),
+            start_time=datetime.now(UTC),
+            end_time=datetime.now(UTC),
             logic_score=84.0,
             accuracy_score=82.0,
             completeness_score=80.0,
@@ -824,7 +821,7 @@ class TestReplayAPI:
                     turn_number=1,
                     role="assistant",
                     content="您现在最想先看哪类 ROI 证明？",
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                     duration_ms=1600,
                     sales_stage="discovery",
                     score_snapshot={"overall_score": 82},
@@ -835,7 +832,7 @@ class TestReplayAPI:
                     turn_number=2,
                     role="user",
                     content="我们还是想先看同行案例和回收周期。",
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                     duration_ms=2200,
                     sales_stage="objection",
                     score_snapshot={"overall_score": 81},
@@ -938,13 +935,13 @@ class TestReplayAPI:
     ):
         """Should return highlights when session is completed"""
         # Arrange - fixtures provide 1 highlight in sample_messages
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/highlights",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 200
         data = response.json()
@@ -969,18 +966,18 @@ class TestReplayAPI:
             turn_number=1,
             role="user",
             content="No highlight message",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             is_highlight=False
         )
         db_session.add(msg)
         await db_session.commit()
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/highlights",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 200
         data = response.json()
@@ -1002,14 +999,14 @@ class TestReplayAPI:
         """Should redirect to audio URL when audio exists"""
         # Arrange - first message has audio_url
         message = sample_messages[0]
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/audio/{message.id}",
             headers=auth_headers,
             follow_redirects=False
         )
-        
+
         # Assert
         assert response.status_code == 307
         assert response.headers["location"] == message.audio_url
@@ -1025,13 +1022,13 @@ class TestReplayAPI:
         """Should return 404 when audio is not available"""
         # Arrange - second message has no audio_url
         message = sample_messages[1]
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/audio/{message.id}",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 404
 
@@ -1045,13 +1042,13 @@ class TestReplayAPI:
         """Should return 404 for audio when message does not exist"""
         # Arrange
         fake_message_id = str(uuid.uuid4())
-        
+
         # Act
         response = await async_client.get(
             f"/api/v1/sessions/{completed_session.session_id}/audio/{fake_message_id}",
             headers=auth_headers
         )
-        
+
         # Assert
         assert response.status_code == 404
 

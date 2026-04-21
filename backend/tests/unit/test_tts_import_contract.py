@@ -4,7 +4,6 @@ import sys
 import pytest
 
 
-
 def test_importing_tts_service_does_not_require_edge_tts_binary_stack() -> None:
     sys.modules.pop("common.audio.tts_service", None)
 

@@ -11,7 +11,7 @@ Tests:
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -255,7 +255,7 @@ class TestReportGenerationTrigger:
         mock_session = MagicMock()
         mock_session.session_id = session_id
         mock_session.report_status = "completed"
-        mock_session.report_generated_at = datetime.now(timezone.utc)
+        mock_session.report_generated_at = datetime.now(UTC)
         mock_session.report_error = None
         _mock_db_session(mock_db, mock_session)
 

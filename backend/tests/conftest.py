@@ -17,8 +17,8 @@ from sqlalchemy.orm import sessionmaker
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from common.db.models import Base
 import agent.models  # noqa: F401  # Register agent/voice-runtime tables on shared Base metadata.
+from common.db.models import Base
 
 # Test database URL (SQLite for testing)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

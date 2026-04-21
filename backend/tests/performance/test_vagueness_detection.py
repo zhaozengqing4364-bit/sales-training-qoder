@@ -2,8 +2,9 @@
 Performance Tests for Vagueness Detection
 Tests that vagueness detection meets <2s latency target
 """
-import pytest
 import time
+
+import pytest
 
 
 @pytest.mark.performance
@@ -24,7 +25,7 @@ class TestVaguenessDetection:
 
         for test_text in test_cases:
             start = time.perf_counter()
-            result = await vagueness_detector.detect_vagueness(test_text)
+            await vagueness_detector.detect_vagueness(test_text)
             end = time.perf_counter()
 
             latency_ms = (end - start) * 1000
@@ -38,7 +39,7 @@ class TestVaguenessDetection:
         from sales_bot.services.vagueness_detector import vagueness_detector
 
         start = time.perf_counter()
-        result = await vagueness_detector.detect_vagueness("It's affordable and worth it")
+        await vagueness_detector.detect_vagueness("It's affordable and worth it")
         end = time.perf_counter()
 
         latency_ms = (end - start) * 1000
@@ -48,9 +49,9 @@ class TestVaguenessDetection:
     @pytest.mark.asyncio
     async def test_bot_response_generation_latency(self):
         """Test that bot response generation is fast enough"""
-        from sales_bot.services.bot_service import sales_bot_service
-        from sales_bot.services.bot_service import Persona
         import uuid
+
+        from sales_bot.services.bot_service import Persona, sales_bot_service
 
         # Test with each persona
         for persona in Persona:
@@ -85,10 +86,10 @@ class TestVaguenessDetection:
     @pytest.mark.asyncio
     async def test_concurrent_sales_sessions(self):
         """Test that multiple concurrent sales sessions can run"""
-        from sales_bot.services.bot_service import sales_bot_service
-        from sales_bot.services.bot_service import Persona
         import asyncio
         import uuid
+
+        from sales_bot.services.bot_service import Persona, sales_bot_service
 
         async def create_single_conversation():
             # 1. Create session

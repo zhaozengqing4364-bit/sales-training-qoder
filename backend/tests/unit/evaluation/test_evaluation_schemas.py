@@ -13,12 +13,12 @@ Test Coverage:
 from __future__ import annotations
 
 import pytest
+
 from evaluation.schemas import (
-    StageEvaluationResponse,
     ComprehensiveReportResponse,
+    StageEvaluationResponse,
     parse_llm_response,
 )
-from common.error_handling.result import Result
 
 
 class TestStageEvaluationResponse:
@@ -372,13 +372,6 @@ class TestParseLlmResponse:
     async def test_parse_large_values(self):
         """Test parsing with large array values."""
         # Arrange
-        large_json = """{
-            "scores": {"communication": 85.0},
-            "strengths": ["Good"] + ["Point"] * 100,
-            "suggestions": ["Improve"] + ["Tip"] * 100,
-            "summary": "Test",
-            "confidence": 0.9
-        }"""
         # Create actual large arrays
         import json
         large_data = {

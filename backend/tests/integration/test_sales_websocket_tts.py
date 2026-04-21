@@ -5,7 +5,6 @@ Tests the EnhancedSalesHandler integration with TTSServiceWithFallback.
 """
 
 import asyncio
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -206,7 +205,6 @@ class TestTTSFallbackChain:
         """Test fallback chain: Aliyun -> Edge -> Browser."""
         from common.audio.tts_factory import (
             TTSServiceWithFallback,
-            get_tts_service_with_fallback,
             reset_tts_service_with_fallback,
         )
 

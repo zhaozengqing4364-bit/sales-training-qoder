@@ -7,22 +7,18 @@ References:
 - Requirements: R1, R2 (Agent Management)
 - API Contract: docs/api-contract/agents.md
 """
-import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-# Import all models to ensure they're registered with Base.metadata
-from common.db.models import Base, User, Scenario
 from agent.models import Agent, AgentPersona, Persona
-from common.knowledge.models import KnowledgeBase, KnowledgeDocument
-from common.conversation.models import ConversationMessage
 
-from main import app
+# Import all models to ensure they're registered with Base.metadata
+from common.db.models import Base, User
 from common.db.session import get_db
-
+from main import app
 
 # Test database URL
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -32,15 +28,15 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 async def test_engine():
     """Create test database engine with all tables"""
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield engine
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     await engine.dispose()
 
 
@@ -52,7 +48,7 @@ async def db_session(test_engine):
         class_=AsyncSession,
         expire_on_commit=False
     )
-    
+
     async with async_session() as session:
         yield session
 
@@ -77,13 +73,13 @@ async def async_client(db_session, test_user):
     """Create async HTTP client for testing"""
     async def override_get_db():
         yield db_session
-    
+
     app.dependency_overrides[get_db] = override_get_db
-    
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-    
+
     app.dependency_overrides.clear()
 
 
@@ -139,7 +135,7 @@ async def sample_agent_data():
 
 class TestAdminAgentAPI:
     """Tests for Admin Agent API - R1"""
-    
+
     async def test_create_agent(self, async_client, auth_headers, sample_agent_data):
         """Should create Agent with draft status - R1.1"""
         response = await async_client.post(
@@ -147,7 +143,7 @@ class TestAdminAgentAPI:
             json=sample_agent_data,
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
@@ -183,7 +179,7 @@ class TestAdminAgentAPI:
         )
 
         assert response.status_code == 403
-    
+
     async def test_list_agents_admin(self, async_client, auth_headers, sample_agent_data):
         """Should list agents with pagination - R1.2"""
         # Create some agents
@@ -197,18 +193,18 @@ class TestAdminAgentAPI:
             json={**sample_agent_data, "name": "Agent 2"},
             headers=auth_headers
         )
-        
+
         response = await async_client.get(
             "/api/v1/admin/agents?page=1&page_size=10",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["data"]["total"] == 2
         assert len(data["data"]["agents"]) == 2
-    
+
     async def test_list_agents_filter_by_category(self, async_client, auth_headers, sample_agent_data):
         """Should filter agents by category - R1.2"""
         # Create agents with different categories
@@ -222,17 +218,17 @@ class TestAdminAgentAPI:
             json={**sample_agent_data, "name": "Presentation Coach", "category": "presentation"},
             headers=auth_headers
         )
-        
+
         response = await async_client.get(
             "/api/v1/admin/agents?category=sales",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["data"]["total"] == 1
         assert data["data"]["agents"][0]["category"] == "sales"
-    
+
     async def test_get_agent_admin(self, async_client, auth_headers, sample_agent_data):
         """Should get agent details with system_prompt - R1.3"""
         # Create agent
@@ -242,12 +238,12 @@ class TestAdminAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
-        
+
         response = await async_client.get(
             f"/api/v1/admin/agents/{agent_id}",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
@@ -265,7 +261,7 @@ class TestAdminAgentAPI:
 
         assert response.status_code == 400
         assert "[FIELD_DEPRECATED_PERSONA_CENTERED]" in response.text
-    
+
     async def test_update_agent(self, async_client, auth_headers, sample_agent_data):
         """Should update agent partially - R1.4"""
         # Create agent
@@ -275,13 +271,13 @@ class TestAdminAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
-        
+
         response = await async_client.put(
             f"/api/v1/admin/agents/{agent_id}",
             json={"name": "Updated Name"},
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
@@ -341,7 +337,7 @@ class TestAdminAgentAPI:
             )
             agent = row.scalar_one()
             assert agent.description == new_description
-    
+
     async def test_publish_agent(self, async_client, auth_headers, sample_agent_data):
         """Should publish agent - R1.5"""
         # Create agent
@@ -351,18 +347,18 @@ class TestAdminAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
-        
+
         response = await async_client.post(
             f"/api/v1/admin/agents/{agent_id}/publish",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["data"]["status"] == "published"
         assert "published_at" in data["data"]
-    
+
     async def test_archive_agent(self, async_client, auth_headers, sample_agent_data):
         """Should archive agent - R1.6"""
         # Create agent
@@ -372,17 +368,17 @@ class TestAdminAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
-        
+
         response = await async_client.post(
             f"/api/v1/admin/agents/{agent_id}/archive",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["data"]["status"] == "archived"
-    
+
     async def test_delete_agent(self, async_client, auth_headers, sample_agent_data):
         """Should delete agent without sessions - R1.7"""
         # Create agent
@@ -392,37 +388,37 @@ class TestAdminAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
-        
+
         response = await async_client.delete(
             f"/api/v1/admin/agents/{agent_id}",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["data"]["deleted"] is True
-        
+
         # Verify deleted
         get_response = await async_client.get(
             f"/api/v1/admin/agents/{agent_id}",
             headers=auth_headers
         )
         assert get_response.status_code == 404
-    
+
     async def test_get_agent_not_found(self, async_client, auth_headers):
         """Should return 404 for non-existent agent"""
         response = await async_client.get(
             "/api/v1/admin/agents/non-existent-id",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 404
 
 
 class TestUserAgentAPI:
     """Tests for User Agent API - R2"""
-    
+
     async def test_list_agents_user_only_published(self, async_client, auth_headers, sample_agent_data):
         """Should only return published agents - R2.1"""
         # Create draft agent
@@ -431,7 +427,7 @@ class TestUserAgentAPI:
             json=sample_agent_data,
             headers=auth_headers
         )
-        
+
         # Create and publish another agent
         create_response = await async_client.post(
             "/api/v1/admin/agents",
@@ -443,18 +439,18 @@ class TestUserAgentAPI:
             f"/api/v1/admin/agents/{agent_id}/publish",
             headers=auth_headers
         )
-        
+
         # User list should only show published
         response = await async_client.get(
             "/api/v1/agents",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["data"]["total"] == 1
         assert data["data"]["agents"][0]["name"] == "Published Agent"
-    
+
     async def test_get_agent_user_no_system_prompt(self, async_client, auth_headers, sample_agent_data):
         """Should not include system_prompt in user view - R2.2"""
         # Create and publish agent
@@ -468,19 +464,19 @@ class TestUserAgentAPI:
             f"/api/v1/admin/agents/{agent_id}/publish",
             headers=auth_headers
         )
-        
+
         response = await async_client.get(
             f"/api/v1/agents/{agent_id}",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         # User response should not have system_prompt
         assert "system_prompt" not in data["data"] or data["data"].get("system_prompt") is None
         assert data["data"]["welcome_message"] == "你好！准备好练习了吗？"
-    
+
     async def test_get_agent_user_draft_not_found(self, async_client, auth_headers, sample_agent_data):
         """Should not find draft agents in user view - R2.2"""
         # Create draft agent
@@ -490,14 +486,14 @@ class TestUserAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
-        
+
         response = await async_client.get(
             f"/api/v1/agents/{agent_id}",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 404
-    
+
     async def test_get_agent_personas(self, async_client, auth_headers, sample_agent_data, db_session):
         """Should return associated personas - R2.3"""
         # Create and publish agent
@@ -507,7 +503,7 @@ class TestUserAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
-        
+
         # Create personas and link them
         persona1 = Persona(
             name="怀疑型客户",
@@ -527,7 +523,7 @@ class TestUserAgentAPI:
         )
         db_session.add_all([persona1, persona2])
         await db_session.flush()
-        
+
         # Link personas to agent
         link1 = AgentPersona(
             agent_id=agent_id,
@@ -543,12 +539,12 @@ class TestUserAgentAPI:
         )
         db_session.add_all([link1, link2])
         await db_session.commit()
-        
+
         response = await async_client.get(
             f"/api/v1/agents/{agent_id}/personas",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True

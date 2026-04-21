@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -49,8 +49,8 @@ async def test_build_presentation_review_groups_page_and_point_level_issues(
     practice_session = SimpleNamespace(
         session_id=session_id,
         presentation_id="ppt-issue-001",
-        start_time=datetime(2026, 3, 1, tzinfo=timezone.utc),
-        end_time=datetime(2026, 3, 1, 0, 12, tzinfo=timezone.utc),
+        start_time=datetime(2026, 3, 1, tzinfo=UTC),
+        end_time=datetime(2026, 3, 1, 0, 12, tzinfo=UTC),
         logic_score=None,
         accuracy_score=None,
         completeness_score=None,
@@ -63,7 +63,7 @@ async def test_build_presentation_review_groups_page_and_point_level_issues(
             ),
             role="user",
             turn_number=1,
-            timestamp=datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 3, 1, 0, 1, tzinfo=UTC),
             transcript_metadata={"page_number": 1},
         ),
         SimpleNamespace(
@@ -74,14 +74,14 @@ async def test_build_presentation_review_groups_page_and_point_level_issues(
             ),
             role="user",
             turn_number=2,
-            timestamp=datetime(2026, 3, 1, 0, 2, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 3, 1, 0, 2, tzinfo=UTC),
             transcript_metadata={"page_number": 2},
         ),
         SimpleNamespace(
             content="大家还有问题吗？如果追问负责人是谁，我这边暂时只能说后面再确认。",
             role="user",
             turn_number=3,
-            timestamp=datetime(2026, 3, 1, 0, 3, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 3, 1, 0, 3, tzinfo=UTC),
             transcript_metadata={"page_number": 2},
         ),
     ]

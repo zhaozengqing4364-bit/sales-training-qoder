@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
-
 from unittest.mock import AsyncMock
 
 import pytest
@@ -13,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 import agent.models  # noqa: F401
 from common.db.models import (
     Base,
+    KnowledgeAnswerabilityProfile,
     KnowledgeAnswerRun,
     KnowledgeAnswerRunStep,
-    KnowledgeAnswerabilityProfile,
     KnowledgeConfigVersion,
     KnowledgeEntityAlias,
     KnowledgeIntentRule,

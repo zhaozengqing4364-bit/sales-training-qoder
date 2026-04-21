@@ -3,10 +3,8 @@ Tests for TimeIntervalTrigger
 """
 import time
 
-import pytest
-
-from evaluation.triggers.time_interval import TimeIntervalTrigger
 from evaluation.triggers.base_trigger import TriggerContext
+from evaluation.triggers.time_interval import TimeIntervalTrigger
 
 
 class TestTimeIntervalTrigger:

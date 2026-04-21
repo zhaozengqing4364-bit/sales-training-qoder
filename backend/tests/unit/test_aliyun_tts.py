@@ -1,10 +1,10 @@
 """阿里云TTS单元测试"""
 
 import asyncio
-import os
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 import sys
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # Mock dashscope before importing our module
 dashscope_mock = MagicMock()
@@ -24,7 +24,7 @@ sys.modules["dashscope"] = dashscope_mock
 sys.modules["dashscope.audio"] = dashscope_mock.audio
 sys.modules["dashscope.audio.tts_v2"] = dashscope_mock.audio.tts_v2
 
-from common.audio.aliyun_streaming_tts import (
+from common.audio.aliyun_streaming_tts import (  # noqa: E402
     AliyunStreamingTTS,
     StreamCallbackHandler,
     get_aliyun_tts_service,

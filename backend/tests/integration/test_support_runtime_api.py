@@ -5,7 +5,6 @@ Integration tests for support runtime release-health endpoints.
 from __future__ import annotations
 
 import uuid
-from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
 import pytest

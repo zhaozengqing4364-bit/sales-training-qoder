@@ -1,10 +1,9 @@
 """
 Tests for TurnCountTrigger
 """
-import pytest
 
-from evaluation.triggers.turn_count import TurnCountTrigger
 from evaluation.triggers.base_trigger import TriggerContext
+from evaluation.triggers.turn_count import TurnCountTrigger
 
 
 class TestTurnCountTrigger:

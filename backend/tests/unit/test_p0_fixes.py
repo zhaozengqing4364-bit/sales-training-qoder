@@ -9,8 +9,9 @@ Tests for:
 """
 
 import asyncio
+from unittest.mock import AsyncMock, Mock
+
 import pytest
-from unittest.mock import Mock, AsyncMock
 
 
 class TestCircuitBreaker:

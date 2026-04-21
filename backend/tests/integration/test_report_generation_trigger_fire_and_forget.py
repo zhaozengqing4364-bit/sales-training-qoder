@@ -7,11 +7,11 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import evaluation.services.report_generation_trigger as trigger_module
 from common.conversation.models import ConversationMessage
 from common.db.models import PracticeSession, Scenario, SessionStatus, User

@@ -6,18 +6,16 @@ Tests the automated verification check execution logic.
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
 
 from common.analytics.verification_runner import (
-    VerificationRunner,
-    TestExecutionResult,
-    CoverageReport,
-    HealthCheckResult,
-    SecurityCheckResult,
-    DocumentationCheckResult,
     QUALITY_GATE_THRESHOLDS,
+    DocumentationCheckResult,
+    HealthCheckResult,
+    TestExecutionResult,
+    VerificationRunner,
 )
 
 

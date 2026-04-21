@@ -8,7 +8,14 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import agent.models  # noqa: F401
-from common.db.models import Base, KnowledgeConfigVersion, KnowledgeEntityAlias, KnowledgeIntentRule, KnowledgeQueryProfile, KnowledgeRankingProfile
+from common.db.models import (
+    Base,
+    KnowledgeConfigVersion,
+    KnowledgeEntityAlias,
+    KnowledgeIntentRule,
+    KnowledgeQueryProfile,
+    KnowledgeRankingProfile,
+)
 from common.error_handling.result import Result
 from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
     search_internal_knowledge,

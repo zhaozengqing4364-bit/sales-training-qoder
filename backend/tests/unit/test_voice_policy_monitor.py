@@ -3,17 +3,16 @@ Unit Tests for Voice Policy Monitor
 
 Tests Story 4.7: 语音策略自动回滚监控告警集成
 """
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from sales_bot.services.voice_policy_monitor import (
-    ServiceType,
     PolicyState,
     RollbackConfig,
-    ServiceMetrics,
     RollbackEvent,
+    ServiceMetrics,
+    ServiceType,
     VoicePolicyMonitor,
 )
 

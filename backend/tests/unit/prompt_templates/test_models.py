@@ -11,20 +11,20 @@ Tests:
 - PromptType enum validation
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from pydantic import ValidationError
 
 from prompt_templates.models import (
+    PromptRenderRequest,
     PromptTemplate,
     PromptTemplateCreate,
     PromptTemplateUpdate,
+    PromptType,
     ScenarioPrompt,
     ScenarioPromptCreate,
-    PromptType,
-    PromptRenderRequest,
 )
 
 
@@ -227,7 +227,7 @@ class TestPromptTemplate:
 
     def test_template_with_all_fields(self):
         """Should create full template with all fields."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         template_id = uuid4()
         template = PromptTemplate(
             id=template_id,
@@ -259,8 +259,8 @@ class TestPromptTemplate:
             is_active = True
             is_default = False
             is_system = False
-            created_at = datetime.now(timezone.utc)
-            updated_at = datetime.now(timezone.utc)
+            created_at = datetime.now(UTC)
+            updated_at = datetime.now(UTC)
 
         orm_obj = FakeORM()
         template = PromptTemplate.model_validate(orm_obj)
@@ -268,7 +268,7 @@ class TestPromptTemplate:
 
     def test_template_validates_json_string_variables(self):
         """Should parse JSON string variables from database."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         template = PromptTemplate(
             id=uuid4(),
             name="Test",
@@ -285,7 +285,7 @@ class TestPromptTemplate:
 
     def test_template_handles_invalid_json_variables(self):
         """Should handle invalid JSON string gracefully."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         template = PromptTemplate(
             id=uuid4(),
             name="Test",
@@ -331,7 +331,7 @@ class TestScenarioPrompt:
 
     def test_scenario_prompt_with_all_fields(self):
         """Should create full scenario prompt."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         prompt_id = uuid4()
         template_id = uuid4()
         assignment = ScenarioPrompt(

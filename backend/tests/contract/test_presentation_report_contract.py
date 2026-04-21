@@ -11,7 +11,15 @@ from sqlalchemy.orm import sessionmaker
 
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
-from common.db.models import Base, Page, PracticeSession, Presentation, RequiredTalkingPoint, Scenario, User
+from common.db.models import (
+    Base,
+    Page,
+    PracticeSession,
+    Presentation,
+    RequiredTalkingPoint,
+    Scenario,
+    User,
+)
 from common.db.session import get_db
 from main import app
 

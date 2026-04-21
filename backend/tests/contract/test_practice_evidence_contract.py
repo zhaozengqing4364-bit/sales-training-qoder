@@ -15,7 +15,14 @@ from sqlalchemy.orm import sessionmaker
 
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
-from common.db.models import Base, PracticeSession, Scenario, SessionAudioSegment, SessionStatus, User
+from common.db.models import (
+    Base,
+    PracticeSession,
+    Scenario,
+    SessionAudioSegment,
+    SessionStatus,
+    User,
+)
 from common.db.session import get_db
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref_payload
 from common.error_handling.result import Result

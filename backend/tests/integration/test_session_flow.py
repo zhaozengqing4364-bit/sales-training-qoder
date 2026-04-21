@@ -13,26 +13,25 @@ References:
 """
 
 import uuid
+from datetime import UTC
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 import common.api.practice as practice_api
-# Import all models to ensure they're registered with Base.metadata
-from common.db.models import Base, User, Scenario, PracticeSession, Presentation
 from agent.models import Agent, AgentPersona, Persona
-from common.error_handling.result import Result
-from common.knowledge.models import KnowledgeBase, KnowledgeDocument
-from common.conversation.models import ConversationMessage
 
-from main import app
+# Import all models to ensure they're registered with Base.metadata
+from common.db.models import Base, PracticeSession, Presentation, Scenario, User
 from common.db.session import get_db
+from common.error_handling.result import Result
+from main import app
 
 
 async def _get_auth_user_id(headers: dict[str, str]) -> str:
@@ -519,7 +518,7 @@ class TestSessionStats:
         self, async_client, auth_headers, db_session
     ):
         """Should return correct stats with sessions"""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         # Use authenticated fixture user from JWT auth_headers
         auth_user_id = await _get_auth_user_id(auth_headers)
@@ -538,7 +537,7 @@ class TestSessionStats:
             accuracy_score=75,
             completeness_score=85,
             total_duration_seconds=600,
-            start_time=datetime.now(timezone.utc) - timedelta(days=1),
+            start_time=datetime.now(UTC) - timedelta(days=1),
         )
         session2 = PracticeSession(
             user_id=auth_user_id,
@@ -548,13 +547,13 @@ class TestSessionStats:
             accuracy_score=85,
             completeness_score=80,
             total_duration_seconds=900,
-            start_time=datetime.now(timezone.utc) - timedelta(days=2),
+            start_time=datetime.now(UTC) - timedelta(days=2),
         )
         session3 = PracticeSession(
             user_id=auth_user_id,
             scenario_id=scenario.scenario_id,
             status="in_progress",
-            start_time=datetime.now(timezone.utc)
+            start_time=datetime.now(UTC)
             - timedelta(days=10),  # Outside weekly
         )
 
@@ -608,7 +607,7 @@ class TestEnhancedSessionReport:
         self, async_client, auth_headers, db_session, published_agent, active_persona
     ):
         """Should return enhanced report with dimension scores"""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         # Use authenticated fixture user from JWT auth_headers
         auth_user_id = await _get_auth_user_id(auth_headers)
@@ -628,8 +627,8 @@ class TestEnhancedSessionReport:
             logic_score=85,
             accuracy_score=78,
             completeness_score=90,
-            start_time=datetime.now(timezone.utc) - timedelta(minutes=30),
-            end_time=datetime.now(timezone.utc),
+            start_time=datetime.now(UTC) - timedelta(minutes=30),
+            end_time=datetime.now(UTC),
             total_duration_seconds=1800,
         )
         db_session.add(session)

@@ -1,6 +1,6 @@
+import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-import pytest
 
 from common.error_handling.middleware import ErrorHandlerMiddleware
 from common.monitoring.logger import get_trace_id, set_trace_id

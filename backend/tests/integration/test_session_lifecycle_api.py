@@ -27,7 +27,6 @@ from common.error_handling.result import Result
 from common.websocket.session_manager import get_session_manager
 from evaluation.services.report_generation_trigger import trigger_report_generation
 
-
 LIFECYCLE_API_CONCURRENCY_CONTRACT = {
     "intentional_terminal_statuses": {
         "sales": "scoring",

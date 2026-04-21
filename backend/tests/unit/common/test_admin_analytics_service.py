@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
-from typing import Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 # Import Agent models so Base.metadata has all FK targets used by common models.
@@ -159,7 +159,7 @@ async def test_overview_and_trends_use_projection_evaluability_not_legacy_weight
         email="need-more-evidence@example.com",
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     evaluable_start = now - timedelta(days=2)
     not_evaluable_start = now - timedelta(days=1)
     in_progress_start = now - timedelta(hours=2)
@@ -366,7 +366,7 @@ async def test_leaderboard_and_agent_stats_use_projection_scores_and_counts(
         email="legacy-weighted@example.com",
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     top_start = now - timedelta(days=3)
     second_start = now - timedelta(days=2)
 
@@ -518,7 +518,7 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
         email="inactive-user@example.com",
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     north_risk_session_id = str(uuid.uuid4())
     south_risk_session_id = str(uuid.uuid4())
@@ -927,7 +927,7 @@ async def test_get_leaderboard_batches_projection_window_and_messages_once(
         email="window-two@example.com",
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     first_session_id = str(uuid.uuid4())
     second_session_id = str(uuid.uuid4())
     db_session.add_all(
@@ -1027,7 +1027,7 @@ async def test_get_overview_stats_replays_projection_window_for_growth_compariso
         email="growth-window@example.com",
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     current_session_id = str(uuid.uuid4())
     previous_session_id = str(uuid.uuid4())
     db_session.add_all(

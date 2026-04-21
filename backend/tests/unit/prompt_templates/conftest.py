@@ -4,16 +4,17 @@ Test fixtures for prompt_templates module.
 Requirements: B3 - Create test skeleton for prompt templates
 """
 
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
+
 import pytest
-from datetime import datetime, timezone
-from uuid import uuid4, UUID
 
 from prompt_templates.models import (
     PromptTemplate,
     PromptTemplateCreate,
+    PromptType,
     ScenarioPrompt,
     ScenarioPromptCreate,
-    PromptType,
 )
 
 
@@ -40,7 +41,7 @@ def sample_prompt_template_create() -> PromptTemplateCreate:
 @pytest.fixture
 def sample_prompt_template() -> PromptTemplate:
     """Sample full prompt template model."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PromptTemplate(
         id=uuid4(),
         name="Sample Template",
@@ -78,7 +79,7 @@ def sample_scenario_prompt(sample_template_id: UUID) -> ScenarioPrompt:
         prompt_type="extraction",
         template_id=sample_template_id,
         is_active=True,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
 

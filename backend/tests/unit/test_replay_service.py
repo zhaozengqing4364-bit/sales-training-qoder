@@ -8,12 +8,12 @@ References:
 - Design: Section 12 (Replay Service)
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from common.conversation.replay import ReplayService, STAGE_NAMES
+from common.conversation.replay import STAGE_NAMES, ReplayService
 from common.db.models import SessionStatus
 from common.error_handling.result import Result
 
@@ -164,7 +164,7 @@ class TestReplayService:
             msg.role = "user" if i % 2 == 0 else "assistant"
             msg.content = f"Message {i + 1}"
             msg.audio_url = f"https://storage.example.com/audio/msg-{i + 1}.mp3"
-            msg.timestamp = datetime.now(timezone.utc)
+            msg.timestamp = datetime.now(UTC)
             msg.duration_ms = 3000 + i * 500
             msg.fuzzy_words = None
             msg.sales_stage = "opening" if i == 0 else "discovery"
@@ -376,7 +376,7 @@ class TestReplayService:
         aligned_message.role = "user"
         aligned_message.content = "ROI 这一块你们有真实案例吗？"
         aligned_message.audio_url = None
-        aligned_message.timestamp = datetime.now(timezone.utc)
+        aligned_message.timestamp = datetime.now(UTC)
         aligned_message.duration_ms = 2500
         aligned_message.fuzzy_words = None
         aligned_message.transcript_metadata = None
@@ -935,7 +935,7 @@ class TestReplayService:
         legacy_message.role = "user"
         legacy_message.content = "我们先聊聊现状。"
         legacy_message.audio_url = None
-        legacy_message.timestamp = datetime.now(timezone.utc)
+        legacy_message.timestamp = datetime.now(UTC)
         legacy_message.duration_ms = 2500
         legacy_message.fuzzy_words = None
         legacy_message.transcript_metadata = None

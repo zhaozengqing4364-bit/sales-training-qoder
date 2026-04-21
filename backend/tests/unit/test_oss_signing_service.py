@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from common.oss.signing import OssConfigError, OssSigningService
+from common.oss.signing import OssSigningService
 
 # Ensure env vars exist before importing the service module
 _VALID_ENV = {

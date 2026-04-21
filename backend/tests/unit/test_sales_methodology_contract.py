@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from common import effectiveness
 
-
 EXPECTED_RUBRIC_IDS = [
     "discovery_qualification",
     "value_story",

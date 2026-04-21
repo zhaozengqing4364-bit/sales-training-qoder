@@ -11,7 +11,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -59,8 +58,9 @@ class TestNFRCIWorkflow:
         assert NFRReporter is not None
         assert create_nfr_report is not None
 
-        # Check module has required methods
         reporter = NFRReporter()
+
+        # Check module has required methods
         assert hasattr(reporter, "add_result")
         assert hasattr(reporter, "generate_json")
         assert hasattr(reporter, "generate_markdown")
@@ -106,7 +106,6 @@ class TestNFRCIWorkflow:
         ]
 
         # Check all expected metrics are defined
-        reporter = NFRReporter()
         defined_metrics = [t.metric_name for t in NFRReporter.THRESHOLDS]
 
         for expected in expected_metrics:
@@ -136,7 +135,7 @@ class TestNFRCIWorkflow:
 
         assert json_path.exists(), f"JSON report not generated: {json_path}"
 
-        with open(json_path, "r") as f:
+        with open(json_path) as f:
             report = json.load(f)
 
         # Check required top-level fields
@@ -267,7 +266,7 @@ class TestNFRCIWorkflow:
 
         json_path = reporter.generate_json()
 
-        with open(json_path, "r") as f:
+        with open(json_path) as f:
             report = json.load(f)
 
         # Check pass/fail determination
@@ -304,7 +303,7 @@ class TestNFRCIWorkflow:
 
         json_path = reporter.generate_json()
 
-        with open(json_path, "r") as f:
+        with open(json_path) as f:
             report = json.load(f)
 
         # Check metadata fields

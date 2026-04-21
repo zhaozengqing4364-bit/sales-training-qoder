@@ -8,8 +8,7 @@ References:
 - Design: Section 11 (Message Storage Service)
 """
 import uuid
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -450,15 +449,15 @@ class TestMessageStorageService:
         """Test getting messages for a session"""
         # Arrange
         mock_messages = [MagicMock(), MagicMock()]
-        
+
         # Mock count query
         mock_count_result = MagicMock()
         mock_count_result.scalar.return_value = 2
-        
+
         # Mock messages query
         mock_messages_result = MagicMock()
         mock_messages_result.scalars.return_value.all.return_value = mock_messages
-        
+
         mock_db.execute.side_effect = [mock_count_result, mock_messages_result]
 
         # Act
@@ -479,13 +478,13 @@ class TestMessageStorageService:
         """Test pagination for session messages"""
         # Arrange
         mock_messages = [MagicMock()]
-        
+
         mock_count_result = MagicMock()
         mock_count_result.scalar.return_value = 100
-        
+
         mock_messages_result = MagicMock()
         mock_messages_result.scalars.return_value.all.return_value = mock_messages
-        
+
         mock_db.execute.side_effect = [mock_count_result, mock_messages_result]
 
         # Act

@@ -1,5 +1,5 @@
-from common.ai import llm_service as llm_module
 import sales_bot.websocket.stepfun_realtime_handler as stepfun_module
+from common.ai import llm_service as llm_module
 
 
 def _event_ids(entries: tuple[dict[str, object], ...]) -> set[str]:

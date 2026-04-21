@@ -2,9 +2,9 @@
 Performance Tests for Interruption Detection
 Tests that interruption detection meets <100ms latency target
 """
-import asyncio
-import pytest
 import time
+
+import pytest
 
 
 @pytest.mark.performance
@@ -14,7 +14,9 @@ class TestInterruptionLatency:
     @pytest.mark.asyncio
     async def test_keyword_detection_latency(self):
         """Test keyword detection is <100ms"""
-        from presentation_coach.services.interruption_detector import get_interruption_detector
+        from presentation_coach.services.interruption_detector import (
+            get_interruption_detector,
+        )
 
         detector = get_interruption_detector()
 
@@ -43,7 +45,9 @@ class TestInterruptionLatency:
     @pytest.mark.asyncio
     async def test_missing_point_detection_latency(self):
         """Test missing point detection is <100ms"""
-        from presentation_coach.services.interruption_detector import get_interruption_detector
+        from presentation_coach.services.interruption_detector import (
+            get_interruption_detector,
+        )
 
         detector = get_interruption_detector()
 
@@ -54,7 +58,7 @@ class TestInterruptionLatency:
         }
 
         start = time.perf_counter()
-        result = await detector.should_interrupt(
+        await detector.should_interrupt(
             "That's all, thank you for listening.",
             context
         )
@@ -68,7 +72,9 @@ class TestInterruptionLatency:
     @pytest.mark.asyncio
     async def test_no_interruption_latency(self):
         """Test that no-interruption case is also fast"""
-        from presentation_coach.services.interruption_detector import get_interruption_detector
+        from presentation_coach.services.interruption_detector import (
+            get_interruption_detector,
+        )
 
         detector = get_interruption_detector()
 
@@ -79,7 +85,7 @@ class TestInterruptionLatency:
         }
 
         start = time.perf_counter()
-        result = await detector.should_interrupt(
+        await detector.should_interrupt(
             "Today I want to discuss our revenue growth.",
             context
         )

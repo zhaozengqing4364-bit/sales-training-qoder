@@ -17,24 +17,22 @@ Test Coverage:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import ValidationError
 
+from common.error_handling.result import Result
 from evaluation.services.comprehensive_report import (
-    ComprehensiveReportService,
     ComprehensiveReport,
+    ComprehensiveReportService,
     DimensionScore,
 )
 from evaluation.services.staged_evaluation import StageEvaluationResult
-from evaluation.schemas import ComprehensiveReportResponse
-from common.error_handling.result import Result
 from presentation_coach.services.presentation_report_service import (
     PresentationReportService,
 )
@@ -223,7 +221,7 @@ class TestComprehensiveReportService:
 
         fake_report = ComprehensiveReport(
             session_id=session_id,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             overall_score=86.0,
             dimension_scores=[
                 DimensionScore(name="流畅连贯性", score=88.0, weight=0.2),
@@ -360,7 +358,7 @@ class TestComprehensiveReportService:
         """Test retrieving existing report."""
         # Arrange
         session_id = str(uuid4())
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(UTC)
 
         mock_db_report = MagicMock()
         mock_db_report.session_id = session_id
@@ -431,7 +429,7 @@ class TestComprehensiveReportService:
         """Test retrieving report with validation error."""
         # Arrange
         session_id = str(uuid4())
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(UTC)
 
         mock_db_report = MagicMock()
         mock_db_report.session_id = session_id
@@ -963,7 +961,7 @@ class TestComprehensiveReportService:
         # Arrange
         report = ComprehensiveReport(
             session_id=str(uuid4()),
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             overall_score=85.0,
             dimension_scores=[
                 DimensionScore(
@@ -994,7 +992,7 @@ class TestComprehensiveReportService:
         # Arrange
         report = ComprehensiveReport(
             session_id=str(uuid4()),
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             overall_score=85.0,
             dimension_scores=[],
             stage_summaries=[],
@@ -1019,7 +1017,7 @@ class TestComprehensiveReportService:
         # Arrange
         report = ComprehensiveReport(
             session_id=str(uuid4()),
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             overall_score=85.0,
             dimension_scores=[],
             stage_summaries=[],
@@ -1129,8 +1127,8 @@ class TestPresentationReportService:
         practice_session = SimpleNamespace(
             session_id=session_id,
             presentation_id="ppt-001",
-            start_time=datetime(2026, 3, 1, tzinfo=timezone.utc),
-            end_time=datetime(2026, 3, 1, 0, 12, tzinfo=timezone.utc),
+            start_time=datetime(2026, 3, 1, tzinfo=UTC),
+            end_time=datetime(2026, 3, 1, 0, 12, tzinfo=UTC),
             logic_score=None,
             accuracy_score=None,
             completeness_score=None,
@@ -1140,14 +1138,14 @@ class TestPresentationReportService:
                 content="客户痛点和价值方案介绍很完整",
                 role="user",
                 turn_number=1,
-                timestamp=datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc),
+                timestamp=datetime(2026, 3, 1, 0, 1, tzinfo=UTC),
                 transcript_metadata={"page_number": 1},
             ),
             SimpleNamespace(
                 content="这一页补充了实施计划，但没有展开落地细节",
                 role="user",
                 turn_number=2,
-                timestamp=datetime(2026, 3, 1, 0, 2, tzinfo=timezone.utc),
+                timestamp=datetime(2026, 3, 1, 0, 2, tzinfo=UTC),
                 transcript_metadata={"page_number": 2},
             ),
         ]
@@ -1224,8 +1222,8 @@ class TestPresentationReportService:
         practice_session = SimpleNamespace(
             session_id=session_id,
             presentation_id="ppt-002",
-            start_time=datetime(2026, 3, 1, tzinfo=timezone.utc),
-            end_time=datetime(2026, 3, 1, 0, 8, tzinfo=timezone.utc),
+            start_time=datetime(2026, 3, 1, tzinfo=UTC),
+            end_time=datetime(2026, 3, 1, 0, 8, tzinfo=UTC),
             logic_score=None,
             accuracy_score=None,
             completeness_score=None,
@@ -1235,14 +1233,14 @@ class TestPresentationReportService:
                 content="我们先讲客户痛点，再讲价值方案",
                 role="user",
                 turn_number=1,
-                timestamp=datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc),
+                timestamp=datetime(2026, 3, 1, 0, 1, tzinfo=UTC),
                 transcript_metadata=None,
             ),
             SimpleNamespace(
                 content="最后补充实施计划",
                 role="user",
                 turn_number=2,
-                timestamp=datetime(2026, 3, 1, 0, 2, tzinfo=timezone.utc),
+                timestamp=datetime(2026, 3, 1, 0, 2, tzinfo=UTC),
                 transcript_metadata={},
             ),
         ]

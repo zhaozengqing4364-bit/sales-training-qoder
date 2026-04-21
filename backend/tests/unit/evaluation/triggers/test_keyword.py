@@ -1,10 +1,9 @@
 """
 Tests for KeywordTrigger
 """
-import pytest
 
-from evaluation.triggers.keyword import KeywordTrigger
 from evaluation.triggers.base_trigger import TriggerContext
+from evaluation.triggers.keyword import KeywordTrigger
 
 
 class TestKeywordTrigger:

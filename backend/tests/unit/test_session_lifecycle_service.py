@@ -13,11 +13,10 @@ import pytest
 
 import common.db.session_lifecycle as session_lifecycle_module
 from common.db.session_lifecycle import (
-    InvalidSessionTransitionError,
     SESSION_LIFECYCLE_RACE_SCENARIOS,
+    InvalidSessionTransitionError,
     SessionLifecycleService,
 )
-
 
 LIFECYCLE_CONCURRENCY_CONTRACT = {
     "locking_strategy": (

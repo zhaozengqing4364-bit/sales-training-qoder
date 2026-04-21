@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from types import SimpleNamespace
+from datetime import UTC, datetime
 from uuid import uuid4
-
-import pytest
 
 from prompt_templates.models import PromptTemplate, PromptType
 from prompt_templates.service import PromptTemplateService
@@ -29,7 +26,7 @@ class _StubConfigManager:
 
 
 def _build_prompt_template(template: str, *, prompt_type: PromptType = PromptType.REPORT) -> PromptTemplate:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PromptTemplate(
         id=uuid4(),
         name="Runtime Prompt",

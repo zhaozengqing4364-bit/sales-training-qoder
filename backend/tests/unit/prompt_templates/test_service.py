@@ -4,22 +4,21 @@ Tests for Prompt Template Service
 TDD Tests for Task B6: Implement PromptTemplateService
 """
 
-import pytest
-from datetime import datetime, timezone
-from uuid import uuid4, UUID
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from prompt_templates.service import PromptTemplateService
 from prompt_templates.models import (
-    PromptTemplate,
+    PromptRenderRequest,
     PromptTemplateCreate,
     PromptTemplateUpdate,
-    ScenarioPromptCreate,
     PromptType,
-    PromptRenderRequest,
+    ScenarioPromptCreate,
 )
+from prompt_templates.service import PromptTemplateService
 
 
 class TestPromptTemplateService:
@@ -49,8 +48,8 @@ class TestPromptTemplateService:
         template.is_active = True
         template.is_default = False
         template.is_system = False
-        template.created_at = datetime.now(timezone.utc)
-        template.updated_at = datetime.now(timezone.utc)
+        template.created_at = datetime.now(UTC)
+        template.updated_at = datetime.now(UTC)
         return template
 
     @pytest.mark.asyncio
@@ -283,8 +282,8 @@ class TestGetTemplateForScenario:
         template.is_active = True
         template.is_default = False
         template.is_system = False
-        template.created_at = datetime.now(timezone.utc)
-        template.updated_at = datetime.now(timezone.utc)
+        template.created_at = datetime.now(UTC)
+        template.updated_at = datetime.now(UTC)
         return template
 
     @pytest.mark.asyncio

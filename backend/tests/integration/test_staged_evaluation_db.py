@@ -4,9 +4,9 @@ Integration Tests for Staged Evaluation Database Tables
 TDD Tests for Task C1: Create Staged Evaluation Database Tables
 """
 
-import pytest
 from uuid import uuid4
 
+import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession

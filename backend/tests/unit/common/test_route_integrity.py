@@ -4,7 +4,6 @@ from collections import Counter
 
 from main import app
 
-
 IGNORED_METHODS = {"HEAD", "OPTIONS"}
 
 

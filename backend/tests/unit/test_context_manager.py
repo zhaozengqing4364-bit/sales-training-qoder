@@ -7,8 +7,8 @@ import pytest
 
 from common.conversation.storage import MessageStorageService
 from sales_bot.services.context_manager import (
-    ContextManager,
     OBJECTION_LEDGER_TRANSCRIPT_KEY,
+    ContextManager,
 )
 
 

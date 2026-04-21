@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -13,9 +13,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from admin.api import interventions as interventions_api
+
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
-from admin.api import interventions as interventions_api
 from common.auth.service import create_access_token
 from common.db.models import Base, PracticeSession, Scenario, User
 from common.db.session import get_db
@@ -128,8 +129,8 @@ async def _create_completed_session(
         user_id=user_id,
         scenario_id=scenario_id,
         status="completed",
-        start_time=datetime.now(timezone.utc),
-        end_time=datetime.now(timezone.utc),
+        start_time=datetime.now(UTC),
+        end_time=datetime.now(UTC),
         total_duration_seconds=180,
     )
     db_session.add(session)
@@ -376,7 +377,7 @@ async def test_create_route_delegates_to_manager_intervention_write_service(
     trainee_user: User,
 ) -> None:
     observed: dict[str, object] = {}
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
 
     class FakeWriteService:
         def __init__(self, db: AsyncSession) -> None:
@@ -446,7 +447,7 @@ async def test_update_route_delegates_to_manager_intervention_write_service(
     intervention_id = str(uuid.uuid4())
     resolving_session_id = str(uuid.uuid4())
     observed: dict[str, object] = {}
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
 
     class FakeWriteService:
         def __init__(self, db: AsyncSession) -> None:

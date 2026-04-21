@@ -22,9 +22,6 @@ import websockets
 
 from common.audio.asr_alibaba import AlibabaASRProvider
 from common.audio.asr_with_fallback import get_asr_with_fallback
-from common.audio.tts_factory import get_tts_service_with_fallback
-from common.audio.tts_service import TTSChunk
-from common.error_handling.result import Result
 
 
 class NFRMetricsTracker:
@@ -302,7 +299,7 @@ class TestASRStreamingLatency:
 
         # Test multiple chunks
         for i in range(5):
-            audio_chunk = bytes(bytes_per_chunk)
+            _ = bytes(bytes_per_chunk)
             start_time = time.perf_counter()
 
             # Simulate processing (actual implementation would use real ASR)
@@ -696,7 +693,7 @@ class TestLoadPerformance:
         avg_time_ms = sum(results) / len(results)
         assert (
             total_time_ms < avg_time_ms * 10
-        ), f"Requests appear sequential, not concurrent"
+        ), "Requests appear sequential, not concurrent"
 
     @pytest.mark.asyncio
     async def test_memory_stability_under_load(
@@ -754,7 +751,7 @@ def test_nfr_automated_report_generation():
     Validates that the NFR reporter can generate reports in multiple formats
     (JSON, Markdown, HTML) for CI/CD integration.
     """
-    from common.monitoring.nfr_reporter import NFRReporter, create_nfr_report
+    from common.monitoring.nfr_reporter import NFRReporter
 
     # Create reporter instance
     reporter = NFRReporter(output_dir="test-results")
@@ -783,7 +780,7 @@ def test_nfr_automated_report_generation():
 
     # Verify JSON report contains required fields
     import json
-    with open(reports["json"], "r") as f:
+    with open(reports["json"]) as f:
         json_report = json.load(f)
 
     assert "metadata" in json_report
@@ -793,7 +790,7 @@ def test_nfr_automated_report_generation():
     assert json_report["summary"]["total_metrics"] == 4
 
     # Verify Markdown report contains key sections
-    with open(reports["markdown"], "r") as f:
+    with open(reports["markdown"]) as f:
         md_content = f.read()
 
     assert "# NFR Performance Report" in md_content
@@ -802,7 +799,7 @@ def test_nfr_automated_report_generation():
     assert "Constitution Principle II" in md_content
 
     # Verify HTML report contains structure
-    with open(reports["html"], "r") as f:
+    with open(reports["html"]) as f:
         html_content = f.read()
 
     assert "<!DOCTYPE html>" in html_content
@@ -846,8 +843,8 @@ def test_nfr_report_convenience_function():
 def cleanup_test_reports():
     """Clean up test results after all tests complete."""
     yield
-    import shutil
     import os
+    import shutil
 
     test_results_dir = "test-results"
     if os.path.exists(test_results_dir):

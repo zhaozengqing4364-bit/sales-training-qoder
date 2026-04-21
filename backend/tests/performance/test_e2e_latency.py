@@ -3,9 +3,10 @@ Performance Tests for End-to-End Latency
 Tests that end-to-end latency meets <300ms target
 """
 import asyncio
-import pytest
 import time
 import uuid
+
+import pytest
 
 
 def _percentile(values: list[float], percentile: float) -> float:
@@ -110,8 +111,10 @@ class TestE2ELatency:
     @pytest.mark.asyncio
     async def test_interruption_to_response_latency(self):
         """Test full flow from speech to AI response"""
-        from presentation_coach.services.interruption_detector import get_interruption_detector
         from common.ai.llm_service import get_llm_service
+        from presentation_coach.services.interruption_detector import (
+            get_interruption_detector,
+        )
 
         detector = get_interruption_detector()
         llm_service = get_llm_service()
@@ -133,7 +136,7 @@ class TestE2ELatency:
 
         # 2. Generate AI response (if needed)
         if detection_result.is_success and detection_result.value:
-            response_result = await llm_service.generate(
+            await llm_service.generate(
                 prompt="Please respond to the user's vague speech.",
                 session_id="test",
                 system_message="You are a presentation coach."

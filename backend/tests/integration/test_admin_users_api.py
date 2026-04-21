@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -29,6 +29,7 @@ from admin.api.security_inventory import (
 )
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
+
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
 from common.db.models import (
@@ -198,7 +199,7 @@ async def test_system_logs_api_returns_shared_redaction_policy_and_safe_diagnost
                     "operator_email": "admin@example.com",
                 }
             ),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
     )
     await db_session.commit()
@@ -726,7 +727,7 @@ async def test_user_sessions_completed_rows_expose_projection_backed_preview_fie
     db_session.add(scenario)
     await db_session.flush()
 
-    completed_start = datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc)
+    completed_start = datetime(2026, 3, 23, 9, 0, tzinfo=UTC)
     completed_session = PracticeSession(
         session_id=str(uuid.uuid4()),
         user_id=str(non_admin_user.user_id),
@@ -929,9 +930,9 @@ async def test_admin_progress_and_stats_follow_projection_backed_supervisor_snap
         "not_evaluable_reason": "INSUFFICIENT_TURN_DATA",
     }
 
-    session_a_start = datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc)
-    session_b_start = datetime(2026, 3, 5, 14, 0, tzinfo=timezone.utc)
-    session_c_start = datetime(2026, 3, 10, 11, 0, tzinfo=timezone.utc)
+    session_a_start = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
+    session_b_start = datetime(2026, 3, 5, 14, 0, tzinfo=UTC)
+    session_c_start = datetime(2026, 3, 10, 11, 0, tzinfo=UTC)
 
     session_a = PracticeSession(
         session_id=str(uuid.uuid4()),
@@ -1210,10 +1211,10 @@ async def test_user_sessions_expose_latest_manager_intervention_results_on_proje
     db_session.add(scenario)
     await db_session.flush()
 
-    intervention_start = datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc)
-    blocked_start = datetime(2026, 3, 24, 9, 0, tzinfo=timezone.utc)
-    improved_start = datetime(2026, 3, 25, 9, 0, tzinfo=timezone.utc)
-    thin_start = datetime(2026, 3, 26, 9, 0, tzinfo=timezone.utc)
+    intervention_start = datetime(2026, 3, 23, 8, 0, tzinfo=UTC)
+    blocked_start = datetime(2026, 3, 24, 9, 0, tzinfo=UTC)
+    improved_start = datetime(2026, 3, 25, 9, 0, tzinfo=UTC)
+    thin_start = datetime(2026, 3, 26, 9, 0, tzinfo=UTC)
 
     blocked_session = PracticeSession(
         session_id=str(uuid.uuid4()),
@@ -1487,8 +1488,8 @@ async def test_user_sessions_delegate_manager_intervention_results_to_resolver_s
         note="resolver seam regression",
         due_state="due",
         reminder_status="not_sent",
-        created_at=datetime(2026, 3, 27, 9, 0, tzinfo=timezone.utc),
-        updated_at=datetime(2026, 3, 27, 9, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 3, 27, 9, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 3, 27, 9, 0, tzinfo=UTC),
     )
     db_session.add(intervention)
     await db_session.commit()

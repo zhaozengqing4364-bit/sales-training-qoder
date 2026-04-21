@@ -2,8 +2,8 @@
 Integration Tests for Sales Bot Flow
 Tests the complete sales conversation flow
 """
+
 import pytest
-import asyncio
 
 
 @pytest.mark.integration

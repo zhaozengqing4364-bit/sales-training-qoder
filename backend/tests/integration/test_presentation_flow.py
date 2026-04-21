@@ -1,6 +1,5 @@
 import asyncio
 import io
-import uuid
 from pathlib import Path
 
 import pytest
@@ -329,14 +328,15 @@ class TestPresentationFlow:
         """Two concurrent in-place replaces can race on page rebuild so one writer commits version 2 while the other falls into the global 500 fallback."""
         monkeypatch.setenv("PPT_STORAGE_PATH", str(tmp_path / "ppts"))
 
+        from httpx import ASGITransport, AsyncClient
+        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+        from sqlalchemy.orm import sessionmaker
+
         import agent.models  # noqa: F401
         from common.db.models import Base
         from common.db.session import get_db
         from main import app
         from presentation_coach.api import presentations as presentations_api
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-        from sqlalchemy.orm import sessionmaker
-        from httpx import ASGITransport, AsyncClient
 
         database_path = tmp_path / "presentation-replace-race.sqlite3"
         engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}", echo=False)

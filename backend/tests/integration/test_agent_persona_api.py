@@ -7,20 +7,14 @@ References:
 - Requirements: R4 (Agent-Persona Association)
 - API Contract: docs/api-contract/personas.md
 """
-import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from common.db.models import Base, User
-from agent.models import Agent, AgentPersona, Persona
-from common.knowledge.models import KnowledgeBase, KnowledgeDocument
-from common.conversation.models import ConversationMessage
-
-from main import app
 from common.db.session import get_db
-
+from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -29,15 +23,15 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 async def test_engine():
     """Create test database engine with all tables"""
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield engine
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     await engine.dispose()
 
 
@@ -49,7 +43,7 @@ async def db_session(test_engine):
         class_=AsyncSession,
         expire_on_commit=False
     )
-    
+
     async with async_session() as session:
         yield session
 
@@ -74,13 +68,13 @@ async def async_client(db_session, test_user):
     """Create async HTTP client for testing"""
     async def override_get_db():
         yield db_session
-    
+
     app.dependency_overrides[get_db] = override_get_db
-    
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-    
+
     app.dependency_overrides.clear()
 
 
@@ -148,7 +142,7 @@ async def test_persona(async_client, auth_headers):
 
 class TestAgentPersonaAPI:
     """Tests for Agent-Persona Association API - R4"""
-    
+
     async def test_add_persona_to_agent(
         self, async_client, auth_headers, test_agent, test_persona
     ):
@@ -162,7 +156,7 @@ class TestAgentPersonaAPI:
             },
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
@@ -200,7 +194,7 @@ class TestAgentPersonaAPI:
         )
 
         assert response.status_code == 403
-    
+
     async def test_add_persona_already_linked(
         self, async_client, auth_headers, test_agent, test_persona
     ):
@@ -211,16 +205,16 @@ class TestAgentPersonaAPI:
             json={"persona_id": test_persona["id"]},
             headers=auth_headers
         )
-        
+
         # Try to link again
         response = await async_client.post(
             f"/api/v1/admin/agents/{test_agent['id']}/personas",
             json={"persona_id": test_persona["id"]},
             headers=auth_headers
         )
-        
+
         assert response.status_code == 400
-    
+
     async def test_list_agent_personas(
         self, async_client, auth_headers, test_agent, test_persona
     ):
@@ -231,18 +225,18 @@ class TestAgentPersonaAPI:
             json={"persona_id": test_persona["id"], "display_order": 1},
             headers=auth_headers
         )
-        
+
         response = await async_client.get(
             f"/api/v1/admin/agents/{test_agent['id']}/personas",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert len(data["data"]["personas"]) == 1
         assert data["data"]["personas"][0]["persona"]["name"] == "Test Persona"
-    
+
     async def test_update_agent_persona(
         self, async_client, auth_headers, test_agent, test_persona
     ):
@@ -253,20 +247,20 @@ class TestAgentPersonaAPI:
             json={"persona_id": test_persona["id"], "display_order": 1},
             headers=auth_headers
         )
-        
+
         # Update
         response = await async_client.put(
             f"/api/v1/admin/agents/{test_agent['id']}/personas/{test_persona['id']}",
             json={"display_order": 5, "is_default": True},
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["data"]["display_order"] == 5
         assert data["data"]["is_default"] is True
-    
+
     async def test_remove_persona_from_agent(
         self, async_client, auth_headers, test_agent, test_persona
     ):
@@ -277,25 +271,25 @@ class TestAgentPersonaAPI:
             json={"persona_id": test_persona["id"]},
             headers=auth_headers
         )
-        
+
         # Remove
         response = await async_client.delete(
             f"/api/v1/admin/agents/{test_agent['id']}/personas/{test_persona['id']}",
             headers=auth_headers
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["data"]["removed"] is True
-        
+
         # Verify removed
         list_response = await async_client.get(
             f"/api/v1/admin/agents/{test_agent['id']}/personas",
             headers=auth_headers
         )
         assert len(list_response.json()["data"]["personas"]) == 0
-    
+
     async def test_is_default_uniqueness(
         self, async_client, auth_headers, test_agent
     ):
@@ -313,21 +307,21 @@ class TestAgentPersonaAPI:
         )
         p1_id = p1_response.json()["data"]["id"]
         p2_id = p2_response.json()["data"]["id"]
-        
+
         # Link first as default
         await async_client.post(
             f"/api/v1/admin/agents/{test_agent['id']}/personas",
             json={"persona_id": p1_id, "is_default": True},
             headers=auth_headers
         )
-        
+
         # Link second as default
         await async_client.post(
             f"/api/v1/admin/agents/{test_agent['id']}/personas",
             json={"persona_id": p2_id, "is_default": True},
             headers=auth_headers
         )
-        
+
         # List and verify only one default
         list_response = await async_client.get(
             f"/api/v1/admin/agents/{test_agent['id']}/personas",
@@ -337,7 +331,7 @@ class TestAgentPersonaAPI:
         defaults = [p for p in personas if p["is_default"]]
         assert len(defaults) == 1
         assert defaults[0]["persona_id"] == p2_id
-    
+
     async def test_add_persona_agent_not_found(self, async_client, auth_headers, test_persona):
         """Should return 404 for non-existent agent"""
         response = await async_client.post(
@@ -345,9 +339,9 @@ class TestAgentPersonaAPI:
             json={"persona_id": test_persona["id"]},
             headers=auth_headers
         )
-        
+
         assert response.status_code == 404
-    
+
     async def test_add_persona_persona_not_found(self, async_client, auth_headers, test_agent):
         """Should return 404 for non-existent persona"""
         response = await async_client.post(
@@ -355,7 +349,7 @@ class TestAgentPersonaAPI:
             json={"persona_id": "non-existent-id"},
             headers=auth_headers
         )
-        
+
         assert response.status_code == 404
 
     async def test_add_inactive_persona_rejected(self, async_client, auth_headers, test_agent, test_persona):

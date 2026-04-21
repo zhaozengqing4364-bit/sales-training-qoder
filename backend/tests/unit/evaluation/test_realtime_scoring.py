@@ -4,17 +4,17 @@ Unit tests for Realtime Scoring Service
 Requirements: Story 2.6 - Real-time scoring updates and improvement suggestions
 """
 
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock, Mock
 
+import pytest
+
+from common.error_handling.result import Result
+from evaluation.services.ai_scoring import AIScoringService
 from evaluation.services.realtime_scoring import (
-    RealtimeScoringService,
     IncrementalScoreState,
+    RealtimeScoringService,
     ScoreUpdateEvent,
 )
-from evaluation.services.ai_scoring import AIScoringService
-from common.error_handling.result import Result
 
 
 @pytest.fixture
@@ -251,7 +251,7 @@ class TestRealtimeScoringService:
     def test_clear_session_state(self, scoring_service):
         """Test session state cleanup."""
         # Create state
-        state = scoring_service._get_or_create_state("test-session")
+        scoring_service._get_or_create_state("test-session")
         assert "test-session" in scoring_service._score_states
 
         # Clear state
