@@ -15,12 +15,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from common.analytics.history_service import PROJECTION_SCORE_BASIS
 from common.db.models import PracticeSession, SessionStatus, User
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+PROJECTION_SCORE_BASIS = "session_evidence_projection_evaluable_only"
 
 
 def _is_admin_user(user: User) -> bool:

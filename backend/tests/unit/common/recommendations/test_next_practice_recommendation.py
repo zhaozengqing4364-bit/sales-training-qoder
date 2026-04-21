@@ -10,17 +10,18 @@ def _sales_session(**overrides):
         scenario_type="sales",
         name="销售对练",
     )
-    session = PracticeSession(
-        session_id="session-recommendation",
-        user_id="user-1",
-        scenario_id="scenario-sales",
-        status=SessionStatus.COMPLETED.value,
-        logic_score=78,
-        accuracy_score=55,
-        completeness_score=84,
-        effectiveness_snapshot={"evaluable": True},
-        **overrides,
-    )
+    values = {
+        "session_id": "session-recommendation",
+        "user_id": "user-1",
+        "scenario_id": "scenario-sales",
+        "status": SessionStatus.COMPLETED.value,
+        "logic_score": 78,
+        "accuracy_score": 55,
+        "completeness_score": 84,
+        "effectiveness_snapshot": {"evaluable": True},
+    }
+    values.update(overrides)
+    session = PracticeSession(**values)
     session.scenario = scenario
     return session
 

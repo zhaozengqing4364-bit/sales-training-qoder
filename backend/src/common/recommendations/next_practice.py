@@ -13,12 +13,13 @@ import os
 from copy import deepcopy
 from typing import Any
 
-from common.analytics.history_service import PROJECTION_SCORE_BASIS
 from common.db.models import PracticeSession, SessionStatus
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+PROJECTION_SCORE_BASIS = "session_evidence_projection_evaluable_only"
 
 
 DEFAULT_RECOMMENDATION_RULESET: dict[str, Any] = {
