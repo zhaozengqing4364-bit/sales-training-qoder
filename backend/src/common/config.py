@@ -239,6 +239,12 @@ class Settings:
         minimum=100,
         maximum=100000,
     )
+    CACHE_MEMORY_MAX_ENTRIES: int = _env_int(
+        "CACHE_MEMORY_MAX_ENTRIES",
+        10000,
+        minimum=100,
+        maximum=1000000,
+    )
 
     # Service Preloading
     PRELOAD_SERVICES: bool = os.getenv("PRELOAD_SERVICES", "false").lower() == "true"

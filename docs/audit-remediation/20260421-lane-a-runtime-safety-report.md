@@ -2,7 +2,7 @@
 
 Worker: `worker-1`  
 Task: `9`  
-Scope slice: Q-03/Q-05/Q-07/Q-08/Q-09/Q-10/Q-11/Q-12/Q-13/Q-29.
+Scope slice: Q-03/Q-05/Q-07/Q-08/Q-09/Q-10/Q-11/Q-12/Q-13/Q-25/Q-29.
 
 ## Implemented
 
@@ -15,6 +15,7 @@ Scope slice: Q-03/Q-05/Q-07/Q-08/Q-09/Q-10/Q-11/Q-12/Q-13/Q-29.
 - Q-11: `BaseSalesHandler._launch_response_task` uses an async lock around response task check/assignment and clears the active task under the same lock.
 - Q-12: `PresentationWebSocketHandler._get_active_websocket` no longer falls back to another session when the current session is missing.
 - Q-13: PCM TTS duration calculation now uses sample rate, bytes-per-sample, and channels via shared helper and validated defaults.
+- Q-25: Redis cache memory fallback now enforces an LRU cap and uses glob-compatible pattern deletion.
 - Q-29: source `print(` usages in Lane A/backend source surfaces were replaced with logger usage or doc examples that do not call print.
 
 ## Config / Governance
@@ -28,6 +29,7 @@ Added env-backed runtime defaults in `common.config.Settings`:
 - `TTS_CHANNELS`: default `1`, bounded `1..2`.
 - `PRESENTATION_FEEDBACK_SESSION_TTL_SECONDS`: default `86400`, bounded `60..604800`.
 - `PRESENTATION_FEEDBACK_MAX_SESSIONS`: default `10000`, bounded `100..100000`.
+- `CACHE_MEMORY_MAX_ENTRIES`: default `10000`, bounded `100..1000000`.
 
 No business rules, scoring thresholds, recommendation logic, badges, notifications, Docker/deploy/ops, or frontend Lane C/D files were changed.
 
@@ -40,8 +42,10 @@ No business rules, scoring thresholds, recommendation logic, badges, notificatio
 - PASS: `cd backend && DATABASE_URL='sqlite+aiosqlite:///./test_lane_a.db' PYTHONPATH=src .venv-test/bin/python -m pytest tests/unit/test_knowledge_retrieval.py tests/unit/test_capability_base.py tests/unit/test_websocket_handler.py tests/unit/test_presentation_handler_persistence.py tests/unit/sales_bot/websocket/test_tts_component_duration.py tests/unit/sales_bot/websocket/test_base_sales_handler_safety.py -q --no-cov` → `115 passed, 1 warning`
 - PASS: `cd backend && ruff check src/evaluation/services/staged_evaluation.py tests/unit/evaluation/test_staged_evaluation_service.py --quiet`
 - PASS: `cd backend && DATABASE_URL='sqlite+aiosqlite:///./test_lane_a.db' PYTHONPATH=src .venv-test/bin/python -m pytest tests/unit/evaluation/test_staged_evaluation_service.py -q --no-cov` → `25 passed`
+- PASS: `cd backend && ruff check src/common/config.py src/common/cache/redis_cache.py tests/unit/common/cache/test_redis_cache.py --quiet`
+- PASS: `cd backend && DATABASE_URL='sqlite+aiosqlite:///./test_lane_a.db' PYTHONPATH=src .venv-test/bin/python -m pytest tests/unit/common/cache/test_redis_cache.py -q --no-cov` → `2 passed`
 - PASS: `cd backend && .venv-test/bin/python -m py_compile <modified source/test files>`
 
 ## Deferred Lane A Items
 
-Remaining Lane A items Q-04/Q-23/Q-24/Q-25/Q-30 are not claimed complete in this slice and need follow-up targeted tasks/tests.
+Remaining Lane A items Q-04/Q-23/Q-24/Q-30 are not claimed complete in this slice and need follow-up targeted tasks/tests.

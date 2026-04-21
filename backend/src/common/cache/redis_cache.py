@@ -10,11 +10,15 @@ Implements caching for:
 Requirements: P2-FIXES.md Issue #24
 """
 
+import fnmatch
 import json
+import time
+from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
+from common.config import settings
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -44,11 +48,12 @@ class CacheManager:
         await cache.delete("user:123")
     """
 
-    def __init__(self, default_ttl: int = 3600):
+    def __init__(self, default_ttl: int = 3600, memory_max_entries: int | None = None):
         self.default_ttl = default_ttl
         self._redis: Any | None = None
-        self._memory_cache: dict = {}
+        self._memory_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._use_memory_fallback = True
+        self._memory_max_entries = memory_max_entries or settings.CACHE_MEMORY_MAX_ENTRIES
 
     async def connect(self, redis_url: str = "redis://localhost:6379"):
         """Connect to Redis"""
@@ -72,7 +77,8 @@ class CacheManager:
                     return json.loads(value)
             elif self._use_memory_fallback:
                 entry = self._memory_cache.get(key)
-                if entry and entry["expires"] > __import__("time").time():
+                if entry and entry["expires"] > time.time():
+                    self._memory_cache.move_to_end(key)
                     return entry["value"]
                 elif entry:
                     del self._memory_cache[key]
@@ -89,12 +95,12 @@ class CacheManager:
                     key, json.dumps(value, default=str), ex=ttl or self.default_ttl
                 )
             elif self._use_memory_fallback:
-                import time
-
                 self._memory_cache[key] = {
                     "value": value,
                     "expires": time.time() + (ttl or self.default_ttl),
                 }
+                self._memory_cache.move_to_end(key)
+                self._enforce_memory_limit()
         except (ConnectionError, TimeoutError, OSError, ValueError) as e:
             logger.error(f"Cache set error: {e}")
 
@@ -116,11 +122,10 @@ class CacheManager:
                 if keys:
                     await self._redis.delete(*keys)
             elif self._use_memory_fallback:
-
                 keys_to_delete = [
                     k
                     for k in self._memory_cache.keys()
-                    if pattern.replace("*", "") in k
+                    if fnmatch.fnmatch(k, pattern)
                 ]
                 for k in keys_to_delete:
                     del self._memory_cache[k]
@@ -136,6 +141,11 @@ class CacheManager:
                 self._memory_cache.clear()
         except (ConnectionError, TimeoutError, OSError, ValueError) as e:
             logger.error(f"Cache clear error: {e}")
+
+    def _enforce_memory_limit(self) -> None:
+        """Evict least-recently-used memory fallback entries above the cap."""
+        while len(self._memory_cache) > self._memory_max_entries:
+            self._memory_cache.popitem(last=False)
 
 
 # Global cache instance

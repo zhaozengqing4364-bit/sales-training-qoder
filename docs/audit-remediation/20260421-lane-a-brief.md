@@ -18,6 +18,7 @@ This slice starts with high-safety, low-cross-lane runtime fixes:
 - Q-11 response pipeline task launch lock.
 - Q-12 PPT websocket session isolation.
 - Q-13 PCM TTS duration formula with validated defaults.
+- Q-25 Redis cache memory fallback LRU cap and glob pattern deletion.
 - Q-29 remove source `print(` usage from backend source surfaces.
 
 ## Configuration / Governance Notes
@@ -34,6 +35,7 @@ These are runtime safety/resource settings. Future admin UI work should expose t
 
 Targeted tests first:
 
+- `backend/tests/unit/common/cache/test_redis_cache.py`
 - `backend/tests/unit/evaluation/test_staged_evaluation_service.py`
 - `backend/tests/unit/test_presentation_feedback_service_policy.py`
 - `backend/tests/unit/test_knowledge_retrieval.py`
