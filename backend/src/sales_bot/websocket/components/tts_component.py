@@ -15,11 +15,41 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from common.config import settings
 from common.monitoring.latency_tracker import LatencyTracker, get_latency_tracker
 from common.monitoring.logger import get_logger
 from common.websocket.base_handler import ConnectionManager
 
 logger = get_logger(__name__)
+
+
+def calculate_pcm_duration_ms(
+    audio_data: bytes,
+    *,
+    sample_rate_hz: int | None = None,
+    bytes_per_sample: int | None = None,
+    channels: int | None = None,
+) -> int:
+    """Calculate PCM duration in milliseconds from audio byte metadata."""
+    if not audio_data:
+        return 0
+
+    effective_sample_rate = sample_rate_hz or settings.TTS_DEFAULT_SAMPLE_RATE_HZ
+    effective_bytes_per_sample = bytes_per_sample or settings.TTS_BYTES_PER_SAMPLE
+    effective_channels = channels or settings.TTS_CHANNELS
+    bytes_per_second = (
+        effective_sample_rate * effective_bytes_per_sample * effective_channels
+    )
+    if bytes_per_second <= 0:
+        logger.warning(
+            "Invalid TTS PCM duration metadata; using zero duration",
+            sample_rate_hz=effective_sample_rate,
+            bytes_per_sample=effective_bytes_per_sample,
+            channels=effective_channels,
+        )
+        return 0
+
+    return round(len(audio_data) * 1000 / bytes_per_second)
 
 
 class TTSComponent:
@@ -114,9 +144,7 @@ class TTSComponent:
             if binary_chunks:
                 audio_data = b"".join(binary_chunks)
                 audio_base64 = base64.b64encode(audio_data).decode("utf-8")
-                duration_ms = (
-                    int(len(audio_data) / 2) if audio_data else len(text) * 100
-                )
+                duration_ms = calculate_pcm_duration_ms(audio_data)
             elif string_chunks:
                 audio_base64 = "".join(string_chunks)
                 duration_ms = len(text) * 100
@@ -203,7 +231,7 @@ class TTSComponent:
                 )
                 raise asyncio.CancelledError("TTS stream expired")
 
-            duration_ms = len(audio_data) // 16 if audio_data else 0
+            duration_ms = calculate_pcm_duration_ms(audio_data)
             audio_base64 = (
                 base64.b64encode(audio_data).decode("utf-8") if audio_data else ""
             )

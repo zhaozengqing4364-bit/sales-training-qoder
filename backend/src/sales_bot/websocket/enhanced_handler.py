@@ -712,6 +712,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
             await self._process_user_text(text)
         except asyncio.CancelledError:
             logger.info("[RESPONSE] Background response task cancelled")
+            raise
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"[RESPONSE] Background response task error: {e}", exc_info=True)
             await self._send_status("listening")

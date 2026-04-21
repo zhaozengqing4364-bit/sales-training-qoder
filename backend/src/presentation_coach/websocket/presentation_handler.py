@@ -194,10 +194,10 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             if isinstance(scenario_connections, dict):
                 connections = scenario_connections
 
-        if self.session_id and self.session_id in connections:
+        if not self.session_id:
+            return None
+        if self.session_id in connections:
             return connections[self.session_id]
-        if connections:
-            return next(iter(connections.values()))
         return self.websocket
 
     def _create_state_snapshot(self) -> SessionStateSnapshot:
@@ -654,10 +654,6 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
 
         session_id = self.session_id
         if not session_id:
-            connections = self.manager.active_connections.get("presentation", {})
-            if connections:
-                session_id = next(iter(connections.keys()))
-        if not session_id:
             self.transcript_buffer = ""
             return
 
@@ -1037,12 +1033,6 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
 
         # Reset point tracker for new page
         target_session_id = self.session_id
-        if not target_session_id:
-            active_session_ids = list(
-                self.manager.active_connections.get("presentation", {}).keys()
-            )
-            if active_session_ids:
-                target_session_id = active_session_ids[0]
 
         if not target_session_id:
             logger.warning("Skip page change requirements load: missing session id")

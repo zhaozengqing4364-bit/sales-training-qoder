@@ -45,6 +45,7 @@ from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
 from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.base_handler import BaseWebSocketHandler
 from common.websocket.session_manager import get_session_manager
+from sales_bot.websocket.components.tts_component import calculate_pcm_duration_ms
 
 logger = get_logger(__name__)
 
@@ -107,6 +108,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         self._backpressure_active = False
         self._client_runtime_options: dict[str, Any] = {}
         self._response_task: asyncio.Task | None = None
+        self._response_task_lock = asyncio.Lock()
 
     # ========== Connection Lifecycle ==========
 
@@ -177,7 +179,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
         except WebSocketDisconnect:
             logger.info(f"Sales WebSocket disconnected: session={session_id}")
-        except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
+        except asyncio.CancelledError:
+            logger.info(f"Sales WebSocket handler cancelled: session={session_id}")
+            raise
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Sales WebSocket error: {str(e)}")
         finally:
             self.running = False
@@ -313,7 +318,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 await self.handle_message(message)
             except asyncio.CancelledError:
                 break
-            except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
+            except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Message processing error: {str(e)}")
 
     # ========== Message Routing ==========
@@ -418,7 +423,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
             else:
                 await self._handle_custom_message(msg_type, data, message)
 
-        except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
+        except asyncio.CancelledError:
+            logger.info(f"Message handling cancelled: type={msg_type}")
+            raise
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Error handling message {msg_type}: {str(e)}")
             await self._send_error("[PROCESSING_ERROR]", "处理消息时出错")
 
@@ -594,7 +602,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
             try:
                 audio_bytes = base64.b64decode(audio_base64)
                 await self._enqueue_audio_bytes(audio_bytes)
-            except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
+            except asyncio.CancelledError:
+                logger.info("Audio chunk handling cancelled")
+                raise
+            except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Failed to decode audio: {e}")
 
     async def _start_streaming_asr(self):
@@ -655,7 +666,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
                     except TimeoutError:
                         logger.warning("ASR task timeout, cancelling")
                         self.asr_task.cancel()
-                    except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
+                    except asyncio.CancelledError:
+                        logger.info("ASR task wait cancelled")
+                        raise
+                    except (RuntimeError, ValueError, OSError) as e:
                         logger.error(f"Error waiting for ASR task: {e}")
 
                 # 保存当前转录结果并立即清空，防止重复处理
@@ -719,7 +733,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
             else:
                 logger.warning("ASR returned empty transcript")
 
-        except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
+        except asyncio.CancelledError:
+            logger.info("Streaming ASR task cancelled")
+            raise
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Streaming ASR error: {e}", exc_info=True)
 
     async def _handle_audio_end(self):
@@ -793,16 +810,21 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     async def _launch_response_task(self, text: str, source: str) -> bool:
         """Launch one background response task; reject parallel pipelines."""
-        if self._response_task and not self._response_task.done():
-            logger.warning(f"Rejecting concurrent response task from {source}: pipeline busy")
-            await self._send_error(
-                "[RESPONSE_BUSY]",
-                "系统正在处理上一轮回复，请稍后再试。",
-            )
-            return False
+        async with self._response_task_lock:
+            if self._response_task and not self._response_task.done():
+                logger.warning(
+                    f"Rejecting concurrent response task from {source}: pipeline busy"
+                )
+                await self._send_error(
+                    "[RESPONSE_BUSY]",
+                    "系统正在处理上一轮回复，请稍后再试。",
+                )
+                return False
 
-        self._response_task = asyncio.create_task(self._process_user_text_safe(text))
-        return True
+            self._response_task = asyncio.create_task(
+                self._process_user_text_safe(text)
+            )
+            return True
 
     async def _process_user_text_safe(self, text: str):
         """Background wrapper for _process_user_text to avoid unhandled task exceptions."""
@@ -913,7 +935,11 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
                 audio_data = b"".join(audio_chunks)
                 audio_base64 = base64.b64encode(audio_data).decode("utf-8")
-                duration_ms = int(len(audio_data) / 2) if audio_data else len(text) * 100
+                duration_ms = (
+                    calculate_pcm_duration_ms(audio_data)
+                    if audio_data
+                    else len(text) * 100
+                )
 
                 logger.info(f"TTS generated {len(audio_data)} bytes for: {text[:30]}...")
 
@@ -932,7 +958,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 logger.warning(f"TTS failed: {result.fallback}")
                 await self._send_tts_fallback(text, request_id)
 
-        except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
+        except asyncio.CancelledError:
+            logger.info("TTS response task cancelled")
+            raise
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"TTS error: {str(e)}", exc_info=True)
             await self._send_tts_fallback(text, request_id)
 
