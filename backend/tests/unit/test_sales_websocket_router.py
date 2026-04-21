@@ -97,6 +97,72 @@ async def test_handle_sales_websocket_rejects_when_kb_lock_unbound(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_kb_lock_unbound_session_recomputes_effective_policy_when_snapshot_tampered(
+    monkeypatch,
+):
+    """A persisted snapshot cannot disable connection-time KB-lock enforcement."""
+
+    class DummySession:
+        def __init__(self):
+            self.voice_policy_snapshot = {
+                "tool_policy": {"require_kb_grounding": False},
+                "knowledge_base_ids": [],
+            }
+            self.agent_id = "agent-1"
+            self.persona_id = "persona-1"
+            self.voice_mode = "stepfun_realtime"
+            self.voice_runtime_profile_id = "profile-1"
+
+    session = DummySession()
+
+    class DummyResult:
+        def scalar_one_or_none(self):
+            return session
+
+    class DummyDbSessionContext:
+        committed = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, _stmt):
+            return DummyResult()
+
+        async def commit(self):
+            self.committed = True
+
+    db_context = DummyDbSessionContext()
+
+    class DummyPolicyService:
+        def __init__(self, _db):
+            pass
+
+        async def resolve_effective_policy(self, **kwargs):
+            assert kwargs == {
+                "agent_id": "agent-1",
+                "persona_id": "persona-1",
+                "voice_mode_override": "stepfun_realtime",
+                "runtime_profile_override": "profile-1",
+            }
+            return {
+                "tool_policy": {"require_kb_grounding": True},
+                "knowledge_base_ids": [],
+            }
+
+    monkeypatch.setattr(sales_router, "AsyncSessionLocal", lambda: db_context)
+    monkeypatch.setattr(sales_router, "VoiceRuntimePolicyService", DummyPolicyService)
+
+    is_unbound = await sales_router._is_kb_lock_unbound_session("session-1")
+
+    assert is_unbound is True
+    assert db_context.committed is True
+    assert session.voice_policy_snapshot["tool_policy"]["require_kb_grounding"] is True
+
+
+@pytest.mark.asyncio
 async def test_handle_sales_websocket_rejects_invalid_token_before_runtime_connect(
     monkeypatch,
 ):
