@@ -32,6 +32,56 @@ export interface DashboardStats {
     not_evaluable_sessions?: number;
 }
 
+export interface GrowthAchievement {
+    achievement_id: string;
+    code: string;
+    name: string;
+    description: string;
+    icon_key: string;
+    unlocked_at?: string | null;
+    evidence?: Record<string, unknown> | null;
+}
+
+export interface GrowthNotification {
+    notification_id: string;
+    type: "system" | "tip" | "reminder" | "achievement" | "ai_coach" | string;
+    title: string;
+    content: string;
+    action_label?: string | null;
+    action_path?: string | null;
+    source?: string | null;
+    evidence?: Record<string, unknown> | null;
+    is_read: boolean;
+    created_at?: string | null;
+}
+
+export interface GrowthGoal {
+    goal_id: string;
+    goal_type: "weekly_sessions" | "monthly_presentations" | string;
+    period: "weekly" | "monthly" | string;
+    target_count: number;
+    current_progress: number;
+    progress_ratio: number;
+    start_date: string;
+    end_date: string;
+    is_active: boolean;
+}
+
+export interface GrowthDashboardResponse {
+    achievements: {
+        unlocked: GrowthAchievement[];
+    };
+    notifications: {
+        items: GrowthNotification[];
+        unread_count: number;
+    };
+    goal: GrowthGoal | null;
+    rules?: {
+        achievement_ruleset_version?: string | null;
+        ai_coach_ruleset_version?: string | null;
+    };
+}
+
 export interface VoicePolicyRuntimeBinding {
     industry_pack_strategy: string;
     customer_pressure_source: string;
