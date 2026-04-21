@@ -2,14 +2,15 @@
 WebSocket Handler Unit Tests
 Tests: ConnectionManager, BaseWebSocketHandler, Constitution Principle I
 """
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from common.websocket.base_handler import (
-    ConnectionManager,
     BaseWebSocketHandler,
-    get_connection_manager
+    ConnectionManager,
+    get_connection_manager,
 )
 
 
@@ -222,7 +223,7 @@ class TestBaseWebSocketHandler:
             task = asyncio.create_task(
                 handler.handle_connection(mock_websocket, "test-session", "token")
             )
-            
+
             # Allow task to start
             await asyncio.sleep(0.5)
 
@@ -287,7 +288,7 @@ class TestBaseWebSocketHandler:
 
         # Run processing loop in background task
         task = asyncio.create_task(handler._process_messages())
-        
+
         # Allow processing
         await asyncio.sleep(0.1)
 
@@ -342,7 +343,7 @@ class TestBaseWebSocketHandler:
 
     async def test_heartbeat_sent_on_timeout(self, handler, mock_websocket):
         """Verify heartbeat is sent when no message received within timeout"""
-        mock_websocket.receive_json = AsyncMock(side_effect=[asyncio.TimeoutError(), Exception("Stop")])
+        mock_websocket.receive_json = AsyncMock(side_effect=[TimeoutError(), Exception("Stop")])
 
         with patch(
             "common.auth.service.verify_token",

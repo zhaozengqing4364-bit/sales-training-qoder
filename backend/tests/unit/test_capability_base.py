@@ -12,7 +12,6 @@ References:
 - Design: Section 1-3 (AgentContext, CapabilityRegistry, CapabilityRunner)
 """
 import asyncio
-from typing import Any
 
 import pytest
 
@@ -20,7 +19,6 @@ from agent.capabilities.base import BaseCapability, CapabilityResult
 from agent.capabilities.registry import CapabilityRegistry
 from agent.capabilities.runner import CapabilityRunner
 from agent.context import AgentContext
-
 
 # =============================================================================
 # Test Fixtures

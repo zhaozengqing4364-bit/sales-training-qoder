@@ -3,8 +3,8 @@ Base WebSocket Handler with connection lifecycle management
 Constitution Principle I: No error popups, graceful degradation
 """
 import asyncio
-from contextlib import suppress
 from collections.abc import Mapping
+from contextlib import suppress
 from datetime import UTC, datetime
 
 from fastapi import WebSocket, WebSocketDisconnect
