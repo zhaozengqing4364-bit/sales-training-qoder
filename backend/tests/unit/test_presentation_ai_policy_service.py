@@ -27,6 +27,44 @@ async def test_get_scope_policy_returns_defaults_when_missing(test_db: AsyncSess
 
 
 @pytest.mark.asyncio
+async def test_get_scope_policy_result_fails_for_invalid_scope_type(
+    test_db: AsyncSession,
+):
+    service = PresentationAIPolicyService(test_db)
+
+    result = await service.get_scope_policy_result(scope_type="tenant")
+
+    assert result.is_success is False
+    assert result.fallback == "[INVALID_SCOPE_TYPE]"
+
+
+@pytest.mark.asyncio
+async def test_get_scope_policy_result_requires_scope_id_for_specific_scope(
+    test_db: AsyncSession,
+):
+    service = PresentationAIPolicyService(test_db)
+
+    result = await service.get_scope_policy_result(scope_type="presentation")
+
+    assert result.is_success is False
+    assert result.fallback == "[SCOPE_ID_REQUIRED]"
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_for_session_result_returns_missing_session(
+    test_db: AsyncSession,
+):
+    service = PresentationAIPolicyService(test_db)
+
+    result = await service.resolve_effective_policy_for_session_result(
+        session_id="missing-session"
+    )
+
+    assert result.is_success is False
+    assert result.fallback == "[SESSION_NOT_FOUND]"
+
+
+@pytest.mark.asyncio
 async def test_resolve_effective_policy_merges_by_scope_precedence(test_db: AsyncSession):
     scenario_id = str(uuid.uuid4())
     presentation_id = str(uuid.uuid4())
