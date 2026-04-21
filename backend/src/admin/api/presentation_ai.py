@@ -9,11 +9,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api.response import success_response
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
-from common.monitoring.logger import get_logger, get_trace_id
+from common.monitoring.logger import get_logger
 from presentation_coach.services.presentation_ai_policy_service import (
     PresentationAIPolicyService,
 )
@@ -53,10 +54,6 @@ class PolicyPreviewPayload(PolicyScopePayload):
     forbidden_words: list[Any] = Field(default_factory=list)
 
 
-def _success(data: Any) -> dict[str, Any]:
-    return {"success": True, "data": data, "trace_id": get_trace_id()}
-
-
 router = APIRouter(
     prefix="/presentation-ai",
     tags=["presentation-ai"],
@@ -72,7 +69,7 @@ async def get_scope_policy(
 ):
     service = PresentationAIPolicyService(db)
     data = await service.get_scope_policy(scope_type=scope_type, scope_id=scope_id)
-    return _success(data)
+    return success_response(data)
 
 
 @router.put("/policy")
@@ -94,7 +91,7 @@ async def upsert_scope_policy(
             updated_by=str(current_user.user_id),
         )
         await db.commit()
-        return _success(data)
+        return success_response(data)
     except ValueError as exc:
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"[{exc}]") from exc
@@ -129,7 +126,7 @@ async def preview_scope_policy(
         scenario_id=scenario_id,
         presentation_id=presentation_id,
     )
-    return _success(data)
+    return success_response(data)
 
 
 @router.get("/policy/effective")
@@ -150,10 +147,10 @@ async def get_effective_policy(
                 status_code=404,
                 detail=policy_result.fallback or "[SESSION_NOT_FOUND]",
             )
-        return _success(policy_result.value)
+        return success_response(policy_result.value)
 
     data = await service.resolve_effective_policy(
         scenario_id=scenario_id,
         presentation_id=presentation_id,
     )
-    return _success(data)
+    return success_response(data)
