@@ -3,6 +3,7 @@ Base WebSocket Handler with connection lifecycle management
 Constitution Principle I: No error popups, graceful degradation
 """
 import asyncio
+from contextlib import suppress
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
@@ -114,6 +115,9 @@ class BaseWebSocketHandler:
     Implements message queue for non-blocking handling and session state recovery
     """
 
+    MAX_MESSAGE_QUEUE_SIZE = settings.WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE
+    BACKPRESSURE_POLICY = settings.WEBSOCKET_BACKPRESSURE_POLICY
+
     def __init__(self, scenario: str):
         self.scenario = scenario
         self.manager = get_connection_manager()
@@ -222,7 +226,7 @@ class BaseWebSocketHandler:
         await self.manager.connect(websocket, self.scenario, session_id)
 
         # Initialize message queue
-        self.message_queue = asyncio.Queue(maxsize=self.max_message_queue_size)
+        self.message_queue = asyncio.Queue(maxsize=self.MAX_MESSAGE_QUEUE_SIZE)
         self.running = True
 
         # Restore state if reconnection
@@ -242,7 +246,7 @@ class BaseWebSocketHandler:
                         websocket.receive_json(),
                         timeout=30.0  # 30s timeout
                     )
-                    await self._enqueue_received_message(websocket, data)
+                    await self._enqueue_message(data, websocket)
 
                 except TimeoutError:
                     # Send heartbeat
@@ -263,6 +267,49 @@ class BaseWebSocketHandler:
             self.running = False
             await self.manager.disconnect(self.scenario, session_id)
             processing_task.cancel()
+
+    async def _enqueue_message(self, data: dict, websocket: WebSocket) -> bool:
+        """Enqueue a message without allowing unbounded memory growth."""
+        if self.message_queue is None:
+            return False
+
+        try:
+            self.message_queue.put_nowait(data)
+            return True
+        except asyncio.QueueFull:
+            policy = self.BACKPRESSURE_POLICY
+            dropped = "newest"
+            if policy == "drop_oldest":
+                with suppress(asyncio.QueueEmpty):
+                    self.message_queue.get_nowait()
+                try:
+                    self.message_queue.put_nowait(data)
+                    dropped = "oldest"
+                except asyncio.QueueFull:
+                    dropped = "newest"
+
+            logger.warning(
+                "WebSocket message queue full",
+                scenario=self.scenario,
+                session_id=self.session_id,
+                max_size=self.MAX_MESSAGE_QUEUE_SIZE,
+                policy=policy,
+                dropped=dropped,
+            )
+            await self.manager.send_json(
+                websocket,
+                {
+                    "type": "backpressure",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "data": {
+                        "reason": "message_queue_full",
+                        "policy": policy,
+                        "dropped": dropped,
+                        "max_size": self.MAX_MESSAGE_QUEUE_SIZE,
+                    },
+                },
+            )
+            return False
 
     async def send_message(self, message: dict):
         """Send message to current websocket connection (SessionManager hook)."""

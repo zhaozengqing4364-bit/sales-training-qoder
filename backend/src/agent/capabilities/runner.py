@@ -211,6 +211,13 @@ class CapabilityRunner:
                     cap.execute(context, input_data),
                     timeout=CAPABILITY_TIMEOUT_SECONDS
                 )
+            except asyncio.CancelledError:
+                logger.info(
+                    f"Capability '{cap.capability_id}' cancelled",
+                    capability_id=cap.capability_id,
+                    session_id=getattr(context, "session_id", None),
+                )
+                raise
             except TimeoutError:
                 logger.error(
                     f"Capability '{cap.capability_id}' timed out "
@@ -222,7 +229,7 @@ class CapabilityRunner:
                     success=False,
                     fallback="[CAPABILITY_TIMEOUT]",
                 )
-            except RECOVERABLE_CAPABILITY_ERRORS as e:
+            except (ConnectionError, OSError, RuntimeError, ValueError, KeyError) as e:
                 error_code = self._get_error_code(e)
                 logger.error(
                     f"Capability '{cap.capability_id}' failed: {e}",
@@ -286,6 +293,13 @@ class CapabilityRunner:
                         cap.execute(context, input_data),
                         timeout=CAPABILITY_TIMEOUT_SECONDS
                     )
+                except asyncio.CancelledError:
+                    logger.info(
+                        f"Capability '{capability_id}' cancelled",
+                        capability_id=capability_id,
+                        session_id=getattr(context, "session_id", None),
+                    )
+                    raise
                 except TimeoutError:
                     logger.error(
                         f"Capability '{capability_id}' timed out "
@@ -297,7 +311,13 @@ class CapabilityRunner:
                         success=False,
                         fallback="[CAPABILITY_TIMEOUT]",
                     )
-                except RECOVERABLE_CAPABILITY_ERRORS as e:
+                except (
+                    ConnectionError,
+                    OSError,
+                    RuntimeError,
+                    ValueError,
+                    KeyError,
+                ) as e:
                     error_code = self._get_error_code(e)
                     logger.error(
                         f"Capability '{capability_id}' failed: {e}",

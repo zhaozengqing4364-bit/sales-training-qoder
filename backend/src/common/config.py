@@ -67,6 +67,21 @@ def _get_enum_env(name: str, default: str, allowed_values: set[str]) -> str:
     return value
 
 
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Read a bounded integer env config with safe fallback."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, value))
+
+
+def _env_choice(name: str, default: str, allowed: set[str]) -> str:
+    """Read an allowlisted string env config with safe fallback."""
+    value = os.getenv(name, default).strip().lower()
+    return value if value in allowed else default
+
+
 class Settings:
     """Application settings"""
 
@@ -154,39 +169,34 @@ class Settings:
 
     # Performance
     MAX_WEBSOCKET_CONNECTIONS: int = int(os.getenv("MAX_WEBSOCKET_CONNECTIONS", "50"))
-    WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE: int = _get_int_env(
+    WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE: int = _env_int(
         "WEBSOCKET_MAX_MESSAGE_QUEUE_SIZE",
         300,
-        min_value=1,
-        max_value=5000,
+        minimum=1,
+        maximum=5000,
     )
-    WEBSOCKET_BACKPRESSURE_POLICY: str = _get_enum_env(
+    WEBSOCKET_BACKPRESSURE_POLICY: str = _env_choice(
         "WEBSOCKET_BACKPRESSURE_POLICY",
         "drop_newest",
-        {"drop_newest"},
+        allowed={"drop_newest", "drop_oldest"},
     )
     ASR_STREAMING_TIMEOUT_MS: int = int(os.getenv("ASR_STREAMING_TIMEOUT_MS", "5000"))
     INTERRUPTION_DETECTION_TIMEOUT_MS: int = int(
         os.getenv("INTERRUPTION_DETECTION_TIMEOUT_MS", "100")
     )
-    TTS_DEFAULT_SAMPLE_RATE_HZ: int = _get_int_env(
+    TTS_DEFAULT_SAMPLE_RATE_HZ: int = _env_int(
         "TTS_DEFAULT_SAMPLE_RATE_HZ",
         16000,
-        min_value=8000,
-        max_value=48000,
+        minimum=8000,
+        maximum=48000,
     )
-    TTS_BYTES_PER_SAMPLE: int = _get_int_env(
+    TTS_BYTES_PER_SAMPLE: int = _env_int(
         "TTS_BYTES_PER_SAMPLE",
         2,
-        min_value=1,
-        max_value=4,
+        minimum=1,
+        maximum=4,
     )
-    TTS_CHANNELS: int = _get_int_env(
-        "TTS_CHANNELS",
-        1,
-        min_value=1,
-        max_value=8,
-    )
+    TTS_CHANNELS: int = _env_int("TTS_CHANNELS", 1, minimum=1, maximum=2)
 
     # Service Preloading
     PRELOAD_SERVICES: bool = os.getenv("PRELOAD_SERVICES", "false").lower() == "true"
