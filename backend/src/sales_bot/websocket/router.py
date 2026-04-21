@@ -380,8 +380,6 @@ async def _is_kb_lock_unbound_session(session_id: str) -> bool:
                 if isinstance(session.voice_policy_snapshot, dict)
                 else None
             )
-            if snapshot and not is_kb_lock_unbound_snapshot(snapshot):
-                return False
 
             policy_service = VoiceRuntimePolicyService(db)
             resolved_policy = await policy_service.resolve_effective_policy(
