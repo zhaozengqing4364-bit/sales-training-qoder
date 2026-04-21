@@ -21,6 +21,7 @@ import type {
     SessionItem,
     SessionStats,
     PracticeSessionReport,
+    ReportTrendsResponse,
     KnowledgeCheckDiagnostics,
     ReplayData,
     ReplayMessagesResponse,
@@ -32,6 +33,8 @@ import type {
     AdminPresentationListItem,
     AdminPresentationDetailItem,
     AdminPresentationPage,
+    PresentationProgress,
+    Recommendation,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -258,6 +261,8 @@ export function createSessionsDomain({
 
         getStats: async () => request<SessionStats>("/sessions/stats"),
         getReport: async (sessionId: string) => request<PracticeSessionReport>(`/practice/sessions/${sessionId}/report`),
+        getReportTrends: async (sessionId: string, limit = 5) => request<ReportTrendsResponse>(`/practice/sessions/${sessionId}/report-trends?limit=${limit}`),
+        getNextRecommendation: async (sessionId: string) => request<Recommendation>(`/practice/sessions/${sessionId}/next-recommendation`),
         getKnowledgeCheck: async (sessionId: string) => request<KnowledgeCheckDiagnostics>(`/practice/sessions/${sessionId}/knowledge-check`),
         getEnhancedReport: async (sessionId: string) => request<Record<string, unknown>>(`/sessions/${sessionId}/enhanced-report`),
         getReplay: async (sessionId: string) => request<ReplayData>(`/sessions/${sessionId}/replay`),
@@ -386,6 +391,17 @@ export function createPresentationsDomain({
         get: async (presentationId: string) => {
             const result = await request<Record<string, unknown>>(`/presentations/${presentationId}`);
             return normalizePresentationDetailItem(result);
+        },
+
+        getProgress: async (presentationId: string) => {
+            return request<PresentationProgress | null>(`/presentations/${presentationId}/progress`);
+        },
+
+        saveProgress: async (presentationId: string, payload: { last_page_number: number; session_id?: string | null }) => {
+            return request<PresentationProgress>(`/presentations/${presentationId}/progress`, {
+                method: "PUT",
+                body: JSON.stringify(payload),
+            });
         },
 
         delete: async (presentationId: string) => {

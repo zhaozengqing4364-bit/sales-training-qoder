@@ -28,8 +28,10 @@ import {
     KnowledgeCheckDiagnostics,
     PracticeSessionReport,
     PresentationReview,
+    Recommendation,
     ReplayAnchor,
     ReplayData,
+    ReportTrendsResponse,
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
@@ -132,6 +134,25 @@ function getScoreLabel(score: number): string {
     if (score >= 80) return "良好";
     if (score >= 60) return "及格";
     return "待改进";
+}
+
+function formatTrendDelta(delta?: number | null): string {
+    if (delta === null || delta === undefined || Number.isNaN(delta)) {
+        return "--";
+    }
+    const sign = delta > 0 ? "+" : "";
+    return `${sign}${delta.toFixed(1)} 分`;
+}
+
+function formatTrendDate(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return "--";
+    }
+    return date.toLocaleDateString("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+    });
 }
 
 function getClaimTruthClasses(tone: SessionClaimTruthTone) {
@@ -576,6 +597,10 @@ export default function ComprehensiveReportPage() {
     const [knowledgeCheck, setKnowledgeCheck] = useState<KnowledgeCheckDiagnostics | null>(null);
     const [replayData, setReplayData] = useState<ReplayData | null>(null);
     const [highlightsData, setHighlightsData] = useState<HighlightsResponse | null>(null);
+    const [reportTrends, setReportTrends] = useState<ReportTrendsResponse | null>(null);
+    const [reportTrendsHint, setReportTrendsHint] = useState<string | null>(null);
+    const [nextRecommendation, setNextRecommendation] = useState<Recommendation | null>(null);
+    const [nextRecommendationHint, setNextRecommendationHint] = useState<string | null>(null);
     const [highlightsLoading, setHighlightsLoading] = useState(false);
     const [highlightsUnavailableHint, setHighlightsUnavailableHint] = useState<string | null>(null);
     const [highlightReviewItems, setHighlightReviewItems] = useState<HighlightReviewItem[]>([]);
@@ -675,6 +700,58 @@ export default function ComprehensiveReportPage() {
         };
 
         void loadEnhancedInsights();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [sessionId, report]);
+
+    useEffect(() => {
+        if (!report) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadGrowthReadModels = async () => {
+            setReportTrends(null);
+            setReportTrendsHint(null);
+            setNextRecommendation(null);
+            setNextRecommendationHint(null);
+
+            const [trendsResult, recommendationResult] = await Promise.allSettled([
+                api.sessions.getReportTrends(sessionId, 5),
+                api.sessions.getNextRecommendation(sessionId),
+            ]);
+
+            if (cancelled) {
+                return;
+            }
+
+            if (trendsResult.status === "fulfilled") {
+                setReportTrends(trendsResult.value);
+                setReportTrendsHint(trendsResult.value.explanation ?? null);
+            } else {
+                setReportTrendsHint("趋势对比暂不可用，当前报告分数不受影响。");
+                debug.warn("[Report] Trend comparison unavailable", {
+                    sessionId,
+                    error: trendsResult.reason,
+                });
+            }
+
+            if (recommendationResult.status === "fulfilled") {
+                setNextRecommendation(recommendationResult.value);
+                setNextRecommendationHint(recommendationResult.value.explanation ?? null);
+            } else {
+                setNextRecommendationHint("下一轮推荐暂不可用，请先按报告建议继续训练。");
+                debug.warn("[Report] Next-practice recommendation unavailable", {
+                    sessionId,
+                    error: recommendationResult.reason,
+                });
+            }
+        };
+
+        void loadGrowthReadModels();
 
         return () => {
             cancelled = true;
@@ -1208,6 +1285,85 @@ export default function ComprehensiveReportPage() {
             </GlassCard>
 
             <LearnerHelpCard context="report" className="mb-6" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <GlassCard className="p-6 border border-blue-100 bg-blue-50/40">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h2 className="text-lg font-semibold text-zinc-900">同场景趋势对比</h2>
+                            <p className="text-xs text-blue-700 mt-1">仅统计 completed + evaluable 训练，不用 0 分伪造趋势。</p>
+                        </div>
+                        {reportTrends?.delta_vs_previous ? (
+                            <span className={cn(
+                                "rounded-full px-3 py-1 text-xs font-semibold",
+                                reportTrends.delta_vs_previous.overall_score >= 0
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                    : "bg-rose-50 text-rose-700 border border-rose-100",
+                            )}>
+                                较上次 {formatTrendDelta(reportTrends.delta_vs_previous.overall_score)}
+                            </span>
+                        ) : null}
+                    </div>
+                    {reportTrends && reportTrends.points.length > 0 ? (
+                        <div className="space-y-3">
+                            {reportTrends.points.map((point) => (
+                                <div key={point.session_id} className="flex items-center gap-3">
+                                    <div className="w-14 text-xs text-zinc-500">{formatTrendDate(point.date)}</div>
+                                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/80">
+                                        <div
+                                            className={cn(
+                                                "h-full rounded-full",
+                                                point.is_current ? "bg-blue-500" : "bg-slate-300",
+                                            )}
+                                            style={{ width: `${Math.max(4, Math.min(100, point.overall_score))}%` }}
+                                        />
+                                    </div>
+                                    <div className={cn("w-12 text-right text-sm font-bold", point.is_current ? "text-blue-700" : "text-zinc-700")}>
+                                        {point.overall_score.toFixed(0)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-zinc-600">{reportTrendsHint || "趋势样本加载中..."}</p>
+                    )}
+                    {reportTrendsHint && reportTrends?.points?.length ? (
+                        <p className="text-xs text-zinc-500 mt-3">{reportTrendsHint}</p>
+                    ) : null}
+                </GlassCard>
+
+                <GlassCard className="p-6 border border-emerald-100 bg-emerald-50/40">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Target className="w-5 h-5 text-emerald-600" />
+                        <h2 className="text-lg font-semibold text-zinc-900">推荐下次练什么</h2>
+                    </div>
+                    {nextRecommendation ? (
+                        <>
+                            <h3 className="text-base font-bold text-zinc-900">{nextRecommendation.title}</h3>
+                            <p className="text-sm text-zinc-700 mt-2 leading-6">{nextRecommendation.reason}</p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-emerald-700">
+                                {nextRecommendation.rule_version ? (
+                                    <span className="rounded-full border border-emerald-100 bg-white/80 px-2.5 py-1">
+                                        rule {nextRecommendation.rule_version}
+                                    </span>
+                                ) : null}
+                                {nextRecommendation.source_session_id ? (
+                                    <span className="rounded-full border border-emerald-100 bg-white/80 px-2.5 py-1">
+                                        source {nextRecommendation.source_session_id.slice(0, 8)}
+                                    </span>
+                                ) : null}
+                            </div>
+                            <Link href={nextRecommendation.target_path}>
+                                <Button variant="primary" size="sm" className="mt-4">
+                                    {nextRecommendation.action_label}
+                                </Button>
+                            </Link>
+                        </>
+                    ) : (
+                        <p className="text-sm text-zinc-600">{nextRecommendationHint || "下一轮推荐加载中..."}</p>
+                    )}
+                </GlassCard>
+            </div>
 
             {report.evaluable === false && (
                 <GlassCard className="p-6 mb-6 border border-amber-200 bg-amber-50/80">
