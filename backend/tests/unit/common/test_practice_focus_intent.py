@@ -1,4 +1,4 @@
-from common.services.practice_session_service import PracticeRetryEntryAssembler
+from common.services.practice_helpers import PracticeRetryEntryAssembler
 
 
 def test_sanitize_focus_intent_accepts_presentation_page_focus():
@@ -36,3 +36,11 @@ def test_sanitize_focus_intent_rejects_invalid_presentation_page_without_other_f
             "presentation_page": {"page_number": 0},
         }
     ) is None
+
+
+def test_practice_session_service_reexports_retry_assembler_for_compatibility():
+    from common.services.practice_session_service import (
+        PracticeRetryEntryAssembler as ReexportedAssembler,
+    )
+
+    assert ReexportedAssembler is PracticeRetryEntryAssembler
