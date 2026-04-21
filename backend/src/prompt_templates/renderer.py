@@ -20,6 +20,49 @@ from jinja2.runtime import Undefined
 from jinja2.sandbox import SandboxedEnvironment
 
 
+PROMPT_TEMPLATE_DELIMITER_ESCAPES = (
+    ("{{", "{ {"),
+    ("}}", "} }"),
+    ("{%", "{ %"),
+    ("%}", "% }"),
+    ("{#", "{ #"),
+    ("#}", "# }"),
+)
+
+
+def escape_prompt_variable(value: str) -> str:
+    """Neutralize nested Jinja delimiters in untrusted prompt variables.
+
+    Prompt templates intentionally do not HTML-escape output because the target is
+    an LLM prompt, not a browser. User-provided values still must not introduce a
+    second template pass or control-looking block into rendered prompt text, so we
+    break Jinja delimiter tokens while preserving readable content.
+    """
+    escaped = value
+    for token, replacement in PROMPT_TEMPLATE_DELIMITER_ESCAPES:
+        escaped = escaped.replace(token, replacement)
+    return escaped
+
+
+def _sanitize_prompt_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return escape_prompt_variable(value)
+    if isinstance(value, dict):
+        return {key: _sanitize_prompt_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_prompt_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_prompt_value(item) for item in value)
+    if isinstance(value, set):
+        return {_sanitize_prompt_value(item) for item in value}
+    return value
+
+
+def sanitize_prompt_variables(variables: dict[str, Any]) -> dict[str, Any]:
+    """Return a sanitized copy of variables before template rendering."""
+    return {key: _sanitize_prompt_value(value) for key, value in variables.items()}
+
+
 @dataclass
 class RenderResult:
     """Result of template rendering."""
@@ -102,8 +145,10 @@ class PromptRenderer:
             # Check for extra variables
             extra = [v for v in variables if v not in required_vars]
 
-            # Render
-            rendered = jinja_template.render(**variables)
+            # Render sanitized variables so untrusted values cannot introduce
+            # nested Jinja control structures into prompt text.
+            safe_variables = sanitize_prompt_variables(variables)
+            rendered = jinja_template.render(**safe_variables)
 
             return RenderResult(
                 rendered=rendered,
