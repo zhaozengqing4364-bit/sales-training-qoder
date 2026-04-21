@@ -15,7 +15,10 @@ from typing import Any
 
 from fastapi import WebSocket
 
-from common.config import settings
+from common.audio.pcm_duration import (
+    calculate_pcm_duration_ms,
+    resolve_pcm_audio_format,
+)
 from common.monitoring.latency_tracker import LatencyTracker, get_latency_tracker
 from common.monitoring.logger import get_logger
 from common.websocket.base_handler import ConnectionManager
@@ -144,7 +147,19 @@ class TTSComponent:
             if binary_chunks:
                 audio_data = b"".join(binary_chunks)
                 audio_base64 = base64.b64encode(audio_data).decode("utf-8")
-                duration_ms = calculate_pcm_duration_ms(audio_data)
+                sample_rate_hz, bytes_per_sample, channels = resolve_pcm_audio_format(
+                    self.persona_config.get("tts_config")
+                )
+                duration_ms = (
+                    calculate_pcm_duration_ms(
+                        audio_data,
+                        sample_rate_hz=sample_rate_hz,
+                        bytes_per_sample=bytes_per_sample,
+                        channels=channels,
+                    )
+                    if audio_data
+                    else len(text) * 100
+                )
             elif string_chunks:
                 audio_base64 = "".join(string_chunks)
                 duration_ms = len(text) * 100

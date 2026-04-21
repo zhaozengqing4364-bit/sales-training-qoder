@@ -35,6 +35,10 @@ from typing import Any
 from fastapi import WebSocket, WebSocketDisconnect
 
 from common.audio.asr_service import get_asr_service
+from common.audio.pcm_duration import (
+    calculate_pcm_duration_ms,
+    resolve_pcm_audio_format,
+)
 from common.db.session import AsyncSessionLocal
 from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
@@ -180,7 +184,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         except WebSocketDisconnect:
             logger.info(f"Sales WebSocket disconnected: session={session_id}")
         except asyncio.CancelledError:
-            logger.info(f"Sales WebSocket handler cancelled: session={session_id}")
+            logger.info(f"Sales WebSocket cancelled: session={session_id}")
             raise
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Sales WebSocket error: {str(e)}")
@@ -424,7 +428,6 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 await self._handle_custom_message(msg_type, data, message)
 
         except asyncio.CancelledError:
-            logger.info(f"Message handling cancelled: type={msg_type}")
             raise
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Error handling message {msg_type}: {str(e)}")
@@ -602,9 +605,6 @@ class BaseSalesHandler(BaseWebSocketHandler):
             try:
                 audio_bytes = base64.b64decode(audio_base64)
                 await self._enqueue_audio_bytes(audio_bytes)
-            except asyncio.CancelledError:
-                logger.info("Audio chunk handling cancelled")
-                raise
             except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Failed to decode audio: {e}")
 
@@ -667,7 +667,6 @@ class BaseSalesHandler(BaseWebSocketHandler):
                         logger.warning("ASR task timeout, cancelling")
                         self.asr_task.cancel()
                     except asyncio.CancelledError:
-                        logger.info("ASR task wait cancelled")
                         raise
                     except (RuntimeError, ValueError, OSError) as e:
                         logger.error(f"Error waiting for ASR task: {e}")
@@ -734,7 +733,6 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 logger.warning("ASR returned empty transcript")
 
         except asyncio.CancelledError:
-            logger.info("Streaming ASR task cancelled")
             raise
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Streaming ASR error: {e}", exc_info=True)
@@ -821,9 +819,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 )
                 return False
 
-            self._response_task = asyncio.create_task(
-                self._process_user_text_safe(text)
-            )
+            self._response_task = asyncio.create_task(self._process_user_text_safe(text))
             return True
 
     async def _process_user_text_safe(self, text: str):
@@ -838,8 +834,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
             await self._send_status("listening")
         finally:
             current_task = asyncio.current_task()
-            if self._response_task is current_task:
-                self._response_task = None
+            async with self._response_task_lock:
+                if self._response_task is current_task:
+                    self._response_task = None
 
     def _is_duplicate_text(self, text: str) -> bool:
         """Check if text is a duplicate of the last user message."""
@@ -935,8 +932,16 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
                 audio_data = b"".join(audio_chunks)
                 audio_base64 = base64.b64encode(audio_data).decode("utf-8")
+                sample_rate_hz, bytes_per_sample, channels = resolve_pcm_audio_format(
+                    self._client_runtime_options.get("tts_audio_format")
+                )
                 duration_ms = (
-                    calculate_pcm_duration_ms(audio_data)
+                    calculate_pcm_duration_ms(
+                        audio_data,
+                        sample_rate_hz=sample_rate_hz,
+                        bytes_per_sample=bytes_per_sample,
+                        channels=channels,
+                    )
                     if audio_data
                     else len(text) * 100
                 )
@@ -959,7 +964,6 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 await self._send_tts_fallback(text, request_id)
 
         except asyncio.CancelledError:
-            logger.info("TTS response task cancelled")
             raise
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"TTS error: {str(e)}", exc_info=True)

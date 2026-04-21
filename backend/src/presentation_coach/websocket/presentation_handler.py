@@ -198,6 +198,8 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             return None
         if self.session_id in connections:
             return connections[self.session_id]
+        if self.session_id:
+            return None
         return self.websocket
 
     def _create_state_snapshot(self) -> SessionStateSnapshot:
