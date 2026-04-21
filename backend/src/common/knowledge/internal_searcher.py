@@ -28,7 +28,10 @@ from common.knowledge_engine.compat import (
     execute_knowledge_answer_engine,
     resolve_knowledge_answer_rollout_mode,
 )
-from common.knowledge_engine.config_repo import KnowledgeAnswerConfigRepository
+from common.knowledge_engine.config_repo import (
+    KnowledgeAnswerConfigRepository,
+    KnowledgeAnswerConfigSnapshot,
+)
 
 
 async def search_internal_knowledge(
@@ -510,7 +513,9 @@ async def search_internal_knowledge(
     )
 
 
-async def _load_active_config_snapshot(db: Any):
+async def _load_active_config_snapshot(
+    db: Any,
+) -> KnowledgeAnswerConfigSnapshot | None:
     try:
         run_sync = getattr(db, "run_sync", None)
         if callable(run_sync):
