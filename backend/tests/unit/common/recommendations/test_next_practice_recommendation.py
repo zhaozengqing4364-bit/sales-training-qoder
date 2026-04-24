@@ -71,3 +71,45 @@ def test_next_practice_recommendation_reports_insufficient_evidence_without_clai
         payload["growth_safety"]["adaptive_difficulty"]["status"]
         == "blocked_by_evidence"
     )
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_next_practice_uses_published_business_rule_threshold(test_db):
+    from copy import deepcopy
+
+    from common.business_rules.defaults import (
+        DEFAULT_RECOMMENDATION_RULESET,
+        NEXT_PRACTICE_RECOMMENDATION_KEY,
+    )
+    from common.business_rules.service import BusinessRuleConfigService
+
+    ruleset = deepcopy(DEFAULT_RECOMMENDATION_RULESET)
+    ruleset["version"] = "next_practice_custom_v1"
+    ruleset["weak_score_threshold"] = 80
+    rule_service = BusinessRuleConfigService(test_db)
+    draft = await rule_service.create_or_update_draft(
+        key=NEXT_PRACTICE_RECOMMENDATION_KEY,
+        value=ruleset,
+        actor_id="admin-test",
+    )
+    await rule_service.publish(
+        key=NEXT_PRACTICE_RECOMMENDATION_KEY,
+        actor_id="admin-test",
+        config_id=str(draft.id),
+        reason="raise recommendation threshold",
+    )
+    await test_db.commit()
+
+    result = await NextPracticeRecommendationService().build_for_session_with_db(
+        db=test_db,
+        session=_sales_session(accuracy_score=75, completeness_score=86, logic_score=88),
+    )
+
+    assert result.is_success
+    payload = result.value
+    assert payload["rule_version"] == "next_practice_custom_v1"
+    assert payload["ruleset_source"] == "database"
+    assert payload["weak_dimension"] == "product_knowledge"
+    assert payload["evidence_summary"]["threshold"] == 80.0
