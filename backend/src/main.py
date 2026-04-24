@@ -11,45 +11,33 @@ import sys
 # Add src to path for imports when this module is executed directly.
 sys.path.insert(0, os.path.dirname(__file__))
 
-from admin.api.admin import router as admin_presentations_router
-from admin.api.analytics import router as admin_analytics_router
-from admin.api.business_rules import router as business_rules_router
-from admin.api.interventions import router as admin_interventions_router
-from admin.api.knowledge_answer_config import router as knowledge_answer_config_router
-from admin.api.model_configs import router as model_configs_router
-from admin.api.presentation_ai import router as presentation_ai_router
-from admin.api.rag_profiles import router as rag_profiles_router
-from admin.api.system_logs import router as admin_system_logs_router
-from admin.api.training_records import router as admin_training_records_router
-
-# Admin API (users, training records, system logs)
-from admin.api.users import router as admin_users_router
-from admin.api.voice_runtime import router as voice_runtime_router
-from agent.api.agent_personas import admin_router as agent_persona_admin_router
-
-# Agent Platform API
-from agent.api.agents import admin_router as agent_admin_router
-from agent.api.agents import user_router as agent_user_router
-from agent.api.personas import admin_router as persona_admin_router
-from common.api import analytics, dashboard, growth, practice, training, users
-from common.api.knowledge_debug import router as knowledge_debug_router
-from common.auth.api import error_response, get_auth_config_diagnostics
-from common.auth.api import router as auth_router
-
-# Development mode auth (for testing without WeChat SSO)
-from common.auth.service import (
-    JWTError,
-    create_access_token,
-    get_current_admin_user,
-    get_current_admin_user_for_app_routes,
-    get_dev_user,
-    get_wecom_provider_diagnostics,
-    is_dev_login_enabled,
-    require_role,
-    resolve_websocket_token,
-    set_auth_session_cookie,
-    should_enforce_csrf,
-    validate_csrf_request,
+from app_factory import create_app  # noqa: E402
+from app_lifespan import lifespan  # noqa: E402
+from common.db.session import get_db  # noqa: E402
+from http_routes import (  # noqa: E402
+    CSRF_EXEMPT_PATHS,
+    _check_database_readiness,
+    _csrf_validation_failed_response,
+    _is_csrf_exempt_path,
+    csrf_protection_middleware,
+    dev_login,
+    health_check,
+    metrics_export,
+)
+from websocket_routes import (  # noqa: E402
+    _default_voice_mode,
+    _is_admin_user_id,
+    _is_presentation_kb_lock_unbound_session,
+    _normalize_requested_voice_mode,
+    _parse_session_id,
+    _reject_invalid_presentation_session,
+    _resolve_presentation_runtime,
+    _resolve_presentation_session_owner_id,
+    presentation_websocket,
+    presentation_websocket_with_path,
+)
+from websocket_routes import (
+    _handle_presentation_websocket as _presentation_websocket_handler,
 )
 
 # Conversation Replay API

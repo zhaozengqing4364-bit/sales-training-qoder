@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from fastapi import APIRouter, FastAPI, Query, WebSocket
 from sqlalchemy import select
