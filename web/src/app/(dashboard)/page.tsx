@@ -459,6 +459,8 @@ export default function HomePage() {
         : getRecommendationSourceCopy(displayRecommendation);
     const shouldShowTodayRetryCard = !isRecommendationUnavailable && isTodayRetryRecommendation(displayRecommendation);
     const suggestedDurationCopy = formatSuggestedDuration(displayRecommendation);
+    const adaptiveDryRun = growth.adaptive_difficulty;
+    const latestAdaptiveItem = adaptiveDryRun?.items?.[0] ?? null;
     const todayRetryDetails = [
         displayRecommendation.due_reason ? `到期原因：${displayRecommendation.due_reason}` : null,
         displayRecommendation.focus ? `本次焦点：${displayRecommendation.focus}` : null,
@@ -875,7 +877,7 @@ export default function HomePage() {
                 </GlassCard>
             </section>
 
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <section className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
                 <GlassCard className="p-6">
                     <div className="flex items-center gap-2 mb-4">
                         <Trophy className="h-5 w-5 text-amber-500" />
@@ -920,6 +922,39 @@ export default function HomePage() {
                     ) : (
                         <p className="text-sm text-slate-500">
                             {isGrowthDegraded ? "目标暂不可用。" : "设置练习目标后，这里会显示完成进度。"}
+                        </p>
+                    )}
+                </GlassCard>
+
+                <GlassCard className="p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Target className="h-5 w-5 text-indigo-500" />
+                        <h2 className="text-lg font-bold text-slate-900">自适应难度 dry-run</h2>
+                    </div>
+                    {adaptiveDryRun && !isGrowthDegraded ? (
+                        <div className="space-y-3">
+                            <p className="text-sm leading-6 text-slate-600">
+                                {adaptiveDryRun.explanation || "只展示建议，不改变真实训练难度。"}
+                            </p>
+                            {latestAdaptiveItem ? (
+                                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+                                    <p className="text-xs font-semibold text-indigo-700">
+                                        最近建议：{latestAdaptiveItem.current_difficulty} → {latestAdaptiveItem.suggested_difficulty}
+                                    </p>
+                                    <p className="mt-1 text-xs leading-5 text-indigo-800">
+                                        {latestAdaptiveItem.explanation || "当前策略未给出调整建议。"}
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-500">暂无 completed/evaluable 训练样本。</p>
+                            )}
+                            <p className="text-xs text-slate-500">
+                                候选 {adaptiveDryRun.summary.candidate_count ?? 0} · 阻塞 {adaptiveDryRun.summary.blocked_count ?? 0} · 不写入训练配置
+                            </p>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500">
+                            {isGrowthDegraded ? "自适应 dry-run 暂不可用。" : "完成可评估训练后展示 dry-run 建议。"}
                         </p>
                     )}
                 </GlassCard>

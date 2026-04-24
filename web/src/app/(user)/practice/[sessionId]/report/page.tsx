@@ -776,7 +776,41 @@ export default function ComprehensiveReportPage() {
     }, [sessionId, report]);
 
     useEffect(() => {
-        setHighlightReviewItems(readHighlightReviewItems(sessionId));
+        let cancelled = false;
+        const localItems = readHighlightReviewItems(sessionId);
+        setHighlightReviewItems(localItems);
+        setHighlightReviewShares([]);
+        setHighlightShareUrl(null);
+        setHighlightReviewSyncHint(null);
+
+        api.sessions
+            .getHighlightReview(sessionId)
+            .then((review) => {
+                if (cancelled) return;
+                const persistedItems = mapPersistedHighlightReviewItems(sessionId, review);
+                if (persistedItems.length > 0) {
+                    persistHighlightReviewItems(sessionId, persistedItems);
+                    setHighlightReviewItems(persistedItems);
+                    setHighlightReviewSyncHint("高光复习清单已从后端跨设备同步。");
+                }
+                setHighlightReviewShares(review?.shares ?? []);
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setHighlightReviewSyncHint(
+                    localItems.length > 0
+                        ? "高光复习清单后端同步暂不可用，已使用本机缓存。"
+                        : null,
+                );
+                debug.warn("[Report] Highlight review backend load failed; using local cache", {
+                    sessionId,
+                    error: err,
+                });
+            });
+
+        return () => {
+            cancelled = true;
+        };
     }, [sessionId]);
 
     useEffect(() => {
@@ -989,6 +1023,30 @@ export default function ComprehensiveReportPage() {
 
     const persistHighlightReviewState = useCallback((items: HighlightReviewItem[]) => {
         persistHighlightReviewItems(sessionId, items);
+        setHighlightReviewSyncHint(items.length > 0 ? "高光复习清单保存中..." : null);
+        void api.sessions
+            .saveHighlightReview(sessionId, {
+                items: buildHighlightReviewSavePayload(items),
+            })
+            .then((review) => {
+                setHighlightReviewShares(review.shares ?? []);
+                setHighlightReviewSyncHint(
+                    items.length > 0
+                        ? "高光复习清单已保存到后端，可跨设备继续复盘。"
+                        : "高光复习清单已清空。",
+                );
+            })
+            .catch((err) => {
+                setHighlightReviewSyncHint(
+                    items.length > 0
+                        ? `本机已保存，跨设备同步失败：${getApiErrorMessage(err)}`
+                        : `清空同步失败：${getApiErrorMessage(err)}`,
+                );
+                debug.warn("[Report] Highlight review backend save failed", {
+                    sessionId,
+                    error: err,
+                });
+            });
         return items;
     }, [sessionId]);
 
@@ -1014,6 +1072,73 @@ export default function ComprehensiveReportPage() {
             persistHighlightReviewState(currentItems.filter((item) => item.id !== highlightId))
         ));
     }, [persistHighlightReviewState]);
+
+    const activeHighlightShare = useMemo(
+        () => getActiveHighlightShare(highlightReviewShares),
+        [highlightReviewShares],
+    );
+
+    const createHighlightShare = useCallback(async () => {
+        if (highlightReviewItems.length === 0) {
+            setHighlightReviewSyncHint("请先选择 1-3 个待改进高光片段，再生成企业微信分享。");
+            return;
+        }
+
+        setHighlightShareLoading(true);
+        setHighlightReviewSyncHint("正在保存并生成企业微信内部只读分享...");
+        try {
+            const savedReview = await api.sessions.saveHighlightReview(sessionId, {
+                items: buildHighlightReviewSavePayload(highlightReviewItems),
+            });
+            setHighlightReviewShares(savedReview.shares ?? []);
+            const share = await api.sessions.createHighlightReviewShare(sessionId, {
+                channel: "wecom",
+                consent_granted: true,
+                consent_text: "我同意通过企业微信内部只读试点分享脱敏高光复习清单，并知晓链接可撤销且会记录访问审计。",
+            });
+            setHighlightShareUrl(share.share_url);
+            setHighlightReviewShares((currentShares) => [share, ...currentShares]);
+            setHighlightReviewSyncHint("企业微信分享已生成：内容已脱敏，链接有 TTL，可随时撤销。");
+        } catch (err) {
+            setHighlightReviewSyncHint(`企业微信分享生成失败：${getApiErrorMessage(err)}`);
+            debug.warn("[Report] Highlight review share creation failed", {
+                sessionId,
+                error: err,
+            });
+        } finally {
+            setHighlightShareLoading(false);
+        }
+    }, [highlightReviewItems, sessionId]);
+
+    const revokeHighlightShare = useCallback(async () => {
+        if (!activeHighlightShare) {
+            return;
+        }
+
+        setHighlightShareLoading(true);
+        setHighlightReviewSyncHint("正在撤销企业微信分享链接...");
+        try {
+            const revoked = await api.sessions.revokeHighlightReviewShare(
+                sessionId,
+                activeHighlightShare.share_id,
+                "learner_revoked_from_report",
+            );
+            setHighlightReviewShares((currentShares) => currentShares.map((share) => (
+                share.share_id === revoked.share_id ? revoked : share
+            )));
+            setHighlightShareUrl(null);
+            setHighlightReviewSyncHint("企业微信分享链接已撤销，后续访问会被拒绝并记录审计。");
+        } catch (err) {
+            setHighlightReviewSyncHint(`企业微信分享撤销失败：${getApiErrorMessage(err)}`);
+            debug.warn("[Report] Highlight review share revoke failed", {
+                sessionId,
+                shareId: activeHighlightShare.share_id,
+                error: err,
+            });
+        } finally {
+            setHighlightShareLoading(false);
+        }
+    }, [activeHighlightShare, sessionId]);
 
     const handleRetryFromGoal = async () => {
         const retry = retryEntry;
@@ -2277,14 +2402,57 @@ export default function ComprehensiveReportPage() {
                                 已选择的待改进片段会随下一轮再练传入，包含原片段和 suggested_response。
                             </p>
                         </div>
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={handleRetryFromHighlightReview}
-                            className="whitespace-nowrap"
-                        >
-                            带清单再练
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                            {activeHighlightShare ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={revokeHighlightShare}
+                                    disabled={highlightShareLoading}
+                                    className="whitespace-nowrap"
+                                >
+                                    撤销分享
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={createHighlightShare}
+                                    disabled={highlightShareLoading}
+                                    className="whitespace-nowrap"
+                                >
+                                    <Share2 className="w-4 h-4 mr-1" />
+                                    企业微信分享试点
+                                </Button>
+                            )}
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={handleRetryFromHighlightReview}
+                                className="whitespace-nowrap"
+                            >
+                                带清单再练
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="mb-4 rounded-xl border border-indigo-100 bg-white/70 p-3 text-xs leading-5 text-indigo-800">
+                        <p>
+                            后端已持久化清单；企业微信分享为内部只读试点，必须用户同意、TTL 到期、可撤销、访问审计且脱敏，不包含音频、学员身份或完整报告。
+                        </p>
+                        {highlightShareUrl && (
+                            <p className="mt-2 break-all font-mono text-[11px] text-indigo-700">
+                                分享链接：{highlightShareUrl}
+                            </p>
+                        )}
+                        {activeHighlightShare && !highlightShareUrl && (
+                            <p className="mt-2 text-indigo-700">
+                                当前有一个有效分享，过期时间：{formatSnapshotTime(activeHighlightShare.expires_at)}，访问次数：{activeHighlightShare.access_count}。
+                            </p>
+                        )}
+                        {highlightReviewSyncHint && (
+                            <p className="mt-2 text-amber-700">{highlightReviewSyncHint}</p>
+                        )}
                     </div>
 
                     <div className="space-y-3">
