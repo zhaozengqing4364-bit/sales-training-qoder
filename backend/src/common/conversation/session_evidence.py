@@ -31,6 +31,8 @@ from sales_bot.websocket.components.stepfun_message_helpers import (
 
 logger = get_logger(__name__)
 
+SESSION_EVIDENCE_RULESET_VERSION = "session_evidence_projection_v1"
+SESSION_EVIDENCE_SCORE_BASIS = "session_evidence_projection_evaluable_only"
 STAGE_SEQUENCE = ["opening", "discovery", "presentation", "objection", "closing"]
 STAGE_NAMES = {
     "opening": "开场破冰",
@@ -91,6 +93,8 @@ def describe_projection_kernel_contract(scenario_type: str) -> dict[str, Any]:
         "scenario_type": normalized_scenario,
         "primary_reader_id": surface_plan.primary_reader_id,
         "mode": surface_plan.mode,
+        "ruleset_version": SESSION_EVIDENCE_RULESET_VERSION,
+        "score_basis": SESSION_EVIDENCE_SCORE_BASIS,
         "dimension_ids": [item.dimension_id for item in dimension_definitions],
         "rollup_ids": list(CANONICAL_ROLLUP_IDS),
         "compatibility_reader_ids": list(surface_plan.compatibility_reader_ids),
@@ -120,6 +124,8 @@ class SessionEvidenceProjection:
     evaluable: bool | None
     not_evaluable_reason: str | None
     evidence_completeness: dict[str, Any]
+    ruleset_version: str
+    score_basis: str
     legacy_score_key_used: bool
     canonical_evaluation_kernel: dict[str, Any] | None = None
     compatibility_readers: dict[str, Any] | None = None
@@ -896,6 +902,10 @@ class SessionEvidenceService:
                 else None
             ),
             evidence_completeness=evidence_completeness,
+            ruleset_version=str(
+                projection_snapshot.get("version") or SESSION_EVIDENCE_RULESET_VERSION
+            ),
+            score_basis=SESSION_EVIDENCE_SCORE_BASIS,
             legacy_score_key_used=legacy_score_key_used,
             canonical_evaluation_kernel=canonical_kernel,
             compatibility_readers=compatibility_readers,
