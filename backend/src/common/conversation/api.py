@@ -10,7 +10,7 @@ References:
 """
 import os
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,8 +21,18 @@ from common.conversation.schemas import (
     ConversationErrorResponse,
     ConversationMessagesSuccessResponse,
     ConversationMessageSuccessResponse,
+    HighlightReviewSaveRequest,
+    HighlightReviewShareCreateRequest,
+    HighlightReviewShareCreateSuccessResponse,
+    HighlightReviewShareRevokeRequest,
+    HighlightReviewSuccessResponse,
     HighlightsSuccessResponse,
     ReplayDataSuccessResponse,
+    SharedHighlightReviewSuccessResponse,
+)
+from common.conversation.highlight_review_service import (
+    PUBLIC_SHARE_PATH_TEMPLATE,
+    HighlightReviewService,
 )
 from common.db.models import PracticeSession, SessionAudioSegment, User
 from common.db.session import get_db
