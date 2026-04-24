@@ -18,6 +18,7 @@ from common.conversation.session_evidence import (
 from common.db.models import PracticeSession, SessionAudioSegment
 from common.db.schemas import ScenarioType, SessionReport
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
+from common.effectiveness.scoring_rulesets import ScoringRulesetService
 from common.monitoring.logger import get_logger
 from common.oss.signing import (
     OssConfigError,
@@ -296,6 +297,27 @@ class PracticeReportService:
             scenario_type_enum=scenario_type_enum,
             presentation_review=presentation_review,
         )
+        (
+            ruleset_version,
+            score_basis,
+            ruleset_metadata,
+        ) = await self._resolve_report_ruleset_metadata(
+            scenario_type=scenario_type_enum.value,
+            fallback_ruleset_version=projection.ruleset_version,
+            fallback_score_basis=projection.score_basis,
+        )
+        evidence_completeness = projection.evidence_completeness
+        canonical_evaluation_kernel = projection.canonical_evaluation_kernel
+        if ruleset_metadata is not None:
+            evidence_completeness = {
+                **projection.evidence_completeness,
+                "scoring_ruleset": ruleset_metadata,
+            }
+            if isinstance(canonical_evaluation_kernel, dict):
+                canonical_evaluation_kernel = {
+                    **canonical_evaluation_kernel,
+                    "scoring_ruleset": ruleset_metadata,
+                }
 
         report = SessionReport(
             session_id=session.session_id,
@@ -345,10 +367,10 @@ class PracticeReportService:
                 if scenario_type_enum == ScenarioType.PRESENTATION
                 else projection.not_evaluable_reason
             ),
-            evidence_completeness=projection.evidence_completeness,
-            ruleset_version=projection.ruleset_version,
-            score_basis=projection.score_basis,
-            canonical_evaluation_kernel=projection.canonical_evaluation_kernel,
+            evidence_completeness=evidence_completeness,
+            ruleset_version=ruleset_version,
+            score_basis=score_basis,
+            canonical_evaluation_kernel=canonical_evaluation_kernel,
             compatibility_readers=projection.compatibility_readers,
             presentation_review=presentation_review,
             retry_entry=PracticeRetryEntryAssembler.build_retry_entry(
@@ -378,15 +400,30 @@ class PracticeReportService:
             session_id=session_id,
             scenario_type=scenario_type_enum.value,
             report_overall_score=report.overall_score,
-            evidence_complete=projection.evidence_completeness.get("complete"),
-            presentation_page_metadata_complete=projection.evidence_completeness.get(
+            ruleset_version=report.ruleset_version,
+            score_basis=report.score_basis,
+            evidence_complete=evidence_completeness.get("complete"),
+            presentation_page_metadata_complete=evidence_completeness.get(
                 "page_metadata_complete"
             ),
-            presentation_degraded_reasons=projection.evidence_completeness.get(
+            presentation_degraded_reasons=evidence_completeness.get(
                 "degraded_reasons"
             ),
         )
         return report
+
+    async def _resolve_report_ruleset_metadata(
+        self,
+        *,
+        scenario_type: str,
+        fallback_ruleset_version: str,
+        fallback_score_basis: str,
+    ) -> tuple[str, str, dict[str, Any] | None]:
+        active = await ScoringRulesetService(self.db).get_active_or_default(scenario_type)
+        if active.source == "default":
+            return fallback_ruleset_version, fallback_score_basis, None
+        metadata = ScoringRulesetService.report_metadata_for_view(active)
+        return active.version, active.definition.score_basis, metadata
 
     @staticmethod
     def _presentation_review_scores(
