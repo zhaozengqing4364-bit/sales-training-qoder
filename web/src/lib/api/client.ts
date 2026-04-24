@@ -1742,6 +1742,10 @@ export const api = {
             return apiFetch<GrowthDashboardResponse>("/growth/dashboard");
         },
 
+        getAdaptiveDifficultyDryRun: async (limit = 10) => {
+            return apiFetch<AdaptiveDifficultyDryRunResponse>(`/growth/adaptive-difficulty/dry-run?limit=${limit}`);
+        },
+
         markNotificationRead: async (notificationId: string) => {
             return apiFetch<GrowthDashboardResponse["notifications"]["items"][number]>(
                 `/growth/notifications/${notificationId}/read`,
