@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select
@@ -54,7 +56,9 @@ def _csrf_validation_failed_response(exc: HTTPException) -> JSONResponse:
     )
 
 
-async def csrf_protection_middleware(request: Request, call_next):
+async def csrf_protection_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
         try:
             validate_csrf_request(request)
@@ -74,7 +78,7 @@ async def _check_database_readiness() -> str:
     return "ok"
 
 
-async def health_check():
+async def health_check() -> JSONResponse:
     """Health check endpoint."""
     payload = build_health_payload(
         checks={"database": await _check_database_readiness()}
@@ -82,7 +86,7 @@ async def health_check():
     return JSONResponse(status_code=200 if payload["ready"] else 503, content=payload)
 
 
-async def metrics_export():
+async def metrics_export() -> Response:
     """Prometheus metrics export mounted on the live backend authority line."""
     return Response(
         content=get_metrics(),
@@ -90,7 +94,7 @@ async def metrics_export():
     )
 
 
-async def dev_login(db: AsyncSession = Depends(get_db)):
+async def dev_login(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """
     Development mode login - creates a mock user and returns a JWT token.
     This path is explicit fallback only and is disabled outside development by default.

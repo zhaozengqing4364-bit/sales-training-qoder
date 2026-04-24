@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 import sys
 
+from fastapi import WebSocket
+
 # Add src to path for imports when this module is executed directly.
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -627,12 +629,12 @@ async def _reject_invalid_presentation_session(
 
 
 async def _handle_presentation_websocket(
-    websocket,
+    websocket: WebSocket,
     session_id: str | None,
     token: str,
     voice_mode: str | None = None,
     trace_id: str = "",
-):
+) -> None:
     """
     Backward-compatible presentation WebSocket helper.
 

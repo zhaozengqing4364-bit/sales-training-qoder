@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import APIRouter, FastAPI, Query, WebSocket
 from sqlalchemy import select
@@ -37,7 +38,7 @@ def _parse_session_id(session_id: str | None) -> str | None:
 
 async def _reject_invalid_presentation_session(
     websocket: WebSocket, session_id: str | None
-):
+) -> None:
     logger.warning(
         "Rejected /ws/presentation connection due to invalid session_id",
         session_id=session_id,
@@ -57,7 +58,7 @@ async def _handle_presentation_websocket(
     is_kb_lock_unbound: ResolveFlag | None = None,
     resolve_owner_id: ResolveOwner | None = None,
     is_admin_user_id: ResolveFlag | None = None,
-):
+) -> None:
     from common.auth.service import verify_token
     from common.websocket.session_manager import get_session_manager
     from presentation_coach.websocket.presentation_handler import (
@@ -117,6 +118,7 @@ async def _handle_presentation_websocket(
         )
 
     effective_voice_mode = persisted_voice_mode
+    handler: Any
     if effective_voice_mode == "stepfun_realtime":
         handler = PresentationStepFunRealtimeHandler()
     else:
@@ -217,7 +219,7 @@ async def presentation_websocket(
         None, description="Voice mode: legacy | stepfun_realtime"
     ),
     trace_id: str = Query("", description="Request trace id for observability"),
-):
+) -> None:
     """WebSocket endpoint for PPT presentation coaching (query session_id)."""
     await _handle_presentation_websocket(
         websocket,
@@ -237,7 +239,7 @@ async def presentation_websocket_with_path(
         None, description="Voice mode: legacy | stepfun_realtime"
     ),
     trace_id: str = Query("", description="Request trace id for observability"),
-):
+) -> None:
     """WebSocket endpoint for PPT presentation coaching (path session_id)."""
     await _handle_presentation_websocket(
         websocket,
