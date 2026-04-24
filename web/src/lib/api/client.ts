@@ -2197,6 +2197,45 @@ export const api = {
     // Admin operations
     admin: {
         ...adminReportDomain,
+        // Business Rule Governance
+        getSalesCombinationRuleSets: async () => {
+            return apiFetch<SalesCombinationRuleSetListResponse>("/admin/business-rules/sales-combinations");
+        },
+
+        validateSalesCombinationRuleSet: async (ruleset: SalesCombinationRuleSet) => {
+            return apiFetch<SalesCombinationRuleValidationResult>("/admin/business-rules/sales-combinations/validate", {
+                method: "POST",
+                body: JSON.stringify(ruleset),
+            });
+        },
+
+        previewSalesCombinationRuleSet: async (ruleset: SalesCombinationRuleSet) => {
+            return apiFetch<SalesCombinationPreviewResponse>("/admin/business-rules/sales-combinations/preview", {
+                method: "POST",
+                body: JSON.stringify(ruleset),
+            });
+        },
+
+        publishSalesCombinationRuleSet: async (rulesetId: string, reason: string) => {
+            return apiFetch<SalesCombinationRuleMutationResponse>(
+                `/admin/business-rules/sales-combinations/${encodeURIComponent(rulesetId)}/publish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ reason }),
+                },
+            );
+        },
+
+        rollbackSalesCombinationRuleSet: async (rulesetId: string, reason: string) => {
+            return apiFetch<SalesCombinationRuleMutationResponse>(
+                `/admin/business-rules/sales-combinations/${encodeURIComponent(rulesetId)}/rollback`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ reason }),
+                },
+            );
+        },
+
         // Training Records
         getTrainingRecords: async (params: {
             search?: string;
