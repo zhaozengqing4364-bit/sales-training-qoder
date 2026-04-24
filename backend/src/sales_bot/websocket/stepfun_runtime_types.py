@@ -19,6 +19,7 @@ class RealtimeResponseState:
     question_limit_enforced: bool = False
 
 
+
 @dataclass
 class FunctionCallState:
     """Tracks arguments streaming for one tool call."""
@@ -27,3 +28,4 @@ class FunctionCallState:
     name: str
     delta_arguments: str = ""
     done_arguments: str = ""
+

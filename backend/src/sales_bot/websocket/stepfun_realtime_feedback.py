@@ -1,8 +1,182 @@
-"""Extracted mixin for StepFun realtime handler responsibilities."""
+"""Feedback mixin for the StepFun realtime websocket handler."""
 
 from __future__ import annotations
 
-# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, rclass StepFunRealtimeFeedbackMixin:
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportGeneralTypeIssues=false
+# ruff: noqa: F401, I001
+
+import asyncio
+import base64
+import copy
+import inspect
+import json
+import os
+import re
+import sys
+import time
+import uuid
+from datetime import UTC, datetime
+from typing import Any, cast
+from urllib.parse import urlencode
+
+import websockets
+from fastapi import WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+from websockets.exceptions import ConnectionClosed
+
+from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
+from agent.capabilities.realtime_scoring import RealtimeScoringCapability
+from agent.capabilities.sales_stage import SalesStageCapability
+from agent.context import AgentContext
+from agent.models import Agent, Persona
+from common.ai.embedding_service import get_embedding_service
+from common.auth.service import JWTError, resolve_websocket_token, verify_token
+from common.conversation.storage import normalize_objection_ledger
+from common.db.models import PracticeSession
+from common.db.session import AsyncSessionLocal
+from common.db.session_lifecycle import (
+    InvalidSessionTransitionError,
+    SessionLifecycleAction,
+    SessionLifecycleService,
+)
+from common.effectiveness import (
+    build_live_session_conclusion_summary,
+    build_sales_effectiveness_metrics,
+    build_sales_rollup_scores,
+    coerce_live_session_conclusion_summary,
+    evaluate_effectiveness_snapshot,
+    evaluate_pass_flags,
+)
+from common.effectiveness.schemas import ActionCard, PassFlags
+from common.knowledge.kb_lock_guard import (
+    build_kb_coach_grounding_context,
+    evaluate_kb_lock_decision,
+    resolve_kb_lock_mode,
+)
+from common.knowledge.service import KnowledgeService
+from common.knowledge_engine.runtime_events import (
+    build_claim_truth_runtime_event,
+    enrich_knowledge_answer_diagnostics,
+    merge_runtime_events,
+)
+from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
+from common.monitoring.trace_context import normalize_trace_id
+from common.resilience.backoff import compute_jitter_backoff_seconds
+from common.websocket.base_handler import (
+    BaseWebSocketHandler,
+    _get_websocket_header_value,
+)
+from common.websocket.session_manager import get_session_manager
+from common.websocket.session_state_service import SessionStateSnapshot
+from sales_bot.services.transcript_normalization import (
+    TranscriptNormalizationResult,
+    TranscriptNormalizationService,
+)
+from sales_bot.services.voice_instruction_compiler import (
+    VoiceInstructionCompiler,
+    build_instruction_contract_hash,
+    enforce_question_limit,
+)
+from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from sales_bot.websocket.components.objection_ledger_helpers import (
+    merge_arbiter_context_with_objection_ledger,
+    resolve_turn_objection_ledger,
+)
+from sales_bot.websocket.components.stepfun_asr_fallback import (
+    ASR_FALLBACK_REQUIRED_ERROR_CODE,
+    DEFAULT_ASR_FALLBACK_POLICY,
+    build_asr_fallback_status_event,
+    extract_asr_error_reason,
+)
+from sales_bot.websocket.components.stepfun_event_payloads import (
+    build_asr_transcript_event,
+    build_error_event,
+    build_heartbeat_event,
+    build_interrupted_event,
+    build_stage_update_event,
+    build_status_event,
+)
+from sales_bot.websocket.components.stepfun_function_call_helpers import (
+    build_function_call_output_event,
+    build_unsupported_function_output,
+    decode_function_arguments,
+    is_json_object_payload,
+    parse_function_call_event,
+)
+from sales_bot.websocket.components.stepfun_helpers import (
+    ensure_knowledge_runtime_metrics,
+    extract_response_text,
+    extract_text_payload,
+    format_stage_name,
+)
+from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
+    search_internal_knowledge,
+)
+from sales_bot.websocket.components.stepfun_knowledge_helpers import (
+    is_product_overview_query,
+    resolve_grounding_context_limits,
+)
+from sales_bot.websocket.components.stepfun_message_helpers import (
+    extract_analysis_patch_fields,
+    normalize_message_persistence_payload,
+    normalize_score_snapshot,
+    patch_existing_message_analysis,
+    save_stepfun_message,
+)
+from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
+    apply_knowledge_runtime_metric,
+    persist_runtime_metrics_to_session,
+)
+from sales_bot.websocket.components.stepfun_tool_helpers import (
+    build_stepfun_tools_from_policy,
+)
+from sales_bot.websocket.components.stepfun_tts_contracts import build_tts_chunk_event
+from sales_bot.websocket.components.stepfun_upstream_router import (
+    UpstreamEventRoute,
+    classify_upstream_event,
+    extract_error_message,
+    extract_function_call_from_item_created,
+    extract_response_done_function_calls,
+)
+from sales_bot.websocket.realtime_feedback_arbiter import (
+    RealtimeFeedbackArbiter,
+    RealtimeFeedbackPacingState,
+)
+from sales_bot.websocket.stepfun_realtime_constants import (
+    DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
+    DEFAULT_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES,
+    DEFAULT_INTERNAL_RETRIEVAL_CACHE_TTL_MS,
+    DEFAULT_KB_LOCK_DECISION_TIMEOUT_MS,
+    DEFAULT_KB_LOCK_WARMUP_ENABLED,
+    DEFAULT_UPSTREAM_AUTO_RECOVER_BASE_DELAY_MS,
+    DEFAULT_UPSTREAM_AUTO_RECOVER_ENABLED,
+    DEFAULT_UPSTREAM_AUTO_RECOVER_MAX_DELAY_MS,
+    DEFAULT_UPSTREAM_AUTO_RECOVER_MAX_RETRIES,
+    DEFAULT_UPSTREAM_KEEPALIVE_ENABLED,
+    DEFAULT_UPSTREAM_KEEPALIVE_INTERVAL_MS,
+    DEFAULT_UPSTREAM_KEEPALIVE_PONG_TIMEOUT_MS,
+    GROUNDING_WAIT_GRACE_SECONDS,
+    GROUNDING_WAIT_POLL_SECONDS,
+    PENDING_RESPONSE_FALLBACK_SECONDS,
+    STEPFUN_RUNTIME_EVENT_INVENTORY,
+    TERMINAL_SESSION_STATUSES,
+    TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS,
+    TRANSCRIPTION_WAIT_GRACE_SECONDS,
+)
+from sales_bot.websocket.stepfun_runtime_types import (
+    FunctionCallState,
+    RealtimeResponseState,
+)
+
+logger = get_logger(__name__)
+
+
+def _handler_symbol(name: str, fallback: Any) -> Any:
+    """Read monkeypatch-compatible symbols from the public handler module."""
+    module = sys.modules.get("sales_bot.websocket.stepfun_realtime_handler")
+    return getattr(module, name, fallback) if module is not None else fallback
+
+class StepFunRealtimeFeedbackMixin:
     async def _ensure_feedback_context(self) -> None:
         """Initialize context used by fuzzy detection and realtime scoring."""
         if self._feedback_context is not None:

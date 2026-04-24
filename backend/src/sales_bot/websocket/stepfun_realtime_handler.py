@@ -19,6 +19,7 @@ import inspect
 import json
 import os
 import re
+import sys
 import time
 import uuid
 from datetime import UTC, datetime
@@ -88,6 +89,12 @@ from sales_bot.websocket.components.objection_ledger_helpers import (
     merge_arbiter_context_with_objection_ledger,
     resolve_turn_objection_ledger,
 )
+from sales_bot.websocket.components.stepfun_asr_fallback import (
+    ASR_FALLBACK_REQUIRED_ERROR_CODE,
+    DEFAULT_ASR_FALLBACK_POLICY,
+    build_asr_fallback_status_event,
+    extract_asr_error_reason,
+)
 from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
@@ -130,6 +137,7 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
 from sales_bot.websocket.components.stepfun_tool_helpers import (
     build_stepfun_tools_from_policy,
 )
+from sales_bot.websocket.components.stepfun_tts_contracts import build_tts_chunk_event
 from sales_bot.websocket.components.stepfun_upstream_router import (
     UpstreamEventRoute,
     classify_upstream_event,
@@ -168,6 +176,13 @@ from sales_bot.websocket.stepfun_runtime_types import (
 )
 
 logger = get_logger(__name__)
+
+
+def _handler_symbol(name: str, fallback: Any) -> Any:
+    """Read monkeypatch-compatible symbols from the public handler module."""
+    module = sys.modules.get("sales_bot.websocket.stepfun_realtime_handler")
+    return getattr(module, name, fallback) if module is not None else fallback
+
 from sales_bot.websocket.stepfun_realtime_connection import (
     StepFunRealtimeConnectionMixin,
 )
