@@ -122,6 +122,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         icon: Sparkles,
         items: [
             { label: "提示词管理", icon: MessageSquareText, href: "/admin/prompts" },
+            { label: "业务规则", icon: Settings, href: "/admin/business-rules/sales-combinations" },
             { label: "语音策略", icon: Activity, href: "/admin/voice-runtime" },
             { label: "PPT AI 策略", icon: Sparkles, href: "/admin/presentation-ai" },
         ],
