@@ -11,6 +11,7 @@ import inspect
 import json
 import os
 import re
+import sys
 import time
 import uuid
 from datetime import UTC, datetime
@@ -160,6 +161,12 @@ from sales_bot.websocket.stepfun_runtime_types import (
 )
 
 logger = get_logger(__name__)
+
+
+def _handler_symbol(name: str, fallback: Any) -> Any:
+    """Read monkeypatch-compatible symbols from the public handler module."""
+    module = sys.modules.get("sales_bot.websocket.stepfun_realtime_handler")
+    return getattr(module, name, fallback) if module is not None else fallback
 
 
 class StepFunRealtimePolicyMixin:
@@ -1370,7 +1377,7 @@ class StepFunRealtimePolicyMixin:
             decision_id = uuid.uuid4().hex[:12]
             decision_started_at = asyncio.get_running_loop().time()
             kb_lock_timeout_seconds = self._kb_lock_decision_timeout_seconds
-            decision_coro = evaluate_kb_lock_decision(
+            decision_coro = _handler_symbol("evaluate_kb_lock_decision", evaluate_kb_lock_decision)(
                 query=normalized_query,
                 effective_policy=self._effective_policy,
                 record_metric=self._record_knowledge_runtime_metric,
@@ -1398,13 +1405,13 @@ class StepFunRealtimePolicyMixin:
                     "cache_hit_ready_docs": False,
                     "cache_hit_internal_retrieval": False,
                 }
-                kb_lock_mode = resolve_kb_lock_mode(tool_policy)
+                kb_lock_mode = _handler_symbol("resolve_kb_lock_mode", resolve_kb_lock_mode)(tool_policy)
                 product_overview_query = is_product_overview_query(normalized_query)
                 if kb_lock_mode == "coach_mode" and not product_overview_query:
                     decision_status = "coach_search_timeout"
                     blocked = False
                     self._pending_blocked_response_text = ""
-                    self._pending_grounding_context = build_kb_coach_grounding_context(
+                    self._pending_grounding_context = _handler_symbol("build_kb_coach_grounding_context", build_kb_coach_grounding_context)(
                         normalized_query,
                         decision_status,
                     )
