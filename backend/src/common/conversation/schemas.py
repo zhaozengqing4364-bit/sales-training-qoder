@@ -12,7 +12,7 @@ References:
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from common.db.schemas import AudioAuditPayloadSchema, PresentationReview
 
@@ -300,6 +300,160 @@ class HighlightsResponse(BaseModel):
     highlights: list[HighlightResponse]
     total_good: int = Field(default=0, ge=0, description="Count of good highlights")
     total_bad: int = Field(default=0, ge=0, description="Count of bad highlights")
+
+
+# ========== Highlight Review Persistence / Sharing Schemas ==========
+
+class HighlightReviewItemUpsert(BaseModel):
+    """Client-selected highlight item to persist in a durable review list."""
+
+    id: str | None = Field(
+        default=None,
+        description="Highlight/message id from the replay high光 response",
+    )
+    message_id: str | None = Field(
+        default=None,
+        description="Explicit ConversationMessage id; falls back to id",
+    )
+    reason: str | None = Field(default=None, max_length=500)
+    stage_name: str | None = Field(default=None, max_length=80)
+    issue_label: str | None = Field(default=None, max_length=80)
+    suggested_response: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("id", "message_id", "reason", "stage_name", "issue_label", "suggested_response")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class HighlightReviewSaveRequest(BaseModel):
+    """Replace the current user's review list for one session."""
+
+    schema_version: str = Field(default="highlight_review_v1", max_length=40)
+    title: str | None = Field(default=None, max_length=160)
+    items: list[HighlightReviewItemUpsert] = Field(default_factory=list, max_length=3)
+
+    @field_validator("schema_version", "title")
+    @classmethod
+    def normalize_review_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class HighlightReviewItemPayload(BaseModel):
+    item_id: str
+    message_id: str
+    turn_number: int
+    role: MessageRoleType
+    content: str
+    reason: str | None = None
+    stage_name: str | None = None
+    issue_label: str | None = None
+    suggested_response: str | None = None
+    sort_order: int
+
+
+class HighlightReviewShareSummary(BaseModel):
+    share_id: str
+    channel: str
+    status: str
+    consent_granted: bool
+    policy_version: str
+    ttl_days: int
+    expires_at: datetime
+    revoked_at: datetime | None = None
+    created_at: datetime
+    access_count: int = 0
+    desensitization_version: str
+
+
+class HighlightReviewPayload(BaseModel):
+    review_id: str
+    session_id: str
+    user_id: str
+    schema_version: str
+    title: str | None = None
+    items: list[HighlightReviewItemPayload] = Field(default_factory=list)
+    shares: list[HighlightReviewShareSummary] = Field(default_factory=list)
+    share_policy: dict[str, Any] = Field(default_factory=dict)
+    updated_at: datetime
+
+
+class HighlightReviewSuccessResponse(BaseModel):
+    success: bool = True
+    data: HighlightReviewPayload | None
+    trace_id: str | None = None
+
+
+class HighlightReviewShareCreateRequest(BaseModel):
+    channel: str = Field(default="wecom", pattern="^wecom$")
+    consent_granted: bool
+    consent_text: str | None = Field(default=None, max_length=1000)
+    ttl_days: int | None = Field(default=None, ge=1, le=90)
+
+    @field_validator("consent_text")
+    @classmethod
+    def normalize_consent_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class HighlightReviewShareCreatePayload(HighlightReviewShareSummary):
+    share_url: str
+    share_token: str
+    public_api_path: str
+
+
+class HighlightReviewShareCreateSuccessResponse(BaseModel):
+    success: bool = True
+    data: HighlightReviewShareCreatePayload
+    trace_id: str | None = None
+
+
+class HighlightReviewShareRevokeRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class SharedHighlightReviewItem(BaseModel):
+    turn_number: int
+    role: MessageRoleType
+    content_excerpt: str
+    reason: str | None = None
+    stage_name: str | None = None
+    issue_label: str | None = None
+    suggested_response: str | None = None
+
+
+class SharedHighlightReviewPayload(BaseModel):
+    share_id: str
+    channel: str
+    status: str
+    expires_at: datetime
+    source_session_ref: str
+    desensitization_version: str
+    items: list[SharedHighlightReviewItem]
+    audit_notice: str
+
+
+class SharedHighlightReviewSuccessResponse(BaseModel):
+    success: bool = True
+    data: SharedHighlightReviewPayload
+    trace_id: str | None = None
 
 
 # ========== ReplayData Schemas ==========
