@@ -80,12 +80,12 @@ def _recommendation_value(*, version: str, threshold: float) -> dict:
 
 @pytest.mark.asyncio
 async def test_business_rule_mutation_rejects_non_admin_user(
-    async_client: AsyncClient,
+    business_rules_client: AsyncClient,
     test_db: AsyncSession,
 ):
     user = await _create_user(test_db, role="user")
 
-    response = await async_client.post(
+    response = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/drafts",
         headers=_headers_for(str(user.user_id)),
         json={
@@ -101,7 +101,7 @@ async def test_business_rule_mutation_rejects_non_admin_user(
 
 @pytest.mark.asyncio
 async def test_business_rule_preview_does_not_change_active_config(
-    async_client: AsyncClient,
+    business_rules_client: AsyncClient,
     test_db: AsyncSession,
     test_user: User,
 ):
@@ -109,21 +109,21 @@ async def test_business_rule_preview_does_not_change_active_config(
     await test_db.commit()
     headers = _headers_for(str(test_user.user_id))
 
-    draft_response = await async_client.post(
+    draft_response = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/drafts",
         headers=headers,
         json={"value": _recommendation_value(version="active_v1", threshold=60)},
     )
     assert draft_response.status_code == 200
     draft_id = draft_response.json()["data"]["id"]
-    publish_response = await async_client.post(
+    publish_response = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/publish",
         headers=headers,
         json={"config_id": draft_id, "reason": "initial active"},
     )
     assert publish_response.status_code == 200
 
-    preview_response = await async_client.post(
+    preview_response = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/preview",
         headers=headers,
         json={
@@ -131,7 +131,7 @@ async def test_business_rule_preview_does_not_change_active_config(
             "reason": "impact check only",
         },
     )
-    active_response = await async_client.get(
+    active_response = await business_rules_client.get(
         f"/api/v1/admin/business-rules/active/{NEXT_PRACTICE_RECOMMENDATION_KEY}",
         headers=headers,
     )
@@ -147,7 +147,7 @@ async def test_business_rule_preview_does_not_change_active_config(
 
 @pytest.mark.asyncio
 async def test_business_rule_publish_rollback_and_audit_log(
-    async_client: AsyncClient,
+    business_rules_client: AsyncClient,
     test_db: AsyncSession,
     test_user: User,
 ):
@@ -155,35 +155,35 @@ async def test_business_rule_publish_rollback_and_audit_log(
     await test_db.commit()
     headers = _headers_for(str(test_user.user_id))
 
-    first_draft = await async_client.post(
+    first_draft = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/drafts",
         headers=headers,
         json={"value": _recommendation_value(version="recommendation_v1", threshold=61)},
     )
     assert first_draft.status_code == 200
     first_id = first_draft.json()["data"]["id"]
-    first_publish = await async_client.post(
+    first_publish = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/publish",
         headers=headers,
         json={"config_id": first_id, "reason": "publish first"},
     )
     assert first_publish.status_code == 200
 
-    second_draft = await async_client.post(
+    second_draft = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/drafts",
         headers=headers,
         json={"value": _recommendation_value(version="recommendation_v2", threshold=75)},
     )
     assert second_draft.status_code == 200
     second_id = second_draft.json()["data"]["id"]
-    second_publish = await async_client.post(
+    second_publish = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/publish",
         headers=headers,
         json={"config_id": second_id, "reason": "publish second"},
     )
     assert second_publish.status_code == 200
 
-    rollback = await async_client.post(
+    rollback = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/rollback",
         headers=headers,
         json={"target_version": 1, "reason": "rollback to stable"},
@@ -224,7 +224,7 @@ async def test_business_rule_publish_rollback_and_audit_log(
 
 @pytest.mark.asyncio
 async def test_business_rule_publish_rejects_invalid_draft(
-    async_client: AsyncClient,
+    business_rules_client: AsyncClient,
     test_db: AsyncSession,
     test_user: User,
 ):
@@ -256,7 +256,7 @@ async def test_business_rule_publish_rejects_invalid_draft(
     await test_db.commit()
     await test_db.refresh(invalid)
 
-    response = await async_client.post(
+    response = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/publish",
         headers=_headers_for(str(test_user.user_id)),
         json={"config_id": str(invalid.id), "reason": "should fail"},
