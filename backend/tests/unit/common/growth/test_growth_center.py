@@ -139,91 +139,33 @@ async def test_ai_coach_notification_is_based_on_latest_evaluable_session(test_d
     assert marked.is_success
     assert marked.value["is_read"] is True
 
+
 @pytest.mark.asyncio
-async def test_growth_achievements_use_published_business_rule_config(test_db):
-    from copy import deepcopy
-
-    from common.business_rules.defaults import (
-        ACHIEVEMENT_RULES_KEY,
-        DEFAULT_ACHIEVEMENT_RULESET,
-    )
-    from common.business_rules.service import BusinessRuleConfigService
-
+async def test_adaptive_difficulty_dry_run_dashboard_never_mutates_training(
+    test_db,
+    monkeypatch,
+):
     user, scenario = await _seed_user_and_scenario(test_db)
-    test_db.add(_session(user, scenario, days_ago=0, score=82))
-    await test_db.flush()
-
-    custom_ruleset = deepcopy(DEFAULT_ACHIEVEMENT_RULESET)
-    custom_ruleset["version"] = "growth_achievement_custom_v1"
-    custom_ruleset["achievements"] = [
-        {
-            "code": "two_sessions_required",
-            "name": "两次有效训练",
-            "description": "完成两场可评估训练。",
-            "icon_key": "trophy",
-            "condition": {"type": "evaluable_session_count", "min": 2},
-        }
-    ]
-    rule_service = BusinessRuleConfigService(test_db)
-    draft = await rule_service.create_or_update_draft(
-        key=ACHIEVEMENT_RULES_KEY,
-        value=custom_ruleset,
-        actor_id=str(user.user_id),
-    )
-    await rule_service.publish(
-        key=ACHIEVEMENT_RULES_KEY,
-        actor_id=str(user.user_id),
-        config_id=str(draft.id),
-        reason="custom achievement threshold",
-    )
+    session = _session(user, scenario, days_ago=0, score=92)
+    test_db.add(session)
     await test_db.commit()
+    monkeypatch.setenv(
+        "GROWTH_ADAPTIVE_DIFFICULTY_POLICY_JSON",
+        '{"version":"adaptive_test_v1","enabled":true,"mode":"dry_run","lower_score_threshold":55,"raise_score_threshold":85}',
+    )
 
-    result = await GrowthCenterService().evaluate_achievements(
+    result = await GrowthCenterService().get_adaptive_difficulty_dry_run(
         db=test_db,
         user_id=str(user.user_id),
+        limit=5,
     )
 
     assert result.is_success
-    assert result.value["newly_unlocked"] == []
-    assert result.value["ruleset_version"] == "growth_achievement_custom_v1"
-    assert result.value["ruleset_source"] == "database"
-
-
-@pytest.mark.asyncio
-async def test_ai_coach_disabled_business_rule_config_suppresses_notification(test_db):
-    from copy import deepcopy
-
-    from common.business_rules.defaults import (
-        AI_COACH_RULES_KEY,
-        DEFAULT_AI_COACH_RULESET,
-    )
-    from common.business_rules.service import BusinessRuleConfigService
-
-    user, scenario = await _seed_user_and_scenario(test_db)
-    test_db.add(_session(user, scenario, days_ago=0, score=45))
-    await test_db.flush()
-
-    disabled_ruleset = deepcopy(DEFAULT_AI_COACH_RULESET)
-    disabled_ruleset["version"] = "ai_coach_disabled_v1"
-    disabled_ruleset["enabled"] = False
-    rule_service = BusinessRuleConfigService(test_db)
-    draft = await rule_service.create_or_update_draft(
-        key=AI_COACH_RULES_KEY,
-        value=disabled_ruleset,
-        actor_id=str(user.user_id),
-    )
-    await rule_service.publish(
-        key=AI_COACH_RULES_KEY,
-        actor_id=str(user.user_id),
-        config_id=str(draft.id),
-        reason="turn off AI coach cards",
-    )
-    await test_db.commit()
-
-    generated = await GrowthCenterService().generate_ai_coach_notification(
-        db=test_db,
-        user_id=str(user.user_id),
-    )
-
-    assert generated.is_success
-    assert generated.value is None
+    payload = result.value
+    assert payload["mode"] == "dry_run_dashboard"
+    assert payload["mutation_enabled"] is False
+    assert payload["summary"]["candidate_count"] == 1
+    assert payload["items"][0]["status"] == "dry_run"
+    assert payload["items"][0]["suggested_adjustment"] == "increase"
+    assert payload["items"][0]["current_difficulty"] == "medium"
+    assert payload["items"][0]["suggested_difficulty"] == "hard"

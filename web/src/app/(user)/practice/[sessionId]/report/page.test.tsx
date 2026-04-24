@@ -1157,6 +1157,18 @@ describe("ReportPage", () => {
         expect(screen.getByText("先补一条制造业客户 18% 回款周期缩短案例，再确认客户是否认可。"))
             .toBeTruthy();
 
+        fireEvent.click(screen.getByRole("button", { name: /企业微信分享试点/ }));
+
+        await waitFor(() => {
+            expect(createHighlightReviewShareMock).toHaveBeenCalledWith("session-1", {
+                channel: "wecom",
+                consent_granted: true,
+                consent_text: expect.stringContaining("脱敏高光复习清单"),
+            });
+        });
+        expect(await screen.findByText(/分享链接：https:\/\/share\.example\.com\/highlight/))
+            .toBeTruthy();
+
         fireEvent.click(screen.getByRole("button", { name: "带清单再练" }));
 
         await waitFor(() => {
