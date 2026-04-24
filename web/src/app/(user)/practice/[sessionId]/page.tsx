@@ -3,7 +3,7 @@ import { debug } from "@/lib/debug";
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Mic, Square, FileText, ArrowLeft, AlertCircle, Wifi, WifiOff, Play, MicOff, Pause, RefreshCw } from "lucide-react";
+import { Mic, Square, FileText, AlertCircle, Play, MicOff, Pause, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatBubble } from "@/components/ui/chat-bubble";
 import { AudioVisualizer } from "@/components/ui/audio-visualizer";
@@ -29,6 +29,7 @@ import {
     practiceUxConfig,
 } from "@/lib/practice-ux-config";
 import { formatGoalTypeLabel, formatIssueTypeLabel } from "@/lib/session-evidence";
+import { PracticeHeader } from "./PracticeHeader";
 
 const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
     preparing: "准备中",
@@ -920,12 +921,6 @@ export default function PracticeSessionPage() {
         isRecordingRef,
     });
 
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    };
-
     // v1-12 Fix: RightPanelContent extracted to separate component file
     // See: @/components/practice/RightPanelContent
 
@@ -956,117 +951,23 @@ export default function PracticeSessionPage() {
             {/* 左侧聊天区域 */}
             <div className="flex-1 flex flex-col h-full relative">
                 {/* 头部 */}
-                <header className="h-16 px-4 md:px-6 flex items-center justify-between bg-white/40 backdrop-blur-md border-b border-white/20 z-10">
-                    <div className="flex items-center gap-3">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => router.push("/")}
-                            aria-label="退出练习并返回首页"
-                            className="md:hidden"
-                        >
-                            <ArrowLeft className="w-5 h-5" />
-                        </Button>
-                        <div>
-                            <h1 className="text-base md:text-lg font-bold text-slate-800">
-                                {scenarioType === 'presentation' ? 'PPT演讲练习' : '销售对练'}
-                            </h1>
-                            <div className="flex items-center gap-2 text-xs text-slate-500">
-                                <span className="flex items-center gap-1">
-                                    {connectionState === "connected" ? (
-                                        <>
-                                            <Wifi className="w-3 h-3 text-emerald-500" />
-                                            <span className="text-emerald-600">{CONNECTION_STATUS_LABELS[connectionState]}</span>
-                                        </>
-                                    ) : connectionState === "connecting" || connectionState === "reconnecting" ? (
-                                        <>
-                                            <span className="w-3 h-3 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-                                            <span>{CONNECTION_STATUS_LABELS[connectionState]}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <WifiOff className="w-3 h-3 text-red-500" />
-                                            <span className="text-red-600">{CONNECTION_STATUS_LABELS[connectionState]}</span>
-                                        </>
-                                    )}
-                                </span>
-                                <span>•</span>
-                                <span>{formatTime(sessionTime)}</span>
-                                <span>•</span>
-                                <span>{SESSION_STATUS_LABELS[sessionStatus]}</span>
-                                <span>•</span>
-                                <span>{voiceMode === "stepfun_realtime" ? "Realtime 模式" : "经典模式"}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={handleTogglePauseResume}
-                            disabled={!canToggleLifecycle}
-                            className="hidden md:flex rounded-full"
-                        >
-                            {pendingLifecycleAction ? (
-                                <>
-                                    <span className="w-4 h-4 mr-2 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-                                    处理中...
-                                </>
-                            ) : isSessionPaused ? (
-                                <>
-                                    <Play className="w-4 h-4 mr-2 fill-current" />
-                                    继续练习
-                                </>
-                            ) : (
-                                <>
-                                    <Pause className="w-4 h-4 mr-2" />
-                                    暂停
-                                </>
-                            )}
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={handleEndSession}
-                            disabled={isEndingSession || isSessionTerminal || pendingLifecycleAction !== null}
-                            className="hidden md:flex rounded-full"
-                        >
-                            {isEndingSession ? (
-                                <>
-                                    <span className="w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    {audioEvidenceStatus.status === "flushing" ? "保存音频中..." : "生成报告中..."}
-                                </>
-                            ) : (
-                                <>
-                                    <Square className="w-4 h-4 mr-2 fill-current" />
-                                    结束练习
-                                </>
-                            )}
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleTogglePauseResume}
-                            disabled={!canToggleLifecycle}
-                            className="md:hidden"
-                        >
-                            {pendingLifecycleAction
-                                ? "处理中..."
-                                : isSessionPaused
-                                ? "继续"
-                                : "暂停"}
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleEndSession}
-                            disabled={isEndingSession || isSessionTerminal || pendingLifecycleAction !== null}
-                            className="md:hidden text-red-500"
-                        >
-                            {isEndingSession ? "生成中..." : "结束"}
-                        </Button>
-                    </div>
-                </header>
+                <PracticeHeader
+                    scenarioType={scenarioType}
+                    connectionState={connectionState}
+                    connectionStatusLabel={connectionStatusLabel}
+                    sessionStatusLabel={lifecycleStatusLabel}
+                    voiceMode={voiceMode}
+                    sessionTime={sessionTime}
+                    canToggleLifecycle={canToggleLifecycle}
+                    pendingLifecycleAction={pendingLifecycleAction}
+                    isSessionPaused={isSessionPaused}
+                    isEndingSession={isEndingSession}
+                    isSessionTerminal={isSessionTerminal}
+                    endButtonLabel={audioEvidenceStatus.status === "flushing" ? "保存音频中..." : "生成报告中..."}
+                    onExit={() => router.push("/")}
+                    onTogglePauseResume={handleTogglePauseResume}
+                    onEndSession={handleEndSession}
+                />
 
                 {showCarryForwardFocus && focusIntent && (
                     <div className="mx-4 mt-4 rounded-2xl border border-indigo-100 bg-indigo-50/80 p-4 text-slate-700 shadow-sm">
