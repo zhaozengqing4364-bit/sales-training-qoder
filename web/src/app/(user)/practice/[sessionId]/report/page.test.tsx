@@ -405,6 +405,10 @@ describe("ReportPage", () => {
         getReplayMock.mockReset();
         getKnowledgeCheckMock.mockReset();
         getHighlightsMock.mockReset();
+        getHighlightReviewMock.mockReset();
+        saveHighlightReviewMock.mockReset();
+        createHighlightReviewShareMock.mockReset();
+        revokeHighlightReviewShareMock.mockReset();
         createSessionMock.mockReset();
         getComprehensiveReportMock.mockReset();
         generateComprehensiveReportMock.mockReset();
@@ -468,6 +472,58 @@ describe("ReportPage", () => {
             highlights: [],
             total_good: 0,
             total_bad: 0,
+        });
+        getHighlightReviewMock.mockResolvedValue(null);
+        saveHighlightReviewMock.mockImplementation((_sessionId, payload) => Promise.resolve({
+            review_id: "review-1",
+            session_id: "session-1",
+            user_id: "user-1",
+            schema_version: "highlight_review_v1",
+            title: null,
+            items: (payload.items || []).map((item: { id?: string; message_id?: string; reason?: string | null; stage_name?: string | null; issue_label?: string | null; suggested_response?: string | null }, index: number) => ({
+                item_id: `item-${index}`,
+                message_id: item.message_id || item.id || `message-${index}`,
+                turn_number: 1,
+                role: "user",
+                content: "saved highlight",
+                reason: item.reason ?? null,
+                stage_name: item.stage_name ?? null,
+                issue_label: item.issue_label ?? null,
+                suggested_response: item.suggested_response ?? null,
+                sort_order: index,
+            })),
+            shares: [],
+            share_policy: { status: "blocked_by_governance" },
+            updated_at: "2026-03-23T00:00:00Z",
+        }));
+        createHighlightReviewShareMock.mockResolvedValue({
+            share_id: "share-1",
+            channel: "wecom",
+            status: "active",
+            consent_granted: true,
+            policy_version: "wecom_test_v1",
+            ttl_days: 7,
+            expires_at: "2026-03-30T00:00:00Z",
+            revoked_at: null,
+            created_at: "2026-03-23T00:00:00Z",
+            access_count: 0,
+            desensitization_version: "highlight_share_desensitized_v1",
+            share_url: "https://share.example.com/highlight",
+            share_token: "token-1",
+            public_api_path: "/api/v1/sessions/highlight-reviews/shared/token-1",
+        });
+        revokeHighlightReviewShareMock.mockResolvedValue({
+            share_id: "share-1",
+            channel: "wecom",
+            status: "revoked",
+            consent_granted: true,
+            policy_version: "wecom_test_v1",
+            ttl_days: 7,
+            expires_at: "2026-03-30T00:00:00Z",
+            revoked_at: "2026-03-24T00:00:00Z",
+            created_at: "2026-03-23T00:00:00Z",
+            access_count: 0,
+            desensitization_version: "highlight_share_desensitized_v1",
         });
         createSessionMock.mockResolvedValue({ session_id: "retry-1" });
         getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
@@ -1086,6 +1142,17 @@ describe("ReportPage", () => {
         );
         expect(persistedReview.schema_version).toBe("highlight_review_v1");
         expect(persistedReview.items).toHaveLength(1);
+        await waitFor(() => {
+            expect(saveHighlightReviewMock).toHaveBeenCalledWith("session-1", {
+                items: [
+                    expect.objectContaining({
+                        id: "highlight-review-1",
+                        message_id: "highlight-review-1",
+                        issue_label: "证据支撑",
+                    }),
+                ],
+            });
+        });
         expect(screen.getByText("我们还是担心 ROI，但我先介绍功能。")).toBeTruthy();
         expect(screen.getByText("先补一条制造业客户 18% 回款周期缩短案例，再确认客户是否认可。"))
             .toBeTruthy();
