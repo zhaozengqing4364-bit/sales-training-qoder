@@ -73,7 +73,7 @@ class SessionRateLimiter:
         self._cleanup_task: asyncio.Task | None = None
         self._running = False
 
-    async def start(self):
+    async def start(self) -> None:
         """Start cleanup background task"""
         if self._running:
             return
@@ -82,7 +82,7 @@ class SessionRateLimiter:
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
         logger.info("Session rate limiter started")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop cleanup background task"""
         self._running = False
 
@@ -154,7 +154,7 @@ class SessionRateLimiter:
 
         return True, ""
 
-    async def register_session(self, user_id: str, session_id: str):
+    async def register_session(self, user_id: str, session_id: str) -> None:
         """Register a new session"""
         now = time.time()
         self._cleanup_user_window(user_id, now=now)
@@ -178,7 +178,7 @@ class SessionRateLimiter:
             },
         )
 
-    async def unregister_session(self, user_id: str, session_id: str):
+    async def unregister_session(self, user_id: str, session_id: str) -> None:
         """Unregister a session"""
         if user_id in self.user_sessions:
             if session_id in self.user_sessions[user_id]:
@@ -199,7 +199,7 @@ class SessionRateLimiter:
             if not self.user_sessions[user_id]:
                 del self.user_sessions[user_id]
 
-    async def _cleanup_loop(self):
+    async def _cleanup_loop(self) -> None:
         """Background task to clean up expired sessions"""
         while self._running:
             try:
@@ -210,7 +210,7 @@ class SessionRateLimiter:
             except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Cleanup loop error: {e}")
 
-    async def _cleanup_expired_sessions(self):
+    async def _cleanup_expired_sessions(self) -> None:
         """Remove expired session records"""
         now = time.time()
         total_removed = 0
@@ -320,14 +320,14 @@ def get_session_rate_limiter() -> SessionRateLimiter:
     return _rate_limiter
 
 
-async def init_session_rate_limiter():
+async def init_session_rate_limiter() -> None:
     """Initialize rate limiter on application startup"""
     limiter = get_session_rate_limiter()
     await limiter.start()
     logger.info("Session rate limiter initialized")
 
 
-async def shutdown_session_rate_limiter():
+async def shutdown_session_rate_limiter() -> None:
     """Shutdown rate limiter on application shutdown"""
     global _rate_limiter
     if _rate_limiter:
