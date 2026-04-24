@@ -11,7 +11,7 @@ from common.business_rules.defaults import (
     NEXT_PRACTICE_RECOMMENDATION_KEY,
 )
 from common.business_rules.service import BusinessRuleConfigService
-from common.db.models import BusinessRuleConfig, User
+from common.db.models import User
 
 
 async def _admin(test_db) -> User:
