@@ -172,13 +172,17 @@ from sales_bot.websocket.stepfun_realtime_connection import (
     StepFunRealtimeConnectionMixin,
 )
 from sales_bot.websocket.stepfun_realtime_policy import StepFunRealtimePolicyMixin
+from sales_bot.websocket.stepfun_realtime_feedback import StepFunRealtimeFeedbackMixin
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
+from sales_bot.websocket.stepfun_realtime_sales_stage import StepFunRealtimeSalesStageMixin
 
 
 class StepFunRealtimeHandler(
     StepFunRealtimeConnectionMixin,
     StepFunRealtimePolicyMixin,
+    StepFunRealtimeFeedbackMixin,
     StepFunRealtimeUpstreamMixin,
+    StepFunRealtimeSalesStageMixin,
     BaseWebSocketHandler,
 ):
     """
