@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from admin.api.scoring_rulesets import router as admin_scoring_rulesets_router
 from common.ai.llm_service import LLMService
 from common.api.response import error_response
 from common.api.server_error import build_server_error
@@ -25,6 +26,7 @@ from evaluation.services.staged_evaluation import StagedEvaluationService
 from prompt_templates.service import PromptTemplateService
 
 router = APIRouter(prefix="/evaluation", tags=["evaluation"])
+router.include_router(admin_scoring_rulesets_router)
 
 
 def _evaluation_error_response(
