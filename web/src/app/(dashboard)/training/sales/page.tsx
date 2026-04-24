@@ -87,21 +87,25 @@ function parseFocusIntentFromTargetPath(targetPath: string | undefined): RetryFo
     }
 }
 
-function combinationMatchesEvidence(combination: CoreCombination, evidenceText: string): boolean {
+function combinationMatchesEvidence(combination: SalesCombinationViewModel, evidenceText: string): boolean {
     return textMatchesTarget(evidenceText, combination.capability)
         && textMatchesTarget(evidenceText, combination.role);
 }
 
-function resolveCombinationFromEvidence(evidenceParts: Array<string | null | undefined>): CoreCombination | null {
+function resolveCombinationFromEvidence(
+    evidenceParts: Array<string | null | undefined>,
+    combinations: SalesCombinationViewModel[],
+): SalesCombinationViewModel | null {
     const evidenceText = evidenceParts.filter(Boolean).join(" ");
     if (!evidenceText) return null;
 
-    return CORE_COMBINATIONS.find((combination) => combinationMatchesEvidence(combination, evidenceText)) || null;
+    return combinations.find((combination) => combinationMatchesEvidence(combination, evidenceText)) || null;
 }
 
 function resolvePersonalizedCombination(
     recommendation: Recommendation | null,
     historySessions: HistorySessionSummary[],
+    combinations: SalesCombinationViewModel[],
 ): PersonalizedCombination | null {
     const recommendationFocusIntent = parseFocusIntentFromTargetPath(recommendation?.target_path);
     const isSalesRecommendation = recommendation
@@ -121,7 +125,7 @@ function resolvePersonalizedCombination(
             recommendationFocusIntent?.next_goal?.goal_type,
             recommendationFocusIntent?.next_goal?.goal_text,
             recommendationFocusIntent?.next_goal?.rule,
-        ]);
+        ], combinations);
 
         if (recommendedCombination) {
             return {
@@ -144,7 +148,7 @@ function resolvePersonalizedCombination(
             session.next_goal?.goal_type,
             session.next_goal?.goal_text,
             session.next_goal?.rule,
-        ]);
+        ], combinations);
 
         if (historyCombination) {
             return {
@@ -158,7 +162,7 @@ function resolvePersonalizedCombination(
 }
 
 function buildCombinationFocusIntent(
-    combination: CoreCombination,
+    combination: SalesCombinationViewModel,
 ): RetryFocusIntent {
     return {
         version: "sales_core_combination_v1",
