@@ -136,6 +136,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    highlight_reviews = relationship(
+        "HighlightReview",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserTrainingPreference(Base):
@@ -806,6 +811,11 @@ class PracticeSession(Base):
     audio_segments = relationship(
         "SessionAudioSegment", back_populates="session", cascade="all, delete-orphan"
     )
+    highlight_reviews = relationship(
+        "HighlightReview",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
 
 class ConversationMessage(Base):
@@ -858,6 +868,210 @@ class ConversationMessage(Base):
     )
 
     session = relationship("PracticeSession", back_populates="messages")
+    highlight_review_items = relationship(
+        "HighlightReviewItem",
+        back_populates="message",
+        cascade="all, delete-orphan",
+    )
+
+
+class HighlightReview(Base):
+    """Durable learner-selected highlight review list for a practice session."""
+
+    __tablename__ = "highlight_reviews"
+
+    review_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    schema_version = Column(
+        String(40), nullable=False, default="highlight_review_v1"
+    )
+    title = Column(String(160), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "session_id",
+            name="uq_highlight_reviews_user_session",
+        ),
+        Index("idx_highlight_reviews_user_updated", "user_id", "updated_at"),
+        Index("idx_highlight_reviews_session", "session_id"),
+    )
+
+    user = relationship("User", back_populates="highlight_reviews")
+    session = relationship("PracticeSession", back_populates="highlight_reviews")
+    items = relationship(
+        "HighlightReviewItem",
+        back_populates="review",
+        cascade="all, delete-orphan",
+        order_by="HighlightReviewItem.sort_order",
+    )
+    shares = relationship(
+        "HighlightReviewShare",
+        back_populates="review",
+        cascade="all, delete-orphan",
+    )
+
+
+class HighlightReviewItem(Base):
+    """Snapshot of one highlighted turn selected for later review."""
+
+    __tablename__ = "highlight_review_items"
+
+    item_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    review_id = Column(
+        String(36),
+        ForeignKey("highlight_reviews.review_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    message_id = Column(
+        String(36),
+        ForeignKey("conversation_messages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    turn_number = Column(Integer, nullable=False)
+    role = Column(String(20), nullable=False)
+    content_excerpt = Column(Text, nullable=False)
+    reason = Column(Text, nullable=True)
+    stage_name = Column(String(80), nullable=True)
+    issue_label = Column(String(80), nullable=True)
+    suggested_response = Column(Text, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    source_payload = Column(JSON, nullable=False, default=dict)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('user', 'assistant')",
+            name="ck_highlight_review_item_role",
+        ),
+        UniqueConstraint(
+            "review_id",
+            "message_id",
+            name="uq_highlight_review_items_review_message",
+        ),
+        Index("idx_highlight_review_items_review", "review_id"),
+        Index("idx_highlight_review_items_message", "message_id"),
+    )
+
+    review = relationship("HighlightReview", back_populates="items")
+    message = relationship("ConversationMessage", back_populates="highlight_review_items")
+
+
+class HighlightReviewShare(Base):
+    """Consent-gated, revocable share token for internal WeCom pilots."""
+
+    __tablename__ = "highlight_review_shares"
+
+    share_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    review_id = Column(
+        String(36),
+        ForeignKey("highlight_reviews.review_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    channel = Column(String(20), nullable=False, default="wecom")
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    consent_granted = Column(Boolean, nullable=False, default=False)
+    consent_text = Column(Text, nullable=True)
+    policy_version = Column(String(80), nullable=False)
+    policy_snapshot = Column(JSON, nullable=False, default=dict)
+    ttl_days = Column(Integer, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    revoked_by_user_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=True
+    )
+    revoked_reason = Column(String(200), nullable=True)
+    desensitization_version = Column(String(50), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    last_accessed_at = Column(DateTime(timezone=True), nullable=True)
+    access_count = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        CheckConstraint(
+            "channel IN ('wecom')",
+            name="ck_highlight_review_share_channel",
+        ),
+        CheckConstraint("ttl_days BETWEEN 1 AND 90", name="ck_highlight_share_ttl"),
+        Index("idx_highlight_review_shares_review", "review_id"),
+        Index("idx_highlight_review_shares_user", "user_id"),
+    )
+
+    review = relationship("HighlightReview", back_populates="shares")
+    access_logs = relationship(
+        "HighlightReviewShareAccessLog",
+        back_populates="share",
+        cascade="all, delete-orphan",
+    )
+
+
+class HighlightReviewShareAccessLog(Base):
+    """Append-only audit log for share create/access/revoke events."""
+
+    __tablename__ = "highlight_review_share_access_logs"
+
+    log_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    share_id = Column(
+        String(36),
+        ForeignKey("highlight_review_shares.share_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_type = Column(String(20), nullable=False)
+    actor_user_id = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    viewer_label = Column(String(120), nullable=True)
+    client_fingerprint = Column(String(64), nullable=True)
+    status = Column(String(20), nullable=False, default="success")
+    details = Column(JSON, nullable=False, default=dict)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('created', 'accessed', 'revoked', 'denied')",
+            name="ck_highlight_share_access_event_type",
+        ),
+        CheckConstraint(
+            "status IN ('success', 'failed', 'blocked')",
+            name="ck_highlight_share_access_status",
+        ),
+        Index("idx_highlight_share_access_logs_share", "share_id", "created_at"),
+        Index("idx_highlight_share_access_logs_actor", "actor_user_id", "created_at"),
+    )
+
+    share = relationship("HighlightReviewShare", back_populates="access_logs")
 
 
 class InterruptionEvent(Base):
