@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import uuid
 from copy import deepcopy
 from importlib import util
@@ -33,6 +34,7 @@ def _business_rules_router():
     )
     assert spec is not None and spec.loader is not None
     module = util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module.router
 

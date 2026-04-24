@@ -143,7 +143,10 @@ async def test_ai_coach_notification_is_based_on_latest_evaluable_session(test_d
 async def test_growth_achievements_use_published_business_rule_config(test_db):
     from copy import deepcopy
 
-    from common.business_rules.defaults import ACHIEVEMENT_RULES_KEY, DEFAULT_ACHIEVEMENT_RULESET
+    from common.business_rules.defaults import (
+        ACHIEVEMENT_RULES_KEY,
+        DEFAULT_ACHIEVEMENT_RULESET,
+    )
     from common.business_rules.service import BusinessRuleConfigService
 
     user, scenario = await _seed_user_and_scenario(test_db)
@@ -190,7 +193,10 @@ async def test_growth_achievements_use_published_business_rule_config(test_db):
 async def test_ai_coach_disabled_business_rule_config_suppresses_notification(test_db):
     from copy import deepcopy
 
-    from common.business_rules.defaults import AI_COACH_RULES_KEY, DEFAULT_AI_COACH_RULESET
+    from common.business_rules.defaults import (
+        AI_COACH_RULES_KEY,
+        DEFAULT_AI_COACH_RULESET,
+    )
     from common.business_rules.service import BusinessRuleConfigService
 
     user, scenario = await _seed_user_and_scenario(test_db)

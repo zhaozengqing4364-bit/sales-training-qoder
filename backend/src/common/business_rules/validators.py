@@ -113,6 +113,7 @@ def _validate_achievement_ruleset(value: dict[str, Any]) -> dict[str, Any]:
                 f"unsupported achievement condition type: {condition_type}"
             )
         raw_min = condition.get("min", 1)
+        minimum: int | float
         if condition_type == "evaluable_session_count":
             try:
                 minimum = int(raw_min)

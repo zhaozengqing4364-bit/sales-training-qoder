@@ -11,13 +11,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response, success_response
+from common.auth.service import get_current_admin_user
 from common.business_rules.defaults import (
     get_business_rule_definition,
     list_business_rule_definitions,
 )
 from common.business_rules.service import BusinessRuleConfigService
 from common.business_rules.validators import BusinessRuleValidationError
-from common.auth.service import get_current_admin_user
 from common.db.models import BusinessRuleConfig, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
