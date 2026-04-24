@@ -15,30 +15,18 @@ import {
     ScenarioSummary,
 } from "@/lib/api/types";
 import { AgentCard } from "@/components/ui/agent-card";
-
-type CoreCombination = {
-    id: string;
-    capability: string;
-    role: string;
-};
+import {
+    buildClientDefaultSalesCombinationResolution,
+    formatSalesCombinationFallbackReason,
+    resolveSalesCombinationRuleSet,
+    type SalesCombinationResolution,
+    type SalesCombinationViewModel,
+} from "@/lib/api/sales-combinations";
 
 type PersonalizedCombination = {
     combinationId: string;
     sourceLabel: string;
 };
-
-const CORE_COMBINATIONS: CoreCombination[] = [
-    { id: "c1", capability: "破冰建立信任", role: "冷淡型客户" },
-    { id: "c2", capability: "破冰建立信任", role: "强势质疑型客户" },
-    { id: "c3", capability: "需求挖掘", role: "价格敏感型客户" },
-    { id: "c4", capability: "需求挖掘", role: "拖延决策型客户" },
-    { id: "c5", capability: "价值表达", role: "竞品比较型客户" },
-    { id: "c6", capability: "价值表达", role: "价格敏感型客户" },
-    { id: "c7", capability: "异议处理", role: "强势质疑型客户" },
-    { id: "c8", capability: "异议处理", role: "竞品比较型客户" },
-    { id: "c9", capability: "推进下一步行动", role: "拖延决策型客户" },
-    { id: "c10", capability: "推进下一步行动", role: "冷淡型客户" },
-];
 
 const normalizeCombinationText = (value: string) => value
     .toLowerCase()
