@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
@@ -243,20 +243,23 @@ class ScoringRulesetService:
 
     @staticmethod
     def view_from_model(row: ScoringRuleset) -> ScoringRulesetView:
-        definition = ScoringRulesetDefinition.model_validate(row.definition_json or {})
+        row_any = cast(Any, row)
+        definition = ScoringRulesetDefinition.model_validate(
+            row_any.definition_json or {}
+        )
         return ScoringRulesetView(
-            ruleset_id=str(row.ruleset_id),
-            scenario_type=_normalize_scenario_type(str(row.scenario_type)),
-            version=str(row.version),
-            display_name=str(row.display_name),
-            description=row.description,
-            status=str(row.status),  # type: ignore[arg-type]
+            ruleset_id=str(row_any.ruleset_id),
+            scenario_type=_normalize_scenario_type(str(row_any.scenario_type)),
+            version=str(row_any.version),
+            display_name=str(row_any.display_name),
+            description=row_any.description,
+            status=cast(ScoringRulesetStatus, str(row_any.status)),
             definition=definition,
-            is_active=bool(row.is_active),
+            is_active=bool(row_any.is_active),
             source="admin",
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            published_at=row.published_at,
+            created_at=row_any.created_at,
+            updated_at=row_any.updated_at,
+            published_at=row_any.published_at,
         )
 
     async def list_rulesets(
@@ -372,19 +375,20 @@ class ScoringRulesetService:
         row = await self.get_ruleset(ruleset_id)
         if row is None:
             raise ValueError("[SCORING_RULESET_NOT_FOUND]")
-        if row.status == "published" and row.is_active:
+        row_any = cast(Any, row)
+        if row_any.status == "published" and row_any.is_active:
             raise ValueError("[SCORING_RULESET_ACTIVE_IMMUTABLE]")
         before = self._snapshot(row)
         if display_name is not None:
-            row.display_name = display_name.strip()
+            row_any.display_name = display_name.strip()
         if description is not None:
-            row.description = description
+            row_any.description = description
         if definition is not None:
-            if definition.scenario_type != row.scenario_type:
+            if definition.scenario_type != row_any.scenario_type:
                 raise ValueError("[SCORING_RULESET_SCENARIO_MISMATCH]")
-            row.definition_json = definition.model_dump(mode="json")
-        row.updated_by = str(actor.user_id)
-        row.updated_at = datetime.now(UTC)
+            row_any.definition_json = definition.model_dump(mode="json")
+        row_any.updated_by = str(actor.user_id)
+        row_any.updated_at = datetime.now(UTC)
         await self.db.flush()
 
         self._queue_audit_log(
@@ -406,17 +410,18 @@ class ScoringRulesetService:
         row = await self.get_ruleset(ruleset_id)
         if row is None:
             raise ValueError("[SCORING_RULESET_NOT_FOUND]")
-        before = await self._active_snapshot(str(row.scenario_type))
+        row_any = cast(Any, row)
+        before = await self._active_snapshot(str(row_any.scenario_type))
 
         # Validate again at the publish boundary so invalid rows cannot become active.
-        ScoringRulesetDefinition.model_validate(row.definition_json or {})
-        await self._deactivate_active(str(row.scenario_type))
-        row.status = "published"
-        row.is_active = True
-        row.published_by = str(actor.user_id)
-        row.published_at = datetime.now(UTC)
-        row.updated_by = str(actor.user_id)
-        row.updated_at = datetime.now(UTC)
+        ScoringRulesetDefinition.model_validate(row_any.definition_json or {})
+        await self._deactivate_active(str(row_any.scenario_type))
+        row_any.status = "published"
+        row_any.is_active = True
+        row_any.published_by = str(actor.user_id)
+        row_any.published_at = datetime.now(UTC)
+        row_any.updated_by = str(actor.user_id)
+        row_any.updated_at = datetime.now(UTC)
         await self.db.flush()
 
         self._queue_audit_log(
@@ -438,15 +443,16 @@ class ScoringRulesetService:
         row = await self.get_ruleset(ruleset_id)
         if row is None:
             raise ValueError("[SCORING_RULESET_NOT_FOUND]")
-        if row.status != "published":
+        row_any = cast(Any, row)
+        if row_any.status != "published":
             raise ValueError("[SCORING_RULESET_ROLLBACK_TARGET_NOT_PUBLISHED]")
-        before = await self._active_snapshot(str(row.scenario_type))
-        await self._deactivate_active(str(row.scenario_type))
-        row.is_active = True
-        row.published_by = str(actor.user_id)
-        row.published_at = datetime.now(UTC)
-        row.updated_by = str(actor.user_id)
-        row.updated_at = datetime.now(UTC)
+        before = await self._active_snapshot(str(row_any.scenario_type))
+        await self._deactivate_active(str(row_any.scenario_type))
+        row_any.is_active = True
+        row_any.published_by = str(actor.user_id)
+        row_any.published_at = datetime.now(UTC)
+        row_any.updated_by = str(actor.user_id)
+        row_any.updated_at = datetime.now(UTC)
         await self.db.flush()
 
         self._queue_audit_log(
@@ -473,6 +479,8 @@ class ScoringRulesetService:
         if not projection_result.is_success:
             raise ValueError(projection_result.fallback or "[SESSION_EVIDENCE_FAILED]")
         projection = projection_result.value
+        if projection is None:
+            raise ValueError("[SESSION_EVIDENCE_FAILED]")
 
         baseline = await self.get_active_or_default(projection.scenario_type)
         if candidate_definition is not None:
@@ -665,8 +673,9 @@ class ScoringRulesetService:
             )
         )
         for active in result.scalars().all():
-            active.is_active = False
-            active.updated_at = datetime.now(UTC)
+            active_any = cast(Any, active)
+            active_any.is_active = False
+            active_any.updated_at = datetime.now(UTC)
 
     async def _active_snapshot(self, scenario_type: str) -> dict[str, Any] | None:
         active = await self.get_active_or_default(scenario_type)
@@ -674,14 +683,17 @@ class ScoringRulesetService:
 
     @staticmethod
     def _snapshot(row: ScoringRuleset) -> dict[str, Any]:
+        row_any = cast(Any, row)
         return {
-            "ruleset_id": str(row.ruleset_id),
-            "scenario_type": str(row.scenario_type),
-            "version": str(row.version),
-            "display_name": str(row.display_name),
-            "status": str(row.status),
-            "is_active": bool(row.is_active),
-            "published_at": row.published_at.isoformat() if row.published_at else None,
+            "ruleset_id": str(row_any.ruleset_id),
+            "scenario_type": str(row_any.scenario_type),
+            "version": str(row_any.version),
+            "display_name": str(row_any.display_name),
+            "status": str(row_any.status),
+            "is_active": bool(row_any.is_active),
+            "published_at": (
+                row_any.published_at.isoformat() if row_any.published_at else None
+            ),
         }
 
     def _queue_audit_log(

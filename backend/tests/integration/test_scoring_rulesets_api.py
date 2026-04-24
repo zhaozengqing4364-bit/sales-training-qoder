@@ -7,8 +7,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Register agent/voice-runtime tables referenced by shared metadata.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
@@ -48,7 +47,7 @@ async def test_engine():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session(test_engine):
-    async_session = sessionmaker(
+    async_session = async_sessionmaker(
         test_engine,
         class_=AsyncSession,
         expire_on_commit=False,
