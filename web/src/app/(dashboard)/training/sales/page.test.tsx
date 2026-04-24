@@ -12,6 +12,7 @@ const {
     getSalesPersonasMock,
     getRecommendationMock,
     getMyHistoryMock,
+    getActiveSalesCombinationsMock,
 } = vi.hoisted(() => ({
     backMock: vi.fn(),
     pushMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
     getSalesPersonasMock: vi.fn(),
     getRecommendationMock: vi.fn(),
     getMyHistoryMock: vi.fn(),
+    getActiveSalesCombinationsMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -53,6 +55,7 @@ vi.mock("@/lib/api/client", async () => {
             training: {
                 ...actual.api.training,
                 getSalesAgents: getSalesAgentsMock,
+                getActiveSalesCombinations: getActiveSalesCombinationsMock,
             },
             scenarios: {
                 ...actual.api.scenarios,
@@ -73,6 +76,8 @@ vi.mock("@/lib/api/client", async () => {
 
 vi.mock("@/lib/debug", () => ({
     debug: {
+        warn: vi.fn(),
+        log: vi.fn(),
         error: vi.fn(),
     },
 }));
@@ -97,6 +102,7 @@ describe("SalesTrainingPage core combinations", () => {
         getSalesPersonasMock.mockReset();
         getRecommendationMock.mockReset();
         getMyHistoryMock.mockReset();
+        getActiveSalesCombinationsMock.mockReset();
 
         getSalesAgentsMock.mockResolvedValue([
             {
@@ -149,6 +155,7 @@ describe("SalesTrainingPage core combinations", () => {
             page_size: 5,
             total_pages: 0,
         });
+        getActiveSalesCombinationsMock.mockResolvedValue(null);
     });
 
     it("turns matched 80/20 combinations into focused start routes", async () => {
