@@ -195,6 +195,28 @@ class TestSessionRateLimiter:
         assert rate_limiter.current_total == 0
 
     @pytest.mark.asyncio
+    async def test_reregistering_same_active_session_does_not_consume_creation_quota(
+        self,
+    ):
+        """Should treat duplicate active-session registration as a heartbeat."""
+        from common.rate_limit.session_limiter import SessionRateLimiter
+
+        limiter = SessionRateLimiter(
+            max_concurrent_per_user=10,
+            max_sessions_per_hour=2,
+            max_total_concurrent=10,
+            session_window=3600,
+            cleanup_interval=0.1,
+        )
+
+        await limiter.register_session("user_1", "session_1")
+        await limiter.register_session("user_1", "session_1")
+
+        assert limiter.current_total == 1
+        assert limiter.get_user_stats("user_1")["created_in_window"] == 1
+        assert (await limiter.check_limit("user_1")) == (True, "")
+
+    @pytest.mark.asyncio
     async def test_session_creation_window_is_separate_from_active_sessions(self):
         """Should deny excessive sequential creations even after sessions end."""
         from common.rate_limit.session_limiter import SessionRateLimiter
@@ -241,6 +263,43 @@ class TestSessionRateLimiter:
 
         assert allowed
         assert reason == ""
+        assert limiter.user_session_creations.get("user_1") is None
+
+    def test_user_stats_drops_expired_creation_window_entries(self):
+        """Should report creation quota from the cleaned current window."""
+        from common.rate_limit.session_limiter import SessionRateLimiter
+
+        limiter = SessionRateLimiter(
+            max_concurrent_per_user=10,
+            max_sessions_per_hour=1,
+            max_total_concurrent=10,
+            session_window=1,
+            cleanup_interval=0.1,
+        )
+        limiter.user_session_creations["user_1"] = [time.time() - 2]
+
+        stats = limiter.get_user_stats("user_1")
+
+        assert stats["created_in_window"] == 0
+        assert stats["remaining_creations"] == 1
+        assert limiter.user_session_creations.get("user_1") is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_expired_sessions_removes_orphan_creation_windows(self):
+        """Should clean stale creation counters even when no active sessions remain."""
+        from common.rate_limit.session_limiter import SessionRateLimiter
+
+        limiter = SessionRateLimiter(
+            max_concurrent_per_user=10,
+            max_sessions_per_hour=1,
+            max_total_concurrent=10,
+            session_window=1,
+            cleanup_interval=0.1,
+        )
+        limiter.user_session_creations["user_1"] = [time.time() - 2]
+
+        await limiter._cleanup_expired_sessions()
+
         assert limiter.user_session_creations.get("user_1") is None
 
     @pytest.mark.asyncio

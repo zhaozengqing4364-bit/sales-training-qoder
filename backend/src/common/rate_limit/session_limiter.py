@@ -162,10 +162,16 @@ class SessionRateLimiter:
         if user_id not in self.user_sessions:
             self.user_sessions[user_id] = {}
 
+        expired_sessions = self._expire_user_sessions(
+            self.user_sessions[user_id],
+            now=now,
+        )
+        self.current_total = max(0, self.current_total - expired_sessions)
+
         is_new_active_session = session_id not in self.user_sessions[user_id]
         self.user_sessions[user_id][session_id] = now
-        self.user_session_creations[user_id].append(now)
         if is_new_active_session:
+            self.user_session_creations[user_id].append(now)
             self.current_total += 1
 
         logger.info(
@@ -226,6 +232,8 @@ class SessionRateLimiter:
             # Remove empty user entries
             if not self.user_sessions[user_id]:
                 del self.user_sessions[user_id]
+
+        for user_id in list(self.user_session_creations.keys()):
             self._cleanup_user_window(user_id, now=now)
 
         if total_removed > 0:
@@ -259,6 +267,7 @@ class SessionRateLimiter:
     def get_user_stats(self, user_id: str) -> dict:
         """Get stats for a specific user"""
         now = time.time()
+        self._cleanup_user_window(user_id, now=now)
         sessions = self.user_sessions.get(user_id, {})
 
         active_sessions = sum(
