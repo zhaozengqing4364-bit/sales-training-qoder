@@ -9,7 +9,7 @@ StepFun Realtime API, enabling a dual-mode runtime:
 
 from __future__ import annotations
 
-# ruff: noqa: F401, I001
+# ruff: noqa: F401, I001, E402
 
 import asyncio
 import base64
