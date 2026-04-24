@@ -552,6 +552,46 @@ function persistHighlightReviewItems(sessionId: string, items: HighlightReviewIt
     }
 }
 
+function mapPersistedHighlightReviewItems(
+    sessionId: string,
+    review: HighlightReviewResponse | null,
+): HighlightReviewItem[] {
+    if (!review?.items?.length) {
+        return [];
+    }
+
+    return review.items
+        .map((item) => ({
+            id: item.message_id,
+            source_session_id: sessionId,
+            turn_number: item.turn_number,
+            content: item.content,
+            reason: item.reason,
+            stage_name: item.stage_name,
+            issue_label: item.issue_label,
+            suggested_response: item.suggested_response,
+        }))
+        .filter(isHighlightReviewItem)
+        .slice(0, HIGHLIGHT_REVIEW_LIMIT);
+}
+
+function buildHighlightReviewSavePayload(items: HighlightReviewItem[]) {
+    return items.slice(0, HIGHLIGHT_REVIEW_LIMIT).map((item) => ({
+        id: item.id,
+        message_id: item.id,
+        reason: item.reason,
+        stage_name: item.stage_name,
+        issue_label: item.issue_label,
+        suggested_response: item.suggested_response,
+    }));
+}
+
+function getActiveHighlightShare(
+    shares: HighlightReviewShareSummary[],
+): HighlightReviewShareSummary | null {
+    return shares.find((share) => share.status === "active") ?? null;
+}
+
 function buildHighlightReviewFocusIntent({
     baseIntent,
     report,
@@ -606,6 +646,10 @@ export default function ComprehensiveReportPage() {
     const [highlightsLoading, setHighlightsLoading] = useState(false);
     const [highlightsUnavailableHint, setHighlightsUnavailableHint] = useState<string | null>(null);
     const [highlightReviewItems, setHighlightReviewItems] = useState<HighlightReviewItem[]>([]);
+    const [highlightReviewShares, setHighlightReviewShares] = useState<HighlightReviewShareSummary[]>([]);
+    const [highlightReviewSyncHint, setHighlightReviewSyncHint] = useState<string | null>(null);
+    const [highlightShareUrl, setHighlightShareUrl] = useState<string | null>(null);
+    const [highlightShareLoading, setHighlightShareLoading] = useState(false);
     const [retryHint, setRetryHint] = useState<string | null>(null);
 
     useEffect(() => {
