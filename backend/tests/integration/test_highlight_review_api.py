@@ -102,7 +102,6 @@ async def test_wecom_share_requires_consent_ttl_revoke_audit_and_desensitizes_pu
     monkeypatch,
 ):
     user, session, message = await _seed_user_session_and_highlight(test_db)
-    service = HighlightReviewService()
     monkeypatch.setenv(
         "GROWTH_WECOM_SHARE_POLICY_JSON",
         json.dumps(
@@ -115,6 +114,7 @@ async def test_wecom_share_requires_consent_ttl_revoke_audit_and_desensitizes_pu
             }
         ),
     )
+    service = HighlightReviewService()
 
     saved = await service.save_review(
         db=test_db,
