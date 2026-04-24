@@ -294,6 +294,15 @@ class GrowthCenterService:
         user_id: str,
     ) -> Result[dict[str, Any]]:
         try:
+            await self._refresh_active_rulesets(db=db)
+            if self.achievement_ruleset.get("enabled") is False:
+                return Result.ok(
+                    {
+                        "newly_unlocked": [],
+                        "ruleset_version": self.achievement_ruleset.get("version"),
+                        "ruleset_source": self.achievement_ruleset_source,
+                    }
+                )
             eligible_sessions = await self._eligible_sessions(db=db, user_id=user_id)
             definitions = await self._sync_achievement_definitions(db=db)
             newly_unlocked: list[dict[str, Any]] = []
@@ -346,6 +355,7 @@ class GrowthCenterService:
                 {
                     "newly_unlocked": newly_unlocked,
                     "ruleset_version": self.achievement_ruleset.get("version"),
+                    "ruleset_source": self.achievement_ruleset_source,
                 }
             )
         except (SQLAlchemyError, ValueError, TypeError, IntegrityError) as exc:
@@ -396,7 +406,11 @@ class GrowthCenterService:
         user_id: str,
     ) -> Result[dict[str, Any] | None]:
         try:
+            await self._refresh_active_rulesets(db=db)
             if self.ai_coach_ruleset.get("enabled") is False:
+                return Result.ok(None)
+            notification_template = self.ai_coach_ruleset.get("notification_template")
+            if not isinstance(notification_template, dict):
                 return Result.ok(None)
             eligible_sessions = await self._eligible_sessions(db=db, user_id=user_id, limit=10)
             if not eligible_sessions:
@@ -429,18 +443,37 @@ class GrowthCenterService:
                 return Result.ok(None)
 
             source = f"ai_coach:{latest.session_id}"
+            title_template = str(
+                notification_template.get("title_template")
+                or "AI 教练建议：先练{label}"
+            )
+            content_template = str(
+                notification_template.get("content_template")
+                or (
+                    "最近一次可评估训练中，{label}为 {score:.0f} 分，低于 "
+                    "{threshold:.0f} 分阈值。建议下一轮先做 10 分钟专项训练。"
+                )
+            )
+            action_path_template = str(
+                notification_template.get("action_path_template")
+                or "/practice/{source_session_id}/report"
+            )
+            template_args = {
+                "label": weakest["label"],
+                "score": weakest["score"],
+                "threshold": threshold,
+                "source_session_id": str(latest.session_id),
+            }
             notification = await self._create_notification_if_absent(
                 db=db,
                 user_id=user_id,
                 type_="ai_coach",
-                title=f"AI 教练建议：先练{weakest['label']}",
-                content=(
-                    f"最近一次可评估训练中，{weakest['label']}为 "
-                    f"{weakest['score']:.0f} 分，低于 {threshold:.0f} 分阈值。"
-                    "建议下一轮先做 10 分钟专项训练。"
+                title=title_template.format(**template_args),
+                content=content_template.format(**template_args),
+                action_label=str(
+                    notification_template.get("action_label") or "按建议训练"
                 ),
-                action_label="按建议训练",
-                action_path=f"/practice/{latest.session_id}/report",
+                action_path=action_path_template.format(**template_args),
                 source=source,
                 evidence={
                     "source_session_id": str(latest.session_id),
@@ -448,6 +481,7 @@ class GrowthCenterService:
                     "score": weakest["score"],
                     "threshold": threshold,
                     "ruleset_version": self.ai_coach_ruleset.get("version"),
+                    "ruleset_source": self.ai_coach_ruleset_source,
                 },
             )
             await db.commit()
@@ -634,6 +668,8 @@ class GrowthCenterService:
                     "rules": {
                         "achievement_ruleset_version": self.achievement_ruleset.get("version"),
                         "ai_coach_ruleset_version": self.ai_coach_ruleset.get("version"),
+                        "achievement_ruleset_source": self.achievement_ruleset_source,
+                        "ai_coach_ruleset_source": self.ai_coach_ruleset_source,
                     },
                 }
             )
