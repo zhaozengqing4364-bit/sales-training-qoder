@@ -2009,6 +2009,10 @@ export const api = {
             return result.agents || [];
         },
 
+        getActiveSalesCombinations: async () => {
+            return apiFetch<SalesCombinationRuleSet>("/business-rules/sales-combinations/active");
+        },
+
         createSession: async (data: {
             scenario_type: "sales" | "presentation";
             presentation_id?: string;
