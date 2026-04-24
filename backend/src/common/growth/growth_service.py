@@ -536,7 +536,7 @@ class GrowthCenterService:
             dimensions = [
                 item for item in self.ai_coach_ruleset.get("dimensions", []) if isinstance(item, dict)
             ]
-            scored_dimensions = []
+            scored_dimensions: list[dict[str, str | float]] = []
             for dimension in dimensions:
                 field = str(dimension.get("score_field") or "")
                 score = getattr(latest, field, None)
@@ -553,8 +553,9 @@ class GrowthCenterService:
             if not scored_dimensions:
                 return Result.ok(None)
 
-            weakest = min(scored_dimensions, key=lambda item: item["score"])
-            if weakest["score"] >= threshold:
+            weakest = min(scored_dimensions, key=lambda item: float(item["score"]))
+            weakest_score = float(weakest["score"])
+            if weakest_score >= threshold:
                 return Result.ok(None)
 
             source = f"ai_coach:{latest.session_id}"
@@ -575,7 +576,7 @@ class GrowthCenterService:
             )
             template_args = {
                 "label": weakest["label"],
-                "score": weakest["score"],
+                "score": weakest_score,
                 "threshold": threshold,
                 "source_session_id": str(latest.session_id),
             }
@@ -593,7 +594,7 @@ class GrowthCenterService:
                 evidence={
                     "source_session_id": str(latest.session_id),
                     "score_field": weakest["field"],
-                    "score": weakest["score"],
+                    "score": weakest_score,
                     "threshold": threshold,
                     "ruleset_version": self.ai_coach_ruleset.get("version"),
                     "ruleset_source": self.ai_coach_ruleset_source,

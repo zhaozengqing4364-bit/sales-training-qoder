@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -213,7 +213,7 @@ class BusinessRuleConfigService:
                 after_snapshot={"value": normalized},
                 reason="schema validation",
             )
-        return normalized
+        return cast(dict[str, Any], normalized)
 
     async def preview(
         self,
@@ -690,11 +690,13 @@ class BusinessRuleConfigService:
                     dict,
                 ),
             }
-        dimensions = value.get("dimensions") if isinstance(value.get("dimensions"), dict) else {}
+        recommendation_dimensions = (
+            value.get("dimensions") if isinstance(value.get("dimensions"), dict) else {}
+        )
         return {
             "enabled": value.get("enabled") is not False,
             "ruleset_version": value.get("version"),
-            "dimension_count": len(dimensions),
+            "dimension_count": len(recommendation_dimensions),
             "weak_score_threshold": value.get("weak_score_threshold"),
             "fallback_title": (value.get("fallback") or {}).get("title")
             if isinstance(value.get("fallback"), dict)
