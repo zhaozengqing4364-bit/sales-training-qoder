@@ -76,6 +76,7 @@ export interface GrowthDashboardResponse {
         unread_count: number;
     };
     goal: GrowthGoal | null;
+    adaptive_difficulty?: AdaptiveDifficultyDryRunResponse;
     rules?: {
         achievement_ruleset_version?: string | null;
         ai_coach_ruleset_version?: string | null;
