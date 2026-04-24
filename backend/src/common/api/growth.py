@@ -38,6 +38,25 @@ async def get_growth_dashboard(
     return success_response(result.value)
 
 
+@router.get("/adaptive-difficulty/dry-run")
+async def get_adaptive_difficulty_dry_run(
+    limit: int = 10,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await GrowthCenterService().get_adaptive_difficulty_dry_run(
+        db=db,
+        user_id=str(current_user.user_id),
+        limit=limit,
+    )
+    if not result.is_success:
+        return error_response(
+            "[ADAPTIVE_DRY_RUN_FAILED]",
+            "自适应难度 dry-run 暂时无法读取。",
+        )
+    return success_response(result.value)
+
+
 @router.get("/notifications")
 async def list_notifications(
     include_read: bool = False,
