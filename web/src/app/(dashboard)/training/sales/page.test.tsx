@@ -304,4 +304,76 @@ describe("SalesTrainingPage core combinations", () => {
         expect(screen.getByText("可选客户画像")).toBeTruthy();
         expect(screen.queryByText("发布中的智能体 0")).toBeNull();
     });
+
+    it("renders a valid admin-configured ruleset and keeps personalized priority inside the server list", async () => {
+        const focusIntent = {
+            version: "sales_retry_v1",
+            source_session_id: "session-previous",
+            main_issue: {
+                issue_type: "异议处理",
+                issue_text: "面对强势质疑型客户时异议处理不足。",
+                recovery_rule: "先复述质疑，再给证据。",
+            },
+            next_goal: {
+                goal_type: "异议处理",
+                goal_text: "下一轮练习异议处理 × 强势质疑型客户。",
+                rule: "retry",
+            },
+        };
+        getActiveSalesCombinationsMock.mockResolvedValueOnce({
+            rule_set_id: "sales-core",
+            version: "v2026.04",
+            status: "published",
+            effective_at: "2026-04-24T00:00:00.000Z",
+            fallback_policy: "client_default_v1",
+            audit_summary: {
+                published_by: "教研运营",
+                published_at: "2026-04-24T00:00:00.000Z",
+                reason: "上线核心组合后台配置",
+            },
+            combinations: [
+                {
+                    id: "server-price",
+                    capability: "需求挖掘",
+                    role: "价格敏感型客户",
+                    priority: 1,
+                    enabled: true,
+                },
+                {
+                    id: "server-objection",
+                    capability: "异议处理",
+                    role: "强势质疑型客户",
+                    priority: 2,
+                    enabled: true,
+                },
+            ],
+        });
+        getRecommendationMock.mockResolvedValueOnce({
+            title: "复练异议处理",
+            reason: "基于上次可评估销售报告。",
+            action_label: "按目标再练",
+            target_path: `/agents/agent-sales?persona_id=persona-cold&focus_intent=${encodeURIComponent(JSON.stringify(focusIntent))}`,
+            recommendation_kind: "sales_retry",
+            scenario_type: "sales",
+            source_session_id: "session-previous",
+        });
+
+        render(<SalesTrainingPage />);
+
+        expect(await screen.findByText("后台配置 · v2026.04")).toBeTruthy();
+        expect(await screen.findByRole("button", {
+            name: /组合 1\s+基于上次报告推荐\s+异议处理\s+客户角色：强势质疑型客户/,
+        })).toBeTruthy();
+        expect(screen.queryByText("推进下一步行动")).toBeNull();
+    });
+
+    it("uses the client fallback combinations when the active ruleset API fails", async () => {
+        getActiveSalesCombinationsMock.mockRejectedValueOnce(new Error("rules unavailable"));
+
+        render(<SalesTrainingPage />);
+
+        expect(await screen.findByText("后台组合配置读取失败，已使用前端安全兜底。 原因：rules unavailable")).toBeTruthy();
+        expect(screen.getByText("安全兜底 · client_default_v1")).toBeTruthy();
+        expect(screen.getByRole("button", { name: /组合 3\s+需求挖掘\s+客户角色：价格敏感型客户/ })).toBeTruthy();
+    });
 });
