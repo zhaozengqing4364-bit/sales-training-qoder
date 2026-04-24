@@ -339,8 +339,8 @@ export default function AdminSalesCombinationsPage() {
                         }}
                         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
                     >
-                        {[...(data?.drafts || []), ...(data?.active ? [data.active] : []), ...(data?.history || [])].map((ruleset) => (
-                            <option key={`${ruleset.status}-${ruleset.rule_set_id}`} value={ruleset.rule_set_id}>
+                        {[...(data?.drafts || []), ...(data?.active ? [data.active] : []), ...(data?.history || [])].map((ruleset, index) => (
+                            <option key={`${ruleset.status}-${ruleset.rule_set_id}-${index}`} value={ruleset.rule_set_id}>
                                 {ruleset.status} · {ruleset.version}
                             </option>
                         ))}
@@ -375,8 +375,8 @@ export default function AdminSalesCombinationsPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {(selectedRuleset?.combinations || []).map((rule) => (
-                                <tr key={rule.id} className="border-t border-slate-100">
+                            {(selectedRuleset?.combinations || []).map((rule, index) => (
+                                <tr key={`${rule.id}-${index}`} className="border-t border-slate-100">
                                     <td className="py-3 pr-3 font-bold text-slate-900">{rule.priority}</td>
                                     <td className="py-3 pr-3 font-mono text-xs text-slate-600">{rule.id}</td>
                                     <td className="py-3 pr-3 font-semibold text-slate-900">{rule.capability || "未填写"}</td>
@@ -442,8 +442,8 @@ export default function AdminSalesCombinationsPage() {
             <GlassCard className="space-y-4 p-6">
                 <h2 className="text-xl font-black text-slate-900">发布历史与审计</h2>
                 <div className="grid gap-3">
-                    {(data?.history || []).map((item) => (
-                        <div key={item.rule_set_id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white/80 p-4 md:flex-row md:items-center md:justify-between">
+                    {(data?.history || []).map((item, index) => (
+                        <div key={`${item.rule_set_id}-${item.version}-${index}`} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white/80 p-4 md:flex-row md:items-center md:justify-between">
                             <div>
                                 <div className="font-bold text-slate-900">{item.version}</div>
                                 <div className="mt-1 text-sm text-slate-600">

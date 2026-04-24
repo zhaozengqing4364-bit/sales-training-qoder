@@ -187,7 +187,7 @@ describe("AdminSalesCombinationsPage", () => {
         expect(screen.getByText("v1")).toBeTruthy();
         expect(screen.getByText(/发布人：admin-a/)).toBeTruthy();
         expect(screen.getByText(/原因：baseline/)).toBeTruthy();
-        expect(screen.getByText("v2-draft")).toBeTruthy();
+        expect(screen.getByText(/选中版本：v2-draft/)).toBeTruthy();
         expect(screen.getByText("trace: trace-history")).toBeTruthy();
         expect(screen.getByText(/publish · admin-a · v0 → v1 · baseline · trace trace-active/)).toBeTruthy();
     });
@@ -195,7 +195,7 @@ describe("AdminSalesCombinationsPage", () => {
     it("keeps preview read-only and leaves the active version unchanged", async () => {
         render(<AdminSalesCombinationsPage />);
 
-        await screen.findByText("v2-draft");
+        await screen.findByText(/选中版本：v2-draft/);
         fireEvent.click(screen.getByRole("button", { name: "预览覆盖率" }));
 
         expect(await screen.findByText(/预览完成；当前 active 仍为 v1/)).toBeTruthy();
@@ -257,7 +257,7 @@ describe("AdminSalesCombinationsPage", () => {
     it("surfaces publish and rollback audit fields returned by the backend", async () => {
         render(<AdminSalesCombinationsPage />);
 
-        await screen.findByText("v2-draft");
+        await screen.findByText(/选中版本：v2-draft/);
         fireEvent.change(screen.getByPlaceholderText("发布/回滚原因（必填，将进入审计记录）"), {
             target: { value: "publish reason" },
         });
