@@ -589,6 +589,18 @@ def _get_status_code(error_code: str) -> int:
         "[SESSION_NOT_FOUND]": 404,
         "[MESSAGE_NOT_FOUND]": 404,
         "[AUDIO_NOT_AVAILABLE]": 404,
+        "[ACCESS_DENIED]": 403,
+        "[HIGHLIGHT_MESSAGE_NOT_FOUND]": 404,
+        "[HIGHLIGHT_REVIEW_NOT_FOUND]": 404,
+        "[HIGHLIGHT_SHARE_NOT_FOUND]": 404,
+        "[HIGHLIGHT_REVIEW_EMPTY]": 400,
+        "[HIGHLIGHT_REVIEW_SAVE_FAILED]": 500,
+        "[HIGHLIGHT_SHARE_CREATE_FAILED]": 500,
+        "[HIGHLIGHT_SHARE_REVOKE_FAILED]": 500,
+        "[HIGHLIGHT_SHARE_INACTIVE]": 410,
+        "[SHARE_CHANNEL_UNSUPPORTED]": 400,
+        "[SHARE_CONSENT_REQUIRED]": 400,
+        "[WECOM_SHARE_NOT_AVAILABLE]": 403,
         "[SESSION_NOT_COMPLETED]": 400,
     }
     return status_map.get(error_code, 500)
