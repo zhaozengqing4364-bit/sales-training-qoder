@@ -51,8 +51,12 @@ def test_env_choice_should_return_default_when_invalid(monkeypatch) -> None:
     )
 
 
-def test_config_module_should_define_each_env_helper_once() -> None:
+def test_config_module_should_define_only_current_env_helpers_once() -> None:
     source = inspect.getsource(config)
 
     assert source.count("def _env_int(") == 1
     assert source.count("def _env_choice(") == 1
+    assert not hasattr(config, "_get_int_env")
+    assert not hasattr(config, "_get_enum_env")
+    assert "def _get_int_env(" not in source
+    assert "def _get_enum_env(" not in source

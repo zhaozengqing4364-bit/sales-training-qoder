@@ -3,7 +3,6 @@ Application Configuration
 Centralized configuration management for the AI Practice System
 """
 
-import logging
 import os
 from pathlib import Path
 
@@ -11,60 +10,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
-
-logger = logging.getLogger(__name__)
-
-
-def _get_int_env(
-    name: str,
-    default: int,
-    *,
-    min_value: int,
-    max_value: int,
-) -> int:
-    """Read a bounded integer env var, falling back safely on bad values."""
-    raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
-        return default
-
-    try:
-        value = int(raw)
-    except ValueError:
-        logger.warning("Invalid integer env %s=%r; using default %s", name, raw, default)
-        return default
-
-    if value < min_value or value > max_value:
-        logger.warning(
-            "Out-of-range integer env %s=%r; expected %s-%s; using default %s",
-            name,
-            raw,
-            min_value,
-            max_value,
-            default,
-        )
-        return default
-
-    return value
-
-
-def _get_enum_env(name: str, default: str, allowed_values: set[str]) -> str:
-    """Read an enum env var with allowlist validation."""
-    raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
-        return default
-
-    value = raw.strip()
-    if value not in allowed_values:
-        logger.warning(
-            "Invalid enum env %s=%r; allowed=%s; using default %s",
-            name,
-            raw,
-            sorted(allowed_values),
-            default,
-        )
-        return default
-
-    return value
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
