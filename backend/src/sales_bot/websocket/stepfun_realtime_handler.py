@@ -191,7 +191,7 @@ class StepFunRealtimeHandler(
     BINARY_AUDIO_CHUNK = 0x01
     BINARY_AUDIO_INTERRUPT = 0x02
 
-    def __init__(self):
+        def __init__(self):
             super().__init__("sales")
             self.upstream_ws = None
             self._upstream_task: asyncio.Task | None = None
@@ -366,7 +366,7 @@ class StepFunRealtimeHandler(
             self._last_runtime_error: dict[str, str] | None = None
             self._transcript_normalization_service = TranscriptNormalizationService()
 
-    async def _load_effective_policy(self):
+        async def _load_effective_policy(self):
             """Load effective voice policy from session snapshot or resolver service."""
             self._effective_policy = {}
             async with AsyncSessionLocal() as db:
@@ -480,7 +480,7 @@ class StepFunRealtimeHandler(
                     knowledge_base_count=len(knowledge_base_ids),
                 )
 
-    async def _refresh_sales_stage_runtime_config(self, db) -> None:
+        async def _refresh_sales_stage_runtime_config(self, db) -> None:
             """Load stage runtime config from Agent/Persona and rebuild capability."""
             agent_capabilities_config: dict[str, Any] = {}
             persona_behavior_config: dict[str, Any] = {}
@@ -600,7 +600,7 @@ class StepFunRealtimeHandler(
             self._latest_action_card = None
             self._feedback_pacing_state = RealtimeFeedbackPacingState()
 
-    async def _sync_session_state(self):
+        async def _sync_session_state(self):
             if not self.session_id:
                 return
 
@@ -617,7 +617,7 @@ class StepFunRealtimeHandler(
             except (RuntimeError, ValueError, OSError) as exc:
                 logger.warning(f"Failed to sync StepFun lifecycle state: {exc}")
 
-    async def _apply_lifecycle_action(self, action: SessionLifecycleAction):
+        async def _apply_lifecycle_action(self, action: SessionLifecycleAction):
             if not self.session_id:
                 return None
 
@@ -661,7 +661,7 @@ class StepFunRealtimeHandler(
                 await self._send_error("[SESSION_LIFECYCLE_FAILED]", "会话状态更新失败")
                 return None
 
-    async def _run_kb_lock_warmup(self, kb_ids: list[str]) -> None:
+        async def _run_kb_lock_warmup(self, kb_ids: list[str]) -> None:
             started_at = asyncio.get_running_loop().time()
             chromadb_warmed = False
             embedding_client_warmed = False
@@ -700,7 +700,7 @@ class StepFunRealtimeHandler(
                     embedding_client_warmed=embedding_client_warmed,
                 )
 
-    async def _pending_response_timeout_fallback(
+        async def _pending_response_timeout_fallback(
             self, expected_generation: int | None = None
         ) -> None:
             try:
@@ -769,7 +769,7 @@ class StepFunRealtimeHandler(
             except asyncio.CancelledError:
                 return
 
-    async def _recover_upstream_after_disconnect(
+        async def _recover_upstream_after_disconnect(
             self,
             *,
             close_code: Any,
@@ -829,7 +829,7 @@ class StepFunRealtimeHandler(
 
             return False
 
-    async def _tool_search_internal_knowledge(
+        async def _tool_search_internal_knowledge(
             self, arguments_obj: dict[str, Any]
         ) -> dict[str, Any]:
             """Search internal knowledge bases bound to current policy."""
@@ -913,7 +913,7 @@ class StepFunRealtimeHandler(
             output.pop("_diagnostics", None)
             return output
 
-    async def _record_knowledge_runtime_metric(
+        async def _record_knowledge_runtime_metric(
             self,
             *,
             query: str,
@@ -945,7 +945,7 @@ class StepFunRealtimeHandler(
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"Failed to record knowledge runtime metric: {exc}")
 
-    async def _persist_runtime_metrics_to_session(self) -> None:
+        async def _persist_runtime_metrics_to_session(self) -> None:
             """Persist in-memory runtime metrics to practice_sessions.voice_policy_snapshot."""
             await persist_runtime_metrics_to_session(
                 session_id=self.session_id,

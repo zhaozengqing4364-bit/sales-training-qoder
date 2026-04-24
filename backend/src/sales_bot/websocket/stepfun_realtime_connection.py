@@ -163,13 +163,15 @@ logger = get_logger(__name__)
 
 
 class StepFunRealtimeConnectionMixin:
-    def _normalize_connection_epoch(value: Any) -> int:
+        @staticmethod
+        def _normalize_connection_epoch(value: Any) -> int:
             try:
                 return max(0, int(value))
             except (TypeError, ValueError):
                 return 0
 
-    def _copy_runtime_error(value: Any) -> dict[str, str] | None:
+        @staticmethod
+        def _copy_runtime_error(value: Any) -> dict[str, str] | None:
             if not isinstance(value, dict):
                 return None
             code = str(value.get("code") or "").strip()
@@ -181,7 +183,7 @@ class StepFunRealtimeConnectionMixin:
                 "message": message,
             }
 
-    def _build_reconnect_state_payload(self) -> dict[str, Any]:
+        def _build_reconnect_state_payload(self) -> dict[str, Any]:
             return {
                 "connection_epoch": self._normalize_connection_epoch(
                     self._connection_epoch
@@ -191,12 +193,12 @@ class StepFunRealtimeConnectionMixin:
                 "last_error": self._copy_runtime_error(self._last_runtime_error),
             }
 
-    def _record_disconnect_reason(self, reason: str | None) -> None:
+        def _record_disconnect_reason(self, reason: str | None) -> None:
             normalized = str(reason or "").strip()
             if normalized:
                 self._last_disconnect_reason = normalized
 
-    def _record_runtime_error(self, code: str, message: str) -> None:
+        def _record_runtime_error(self, code: str, message: str) -> None:
             self._last_runtime_error = self._copy_runtime_error(
                 {
                     "code": code,
@@ -204,7 +206,7 @@ class StepFunRealtimeConnectionMixin:
                 }
             )
 
-    def _reset_turn_runtime_state(self) -> None:
+        def _reset_turn_runtime_state(self) -> None:
             """Clear turn-scoped state that must not leak across reconnects or interrupts."""
             self._pending_grounding_context = ""
             self._pending_blocked_response_text = ""
@@ -217,14 +219,14 @@ class StepFunRealtimeConnectionMixin:
             self._function_call_states.clear()
             self._executed_call_ids.clear()
 
-    async def _clear_upstream_generation(self) -> None:
+        async def _clear_upstream_generation(self) -> None:
             """Abort any active upstream response and clear buffered audio input."""
             if self.upstream_ws is None:
                 return
             await self._send_upstream({"type": "response.cancel"})
             await self._send_upstream({"type": "input_audio_buffer.clear"})
 
-    def _log_grounding_debug(self, event: str, **fields: Any) -> None:
+        def _log_grounding_debug(self, event: str, **fields: Any) -> None:
             if not self._grounding_debug_log:
                 return
             logger.info(
@@ -233,7 +235,7 @@ class StepFunRealtimeConnectionMixin:
                 **fields,
             )
 
-    def _log_latency_debug(self, event: str, **fields: Any) -> None:
+        def _log_latency_debug(self, event: str, **fields: Any) -> None:
             if not self._latency_debug_log:
                 return
             logger.info(
@@ -242,12 +244,12 @@ class StepFunRealtimeConnectionMixin:
                 **fields,
             )
 
-    def _is_auto_kb_lock_default_enabled(self) -> bool:
+        def _is_auto_kb_lock_default_enabled(self) -> bool:
             return str(
                 os.getenv("PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND", "true")
             ).strip().lower() in {"1", "true", "yes", "on"}
 
-    def _has_explicit_persona_kb_lock_flag(self, policy: dict[str, Any]) -> bool:
+        def _has_explicit_persona_kb_lock_flag(self, policy: dict[str, Any]) -> bool:
             persona_policy = policy.get("persona_policy")
             if not isinstance(persona_policy, dict):
                 return False
@@ -256,13 +258,13 @@ class StepFunRealtimeConnectionMixin:
                 return False
             return "require_kb_grounding" in persona_tool_policy
 
-    def _is_kb_lock_required_for_current_policy(self) -> bool:
+        def _is_kb_lock_required_for_current_policy(self) -> bool:
             tool_policy = self._effective_policy.get("tool_policy")
             if not isinstance(tool_policy, dict):
                 return False
             return bool(tool_policy.get("require_kb_grounding", False))
 
-    def _resolve_answerability_mode(self) -> tuple[str, dict[str, Any] | None]:
+        def _resolve_answerability_mode(self) -> tuple[str, dict[str, Any] | None]:
             diagnostics = self._latest_knowledge_answer_diagnostics
             if not isinstance(diagnostics, dict):
                 return "default", None
@@ -283,7 +285,8 @@ class StepFunRealtimeConnectionMixin:
                 return "ungrounded", diagnostics
             return "grounded", diagnostics
 
-    def _build_answerability_instruction_overlay(
+        @staticmethod
+        def _build_answerability_instruction_overlay(
             mode: str,
             diagnostics: dict[str, Any] | None,
         ) -> str:
@@ -326,7 +329,7 @@ class StepFunRealtimeConnectionMixin:
                 )
             return ""
 
-    def _build_blocked_response_from_answerability(
+        def _build_blocked_response_from_answerability(
             self,
             diagnostics: dict[str, Any] | None,
         ) -> str:
@@ -339,7 +342,8 @@ class StepFunRealtimeConnectionMixin:
                 return "当前内部知识检索失败，暂时无法基于内部资料安全回答。请稍后重试。"
             return "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
 
-    def _split_response_sentences(text: str) -> list[str]:
+        @staticmethod
+        def _split_response_sentences(text: str) -> list[str]:
             normalized = str(text or "").strip()
             if not normalized:
                 return []
@@ -347,7 +351,7 @@ class StepFunRealtimeConnectionMixin:
             cleaned = [sentence.strip() for sentence in sentences if sentence.strip()]
             return cleaned or [normalized]
 
-    def _apply_answerability_output_guard(self, response_text: str) -> str:
+        def _apply_answerability_output_guard(self, response_text: str) -> str:
             diagnostics = self._latest_knowledge_answer_diagnostics
             if not isinstance(diagnostics, dict):
                 return response_text
@@ -389,20 +393,20 @@ class StepFunRealtimeConnectionMixin:
                 return "".join(kept_sentences)
             return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
 
-    def _get_effective_tool_policy(self) -> dict[str, Any]:
+        def _get_effective_tool_policy(self) -> dict[str, Any]:
             tool_policy = self._effective_policy.get("tool_policy")
             if isinstance(tool_policy, dict):
                 return tool_policy
             return {}
 
-    def _get_max_questions_per_turn(self) -> int:
+        def _get_max_questions_per_turn(self) -> int:
             raw_value = self._get_effective_tool_policy().get("max_questions_per_turn", 1)
             try:
                 return max(1, int(raw_value))
             except (TypeError, ValueError):
                 return 1
 
-    def _normalize_transcript(
+        def _normalize_transcript(
             self,
             text: str,
             *,
@@ -414,7 +418,8 @@ class StepFunRealtimeConnectionMixin:
                 is_final=is_final,
             )
 
-    def _build_transcript_metadata(
+        @staticmethod
+        def _build_transcript_metadata(
             normalization_result: TranscriptNormalizationResult,
             *,
             extras: dict[str, Any] | None = None,
@@ -428,7 +433,8 @@ class StepFunRealtimeConnectionMixin:
                 metadata.update(extras)
             return metadata
 
-    def _resolve_grounding_prefetch_timeout_seconds_from_env() -> float:
+        @staticmethod
+        def _resolve_grounding_prefetch_timeout_seconds_from_env() -> float:
             raw_timeout = os.getenv(
                 "STEPFUN_GROUNDING_PREFETCH_TIMEOUT_MS",
                 str(DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS),
@@ -440,7 +446,8 @@ class StepFunRealtimeConnectionMixin:
             timeout_ms = max(0, min(5000, timeout_ms))
             return timeout_ms / 1000.0
 
-    def _resolve_kb_lock_decision_timeout_seconds_from_env() -> float:
+        @staticmethod
+        def _resolve_kb_lock_decision_timeout_seconds_from_env() -> float:
             raw_timeout = os.getenv(
                 "STEPFUN_KB_LOCK_DECISION_TIMEOUT_MS",
                 str(DEFAULT_KB_LOCK_DECISION_TIMEOUT_MS),
@@ -452,7 +459,8 @@ class StepFunRealtimeConnectionMixin:
             timeout_ms = max(100, min(8000, timeout_ms))
             return timeout_ms / 1000.0
 
-    def _resolve_internal_retrieval_cache_ttl_seconds_from_env() -> float:
+        @staticmethod
+        def _resolve_internal_retrieval_cache_ttl_seconds_from_env() -> float:
             raw_timeout = os.getenv(
                 "STEPFUN_INTERNAL_RETRIEVAL_CACHE_TTL_MS",
                 str(DEFAULT_INTERNAL_RETRIEVAL_CACHE_TTL_MS),
@@ -464,7 +472,8 @@ class StepFunRealtimeConnectionMixin:
             timeout_ms = max(0, min(30000, timeout_ms))
             return timeout_ms / 1000.0
 
-    def _resolve_internal_retrieval_cache_max_entries_from_env() -> int:
+        @staticmethod
+        def _resolve_internal_retrieval_cache_max_entries_from_env() -> int:
             raw_limit = os.getenv(
                 "STEPFUN_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES",
                 str(DEFAULT_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES),
@@ -475,28 +484,32 @@ class StepFunRealtimeConnectionMixin:
                 limit = DEFAULT_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES
             return max(16, min(1024, limit))
 
-    def _resolve_kb_lock_warmup_enabled_from_env() -> bool:
+        @staticmethod
+        def _resolve_kb_lock_warmup_enabled_from_env() -> bool:
             raw_value = os.getenv(
                 "STEPFUN_KB_LOCK_WARMUP_ENABLED",
                 "true" if DEFAULT_KB_LOCK_WARMUP_ENABLED else "false",
             )
             return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
-    def _resolve_upstream_auto_recover_enabled_from_env() -> bool:
+        @staticmethod
+        def _resolve_upstream_auto_recover_enabled_from_env() -> bool:
             raw_value = os.getenv(
                 "STEPFUN_UPSTREAM_AUTO_RECOVER_ENABLED",
                 "true" if DEFAULT_UPSTREAM_AUTO_RECOVER_ENABLED else "false",
             )
             return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
-    def _resolve_upstream_keepalive_enabled_from_env() -> bool:
+        @staticmethod
+        def _resolve_upstream_keepalive_enabled_from_env() -> bool:
             raw_value = os.getenv(
                 "STEPFUN_UPSTREAM_KEEPALIVE_ENABLED",
                 "true" if DEFAULT_UPSTREAM_KEEPALIVE_ENABLED else "false",
             )
             return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
-    def _resolve_upstream_auto_recover_max_retries_from_env() -> int:
+        @staticmethod
+        def _resolve_upstream_auto_recover_max_retries_from_env() -> int:
             raw_value = os.getenv(
                 "STEPFUN_UPSTREAM_AUTO_RECOVER_MAX_RETRIES",
                 str(DEFAULT_UPSTREAM_AUTO_RECOVER_MAX_RETRIES),
@@ -507,7 +520,8 @@ class StepFunRealtimeConnectionMixin:
                 retries = DEFAULT_UPSTREAM_AUTO_RECOVER_MAX_RETRIES
             return max(0, min(10, retries))
 
-    def _resolve_upstream_auto_recover_delay_seconds_from_env(
+        @staticmethod
+        def _resolve_upstream_auto_recover_delay_seconds_from_env(
             name: str,
             *,
             default_ms: int,
@@ -522,15 +536,15 @@ class StepFunRealtimeConnectionMixin:
             delay_ms = max(min_ms, min(max_ms, delay_ms))
             return delay_ms / 1000.0
 
-    async def _touch_session_activity(self) -> None:
+        async def _touch_session_activity(self) -> None:
             """Refresh SessionManager activity for reconnect/timeout decisions."""
             if self.session_id:
                 await get_session_manager().update_activity(self.session_id)
 
-    def _mark_upstream_activity(self) -> None:
+        def _mark_upstream_activity(self) -> None:
             self._upstream_last_activity_at = asyncio.get_running_loop().time()
 
-    async def _stop_upstream_keepalive_task(self) -> None:
+        async def _stop_upstream_keepalive_task(self) -> None:
             keepalive_task = self._upstream_keepalive_task
             self._upstream_keepalive_task = None
             if keepalive_task and not keepalive_task.done():
@@ -540,7 +554,7 @@ class StepFunRealtimeConnectionMixin:
                 except asyncio.CancelledError:
                     pass
 
-    def _ensure_upstream_keepalive_task(self) -> None:
+        def _ensure_upstream_keepalive_task(self) -> None:
             if (
                 not self._upstream_keepalive_enabled
                 or self.upstream_ws is None
@@ -553,7 +567,7 @@ class StepFunRealtimeConnectionMixin:
                 self._run_upstream_keepalive_loop(self.upstream_ws)
             )
 
-    async def _send_upstream_keepalive_ping(self, upstream_ws: Any) -> None:
+        async def _send_upstream_keepalive_ping(self, upstream_ws: Any) -> None:
             ping = getattr(upstream_ws, "ping", None)
             if not callable(ping):
                 return
@@ -568,7 +582,7 @@ class StepFunRealtimeConnectionMixin:
                     timeout=self._upstream_keepalive_pong_timeout_seconds,
                 )
 
-    async def _run_upstream_keepalive_loop(self, upstream_ws: Any) -> None:
+        async def _run_upstream_keepalive_loop(self, upstream_ws: Any) -> None:
             while self.running and self.upstream_ws is upstream_ws:
                 await asyncio.sleep(self._upstream_keepalive_interval_seconds)
                 if self.upstream_ws is not upstream_ws:
@@ -595,7 +609,7 @@ class StepFunRealtimeConnectionMixin:
                     )
                     break
 
-    def _create_state_snapshot(self) -> SessionStateSnapshot:
+        def _create_state_snapshot(self) -> SessionStateSnapshot:
             """Persist only reconnect-safe runtime fields for StepFun sales sessions."""
             runtime_state: dict[str, Any] = {}
             if self.current_request_id:
@@ -644,7 +658,7 @@ class StepFunRealtimeConnectionMixin:
                 user_id=self.user_id,
             )
 
-    async def _restore_session_state(self, state: SessionStateSnapshot):
+        async def _restore_session_state(self, state: SessionStateSnapshot):
             """Restore the minimal StepFun runtime subset required to continue training."""
             await super()._restore_session_state(state)
 
@@ -727,7 +741,7 @@ class StepFunRealtimeConnectionMixin:
             )
             await self._send_reconnection_success(self._create_state_snapshot())
 
-    async def _save_session_state(self):
+        async def _save_session_state(self):
             """Persist reconnectable state, or clear dirty snapshots after terminal exits."""
             if not self.session_id:
                 return
@@ -772,7 +786,7 @@ class StepFunRealtimeConnectionMixin:
                     error=result.fallback,
                 )
 
-    async def send_message(self, message: dict):
+        async def send_message(self, message: dict):
             """Send SessionManager notifications with reconnect diagnostics."""
             websocket = self._get_active_websocket()
             if not websocket:
@@ -797,7 +811,7 @@ class StepFunRealtimeConnectionMixin:
 
             await self.manager.send_json(websocket, outbound)
 
-    async def handle_connection(
+        async def handle_connection(
             self,
             websocket: WebSocket,
             session_id: str,

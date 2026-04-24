@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+@dataclass
 class RealtimeResponseState:
     """Tracks one active model response stream."""
 
@@ -18,6 +19,7 @@ class RealtimeResponseState:
     question_limit_enforced: bool = False
 
 
+@dataclass
 class FunctionCallState:
     """Tracks arguments streaming for one tool call."""
 

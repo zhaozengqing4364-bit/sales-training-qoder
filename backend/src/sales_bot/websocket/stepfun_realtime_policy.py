@@ -163,7 +163,8 @@ logger = get_logger(__name__)
 
 
 class StepFunRealtimePolicyMixin:
-    def _normalize_kb_ids(raw_kb_ids: Any) -> list[str]:
+        @staticmethod
+        def _normalize_kb_ids(raw_kb_ids: Any) -> list[str]:
             if not isinstance(raw_kb_ids, list):
                 return []
             normalized: list[str] = []
@@ -174,7 +175,8 @@ class StepFunRealtimePolicyMixin:
                 normalized.append(kb_id)
             return sorted(set(normalized))
 
-    def _build_policy_core_signature(cls, policy: dict[str, Any]) -> dict[str, Any]:
+        @classmethod
+        def _build_policy_core_signature(cls, policy: dict[str, Any]) -> dict[str, Any]:
             tool_policy = policy.get("tool_policy")
             if not isinstance(tool_policy, dict):
                 tool_policy = {}
@@ -207,7 +209,8 @@ class StepFunRealtimePolicyMixin:
                 },
             }
 
-    def _is_policy_snapshot_stale(
+        @classmethod
+        def _is_policy_snapshot_stale(
             cls,
             *,
             snapshot: dict[str, Any],
@@ -217,7 +220,8 @@ class StepFunRealtimePolicyMixin:
             resolved_signature = cls._build_policy_core_signature(resolved_policy)
             return snapshot_signature != resolved_signature
 
-    def _merge_resolved_policy_with_snapshot_overlays(
+        @staticmethod
+        def _merge_resolved_policy_with_snapshot_overlays(
             *,
             resolved_policy: dict[str, Any],
             snapshot: dict[str, Any],
@@ -232,7 +236,7 @@ class StepFunRealtimePolicyMixin:
                 )
             return merged_policy
 
-    def _enforce_tool_policy_guardrails(self) -> bool:
+        def _enforce_tool_policy_guardrails(self) -> bool:
             policy = self._effective_policy
             if not isinstance(policy, dict):
                 self._effective_policy = {}
@@ -449,7 +453,8 @@ class StepFunRealtimePolicyMixin:
             )
             return True
 
-    def _merge_sales_stage_runtime_config(
+        @staticmethod
+        def _merge_sales_stage_runtime_config(
             agent_capabilities_config: Any,
             persona_behavior_config: Any,
         ) -> dict[str, Any]:
@@ -468,7 +473,8 @@ class StepFunRealtimePolicyMixin:
 
             return merged
 
-    def _merge_capability_runtime_config(
+        @staticmethod
+        def _merge_capability_runtime_config(
             *,
             capability_key: str,
             agent_capabilities_config: Any,
@@ -492,7 +498,7 @@ class StepFunRealtimePolicyMixin:
 
             return merged
 
-    def _apply_latest_scores_to_session(self, session: PracticeSession) -> None:
+        def _apply_latest_scores_to_session(self, session: PracticeSession) -> None:
             """Sync latest realtime score snapshot into session-level score fields."""
             normalized_score_snapshot = normalize_score_snapshot(
                 self._latest_score_snapshot
@@ -571,7 +577,7 @@ class StepFunRealtimePolicyMixin:
                     turn_count=max(0, self.turn_count),
                 )
 
-    async def _ensure_input_allowed(self, msg_type: str) -> bool:
+        async def _ensure_input_allowed(self, msg_type: str) -> bool:
             if SessionLifecycleService.is_input_allowed(self.session_status):
                 return True
 
@@ -589,7 +595,7 @@ class StepFunRealtimePolicyMixin:
             await self._send_status("idle")
             return False
 
-    async def _connect_upstream(self):
+        async def _connect_upstream(self):
             """Connect to StepFun realtime WebSocket and initialize session."""
             query = urlencode({"model": self._stepfun_model})
             endpoint = f"{self._stepfun_url}?{query}"
@@ -660,7 +666,7 @@ class StepFunRealtimePolicyMixin:
             logger.info("StepFun session.update sent")
             await self._maybe_start_kb_lock_warmup()
 
-    async def _close_upstream(self):
+        async def _close_upstream(self):
             """Close upstream connection safely."""
             await self._stop_upstream_keepalive_task()
             if self.upstream_ws:
@@ -672,7 +678,7 @@ class StepFunRealtimePolicyMixin:
             self._upstream_connected_at = 0.0
             self._upstream_last_activity_at = 0.0
 
-    async def _maybe_start_kb_lock_warmup(self) -> None:
+        async def _maybe_start_kb_lock_warmup(self) -> None:
             if not self._kb_lock_warmup_enabled:
                 return
             tool_policy = self._effective_policy.get("tool_policy")
@@ -695,7 +701,7 @@ class StepFunRealtimePolicyMixin:
                 self._run_kb_lock_warmup(normalized_kb_ids)
             )
 
-    async def _handle_client_text(self, raw_text: str):
+        async def _handle_client_text(self, raw_text: str):
             """Parse and route frontend JSON messages."""
             try:
                 message = json.loads(raw_text)
@@ -855,7 +861,7 @@ class StepFunRealtimePolicyMixin:
                     },
                 )
 
-    async def _handle_binary_frame(self, data: bytes):
+        async def _handle_binary_frame(self, data: bytes):
             """Handle binary audio frames from frontend."""
             if len(data) < 2:
                 return
@@ -879,7 +885,7 @@ class StepFunRealtimePolicyMixin:
             )
             self._has_uncommitted_audio = True
 
-    async def _ensure_feedback_context(self) -> None:
+        async def _ensure_feedback_context(self) -> None:
             """Initialize context used by fuzzy detection and realtime scoring."""
             if self._feedback_context is not None:
                 return
@@ -913,7 +919,7 @@ class StepFunRealtimePolicyMixin:
                     self._feedback_context
                 )
 
-    async def _send_fuzzy_detection(self, detections: list[dict[str, Any]]) -> None:
+        async def _send_fuzzy_detection(self, detections: list[dict[str, Any]]) -> None:
             if not detections:
                 return
             await self.manager.send_json(
@@ -926,7 +932,7 @@ class StepFunRealtimePolicyMixin:
                 },
             )
 
-    async def _send_score_update(
+        async def _send_score_update(
             self,
             *,
             turn_number: int,
@@ -968,7 +974,7 @@ class StepFunRealtimePolicyMixin:
                 },
             )
 
-    async def _send_action_card(self, card: ActionCard) -> None:
+        async def _send_action_card(self, card: ActionCard) -> None:
             """Send one actionable card for the next turn."""
             await self.manager.send_json(
                 self.websocket,
@@ -980,24 +986,26 @@ class StepFunRealtimePolicyMixin:
                 },
             )
 
-    def _format_stage_name(stage_id: str | None) -> str:
+        @staticmethod
+        def _format_stage_name(stage_id: str | None) -> str:
             return format_stage_name(stage_id)
 
-    def _coach_health_message(status: str) -> str:
+        @staticmethod
+        def _coach_health_message(status: str) -> str:
             if status == "degraded":
                 return "实时辅导暂不可用，训练仍可继续。"
             if status == "resumed":
                 return "实时辅导已恢复，后续建议会继续更新。"
             return "实时辅导正常。"
 
-    def _coach_health_payload(self) -> dict[str, Any]:
+        def _coach_health_payload(self) -> dict[str, Any]:
             return {
                 "status": self._coach_health,
                 "reason": self._coach_health_reason,
                 "message": self._coach_health_message(self._coach_health),
             }
 
-    def get_runtime_diagnostics(self) -> dict[str, Any]:
+        def get_runtime_diagnostics(self) -> dict[str, Any]:
             live_session_summary = coerce_live_session_conclusion_summary(
                 self._latest_live_session_summary
             )
@@ -1039,7 +1047,7 @@ class StepFunRealtimePolicyMixin:
                 "runtime_events": runtime_events,
             }
 
-    async def _send_coach_health(self) -> None:
+        async def _send_coach_health(self) -> None:
             await self.manager.send_json(
                 self.websocket,
                 {
@@ -1050,7 +1058,7 @@ class StepFunRealtimePolicyMixin:
                 },
             )
 
-    async def _set_coach_health(self, status: str, reason: str | None = None) -> None:
+        async def _set_coach_health(self, status: str, reason: str | None = None) -> None:
             normalized_reason = (
                 reason.strip() if isinstance(reason, str) and reason.strip() else None
             )
@@ -1063,7 +1071,7 @@ class StepFunRealtimePolicyMixin:
             self._coach_health_reason = normalized_reason
             await self._send_coach_health()
 
-    async def _run_realtime_feedback(
+        async def _run_realtime_feedback(
             self,
             *,
             user_text: str,
@@ -1335,7 +1343,7 @@ class StepFunRealtimePolicyMixin:
             self._feedback_context.add_message(role="user", content=text)
             return analysis_data
 
-    async def _prepare_grounding_context(self, query: str) -> None:
+        async def _prepare_grounding_context(self, query: str) -> None:
             """
             Pre-fetch internal knowledge for the current user turn.
 
@@ -1716,7 +1724,7 @@ class StepFunRealtimePolicyMixin:
                 answerability_mode=answerability_mode,
             )
 
-    async def _schedule_response_after_commit(self) -> None:
+        async def _schedule_response_after_commit(self) -> None:
             """
             Schedule response creation after audio commit.
 
@@ -1740,7 +1748,7 @@ class StepFunRealtimePolicyMixin:
             if timeout_task:
                 timeout_task.cancel()
 
-    async def _cancel_pending_response_after_commit(self) -> None:
+        async def _cancel_pending_response_after_commit(self) -> None:
             async with self._pending_response_lock:
                 self._pending_response_after_commit = False
                 self._awaiting_transcription_after_commit = False
@@ -1753,7 +1761,7 @@ class StepFunRealtimePolicyMixin:
             if timeout_task:
                 timeout_task.cancel()
 
-    async def _create_response_from_pending_commit(
+        async def _create_response_from_pending_commit(
             self, expected_generation: int | None = None
         ) -> bool:
             async with self._pending_response_lock:
