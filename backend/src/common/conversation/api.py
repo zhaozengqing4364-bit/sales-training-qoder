@@ -66,6 +66,169 @@ async def _ensure_session_access(
     return None
 
 
+@router.get(
+    "/highlight-reviews/shared/{token}",
+    response_model=SharedHighlightReviewSuccessResponse,
+    responses={
+        404: {"model": ConversationErrorResponse, "description": "Share not found"},
+        410: {
+            "model": ConversationErrorResponse,
+            "description": "Share expired or revoked",
+        },
+    },
+)
+async def get_shared_highlight_review(
+    token: str,
+    request: Request,
+    viewer: str | None = Query(None, max_length=120),
+    db: AsyncSession = Depends(get_db),
+):
+    """Public token-gated readonly share endpoint for the internal WeCom pilot."""
+    client_host = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent", "")
+    result = await HighlightReviewService().get_shared_review(
+        db=db,
+        token=token,
+        viewer_label=viewer,
+        client_hint=f"{client_host}|{user_agent}",
+    )
+    if not result.is_success:
+        error_code = _extract_error_code(
+            result.fallback or "[HIGHLIGHT_SHARE_NOT_FOUND]"
+        )
+        return _error_response(
+            _get_status_code(error_code),
+            error_code,
+            "分享链接不存在、已过期或已撤销。",
+        )
+    return _success_response(result.value or {})
+
+
+@router.get(
+    "/{session_id}/highlight-review",
+    response_model=HighlightReviewSuccessResponse,
+)
+async def get_highlight_review(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read the current user's persisted highlight review list for a session."""
+    result = await HighlightReviewService().get_review(
+        db=db,
+        session_id=session_id,
+        current_user=current_user,
+    )
+    if not result.is_success:
+        error_code = _extract_error_code(
+            result.fallback or "[HIGHLIGHT_REVIEW_FAILED]"
+        )
+        return _error_response(
+            _get_status_code(error_code), error_code, "高光复习清单暂不可用。"
+        )
+    return _success_response(result.value)
+
+
+@router.put(
+    "/{session_id}/highlight-review",
+    response_model=HighlightReviewSuccessResponse,
+)
+async def save_highlight_review(
+    session_id: str,
+    payload: HighlightReviewSaveRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Replace the current user's session highlight review list."""
+    result = await HighlightReviewService().save_review(
+        db=db,
+        session_id=session_id,
+        current_user=current_user,
+        title=payload.title,
+        items=[item.model_dump() for item in payload.items],
+    )
+    if not result.is_success:
+        error_code = _extract_error_code(
+            result.fallback or "[HIGHLIGHT_REVIEW_SAVE_FAILED]"
+        )
+        return _error_response(
+            _get_status_code(error_code),
+            error_code,
+            "高光复习清单保存失败，请刷新后重试。",
+        )
+    return _success_response(result.value or {})
+
+
+@router.post(
+    "/{session_id}/highlight-review/shares",
+    response_model=HighlightReviewShareCreateSuccessResponse,
+)
+async def create_highlight_review_share(
+    session_id: str,
+    payload: HighlightReviewShareCreateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a consent-gated, TTL-bound WeCom pilot share link."""
+    result = await HighlightReviewService().create_share(
+        db=db,
+        session_id=session_id,
+        current_user=current_user,
+        channel=payload.channel,
+        consent_granted=payload.consent_granted,
+        consent_text=payload.consent_text,
+        ttl_days=payload.ttl_days,
+    )
+    if not result.is_success:
+        error_code = _extract_error_code(
+            result.fallback or "[HIGHLIGHT_SHARE_CREATE_FAILED]"
+        )
+        return _error_response(
+            _get_status_code(error_code),
+            error_code,
+            "企业微信分享试点暂不可用，请确认已同意分享且治理策略已开启。",
+        )
+
+    data = result.value or {}
+    token = str(data.get("share_token") or "")
+    public_api_path = PUBLIC_SHARE_PATH_TEMPLATE.format(token=token)
+    data["public_api_path"] = public_api_path
+    data["share_url"] = str(request.base_url).rstrip("/") + public_api_path
+    return _success_response(data)
+
+
+@router.post(
+    "/{session_id}/highlight-review/shares/{share_id}/revoke",
+    response_model=dict,
+)
+async def revoke_highlight_review_share(
+    session_id: str,
+    share_id: str,
+    payload: HighlightReviewShareRevokeRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke a previously created highlight review share link."""
+    result = await HighlightReviewService().revoke_share(
+        db=db,
+        session_id=session_id,
+        share_id=share_id,
+        current_user=current_user,
+        reason=payload.reason if payload else None,
+    )
+    if not result.is_success:
+        error_code = _extract_error_code(
+            result.fallback or "[HIGHLIGHT_SHARE_REVOKE_FAILED]"
+        )
+        return _error_response(
+            _get_status_code(error_code),
+            error_code,
+            "企业微信分享撤销失败，请刷新后重试。",
+        )
+    return _success_response(result.value or {})
+
+
 
 
 
