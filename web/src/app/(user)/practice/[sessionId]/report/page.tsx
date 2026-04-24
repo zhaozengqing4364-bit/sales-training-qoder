@@ -60,6 +60,7 @@ import {
     type SessionClaimTruthTone,
 } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
+import { useSessionReportData } from "./use-session-report-data";
 
 function buildPresentationPageReplayPath(sessionId: string, pageNumber: number): string {
     const params = new URLSearchParams();
@@ -589,11 +590,9 @@ export default function ComprehensiveReportPage() {
     const params = useParams();
     const sessionId = params.sessionId as string;
 
-    const [loading, setLoading] = useState(true);
-    const [report, setReport] = useState<PracticeSessionReport | null>(null);
+    const { loading, report, error } = useSessionReportData(sessionId);
     const [enhancedReport, setEnhancedReport] = useState<ComprehensiveReport | null>(null);
     const [enhancedUnavailableHint, setEnhancedUnavailableHint] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
     const [knowledgeCheck, setKnowledgeCheck] = useState<KnowledgeCheckDiagnostics | null>(null);
     const [replayData, setReplayData] = useState<ReplayData | null>(null);
     const [highlightsData, setHighlightsData] = useState<HighlightsResponse | null>(null);
@@ -606,38 +605,9 @@ export default function ComprehensiveReportPage() {
     const [highlightReviewItems, setHighlightReviewItems] = useState<HighlightReviewItem[]>([]);
     const [retryHint, setRetryHint] = useState<string | null>(null);
 
-    const loadUnifiedEvidence = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        setReplayData(null);
-
-        try {
-            const data = await api.sessions.getReport(sessionId);
-            setReport(data);
-            debug.log("[Report] Loaded unified evidence contract", {
-                sessionId,
-                scenarioType: data.scenario_type,
-                overallScore: data.overall_score,
-                evaluable: data.evaluable,
-                notEvaluableReason: data.not_evaluable_reason,
-                evidenceComplete: data.evidence_completeness?.complete,
-                presentationReviewAvailable: Boolean(data.presentation_review),
-            });
-        } catch (err) {
-            setReport(null);
-            setError(`统一训练证据加载失败：${getApiErrorMessage(err)}`);
-            debug.error("[Report] Unified evidence contract load failed", {
-                sessionId,
-                error: err,
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, [sessionId]);
-
     useEffect(() => {
-        void Promise.resolve().then(loadUnifiedEvidence);
-    }, [loadUnifiedEvidence]);
+        setReplayData(null);
+    }, [sessionId]);
 
     useEffect(() => {
         if (!report) {
