@@ -12,6 +12,7 @@ Requirements: P0-FIXES.md Issue #13
 import asyncio
 import time
 from collections import defaultdict
+from collections.abc import MutableMapping
 from dataclasses import dataclass, field
 
 from common.monitoring.logger import get_logger
@@ -63,12 +64,16 @@ class SessionRateLimiter:
 
         # user_id -> {session_id: timestamp}
         self.user_sessions: dict[str, dict[str, float]] = defaultdict(dict)
+        # user_id -> session creation timestamps within the rate-limit window.
+        # Keep this separate from active sessions so users cannot bypass the
+        # hourly creation limit by ending sessions immediately after creation.
+        self.user_session_creations: dict[str, list[float]] = defaultdict(list)
         self.current_total = 0
 
         self._cleanup_task: asyncio.Task | None = None
         self._running = False
 
-    async def start(self):
+    async def start(self) -> None:
         """Start cleanup background task"""
         if self._running:
             return
@@ -77,7 +82,7 @@ class SessionRateLimiter:
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
         logger.info("Session rate limiter started")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop cleanup background task"""
         self._running = False
 
@@ -98,6 +103,7 @@ class SessionRateLimiter:
             (allowed: bool, reason: str)
         """
         now = time.time()
+        self._cleanup_user_window(user_id, now=now)
 
         # 1. Check global concurrent limit
         if self.current_total >= self.max_total_concurrent:
@@ -112,13 +118,13 @@ class SessionRateLimiter:
 
         # 2. Clean up expired sessions for this user
         if user_id in self.user_sessions:
-            expired = [
-                sid
-                for sid, ts in self.user_sessions[user_id].items()
-                if now - ts >= self.session_window
-            ]
-            for sid in expired:
-                del self.user_sessions[user_id][sid]
+            expired_sessions = self._expire_user_sessions(
+                self.user_sessions[user_id],
+                now=now,
+            )
+            self.current_total = max(0, self.current_total - expired_sessions)
+            if not self.user_sessions[user_id]:
+                del self.user_sessions[user_id]
 
         # 3. Check user concurrent limit
         active_sessions = len(self.user_sessions.get(user_id, {}))
@@ -134,12 +140,13 @@ class SessionRateLimiter:
             return False, f"您已有{active_sessions}个活跃会话，请先结束其他会话"
 
         # 4. Check hourly limit
-        if active_sessions >= self.max_sessions_per_hour:
+        created_in_window = len(self.user_session_creations.get(user_id, []))
+        if created_in_window >= self.max_sessions_per_hour:
             logger.warning(
                 f"User {user_id} hourly session limit reached",
                 extra={
                     "user_id": user_id,
-                    "active_sessions": active_sessions,
+                    "created_in_window": created_in_window,
                     "max_per_hour": self.max_sessions_per_hour,
                 },
             )
@@ -147,15 +154,19 @@ class SessionRateLimiter:
 
         return True, ""
 
-    async def register_session(self, user_id: str, session_id: str):
+    async def register_session(self, user_id: str, session_id: str) -> None:
         """Register a new session"""
         now = time.time()
+        self._cleanup_user_window(user_id, now=now)
 
         if user_id not in self.user_sessions:
             self.user_sessions[user_id] = {}
 
+        is_new_active_session = session_id not in self.user_sessions[user_id]
         self.user_sessions[user_id][session_id] = now
-        self.current_total += 1
+        self.user_session_creations[user_id].append(now)
+        if is_new_active_session:
+            self.current_total += 1
 
         logger.info(
             f"Session registered for user {user_id}",
@@ -167,7 +178,7 @@ class SessionRateLimiter:
             },
         )
 
-    async def unregister_session(self, user_id: str, session_id: str):
+    async def unregister_session(self, user_id: str, session_id: str) -> None:
         """Unregister a session"""
         if user_id in self.user_sessions:
             if session_id in self.user_sessions[user_id]:
@@ -188,7 +199,7 @@ class SessionRateLimiter:
             if not self.user_sessions[user_id]:
                 del self.user_sessions[user_id]
 
-    async def _cleanup_loop(self):
+    async def _cleanup_loop(self) -> None:
         """Background task to clean up expired sessions"""
         while self._running:
             try:
@@ -199,26 +210,23 @@ class SessionRateLimiter:
             except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Cleanup loop error: {e}")
 
-    async def _cleanup_expired_sessions(self):
+    async def _cleanup_expired_sessions(self) -> None:
         """Remove expired session records"""
         now = time.time()
         total_removed = 0
 
         for user_id in list(self.user_sessions.keys()):
-            expired_sessions = [
-                sid
-                for sid, ts in self.user_sessions[user_id].items()
-                if now - ts >= self.session_window
-            ]
-
-            for sid in expired_sessions:
-                del self.user_sessions[user_id][sid]
-                total_removed += 1
-                self.current_total = max(0, self.current_total - 1)
+            expired_sessions = self._expire_user_sessions(
+                self.user_sessions[user_id],
+                now=now,
+            )
+            total_removed += expired_sessions
+            self.current_total = max(0, self.current_total - expired_sessions)
 
             # Remove empty user entries
             if not self.user_sessions[user_id]:
                 del self.user_sessions[user_id]
+            self._cleanup_user_window(user_id, now=now)
 
         if total_removed > 0:
             logger.info(
@@ -262,7 +270,42 @@ class SessionRateLimiter:
             "active_sessions": active_sessions,
             "max_concurrent": self.max_concurrent_per_user,
             "remaining": max(0, self.max_concurrent_per_user - active_sessions),
+            "created_in_window": len(self.user_session_creations.get(user_id, [])),
+            "remaining_creations": max(
+                0,
+                self.max_sessions_per_hour
+                - len(self.user_session_creations.get(user_id, [])),
+            ),
         }
+
+    def _cleanup_user_window(self, user_id: str, *, now: float) -> None:
+        """Drop stale creation timestamps outside the configured window."""
+        creations = self.user_session_creations.get(user_id)
+        if not creations:
+            self.user_session_creations.pop(user_id, None)
+            return
+
+        self.user_session_creations[user_id] = [
+            created_at for created_at in creations if now - created_at < self.session_window
+        ]
+        if not self.user_session_creations[user_id]:
+            del self.user_session_creations[user_id]
+
+    def _expire_user_sessions(
+        self,
+        sessions: MutableMapping[str, float],
+        *,
+        now: float,
+    ) -> int:
+        """Remove expired active sessions and return the number removed."""
+        expired = [
+            session_id
+            for session_id, created_at in sessions.items()
+            if now - created_at >= self.session_window
+        ]
+        for session_id in expired:
+            del sessions[session_id]
+        return len(expired)
 
 
 # Global rate limiter instance
@@ -277,14 +320,14 @@ def get_session_rate_limiter() -> SessionRateLimiter:
     return _rate_limiter
 
 
-async def init_session_rate_limiter():
+async def init_session_rate_limiter() -> None:
     """Initialize rate limiter on application startup"""
     limiter = get_session_rate_limiter()
     await limiter.start()
     logger.info("Session rate limiter initialized")
 
 
-async def shutdown_session_rate_limiter():
+async def shutdown_session_rate_limiter() -> None:
     """Shutdown rate limiter on application shutdown"""
     global _rate_limiter
     if _rate_limiter:

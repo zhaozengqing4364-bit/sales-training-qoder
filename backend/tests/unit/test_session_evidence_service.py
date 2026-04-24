@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from common.conversation.session_evidence import SessionEvidenceService
+from common.conversation.session_evidence import (
+    SESSION_EVIDENCE_SCORE_BASIS,
+    SessionEvidenceService,
+    describe_projection_kernel_contract,
+)
 
 
 def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:
@@ -231,6 +235,8 @@ class TestSessionEvidenceService:
         ]
         assert projection.evaluable is True
         assert projection.not_evaluable_reason is None
+        assert projection.ruleset_version == "rule_v1"
+        assert projection.score_basis == SESSION_EVIDENCE_SCORE_BASIS
         assert projection.evidence_completeness["message_count"] == 2
         assert projection.evidence_completeness["legacy_score_key_used"] is True
         assert projection.evidence_completeness["complete"] is True
@@ -256,6 +262,12 @@ class TestSessionEvidenceService:
         assert third_call.kwargs["message_count"] == 2
         assert third_call.kwargs["legacy_score_key_used"] is True
         assert third_call.kwargs["projection_complete"] is True
+
+    def test_projection_kernel_contract_includes_ruleset_and_score_basis(self) -> None:
+        contract = describe_projection_kernel_contract("sales")
+
+        assert contract["ruleset_version"] == "session_evidence_projection_v1"
+        assert contract["score_basis"] == SESSION_EVIDENCE_SCORE_BASIS
 
     @pytest.mark.asyncio
     async def test_get_projection_falls_back_to_latest_message_scores_when_session_scores_missing(
