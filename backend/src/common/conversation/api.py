@@ -8,6 +8,7 @@ References:
 - Design: Section 12 (Replay Service)
 - API Contract: docs/api-contract/replay.md
 """
+
 import os
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -16,6 +17,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import get_current_user
+from common.conversation.highlight_review_service import (
+    PUBLIC_SHARE_PATH_TEMPLATE,
+    HighlightReviewService,
+)
 from common.conversation.replay import ReplayService
 from common.conversation.schemas import (
     ConversationErrorResponse,
@@ -29,10 +34,6 @@ from common.conversation.schemas import (
     HighlightsSuccessResponse,
     ReplayDataSuccessResponse,
     SharedHighlightReviewSuccessResponse,
-)
-from common.conversation.highlight_review_service import (
-    PUBLIC_SHARE_PATH_TEMPLATE,
-    HighlightReviewService,
 )
 from common.db.models import PracticeSession, SessionAudioSegment, User
 from common.db.session import get_db
@@ -120,9 +121,7 @@ async def get_highlight_review(
         current_user=current_user,
     )
     if not result.is_success:
-        error_code = _extract_error_code(
-            result.fallback or "[HIGHLIGHT_REVIEW_FAILED]"
-        )
+        error_code = _extract_error_code(result.fallback or "[HIGHLIGHT_REVIEW_FAILED]")
         return _error_response(
             _get_status_code(error_code), error_code, "高光复习清单暂不可用。"
         )
@@ -229,23 +228,23 @@ async def revoke_highlight_review_share(
     return _success_response(result.value or {})
 
 
-
-
-
 @router.get(
     "/{session_id}/messages",
     response_model=ConversationMessagesSuccessResponse,
     responses={
-        400: {"model": ConversationErrorResponse, "description": "Session not completed"},
-        404: {"model": ConversationErrorResponse, "description": "Session not found"}
-    }
+        400: {
+            "model": ConversationErrorResponse,
+            "description": "Session not completed",
+        },
+        404: {"model": ConversationErrorResponse, "description": "Session not found"},
+    },
 )
 async def get_messages(
     session_id: str,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get paginated conversation messages for a session.
@@ -276,7 +275,9 @@ async def get_messages(
 
     return _success_response(
         {
-            "messages": [_message_to_response(m, index + 1) for index, m in enumerate(messages)],
+            "messages": [
+                _message_to_response(m, index + 1) for index, m in enumerate(messages)
+            ],
             "total": total,
         }
     )
@@ -286,15 +287,18 @@ async def get_messages(
     "/{session_id}/messages/{message_id}",
     response_model=ConversationMessageSuccessResponse,
     responses={
-        400: {"model": ConversationErrorResponse, "description": "Session not completed"},
-        404: {"model": ConversationErrorResponse, "description": "Message not found"}
-    }
+        400: {
+            "model": ConversationErrorResponse,
+            "description": "Session not completed",
+        },
+        404: {"model": ConversationErrorResponse, "description": "Message not found"},
+    },
 )
 async def get_message_detail(
     session_id: str,
     message_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get detailed information for a single message.
@@ -323,6 +327,7 @@ async def get_message_detail(
 
     # Get message from storage service
     from common.conversation.storage import MessageStorageService
+
     storage = MessageStorageService(db)
     message_result = await storage.get_message_by_id(message_id)
 
@@ -335,7 +340,9 @@ async def get_message_detail(
 
     # Verify message belongs to session
     if message.session_id != session_id:
-        return _error_response(404, "[MESSAGE_NOT_FOUND]", "Message not found in this session")
+        return _error_response(
+            404, "[MESSAGE_NOT_FOUND]", "Message not found in this session"
+        )
 
     return _success_response(_message_to_detail_response(message, service))
 
@@ -344,14 +351,17 @@ async def get_message_detail(
     "/{session_id}/replay",
     response_model=ReplayDataSuccessResponse,
     responses={
-        400: {"model": ConversationErrorResponse, "description": "Session not completed"},
-        404: {"model": ConversationErrorResponse, "description": "Session not found"}
-    }
+        400: {
+            "model": ConversationErrorResponse,
+            "description": "Session not completed",
+        },
+        404: {"model": ConversationErrorResponse, "description": "Session not found"},
+    },
 )
 async def get_replay_data(
     session_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get complete replay data for a session.
@@ -384,14 +394,17 @@ async def get_replay_data(
     "/{session_id}/highlights",
     response_model=HighlightsSuccessResponse,
     responses={
-        400: {"model": ConversationErrorResponse, "description": "Session not completed"},
-        404: {"model": ConversationErrorResponse, "description": "Session not found"}
-    }
+        400: {
+            "model": ConversationErrorResponse,
+            "description": "Session not completed",
+        },
+        404: {"model": ConversationErrorResponse, "description": "Session not found"},
+    },
 )
 async def get_highlights(
     session_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get highlighted messages (key moments) from a session.
@@ -429,26 +442,31 @@ async def get_highlights(
         return _error_response(status_code, error_code, result.fallback)
 
     data = result.value
-    return _success_response({
-        "highlights": data["highlights"],
-        "total_good": data["total_good"],
-        "total_bad": data["total_bad"],
-    })
+    return _success_response(
+        {
+            "highlights": data["highlights"],
+            "total_good": data["total_good"],
+            "total_bad": data["total_bad"],
+        }
+    )
 
 
 @router.get(
     "/{session_id}/audio/{message_id}",
     responses={
         200: {"description": "Audio file or redirect"},
-        400: {"model": ConversationErrorResponse, "description": "Session not completed"},
-        404: {"model": ConversationErrorResponse, "description": "Audio not found"}
-    }
+        400: {
+            "model": ConversationErrorResponse,
+            "description": "Session not completed",
+        },
+        404: {"model": ConversationErrorResponse, "description": "Audio not found"},
+    },
 )
 async def get_audio(
     session_id: str,
     message_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get audio file for a message.
@@ -481,6 +499,7 @@ async def get_audio(
 
     # Get message
     from common.conversation.storage import MessageStorageService
+
     storage = MessageStorageService(db)
     message_result = await storage.get_message_by_id(message_id)
 
@@ -491,14 +510,20 @@ async def get_audio(
 
     # Verify message belongs to session
     if message.session_id != session_id:
-        return _error_response(404, "[MESSAGE_NOT_FOUND]", "Message not found in this session")
+        return _error_response(
+            404, "[MESSAGE_NOT_FOUND]", "Message not found in this session"
+        )
 
     # Check audio URL exists
     if not message.audio_url:
-        return _error_response(404, "[AUDIO_NOT_AVAILABLE]", "Audio not available for this message")
+        return _error_response(
+            404, "[AUDIO_NOT_AVAILABLE]", "Audio not available for this message"
+        )
 
     # If it's a remote URL, redirect
-    if message.audio_url.startswith("http://") or message.audio_url.startswith("https://"):
+    if message.audio_url.startswith("http://") or message.audio_url.startswith(
+        "https://"
+    ):
         return RedirectResponse(url=message.audio_url)
 
     # If it's a local file, serve it
@@ -506,7 +531,7 @@ async def get_audio(
         return FileResponse(
             message.audio_url,
             media_type="audio/mpeg",
-            filename=f"message_{message_id}.mp3"
+            filename=f"message_{message_id}.mp3",
         )
 
     return _error_response(404, "[AUDIO_NOT_AVAILABLE]", "Audio file not found")
@@ -516,7 +541,10 @@ async def get_audio(
     "/{session_id}/audio-segments/{segment_sequence}",
     responses={
         302: {"description": "Redirect to signed audio URL"},
-        404: {"model": ConversationErrorResponse, "description": "Segment not found or not uploaded"},
+        404: {
+            "model": ConversationErrorResponse,
+            "description": "Segment not found or not uploaded",
+        },
     },
 )
 async def get_audio_segment_playback(
@@ -543,18 +571,21 @@ async def get_audio_segment_playback(
 
     if segment is None:
         return _error_response(
-            404, "[SEGMENT_NOT_FOUND]",
+            404,
+            "[SEGMENT_NOT_FOUND]",
             f"Audio segment {segment_sequence} not found for session {session_id}",
         )
 
     if segment.upload_status != "uploaded":
         return _error_response(
-            404, "[SEGMENT_NOT_UPLOADED]",
+            404,
+            "[SEGMENT_NOT_UPLOADED]",
             f"Audio segment {segment_sequence} has status '{segment.upload_status}', expected 'uploaded'",
         )
 
     try:
         from common.oss.signing import get_oss_signing_service
+
         signing = get_oss_signing_service()
         signed_url = signing.generate_get_url(segment.object_key, expires=3600)
     except Exception as exc:
@@ -565,7 +596,8 @@ async def get_audio_segment_playback(
             error=str(exc),
         )
         return _error_response(
-            500, "[SIGNING_FAILED]",
+            500,
+            "[SIGNING_FAILED]",
             "Failed to generate audio playback URL",
         )
 
@@ -574,12 +606,13 @@ async def get_audio_segment_playback(
 
 # ========== Helper Functions ==========
 
+
 def _extract_error_code(fallback: str) -> str:
     """Extract error code from fallback message"""
     if fallback and fallback.startswith("["):
         end = fallback.find("]")
         if end > 0:
-            return fallback[:end + 1]
+            return fallback[: end + 1]
     return "[UNKNOWN_ERROR]"
 
 
@@ -628,7 +661,9 @@ def _error_response(status_code: int, error_code: str, message: str) -> JSONResp
     )
 
 
-def _normalize_turn_number(raw_turn_number: int | None, fallback_turn_number: int = 1) -> int:
+def _normalize_turn_number(
+    raw_turn_number: int | None, fallback_turn_number: int = 1
+) -> int:
     """Normalize legacy turn numbers to satisfy response contract (>=1)."""
     if isinstance(raw_turn_number, int) and raw_turn_number >= 1:
         return raw_turn_number
@@ -640,7 +675,9 @@ def _message_to_response(message, fallback_turn_number: int = 1) -> dict:
     return {
         "id": message.id,
         "session_id": message.session_id,
-        "turn_number": _normalize_turn_number(message.turn_number, fallback_turn_number),
+        "turn_number": _normalize_turn_number(
+            message.turn_number, fallback_turn_number
+        ),
         "role": message.role,
         "content": message.content,
         "audio_url": message.audio_url,
@@ -652,7 +689,7 @@ def _message_to_response(message, fallback_turn_number: int = 1) -> dict:
         "ai_feedback": message.ai_feedback,
         "is_highlight": message.is_highlight,
         "highlight_type": message.highlight_type,
-        "highlight_reason": message.highlight_reason
+        "highlight_reason": message.highlight_reason,
     }
 
 

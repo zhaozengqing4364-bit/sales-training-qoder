@@ -149,7 +149,9 @@ async def test_wecom_share_requires_consent_ttl_revoke_audit_and_desensitizes_pu
     assert public_response.status_code == 200
     public_payload = public_response.json()["data"]
     public_item = public_payload["items"][0]
-    assert public_payload["desensitization_version"] == "highlight_share_desensitized_v1"
+    assert (
+        public_payload["desensitization_version"] == "highlight_share_desensitized_v1"
+    )
     assert "13812345678" not in public_item["content_excerpt"]
     assert "buyer@example.com" not in public_item["content_excerpt"]
     assert "[phone]" in public_item["content_excerpt"]
@@ -168,10 +170,19 @@ async def test_wecom_share_requires_consent_ttl_revoke_audit_and_desensitizes_pu
     assert denied_response.status_code == 410
 
     logs = (
-        await test_db.execute(
-            select(HighlightReviewShareAccessLog).where(
-                HighlightReviewShareAccessLog.share_id == share["share_id"]
+        (
+            await test_db.execute(
+                select(HighlightReviewShareAccessLog).where(
+                    HighlightReviewShareAccessLog.share_id == share["share_id"]
+                )
             )
         )
-    ).scalars().all()
-    assert {log.event_type for log in logs} >= {"created", "accessed", "revoked", "denied"}
+        .scalars()
+        .all()
+    )
+    assert {log.event_type for log in logs} >= {
+        "created",
+        "accessed",
+        "revoked",
+        "denied",
+    }

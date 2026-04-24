@@ -92,9 +92,7 @@ class User(Base):
     email = Column(String(255), unique=True)
     hashed_password = Column(String(255), nullable=True)
     role = Column(String(20), default="user", nullable=False)  # user, admin, support
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     last_login = Column(DateTime(timezone=True))
     is_active = Column(Boolean, default=True)
 
@@ -236,7 +234,9 @@ class Achievement(Base):
 
     __tablename__ = "achievements"
 
-    achievement_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    achievement_id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
     code = Column(String(80), nullable=False, unique=True, index=True)
     name = Column(String(120), nullable=False)
     description = Column(Text, nullable=False)
@@ -341,7 +341,9 @@ class Notification(Base):
             "type IN ('system', 'tip', 'reminder', 'achievement', 'ai_coach')",
             name="ck_notification_type",
         ),
-        Index("idx_notifications_user_read_created", "user_id", "is_read", "created_at"),
+        Index(
+            "idx_notifications_user_read_created", "user_id", "is_read", "created_at"
+        ),
     )
 
     user = relationship("User", back_populates="notifications")
@@ -584,9 +586,7 @@ class Scenario(Base):
     description = Column(String)
     persona_prompt = Column(String)  # For sales bot
     is_active = Column(Boolean, default=True)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(
@@ -607,9 +607,7 @@ class Presentation(Base):
     title = Column(String(200), nullable=False)
     file_url = Column(String(500), nullable=False)
     file_size_bytes = Column(Integer)
-    upload_date = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    upload_date = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     version_number = Column(Integer, default=1)
     status = Column(String(20), default="processing", index=True)
     uploaded_by_admin_id = Column(String(36), ForeignKey("users.user_id"))
@@ -679,9 +677,7 @@ class RequiredTalkingPoint(Base):
     created_by = Column(String(10), nullable=False)
     is_ai_generated = Column(Boolean, default=False)
     confirmed_by_admin = Column(Boolean, default=True)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint("created_by IN ('admin', 'ai')", name="ck_point_created_by"),
@@ -891,9 +887,7 @@ class HighlightReview(Base):
         ForeignKey("users.user_id", ondelete="CASCADE"),
         nullable=False,
     )
-    schema_version = Column(
-        String(40), nullable=False, default="highlight_review_v1"
-    )
+    schema_version = Column(String(40), nullable=False, default="highlight_review_v1")
     title = Column(String(160), nullable=True)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
@@ -974,7 +968,9 @@ class HighlightReviewItem(Base):
     )
 
     review = relationship("HighlightReview", back_populates="items")
-    message = relationship("ConversationMessage", back_populates="highlight_review_items")
+    message = relationship(
+        "ConversationMessage", back_populates="highlight_review_items"
+    )
 
 
 class HighlightReviewShare(Base):
@@ -1002,9 +998,7 @@ class HighlightReviewShare(Base):
     ttl_days = Column(Integer, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True, index=True)
-    revoked_by_user_id = Column(
-        String(36), ForeignKey("users.user_id"), nullable=True
-    )
+    revoked_by_user_id = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     revoked_reason = Column(String(200), nullable=True)
     desensitization_version = Column(String(50), nullable=False)
     created_at = Column(
@@ -1084,9 +1078,7 @@ class InterruptionEvent(Base):
         nullable=False,
         index=True,
     )
-    timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     interruption_type = Column(String(30), nullable=False)
     trigger_content = Column(String)
     ai_response = Column(String, nullable=False)
@@ -1173,9 +1165,7 @@ class LeaderboardEntry(Base):
     average_score = Column(Float, nullable=False)
     total_sessions = Column(Integer, default=1)
     rank = Column(Integer, index=True)
-    last_updated = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    last_updated = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(
@@ -1258,9 +1248,7 @@ class PromptTemplate(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     is_default = Column(Boolean, nullable=False, default=False)
     is_system = Column(Boolean, nullable=False, default=False)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -1284,9 +1272,7 @@ class ScenarioPrompt(Base):
     prompt_type = Column(String(50), nullable=False)
     template_id = Column(String(36), ForeignKey("prompt_templates.id"), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     template = relationship("PromptTemplate")
 
@@ -1500,9 +1486,7 @@ class ReleaseVerificationRecord(Base):
     duration_ms = Column(Integer, nullable=True)
 
     # Traceability
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -1568,9 +1552,7 @@ class ReleaseVerificationSummary(Base):
     decision_reason = Column(Text, nullable=True)
 
     # Audit
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

@@ -12,7 +12,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-
 revision: str = "20260424_1106_w6"
 down_revision: str | None = "20260421_0645_032"
 branch_labels: str | Sequence[str] | None = None
@@ -205,7 +204,9 @@ def upgrade() -> None:
         sa.Column("actor_user_id", sa.String(length=36), nullable=True),
         sa.Column("viewer_label", sa.String(length=120), nullable=True),
         sa.Column("client_fingerprint", sa.String(length=64), nullable=True),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="success"),
+        sa.Column(
+            "status", sa.String(length=20), nullable=False, server_default="success"
+        ),
         sa.Column("details", sa.JSON(), nullable=False, server_default="{}"),
         sa.Column(
             "created_at",
@@ -222,7 +223,8 @@ def upgrade() -> None:
             name="ck_highlight_share_access_status",
         ),
         sa.ForeignKeyConstraint(
-            ["actor_user_id"], ["users.user_id"],
+            ["actor_user_id"],
+            ["users.user_id"],
         ),
         sa.ForeignKeyConstraint(
             ["share_id"], ["highlight_review_shares.share_id"], ondelete="CASCADE"
@@ -254,8 +256,12 @@ def downgrade() -> None:
     )
     op.drop_table("highlight_review_share_access_logs")
 
-    op.drop_index("idx_highlight_review_shares_user", table_name="highlight_review_shares")
-    op.drop_index("idx_highlight_review_shares_review", table_name="highlight_review_shares")
+    op.drop_index(
+        "idx_highlight_review_shares_user", table_name="highlight_review_shares"
+    )
+    op.drop_index(
+        "idx_highlight_review_shares_review", table_name="highlight_review_shares"
+    )
     op.drop_index(
         op.f("ix_highlight_review_shares_revoked_at"),
         table_name="highlight_review_shares",

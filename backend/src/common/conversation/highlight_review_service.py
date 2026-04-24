@@ -297,7 +297,9 @@ class HighlightReviewService:
         if review is None or not review.items:
             return Result.fail("[HIGHLIGHT_REVIEW_EMPTY]")
 
-        resolved_ttl_days = min(int(ttl_days or policy.get("ttl_days") or 7), int(policy["ttl_days"]))
+        resolved_ttl_days = min(
+            int(ttl_days or policy.get("ttl_days") or 7), int(policy["ttl_days"])
+        )
         token = secrets.token_urlsafe(32)
         share = HighlightReviewShare(
             review_id=str(review.review_id),
@@ -497,8 +499,12 @@ class HighlightReviewService:
             .where(ConversationMessage.is_highlight.is_(True))
         )
         messages = list(result.scalars().all())
-        message_order = {message_id: index for index, message_id in enumerate(message_ids)}
-        return sorted(messages, key=lambda message: message_order.get(str(message.id), 0))
+        message_order = {
+            message_id: index for index, message_id in enumerate(message_ids)
+        }
+        return sorted(
+            messages, key=lambda message: message_order.get(str(message.id), 0)
+        )
 
     async def _load_review(
         self,
@@ -528,7 +534,10 @@ class HighlightReviewService:
     ) -> HighlightReviewShare | None:
         result = await db.execute(
             select(HighlightReviewShare)
-            .join(HighlightReview, HighlightReview.review_id == HighlightReviewShare.review_id)
+            .join(
+                HighlightReview,
+                HighlightReview.review_id == HighlightReviewShare.review_id,
+            )
             .where(HighlightReview.session_id == session_id)
             .where(HighlightReview.user_id == user_id)
             .where(HighlightReviewShare.share_id == share_id)

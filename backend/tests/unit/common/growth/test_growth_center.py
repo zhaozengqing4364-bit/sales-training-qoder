@@ -46,7 +46,9 @@ async def test_growth_achievements_unlock_idempotently_from_evaluable_sessions(t
         "score_breakthrough_80",
     ]
     assert second.value["newly_unlocked"] == []
-    dashboard = await service.get_dashboard_growth(db=test_db, user_id=str(user.user_id))
+    dashboard = await service.get_dashboard_growth(
+        db=test_db, user_id=str(user.user_id)
+    )
     assert dashboard.is_success
     assert {item["code"] for item in dashboard.value["achievements"]["unlocked"]} == {
         "first_evaluable_session",
@@ -89,7 +91,9 @@ async def test_growth_goal_progress_counts_only_completed_evaluable_sessions(tes
     )
     await test_db.commit()
 
-    dashboard = await service.get_dashboard_growth(db=test_db, user_id=str(user.user_id))
+    dashboard = await service.get_dashboard_growth(
+        db=test_db, user_id=str(user.user_id)
+    )
 
     assert dashboard.is_success
     goal = dashboard.value["goal"]

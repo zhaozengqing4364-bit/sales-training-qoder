@@ -34,6 +34,45 @@ from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 
+DEFAULT_ACHIEVEMENT_RULESET: dict[str, Any] = {
+    "version": "growth_achievement_rules_v1",
+    "achievements": [
+        {
+            "code": "first_evaluable_session",
+            "name": "首次有效训练",
+            "description": "完成第一场可评估训练。",
+            "icon_key": "trophy",
+            "condition": {"type": "evaluable_session_count", "min": 1},
+        },
+        {
+            "code": "score_breakthrough_80",
+            "name": "突破 80 分",
+            "description": "任意一场可评估训练综合分达到 80 分。",
+            "icon_key": "sparkles",
+            "condition": {"type": "max_overall_score", "min": 80},
+        },
+    ],
+}
+
+DEFAULT_AI_COACH_RULESET: dict[str, Any] = {
+    "version": "growth_ai_coach_rules_v1",
+    "enabled": True,
+    "weak_score_threshold": 60.0,
+    "dimensions": [
+        {"key": "value_logic", "label": "价值逻辑", "score_field": "logic_score"},
+        {
+            "key": "product_knowledge",
+            "label": "产品知识与证据",
+            "score_field": "accuracy_score",
+        },
+        {
+            "key": "objection_handling",
+            "label": "异议处理",
+            "score_field": "completeness_score",
+        },
+    ],
+}
+
 
 class GrowthCenterService:
     """Config-backed growth service.
@@ -270,7 +309,9 @@ class GrowthCenterService:
             "started_at": session.start_time.isoformat()
             if session.start_time
             else None,
-            "scenario_type": getattr(getattr(session, "scenario", None), "scenario_type", None),
+            "scenario_type": getattr(
+                getattr(session, "scenario", None), "scenario_type", None
+            ),
             "current_difficulty": current_difficulty,
             "suggested_difficulty": suggested_difficulty,
             "suggested_adjustment": decision.get("suggested_adjustment") or "none",
@@ -330,7 +371,9 @@ class GrowthCenterService:
             "source": notification.source,
             "evidence": notification.evidence_json,
             "is_read": bool(notification.is_read),
-            "read_at": notification.read_at.isoformat() if notification.read_at else None,
+            "read_at": notification.read_at.isoformat()
+            if notification.read_at
+            else None,
             "expires_at": notification.expires_at.isoformat()
             if notification.expires_at
             else None,
@@ -351,7 +394,9 @@ class GrowthCenterService:
             if not code or not isinstance(condition, dict):
                 continue
 
-            result = await db.execute(select(Achievement).where(Achievement.code == code))
+            result = await db.execute(
+                select(Achievement).where(Achievement.code == code)
+            )
             achievement = result.scalar_one_or_none()
             if achievement is None:
                 achievement = Achievement(code=code)
@@ -375,7 +420,11 @@ class GrowthCenterService:
         *,
         eligible_sessions: list[PracticeSession],
     ) -> tuple[bool, dict[str, Any]]:
-        condition = achievement.condition_json if isinstance(achievement.condition_json, dict) else {}
+        condition = (
+            achievement.condition_json
+            if isinstance(achievement.condition_json, dict)
+            else {}
+        )
         condition_type = condition.get("type")
         scores = [
             score
@@ -475,7 +524,9 @@ class GrowthCenterService:
             )
         except (SQLAlchemyError, ValueError, TypeError, IntegrityError) as exc:
             await db.rollback()
-            logger.error("growth_achievements_evaluate_failed", user_id=user_id, error=str(exc))
+            logger.error(
+                "growth_achievements_evaluate_failed", user_id=user_id, error=str(exc)
+            )
             return Result.fail(f"[ACHIEVEMENT_EVALUATION_FAILED] {exc}")
 
     async def _create_notification_if_absent(
@@ -524,17 +575,18 @@ class GrowthCenterService:
             await self._refresh_active_rulesets(db=db)
             if self.ai_coach_ruleset.get("enabled") is False:
                 return Result.ok(None)
-            notification_template = self.ai_coach_ruleset.get("notification_template")
-            if not isinstance(notification_template, dict):
-                return Result.ok(None)
-            eligible_sessions = await self._eligible_sessions(db=db, user_id=user_id, limit=10)
+            eligible_sessions = await self._eligible_sessions(
+                db=db, user_id=user_id, limit=10
+            )
             if not eligible_sessions:
                 return Result.ok(None)
 
             latest = eligible_sessions[0]
             threshold = float(self.ai_coach_ruleset.get("weak_score_threshold", 60.0))
             dimensions = [
-                item for item in self.ai_coach_ruleset.get("dimensions", []) if isinstance(item, dict)
+                item
+                for item in self.ai_coach_ruleset.get("dimensions", [])
+                if isinstance(item, dict)
             ]
             scored_dimensions: list[dict[str, str | float]] = []
             for dimension in dimensions:
@@ -601,10 +653,14 @@ class GrowthCenterService:
                 },
             )
             await db.commit()
-            return Result.ok(self._notification_payload(notification) if notification else None)
+            return Result.ok(
+                self._notification_payload(notification) if notification else None
+            )
         except (SQLAlchemyError, ValueError, TypeError) as exc:
             await db.rollback()
-            logger.error("ai_coach_notification_failed", user_id=user_id, error=str(exc))
+            logger.error(
+                "ai_coach_notification_failed", user_id=user_id, error=str(exc)
+            )
             return Result.fail(f"[AI_COACH_NOTIFICATION_FAILED] {exc}")
 
     async def list_notifications(
@@ -630,7 +686,9 @@ class GrowthCenterService:
                 query = query.where(Notification.is_read.is_(False))
 
             result = await db.execute(query)
-            items = [self._notification_payload(item) for item in result.scalars().all()]
+            items = [
+                self._notification_payload(item) for item in result.scalars().all()
+            ]
             unread = sum(1 for item in items if not item["is_read"])
             return Result.ok({"items": items, "unread_count": unread})
         except (SQLAlchemyError, ValueError, TypeError) as exc:
@@ -661,7 +719,9 @@ class GrowthCenterService:
             return Result.ok(self._notification_payload(notification))
         except (SQLAlchemyError, ValueError, TypeError) as exc:
             await db.rollback()
-            logger.error("notification_mark_read_failed", user_id=user_id, error=str(exc))
+            logger.error(
+                "notification_mark_read_failed", user_id=user_id, error=str(exc)
+            )
             return Result.fail(f"[NOTIFICATION_MARK_READ_FAILED] {exc}")
 
     async def upsert_goal(
@@ -677,12 +737,18 @@ class GrowthCenterService:
     ) -> Result[dict[str, Any]]:
         try:
             if target_count <= 0:
-                return Result.fail("[INVALID_GOAL_TARGET] target_count must be positive")
+                return Result.fail(
+                    "[INVALID_GOAL_TARGET] target_count must be positive"
+                )
             if end_date < start_date:
-                return Result.fail("[INVALID_GOAL_RANGE] end_date must be >= start_date")
+                return Result.fail(
+                    "[INVALID_GOAL_RANGE] end_date must be >= start_date"
+                )
 
             active_result = await db.execute(
-                select(UserGoal).where(UserGoal.user_id == user_id, UserGoal.is_active.is_(True))
+                select(UserGoal).where(
+                    UserGoal.user_id == user_id, UserGoal.is_active.is_(True)
+                )
             )
             for goal in active_result.scalars().all():
                 goal.is_active = False
@@ -706,15 +772,20 @@ class GrowthCenterService:
             logger.error("goal_upsert_failed", user_id=user_id, error=str(exc))
             return Result.fail(f"[GOAL_UPSERT_FAILED] {exc}")
 
-    async def _goal_payload(self, *, db: AsyncSession, goal: UserGoal) -> dict[str, Any]:
+    async def _goal_payload(
+        self, *, db: AsyncSession, goal: UserGoal
+    ) -> dict[str, Any]:
         start_dt = datetime.combine(goal.start_date, time.min, tzinfo=UTC)
         end_dt = datetime.combine(goal.end_date, time.max, tzinfo=UTC)
-        sessions = await self._eligible_sessions(db=db, user_id=str(goal.user_id), limit=200)
+        sessions = await self._eligible_sessions(
+            db=db, user_id=str(goal.user_id), limit=200
+        )
         scoped = [
             session
             for session in sessions
             if session.start_time
-            and start_dt <= (
+            and start_dt
+            <= (
                 session.start_time.replace(tzinfo=UTC)
                 if session.start_time.tzinfo is None
                 else session.start_time.astimezone(UTC)
@@ -725,7 +796,8 @@ class GrowthCenterService:
             scoped = [
                 session
                 for session in scoped
-                if str(getattr(getattr(session, "scenario", None), "scenario_type", "")) == "presentation"
+                if str(getattr(getattr(session, "scenario", None), "scenario_type", ""))
+                == "presentation"
             ]
         current_progress = len(scoped)
         target_count = int(goal.target_count)
@@ -735,13 +807,17 @@ class GrowthCenterService:
             "period": goal.period,
             "target_count": target_count,
             "current_progress": current_progress,
-            "progress_ratio": min(1.0, current_progress / target_count if target_count else 0.0),
+            "progress_ratio": min(
+                1.0, current_progress / target_count if target_count else 0.0
+            ),
             "start_date": goal.start_date.isoformat(),
             "end_date": goal.end_date.isoformat(),
             "is_active": bool(goal.is_active),
         }
 
-    async def _current_goal(self, *, db: AsyncSession, user_id: str) -> dict[str, Any] | None:
+    async def _current_goal(
+        self, *, db: AsyncSession, user_id: str
+    ) -> dict[str, Any] | None:
         result = await db.execute(
             select(UserGoal)
             .where(UserGoal.user_id == user_id, UserGoal.is_active.is_(True))
@@ -784,7 +860,9 @@ class GrowthCenterService:
             return Result.ok(
                 {
                     "achievements": {"unlocked": unlocked},
-                    "notifications": notifications.value if notifications.is_success else {"items": [], "unread_count": 0},
+                    "notifications": notifications.value
+                    if notifications.is_success
+                    else {"items": [], "unread_count": 0},
                     "goal": goal,
                     "adaptive_difficulty": adaptive_dry_run.value
                     if adaptive_dry_run.is_success
@@ -796,10 +874,12 @@ class GrowthCenterService:
                         "summary": {"total_sessions": 0, "status_counts": {}},
                     },
                     "rules": {
-                        "achievement_ruleset_version": self.achievement_ruleset.get("version"),
-                        "ai_coach_ruleset_version": self.ai_coach_ruleset.get("version"),
-                        "achievement_ruleset_source": self.achievement_ruleset_source,
-                        "ai_coach_ruleset_source": self.ai_coach_ruleset_source,
+                        "achievement_ruleset_version": self.achievement_ruleset.get(
+                            "version"
+                        ),
+                        "ai_coach_ruleset_version": self.ai_coach_ruleset.get(
+                            "version"
+                        ),
                     },
                 }
             )
