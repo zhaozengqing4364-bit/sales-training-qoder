@@ -2207,6 +2207,82 @@ export interface HighlightsResponse {
     total_bad: number;
 }
 
+export interface HighlightReviewItemPayload {
+    item_id?: string;
+    message_id: string;
+    turn_number: number;
+    role: "assistant" | "user" | string;
+    content: string;
+    reason: string | null;
+    stage_name: string | null;
+    issue_label: string | null;
+    suggested_response: string | null;
+    sort_order: number;
+}
+
+export interface HighlightReviewShareSummary {
+    share_id: string;
+    channel: "wecom" | string;
+    status: "active" | "revoked" | "expired" | string;
+    consent_granted: boolean;
+    policy_version: string;
+    ttl_days: number;
+    expires_at: string;
+    revoked_at?: string | null;
+    created_at: string;
+    access_count: number;
+    desensitization_version: string;
+}
+
+export interface HighlightReviewResponse {
+    review_id: string;
+    session_id: string;
+    user_id: string;
+    schema_version: "highlight_review_v1" | string;
+    title?: string | null;
+    items: HighlightReviewItemPayload[];
+    shares: HighlightReviewShareSummary[];
+    share_policy?: Record<string, unknown>;
+    updated_at: string;
+}
+
+export interface HighlightReviewShareCreateResponse extends HighlightReviewShareSummary {
+    share_url: string;
+    share_token: string;
+    public_api_path: string;
+}
+
+export interface AdaptiveDifficultyDryRunItem {
+    session_id: string;
+    started_at?: string | null;
+    scenario_type?: "sales" | "presentation" | string | null;
+    current_difficulty: string;
+    suggested_difficulty: string;
+    suggested_adjustment: "increase" | "decrease" | "keep" | "none" | string;
+    status: "disabled" | "dry_run" | "active_candidate" | "blocked_by_evidence" | "blocked_by_missing_score" | string;
+    enabled: boolean;
+    overall_score?: number | null;
+    score_basis?: string | null;
+    policy_version?: string | null;
+    policy_source?: string | null;
+    rollback_strategy?: string | null;
+    explanation?: string | null;
+}
+
+export interface AdaptiveDifficultyDryRunResponse {
+    feature: "adaptive_difficulty";
+    mode: "dry_run_dashboard" | string;
+    mutation_enabled: boolean;
+    explanation?: string;
+    summary: {
+        total_sessions: number;
+        status_counts: Record<string, number>;
+        candidate_count?: number;
+        blocked_count?: number;
+    };
+    items: AdaptiveDifficultyDryRunItem[];
+}
+
 export interface SessionStats {
     total_sessions: number;
     weekly_sessions: number;
