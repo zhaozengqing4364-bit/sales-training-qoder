@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import uuid
 from copy import deepcopy
+from importlib import util
+from pathlib import Path
 
 import pytest
-from httpx import AsyncClient
+import pytest_asyncio
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +19,36 @@ from common.business_rules.defaults import (
     get_business_rule_definition,
 )
 from common.db.models import BusinessRuleConfig, BusinessRuleConfigAuditLog, User
+from common.db.session import get_db
+
+BUSINESS_RULES_API_PATH = (
+    Path(__file__).resolve().parents[2] / "src" / "admin" / "api" / "business_rules.py"
+)
+
+
+def _business_rules_router():
+    spec = util.spec_from_file_location(
+        "business_rules_api_under_test",
+        BUSINESS_RULES_API_PATH,
+    )
+    assert spec is not None and spec.loader is not None
+    module = util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.router
+
+
+@pytest_asyncio.fixture
+async def business_rules_client(test_db: AsyncSession):
+    app = FastAPI()
+    app.include_router(_business_rules_router(), prefix="/api/v1/admin")
+
+    async def override_get_db():
+        yield test_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
 
 
 def _headers_for(user_id: str) -> dict[str, str]:
