@@ -1,3 +1,5 @@
+import pytest
+
 from common.db.models import PracticeSession, Scenario, SessionStatus
 from common.recommendations.next_practice import NextPracticeRecommendationService
 
@@ -71,10 +73,6 @@ def test_next_practice_recommendation_reports_insufficient_evidence_without_clai
         payload["growth_safety"]["adaptive_difficulty"]["status"]
         == "blocked_by_evidence"
     )
-
-import pytest
-
-
 @pytest.mark.asyncio
 async def test_next_practice_uses_published_business_rule_threshold(test_db):
     from copy import deepcopy
