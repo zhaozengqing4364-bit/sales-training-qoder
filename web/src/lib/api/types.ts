@@ -202,6 +202,110 @@ export interface TrainingCategory {
     status: "active" | "coming_soon" | "inactive";
 }
 
+export type SalesCombinationRuleStatus = "draft" | "published" | "archived";
+
+export type SalesCombinationFallbackPolicy = "client_default_v1" | "hide_all";
+
+export interface SalesCombinationRule {
+    id: string;
+    capability: string;
+    role: string;
+    priority: number;
+    enabled: boolean;
+    required_agent_match?: string[];
+    required_persona_match?: string[];
+}
+
+export interface SalesCombinationRuleAuditSummary {
+    published_by?: string | null;
+    published_at?: string | null;
+    reason?: string | null;
+    trace_id?: string | null;
+}
+
+export interface SalesCombinationRuleSet {
+    rule_set_id: string;
+    version: string;
+    status: SalesCombinationRuleStatus;
+    effective_at: string | null;
+    combinations: SalesCombinationRule[];
+    fallback_policy: SalesCombinationFallbackPolicy;
+    audit_summary?: SalesCombinationRuleAuditSummary;
+}
+
+export interface SalesCombinationRulePermission {
+    can_view: boolean;
+    can_mutate: boolean;
+    can_publish: boolean;
+    reason?: string | null;
+}
+
+export interface BusinessRuleAuditEntry {
+    id?: string;
+    actor?: string | null;
+    action: "draft" | "validate" | "preview" | "publish" | "rollback" | string;
+    before_version?: string | null;
+    after_version?: string | null;
+    reason?: string | null;
+    trace_id?: string | null;
+    created_at?: string | null;
+}
+
+export interface SalesCombinationRuleSetListResponse {
+    active: SalesCombinationRuleSet | null;
+    drafts: SalesCombinationRuleSet[];
+    history: SalesCombinationRuleSet[];
+    audit_log?: BusinessRuleAuditEntry[];
+    permissions?: SalesCombinationRulePermission;
+}
+
+export interface SalesCombinationRuleValidationIssue {
+    path: string;
+    message: string;
+}
+
+export interface SalesCombinationRuleValidationResult {
+    valid: boolean;
+    errors: SalesCombinationRuleValidationIssue[];
+    warnings?: SalesCombinationRuleValidationIssue[];
+}
+
+export type SalesCombinationPreviewStatus =
+    | "matched"
+    | "missing_agent"
+    | "missing_persona"
+    | "disabled";
+
+export interface SalesCombinationPreviewItem {
+    combination_id: string;
+    capability: string;
+    role: string;
+    status: SalesCombinationPreviewStatus;
+    matched_agent_name?: string | null;
+    matched_persona_name?: string | null;
+    reason?: string | null;
+}
+
+export interface SalesCombinationPreviewResponse {
+    valid: boolean;
+    ruleset_version: string;
+    previewed_at?: string | null;
+    coverage: {
+        total: number;
+        matched: number;
+        missing_agent: number;
+        missing_persona: number;
+        disabled: number;
+    };
+    items: SalesCombinationPreviewItem[];
+    validation_errors?: SalesCombinationRuleValidationIssue[];
+}
+
+export interface SalesCombinationRuleMutationResponse {
+    ruleset: SalesCombinationRuleSet;
+    audit: BusinessRuleAuditEntry;
+}
+
 export interface Recommendation {
     title: string;
     reason: string;
