@@ -898,7 +898,10 @@ async def get_session_next_recommendation(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    recommendation_result = NextPracticeRecommendationService().build_for_session(session)
+    recommendation_result = await NextPracticeRecommendationService().build_for_session_with_db(
+        db=db,
+        session=session,
+    )
     if not recommendation_result.is_success:
         return build_server_error(
             "[NEXT_PRACTICE_RECOMMENDATION_FAILED]",
