@@ -690,8 +690,11 @@ class BusinessRuleConfigService:
                     dict,
                 ),
             }
-        recommendation_dimensions = (
-            value.get("dimensions") if isinstance(value.get("dimensions"), dict) else {}
+        raw_recommendation_dimensions = value.get("dimensions")
+        recommendation_dimensions: dict[str, Any] = (
+            raw_recommendation_dimensions
+            if isinstance(raw_recommendation_dimensions, dict)
+            else {}
         )
         return {
             "enabled": value.get("enabled") is not False,
