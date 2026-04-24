@@ -17,6 +17,7 @@ import {
     Presentation,
     Trophy,
     Flame,
+    Target,
 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api/client";
