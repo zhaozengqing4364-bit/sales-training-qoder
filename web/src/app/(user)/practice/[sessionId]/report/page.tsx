@@ -653,10 +653,6 @@ export default function ComprehensiveReportPage() {
     const [retryHint, setRetryHint] = useState<string | null>(null);
 
     useEffect(() => {
-        setReplayData(null);
-    }, [sessionId]);
-
-    useEffect(() => {
         if (!report) {
             return;
         }

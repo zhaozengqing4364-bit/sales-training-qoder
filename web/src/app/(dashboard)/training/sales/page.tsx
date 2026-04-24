@@ -272,7 +272,7 @@ export default function SalesTrainingPage() {
     }, []);
 
     useEffect(() => {
-        void loadSalesTrainingData();
+        void Promise.resolve().then(loadSalesTrainingData);
     }, [loadSalesTrainingData]);
 
     const handleAgentClick = (agentId: string) => {

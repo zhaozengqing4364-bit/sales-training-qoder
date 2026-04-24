@@ -148,7 +148,7 @@ export default function AdminSalesCombinationsPage() {
     }, []);
 
     useEffect(() => {
-        void loadRuleSets();
+        void Promise.resolve().then(loadRuleSets);
     }, [loadRuleSets]);
 
     const handlePreview = async () => {

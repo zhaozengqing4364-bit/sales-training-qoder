@@ -45,7 +45,7 @@ export function useSessionReportData(sessionId: string): SessionReportDataState 
     }, [sessionId]);
 
     useEffect(() => {
-        void reload();
+        void Promise.resolve().then(reload);
     }, [reload]);
 
     return {
