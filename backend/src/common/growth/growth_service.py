@@ -29,6 +29,7 @@ from common.db.models import (
     UserGoal,
 )
 from common.error_handling.result import Result
+from common.growth.safety_policies import GrowthSafetyPolicyService
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -185,6 +186,120 @@ class GrowthCenterService:
             )
             if self._is_completed_evaluable(session)
         ]
+
+    async def get_adaptive_difficulty_dry_run(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: str,
+        limit: int = 10,
+    ) -> Result[dict[str, Any]]:
+        """Build a non-mutating dashboard of adaptive difficulty decisions."""
+
+        try:
+            bounded_limit = max(1, min(int(limit), 50))
+            result = await db.execute(
+                select(PracticeSession)
+                .options(
+                    selectinload(PracticeSession.scenario),
+                    selectinload(PracticeSession.persona),
+                )
+                .where(PracticeSession.user_id == user_id)
+                .where(PracticeSession.status == SessionStatus.COMPLETED.value)
+                .order_by(PracticeSession.start_time.desc())
+                .limit(bounded_limit)
+            )
+            sessions = list(result.scalars().all())
+            policy_service = GrowthSafetyPolicyService()
+            items = [
+                self._adaptive_difficulty_item(policy_service, session)
+                for session in sessions
+            ]
+            status_counts: dict[str, int] = {}
+            for item in items:
+                status = str(item["status"])
+                status_counts[status] = status_counts.get(status, 0) + 1
+
+            return Result.ok(
+                {
+                    "feature": "adaptive_difficulty",
+                    "mode": "dry_run_dashboard",
+                    "mutation_enabled": False,
+                    "explanation": "只展示如果启用会如何调整，不写入训练难度或用户偏好。",
+                    "summary": {
+                        "total_sessions": len(items),
+                        "status_counts": status_counts,
+                        "candidate_count": sum(
+                            status_counts.get(status, 0)
+                            for status in ("dry_run", "active_candidate")
+                        ),
+                        "blocked_count": sum(
+                            count
+                            for status, count in status_counts.items()
+                            if status.startswith("blocked")
+                        ),
+                    },
+                    "items": items,
+                }
+            )
+        except (SQLAlchemyError, ValueError, TypeError) as exc:
+            logger.error(
+                "adaptive_difficulty_dry_run_failed",
+                user_id=user_id,
+                error=str(exc),
+            )
+            return Result.fail(f"[ADAPTIVE_DRY_RUN_FAILED] {exc}")
+
+    @staticmethod
+    def _adaptive_difficulty_item(
+        policy_service: GrowthSafetyPolicyService,
+        session: PracticeSession,
+    ) -> dict[str, Any]:
+        decision = policy_service.evaluate_adaptive_difficulty(session).value or {}
+        current_difficulty = (
+            str(getattr(getattr(session, "persona", None), "difficulty", "") or "")
+            or "medium"
+        )
+        suggested_difficulty = GrowthCenterService._suggested_difficulty(
+            current_difficulty=current_difficulty,
+            adjustment=str(decision.get("suggested_adjustment") or "none"),
+            max_step=int(decision.get("max_adjustment_step") or 1),
+        )
+        return {
+            "session_id": str(session.session_id),
+            "started_at": session.start_time.isoformat()
+            if session.start_time
+            else None,
+            "scenario_type": getattr(getattr(session, "scenario", None), "scenario_type", None),
+            "current_difficulty": current_difficulty,
+            "suggested_difficulty": suggested_difficulty,
+            "suggested_adjustment": decision.get("suggested_adjustment") or "none",
+            "status": decision.get("status") or "unknown",
+            "enabled": bool(decision.get("enabled", False)),
+            "overall_score": decision.get("overall_score"),
+            "score_basis": decision.get("score_basis"),
+            "policy_version": decision.get("policy_version"),
+            "policy_source": decision.get("policy_source"),
+            "rollback_strategy": decision.get("rollback_strategy"),
+            "explanation": decision.get("explanation"),
+        }
+
+    @staticmethod
+    def _suggested_difficulty(
+        *,
+        current_difficulty: str,
+        adjustment: str,
+        max_step: int,
+    ) -> str:
+        order = ["easy", "medium", "hard"]
+        normalized = current_difficulty if current_difficulty in order else "medium"
+        index = order.index(normalized)
+        step = max(1, min(max_step, 3))
+        if adjustment == "increase":
+            return order[min(len(order) - 1, index + step)]
+        if adjustment == "decrease":
+            return order[max(0, index - step)]
+        return normalized
 
     @staticmethod
     def _achievement_payload(
@@ -660,11 +775,25 @@ class GrowthCenterService:
             ]
             notifications = await self.list_notifications(db=db, user_id=user_id)
             goal = await self._current_goal(db=db, user_id=user_id)
+            adaptive_dry_run = await self.get_adaptive_difficulty_dry_run(
+                db=db,
+                user_id=user_id,
+                limit=5,
+            )
             return Result.ok(
                 {
                     "achievements": {"unlocked": unlocked},
                     "notifications": notifications.value if notifications.is_success else {"items": [], "unread_count": 0},
                     "goal": goal,
+                    "adaptive_difficulty": adaptive_dry_run.value
+                    if adaptive_dry_run.is_success
+                    else {
+                        "feature": "adaptive_difficulty",
+                        "mode": "dry_run_dashboard",
+                        "mutation_enabled": False,
+                        "items": [],
+                        "summary": {"total_sessions": 0, "status_counts": {}},
+                    },
                     "rules": {
                         "achievement_ruleset_version": self.achievement_ruleset.get("version"),
                         "ai_coach_ruleset_version": self.ai_coach_ruleset.get("version"),
