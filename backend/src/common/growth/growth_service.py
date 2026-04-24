@@ -13,6 +13,13 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.business_rules.defaults import (
+    ACHIEVEMENT_RULES_KEY,
+    AI_COACH_RULES_KEY,
+    DEFAULT_ACHIEVEMENT_RULESET,
+    DEFAULT_AI_COACH_RULESET,
+)
+from common.business_rules.service import BusinessRuleConfigService
 from common.db.models import (
     Achievement,
     Notification,
@@ -25,37 +32,6 @@ from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
-
-DEFAULT_ACHIEVEMENT_RULESET: dict[str, Any] = {
-    "version": "growth_achievement_rules_v1",
-    "achievements": [
-        {
-            "code": "first_evaluable_session",
-            "name": "首次有效训练",
-            "description": "完成第一场可评估训练。",
-            "icon_key": "trophy",
-            "condition": {"type": "evaluable_session_count", "min": 1},
-        },
-        {
-            "code": "score_breakthrough_80",
-            "name": "突破 80 分",
-            "description": "任意一场可评估训练综合分达到 80 分。",
-            "icon_key": "sparkles",
-            "condition": {"type": "max_overall_score", "min": 80},
-        },
-    ],
-}
-
-DEFAULT_AI_COACH_RULESET: dict[str, Any] = {
-    "version": "growth_ai_coach_rules_v1",
-    "enabled": True,
-    "weak_score_threshold": 60.0,
-    "dimensions": [
-        {"key": "value_logic", "label": "价值逻辑", "score_field": "logic_score"},
-        {"key": "product_knowledge", "label": "产品知识与证据", "score_field": "accuracy_score"},
-        {"key": "objection_handling", "label": "异议处理", "score_field": "completeness_score"},
-    ],
-}
 
 
 class GrowthCenterService:
@@ -75,6 +51,8 @@ class GrowthCenterService:
         achievement_ruleset: dict[str, Any] | None = None,
         ai_coach_ruleset: dict[str, Any] | None = None,
     ) -> None:
+        self._achievement_ruleset_injected = achievement_ruleset is not None
+        self._ai_coach_ruleset_injected = ai_coach_ruleset is not None
         self.achievement_ruleset = self._load_ruleset(
             injected=achievement_ruleset,
             env_name="GROWTH_ACHIEVEMENT_RULESET_JSON",
@@ -87,6 +65,34 @@ class GrowthCenterService:
             default=DEFAULT_AI_COACH_RULESET,
             required_key="dimensions",
         )
+        self.achievement_ruleset_source = "injected" if achievement_ruleset else "default"
+        self.ai_coach_ruleset_source = "injected" if ai_coach_ruleset else "default"
+
+    async def _refresh_active_rulesets(self, *, db: AsyncSession) -> None:
+        """Load DB-published business-rule configs when available.
+
+        Constructor/env-injected rules remain authoritative for isolated tests and
+        explicit overrides; runtime API calls use the database resolver with the
+        already-loaded ruleset as the safe fallback.
+        """
+
+        service = BusinessRuleConfigService(db)
+        if not self._achievement_ruleset_injected:
+            achievement_resolution = await service.resolve_active_config(
+                ACHIEVEMENT_RULES_KEY,
+                fallback_value=self.achievement_ruleset,
+                fallback_source=self.achievement_ruleset_source,
+            )
+            self.achievement_ruleset = achievement_resolution.value
+            self.achievement_ruleset_source = achievement_resolution.source
+        if not self._ai_coach_ruleset_injected:
+            ai_coach_resolution = await service.resolve_active_config(
+                AI_COACH_RULES_KEY,
+                fallback_value=self.ai_coach_ruleset,
+                fallback_source=self.ai_coach_ruleset_source,
+            )
+            self.ai_coach_ruleset = ai_coach_resolution.value
+            self.ai_coach_ruleset_source = ai_coach_resolution.source
 
     @staticmethod
     def _load_ruleset(
