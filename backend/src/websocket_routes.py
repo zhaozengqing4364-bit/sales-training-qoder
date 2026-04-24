@@ -305,7 +305,7 @@ async def _is_presentation_kb_lock_unbound_session(session_id: str) -> bool:
                 )
             )
             snapshot = result.scalar_one_or_none()
-            return is_kb_lock_unbound_snapshot(snapshot)
+            return bool(is_kb_lock_unbound_snapshot(snapshot))
     except (RuntimeError, ValueError, OSError) as exc:
         logger.warning(
             "Failed to evaluate presentation KB lock binding before websocket connect",
