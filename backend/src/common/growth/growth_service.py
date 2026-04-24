@@ -34,45 +34,6 @@ from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 
-DEFAULT_ACHIEVEMENT_RULESET: dict[str, Any] = {
-    "version": "growth_achievement_rules_v1",
-    "achievements": [
-        {
-            "code": "first_evaluable_session",
-            "name": "首次有效训练",
-            "description": "完成第一场可评估训练。",
-            "icon_key": "trophy",
-            "condition": {"type": "evaluable_session_count", "min": 1},
-        },
-        {
-            "code": "score_breakthrough_80",
-            "name": "突破 80 分",
-            "description": "任意一场可评估训练综合分达到 80 分。",
-            "icon_key": "sparkles",
-            "condition": {"type": "max_overall_score", "min": 80},
-        },
-    ],
-}
-
-DEFAULT_AI_COACH_RULESET: dict[str, Any] = {
-    "version": "growth_ai_coach_rules_v1",
-    "enabled": True,
-    "weak_score_threshold": 60.0,
-    "dimensions": [
-        {"key": "value_logic", "label": "价值逻辑", "score_field": "logic_score"},
-        {
-            "key": "product_knowledge",
-            "label": "产品知识与证据",
-            "score_field": "accuracy_score",
-        },
-        {
-            "key": "objection_handling",
-            "label": "异议处理",
-            "score_field": "completeness_score",
-        },
-    ],
-}
-
 
 class GrowthCenterService:
     """Config-backed growth service.
