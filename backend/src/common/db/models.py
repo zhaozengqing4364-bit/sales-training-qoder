@@ -1182,6 +1182,52 @@ class ComprehensiveReport(Base):
     __table_args__ = {"extend_existing": True}
 
 
+class ScoringRuleset(Base):
+    """Versioned scoring ruleset managed through the admin control plane."""
+
+    __tablename__ = "scoring_rulesets"
+
+    ruleset_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    scenario_type = Column(String(20), nullable=False, index=True)
+    version = Column(String(80), nullable=False)
+    display_name = Column(String(160), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    definition_json = Column(JSON, nullable=False, default=dict)
+    is_active = Column(Boolean, nullable=False, default=False, index=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    published_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "scenario_type IN ('sales', 'presentation')",
+            name="ck_scoring_ruleset_scenario_type",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_scoring_ruleset_status",
+        ),
+        UniqueConstraint(
+            "scenario_type",
+            "version",
+            name="uq_scoring_ruleset_scenario_version",
+        ),
+        Index("idx_scoring_rulesets_scenario_active", "scenario_type", "is_active"),
+        Index("idx_scoring_rulesets_status", "status"),
+    )
+
+
 class VerificationCheckType(str, enum.Enum):
     """Types of verification checks for release gates"""
 
