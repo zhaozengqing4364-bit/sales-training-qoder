@@ -42,7 +42,7 @@ describe("PracticeHeader", () => {
         expect(screen.getByText("经典模式")).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "退出练习并返回首页" }));
-        fireEvent.click(screen.getByRole("button", { name: /暂停/ }));
+        fireEvent.click(screen.getAllByRole("button", { name: /暂停/ })[0]);
         fireEvent.click(screen.getByRole("button", { name: /结束练习/ }));
 
         expect(onExit).toHaveBeenCalledTimes(1);
