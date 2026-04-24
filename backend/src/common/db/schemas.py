@@ -516,6 +516,8 @@ class SessionReport(BaseModel):
     evaluable: bool | None = None
     not_evaluable_reason: str | None = None
     evidence_completeness: dict[str, Any] | None = None
+    ruleset_version: str | None = None
+    score_basis: str | None = None
     canonical_evaluation_kernel: dict[str, Any] | None = None
     compatibility_readers: dict[str, Any] | None = None
     presentation_review: PresentationReview | None = None
