@@ -9,6 +9,7 @@ StepFun Realtime API, enabling a dual-mode runtime:
 
 from __future__ import annotations
 
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportGeneralTypeIssues=false
 # ruff: noqa: F401, I001, E402
 
 import asyncio

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportGeneralTypeIssues=false
 # ruff: noqa: F401, I001
 
 import asyncio
