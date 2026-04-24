@@ -13,6 +13,13 @@ import os
 from copy import deepcopy
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from common.business_rules.defaults import (
+    DEFAULT_RECOMMENDATION_RULESET,
+    NEXT_PRACTICE_RECOMMENDATION_KEY,
+)
+from common.business_rules.service import BusinessRuleConfigService
 from common.db.models import PracticeSession, SessionStatus
 from common.error_handling.result import Result
 from common.growth.safety_policies import GrowthSafetyPolicyService
@@ -23,49 +30,11 @@ logger = get_logger(__name__)
 PROJECTION_SCORE_BASIS = "session_evidence_projection_evaluable_only"
 
 
-DEFAULT_RECOMMENDATION_RULESET: dict[str, Any] = {
-    "version": "growth_recommendation_rules_v1",
-    "enabled": True,
-    "weak_score_threshold": 60.0,
-    "dimensions": {
-        "product_knowledge": {
-            "score_field": "accuracy_score",
-            "label": "产品知识与证据",
-            "title": "补强产品知识与证据表达",
-            "reason_template": "上次可评估训练中「{label}」为 {score:.0f} 分，低于 {threshold:.0f} 分阈值，建议下一轮先补充案例、数据或 ROI 证据。",
-            "action_label": "练产品知识专项",
-            "target_path": "/training/sales?focus=product_knowledge",
-        },
-        "objection_handling": {
-            "score_field": "completeness_score",
-            "label": "异议处理",
-            "title": "练一轮异议处理专项",
-            "reason_template": "上次可评估训练中「{label}」为 {score:.0f} 分，低于 {threshold:.0f} 分阈值，建议下一轮重点承接客户顾虑并推动下一步。",
-            "action_label": "练异议处理",
-            "target_path": "/training/sales?focus=objection_handling",
-        },
-        "value_logic": {
-            "score_field": "logic_score",
-            "label": "价值逻辑",
-            "title": "梳理价值表达逻辑",
-            "reason_template": "上次可评估训练中「{label}」为 {score:.0f} 分，低于 {threshold:.0f} 分阈值，建议下一轮先把能力、收益和下一步说清楚。",
-            "action_label": "练价值表达",
-            "target_path": "/training/sales?focus=value_logic",
-        },
-    },
-    "fallback": {
-        "title": "保持复练节奏",
-        "reason": "上次可评估训练没有明显低于阈值的维度，建议延续当前训练节奏并尝试更完整的场景。",
-        "action_label": "继续练习",
-        "target_path": "/training",
-    },
-}
-
-
 class NextPracticeRecommendationService:
     """Build explainable next-practice recommendations for one session."""
 
     def __init__(self, ruleset: dict[str, Any] | None = None) -> None:
+        self._ruleset_injected = ruleset is not None
         self.ruleset, self.ruleset_source = self._resolve_ruleset(ruleset)
         self.growth_safety = GrowthSafetyPolicyService()
 
@@ -87,6 +56,28 @@ class NextPracticeRecommendationService:
                 )
 
         return deepcopy(DEFAULT_RECOMMENDATION_RULESET), "default"
+
+    async def refresh_active_ruleset(self, db: AsyncSession) -> None:
+        """Load the published DB ruleset when this service was not injected."""
+
+        if self._ruleset_injected:
+            return
+        resolution = await BusinessRuleConfigService(db).resolve_active_config(
+            NEXT_PRACTICE_RECOMMENDATION_KEY,
+            fallback_value=self.ruleset,
+            fallback_source=self.ruleset_source,
+        )
+        self.ruleset = resolution.value
+        self.ruleset_source = resolution.source
+
+    async def build_for_session_with_db(
+        self,
+        *,
+        db: AsyncSession,
+        session: PracticeSession,
+    ) -> Result[dict[str, Any]]:
+        await self.refresh_active_ruleset(db)
+        return self.build_for_session(session)
 
     @staticmethod
     def _validate_ruleset(ruleset: dict[str, Any]) -> dict[str, Any]:
