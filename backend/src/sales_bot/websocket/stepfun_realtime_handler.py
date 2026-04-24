@@ -223,6 +223,9 @@ class StepFunRealtimeHandler(
             os.getenv("STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE", "24000")
         )
         self._stepfun_playback_rate = 1.0
+        self._tts_chunk_protocol_version = str(
+            os.getenv("STEPFUN_TTS_CHUNK_PROTOCOL_VERSION", "v1")
+        ).strip().lower()
         self._stepfun_input_transcription_enabled = str(
             os.getenv("STEPFUN_REALTIME_ENABLE_INPUT_TRANSCRIPTION", "true")
         ).strip().lower() in {"1", "true", "yes", "on"}

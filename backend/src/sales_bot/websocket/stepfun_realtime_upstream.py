@@ -129,6 +129,15 @@ from sales_bot.websocket.components.stepfun_upstream_router import (
     extract_function_call_from_item_created,
     extract_response_done_function_calls,
 )
+from sales_bot.websocket.components.stepfun_asr_fallback import (
+    ASR_FALLBACK_REQUIRED_ERROR_CODE,
+    DEFAULT_ASR_FALLBACK_POLICY,
+    build_asr_fallback_status_event,
+    extract_asr_error_reason,
+)
+from sales_bot.websocket.components.stepfun_tts_contracts import (
+    build_tts_chunk_event,
+)
 from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
@@ -826,6 +835,24 @@ class StepFunRealtimeUpstreamMixin:
 
     async def _handle_upstream_error(self, event: dict) -> None:
         """Normalize upstream error and forward to frontend."""
+        asr_reason = extract_asr_error_reason(event)
+        if asr_reason:
+            await self.manager.send_json(
+                self.websocket,
+                build_asr_fallback_status_event(
+                    reason=asr_reason,
+                    session_status=self.session_status,
+                    ai_state=self.ai_state,
+                    turn_count=self.turn_count,
+                    trace_id=get_trace_id(),
+                    policy=DEFAULT_ASR_FALLBACK_POLICY,
+                ),
+            )
+            await self._send_error(
+                ASR_FALLBACK_REQUIRED_ERROR_CODE,
+                DEFAULT_ASR_FALLBACK_POLICY.user_message,
+            )
+            return
         await self._send_error("[STEPFUN_API_ERROR]", extract_error_message(event))
 
     async def _flush_active_response(self, response_done_event: dict) -> bool:
@@ -891,23 +918,20 @@ class StepFunRealtimeUpstreamMixin:
         if response_state.chunk_index > 0:
             await self.manager.send_json(
                 self.websocket,
-                {
-                    "type": "tts_chunk",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "stream_id": response_state.stream_id,
-                    "request_id": response_state.request_id,
-                    "data": {
-                        "chunk_index": response_state.chunk_index,
-                        "audio": "",
-                        "duration_ms": 0,
-                        "is_final": True,
-                        "text": response_text,
-                        "total_duration_ms": response_state.total_duration_ms,
-                        "audio_format": self._stepfun_output_audio_format.lower(),
-                        "sample_rate": self._stepfun_output_sample_rate,
-                        "playback_rate": self._stepfun_playback_rate,
-                    },
-                },
+                build_tts_chunk_event(
+                    stream_id=response_state.stream_id,
+                    request_id=response_state.request_id,
+                    chunk_index=response_state.chunk_index,
+                    audio="",
+                    duration_ms=0,
+                    is_final=True,
+                    text=response_text,
+                    total_duration_ms=response_state.total_duration_ms,
+                    audio_format=self._stepfun_output_audio_format,
+                    sample_rate=self._stepfun_output_sample_rate,
+                    playback_rate=self._stepfun_playback_rate,
+                    protocol_version=self._tts_chunk_protocol_version,
+                ),
             )
             await self._send_status("listening")
             return True
@@ -968,21 +992,18 @@ class StepFunRealtimeUpstreamMixin:
 
         await self.manager.send_json(
             self.websocket,
-            {
-                "type": "tts_chunk",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "stream_id": response_state.stream_id,
-                "request_id": response_state.request_id,
-                "data": {
-                    "chunk_index": chunk_index,
-                    "audio": audio_payload,
-                    "duration_ms": duration_ms,
-                    "is_final": False,
-                    "audio_format": output_format,
-                    "sample_rate": self._stepfun_output_sample_rate,
-                    "playback_rate": self._stepfun_playback_rate,
-                },
-            },
+            build_tts_chunk_event(
+                stream_id=response_state.stream_id,
+                request_id=response_state.request_id,
+                chunk_index=chunk_index,
+                audio=audio_payload,
+                duration_ms=duration_ms,
+                is_final=False,
+                audio_format=output_format,
+                sample_rate=self._stepfun_output_sample_rate,
+                playback_rate=self._stepfun_playback_rate,
+                protocol_version=self._tts_chunk_protocol_version,
+            ),
         )
 
         if not response_state.first_chunk_sent:
