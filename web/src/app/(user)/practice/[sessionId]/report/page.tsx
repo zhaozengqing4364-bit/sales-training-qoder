@@ -10,6 +10,7 @@ import {
     CheckCircle,
     Home,
     Lightbulb,
+    Share2,
     Sparkles,
     Target,
 } from "lucide-react";
@@ -23,6 +24,8 @@ import { StatusIndicator } from "@/components/ui/status-indicator";
 import { api, ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
 import {
     ComprehensiveReport,
+    HighlightReviewResponse,
+    HighlightReviewShareSummary,
     HighlightItem,
     HighlightsResponse,
     KnowledgeCheckDiagnostics,
