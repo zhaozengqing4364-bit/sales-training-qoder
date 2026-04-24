@@ -260,6 +260,12 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[REPORT_FETCH_FAILED]": "报告暂时无法读取，请稍后重试。",
     "[REPORT_GENERATION_FAILED]": "报告生成失败，请稍后重试。",
     "[TTS_PREVIEW_FAILED]": "语音试听失败，请稍后重试。",
+    "[HIGHLIGHT_REVIEW_SAVE_FAILED]": "高光复习清单保存失败，请稍后重试。",
+    "[HIGHLIGHT_MESSAGE_NOT_FOUND]": "所选高光片段已变化，请刷新报告后重新选择。",
+    "[HIGHLIGHT_REVIEW_EMPTY]": "请先选择至少一个高光片段再分享。",
+    "[WECOM_SHARE_NOT_AVAILABLE]": "企业微信分享试点暂未通过治理配置开放。",
+    "[SHARE_CONSENT_REQUIRED]": "请先确认同意分享脱敏高光清单。",
+    "[HIGHLIGHT_SHARE_INACTIVE]": "分享链接已过期或已撤销。",
 };
 
 type NormalizedApiErrorPayload = {
