@@ -388,6 +388,131 @@ class UserGoal(Base):
     user = relationship("User", back_populates="goals")
 
 
+class BusinessRuleConfig(Base):
+    """Versioned business-rule configuration for governed runtime rules."""
+
+    __tablename__ = "business_rule_configs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    domain = Column(String(80), nullable=False, index=True)
+    key = Column(String(160), nullable=False, index=True)
+    schema_version = Column(String(40), nullable=False)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    version = Column(Integer, nullable=False)
+    value_json = Column("value", _jsonb_compatible_type(), nullable=False, default=dict)
+    default_value_json = Column(
+        "default_value",
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=dict,
+    )
+    type = Column(String(40), nullable=False, default="rule_json")
+    range_or_allowlist_json = Column(
+        "range_or_allowlist",
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=dict,
+    )
+    read_path = Column(String(255), nullable=False)
+    admin_entry = Column(String(255), nullable=False)
+    permission = Column(String(80), nullable=False, default="admin")
+    audit_policy = Column(Text, nullable=False)
+    fallback_policy = Column(Text, nullable=False)
+    rollback_policy = Column(Text, nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    validation_errors_json = Column(
+        "validation_errors",
+        _jsonb_compatible_type(),
+        nullable=False,
+        default=list,
+    )
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived', 'disabled')",
+            name="ck_business_rule_config_status",
+        ),
+        UniqueConstraint("key", "version", name="uq_business_rule_config_key_version"),
+        Index(
+            "idx_business_rule_configs_key_status_version",
+            "key",
+            "status",
+            "version",
+        ),
+        Index("idx_business_rule_configs_domain_status", "domain", "status"),
+    )
+
+    creator = relationship("User", foreign_keys=[created_by])
+    updater = relationship("User", foreign_keys=[updated_by])
+
+
+class BusinessRuleConfigAuditLog(Base):
+    """Audit trail for business-rule draft, publish, rollback, and disable actions."""
+
+    __tablename__ = "business_rule_config_audit_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    config_id = Column(
+        String(36),
+        ForeignKey("business_rule_configs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    domain = Column(String(80), nullable=False, index=True)
+    config_key = Column(String(160), nullable=False, index=True)
+    action = Column(String(40), nullable=False, index=True)
+    actor_id = Column(String(36), ForeignKey("users.user_id"), nullable=True, index=True)
+    before_version = Column(Integer, nullable=True)
+    after_version = Column(Integer, nullable=True)
+    before_snapshot_json = Column(
+        "before_snapshot",
+        _jsonb_compatible_type(),
+        nullable=True,
+    )
+    after_snapshot_json = Column(
+        "after_snapshot",
+        _jsonb_compatible_type(),
+        nullable=True,
+    )
+    reason = Column(Text, nullable=False, default="not-provided")
+    trace_id = Column(String(120), nullable=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('seed_default', 'create_draft', 'update_draft', 'validate', "
+            "'preview', 'publish', 'rollback', 'disable', 'delete_draft')",
+            name="ck_business_rule_audit_action",
+        ),
+        Index(
+            "idx_business_rule_audit_key_created",
+            "config_key",
+            "created_at",
+        ),
+    )
+
+    config = relationship("BusinessRuleConfig")
+    actor = relationship("User", foreign_keys=[actor_id])
+
+
 class PasswordResetToken(Base):
     """Durable password-reset lifecycle row.
 
