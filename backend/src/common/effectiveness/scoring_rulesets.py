@@ -113,7 +113,7 @@ class ScoringRulesetDefinition(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_dimension_contract(self) -> "ScoringRulesetDefinition":
+    def validate_dimension_contract(self) -> ScoringRulesetDefinition:
         expected = {
             item.dimension_id: item
             for item in get_canonical_dimension_definitions(self.scenario_type)
