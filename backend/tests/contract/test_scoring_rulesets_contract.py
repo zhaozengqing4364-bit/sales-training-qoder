@@ -38,7 +38,7 @@ async def test_admin_scoring_ruleset_active_contract_returns_default_schema(
     assert response.status_code == 200
     payload = response.json()
     assert payload["success"] is True
-    assert isinstance(payload["trace_id"], str) | (payload["trace_id"] is None)
+    assert isinstance(payload["trace_id"], str) or payload["trace_id"] is None
     data = payload["data"]
     assert data["scenario_type"] == "sales"
     assert data["version"] == "session_evidence_projection_v1"

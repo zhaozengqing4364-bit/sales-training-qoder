@@ -1438,7 +1438,6 @@ class ScoringRuleset(Base):
             name="uq_scoring_ruleset_scenario_version",
         ),
         Index("idx_scoring_rulesets_scenario_active", "scenario_type", "is_active"),
-        Index("idx_scoring_rulesets_status", "status"),
     )
 
 
