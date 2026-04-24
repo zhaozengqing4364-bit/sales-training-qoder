@@ -190,6 +190,9 @@ export default function SalesTrainingPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [failedSections, setFailedSections] = useState<string[]>([]);
+    const [combinationRules, setCombinationRules] = useState<SalesCombinationResolution>(
+        () => buildClientDefaultSalesCombinationResolution("not_loaded"),
+    );
 
     const loadSalesTrainingData = useCallback(async () => {
         setIsLoading(true);
@@ -197,14 +200,16 @@ export default function SalesTrainingPage() {
         setFailedSections([]);
         setLatestRecommendation(null);
         setSalesHistory([]);
+        setCombinationRules(buildClientDefaultSalesCombinationResolution("not_loaded"));
 
         try {
-            const [agentResult, scenarioResult, personasResult, recommendationResult, historyResult] = await Promise.allSettled([
+            const [agentResult, scenarioResult, personasResult, recommendationResult, historyResult, combinationRulesResult] = await Promise.allSettled([
                 api.training.getSalesAgents(),
                 api.scenarios.list("sales"),
                 api.scenarios.getSalesPersonas(),
                 api.dashboard.getRecommendation(),
                 api.user.getMyHistory({ page: 1, page_size: 5, scenario_type: "sales" }),
+                api.training.getActiveSalesCombinations(),
             ]);
 
             const failedSections: string[] = [];
@@ -233,6 +238,26 @@ export default function SalesTrainingPage() {
             if (historyResult.status === "fulfilled") {
                 setSalesHistory(historyResult.value.sessions || []);
             }
+            if (combinationRulesResult.status === "fulfilled") {
+                const resolvedRules = resolveSalesCombinationRuleSet(combinationRulesResult.value);
+                setCombinationRules(resolvedRules);
+                if (resolvedRules.source === "client_default") {
+                    debug.warn("[SalesTraining] Active sales-combination ruleset rejected; using client default", {
+                        fallbackReason: resolvedRules.fallbackReason,
+                        invalidReason: resolvedRules.invalidReason,
+                    });
+                }
+            } else {
+                setCombinationRules(buildClientDefaultSalesCombinationResolution(
+                    "api_error",
+                    combinationRulesResult.reason instanceof Error
+                        ? combinationRulesResult.reason.message
+                        : "active sales-combination ruleset API failed",
+                ));
+                debug.warn("[SalesTraining] Active sales-combination ruleset unavailable; using client default", {
+                    error: combinationRulesResult.reason,
+                });
+            }
 
             setFailedSections(failedSections);
             if (failedSections.length > 0) {
@@ -256,12 +281,12 @@ export default function SalesTrainingPage() {
     };
 
     const personalizedCombination = useMemo(
-        () => resolvePersonalizedCombination(latestRecommendation, salesHistory),
-        [latestRecommendation, salesHistory],
+        () => resolvePersonalizedCombination(latestRecommendation, salesHistory, combinationRules.combinations),
+        [combinationRules.combinations, latestRecommendation, salesHistory],
     );
 
     const combinationCards = useMemo(() => {
-        const cards = CORE_COMBINATIONS.map((combination) => {
+        const cards = combinationRules.combinations.map((combination) => {
             const agent = resolveAgentForCapability(agents, combination.capability);
             const persona = resolvePersonaForRole(salesPersonas, combination.role);
             const focusIntent = buildCombinationFocusIntent(combination);
@@ -294,7 +319,9 @@ export default function SalesTrainingPage() {
             if (right.id === personalizedCombination.combinationId) return 1;
             return 0;
         });
-    }, [agents, personalizedCombination, salesPersonas]);
+    }, [agents, combinationRules.combinations, personalizedCombination, salesPersonas]);
+
+    const combinationFallbackCopy = formatSalesCombinationFallbackReason(combinationRules);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
