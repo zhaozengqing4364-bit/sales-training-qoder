@@ -168,7 +168,7 @@ async def test_wecom_share_requires_consent_ttl_revoke_audit_and_desensitizes_pu
     assert "buyer@example.com" not in public_item["content_excerpt"]
     assert "[phone]" in public_item["content_excerpt"]
     assert "[email]" in public_item["content_excerpt"]
-    assert "audit" in public_payload["audit_notice"].lower()
+    assert "审计" in public_payload["audit_notice"]
 
     revoke_result = await service.revoke_share(
         db=test_db,
