@@ -383,10 +383,28 @@ export default function SalesTrainingPage() {
 
             <div className="rounded-3xl border border-slate-100 bg-white/70 p-6">
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                    <h2 className="text-lg font-bold text-slate-900">核心 10 组合（80/20）</h2>
-                    <span className="text-xs text-slate-500">首期优先练这些组合，先拿稳定效果</span>
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-900">
+                            核心 {combinationCards.length || combinationRules.combinations.length || 10} 组合（80/20）
+                        </h2>
+                        {combinationFallbackCopy && (
+                            <p className="mt-1 text-xs font-medium text-amber-700">
+                                {combinationFallbackCopy}
+                                {combinationRules.invalidReason ? ` 原因：${combinationRules.invalidReason}` : ""}
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex flex-col items-start gap-1 sm:items-end">
+                        <span className="text-xs text-slate-500">首期优先练这些组合，先拿稳定效果</span>
+                        <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+                            {combinationRules.source === "server"
+                                ? `后台配置 · ${combinationRules.version}`
+                                : `安全兜底 · ${combinationRules.version}`}
+                        </span>
+                    </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {combinationCards.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                     {combinationCards.map((item, idx) => (
                         <button
                             key={item.id}
@@ -430,7 +448,12 @@ export default function SalesTrainingPage() {
                             )}
                         </button>
                     ))}
-                </div>
+                    </div>
+                ) : (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+                        后台当前显式隐藏了全部销售训练组合。你仍可从下方已发布销售智能体进入角色选择页。
+                    </div>
+                )}
             </div>
 
             {/* Agents Grid */}
