@@ -10,7 +10,11 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.conversation.session_evidence import SessionEvidenceService
+from common.conversation.session_evidence import (
+    SESSION_EVIDENCE_SCORE_BASIS,
+    SESSION_EVIDENCE_RULESET_VERSION,
+    SessionEvidenceService,
+)
 from common.db.models import PracticeSession, SessionAudioSegment
 from common.db.schemas import ScenarioType, SessionReport
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
@@ -189,6 +193,10 @@ class PracticeReportService:
                 overall_result=resolved_snapshot.get("overall_result"),
                 main_issue=resolved_snapshot.get("main_issue"),
                 next_goal=resolved_snapshot.get("next_goal"),
+                ruleset_version=str(
+                    resolved_snapshot.get("version") or SESSION_EVIDENCE_RULESET_VERSION
+                ),
+                score_basis=SESSION_EVIDENCE_SCORE_BASIS,
                 retry_entry=PracticeRetryEntryAssembler.build_retry_entry(
                     session=session,
                     scenario_type="presentation",
@@ -222,6 +230,10 @@ class PracticeReportService:
             overall_result=resolved_snapshot.get("overall_result"),
             main_issue=resolved_snapshot.get("main_issue"),
             next_goal=resolved_snapshot.get("next_goal"),
+            ruleset_version=str(
+                resolved_snapshot.get("version") or SESSION_EVIDENCE_RULESET_VERSION
+            ),
+            score_basis=SESSION_EVIDENCE_SCORE_BASIS,
             retry_entry=PracticeRetryEntryAssembler.build_retry_entry(
                 session=session,
                 scenario_type="sales",
@@ -334,6 +346,8 @@ class PracticeReportService:
                 else projection.not_evaluable_reason
             ),
             evidence_completeness=projection.evidence_completeness,
+            ruleset_version=projection.ruleset_version,
+            score_basis=projection.score_basis,
             canonical_evaluation_kernel=projection.canonical_evaluation_kernel,
             compatibility_readers=projection.compatibility_readers,
             presentation_review=presentation_review,
