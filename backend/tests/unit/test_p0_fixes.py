@@ -9,6 +9,7 @@ Tests for:
 """
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -192,6 +193,55 @@ class TestSessionRateLimiter:
 
         await rate_limiter.unregister_session("user_1", "session_1")
         assert rate_limiter.current_total == 0
+
+    @pytest.mark.asyncio
+    async def test_session_creation_window_is_separate_from_active_sessions(self):
+        """Should deny excessive sequential creations even after sessions end."""
+        from common.rate_limit.session_limiter import SessionRateLimiter
+
+        limiter = SessionRateLimiter(
+            max_concurrent_per_user=10,
+            max_sessions_per_hour=2,
+            max_total_concurrent=10,
+            session_window=3600,
+            cleanup_interval=0.1,
+        )
+
+        assert (await limiter.check_limit("user_1")) == (True, "")
+        await limiter.register_session("user_1", "session_1")
+        await limiter.unregister_session("user_1", "session_1")
+        assert limiter.current_total == 0
+
+        assert (await limiter.check_limit("user_1")) == (True, "")
+        await limiter.register_session("user_1", "session_2")
+        await limiter.unregister_session("user_1", "session_2")
+        assert limiter.get_user_stats("user_1")["active_sessions"] == 0
+        assert limiter.get_user_stats("user_1")["created_in_window"] == 2
+
+        allowed, reason = await limiter.check_limit("user_1")
+
+        assert not allowed
+        assert "每小时会话上限" in reason
+
+    @pytest.mark.asyncio
+    async def test_session_creation_window_expires_without_active_session(self):
+        """Should allow a new creation after old creation timestamps expire."""
+        from common.rate_limit.session_limiter import SessionRateLimiter
+
+        limiter = SessionRateLimiter(
+            max_concurrent_per_user=10,
+            max_sessions_per_hour=1,
+            max_total_concurrent=10,
+            session_window=1,
+            cleanup_interval=0.1,
+        )
+        limiter.user_session_creations["user_1"] = [time.time() - 2]
+
+        allowed, reason = await limiter.check_limit("user_1")
+
+        assert allowed
+        assert reason == ""
+        assert limiter.user_session_creations.get("user_1") is None
 
     @pytest.mark.asyncio
     async def test_global_limit(self, rate_limiter):

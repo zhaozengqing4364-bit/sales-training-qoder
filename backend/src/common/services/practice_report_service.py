@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.session_evidence import (
-    SESSION_EVIDENCE_SCORE_BASIS,
     SESSION_EVIDENCE_RULESET_VERSION,
+    SESSION_EVIDENCE_SCORE_BASIS,
     SessionEvidenceService,
 )
 from common.db.models import PracticeSession, SessionAudioSegment
