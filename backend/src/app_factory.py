@@ -124,6 +124,7 @@ def create_app() -> FastAPI:
         version=APP_VERSION,
         lifespan=lifespan,
     )
+    app.state.lifespan_authority = lifespan
     initialize_metrics(
         version=app.version,
         environment=os.getenv("ENVIRONMENT", "development").strip().lower(),
