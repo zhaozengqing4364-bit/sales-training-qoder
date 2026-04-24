@@ -28,6 +28,7 @@ import type {
     HighlightsResponse,
     HighlightReviewItemPayload,
     HighlightReviewResponse,
+    HighlightReviewShareSummary,
     HighlightReviewShareCreateResponse,
     SessionLifecycleAction,
     SessionLifecycleRequest,
@@ -276,6 +277,45 @@ export function createSessionsDomain({
             return request<Record<string, unknown>>(`/sessions/${sessionId}/messages/${messageId}`);
         },
         getHighlights: async (sessionId: string) => request<HighlightsResponse>(`/sessions/${sessionId}/highlights`),
+        getHighlightReview: async (sessionId: string) => request<HighlightReviewResponse | null>(`/sessions/${sessionId}/highlight-review`),
+        saveHighlightReview: async (
+            sessionId: string,
+            payload: { items: Array<Partial<HighlightReviewItemPayload> & { id?: string }>; title?: string | null },
+        ) => request<HighlightReviewResponse>(`/sessions/${sessionId}/highlight-review`, {
+            method: "PUT",
+            body: JSON.stringify({
+                schema_version: "highlight_review_v1",
+                title: payload.title ?? null,
+                items: payload.items.map((item) => ({
+                    id: item.id ?? item.message_id,
+                    message_id: item.message_id ?? item.id,
+                    reason: item.reason ?? null,
+                    stage_name: item.stage_name ?? null,
+                    issue_label: item.issue_label ?? null,
+                    suggested_response: item.suggested_response ?? null,
+                })),
+            }),
+        }),
+        createHighlightReviewShare: async (
+            sessionId: string,
+            payload: { consent_granted: boolean; consent_text?: string | null; ttl_days?: number | null; channel?: "wecom" },
+        ) => request<HighlightReviewShareCreateResponse>(`/sessions/${sessionId}/highlight-review/shares`, {
+            method: "POST",
+            body: JSON.stringify({
+                channel: payload.channel ?? "wecom",
+                consent_granted: payload.consent_granted,
+                consent_text: payload.consent_text ?? null,
+                ttl_days: payload.ttl_days ?? null,
+            }),
+        }),
+        revokeHighlightReviewShare: async (
+            sessionId: string,
+            shareId: string,
+            reason?: string | null,
+        ) => request<HighlightReviewShareSummary>(`/sessions/${sessionId}/highlight-review/shares/${shareId}/revoke`, {
+            method: "POST",
+            body: JSON.stringify({ reason: reason ?? null }),
+        }),
 
         getAudioBlobUrl: async (sessionId: string, messageId: string) => {
             const response = await fetch(`${resolveApiBaseUrl()}/sessions/${sessionId}/audio/${messageId}`, {
