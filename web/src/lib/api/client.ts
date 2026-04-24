@@ -68,6 +68,9 @@ import {
     ReplayData,
     ReplayMessagesResponse,
     HighlightsResponse,
+    HighlightReviewItemPayload,
+    HighlightReviewResponse,
+    HighlightReviewShareCreateResponse,
     SessionStats,
     PracticeSessionReport,
     HistoryListResponse,
@@ -116,11 +119,7 @@ import {
     AdminModelConfigTestResponse,
     AdminModelConfigTestRequest,
     AdminModelConfigUpdateRequest,
-    SalesCombinationPreviewResponse,
-    SalesCombinationRuleMutationResponse,
-    SalesCombinationRuleSet,
-    SalesCombinationRuleSetListResponse,
-    SalesCombinationRuleValidationResult,
+    AdaptiveDifficultyDryRunResponse,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
