@@ -11,6 +11,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.business_rules.defaults import (
+    SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
     get_default_business_rule_value,
     list_business_rule_definitions,
@@ -692,6 +693,18 @@ class BusinessRuleConfigService:
 
     @staticmethod
     def _preview_summary(key: str, value: dict[str, Any]) -> dict[str, Any]:
+        if key == SALES_COMBINATION_RULES_KEY:
+            combinations = [
+                item for item in value.get("combinations", []) if isinstance(item, dict)
+            ]
+            enabled = [item for item in combinations if item.get("enabled", True) is not False]
+            return {
+                "enabled": True,
+                "ruleset_version": value.get("version"),
+                "combination_count": len(combinations),
+                "enabled_combination_count": len(enabled),
+                "fallback_policy": value.get("fallback_policy"),
+            }
         if key.endswith("achievement.rules"):
             achievements = [
                 item for item in value.get("achievements", []) if isinstance(item, dict)

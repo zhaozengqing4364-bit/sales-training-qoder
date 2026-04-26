@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.api.response import error_response, success_response
 from common.auth.service import get_current_admin_user
 from common.business_rules.defaults import (
-    SALES_COMBINATIONS_RULESET_KEY,
+    SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
     get_default_business_rule_value,
     list_business_rule_definitions,
@@ -73,6 +73,12 @@ class BusinessRuleDeleteDraftRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: str | None = Field(default=None, max_length=500)
+
+
+class SalesCombinationMutationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=1, max_length=500)
 
 
 def _error(
@@ -330,141 +336,172 @@ async def get_active_business_rule(
         return _business_rule_error(exc)
 
 
+def _sales_ruleset_from_row(row: BusinessRuleConfig) -> dict[str, Any]:
+    value = row.value_json if isinstance(row.value_json, dict) else {}
+    return {
+        "rule_set_id": value.get("rule_set_id"),
+        "version": value.get("version"),
+        "status": row.status,
+        "effective_at": row.updated_at.isoformat() if row.updated_at else None,
+        "fallback_policy": value.get("fallback_policy", "client_default_v1"),
+        "combinations": value.get("combinations", []),
+        "source": "database",
+        "fallback_reason": None,
+        "audit_summary": {
+            "published_by": str(row.updated_by or row.created_by)
+            if (row.updated_by or row.created_by)
+            else None,
+            "published_at": row.updated_at.isoformat() if row.updated_at else None,
+            "reason": None,
+            "trace_id": None,
+        },
+    }
+
+
+def _sales_audit_payload(row) -> dict[str, Any]:
+    return {
+        "id": str(row.id),
+        "actor": str(row.actor_id) if row.actor_id else None,
+        "action": row.action,
+        "before_version": str(row.before_version) if row.before_version is not None else None,
+        "after_version": str(row.after_version) if row.after_version is not None else None,
+        "reason": row.reason,
+        "trace_id": row.trace_id,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+async def _find_sales_config_by_ruleset_id(
+    service: BusinessRuleConfigService,
+    *,
+    ruleset_id: str,
+    statuses: set[str],
+) -> BusinessRuleConfig | None:
+    rows = await service.list_configs(key=SALES_COMBINATION_RULES_KEY)
+    for row in rows:
+        value = row.value_json if isinstance(row.value_json, dict) else {}
+        if row.status in statuses and value.get("rule_set_id") == ruleset_id:
+            return row
+    return None
+
+
+async def _sales_list_payload(
+    service: BusinessRuleConfigService,
+) -> dict[str, Any]:
+    rows = await service.list_configs(key=SALES_COMBINATION_RULES_KEY)
+    active_rows = [row for row in rows if row.status in {"published", "disabled"}]
+    draft_rows = [row for row in rows if row.status == "draft"]
+    history_rows = [row for row in rows if row.status == "archived"]
+    audit_rows = await service.list_audit_logs(key=SALES_COMBINATION_RULES_KEY, limit=50)
+    return {
+        "active": _sales_ruleset_from_row(active_rows[0]) if active_rows else None,
+        "drafts": [_sales_ruleset_from_row(row) for row in draft_rows],
+        "history": [_sales_ruleset_from_row(row) for row in history_rows],
+        "audit_log": [_sales_audit_payload(row) for row in audit_rows],
+        "permissions": {
+            "can_view": True,
+            "can_mutate": True,
+            "can_publish": True,
+            "reason": None,
+        },
+    }
+
+
 @router.get("/sales-combinations")
 async def list_sales_combination_rulesets(
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _ = current_user
     service = BusinessRuleConfigService(db)
-    rows = await service.list_configs(key=SALES_COMBINATIONS_RULESET_KEY)
-    audit_rows = [
-        service.audit_snapshot(row)
-        for row in await service.list_audit_logs(
-            key=SALES_COMBINATIONS_RULESET_KEY, limit=50
-        )
-    ]
-    latest_audit_by_version: dict[int, dict[str, Any]] = {}
-    for audit in audit_rows:
-        after_version = audit.get("after_version")
-        if (
-            isinstance(after_version, int)
-            and after_version not in latest_audit_by_version
-        ):
-            latest_audit_by_version[after_version] = audit
-
-    active_rows = [row for row in rows if row.status in {"published", "disabled"}]
-    active_row = active_rows[0] if active_rows else None
-    active = None
-    if active_row is not None:
-        active = _sales_ruleset_payload(
-            active_row,
-            validate_business_rule_value(
-                SALES_COMBINATIONS_RULESET_KEY,
-                dict(active_row.value_json or {}),
-            ),
-            status="published" if active_row.status != "disabled" else "archived",
-            audit=latest_audit_by_version.get(active_row.version),
-        )
-    else:
-        resolution = await service.resolve_active_config(SALES_COMBINATIONS_RULESET_KEY)
-        active = _sales_ruleset_payload(
-            None,
-            resolution.value,
-            status="published",
-            fallback_reason=resolution.fallback_reason,
-        )
-
-    drafts = [
-        _sales_ruleset_payload(
-            row,
-            validate_business_rule_value(
-                SALES_COMBINATIONS_RULESET_KEY, dict(row.value_json or {})
-            ),
-            status="draft",
-            audit=latest_audit_by_version.get(row.version),
-        )
-        for row in rows
-        if row.status == "draft"
-    ]
-    history = [
-        _sales_ruleset_payload(
-            row,
-            validate_business_rule_value(
-                SALES_COMBINATIONS_RULESET_KEY, dict(row.value_json or {})
-            ),
-            status="archived",
-            audit=latest_audit_by_version.get(row.version),
-        )
-        for row in rows
-        if row.status in {"archived", "disabled"}
-    ]
-    return success_response(
-        {
-            "active": active,
-            "drafts": drafts,
-            "history": history,
-            "audit_log": [_sales_audit_payload(row) for row in audit_rows],
-            "permissions": {
-                "can_view": True,
-                "can_mutate": current_user.role == "admin",
-                "can_publish": current_user.role == "admin",
-                "reason": None if current_user.role == "admin" else "需要管理员权限。",
-            },
-        }
-    )
+    try:
+        return success_response(await _sales_list_payload(service))
+    except (BusinessRuleValidationError, KeyError, ValueError) as exc:
+        return _business_rule_error(exc)
 
 
 @router.post("/sales-combinations/validate")
 async def validate_sales_combination_ruleset(
-    payload: dict[str, Any] = Body(...),
+    payload: dict[str, Any],
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
     try:
-        normalized = await service.validate_config_value(
-            key=SALES_COMBINATIONS_RULESET_KEY,
+        await service.validate_config_value(
+            key=SALES_COMBINATION_RULES_KEY,
             value=payload,
             actor_id=str(current_user.user_id),
             audit=True,
         )
         await db.commit()
+        return success_response({"valid": True, "errors": [], "warnings": []})
+    except BusinessRuleValidationError as exc:
+        await db.rollback()
         return success_response(
             {
-                "valid": True,
-                "errors": [],
+                "valid": False,
+                "errors": [{"path": "ruleset", "message": str(exc)}],
                 "warnings": [],
-                "normalized_value": normalized,
             }
         )
-    except (BusinessRuleValidationError, KeyError, ValueError) as exc:
+    except (KeyError, ValueError) as exc:
         await db.rollback()
-        return success_response(_sales_validation_error_payload(exc))
+        return _business_rule_error(exc)
 
 
 @router.post("/sales-combinations/preview")
 async def preview_sales_combination_ruleset(
-    payload: dict[str, Any] = Body(...),
+    payload: dict[str, Any],
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
     try:
         normalized = await service.validate_config_value(
-            key=SALES_COMBINATIONS_RULESET_KEY,
+            key=SALES_COMBINATION_RULES_KEY,
             value=payload,
             actor_id=str(current_user.user_id),
             audit=True,
         )
         await db.commit()
-        return success_response(_sales_preview_payload(normalized))
-    except (BusinessRuleValidationError, KeyError, ValueError) as exc:
+        combinations = normalized.get("combinations", [])
+        disabled = sum(1 for item in combinations if item.get("enabled") is False)
+        total = len(combinations)
+        return success_response(
+            {
+                "valid": True,
+                "ruleset_version": normalized["version"],
+                "previewed_at": datetime.now(UTC).isoformat(),
+                "coverage": {
+                    "total": total,
+                    "matched": total - disabled,
+                    "missing_agent": 0,
+                    "missing_persona": 0,
+                    "disabled": disabled,
+                },
+                "items": [
+                    {
+                        "combination_id": item["id"],
+                        "capability": item["capability"],
+                        "role": item["role"],
+                        "status": "disabled" if item.get("enabled") is False else "matched",
+                        "matched_agent_name": None,
+                        "matched_persona_name": None,
+                        "reason": None,
+                    }
+                    for item in combinations
+                ],
+                "validation_errors": [],
+            }
+        )
+    except BusinessRuleValidationError as exc:
         await db.rollback()
-        invalid = _sales_validation_error_payload(exc)
         return success_response(
             {
                 "valid": False,
-                "ruleset_version": payload.get("version"),
+                "ruleset_version": str(payload.get("version") or ""),
+                "previewed_at": datetime.now(UTC).isoformat(),
                 "coverage": {
                     "total": 0,
                     "matched": 0,
@@ -473,52 +510,48 @@ async def preview_sales_combination_ruleset(
                     "disabled": 0,
                 },
                 "items": [],
-                "validation_errors": invalid["errors"],
+                "validation_errors": [{"path": "ruleset", "message": str(exc)}],
             }
         )
+    except (KeyError, ValueError) as exc:
+        await db.rollback()
+        return _business_rule_error(exc)
 
 
 @router.post("/sales-combinations/{ruleset_id}/publish")
 async def publish_sales_combination_ruleset(
     ruleset_id: str,
-    payload: BusinessRulePublishRequest,
+    payload: SalesCombinationMutationRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
     try:
-        rows = await service.list_configs(key=SALES_COMBINATIONS_RULESET_KEY)
-        draft = _find_sales_row_by_ruleset_id(rows, ruleset_id, statuses={"draft"})
-        if draft is None and ruleset_id == get_default_business_rule_value(
-            SALES_COMBINATIONS_RULESET_KEY
-        ).get("rule_set_id"):
-            draft = await service.create_or_update_draft(
-                key=SALES_COMBINATIONS_RULESET_KEY,
-                value=get_default_business_rule_value(SALES_COMBINATIONS_RULESET_KEY),
-                actor_id=str(current_user.user_id),
-                reason=payload.reason,
-            )
+        before = await service.resolve_active_config(SALES_COMBINATION_RULES_KEY)
+        draft = await _find_sales_config_by_ruleset_id(
+            service,
+            ruleset_id=ruleset_id,
+            statuses={"draft"},
+        )
         row = await service.publish(
-            key=SALES_COMBINATIONS_RULESET_KEY,
+            key=SALES_COMBINATION_RULES_KEY,
             actor_id=str(current_user.user_id),
-            config_id=str(draft.id) if draft else payload.config_id,
+            config_id=str(draft.id) if draft is not None else None,
             reason=payload.reason,
         )
         await db.commit()
         await db.refresh(row)
-        audit = service.audit_snapshot(
-            (
-                await service.list_audit_logs(
-                    key=SALES_COMBINATIONS_RULESET_KEY, limit=1
-                )
-            )[0]
-        )
         return success_response(
             {
-                "ruleset": _sales_ruleset_payload(
-                    row, dict(row.value_json or {}), status="published", audit=audit
-                ),
-                "audit": _sales_audit_payload(audit),
+                "ruleset": _sales_ruleset_from_row(row),
+                "audit": {
+                    "actor": str(current_user.user_id),
+                    "action": "publish",
+                    "before_version": str(before.version) if before.version is not None else None,
+                    "after_version": row.value_json.get("version"),
+                    "reason": payload.reason,
+                    "trace_id": None,
+                },
             }
         )
     except (BusinessRuleValidationError, KeyError, ValueError) as exc:
@@ -529,40 +562,37 @@ async def publish_sales_combination_ruleset(
 @router.post("/sales-combinations/{ruleset_id}/rollback")
 async def rollback_sales_combination_ruleset(
     ruleset_id: str,
-    payload: BusinessRuleRollbackRequest,
+    payload: SalesCombinationMutationRequest,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
     try:
-        rows = await service.list_configs(key=SALES_COMBINATIONS_RULESET_KEY)
-        target = _find_sales_row_by_ruleset_id(
-            rows,
-            ruleset_id,
-            statuses={"archived", "published", "disabled"},
+        before = await service.resolve_active_config(SALES_COMBINATION_RULES_KEY)
+        target = await _find_sales_config_by_ruleset_id(
+            service,
+            ruleset_id=ruleset_id,
+            statuses={"published", "archived", "disabled"},
         )
         row = await service.rollback(
-            key=SALES_COMBINATIONS_RULESET_KEY,
+            key=SALES_COMBINATION_RULES_KEY,
             actor_id=str(current_user.user_id),
-            target_config_id=str(target.id) if target else payload.target_config_id,
-            target_version=payload.target_version,
+            target_config_id=str(target.id) if target is not None else None,
             reason=payload.reason,
         )
         await db.commit()
         await db.refresh(row)
-        audit = service.audit_snapshot(
-            (
-                await service.list_audit_logs(
-                    key=SALES_COMBINATIONS_RULESET_KEY, limit=1
-                )
-            )[0]
-        )
         return success_response(
             {
-                "ruleset": _sales_ruleset_payload(
-                    row, dict(row.value_json or {}), status="published", audit=audit
-                ),
-                "audit": _sales_audit_payload(audit),
+                "ruleset": _sales_ruleset_from_row(row),
+                "audit": {
+                    "actor": str(current_user.user_id),
+                    "action": "rollback",
+                    "before_version": str(before.version) if before.version is not None else None,
+                    "after_version": row.value_json.get("version"),
+                    "reason": payload.reason,
+                    "trace_id": None,
+                },
             }
         )
     except (BusinessRuleValidationError, KeyError, ValueError) as exc:
