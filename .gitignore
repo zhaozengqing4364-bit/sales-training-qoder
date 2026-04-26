@@ -50,6 +50,7 @@ build/
 .vite/
 .cache/
 package-lock.json
+!web/package-lock.json
 yarn.lock
 pnpm-lock.yaml
 

@@ -20,7 +20,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.25.0",
     "lucide-react": "^0.562.0",
-    "next": "^16.2.3",
+    "next": "16.2.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.6.0",
@@ -35,14 +35,18 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@vitest/coverage-v8": "4.1.4",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "^16.2.3",
+    "eslint-config-next": "16.2.3",
     "fast-check": "^4.5.3",
     "jsdom": "^27.4.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.0.16"
+    "vitest": "4.1.4"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "eslint-plugin-react-hooks": "7.0.1"
   }
 }
