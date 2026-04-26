@@ -19,7 +19,9 @@ from main import app
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:
+def _make_effectiveness_snapshot(
+    *, evaluable: bool, reason: str | None
+) -> dict[str, object]:
     return {
         "pass_flags": {
             "pass_3min_flow": evaluable,
@@ -38,12 +40,18 @@ def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict
         "main_issue": {
             "issue_type": "main_capability_not_passed",
             "issue_text": "证据不足，当前无法评估。" if not evaluable else "继续保持。",
-            "recovery_rule": "补齐有效互动后再结束。" if not evaluable else "保持当前节奏。",
+            "recovery_rule": "补齐有效互动后再结束。"
+            if not evaluable
+            else "保持当前节奏。",
         },
         "next_goal": {
             "goal_type": "main_capability_focus",
-            "goal_text": "先完成一轮有效互动再评估。" if not evaluable else "维持当前表现。",
-            "rule": "补齐用户表达和AI回应后再结束。" if not evaluable else "继续按当前节奏推进。",
+            "goal_text": "先完成一轮有效互动再评估。"
+            if not evaluable
+            else "维持当前表现。",
+            "rule": "补齐用户表达和AI回应后再结束。"
+            if not evaluable
+            else "继续按当前节奏推进。",
         },
         "version": "rule_v1",
         "evaluable": evaluable,
@@ -64,7 +72,9 @@ async def test_engine():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session(test_engine):
-    async_session = sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
     async with async_session() as session:
         yield session
 
@@ -270,7 +280,9 @@ async def test_history_statistics_and_trends_share_same_session_evidence_project
     replay_data = replay_resp.json()["data"]
 
     history_by_id = {item["session_id"]: item for item in history_data["sessions"]}
-    analytics_history_by_id = {item["session_id"]: item for item in analytics_history_data["items"]}
+    analytics_history_by_id = {
+        item["session_id"]: item for item in analytics_history_data["items"]
+    }
 
     assert set(history_by_id) == {
         legacy_session.session_id,
@@ -282,10 +294,15 @@ async def test_history_statistics_and_trends_share_same_session_evidence_project
     }
 
     legacy_history_item = history_by_id[legacy_session.session_id]
-    assert legacy_history_item["overall_score"] == pytest.approx(legacy_projection.overall_score)
+    assert legacy_history_item["overall_score"] == pytest.approx(
+        legacy_projection.overall_score
+    )
     assert legacy_history_item["evaluable"] is True
     assert legacy_history_item["not_evaluable_reason"] is None
-    assert legacy_history_item["evidence_completeness"] == legacy_projection.evidence_completeness
+    assert (
+        legacy_history_item["evidence_completeness"]
+        == legacy_projection.evidence_completeness
+    )
     assert legacy_history_item["evidence_completeness"]["legacy_score_key_used"] is True
 
     no_evidence_history_item = history_by_id[no_evidence_session.session_id]
@@ -299,17 +316,23 @@ async def test_history_statistics_and_trends_share_same_session_evidence_project
         == "INSUFFICIENT_TURN_DATA"
     )
 
-    assert analytics_history_by_id[legacy_session.session_id]["overall_score"] == pytest.approx(
-        legacy_projection.overall_score
-    )
+    assert analytics_history_by_id[legacy_session.session_id][
+        "overall_score"
+    ] == pytest.approx(legacy_projection.overall_score)
     assert analytics_history_by_id[legacy_session.session_id]["evaluable"] is True
     assert analytics_history_by_id[no_evidence_session.session_id]["evaluable"] is False
 
-    assert report_data["overall_score"] == replay_data["overall_score"] == pytest.approx(
-        legacy_projection.overall_score
+    assert (
+        report_data["overall_score"]
+        == replay_data["overall_score"]
+        == pytest.approx(legacy_projection.overall_score)
     )
-    assert legacy_history_item["overall_score"] == pytest.approx(report_data["overall_score"])
-    assert legacy_history_item["overall_score"] == pytest.approx(replay_data["overall_score"])
+    assert legacy_history_item["overall_score"] == pytest.approx(
+        report_data["overall_score"]
+    )
+    assert legacy_history_item["overall_score"] == pytest.approx(
+        replay_data["overall_score"]
+    )
 
     assert stats_data == {
         "total_sessions": 3,
@@ -317,6 +340,7 @@ async def test_history_statistics_and_trends_share_same_session_evidence_project
         "not_evaluable_sessions": 1,
         "average_score": 84.5,
         "best_score": 87.0,
+        "score_basis": "session_evidence_projection_evaluable_only",
         "total_practice_time_seconds": 276,
         "total_practice_time_minutes": 4.6,
     }

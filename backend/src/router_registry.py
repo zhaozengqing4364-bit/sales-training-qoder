@@ -7,6 +7,7 @@ from fastapi.routing import APIRoute
 
 from admin.api.admin import router as admin_presentations_router
 from admin.api.analytics import router as admin_analytics_router
+from admin.api.business_rules import router as business_rules_router
 from admin.api.interventions import router as admin_interventions_router
 from admin.api.knowledge_answer_config import router as knowledge_answer_config_router
 from admin.api.model_configs import router as model_configs_router
@@ -21,6 +22,7 @@ from agent.api.agents import admin_router as agent_admin_router
 from agent.api.agents import user_router as agent_user_router
 from agent.api.personas import admin_router as persona_admin_router
 from common.api import analytics, dashboard, growth, practice, training, users
+from common.api.business_rules import router as runtime_business_rules_router
 from common.api.knowledge_debug import router as knowledge_debug_router
 from common.auth.api import router as auth_router
 from common.auth.service import (
@@ -92,6 +94,12 @@ def register_routers(app: FastAPI) -> None:
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(
+        runtime_business_rules_router,
+        prefix="/api/v1",
+        tags=["business-rules"],
+        dependencies=[Depends(require_role(["admin", "user"]))],
+    )
+    app.include_router(
         scenarios_router,
         prefix="/api/v1",
         tags=["scenarios"],
@@ -160,6 +168,12 @@ def register_routers(app: FastAPI) -> None:
         admin_system_logs_router,
         prefix="/api/v1",
         tags=["admin-system-logs"],
+        dependencies=[Depends(get_current_admin_user)],
+    )
+    app.include_router(
+        business_rules_router,
+        prefix="/api/v1/admin",
+        tags=["admin-business-rules"],
         dependencies=[Depends(get_current_admin_user)],
     )
     app.include_router(

@@ -120,7 +120,23 @@ const blockingFaults = {
             session_status: "scoring",
             report_status: "processing",
             diagnostics: {
-                linked_asset_changes: [],
+                linked_asset_changes: [
+                    {
+                        asset_type: "knowledge_base",
+                        asset_label: "知识库",
+                        asset_id: "kb-1",
+                        asset_name: "产品知识库",
+                        admin_path: "/admin/knowledge/kb-1",
+                        latest_change_label: "刚刚更新",
+                        latest_change_type: "knowledge_uploaded",
+                        last_changed_at: "2026-03-24T07:50:00Z",
+                        change_count_7d: 1,
+                        sessions_since_change: 2,
+                        impact_level: "high",
+                        health_status: "blocking",
+                    },
+                ],
+                runtime_events: [{ code: "SCORING_TIMEOUT", minute: 35 }],
                 stuck_for_minutes: 35,
             },
         },
@@ -232,6 +248,9 @@ describe("SupportRuntimePage", () => {
         expect(screen.getByText("session-stuck")).toBeTruthy();
         expect(screen.getByText("sales · scoring · processing")).toBeTruthy();
         expect(screen.getByText("stuck_for_minutes: 35")).toBeTruthy();
+        expect(screen.getByText(/SCORING_TIMEOUT/)).toBeTruthy();
+        expect(screen.queryByText(/\[object Object\]/)).toBeNull();
+        expect(screen.getByText(/下一步：检查评分任务队列/)).toBeTruthy();
     });
 
     it("renders a warning-only release state without inventing blocking severity on the client", async () => {

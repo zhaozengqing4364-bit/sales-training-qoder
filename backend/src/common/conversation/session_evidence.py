@@ -81,7 +81,9 @@ SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
 
 
 def describe_projection_kernel_contract(scenario_type: str) -> dict[str, Any]:
-    normalized_scenario = "presentation" if str(scenario_type).lower() == "presentation" else "sales"
+    normalized_scenario = (
+        "presentation" if str(scenario_type).lower() == "presentation" else "sales"
+    )
     dimension_definitions = get_canonical_dimension_definitions(normalized_scenario)
     surface_plan = get_surface_reader_plan(
         surface_id="report",
@@ -165,7 +167,10 @@ class SessionEvidenceService:
                 scenario_type=scenario_type,
             )
 
-            if require_completed and current_session.status != SessionStatus.COMPLETED.value:
+            if (
+                require_completed
+                and current_session.status != SessionStatus.COMPLETED.value
+            ):
                 return Result.fail(
                     f"[SESSION_NOT_COMPLETED] Session must be completed for replay. "
                     f"Current status: {current_session.status}"
@@ -187,8 +192,7 @@ class SessionEvidenceService:
                 )
                 if not presentation_result.is_success:
                     return Result.fail(
-                        presentation_result.fallback
-                        or "[PRESENTATION_REVIEW_FAILED]"
+                        presentation_result.fallback or "[PRESENTATION_REVIEW_FAILED]"
                     )
                 projection = presentation_result.value
 
@@ -202,7 +206,9 @@ class SessionEvidenceService:
                 message_count=projection.evidence_completeness["message_count"],
                 legacy_score_key_used=projection.legacy_score_key_used,
                 projection_complete=projection.evidence_completeness["complete"],
-                projection_missing_fields=projection.evidence_completeness["missing_fields"],
+                projection_missing_fields=projection.evidence_completeness[
+                    "missing_fields"
+                ],
                 sales_alignment_used=projection.sales_alignment_used,
                 sales_alignment_stage_key=projection.sales_alignment_stage_key,
                 sales_alignment_focus_type=projection.sales_alignment_focus_type,
@@ -210,13 +216,17 @@ class SessionEvidenceService:
                 claim_truth_status=(
                     projection.effectiveness_snapshot["claim_truth"].get("status")
                     if isinstance(projection.effectiveness_snapshot, dict)
-                    and isinstance(projection.effectiveness_snapshot.get("claim_truth"), dict)
+                    and isinstance(
+                        projection.effectiveness_snapshot.get("claim_truth"), dict
+                    )
                     else None
                 ),
                 claim_truth_source=(
                     projection.effectiveness_snapshot["claim_truth"].get("source")
                     if isinstance(projection.effectiveness_snapshot, dict)
-                    and isinstance(projection.effectiveness_snapshot.get("claim_truth"), dict)
+                    and isinstance(
+                        projection.effectiveness_snapshot.get("claim_truth"), dict
+                    )
                     else None
                 ),
                 presentation_review_available=bool(projection.presentation_review),
@@ -238,9 +248,13 @@ class SessionEvidenceService:
                     else None
                 ),
                 retrieval_facts_status=(
-                    projection.effectiveness_snapshot.get("retrieval_facts", {}).get("status")
+                    projection.effectiveness_snapshot.get("retrieval_facts", {}).get(
+                        "status"
+                    )
                     if isinstance(projection.effectiveness_snapshot, dict)
-                    and isinstance(projection.effectiveness_snapshot.get("retrieval_facts"), dict)
+                    and isinstance(
+                        projection.effectiveness_snapshot.get("retrieval_facts"), dict
+                    )
                     else None
                 ),
             )
@@ -284,7 +298,9 @@ class SessionEvidenceService:
     ) -> str:
         scenario_from_relationship = None
         session_dict = getattr(session, "__dict__", {})
-        scenario_obj = session_dict.get("scenario") if isinstance(session_dict, dict) else None
+        scenario_obj = (
+            session_dict.get("scenario") if isinstance(session_dict, dict) else None
+        )
         if scenario_obj is not None:
             scenario_from_relationship = getattr(scenario_obj, "scenario_type", None)
 
@@ -304,9 +320,9 @@ class SessionEvidenceService:
             PresentationReportService,
         )
 
-        review_result = await PresentationReportService(self.db).build_presentation_review(
-            session_id
-        )
+        review_result = await PresentationReportService(
+            self.db
+        ).build_presentation_review(session_id)
         if not review_result.is_success or review_result.value is None:
             return Result.fail(review_result.fallback or "[PRESENTATION_REVIEW_FAILED]")
 
@@ -319,7 +335,11 @@ class SessionEvidenceService:
             scenario_type="presentation",
             surface_id="report",
             source_reader_id="presentation_review_dimensions_v1",
-            overall_score=(float(overall_score) if isinstance(overall_score, (int, float)) else None),
+            overall_score=(
+                float(overall_score)
+                if isinstance(overall_score, (int, float))
+                else None
+            ),
             dimension_details=dimension_scores,
             dimension_scores={
                 str(item.get("name")): float(item.get("score") or 0.0)
@@ -330,9 +350,13 @@ class SessionEvidenceService:
             accuracy_score=projection.accuracy_score,
             completeness_score=projection.completeness_score,
         )
-        rollup_fields = compatibility_readers.get("practice_session_rollup_fields_v1", {})
+        rollup_fields = compatibility_readers.get(
+            "practice_session_rollup_fields_v1", {}
+        )
 
-        projection.logic_score = float(rollup_fields.get("logic_score") or projection.logic_score)
+        projection.logic_score = float(
+            rollup_fields.get("logic_score") or projection.logic_score
+        )
         projection.accuracy_score = float(
             rollup_fields.get("accuracy_score") or projection.accuracy_score
         )
@@ -354,9 +378,11 @@ class SessionEvidenceService:
         projection.evaluable = None
         projection.not_evaluable_reason = None
         projection.presentation_review = review
-        projection.evidence_completeness = self._build_presentation_evidence_completeness(
-            messages=projection.messages,
-            review=review,
+        projection.evidence_completeness = (
+            self._build_presentation_evidence_completeness(
+                messages=projection.messages,
+                review=review,
+            )
         )
         return Result.ok(projection)
 
@@ -462,19 +488,24 @@ class SessionEvidenceService:
 
         # --- Per-source availability detection ---
         retrieval_facts = build_retrieval_facts(voice_policy_snapshot)
-        retrieval_available = isinstance(retrieval_facts, dict) and retrieval_facts.get("status") == "hit"
+        retrieval_available = (
+            isinstance(retrieval_facts, dict) and retrieval_facts.get("status") == "hit"
+        )
 
         # Transcript: look for user messages with score_snapshot (scored turns)
         scored_user_turns = [
-            msg for msg in messages
+            msg
+            for msg in messages
             if msg.get("role") == "user" and isinstance(msg.get("score_snapshot"), dict)
         ]
         transcript_available = len(scored_user_turns) > 0
 
         # Audio: look for messages with audio_url or duration_ms
         audio_turns = [
-            msg for msg in messages
-            if msg.get("audio_url") or (isinstance(msg.get("duration_ms"), int) and msg["duration_ms"] > 0)
+            msg
+            for msg in messages
+            if msg.get("audio_url")
+            or (isinstance(msg.get("duration_ms"), int) and msg["duration_ms"] > 0)
         ]
         audio_available = len(audio_turns) > 0
 
@@ -489,7 +520,9 @@ class SessionEvidenceService:
             return {
                 "retrieval_source": {
                     "available": retrieval,
-                    "reason": None if retrieval else (reason_unavailable or "no_retrieval_hits"),
+                    "reason": None
+                    if retrieval
+                    else (reason_unavailable or "no_retrieval_hits"),
                 },
                 "transcript_source": {
                     "available": transcript_turn_count > 0,
@@ -510,7 +543,9 @@ class SessionEvidenceService:
         claim_truth_turns = 0
         for msg in scored_user_turns:
             dims = msg.get("score_snapshot", {}).get("dimension_scores", {})
-            if isinstance(dims, dict) and any(k in dims for k in ("证据使用", "evidence_usage")):
+            if isinstance(dims, dict) and any(
+                k in dims for k in ("证据使用", "evidence_usage")
+            ):
                 claim_truth_turns += 1
         if claim_truth_turns == 0:
             # Fallback: all scored turns contribute to claim_truth assessment
@@ -589,9 +624,13 @@ class SessionEvidenceService:
                 if not isinstance(sources, dict):
                     continue
                 retrieval_src = sources.get("retrieval_source")
-                if isinstance(retrieval_src, dict) and not retrieval_src.get("available", True):
+                if isinstance(retrieval_src, dict) and not retrieval_src.get(
+                    "available", True
+                ):
                     retrieval_degraded = True
-                    retrieval_reason = retrieval_src.get("reason") or "no_retrieval_facts"
+                    retrieval_reason = (
+                        retrieval_src.get("reason") or "no_retrieval_facts"
+                    )
                     break
 
         retrieval_layer: dict[str, Any] = (
@@ -611,7 +650,9 @@ class SessionEvidenceService:
                 if not isinstance(sources, dict):
                     continue
                 transcript_src = sources.get("transcript_source")
-                if isinstance(transcript_src, dict) and not transcript_src.get("available", True):
+                if isinstance(transcript_src, dict) and not transcript_src.get(
+                    "available", True
+                ):
                     transcript_degraded = True
                     break
 
@@ -652,10 +693,18 @@ class SessionEvidenceService:
         report_status = getattr(session, "report_status", None)
         report_error = getattr(session, "report_error", None)
         enhanced_report_degraded = str(report_status) == "failed"
-        enhanced_report_reason = str(report_error).strip() if isinstance(report_error, str) and report_error else None
+        enhanced_report_reason = (
+            str(report_error).strip()
+            if isinstance(report_error, str) and report_error
+            else None
+        )
 
         enhanced_report_layer: dict[str, Any] = (
-            {"status": "degraded", "token": "report_generation_failed", "explanation": enhanced_report_reason or "report_generation_failed"}
+            {
+                "status": "degraded",
+                "token": "report_generation_failed",
+                "explanation": enhanced_report_reason or "report_generation_failed",
+            }
             if enhanced_report_degraded
             else {"status": "ok", "token": "enhanced_report_ok", "explanation": None}
         )
@@ -696,7 +745,10 @@ class SessionEvidenceService:
         for index, message in enumerate(messages):
             normalized = cls.serialize_message(message, fallback_turn_number=index + 1)
             raw_snapshot = getattr(message, "score_snapshot", None)
-            if isinstance(raw_snapshot, dict) and raw_snapshot.get("overall") is not None:
+            if (
+                isinstance(raw_snapshot, dict)
+                and raw_snapshot.get("overall") is not None
+            ):
                 legacy_score_key_used = True
             normalized_messages.append(normalized)
 
@@ -704,7 +756,9 @@ class SessionEvidenceService:
             session,
             normalized_messages,
         )
-        overall_score = round((logic_score + accuracy_score + completeness_score) / 3.0, 2)
+        overall_score = round(
+            (logic_score + accuracy_score + completeness_score) / 3.0, 2
+        )
         latest_score_snapshot = cls._get_latest_score_snapshot(normalized_messages)
         latest_sales_stage = cls._get_latest_sales_stage(normalized_messages)
         canonical_kernel, compatibility_readers = build_canonical_views(
@@ -712,10 +766,12 @@ class SessionEvidenceService:
             surface_id="report",
             source_reader_id=(
                 "sales_realtime_score_snapshot_v1"
-                if resolved_scenario_type == "sales" and isinstance(latest_score_snapshot, dict)
+                if resolved_scenario_type == "sales"
+                and isinstance(latest_score_snapshot, dict)
                 else (
                     "presentation_review_dimensions_v1"
-                    if resolved_scenario_type == "presentation" and isinstance(latest_score_snapshot, dict)
+                    if resolved_scenario_type == "presentation"
+                    and isinstance(latest_score_snapshot, dict)
                     else "session_evidence_projection_v1"
                 )
             ),
@@ -729,7 +785,9 @@ class SessionEvidenceService:
             accuracy_score=accuracy_score,
             completeness_score=completeness_score,
         )
-        rollup_fields = compatibility_readers.get("practice_session_rollup_fields_v1", {})
+        rollup_fields = compatibility_readers.get(
+            "practice_session_rollup_fields_v1", {}
+        )
         logic_score = float(rollup_fields.get("logic_score") or logic_score)
         accuracy_score = float(rollup_fields.get("accuracy_score") or accuracy_score)
         completeness_score = float(
@@ -754,10 +812,14 @@ class SessionEvidenceService:
         )
         projection_snapshot = snapshot
         main_issue = (
-            snapshot.get("main_issue") if isinstance(snapshot.get("main_issue"), dict) else None
+            snapshot.get("main_issue")
+            if isinstance(snapshot.get("main_issue"), dict)
+            else None
         )
         next_goal = (
-            snapshot.get("next_goal") if isinstance(snapshot.get("next_goal"), dict) else None
+            snapshot.get("next_goal")
+            if isinstance(snapshot.get("next_goal"), dict)
+            else None
         )
         sales_alignment_used = False
         sales_alignment_stage_key = None
@@ -769,8 +831,12 @@ class SessionEvidenceService:
             stage_key = sales_alignment.get("stage_key")
             focus_type = sales_alignment.get("focus_type")
             fallback_reason = sales_alignment.get("fallback_reason")
-            sales_alignment_stage_key = str(stage_key) if stage_key is not None else None
-            sales_alignment_focus_type = str(focus_type) if focus_type is not None else None
+            sales_alignment_stage_key = (
+                str(stage_key) if stage_key is not None else None
+            )
+            sales_alignment_focus_type = (
+                str(focus_type) if focus_type is not None else None
+            )
             sales_alignment_fallback_reason = (
                 str(fallback_reason) if fallback_reason is not None else None
             )
@@ -785,7 +851,9 @@ class SessionEvidenceService:
             if sales_alignment_used:
                 aligned_main_issue = sales_alignment.get("main_issue")
                 aligned_next_goal = sales_alignment.get("next_goal")
-                if isinstance(aligned_main_issue, dict) and isinstance(aligned_next_goal, dict):
+                if isinstance(aligned_main_issue, dict) and isinstance(
+                    aligned_next_goal, dict
+                ):
                     projection_snapshot = {
                         **projection_snapshot,
                         "main_issue": dict(aligned_main_issue),
@@ -822,10 +890,7 @@ class SessionEvidenceService:
 
         # Mirror degradation tokens into evidence_completeness.degraded_reasons
         # for backward-compat consumers (admin analytics, history projection).
-        if (
-            resolved_scenario_type == "sales"
-            and isinstance(evidence_degradation, dict)
-        ):
+        if resolved_scenario_type == "sales" and isinstance(evidence_degradation, dict):
             degraded_reasons: list[str] = []
             for _layer_key, layer in evidence_degradation.items():
                 if not isinstance(layer, dict):
@@ -834,17 +899,22 @@ class SessionEvidenceService:
                     token = layer.get("token")
                     if isinstance(token, str) and token:
                         degraded_reasons.append(token)
-            evidence_completeness = {**evidence_completeness, "degraded_reasons": degraded_reasons}
+            evidence_completeness = {
+                **evidence_completeness,
+                "degraded_reasons": degraded_reasons,
+            }
 
         canonical_kernel, compatibility_readers = build_canonical_views(
             scenario_type=resolved_scenario_type,
             surface_id="report",
             source_reader_id=(
                 "sales_realtime_score_snapshot_v1"
-                if resolved_scenario_type == "sales" and isinstance(latest_score_snapshot, dict)
+                if resolved_scenario_type == "sales"
+                and isinstance(latest_score_snapshot, dict)
                 else (
                     "presentation_review_dimensions_v1"
-                    if resolved_scenario_type == "presentation" and isinstance(latest_score_snapshot, dict)
+                    if resolved_scenario_type == "presentation"
+                    and isinstance(latest_score_snapshot, dict)
                     else "session_evidence_projection_v1"
                 )
             ),
@@ -949,7 +1019,9 @@ class SessionEvidenceService:
             "fuzzy_words": getattr(message, "fuzzy_words", None),
             "transcript_metadata": getattr(message, "transcript_metadata", None),
             "sales_stage": sales_stage,
-            "stage_name": STAGE_NAMES.get(str(sales_stage), str(sales_stage)) if sales_stage else None,
+            "stage_name": STAGE_NAMES.get(str(sales_stage), str(sales_stage))
+            if sales_stage
+            else None,
             "score_snapshot": normalize_score_snapshot(
                 getattr(message, "score_snapshot", None)
             ),
@@ -1030,8 +1102,12 @@ class SessionEvidenceService:
             sales_stage = message.get("sales_stage")
             if sales_stage and sales_stage != current_stage:
                 if current_stage:
-                    stage_data.setdefault(current_stage, {"duration_ms": 0, "scores": []})
-                    stage_data[current_stage]["duration_ms"] += cumulative_ms - stage_start_ms
+                    stage_data.setdefault(
+                        current_stage, {"duration_ms": 0, "scores": []}
+                    )
+                    stage_data[current_stage]["duration_ms"] += (
+                        cumulative_ms - stage_start_ms
+                    )
 
                 current_stage = str(sales_stage)
                 stage_start_ms = cumulative_ms
@@ -1040,7 +1116,9 @@ class SessionEvidenceService:
             if current_stage and isinstance(score_snapshot, dict):
                 overall_score = score_snapshot.get("overall_score")
                 if isinstance(overall_score, (int, float)):
-                    stage_data.setdefault(current_stage, {"duration_ms": 0, "scores": []})
+                    stage_data.setdefault(
+                        current_stage, {"duration_ms": 0, "scores": []}
+                    )
                     stage_data[current_stage]["scores"].append(float(overall_score))
 
             cumulative_ms += int(message.get("duration_ms") or 0)
@@ -1095,14 +1173,18 @@ class SessionEvidenceService:
 
         logic_score = cls._coerce_score(getattr(session, "logic_score", None))
         accuracy_score = cls._coerce_score(getattr(session, "accuracy_score", None))
-        completeness_score = cls._coerce_score(getattr(session, "completeness_score", None))
+        completeness_score = cls._coerce_score(
+            getattr(session, "completeness_score", None)
+        )
 
         if logic_score is None:
             logic_score = _fallback_from_snapshot("专业度", "professional")
         if accuracy_score is None:
             accuracy_score = _fallback_from_snapshot("沟通技巧", "communication")
         if completeness_score is None:
-            completeness_score = _fallback_from_snapshot("销售流程", "discovery", "closing")
+            completeness_score = _fallback_from_snapshot(
+                "销售流程", "discovery", "closing"
+            )
 
         return logic_score, accuracy_score, completeness_score
 
@@ -1116,7 +1198,9 @@ class SessionEvidenceService:
             return None
 
     @staticmethod
-    def _get_latest_score_snapshot(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
+    def _get_latest_score_snapshot(
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
         for message in reversed(messages):
             snapshot = message.get("score_snapshot")
             if isinstance(snapshot, dict):
@@ -1426,7 +1510,9 @@ def derive_effectiveness_metrics(
             2,
         ),
         "offtopic_turn_count": float(max(0, round((100.0 - accuracy) / 25.0))),
-        "offtopic_max_streak": float(2 if accuracy < 55 else (1 if accuracy < 80 else 0)),
+        "offtopic_max_streak": float(
+            2 if accuracy < 55 else (1 if accuracy < 80 else 0)
+        ),
         "structure_coverage": round(max(0.0, min(1.0, completeness / 100.0)), 4),
     }
     overall_score = (logic + accuracy + completeness) / 3.0

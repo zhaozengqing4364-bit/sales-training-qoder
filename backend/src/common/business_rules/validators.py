@@ -9,6 +9,7 @@ from common.business_rules.defaults import (
     ACHIEVEMENT_RULES_KEY,
     AI_COACH_RULES_KEY,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
+    SALES_COMBINATIONS_RULESET_KEY,
     get_business_rule_definition,
 )
 
@@ -32,10 +33,14 @@ def validate_business_rule_value(key: str, value: dict[str, Any]) -> dict[str, A
         return _validate_ai_coach_ruleset(value)
     if key == NEXT_PRACTICE_RECOMMENDATION_KEY:
         return _validate_recommendation_ruleset(value)
+    if key == SALES_COMBINATIONS_RULESET_KEY:
+        return _validate_sales_combinations_ruleset(value)
     raise BusinessRuleValidationError(f"unsupported business rule key: {key}")
 
 
-def _required_string(payload: dict[str, Any], field: str, *, max_length: int = 255) -> str:
+def _required_string(
+    payload: dict[str, Any], field: str, *, max_length: int = 255
+) -> str:
     raw = payload.get(field)
     if not isinstance(raw, str) or not raw.strip():
         raise BusinessRuleValidationError(f"{field} is required")
@@ -99,14 +104,18 @@ def _validate_achievement_ruleset(value: dict[str, Any]) -> dict[str, Any]:
     normalized_items: list[dict[str, Any]] = []
     for index, item in enumerate(achievements):
         if not isinstance(item, dict):
-            raise BusinessRuleValidationError(f"achievements[{index}] must be an object")
+            raise BusinessRuleValidationError(
+                f"achievements[{index}] must be an object"
+            )
         code = _required_string(item, "code", max_length=80)
         if code in seen_codes:
             raise BusinessRuleValidationError(f"duplicate achievement code: {code}")
         seen_codes.add(code)
         condition = item.get("condition")
         if not isinstance(condition, dict):
-            raise BusinessRuleValidationError(f"achievements[{index}].condition is required")
+            raise BusinessRuleValidationError(
+                f"achievements[{index}].condition is required"
+            )
         condition_type = _required_string(condition, "type", max_length=60)
         if condition_type not in _ACHIEVEMENT_CONDITION_TYPES:
             raise BusinessRuleValidationError(
@@ -118,9 +127,13 @@ def _validate_achievement_ruleset(value: dict[str, Any]) -> dict[str, Any]:
             try:
                 minimum = int(raw_min)
             except (TypeError, ValueError) as exc:
-                raise BusinessRuleValidationError("condition.min must be an integer") from exc
+                raise BusinessRuleValidationError(
+                    "condition.min must be an integer"
+                ) from exc
             if minimum < 1 or minimum > 10000:
-                raise BusinessRuleValidationError("condition.min must be within [1, 10000]")
+                raise BusinessRuleValidationError(
+                    "condition.min must be within [1, 10000]"
+                )
         else:
             minimum = _threshold(raw_min, field="condition.min")
 
@@ -182,7 +195,9 @@ def _validate_ai_coach_ruleset(value: dict[str, Any]) -> dict[str, Any]:
         normalized["notification_template"] = None
         return normalized
     if not isinstance(template, dict):
-        raise BusinessRuleValidationError("notification_template must be an object or null")
+        raise BusinessRuleValidationError(
+            "notification_template must be an object or null"
+        )
     title_template = _format_template(
         _required_string(template, "title_template", max_length=180),
         field="notification_template.title_template",
@@ -249,4 +264,115 @@ def _validate_recommendation_ruleset(value: dict[str, Any]) -> dict[str, Any]:
         "action_label": _required_string(fallback, "action_label", max_length=80),
         "target_path": _required_string(fallback, "target_path", max_length=500),
     }
+    return normalized
+
+
+def _string_list(value: Any, *, field: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise BusinessRuleValidationError(f"{field} must be a list")
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise BusinessRuleValidationError(f"{field}[{index}] must be a string")
+        cleaned = item.strip()
+        if cleaned:
+            normalized.append(cleaned)
+    return normalized
+
+
+def _positive_integer(value: Any, *, field: str) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise BusinessRuleValidationError(
+            f"{field} must be a positive integer"
+        ) from exc
+    if number <= 0:
+        raise BusinessRuleValidationError(f"{field} must be a positive integer")
+    return number
+
+
+def _validate_sales_combinations_ruleset(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["rule_set_id"] = _required_string(
+        normalized, "rule_set_id", max_length=120
+    )
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+
+    fallback_policy = _required_string(normalized, "fallback_policy", max_length=40)
+    if fallback_policy not in {"client_default_v1", "hide_all"}:
+        raise BusinessRuleValidationError(
+            "fallback_policy must be client_default_v1 or hide_all"
+        )
+    normalized["fallback_policy"] = fallback_policy
+
+    combinations = normalized.get("combinations")
+    if not isinstance(combinations, list):
+        raise BusinessRuleValidationError("combinations must be a list")
+    if not combinations and fallback_policy != "hide_all":
+        raise BusinessRuleValidationError(
+            "combinations must be non-empty unless fallback_policy is hide_all"
+        )
+
+    seen_ids: set[str] = set()
+    seen_pairs: set[str] = set()
+    enabled_count = 0
+    normalized_combinations: list[dict[str, Any]] = []
+    for index, item in enumerate(combinations):
+        if not isinstance(item, dict):
+            raise BusinessRuleValidationError(
+                f"combinations[{index}] must be an object"
+            )
+        combination_id = _required_string(item, "id", max_length=80)
+        if combination_id in seen_ids:
+            raise BusinessRuleValidationError(
+                f"duplicate combination id: {combination_id}"
+            )
+        seen_ids.add(combination_id)
+
+        capability = _required_string(item, "capability", max_length=120)
+        role = _required_string(item, "role", max_length=120)
+        pair_key = f"{capability}::{role}".lower()
+        if pair_key in seen_pairs:
+            raise BusinessRuleValidationError(
+                f"duplicate capability/role pair: {capability} × {role}"
+            )
+        seen_pairs.add(pair_key)
+
+        enabled = item.get("enabled") is not False
+        if enabled:
+            enabled_count += 1
+        normalized_combinations.append(
+            {
+                "id": combination_id,
+                "capability": capability,
+                "role": role,
+                "priority": _positive_integer(
+                    item.get("priority"),
+                    field=f"combinations[{index}].priority",
+                ),
+                "enabled": enabled,
+                "required_agent_match": _string_list(
+                    item.get("required_agent_match"),
+                    field=f"combinations[{index}].required_agent_match",
+                ),
+                "required_persona_match": _string_list(
+                    item.get("required_persona_match"),
+                    field=f"combinations[{index}].required_persona_match",
+                ),
+            }
+        )
+
+    if enabled_count == 0 and fallback_policy != "hide_all":
+        raise BusinessRuleValidationError(
+            "all combinations disabled requires fallback_policy hide_all"
+        )
+
+    normalized["combinations"] = sorted(
+        normalized_combinations,
+        key=lambda item: (item["priority"], item["id"]),
+    )
     return normalized

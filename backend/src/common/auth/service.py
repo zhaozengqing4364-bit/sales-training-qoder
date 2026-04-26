@@ -415,20 +415,20 @@ def resolve_websocket_auth(
             "compatibility_mode": False,
         }
 
-    normalized_query_token = (query_token or "").strip()
-    if normalized_query_token:
-        return {
-            "token": normalized_query_token,
-            "transport": "query_token",
-            "compatibility_mode": True,
-        }
-
     cookie_token = _extract_cookie_token(cookie_header)
     if cookie_token:
         return {
             "token": cookie_token,
             "transport": "session_cookie",
             "compatibility_mode": False,
+        }
+
+    normalized_query_token = (query_token or "").strip()
+    if normalized_query_token:
+        return {
+            "token": normalized_query_token,
+            "transport": "query_token",
+            "compatibility_mode": True,
         }
 
     return {

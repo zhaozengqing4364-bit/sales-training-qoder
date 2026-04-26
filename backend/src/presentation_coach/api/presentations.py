@@ -109,9 +109,7 @@ PRESENTATION_RESOURCE_RACE_INVENTORY: tuple[dict[str, Any], ...] = (
             "thumbnail_directory",
         ),
         "active_session_blocker_coverage": "not_covered",
-        "current_guardrails": (
-            "owner_or_admin_permission_check_only",
-        ),
+        "current_guardrails": ("owner_or_admin_permission_check_only",),
         "uncovered_race_windows": (
             "route has no practice-session preflight before deleting the presentation row",
             "stored ppt and thumbnail artifacts are not removed by the delete handler",
@@ -437,7 +435,9 @@ async def _replace_pages_and_metadata(
                     page_id=page.page_id,
                     presentation_id=None,
                     phrase=cast(str, word["phrase"]),
-                    suggested_alternative=cast(str | None, word["suggested_alternative"]),
+                    suggested_alternative=cast(
+                        str | None, word["suggested_alternative"]
+                    ),
                     is_regex=bool(word["is_regex"]),
                 )
             )
@@ -503,7 +503,9 @@ async def list_presentations(
             else "PPT 已上传"
         )
         governance_summary = runtime_service.build_asset_governance_summary(
-            governance_indexes.get("presentation", {}).get(str(presentation.presentation_id)),
+            governance_indexes.get("presentation", {}).get(
+                str(presentation.presentation_id)
+            ),
             last_changed_at=upload_date,
             latest_change_type="presentation_uploaded",
             latest_change_label=latest_change_label,
@@ -519,7 +521,7 @@ async def list_presentations(
 async def upload_presentation(
     title: str = Form(...),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a new PPT presentation with automatic parsing"""
@@ -584,7 +586,9 @@ async def upload_presentation(
                     Page(
                         presentation_id=presentation_id_value,
                         page_number=page_number,
-                        ocr_extracted_text=cast(str, page_data.get("extracted_text", "")),
+                        ocr_extracted_text=cast(
+                            str, page_data.get("extracted_text", "")
+                        ),
                         image_url=image_url,
                         extraction_confidence=0.95,
                         needs_manual_review=False,
@@ -659,7 +663,9 @@ async def replace_presentation(
                 message="演示文稿不存在。",
             )
 
-        active_sessions = await _non_terminal_sessions_for_presentation(db, presentation_id)
+        active_sessions = await _non_terminal_sessions_for_presentation(
+            db, presentation_id
+        )
         if active_sessions:
             logger.warning(
                 "Blocked in-place presentation replace because active sessions still reference it",
@@ -719,7 +725,9 @@ async def replace_presentation(
                 failed_presentation.status = "failed"
                 failed_presentation.ocr_progress = 0.0
                 await db.commit()
-                failed_presentation = await _load_presentation_detail(db, presentation_id)
+                failed_presentation = await _load_presentation_detail(
+                    db, presentation_id
+                )
             logger.warning(
                 "Presentation replace parse failed",
                 presentation_id=presentation_id,

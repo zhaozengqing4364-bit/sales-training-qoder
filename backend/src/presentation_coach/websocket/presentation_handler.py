@@ -206,8 +206,9 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             return None
         if self.session_id in connections:
             return connections[self.session_id]
-        if self.session_id:
+        if connections:
             return None
+        return self.websocket
         return self.websocket
 
     def _create_state_snapshot(self) -> SessionStateSnapshot:
@@ -318,7 +319,10 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         if transition.action in {"pause", "end"}:
             await self._stop_streaming_asr(process_transcript=False)
 
-        if transition.action in {"start", "resume"} and self.session_status == "in_progress":
+        if (
+            transition.action in {"start", "resume"}
+            and self.session_status == "in_progress"
+        ):
             await self._restore_page_context()
 
     async def handle_connection(
@@ -516,10 +520,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             if queue_size >= self.ASR_HIGH_WATERMARK and not self._backpressure_active:
                 self._backpressure_active = True
                 await self._send_backpressure("slow_down", queue_size)
-            elif (
-                queue_size <= self.ASR_LOW_WATERMARK
-                and self._backpressure_active
-            ):
+            elif queue_size <= self.ASR_LOW_WATERMARK and self._backpressure_active:
                 self._backpressure_active = False
                 await self._send_backpressure("resume", queue_size)
 
@@ -947,7 +948,9 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                     session_identity = session_identity_result.first()
                     if session_identity:
                         agent_id = cast(str | None, session_identity[0])
-                        session_snapshot = cast(dict[str, Any] | None, session_identity[3])
+                        session_snapshot = cast(
+                            dict[str, Any] | None, session_identity[3]
+                        )
                         if isinstance(session_snapshot, dict):
                             snapshot_instructions = str(
                                 session_snapshot.get("instructions") or ""
@@ -997,7 +1000,11 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                                 template = await prompt_service.get_template(
                                     uuid.UUID(explicit_template_id)
                                 )
-                                if template and template.template and template.is_active:
+                                if (
+                                    template
+                                    and template.template
+                                    and template.is_active
+                                ):
                                     template_text = template.template
                             except ValueError:
                                 logger.warning(

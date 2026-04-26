@@ -13,10 +13,13 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api.business_rules import router as runtime_business_rules_router
 from common.auth.service import create_access_token
 from common.business_rules.defaults import (
     DEFAULT_RECOMMENDATION_RULESET,
+    DEFAULT_SALES_COMBINATIONS_RULESET,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
+    SALES_COMBINATIONS_RULESET_KEY,
     get_business_rule_definition,
 )
 from common.db.models import BusinessRuleConfig, BusinessRuleConfigAuditLog, User
@@ -43,6 +46,20 @@ def _business_rules_router():
 async def business_rules_client(test_db: AsyncSession):
     app = FastAPI()
     app.include_router(_business_rules_router(), prefix="/api/v1/admin")
+
+    async def override_get_db():
+        yield test_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def business_rules_runtime_client(test_db: AsyncSession):
+    app = FastAPI()
+    app.include_router(runtime_business_rules_router, prefix="/api/v1")
 
     async def override_get_db():
         yield test_db
@@ -160,7 +177,9 @@ async def test_business_rule_publish_rollback_and_audit_log(
     first_draft = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/drafts",
         headers=headers,
-        json={"value": _recommendation_value(version="recommendation_v1", threshold=61)},
+        json={
+            "value": _recommendation_value(version="recommendation_v1", threshold=61)
+        },
     )
     assert first_draft.status_code == 200
     first_id = first_draft.json()["data"]["id"]
@@ -174,7 +193,9 @@ async def test_business_rule_publish_rollback_and_audit_log(
     second_draft = await business_rules_client.post(
         f"/api/v1/admin/business-rules/{NEXT_PRACTICE_RECOMMENDATION_KEY}/drafts",
         headers=headers,
-        json={"value": _recommendation_value(version="recommendation_v2", threshold=75)},
+        json={
+            "value": _recommendation_value(version="recommendation_v2", threshold=75)
+        },
     )
     assert second_draft.status_code == 200
     second_id = second_draft.json()["data"]["id"]
@@ -195,12 +216,19 @@ async def test_business_rule_publish_rollback_and_audit_log(
     assert rollback.json()["data"]["status"] == "published"
 
     audit_rows = (
-        await test_db.execute(
-            select(BusinessRuleConfigAuditLog)
-            .where(BusinessRuleConfigAuditLog.config_key == NEXT_PRACTICE_RECOMMENDATION_KEY)
-            .order_by(BusinessRuleConfigAuditLog.created_at.asc())
+        (
+            await test_db.execute(
+                select(BusinessRuleConfigAuditLog)
+                .where(
+                    BusinessRuleConfigAuditLog.config_key
+                    == NEXT_PRACTICE_RECOMMENDATION_KEY
+                )
+                .order_by(BusinessRuleConfigAuditLog.created_at.asc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     actions = [row.action for row in audit_rows]
 
     assert actions == [
@@ -214,13 +242,17 @@ async def test_business_rule_publish_rollback_and_audit_log(
     assert audit_rows[-1].after_version == 1
     assert audit_rows[-1].reason == "rollback to stable"
     active_rows = (
-        await test_db.execute(
-            select(BusinessRuleConfig).where(
-                BusinessRuleConfig.key == NEXT_PRACTICE_RECOMMENDATION_KEY,
-                BusinessRuleConfig.status == "published",
+        (
+            await test_db.execute(
+                select(BusinessRuleConfig).where(
+                    BusinessRuleConfig.key == NEXT_PRACTICE_RECOMMENDATION_KEY,
+                    BusinessRuleConfig.status == "published",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert [row.version for row in active_rows] == [1]
 
 
@@ -266,3 +298,132 @@ async def test_business_rule_publish_rejects_invalid_draft(
 
     assert response.status_code == 400
     assert response.json()["error"] == "[BUSINESS_RULE_SCHEMA_INVALID]"
+
+
+@pytest.mark.asyncio
+async def test_business_rule_definitions_include_sales_combinations(
+    business_rules_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+):
+    test_user.role = "admin"
+    await test_db.commit()
+
+    response = await business_rules_client.get(
+        "/api/v1/admin/business-rules/definitions",
+        headers=_headers_for(str(test_user.user_id)),
+    )
+
+    assert response.status_code == 200
+    keys = {item["key"] for item in response.json()["data"]["items"]}
+    assert SALES_COMBINATIONS_RULESET_KEY in keys
+
+
+@pytest.mark.asyncio
+async def test_sales_combinations_validate_rejects_duplicate_capability_role(
+    business_rules_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+):
+    test_user.role = "admin"
+    await test_db.commit()
+    invalid = deepcopy(DEFAULT_SALES_COMBINATIONS_RULESET)
+    invalid["combinations"] = [
+        {
+            "id": "duplicate-a",
+            "capability": "需求挖掘",
+            "role": "价格敏感型客户",
+            "priority": 1,
+            "enabled": True,
+        },
+        {
+            "id": "duplicate-b",
+            "capability": "需求挖掘",
+            "role": "价格敏感型客户",
+            "priority": 2,
+            "enabled": True,
+        },
+    ]
+
+    response = await business_rules_client.post(
+        "/api/v1/admin/business-rules/sales-combinations/validate",
+        headers=_headers_for(str(test_user.user_id)),
+        json=invalid,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["valid"] is False
+    assert "duplicate capability/role pair" in payload["errors"][0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_sales_combinations_list_falls_back_to_bundled_default(
+    business_rules_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+):
+    test_user.role = "admin"
+    await test_db.commit()
+
+    response = await business_rules_client.get(
+        "/api/v1/admin/business-rules/sales-combinations",
+        headers=_headers_for(str(test_user.user_id)),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["active"]["rule_set_id"] == "sales-combinations-default-v1"
+    assert payload["active"]["fallback_policy"] == "client_default_v1"
+    assert len(payload["active"]["combinations"]) == 10
+    assert payload["drafts"] == []
+    assert payload["permissions"]["can_publish"] is True
+
+
+@pytest.mark.asyncio
+async def test_sales_combinations_seed_publish_and_active_resolution(
+    business_rules_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+):
+    test_user.role = "admin"
+    await test_db.commit()
+    headers = _headers_for(str(test_user.user_id))
+
+    seed = await business_rules_client.post(
+        "/api/v1/admin/business-rules/seed-defaults",
+        headers=headers,
+    )
+    assert seed.status_code == 200
+    created_keys = {item["key"] for item in seed.json()["data"]["created"]}
+    assert SALES_COMBINATIONS_RULESET_KEY in created_keys
+
+    list_response = await business_rules_client.get(
+        "/api/v1/admin/business-rules/sales-combinations",
+        headers=headers,
+    )
+    assert list_response.status_code == 200
+    assert list_response.json()["data"]["active"]["version"] == "sales_combinations_v1"
+
+    active_response = await business_rules_client.get(
+        f"/api/v1/admin/business-rules/active/{SALES_COMBINATIONS_RULESET_KEY}",
+        headers=headers,
+    )
+    assert active_response.status_code == 200
+    assert active_response.json()["data"]["source"] == "database"
+
+
+@pytest.mark.asyncio
+async def test_user_active_sales_combinations_returns_bundled_default_when_missing(
+    business_rules_runtime_client: AsyncClient,
+):
+    response = await business_rules_runtime_client.get(
+        "/api/v1/business-rules/sales-combinations/active"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["rule_set_id"] == "sales-combinations-default-v1"
+    assert payload["source"] == "bundled_default"
+    assert payload["fallback_reason"] == "active_missing"
+    assert len(payload["combinations"]) == 10
