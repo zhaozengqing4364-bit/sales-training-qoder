@@ -110,16 +110,18 @@ describe("LoginPage", () => {
         expect(screen.getByText(/仅 development 环境可用的开发者登录。/i)).toBeTruthy();
     });
 
-    it("provides explicit accessible labels for the login fields", () => {
+    it("provides explicit accessible labels for the login fields", async () => {
         render(<LoginPage />);
+        await screen.findByRole("button", { name: /开发者快速登录/i });
 
         expect(screen.getByLabelText("邮箱地址")).toBeTruthy();
         expect(screen.getByLabelText("密码")).toBeTruthy();
         expect(screen.getByLabelText(/记住邮箱/)).toBeTruthy();
     });
 
-    it("lets learners reveal and hide the password without changing the value", () => {
+    it("lets learners reveal and hide the password without changing the value", async () => {
         render(<LoginPage />);
+        await screen.findByRole("button", { name: /开发者快速登录/i });
 
         const passwordInput = screen.getByLabelText("密码") as HTMLInputElement;
         fireEvent.change(passwordInput, {
@@ -136,8 +138,9 @@ describe("LoginPage", () => {
         expect(passwordInput.type).toBe("password");
     });
 
-    it("preserves a typed email when handing off to forgot-password", () => {
+    it("preserves a typed email when handing off to forgot-password", async () => {
         render(<LoginPage />);
+        await screen.findByRole("button", { name: /开发者快速登录/i });
 
         fireEvent.change(screen.getByLabelText("邮箱地址"), {
             target: { value: "  admin@test.com  " },
@@ -208,10 +211,11 @@ describe("LoginPage", () => {
         expect(window.localStorage.getItem("user")).toBeNull();
     });
 
-    it("hydrates the remembered email without pretending to extend the backend session", () => {
+    it("hydrates the remembered email without pretending to extend the backend session", async () => {
         window.localStorage.setItem("qoder.login.rememberEmail.v1", "remembered@test.com");
 
         render(<LoginPage />);
+        await screen.findByRole("button", { name: /开发者快速登录/i });
 
         expect((screen.getByLabelText("邮箱地址") as HTMLInputElement).value).toBe("remembered@test.com");
         expect((screen.getByLabelText(/记住邮箱/) as HTMLInputElement).checked).toBe(true);
