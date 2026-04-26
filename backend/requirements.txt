@@ -79,6 +79,7 @@ xlrd>=2.0.1
 python-dotenv>=1.0.0
 orjson>=3.11.6
 email-validator>=2.0.0
+packaging>=24.2
 protobuf>=6.33.5
 pyasn1>=0.6.3
 Pygments>=2.20.0
