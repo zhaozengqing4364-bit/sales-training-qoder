@@ -7,7 +7,7 @@ from fastapi.routing import APIRoute
 
 from admin.api.admin import router as admin_presentations_router
 from admin.api.analytics import router as admin_analytics_router
-from admin.api.business_rules import router as admin_business_rules_router
+from admin.api.business_rules import router as business_rules_router
 from admin.api.interventions import router as admin_interventions_router
 from admin.api.knowledge_answer_config import router as knowledge_answer_config_router
 from admin.api.model_configs import router as model_configs_router
@@ -101,7 +101,7 @@ def register_routers(app: FastAPI) -> None:
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(
-        runtime_business_rules_router,
+        business_rules.router,
         prefix="/api/v1",
         tags=["business-rules"],
         dependencies=[Depends(require_role(["admin", "user"]))],
@@ -158,6 +158,11 @@ def register_routers(app: FastAPI) -> None:
         prefix="/api/v1",
         tags=["admin-training-records"],
         dependencies=[Depends(get_current_admin_user)],
+    )
+    app.include_router(
+        business_rules_router,
+        prefix="/api/v1/admin",
+        tags=["admin-business-rules"],
     )
     app.include_router(
         admin_analytics_router,

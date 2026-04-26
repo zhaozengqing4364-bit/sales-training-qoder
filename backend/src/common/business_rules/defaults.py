@@ -101,8 +101,9 @@ DEFAULT_RECOMMENDATION_RULESET: dict[str, Any] = {
 }
 
 DEFAULT_SALES_COMBINATION_RULESET: dict[str, Any] = {
-    "rule_set_id": "sales-core-default",
-    "version": "sales_combinations_default_v1",
+    "rule_set_id": "sales-training-combinations-default-v1",
+    "version": "sales_training_combinations_v1",
+    "enabled": True,
     "fallback_policy": "client_default_v1",
     "combinations": [
         {
@@ -290,20 +291,21 @@ _BUSINESS_RULE_DEFINITIONS = {
         type="rule_json",
         range_or_allowlist={
             "fallback_policy": ["client_default_v1", "hide_all"],
-            "required_fields": ["rule_set_id", "version", "combinations"],
-            "priority": {"min_inclusive": 1},
+            "combination_fields": [
+                "id",
+                "capability",
+                "role",
+                "priority",
+                "enabled",
+                "required_agent_match",
+                "required_persona_match",
+            ],
         },
-        read_path="common.api.business_rules.get_active_sales_combinations",
+        read_path="common.api.business_rules.get_active_sales_combination_ruleset",
         admin_entry="/admin/business-rules/sales-combinations",
         permission="admin_publish_only",
-        audit_policy=(
-            "draft/validate/preview/publish/rollback/disable/delete_draft require "
-            "actor, before/after version, reason, trace_id"
-        ),
-        fallback_policy=(
-            "use bundled sales default ruleset when database config is missing or invalid; "
-            "response exposes source/fallback_reason"
-        ),
+        audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled default sales combinations when database config is missing or invalid; hide_all may intentionally expose no combinations",
         rollback_policy="restore a prior archived/published sales-combination ruleset",
     ),
 }

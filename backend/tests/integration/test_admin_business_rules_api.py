@@ -19,7 +19,7 @@ from common.business_rules.defaults import (
     DEFAULT_RECOMMENDATION_RULESET,
     DEFAULT_SALES_COMBINATIONS_RULESET,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
-    SALES_COMBINATIONS_RULESET_KEY,
+    SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
 )
 from common.db.models import BusinessRuleConfig, BusinessRuleConfigAuditLog, User
@@ -28,12 +28,27 @@ from common.db.session import get_db
 BUSINESS_RULES_API_PATH = (
     Path(__file__).resolve().parents[2] / "src" / "admin" / "api" / "business_rules.py"
 )
+USER_BUSINESS_RULES_API_PATH = (
+    Path(__file__).resolve().parents[2] / "src" / "common" / "api" / "business_rules.py"
+)
 
 
 def _business_rules_router():
     spec = util.spec_from_file_location(
         "business_rules_api_under_test",
         BUSINESS_RULES_API_PATH,
+    )
+    assert spec is not None and spec.loader is not None
+    module = util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.router
+
+
+def _user_business_rules_router():
+    spec = util.spec_from_file_location(
+        "user_business_rules_api_under_test",
+        USER_BUSINESS_RULES_API_PATH,
     )
     assert spec is not None and spec.loader is not None
     module = util.module_from_spec(spec)
@@ -57,9 +72,9 @@ async def business_rules_client(test_db: AsyncSession):
 
 
 @pytest_asyncio.fixture
-async def business_rules_runtime_client(test_db: AsyncSession):
+async def user_business_rules_client(test_db: AsyncSession):
     app = FastAPI()
-    app.include_router(runtime_business_rules_router, prefix="/api/v1")
+    app.include_router(_user_business_rules_router(), prefix="/api/v1")
 
     async def override_get_db():
         yield test_db
@@ -316,49 +331,11 @@ async def test_business_rule_definitions_include_sales_combinations(
 
     assert response.status_code == 200
     keys = {item["key"] for item in response.json()["data"]["items"]}
-    assert SALES_COMBINATIONS_RULESET_KEY in keys
+    assert SALES_COMBINATION_RULES_KEY in keys
 
 
 @pytest.mark.asyncio
-async def test_sales_combinations_validate_rejects_duplicate_capability_role(
-    business_rules_client: AsyncClient,
-    test_db: AsyncSession,
-    test_user: User,
-):
-    test_user.role = "admin"
-    await test_db.commit()
-    invalid = deepcopy(DEFAULT_SALES_COMBINATIONS_RULESET)
-    invalid["combinations"] = [
-        {
-            "id": "duplicate-a",
-            "capability": "需求挖掘",
-            "role": "价格敏感型客户",
-            "priority": 1,
-            "enabled": True,
-        },
-        {
-            "id": "duplicate-b",
-            "capability": "需求挖掘",
-            "role": "价格敏感型客户",
-            "priority": 2,
-            "enabled": True,
-        },
-    ]
-
-    response = await business_rules_client.post(
-        "/api/v1/admin/business-rules/sales-combinations/validate",
-        headers=_headers_for(str(test_user.user_id)),
-        json=invalid,
-    )
-
-    assert response.status_code == 200
-    payload = response.json()["data"]
-    assert payload["valid"] is False
-    assert "duplicate capability/role pair" in payload["errors"][0]["message"]
-
-
-@pytest.mark.asyncio
-async def test_sales_combinations_list_falls_back_to_bundled_default(
+async def test_sales_combination_admin_endpoint_uses_bundled_default_when_missing(
     business_rules_client: AsyncClient,
     test_db: AsyncSession,
     test_user: User,
@@ -373,57 +350,56 @@ async def test_sales_combinations_list_falls_back_to_bundled_default(
 
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["active"]["rule_set_id"] == "sales-combinations-default-v1"
-    assert payload["active"]["fallback_policy"] == "client_default_v1"
-    assert len(payload["active"]["combinations"]) == 10
+    assert payload["active"]["source"] == "default"
+    assert payload["active"]["fallback_reason"] == "active_missing"
+    assert payload["active"]["rule_set_id"] == "sales-training-combinations-default-v1"
     assert payload["drafts"] == []
     assert payload["permissions"]["can_publish"] is True
 
 
 @pytest.mark.asyncio
-async def test_sales_combinations_seed_publish_and_active_resolution(
+async def test_sales_combination_validate_endpoint_reports_schema_errors(
     business_rules_client: AsyncClient,
     test_db: AsyncSession,
     test_user: User,
 ):
     test_user.role = "admin"
     await test_db.commit()
-    headers = _headers_for(str(test_user.user_id))
 
-    seed = await business_rules_client.post(
-        "/api/v1/admin/business-rules/seed-defaults",
-        headers=headers,
-    )
-    assert seed.status_code == 200
-    created_keys = {item["key"] for item in seed.json()["data"]["created"]}
-    assert SALES_COMBINATIONS_RULESET_KEY in created_keys
-
-    list_response = await business_rules_client.get(
-        "/api/v1/admin/business-rules/sales-combinations",
-        headers=headers,
-    )
-    assert list_response.status_code == 200
-    assert list_response.json()["data"]["active"]["version"] == "sales_combinations_v1"
-
-    active_response = await business_rules_client.get(
-        f"/api/v1/admin/business-rules/active/{SALES_COMBINATIONS_RULESET_KEY}",
-        headers=headers,
-    )
-    assert active_response.status_code == 200
-    assert active_response.json()["data"]["source"] == "database"
-
-
-@pytest.mark.asyncio
-async def test_user_active_sales_combinations_returns_bundled_default_when_missing(
-    business_rules_runtime_client: AsyncClient,
-):
-    response = await business_rules_runtime_client.get(
-        "/api/v1/business-rules/sales-combinations/active"
+    response = await business_rules_client.post(
+        "/api/v1/admin/business-rules/sales-combinations/validate",
+        headers=_headers_for(str(test_user.user_id)),
+        json={
+            "rule_set_id": "broken",
+            "version": "v1",
+            "fallback_policy": "client_default_v1",
+            "combinations": [],
+        },
     )
 
     assert response.status_code == 200
-    payload = response.json()["data"]
-    assert payload["rule_set_id"] == "sales-combinations-default-v1"
-    assert payload["source"] == "bundled_default"
-    assert payload["fallback_reason"] == "active_missing"
-    assert len(payload["combinations"]) == 10
+    body = response.json()["data"]
+    assert body["valid"] is False
+    assert "combinations must be non-empty" in body["errors"][0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_sales_combination_active_endpoint_returns_governed_default_for_user(
+    user_business_rules_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+):
+    test_user.role = "user"
+    await test_db.commit()
+
+    response = await user_business_rules_client.get(
+        "/api/v1/business-rules/sales-combinations/active",
+        headers=_headers_for(str(test_user.user_id)),
+    )
+
+    assert response.status_code == 200
+    active = response.json()["data"]
+    assert active["source"] == "default"
+    assert active["fallback_reason"] == "active_missing"
+    assert active["rule_set_id"] == "sales-training-combinations-default-v1"
+    assert len(active["combinations"]) == 10

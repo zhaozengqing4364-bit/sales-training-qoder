@@ -738,20 +738,18 @@ class BusinessRuleConfigService:
                     dict,
                 ),
             }
-        if key.endswith("sales.training.combinations.ruleset") or key.startswith(
-            "sales."
-        ):
+        if key.endswith("sales.training.combinations.ruleset"):
             combinations = [
                 item for item in value.get("combinations", []) if isinstance(item, dict)
             ]
+            enabled_count = sum(
+                1 for item in combinations if item.get("enabled", True) is not False
+            )
             return {
                 "enabled": value.get("enabled") is not False,
                 "ruleset_version": value.get("version"),
-                "rule_set_id": value.get("rule_set_id"),
                 "combination_count": len(combinations),
-                "enabled_combination_count": sum(
-                    1 for item in combinations if item.get("enabled", True) is not False
-                ),
+                "enabled_combination_count": enabled_count,
                 "fallback_policy": value.get("fallback_policy"),
             }
         raw_recommendation_dimensions = value.get("dimensions")

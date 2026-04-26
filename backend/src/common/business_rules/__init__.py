@@ -4,7 +4,7 @@ from common.business_rules.defaults import (
     ACHIEVEMENT_RULES_KEY,
     AI_COACH_RULES_KEY,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
-    SALES_COMBINATIONS_RULESET_KEY,
+    SALES_COMBINATION_RULES_KEY,
 )
 from common.business_rules.service import (
     BusinessRuleConfigService,
@@ -19,7 +19,7 @@ __all__ = [
     "ACHIEVEMENT_RULES_KEY",
     "AI_COACH_RULES_KEY",
     "NEXT_PRACTICE_RECOMMENDATION_KEY",
-    "SALES_COMBINATIONS_RULESET_KEY",
+    "SALES_COMBINATION_RULES_KEY",
     "BusinessRuleConfigService",
     "BusinessRuleResolution",
     "BusinessRuleValidationError",

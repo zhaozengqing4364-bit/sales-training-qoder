@@ -267,35 +267,25 @@ def _validate_recommendation_ruleset(value: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _string_list(value: Any, *, field: str) -> list[str]:
-    if value is None:
-        return []
-    if not isinstance(value, list):
-        raise BusinessRuleValidationError(f"{field} must be a list")
-    cleaned: list[str] = []
-    for index, item in enumerate(value):
-        if not isinstance(item, str):
-            raise BusinessRuleValidationError(f"{field}[{index}] must be a string")
-        item_value = item.strip()
-        if item_value:
-            cleaned.append(item_value)
-    return cleaned
-
-
 def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]:
     normalized = deepcopy(value)
-    normalized["rule_set_id"] = _required_string(normalized, "rule_set_id", max_length=120)
+    normalized["rule_set_id"] = _required_string(
+        normalized,
+        "rule_set_id",
+        max_length=120,
+    )
     normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
 
     fallback_policy = _optional_string(
         normalized,
         "fallback_policy",
         default="client_default_v1",
         max_length=40,
-    ) or "client_default_v1"
+    )
     if fallback_policy not in {"client_default_v1", "hide_all"}:
         raise BusinessRuleValidationError(
-            "fallback_policy must be one of client_default_v1, hide_all"
+            "fallback_policy must be client_default_v1 or hide_all"
         )
     normalized["fallback_policy"] = fallback_policy
 
@@ -304,24 +294,24 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
         raise BusinessRuleValidationError("combinations must be a list")
     if not combinations and fallback_policy != "hide_all":
         raise BusinessRuleValidationError(
-            "combinations must contain at least one rule unless fallback_policy is hide_all"
+            "combinations must be non-empty unless fallback_policy is hide_all"
         )
 
     seen_ids: set[str] = set()
     seen_pairs: set[str] = set()
+    normalized_combinations: list[dict[str, Any]] = []
     enabled_count = 0
-    normalized_rules: list[dict[str, Any]] = []
     for index, item in enumerate(combinations):
         if not isinstance(item, dict):
             raise BusinessRuleValidationError(f"combinations[{index}] must be an object")
 
-        rule_id = _required_string(item, "id", max_length=120)
-        if rule_id in seen_ids:
-            raise BusinessRuleValidationError(f"duplicate combination id: {rule_id}")
-        seen_ids.add(rule_id)
+        combination_id = _required_string(item, "id", max_length=80)
+        if combination_id in seen_ids:
+            raise BusinessRuleValidationError(f"duplicate combination id: {combination_id}")
+        seen_ids.add(combination_id)
 
-        capability = _required_string(item, "capability", max_length=160)
-        role = _required_string(item, "role", max_length=160)
+        capability = _required_string(item, "capability", max_length=120)
+        role = _required_string(item, "role", max_length=120)
         pair_key = f"{capability}::{role}".lower()
         if pair_key in seen_pairs:
             raise BusinessRuleValidationError(
@@ -333,20 +323,20 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
             priority = int(item.get("priority"))
         except (TypeError, ValueError) as exc:
             raise BusinessRuleValidationError(
-                f"combinations[{index}].priority must be a positive integer"
+                f"combinations[{index}].priority must be a positive number"
             ) from exc
-        if priority < 1:
+        if priority <= 0:
             raise BusinessRuleValidationError(
-                f"combinations[{index}].priority must be a positive integer"
+                f"combinations[{index}].priority must be a positive number"
             )
 
         enabled = item.get("enabled", True) is not False
         if enabled:
             enabled_count += 1
 
-        normalized_rules.append(
+        normalized_combinations.append(
             {
-                "id": rule_id,
+                "id": combination_id,
                 "capability": capability,
                 "role": role,
                 "priority": priority,
@@ -362,13 +352,28 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
             }
         )
 
-    if normalized_rules and enabled_count == 0 and fallback_policy != "hide_all":
+    if normalized_combinations and enabled_count == 0 and fallback_policy != "hide_all":
         raise BusinessRuleValidationError(
             "all combinations are disabled; fallback_policy must be hide_all"
         )
 
     normalized["combinations"] = sorted(
-        normalized_rules,
+        normalized_combinations,
         key=lambda item: (item["priority"], item["id"]),
     )
+    return normalized
+
+
+def _string_list(value: Any, *, field: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise BusinessRuleValidationError(f"{field} must be a list")
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise BusinessRuleValidationError(f"{field}[{index}] must be a string")
+        cleaned = item.strip()
+        if cleaned:
+            normalized.append(cleaned)
     return normalized
