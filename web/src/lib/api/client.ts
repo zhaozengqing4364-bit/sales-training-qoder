@@ -56,6 +56,7 @@ import {
     UserProgressResponse,
     PromptTemplate,
     PromptTemplateCreate,
+    PromptTemplateGovernanceReport,
     PromptTemplateUpdate,
     ScenarioPrompt,
     ScenarioPromptCreate,
@@ -3160,6 +3161,17 @@ export const api = {
             const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
             return apiFetch<PromptTemplate>(`/prompt-templates/${normalizedId}/set-default?prompt_type=${promptType}`, {
                 method: "POST",
+            });
+        },
+
+        getPromptTemplateGovernanceInvalid: async () => {
+            return apiFetch<PromptTemplateGovernanceReport>("/prompt-templates/governance/invalid");
+        },
+
+        migrateInvalidPromptTemplates: async (reason: string) => {
+            return apiFetch<PromptTemplateGovernanceReport>("/prompt-templates/governance/migrate-invalid", {
+                method: "POST",
+                body: JSON.stringify({ reason }),
             });
         },
 

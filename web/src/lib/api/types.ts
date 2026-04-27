@@ -1631,6 +1631,7 @@ export type PromptType =
     | "scoring"
     | "stage"
     | "fuzzy_detection"
+    | "realtime_scoring"
     | "interruption"
     | "tracking"
     | "welcome"
@@ -1669,6 +1670,25 @@ export interface PromptTemplateUpdate {
     variables?: string[];
     is_active?: boolean;
     is_default?: boolean;
+}
+
+export interface PromptTemplateGovernanceIssue {
+    template_id: string;
+    name: string;
+    prompt_type: string;
+    is_active: boolean;
+    is_default: boolean;
+    reason_codes: string[];
+    disabled_by_migration: boolean;
+    action: string;
+}
+
+export interface PromptTemplateGovernanceReport {
+    generated_at: string;
+    mode: string;
+    issues: PromptTemplateGovernanceIssue[];
+    migrated_count: number;
+    audit_action: string;
 }
 
 export interface ScenarioPrompt {
