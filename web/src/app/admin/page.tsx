@@ -187,7 +187,7 @@ export default function AdminDashboardPage() {
                             直接进入当前已接入数据源的管理面；首页不提供未接入的表单、日志控制台或自动告警入口。
                         </p>
                     </div>
-                    <Badge variant="green">已接入数据源</Badge>
+                    <Badge variant="green">已接数据源</Badge>
                 </div>
                 <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <GlassCard className="p-5 border border-white/80 bg-white/80">
@@ -225,7 +225,7 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">系统日志与后端状态</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    需要看系统侧证据时，直接回到日志与后端健康信号，而不是留在首页消费示意控制台或虚构告警。
+                                    需要看系统侧证据时，直接回到日志与后端健康信号，而不是留在首页消费示意控制台或未接入告警。
                                 </p>
                             </div>
                             <Server className="w-5 h-5 text-blue-600" />
@@ -253,7 +253,7 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">首页动作编排</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    公告发布、批量动作、配置快捷入口等还没有一条首页级统一数据来源；当前只保留到真实管理面的跳转，不再假装本页已经具备这些操作流。
+                                    公告发布、批量动作、配置快捷入口等还没有一条首页级数据源；当前只保留到真实管理面的跳转，当前不提供这些操作流。
                                 </p>
                             </div>
                             <Activity className="w-5 h-5 text-slate-400" />
@@ -265,7 +265,7 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">统一告警与动态</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    当前仓库还没有一条可直接复用到首页的统一告警 / 动态数据来源；如果未来恢复，应先明确事件来源、过滤口径和 operator 响应动作。
+                                    当前仓库还没有一条可直接复用到首页的统一告警 / 动态数据源；如果未来恢复，应先明确事件来源、过滤口径和 operator 响应动作。
                                 </p>
                             </div>
                             <Server className="w-5 h-5 text-slate-400" />
@@ -289,9 +289,9 @@ export default function AdminDashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <GlassCard className="p-6 border border-slate-200/70">
-                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">首页后续 truth surface</h2>
+                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">首页后续 数据来源说明</h2>
                     <p className="mt-3 text-sm text-slate-600 text-pretty">
-                        若后续要恢复首页级组织运营卡片，必须先明确复用哪条 backend authority，并让 admin home 只做 read-side 展示，不能再在本地维护第二套统计口径。
+                        若后续要恢复首页级组织运营卡片，必须先明确复用哪条 后端数据源，并让 admin home 只做 只读 展示，不能再在本地维护第二套统计口径。
                     </p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 list-disc pl-5">
                         <li>组织侧统计优先复用 <code>/admin/users</code> 或 <code>/admin/analytics</code> 的真实集合。</li>
