@@ -1,0 +1,1 @@
+{"success":true,"data":{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNTI0YjkwMC1lYTEyLTQzMWMtYWY1ZS0yYTE1ZjM4MWRhMzkiLCJyb2xlIjoidXNlciIsImV4cCI6MTc3NzM0Nzk5MX0.t3ZuLQ-S5we80I5f3Fw1WUtcoqeokLk34_Oan3cz1cU","token_type":"bearer","user":{"user_id":"2524b900-ea12-431c-af5e-2a15f381da39","email":"dev@example.com","name":"Developer","role":"user"}}}
