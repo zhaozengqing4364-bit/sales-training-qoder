@@ -1,7 +1,7 @@
 [project]
 name = "ai-practice-backend"
 version = "1.0.0"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "haystack-ai>=2.0.0",
     # Targeted pytest collection imports retrieval/auth modules directly.
