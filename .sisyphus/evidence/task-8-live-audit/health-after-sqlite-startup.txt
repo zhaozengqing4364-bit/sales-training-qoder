@@ -1,0 +1,72 @@
+# task-8 health after sqlite startup 2026-04-27T03:31:16Z
+## ports
+## backend /health
+
+## backend /api/v1/health
+
+## backend dev-login
+
+## frontend /
+
+## frontend /login
+
+## frontend log tail
+npm warn exec The following package was not found and will be installed: next@16.2.4
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3445
+- Network:       http://10.92.155.4:3445
+✓ Ready in 603ms
+Error: Turbopack build failed with 1 errors:
+./src/app
+Error: Next.js inferred your workspace root, but it may not be correct.
+    We couldn't find the Next.js package (next/package.json) from the project directory: /Users/zhaozengqing/github/销售训练qoder/.omx/team/omx-context-full-release-close/worktrees/worker-5/web/src/app
+     To fix this, set turbopack.root in your Next.js config, or ensure the Next.js package is resolvable from this directory.
+    Note: For security and performance reasons, files outside of the project directory will not be compiled.
+    See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+
+    at ignore-listed frames
+[?25h
+
+## backend log tail
+INFO:     Will watch for changes in these directories: ['/Users/zhaozengqing/github/销售训练qoder/.omx/team/omx-context-full-release-close/worktrees/worker-5/backend']
+INFO:     Uvicorn running on http://127.0.0.1:3444 (Press CTRL+C to quit)
+INFO:     Started reloader process [62713] using WatchFiles
+2026-04-27 11:29:02 [info     ] Registered capability: fuzzy_detection capability_id=fuzzy_detection class_name=FuzzyDetectionCapability trace_id=d12f4dc11bf55b106464f660d9f57815
+2026-04-27 11:29:02 [info     ] Registered capability: knowledge_retrieval capability_id=knowledge_retrieval class_name=KnowledgeRetrievalCapability trace_id=d12f4dc11bf55b106464f660d9f57815
+2026-04-27 11:29:02 [info     ] Registered capability: realtime_scoring capability_id=realtime_scoring class_name=RealtimeScoringCapability trace_id=d12f4dc11bf55b106464f660d9f57815
+2026-04-27 11:29:02 [info     ] Registered capability: sales_stage capability_id=sales_stage class_name=SalesStageCapability trace_id=d12f4dc11bf55b106464f660d9f57815
+INFO:     Started server process [63132]
+INFO:     Waiting for application startup.
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "Starting AI Practice System backend", "level": "info", "timestamp": "2026-04-27T03:29:03.724549Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "OpenTelemetry disabled", "level": "info", "timestamp": "2026-04-27T03:29:03.724643Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "startup_initializer": "common.db.session.init_db", "schema_migration_entrypoint": "cd backend && alembic upgrade head", "legacy_schema_repair_entrypoint": "cd backend && python scripts/repair_legacy_schema.py", "auth_bootstrap_entrypoint": "cd backend && python scripts/bootstrap_auth_admin.py --email <email> --role <role>", "startup_compatibility_guards": ["development/test-only personas.persona_policy compatibility guard", "development/test-only knowledge_documents schema compatibility guard"], "event": "Database authority map resolved for startup", "level": "info", "timestamp": "2026-04-27T03:29:03.724703Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "startup_initializer": "common.db.session.init_db", "startup_table_bootstrap": "Base.metadata.create_all", "startup_compatibility_guards": ["development/test-only personas.persona_policy compatibility guard", "development/test-only knowledge_documents schema compatibility guard"], "schema_migration_entrypoint": "cd backend && alembic upgrade head", "legacy_schema_repair_entrypoint": "cd backend && python scripts/repair_legacy_schema.py", "auth_bootstrap_entrypoint": "cd backend && python scripts/bootstrap_auth_admin.py --email <email> --role <role>", "event": "Running startup database bootstrap", "level": "info", "timestamp": "2026-04-27T03:29:03.724763Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "Startup database bootstrap finished", "level": "info", "timestamp": "2026-04-27T03:29:04.020259Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "shared_password": "[REDACTED]", "user_overrides": 1, "event": "Auth credentials configured", "level": "info", "timestamp": "2026-04-27T03:29:04.020391Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "corp_id_configured": true, "agent_id_configured": true, "event": "WeCom SSO configured", "level": "info", "timestamp": "2026-04-27T03:29:04.020437Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "ConfigManager initialized", "level": "info", "timestamp": "2026-04-27T03:29:04.020494Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "ConfigManager loaded 0 configs, defaults: []", "level": "info", "timestamp": "2026-04-27T03:29:04.081900Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "ConfigManager initialized", "level": "info", "timestamp": "2026-04-27T03:29:04.081970Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "Session manager started", "level": "info", "timestamp": "2026-04-27T03:29:04.082029Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "Session manager initialized", "level": "info", "timestamp": "2026-04-27T03:29:04.082054Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "redis_url": "redis://localhost:6379/0", "key_prefix": "ws:session_state:", "state_ttl": 1800, "event": "Session state service started", "level": "info", "timestamp": "2026-04-27T03:29:04.286789Z"}
+{"trace_id": "d12f4dc11bf55b106464f660d9f57815", "event": "Session state service initialized", "level": "info", "timestamp": "2026-04-27T03:29:04.286863Z"}
+INFO:     Application startup complete.
+INFO:     127.0.0.1:54833 - "GET /api/v1/admin/rag-profiles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54834 - "GET /api/v1/admin/knowledge-answer/versions/cfg-1/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54835 - "GET /api/v1/admin/rag-profiles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54836 - "GET /api/v1/admin/knowledge-answer/versions/cfg-1/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54833 - "GET /api/v1/admin/knowledge-answer/versions/cfg-2/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54833 - "GET /api/v1/admin/rag-profiles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54834 - "GET /api/v1/admin/knowledge-answer/versions/cfg-1/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54833 - "GET /api/v1/admin/rag-profiles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54834 - "GET /api/v1/admin/knowledge-answer/versions/cfg-1/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54833 - "GET /api/v1/admin/rag-profiles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54834 - "GET /api/v1/admin/knowledge-answer/versions/cfg-1/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54833 - "GET /api/v1/admin/rag-profiles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54834 - "GET /api/v1/admin/knowledge-answer/versions/cfg-1/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54833 - "GET /api/v1/admin/rag-profiles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54834 - "GET /api/v1/admin/knowledge-answer/versions/cfg-1/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54833 - "GET /api/v1/admin/rag-profiles HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54834 - "GET /api/v1/admin/knowledge-answer/versions/cfg-1/entity-aliases HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55143 - "GET /health HTTP/1.1" 200 OK
