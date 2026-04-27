@@ -119,6 +119,64 @@ class PromptTemplateQuarantineResult(BaseModel):
     audit_log_action: str
 
 
+def _normalize_prompt_variables(value: Any) -> list[str]:
+    """Normalize author-provided variables while rejecting legacy object payloads.
+
+    Historical rows may contain a JSON object; those are handled by the read model so
+    operators can see and migrate them. New writes must be a flat list of non-empty
+    strings to keep the runtime contract deterministic.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError("variables must be a JSON array of strings") from exc
+        value = parsed
+    if isinstance(value, dict):
+        raise ValueError("variables must be a list of strings, not an object")
+    if not isinstance(value, list):
+        raise ValueError("variables must be a list of strings")
+
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError("variables must contain only strings")
+        variable = item.strip()
+        if not variable:
+            raise ValueError("variables cannot contain empty names")
+        if variable not in normalized:
+            normalized.append(variable)
+    return normalized
+
+
+def _legacy_variable_issue(value: Any) -> str | None:
+    if isinstance(value, dict):
+        return "variables_object_migratable"
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return "variables_string_not_json_array"
+        if isinstance(parsed, dict):
+            return "variables_object_migratable"
+        if not isinstance(parsed, list):
+            return "variables_json_not_array"
+    elif value is not None and not isinstance(value, list):
+        return "variables_not_array"
+    return None
+
+
+def _coerce_legacy_variables_for_read(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        return [str(key) for key in value.keys() if str(key).strip()]
+    try:
+        return _normalize_prompt_variables(value)
+    except ValueError:
+        return []
+
+
 class PromptTemplateBase(BaseModel):
     """Base model for prompt templates."""
 

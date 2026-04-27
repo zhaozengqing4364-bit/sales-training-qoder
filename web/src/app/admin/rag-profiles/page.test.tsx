@@ -173,3 +173,29 @@ describe("RagProfilesPage", () => {
         expect(screen.queryByText("暂无 RAG 配置")).toBeNull();
     });
 });
+
+    it("distinguishes empty state from API failure and links the migration path", async () => {
+        listRagProfilesMock.mockResolvedValueOnce([]);
+
+        render(<RagProfilesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("暂无 RAG 配置")).toBeTruthy();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "前往检索策略" }));
+        expect(pushMock).toHaveBeenCalledWith("/admin/retrieval-strategies");
+    });
+
+    it("shows a retryable failure state when RAG profile loading fails", async () => {
+        listRagProfilesMock.mockRejectedValueOnce(new Error("接口不可用"));
+
+        render(<RagProfilesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("RAG 配置加载失败")).toBeTruthy();
+        });
+        expect(screen.getByText("接口不可用")).toBeTruthy();
+        expect(errorToastMock).toHaveBeenCalledWith("加载失败：接口不可用");
+    });
+});
