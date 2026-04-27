@@ -49,7 +49,7 @@ describe("AdminDashboardPage", () => {
         });
     });
 
-    it("keeps only the top effectiveness card as live data and downgrades the rest of the admin home to truth-surface pending authority", async () => {
+    it("keeps only the top effectiveness card as live data and marks the rest as pending authority data", async () => {
         render(<AdminDashboardPage />);
 
         await waitFor(() => {
@@ -57,7 +57,7 @@ describe("AdminDashboardPage", () => {
             expect(getDashboardMock).toHaveBeenCalledWith({ days: 7 });
         });
 
-        expect(await screen.findByText("管理首页接入说明")).toBeTruthy();
+        expect(await screen.findByText("管理首页数据来源说明")).toBeTruthy();
         expect(screen.queryByPlaceholderText("全局搜索...")).toBeNull();
         expect(screen.getByText("66.7%")).toBeTruthy();
         expect(screen.getByText("58.3%")).toBeTruthy();
