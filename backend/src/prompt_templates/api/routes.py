@@ -37,6 +37,7 @@ from prompt_templates.models import (
     PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
+    PromptTemplateGovernanceRollbackResponse,
     PromptTemplateQuarantineResult,
     PromptTemplateUpdate,
     PromptType,
@@ -238,7 +239,7 @@ async def get_prompt_template_options(
             {"value": value, "label": value} for value in ALLOWED_PROMPT_TYPE_VALUES
         ],
         "sales_allowed_prompt_types": sorted(
-            SALES_PROMPT_SCOPE_ALLOWED_TYPES
+            PromptTemplateService.SALES_PROMPT_SCOPE_ALLOWED_TYPES
         ),
         "variables_schema": "list[str]",
         "invalid_active_count": int(status_payload.get("invalid_active_count", 0)),
@@ -508,13 +509,16 @@ async def migrate_invalid_prompt_templates(
         )
 
 
-@router.post("/governance/{template_id}/rollback")
+@router.post(
+    "/governance/{template_id}/rollback",
+    response_model=PromptTemplateGovernanceRollbackResponse,
+)
 async def rollback_prompt_template_governance(
     template_id: str,
     request: PromptGovernanceRollbackRequest | None = None,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> dict[str, Any]:
+) -> PromptTemplateGovernanceRollbackResponse:
     """Rollback the latest governance migration for one template when audit data exists."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:

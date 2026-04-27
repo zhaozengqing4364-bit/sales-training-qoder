@@ -4,7 +4,7 @@
  * Create New Prompt Template Page (B10)
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { api } from "@/lib/api/client";
-import { PromptType } from "@/lib/api/types";
+import { PromptTemplateOptions, PromptType } from "@/lib/api/types";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   summary: "总结",
@@ -29,8 +29,6 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   evaluation: "实时评价",
   report: "综合报告",
 };
-const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
-
 export default function NewPromptTemplatePage() {
     const router = useRouter();
     const [saving, setSaving] = useState(false);
@@ -42,15 +40,26 @@ export default function NewPromptTemplatePage() {
     const [category, setCategory] = useState("common");
     const [template, setTemplate] = useState("");
     const [isDefault, setIsDefault] = useState(false);
+    const [promptOptions, setPromptOptions] = useState<PromptTemplateOptions | null>(null);
     const normalizedCategory = category.trim().toLowerCase();
+    const salesAllowedPromptTypes = useMemo(
+        () => new Set((promptOptions?.sales_allowed_prompt_types || []) as PromptType[]),
+        [promptOptions],
+    );
+
+    useEffect(() => {
+        void api.admin.getPromptTemplateOptions()
+            .then(setPromptOptions)
+            .catch(() => setPromptOptions(null));
+    }, []);
 
     const selectablePromptTypes = useMemo(() => {
         const entries = Object.entries(PROMPT_TYPE_LABELS) as [PromptType, string][];
-        if (normalizedCategory !== "sales") {
+        if (normalizedCategory !== "sales" || salesAllowedPromptTypes.size === 0) {
             return entries;
         }
-        return entries.filter(([type]) => SALES_ALLOWED_PROMPT_TYPES.includes(type));
-    }, [normalizedCategory]);
+        return entries.filter(([type]) => salesAllowedPromptTypes.has(type));
+    }, [normalizedCategory, salesAllowedPromptTypes]);
 
     const effectivePromptType = (
         selectablePromptTypes.some(([type]) => type === promptType)
@@ -161,9 +170,10 @@ export default function NewPromptTemplatePage() {
                                     const nextNormalized = nextCategory.trim().toLowerCase();
                                     if (
                                         nextNormalized === "sales" &&
-                                        !SALES_ALLOWED_PROMPT_TYPES.includes(promptType)
+                                        salesAllowedPromptTypes.size > 0 &&
+                                        !salesAllowedPromptTypes.has(promptType)
                                     ) {
-                                        setPromptType(SALES_ALLOWED_PROMPT_TYPES[0]);
+                                        setPromptType([...salesAllowedPromptTypes][0]);
                                     }
                                     setCategory(nextCategory);
                                 }}

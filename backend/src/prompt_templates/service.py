@@ -37,6 +37,7 @@ from prompt_templates.models import (
     PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
+    PromptTemplateGovernanceRollbackResponse,
     PromptTemplateQuarantineResult,
     PromptTemplateUpdate,
     PromptType,
@@ -58,6 +59,8 @@ class PromptTemplateService:
     - Scenario-specific template resolution
     - Template rendering with variable substitution
     """
+
+    SALES_PROMPT_SCOPE_ALLOWED_TYPES = SALES_PROMPT_SCOPE_ALLOWED_TYPES
 
     def __init__(self, db_session: AsyncSession | None = None):
         """Initialize service.
@@ -364,7 +367,7 @@ class PromptTemplateService:
         policy = {
             "variables_schema": "list[str]",
             "invalid_history_runtime_behavior": "visible_in_governance_and_disabled_before_runtime_lookup",
-            "rollback": "restore prior is_active/is_default from prompt_template.governance.remediate_invalid SystemLog details",
+            "rollback": "restore from prompt_template.governance_migrate audit snapshots; invalid rows remain disabled until corrected",
             "audit_action": "prompt_template.governance.remediate_invalid",
         }
         return {
@@ -529,7 +532,7 @@ class PromptTemplateService:
         *,
         actor: Any | None = None,
         reason: str = "update_prompt_template",
-    ) -> PromptTemplate | None:
+    ) -> PromptTemplateGovernanceRollbackResponse | None:
         """Update an existing template.
 
         Args:
@@ -1084,6 +1087,13 @@ class PromptTemplateService:
         row.prompt_type = str(before.get("prompt_type") or row.prompt_type)
         row.updated_at = datetime.now(UTC)
 
+        safety_overrides: list[str] = []
+        restored_issues = self._governance_issues_for_row(row)
+        if restored_issues and (row.is_active or row.is_default):
+            row.is_active = False
+            row.is_default = False
+            safety_overrides.append("disabled_invalid_after_rollback")
+
         await self._queue_prompt_governance_audit(
             action="prompt_template.governance_rollback",
             actor=actor,
@@ -1091,31 +1101,22 @@ class PromptTemplateService:
             reason=reason,
             before=current,
             after=self._snapshot_db_template(row),
-            issues=issues,
+            issues=restored_issues or issues,
         )
         await self.db.commit()
         await self.db.refresh(row)
         await self.loader.invalidate_cache(template_id)
-        normalized = self._safe_model_validate(row)
-        if normalized is not None:
-            return {
-                "template": normalized.model_dump(mode="json"),
-                "governance_status": "valid",
-                "governance_issues": [],
-                "audit_action": "prompt_template.governance_rollback",
-            }
-
-        remaining_issues = self._governance_issues_for_row(row)
-        return {
-            "template": self._template_snapshot(row),
-            "governance_status": "needs_review",
-            "governance_issues": remaining_issues,
-            "audit_action": "prompt_template.governance_rollback",
-            "message": (
-                "Rollback restored historical invalid data; the template remains "
-                "visible in governance status until remediated again."
-            ),
-        }
+        after = self._snapshot_db_template(row)
+        final_issues = self._governance_issues_for_row(row)
+        return PromptTemplateGovernanceRollbackResponse(
+            template_id=str(template_id),
+            rolled_back=True,
+            runtime_status="needs_review" if final_issues else "valid",
+            before=current,
+            after=after,
+            issues=final_issues,
+            safety_overrides=safety_overrides,
+        )
 
     async def assign_template_to_scenario(
         self,

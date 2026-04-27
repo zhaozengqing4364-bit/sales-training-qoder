@@ -14,7 +14,7 @@ import { GlassModal } from "@/components/ui/glass-modal";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api/client";
-import { PromptTemplate, PromptType } from "@/lib/api/types";
+import { PromptTemplate, PromptTemplateOptions, PromptType } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
@@ -32,8 +32,6 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   evaluation: "实时评价",
   report: "综合报告",
 };
-const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
-
 export default function EditPromptTemplatePage() {
     const params = useParams();
     const router = useRouter();
@@ -61,15 +59,26 @@ export default function EditPromptTemplatePage() {
     const [testResult, setTestResult] = useState<string | null>(null);
     const [testing, setTesting] = useState(false);
     const [showTestModal, setShowTestModal] = useState(false);
+    const [promptOptions, setPromptOptions] = useState<PromptTemplateOptions | null>(null);
     const normalizedCategory = category.trim().toLowerCase();
+    const salesAllowedPromptTypes = useMemo(
+        () => new Set((promptOptions?.sales_allowed_prompt_types || []) as PromptType[]),
+        [promptOptions],
+    );
 
     const selectablePromptTypes = useMemo(() => {
         const entries = Object.entries(PROMPT_TYPE_LABELS) as [PromptType, string][];
-        if (normalizedCategory !== "sales") {
+        if (normalizedCategory !== "sales" || salesAllowedPromptTypes.size === 0) {
             return entries;
         }
-        return entries.filter(([type]) => SALES_ALLOWED_PROMPT_TYPES.includes(type));
-    }, [normalizedCategory]);
+        return entries.filter(([type]) => salesAllowedPromptTypes.has(type));
+    }, [normalizedCategory, salesAllowedPromptTypes]);
+
+    useEffect(() => {
+        void api.admin.getPromptTemplateOptions()
+            .then(setPromptOptions)
+            .catch(() => setPromptOptions(null));
+    }, []);
 
     // Load template
     const loadTemplate = useCallback(async () => {
@@ -250,9 +259,10 @@ export default function EditPromptTemplatePage() {
                                     const nextNormalized = nextCategory.trim().toLowerCase();
                                     if (
                                         nextNormalized === "sales" &&
-                                        !SALES_ALLOWED_PROMPT_TYPES.includes(promptType)
+                                        salesAllowedPromptTypes.size > 0 &&
+                                        !salesAllowedPromptTypes.has(promptType)
                                     ) {
-                                        setPromptType(SALES_ALLOWED_PROMPT_TYPES[0]);
+                                        setPromptType([...salesAllowedPromptTypes][0]);
                                     }
                                     setCategory(nextCategory);
                                 }}

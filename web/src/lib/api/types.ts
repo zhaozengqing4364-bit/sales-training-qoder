@@ -1754,6 +1754,17 @@ export interface PromptTemplateQuarantineResult {
     audit_log_action: string;
 }
 
+export interface PromptTemplateGovernanceRollbackResponse {
+    template_id: string;
+    rolled_back: boolean;
+    runtime_status: "valid" | "needs_review" | string;
+    before: Record<string, unknown>;
+    after: Record<string, unknown>;
+    issues: PromptTemplateGovernanceIssue[];
+    safety_overrides: string[];
+    audit_log_action: string;
+}
+
 export interface ScenarioPrompt {
     id: string;
     scenario_type: string;

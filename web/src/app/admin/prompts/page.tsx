@@ -10,7 +10,13 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { PromptTemplate, PromptTemplateGovernanceStatus, PromptType, ScenarioPrompt } from "@/lib/api/types";
+import {
+  PromptTemplate,
+  PromptTemplateGovernanceStatus,
+  PromptTemplateOptions,
+  PromptType,
+  ScenarioPrompt,
+} from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
@@ -44,8 +50,6 @@ const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
   evaluation: "bg-teal-100 text-teal-700",
   report: "bg-zinc-200 text-zinc-700",
 };
-const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
-
 function getRoleLabel(role: string): string {
   if (role === "admin") {
     return "管理员";
@@ -85,6 +89,7 @@ export default function AdminPromptsPage() {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [scenarioPrompts, setScenarioPrompts] = useState<ScenarioPrompt[]>([]);
   const [governanceStatus, setGovernanceStatus] = useState<PromptTemplateGovernanceStatus | null>(null);
+  const [promptOptions, setPromptOptions] = useState<PromptTemplateOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,16 +107,21 @@ export default function AdminPromptsPage() {
 
   const isAdmin = userRole === "admin";
   const canOperate = isAdmin;
+  const salesAllowedPromptTypes = useMemo(
+    () => new Set((promptOptions?.sales_allowed_prompt_types || []) as PromptType[]),
+    [promptOptions],
+  );
 
   const loadData = async () => {
     setLoading(true);
     setLoadWarnings([]);
     try {
-      const [templatesResult, scenarioPromptsResult, userResult, governanceResult] = await Promise.allSettled([
+      const [templatesResult, scenarioPromptsResult, userResult, governanceResult, optionsResult] = await Promise.allSettled([
         api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
         api.admin.getScenarioPrompts(),
         api.user.getMe(),
         api.admin.getPromptTemplateGovernanceStatus(),
+        api.admin.getPromptTemplateOptions(),
       ]);
       const warnings: string[] = [];
 
@@ -142,7 +152,12 @@ export default function AdminPromptsPage() {
         setGovernanceStatus(null);
         warnings.push(`治理状态加载失败：${getApiErrorMessage(governanceResult.reason)}`);
       }
-      setLoadWarnings(warnings);
+
+      if (optionsResult.status === "fulfilled") {
+        setPromptOptions(optionsResult.value);
+      } else {
+        setPromptOptions(null);
+      }
     } catch (error) {
       debug.error("Failed to load prompt admin data", error);
       setLoadWarnings(["提示词数据加载失败：请检查权限、后端服务与审计数据源后重试。"]);
@@ -691,7 +706,17 @@ export default function AdminPromptsPage() {
 
           <select
             value={bindingScenarioType}
-            onChange={(event) => setBindingScenarioType(event.target.value as "sales" | "presentation")}
+            onChange={(event) => {
+              const nextScenarioType = event.target.value as "sales" | "presentation";
+              setBindingScenarioType(nextScenarioType);
+              if (
+                nextScenarioType === "sales" &&
+                salesAllowedPromptTypes.size > 0 &&
+                !salesAllowedPromptTypes.has(bindingPromptType)
+              ) {
+                setBindingPromptType([...salesAllowedPromptTypes][0]);
+              }
+            }}
             className="rounded-lg border border-zinc-200 bg-stone-50 px-3 py-2 text-sm"
           >
             <option value="sales">销售场景</option>
@@ -705,10 +730,10 @@ export default function AdminPromptsPage() {
           >
             {Object.entries(PROMPT_TYPE_LABELS)
               .filter(([type]) => {
-                if (bindingScenarioType !== "sales") {
+                if (bindingScenarioType !== "sales" || salesAllowedPromptTypes.size === 0) {
                   return true;
                 }
-                return SALES_ALLOWED_PROMPT_TYPES.includes(type as PromptType);
+                return salesAllowedPromptTypes.has(type as PromptType);
               })
               .map(([type, label]) => (
               <option key={type} value={type}>
