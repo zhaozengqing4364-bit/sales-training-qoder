@@ -1676,23 +1676,45 @@ export interface PromptTemplateUpdate {
     is_default?: boolean;
 }
 
-export interface PromptTemplateGovernanceIssue {
-    template_id: string;
+
+export interface PromptTemplateGovernanceInvalidTemplate {
+    id: string;
     name: string;
     prompt_type: string;
+    category: string;
     is_active: boolean;
     is_default: boolean;
-    reason_codes: string[];
-    disabled_by_migration: boolean;
-    action: string;
+    variables_shape: string;
+    validation_errors: string[];
+    recommended_action: string;
 }
 
-export interface PromptTemplateGovernanceReport {
-    generated_at: string;
-    mode: string;
-    issues: PromptTemplateGovernanceIssue[];
-    migrated_count: number;
-    audit_action: string;
+export interface PromptTemplateGovernanceStatus {
+    options: {
+        allowed_prompt_types: PromptType[];
+        form_defaults: {
+            category: string;
+            is_active: boolean;
+            is_default: boolean;
+            variables: string[];
+        };
+        validation: Record<string, string>;
+        permissions: Record<string, string>;
+        audit: { sink: string; actions: string[] };
+        fallback: string;
+        rollback: string;
+    };
+    invalid_templates: PromptTemplateGovernanceInvalidTemplate[];
+    invalid_count: number;
+    active_invalid_count: number;
+}
+
+export interface PromptTemplateGovernanceRemediationResult {
+    invalid_count: number;
+    disabled_count: number;
+    disabled_ids: string[];
+    invalid_templates: PromptTemplateGovernanceInvalidTemplate[];
+    rollback: string;
 }
 
 export interface ScenarioPrompt {

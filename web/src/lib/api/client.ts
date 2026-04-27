@@ -3179,14 +3179,14 @@ export const api = {
             });
         },
 
-        getPromptTemplateGovernanceInvalid: async () => {
-            return apiFetch<PromptTemplateGovernanceReport>("/prompt-templates/governance/invalid");
+        getPromptTemplateGovernanceStatus: async () => {
+            return apiFetch<PromptTemplateGovernanceStatus>("/prompt-templates/governance/status");
         },
 
-        migrateInvalidPromptTemplates: async (reason: string) => {
-            return apiFetch<PromptTemplateGovernanceReport>("/prompt-templates/governance/migrate-invalid", {
+        remediateInvalidPromptTemplates: async (reason: string) => {
+            const query = new URLSearchParams({ reason });
+            return apiFetch<PromptTemplateGovernanceRemediationResult>(`/prompt-templates/governance/remediate-invalid?${query.toString()}`, {
                 method: "POST",
-                body: JSON.stringify({ reason }),
             });
         },
 
