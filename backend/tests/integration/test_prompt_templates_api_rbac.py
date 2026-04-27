@@ -2,13 +2,14 @@
 Integration tests for Prompt Templates API role permissions.
 """
 
-import pytest_asyncio
 from datetime import UTC, datetime
+from uuid import uuid4
+
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from uuid import uuid4
 
 from common.db.models import Base, PromptTemplate, SystemLog, User
 from common.db.session import get_db

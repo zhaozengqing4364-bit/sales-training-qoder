@@ -279,19 +279,93 @@ class PromptTemplateService:
             return
         from common.db.models import SystemLog
 
-        actor_id = str(getattr(actor, "user_id", "") or "") or None
-        actor_identifier = (
-            str(getattr(actor, "email", "") or "").strip()
-            or str(getattr(actor, "wechat_user_id", "") or "").strip()
-            or actor_id
-            or "system"
-        )
-        details = {
-            "reason": reason,
-            "before": before,
-            "after": after,
-            "rollback_policy": PROMPT_GOVERNANCE_ROLLBACK_POLICY,
-            "timestamp": datetime.now(UTC).isoformat(),
+        result = await self.db.execute(select(PromptTemplateDB))
+        rows = result.scalars().all()
+        actions: list[dict[str, Any]] = []
+        now = datetime.now(UTC)
+
+        for row in rows:
+            before = {
+                "prompt_type": getattr(row, "prompt_type", None),
+                "variables": getattr(row, "variables", None),
+                "is_active": bool(getattr(row, "is_active", False)),
+                "is_default": bool(getattr(row, "is_default", False)),
+            }
+            row_actions: list[str] = []
+
+            if not self._is_allowed_prompt_type(before["prompt_type"]):
+                row_actions.append("disabled_invalid_prompt_type")
+
+            try:
+                migrated_variables, remediation = self._normalize_legacy_variables(
+                    before["variables"]
+                )
+                if remediation:
+                    row_actions.append(remediation)
+            except ValueError as exc:
+                migrated_variables = []
+                row_actions.append(str(exc))
+                row_actions.append("disabled_invalid_variables")
+
+            if not row_actions:
+                continue
+
+            if not dry_run:
+                row.variables = migrated_variables
+                if (
+                    "disabled_invalid_prompt_type" in row_actions
+                    or "disabled_invalid_variables" in row_actions
+                ):
+                    row.is_active = False
+                    row.is_default = False
+                row.updated_at = now
+
+            after = {
+                "prompt_type": getattr(row, "prompt_type", None),
+                "variables": migrated_variables,
+                "is_active": bool(getattr(row, "is_active", False)),
+                "is_default": bool(getattr(row, "is_default", False)),
+            }
+            actions.append(
+                {
+                    "template_id": str(getattr(row, "id", "")),
+                    "name": str(getattr(row, "name", "")),
+                    "actions": row_actions,
+                    "before": before,
+                    "after": after,
+                }
+            )
+
+        if not dry_run and actions:
+            audit_log = SystemLog(
+                action="prompt_template_governance_remediation",
+                user_id=actor_user_id,
+                user_identifier=actor_identifier,
+                status="warning",
+                details=json.dumps(
+                    {
+                        "version": PROMPT_TEMPLATE_GOVERNANCE_VERSION,
+                        "reason": reason,
+                        "actions": actions,
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                ),
+            )
+            self.db.add(audit_log)
+            await self.db.commit()
+            await self.loader.invalidate_cache()
+
+        return {
+            "version": PROMPT_TEMPLATE_GOVERNANCE_VERSION,
+            "dry_run": dry_run,
+            "remediated_count": len(actions),
+            "actions": actions,
+            "rollback": {
+                "source": "system_logs",
+                "action": "prompt_template_governance_remediation",
+                "instruction": "Use the audit log before/after payload to restore variables/is_active/is_default; unknown prompt_type rows remain disabled unless a supported PromptType is added.",
+            },
         }
         self.db.add(
             SystemLog(
