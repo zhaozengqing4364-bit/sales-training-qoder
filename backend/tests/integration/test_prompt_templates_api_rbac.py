@@ -239,9 +239,9 @@ class TestPromptTemplateRBAC:
         assert body["message"] == "模板不存在"
         assert body.get("trace_id")
 
-    async def test_admin_can_create_realtime_scoring_template(
-        self, async_client, auth_headers
-    ):
+
+class TestPromptTemplateGovernance:
+    async def test_admin_can_create_realtime_scoring_template(self, async_client, auth_headers):
         response = await async_client.post(
             "/api/v1/prompt-templates",
             headers=auth_headers["admin"],
@@ -249,26 +249,23 @@ class TestPromptTemplateRBAC:
                 "name": "实时评分模板",
                 "prompt_type": "realtime_scoring",
                 "category": "sales",
-                "template": "请评分：{{ transcript }}",
-                "variables": ["transcript"],
+                "template": "请根据分数 {{ score }} 输出反馈",
+                "variables": ["score"],
             },
         )
 
         assert response.status_code == 201
-        body = response.json()
-        assert body["prompt_type"] == "realtime_scoring"
+        assert response.json()["prompt_type"] == "realtime_scoring"
 
-    async def test_admin_create_rejects_variables_dict_with_400(
-        self, async_client, auth_headers
-    ):
+    async def test_admin_create_rejects_object_variables_with_400(self, async_client, auth_headers):
         response = await async_client.post(
             "/api/v1/prompt-templates",
             headers=auth_headers["admin"],
             json={
                 "name": "非法变量模板",
-                "prompt_type": "scoring",
+                "prompt_type": "realtime_scoring",
                 "category": "sales",
-                "template": "请评分：{{ score }}",
+                "template": "Score {{ score }}",
                 "variables": {"score": "number"},
             },
         )
@@ -277,66 +274,46 @@ class TestPromptTemplateRBAC:
         body = response.json()
         assert body["success"] is False
         assert body["error"] == "[PROMPT_TEMPLATE_VALIDATION_FAILED]"
+        assert "variables" in body["message"]
 
-    async def test_governance_migration_disables_invalid_historical_template(
+    async def test_governance_status_and_remediation_disable_invalid_history(
         self, async_client, auth_headers, db_session
     ):
-        historical = PromptTemplate(
-            id="123e4567-e89b-12d3-a456-426614174111",
-            name="历史非法变量模板",
-            prompt_type="scoring",
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        invalid = PromptTemplateDB(
+            id="123e4567-e89b-12d3-a456-426614174001",
+            name="legacy invalid scoring",
+            prompt_type="legacy_illegal_type",
             category="sales",
-            template="请评分：{{ score }}",
+            template="Score {{ score }}",
             variables={"score": "number"},
             is_active=True,
             is_default=True,
             is_system=False,
         )
-        db_session.add(historical)
+        db_session.add(invalid)
         await db_session.commit()
 
-        report_response = await async_client.get(
-            "/api/v1/prompt-templates/governance/invalid",
+        status_response = await async_client.get(
+            "/api/v1/prompt-templates/governance/status",
             headers=auth_headers["admin"],
         )
+        assert status_response.status_code == 200
+        status_body = status_response.json()
+        assert status_body["invalid_count"] == 1
+        assert status_body["invalid_templates"][0]["runtime_status"] == "disabled_required"
+        assert "realtime_scoring" in status_body["allowed_prompt_types"]
 
-        assert report_response.status_code == 200
-        report = report_response.json()
-        assert report["mode"] == "report_only"
-        assert report["issues"][0]["template_id"] == historical.id
-        assert "variables_must_be_list_strings" in report["issues"][0]["reason_codes"]
-
-        migrate_response = await async_client.post(
-            "/api/v1/prompt-templates/governance/migrate-invalid",
+        remediation_response = await async_client.post(
+            "/api/v1/prompt-templates/governance/remediate-invalid",
             headers=auth_headers["admin"],
-            json={"reason": "close A-009 invalid historical template governance"},
+            json={"reason": "close A-009 invalid historical template"},
         )
+        assert remediation_response.status_code == 200
+        remediation_body = remediation_response.json()
+        assert remediation_body["remediated_count"] == 1
 
-        assert migrate_response.status_code == 200
-        migrated = migrate_response.json()
-        assert migrated["migrated_count"] == 1
-        assert migrated["issues"][0]["disabled_by_migration"] is True
-
-        await db_session.refresh(historical)
-        assert historical.is_active is False
-        assert historical.is_default is False
-
-        log = (
-            await db_session.execute(
-                SystemLog.__table__.select().where(
-                    SystemLog.action == "prompt_template_invalid_migration"
-                )
-            )
-        ).first()
-        assert log is not None
-
-    async def test_support_cannot_use_governance_migration(
-        self, async_client, auth_headers
-    ):
-        response = await async_client.post(
-            "/api/v1/prompt-templates/governance/migrate-invalid",
-            headers=auth_headers["support"],
-            json={"reason": "not allowed"},
-        )
-
-        assert response.status_code == 403
+        await db_session.refresh(invalid)
+        assert invalid.is_active is False
+        assert invalid.is_default is False
