@@ -110,6 +110,7 @@ function isIgnorableConsoleMessage(message: ConsoleMessage): boolean {
     text.includes("Download the React DevTools") ||
     text.includes("[HMR]") ||
     text.includes("[Fast Refresh]") ||
+    text.includes("/_next/webpack-hmr") ||
     text.includes("next-router")
   );
 }
@@ -125,7 +126,12 @@ function isIgnorableResponse(response: Response): boolean {
 
 function isIgnorableFailedRequest(request: Request): boolean {
   const url = request.url();
-  return url.includes("/_next/webpack-hmr") || url.endsWith("/favicon.ico");
+  const failure = request.failure()?.errorText || "";
+  return (
+    url.includes("/_next/webpack-hmr") ||
+    url.endsWith("/favicon.ico") ||
+    (failure === "net::ERR_ABORTED" && new URL(url).pathname === "/")
+  );
 }
 
 async function loginWithDevEndpoint(context: BrowserContext): Promise<DevLoginResult> {
