@@ -32,7 +32,7 @@ describe("SettingsPage", () => {
     it("marks non-model settings as read-only instead of offering fake persistence", () => {
         render(<SettingsPage />);
 
-        expect(screen.getAllByText("这些配置项当前仅展示目标状态，尚未接入持久化接口，暂不会保存。").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("这些配置项当前仅做只读展示；待接入持久化接口、权限、审计与回滚后才开放编辑。").length).toBeGreaterThan(0);
         expect((screen.getByRole("button", { name: /保存配置/ }) as HTMLButtonElement).disabled).toBe(true);
         expect((screen.getByRole("button", { name: /放弃更改/ }) as HTMLButtonElement).disabled).toBe(true);
         expect(screen.getByDisplayValue("Intelligent Coach AI").hasAttribute("readonly")).toBe(true);
