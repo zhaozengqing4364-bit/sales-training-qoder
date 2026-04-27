@@ -57,7 +57,7 @@ describe("AdminDashboardPage", () => {
             expect(getDashboardMock).toHaveBeenCalledWith({ days: 7 });
         });
 
-        expect(await screen.findByText("管理首页接入状态说明")).toBeTruthy();
+        expect(await screen.findByText("管理首页数据来源说明")).toBeTruthy();
         expect(screen.queryByPlaceholderText("全局搜索...")).toBeNull();
         expect(screen.getByText("66.7%")).toBeTruthy();
         expect(screen.getByText("58.3%")).toBeTruthy();

@@ -21,7 +21,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -375,7 +375,7 @@ async def get_template_for_scenario(
 
 @router.post("", response_model=PromptTemplate, status_code=201)
 async def create_prompt_template(
-    raw_data: dict[str, Any] = Body(...),
+    data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -390,10 +390,15 @@ async def create_prompt_template(
     assert isinstance(data, PromptTemplateCreate)
 
     try:
-        data = PromptTemplateCreate.model_validate(raw_data)
-        return await service.create_template(data)
+        payload = PromptTemplateCreate.model_validate(data)
+        return await service.create_template(payload)
     except ValidationError as exc:
-        return _validation_error_response(exc)
+        return _prompt_error_response(
+            status_code=400,
+            error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
+            message="提示词模板校验失败：variables 必须是字符串数组，prompt_type 必须属于允许类型。",
+            exc=exc,
+        )
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -410,18 +415,31 @@ async def create_prompt_template(
         )
 
 
-@router.get("/governance/audit")
-async def audit_prompt_template_governance(
+
+
+class PromptTemplateRemediationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        default="prompt governance remediation",
+        min_length=1,
+        max_length=500,
+    )
+
+
+@router.get("/governance/status")
+async def get_prompt_template_governance_status(
+    limit: int = Query(1000, ge=1, le=5000),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> dict[str, Any]:
-    """Show invalid historical prompt templates that need migration/disable action."""
+    """Return visible governance status for invalid historical prompt templates."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
 
     try:
-        return await service.audit_legacy_templates()
+        return await service.get_governance_status(limit=limit)
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -431,30 +449,21 @@ async def audit_prompt_template_governance(
         )
 
 
-@router.post("/governance/remediate")
-async def remediate_prompt_template_governance(
-    payload: dict[str, Any] = Body(default_factory=dict),
+@router.post("/governance/remediate-invalid")
+async def remediate_invalid_prompt_templates(
+    request: PromptTemplateRemediationRequest,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> dict[str, Any]:
-    """Migrate safe legacy template data and quarantine unsafe historical rows."""
+    """Disable invalid historical templates and write an audit log for rollback."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
 
-    reason = str(payload.get("reason") or "").strip()
-    if not reason:
-        return _prompt_error_response(
-            status_code=400,
-            error_code="[PROMPT_GOVERNANCE_REASON_REQUIRED]",
-            message="执行提示词治理迁移/禁用前必须填写原因。",
-        )
     try:
-        return await service.remediate_legacy_templates(
-            actor_user_id=str(getattr(current_user, "user_id", "")),
-            actor_identifier=_actor_identifier(current_user),
-            reason=reason,
-            dry_run=bool(payload.get("dry_run", False)),
+        return await service.remediate_invalid_templates(
+            actor_id=str(getattr(current_user, "user_id", "") or "") or None,
+            reason=request.reason,
         )
     except SQLAlchemyError as exc:
         return _prompt_error_response(
@@ -509,7 +518,7 @@ async def get_prompt_template(
 @router.put("/{template_id}", response_model=PromptTemplate)
 async def update_prompt_template(
     template_id: str,
-    raw_data: dict[str, Any] = Body(...),
+    data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -529,8 +538,8 @@ async def update_prompt_template(
     assert isinstance(data, PromptTemplateUpdate)
 
     try:
-        data = PromptTemplateUpdate.model_validate(raw_data)
-        template = await service.update_template(template_uuid, data)
+        payload = PromptTemplateUpdate.model_validate(data)
+        template = await service.update_template(template_uuid, payload)
         if not template:
             return _prompt_error_response(
                 status_code=404,
@@ -539,7 +548,12 @@ async def update_prompt_template(
             )
         return template
     except ValidationError as exc:
-        return _validation_error_response(exc)
+        return _prompt_error_response(
+            status_code=400,
+            error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
+            message="提示词模板校验失败：variables 必须是字符串数组，prompt_type 必须属于允许类型。",
+            exc=exc,
+        )
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,

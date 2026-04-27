@@ -83,100 +83,6 @@ def _ensure_variables_are_list(value: Any) -> list[str]:
     return _normalize_variable_names(value)
 
 
-ALLOWED_PROMPT_TYPE_VALUES = tuple(item.value for item in PromptType)
-
-
-class PromptTemplateGovernanceIssue(BaseModel):
-    """Visible governance issue for historical prompt-template rows."""
-
-    template_id: str
-    name: str | None = None
-    prompt_type: str | None = None
-    is_active: bool
-    is_default: bool
-    issue_codes: list[str]
-    messages: list[str]
-    recommended_action: str
-
-
-class PromptTemplateGovernanceStatus(BaseModel):
-    """Prompt-template governance status for admin review/remediation."""
-
-    checked_count: int
-    invalid_count: int
-    invalid_active_count: int
-    issues: list[PromptTemplateGovernanceIssue]
-    rollback_policy: str
-    audit_log_action: str
-
-
-class PromptTemplateQuarantineResult(BaseModel):
-    """Result of disabling invalid historical prompt templates."""
-
-    checked_count: int
-    quarantined_count: int
-    issues: list[PromptTemplateGovernanceIssue]
-    audit_log_action: str
-
-
-def _normalize_prompt_variables(value: Any) -> list[str]:
-    """Normalize author-provided variables while rejecting legacy object payloads.
-
-    Historical rows may contain a JSON object; those are handled by the read model so
-    operators can see and migrate them. New writes must be a flat list of non-empty
-    strings to keep the runtime contract deterministic.
-    """
-    if value is None:
-        return []
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError as exc:
-            raise ValueError("variables must be a JSON array of strings") from exc
-        value = parsed
-    if isinstance(value, dict):
-        raise ValueError("variables must be a list of strings, not an object")
-    if not isinstance(value, list):
-        raise ValueError("variables must be a list of strings")
-
-    normalized: list[str] = []
-    for item in value:
-        if not isinstance(item, str):
-            raise ValueError("variables must contain only strings")
-        variable = item.strip()
-        if not variable:
-            raise ValueError("variables cannot contain empty names")
-        if variable not in normalized:
-            normalized.append(variable)
-    return normalized
-
-
-def _legacy_variable_issue(value: Any) -> str | None:
-    if isinstance(value, dict):
-        return "variables_object_migratable"
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return "variables_string_not_json_array"
-        if isinstance(parsed, dict):
-            return "variables_object_migratable"
-        if not isinstance(parsed, list):
-            return "variables_json_not_array"
-    elif value is not None and not isinstance(value, list):
-        return "variables_not_array"
-    return None
-
-
-def _coerce_legacy_variables_for_read(value: Any) -> list[str]:
-    if isinstance(value, dict):
-        return [str(key) for key in value.keys() if str(key).strip()]
-    try:
-        return _normalize_prompt_variables(value)
-    except ValueError:
-        return []
-
-
 class PromptTemplateBase(BaseModel):
     """Base model for prompt templates."""
 
@@ -212,6 +118,12 @@ class PromptTemplateBase(BaseModel):
         if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
             raise ValueError("variables must be a list of strings")
         return list(dict.fromkeys(item.strip() for item in v if item.strip()))
+
+
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_variables_metadata(cls, value: Any) -> list[str]:
+        return _ensure_variables_are_list(value)
 
 
 class PromptTemplateCreate(PromptTemplateBase):
@@ -326,10 +238,8 @@ class PromptTemplateUpdate(BaseModel):
 
     @field_validator("variables", mode="before")
     @classmethod
-    def validate_variable_list(cls, v: Any) -> list[str] | None:
-        if v is None:
-            return None
-        return PromptTemplateBase.validate_variable_list(v)
+    def validate_variables_metadata(cls, value: Any) -> list[str]:
+        return _ensure_variables_are_list(value)
 
     @model_validator(mode="after")
     def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
@@ -362,8 +272,11 @@ class PromptTemplate(PromptTemplateBase):
     )
     governance_issues: list[str] = Field(default_factory=list)
 
-    # variables validation is inherited from PromptTemplateBase so historical invalid rows
-    # become visible through governance audit/remediation instead of being silently coerced.
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_variables(cls, v: Any) -> list[str]:
+        """Ensure variables is a visible, valid list of strings."""
+        return _ensure_variables_are_list(v)
 
 
 class ScenarioPromptBase(BaseModel):

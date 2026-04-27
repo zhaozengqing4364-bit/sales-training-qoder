@@ -1677,35 +1677,48 @@ export interface PromptTemplateUpdate {
     is_default?: boolean;
 }
 
+
 export interface PromptTemplateGovernanceIssue {
-    template_id: string;
+    code: string;
+    severity: "blocking" | "warning" | string;
+    message: string;
+}
+
+export interface PromptTemplateGovernanceInvalidTemplate {
+    id: string;
     name: string;
     prompt_type: string;
+    category: string;
+    variables: unknown;
     is_active: boolean;
     is_default: boolean;
-    issues: string[];
+    updated_at?: string | null;
+    issues: PromptTemplateGovernanceIssue[];
+    runtime_status: string;
+    remediation: string;
 }
 
-export interface PromptTemplateGovernanceAudit {
-    version: string;
-    total: number;
+export interface PromptTemplateGovernanceStatus {
+    allowed_prompt_types: string[];
+    policy: {
+        variables_schema: string;
+        invalid_history_runtime_behavior: string;
+        rollback: string;
+        audit_action: string;
+    };
     invalid_count: number;
-    items: PromptTemplateGovernanceIssue[];
+    invalid_templates: PromptTemplateGovernanceInvalidTemplate[];
+    limit: number;
 }
 
-export interface PromptTemplateGovernanceRemediation {
-    version: string;
-    dry_run: boolean;
+export interface PromptTemplateGovernanceRemediationResponse {
     remediated_count: number;
-    actions: Array<{
-        template_id: string;
-        name: string;
-        actions: string[];
-    }>;
-    rollback: {
-        source: string;
+    items: Array<{ before: unknown; after: unknown; issues: PromptTemplateGovernanceIssue[] }>;
+    audit: {
         action: string;
-        instruction: string;
+        actor_id?: string | null;
+        reason: string;
+        trace_id?: string | null;
     };
 }
 

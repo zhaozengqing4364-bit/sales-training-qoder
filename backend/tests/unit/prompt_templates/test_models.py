@@ -314,7 +314,7 @@ class TestPromptTemplate:
         assert template.variables == ["var1", "var2"]
 
     def test_template_rejects_invalid_json_variables(self):
-        """Invalid historical rows should be visible to governance instead of coerced."""
+        """Should reject invalid JSON string variables for governance visibility."""
         now = datetime.now(UTC)
         with pytest.raises(ValidationError):
             PromptTemplate(
@@ -330,13 +330,14 @@ class TestPromptTemplate:
                 updated_at=now,
             )
 
-    def test_create_rejects_variables_dict_before_save(self):
+    def test_create_rejects_object_shaped_variables(self):
+        """Should reject historical object-shaped variable schemas on save."""
         with pytest.raises(ValidationError):
             PromptTemplateCreate(
-                name="Invalid variables",
+                name="Bad Variables",
                 prompt_type=PromptType.REALTIME_SCORING,
                 template="Score {{ score }}",
-                variables={"score": "number"},  # type: ignore[arg-type]
+                variables={"score": "number"},
             )
 
 
