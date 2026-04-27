@@ -104,12 +104,12 @@ export default function AdminPromptsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [templatesResult, scenarioPromptsResult, governanceResult, userResult] = await Promise.allSettled([
+      const [templatesResult, scenarioPromptsResult, userResult, governanceResult] = await Promise.allSettled([
         api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
         api.admin.getScenarioPrompts(),
         api.admin.getPromptTemplateGovernanceStatus(),
         api.user.getMe(),
-        api.admin.getPromptTemplateGovernanceInvalid(),
+        api.admin.getPromptTemplateGovernanceStatus(),
       ]);
 
       if (templatesResult.status === "fulfilled") {
@@ -137,9 +137,9 @@ export default function AdminPromptsPage() {
       }
 
       if (governanceResult.status === "fulfilled") {
-        setGovernanceIssues(governanceResult.value.issues || []);
+        setGovernanceStatus(governanceResult.value);
       } else {
-        setGovernanceIssues([]);
+        setGovernanceStatus(null);
       }
     } catch (error) {
       debug.error("Failed to load prompt admin data", error);
@@ -319,11 +319,8 @@ export default function AdminPromptsPage() {
 
     setIsOperating(true);
     try {
-      const result = await api.admin.remediateInvalidPromptTemplates(
-        "admin prompt governance remediation from /admin/prompts",
-      );
-      await loadData();
-      toast.success(`已停用 ${result.disabled_count} 个非法历史模板`);
+      const result = await api.admin.remediateInvalidPromptTemplates("A-009 prompt template governance remediation");
+      await refreshAfterMutation(`已停用 ${result.remediated_count} 个非法历史模板`);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -378,7 +375,34 @@ export default function AdminPromptsPage() {
 
       <GlassCard className="p-4 space-y-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          销售场景仅允许绑定评估/报告类模板。业务角色提示词与知识库策略请在角色中心配置。
+          销售场景仅允许绑定评估/报告/实时评分类模板。业务角色提示词与知识库策略请在角色中心配置。
+        </div>
+        <div className={cn(
+          "rounded-xl border px-3 py-3 text-xs",
+          governanceStatus?.invalid_count
+            ? "border-red-200 bg-red-50 text-red-700"
+            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+        )}>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">提示词治理状态</div>
+              <div className="mt-1">
+                {governanceStatus
+                  ? `允许类型 ${governanceStatus.allowed_prompt_types.join(" / ")}；非法历史模板 ${governanceStatus.invalid_count} 个；变量 schema：${governanceStatus.policy.variables_schema}`
+                  : "治理状态暂不可用，请刷新或查看后端日志。"}
+              </div>
+            </div>
+            {governanceStatus?.invalid_count ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!canOperate || isOperating}
+                onClick={() => void handleRemediateInvalidTemplates()}
+              >
+                停用非法历史模板
+              </Button>
+            ) : null}
+          </div>
         </div>
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-xs text-blue-800">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
