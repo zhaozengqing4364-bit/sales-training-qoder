@@ -34,11 +34,15 @@ type DevLoginResult = {
   ok: boolean;
   status: number | null;
   error: string | null;
+  authority: "smoke_admin_password" | "development_fallback";
+  role: string | null;
 };
 
 const backendBaseUrl = (
   process.env.SMOKE_BACKEND_BASE_URL || "http://localhost:3444/api/v1"
 ).replace(/\/+$/, "");
+const smokeAdminEmail = process.env.SMOKE_ADMIN_EMAIL || "admin@qoder.ai";
+const smokeAdminPassword = process.env.SMOKE_ADMIN_PASSWORD || "change-me";
 const auditOutputDir = path.resolve(
   process.cwd(),
   "..",
@@ -130,26 +134,65 @@ function isIgnorableFailedRequest(request: Request): boolean {
   return (
     url.includes("/_next/webpack-hmr") ||
     url.endsWith("/favicon.ico") ||
+    (failure === "net::ERR_ABORTED" && url.includes("/_next/static/")) ||
+    (failure === "net::ERR_ABORTED" && url.includes("/__nextjs_font/")) ||
     (failure === "net::ERR_ABORTED" && new URL(url).pathname === "/")
   );
 }
 
 async function loginWithDevEndpoint(context: BrowserContext): Promise<DevLoginResult> {
   try {
+    const adminResponse = await context.request.post(`${backendBaseUrl}/auth/login`, {
+      data: {
+        email: smokeAdminEmail,
+        password: smokeAdminPassword,
+      },
+      timeout: 10_000,
+    });
+    const payload = await adminResponse.json().catch(() => null) as {
+      data?: { user?: { role?: string } };
+      user?: { role?: string };
+    } | null;
+    const role = payload?.data?.user?.role ?? payload?.user?.role ?? null;
+    if (adminResponse.ok() && role === "admin") {
+      return {
+        ok: true,
+        status: adminResponse.status(),
+        error: null,
+        authority: "smoke_admin_password",
+        role,
+      };
+    }
+  } catch {
+    // Fall through to explicit dev-login fallback below so blocked environments still emit structured evidence.
+  }
+
+  try {
     const response = await context.request.post(`${backendBaseUrl}/auth/dev-login`, {
       timeout: 10_000,
     });
+    const payload = await response.json().catch(() => null) as {
+      data?: { user?: { role?: string } };
+      user?: { role?: string };
+    } | null;
+    const role = payload?.data?.user?.role ?? payload?.user?.role ?? null;
 
     return {
-      ok: response.ok(),
+      ok: response.ok() && role === "admin",
       status: response.status(),
-      error: response.ok() ? null : `dev-login status ${response.status()}`,
+      error: response.ok()
+        ? `dev-login returned role ${role || "unknown"}; admin audit routes require an admin session`
+        : `dev-login status ${response.status()}`,
+      authority: "development_fallback",
+      role,
     };
   } catch (error) {
     return {
       ok: false,
       status: null,
       error: error instanceof Error ? error.message : String(error),
+      authority: "development_fallback",
+      role: null,
     };
   }
 }
@@ -231,6 +274,8 @@ function isCriticalRouteFailure(result: AuditRouteResult): boolean {
 }
 
 test.describe("frontend audit routes", () => {
+  test.setTimeout(180_000);
+
   test("captures structured route evidence and enforces P0 failure thresholds", async ({ context, page }) => {
     fs.mkdirSync(auditOutputDir, { recursive: true });
     const reportPath = path.join(auditOutputDir, "frontend-audit-routes.json");

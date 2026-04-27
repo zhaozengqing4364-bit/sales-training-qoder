@@ -1,0 +1,113 @@
+{
+  "generated_at": "2026-04-27T04:31:19.409Z",
+  "routes": [
+    {
+      "route": "/training/sales",
+      "label": "Sales training user path",
+      "critical": true,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/training/sales",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/training-sales.png"
+    },
+    {
+      "route": "/admin/business-rules/sales-combinations",
+      "label": "Sales-combinations admin governance path",
+      "critical": true,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/admin/business-rules/sales-combinations",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/admin-business-rules-sales-combinations.png"
+    },
+    {
+      "route": "/support/runtime",
+      "label": "Runtime support path",
+      "critical": true,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/support/runtime",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/support-runtime.png"
+    },
+    {
+      "route": "/history",
+      "label": "Training history path",
+      "critical": false,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/history",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/history.png"
+    },
+    {
+      "route": "/profile",
+      "label": "Profile path",
+      "critical": false,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/profile",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/profile.png"
+    },
+    {
+      "route": "/admin",
+      "label": "Admin overview path",
+      "critical": false,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/admin",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/admin.png"
+    },
+    {
+      "route": "/admin/settings",
+      "label": "Admin settings path",
+      "critical": false,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/admin/settings",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/admin-settings.png"
+    },
+    {
+      "route": "/admin/logs",
+      "label": "Admin logs path",
+      "critical": false,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/admin/logs",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/admin-logs.png"
+    },
+    {
+      "route": "/admin/rag-profiles",
+      "label": "RAG profiles legacy path",
+      "critical": false,
+      "status": 200,
+      "title": "AI 智能练习平台",
+      "url": "http://localhost:3445/admin/rag-profiles",
+      "consoleErrors": [],
+      "networkErrors": [],
+      "forbiddenTextMatches": [],
+      "screenshotPath": "/Users/zhaozengqing/github/销售训练qoder/.sisyphus/evidence/leader-task8-audit-final/admin-rag-profiles.png"
+    }
+  ]
+}
