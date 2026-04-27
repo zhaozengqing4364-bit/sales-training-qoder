@@ -183,11 +183,6 @@ def register_routers(app: FastAPI) -> None:
         dependencies=[Depends(get_current_admin_user)],
     )
     app.include_router(
-        admin_business_rules_router,
-        prefix="/api/v1/admin",
-        tags=["admin-business-rules"],
-    )
-    app.include_router(
         knowledge_answer_config_router,
         prefix="/api/v1/admin",
         tags=["admin-knowledge-answer"],
@@ -203,12 +198,6 @@ def register_routers(app: FastAPI) -> None:
         prefix="/api/v1",
         tags=["support-runtime"],
         dependencies=[Depends(require_role(["admin", "support"]))],
-    )
-    app.include_router(
-        business_rules.router,
-        prefix="/api/v1",
-        tags=["business-rules"],
-        dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(
         knowledge_debug_router,

@@ -13,11 +13,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.api.business_rules import router as runtime_business_rules_router
 from common.auth.service import create_access_token
 from common.business_rules.defaults import (
     DEFAULT_RECOMMENDATION_RULESET,
-    DEFAULT_SALES_COMBINATIONS_RULESET,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
     SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
