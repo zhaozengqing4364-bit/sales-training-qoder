@@ -184,7 +184,7 @@ export default function AdminDashboardPage() {
                     <div>
                         <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">当前管理入口</h2>
                         <p className="mt-2 text-sm text-slate-700 text-pretty">
-                            直接进入当前已接入数据源的管理面；首页不提供未接入的表单、日志控制台或自动告警入口。
+                            直接进入当前已接入统一数据来源的管理面，不在首页提供未接入的表单、日志控制台或自动告警入口。
                         </p>
                     </div>
                     <Badge variant="green">已接数据源</Badge>
