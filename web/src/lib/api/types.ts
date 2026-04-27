@@ -1629,6 +1629,7 @@ export type PromptType =
     | "system_prompt"
     | "extraction"
     | "scoring"
+    | "realtime_scoring"
     | "stage"
     | "fuzzy_detection"
     | "realtime_scoring"
@@ -1650,6 +1651,8 @@ export interface PromptTemplate {
     is_system: boolean;
     created_at: string;
     updated_at: string;
+    governance_status?: "valid" | "needs_review" | string;
+    governance_issues?: string[];
 }
 
 export interface PromptTemplateCreate {

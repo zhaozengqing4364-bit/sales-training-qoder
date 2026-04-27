@@ -23,6 +23,7 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
     system_prompt: "系统提示词",
     extraction: "提取",
     scoring: "评分",
+    realtime_scoring: "实时评分",
     stage: "阶段",
     fuzzy_detection: "模糊检测",
     realtime_scoring: "实时评分",
