@@ -44,12 +44,14 @@ class PromptType(str, Enum):
     REALTIME_SCORING = "realtime_scoring"
 
 
-def _normalize_prompt_variables(value: Any) -> list[str]:
-    """Normalize author-provided variables while rejecting legacy object payloads.
 
-    Historical rows may contain a JSON object; those are handled by the read model so
-    operators can see and migrate them. New writes must be a flat list of non-empty
-    strings to keep the runtime contract deterministic.
+
+def _normalize_variable_names(value: Any) -> list[str]:
+    """Normalize template variable metadata and reject historical dict-shaped payloads.
+
+    Prompt variable metadata is a list of variable names. Dict-shaped rows are
+    treated as governance issues because key/value schema objects hide runtime
+    contract drift and previously caused invalid templates to be skipped.
     """
     if value is None:
         return []
@@ -57,7 +59,7 @@ def _normalize_prompt_variables(value: Any) -> list[str]:
         try:
             parsed = json.loads(value)
         except json.JSONDecodeError as exc:
-            raise ValueError("variables must be a JSON array of strings") from exc
+            raise ValueError("variables must be a JSON list of strings") from exc
         value = parsed
     if isinstance(value, dict):
         raise ValueError("variables must be a list of strings, not an object")
@@ -70,36 +72,14 @@ def _normalize_prompt_variables(value: Any) -> list[str]:
             raise ValueError("variables must contain only strings")
         variable = item.strip()
         if not variable:
-            raise ValueError("variables cannot contain empty names")
+            raise ValueError("variables must not contain blank names")
         if variable not in normalized:
             normalized.append(variable)
     return normalized
 
 
-def _legacy_variable_issue(value: Any) -> str | None:
-    if isinstance(value, dict):
-        return "variables_object_migratable"
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return "variables_string_not_json_array"
-        if isinstance(parsed, dict):
-            return "variables_object_migratable"
-        if not isinstance(parsed, list):
-            return "variables_json_not_array"
-    elif value is not None and not isinstance(value, list):
-        return "variables_not_array"
-    return None
-
-
-def _coerce_legacy_variables_for_read(value: Any) -> list[str]:
-    if isinstance(value, dict):
-        return [str(key) for key in value.keys() if str(key).strip()]
-    try:
-        return _normalize_prompt_variables(value)
-    except ValueError:
-        return []
+def _ensure_variables_are_list(value: Any) -> list[str]:
+    return _normalize_variable_names(value)
 
 
 class PromptTemplateBase(BaseModel):
@@ -144,6 +124,12 @@ class PromptTemplateBase(BaseModel):
         except Exception as exc:
             raise ValueError("template must be valid Jinja2 syntax") from exc
         return value
+
+
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_variables_metadata(cls, value: Any) -> list[str]:
+        return _ensure_variables_are_list(value)
 
 
 class PromptTemplateCreate(PromptTemplateBase):
@@ -256,6 +242,11 @@ class PromptTemplateUpdate(BaseModel):
     is_active: bool | None = None
     is_default: bool | None = None
 
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_variables_metadata(cls, value: Any) -> list[str]:
+        return _ensure_variables_are_list(value)
+
     @model_validator(mode="after")
     def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
         """Re-extract variables if template is updated."""
@@ -289,43 +280,9 @@ class PromptTemplate(PromptTemplateBase):
 
     @model_validator(mode="before")
     @classmethod
-    def attach_governance_state(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            raw_variables = data.get("variables")
-            payload = dict(data)
-        else:
-            raw_variables = getattr(data, "variables", None)
-            payload = {
-                "id": getattr(data, "id", None),
-                "name": getattr(data, "name", None),
-                "prompt_type": getattr(data, "prompt_type", None),
-                "category": getattr(data, "category", None),
-                "template": getattr(data, "template", None),
-                "variables": raw_variables,
-                "is_active": getattr(data, "is_active", None),
-                "is_default": getattr(data, "is_default", None),
-                "is_system": getattr(data, "is_system", None),
-                "created_at": getattr(data, "created_at", None),
-                "updated_at": getattr(data, "updated_at", None),
-            }
-
-        issues: list[str] = []
-        variable_issue = _legacy_variable_issue(raw_variables)
-        if variable_issue:
-            issues.append(variable_issue)
-            payload["variables"] = _coerce_legacy_variables_for_read(raw_variables)
-
-        prompt_type = str(payload.get("prompt_type") or "")
-        if prompt_type:
-            try:
-                PromptType(prompt_type)
-            except ValueError:
-                issues.append("prompt_type_not_allowed")
-
-        payload["governance_issues"] = issues
-        payload["governance_status"] = "needs_review" if issues else "valid"
-        return payload
-
+    def validate_variables(cls, v: Any) -> list[str]:
+        """Ensure variables is a visible, valid list of strings."""
+        return _ensure_variables_are_list(v)
 
 
 class ScenarioPromptBase(BaseModel):

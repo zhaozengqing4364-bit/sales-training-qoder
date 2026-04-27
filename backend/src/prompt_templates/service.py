@@ -47,7 +47,7 @@ from prompt_templates.models import (
 from prompt_templates.renderer import render_template
 
 logger = get_logger(__name__)
-SALES_PROMPT_SCOPE_ALLOWED_TYPES = {"evaluation", "report", "stage", "scoring"}
+SALES_PROMPT_SCOPE_ALLOWED_TYPES = {"evaluation", "report", "stage", "scoring", "realtime_scoring"}
 
 
 class PromptTemplateService:
@@ -83,146 +83,177 @@ class PromptTemplateService:
             return None
 
     @staticmethod
-    def _governance_issue_for_row(db_template: Any) -> PromptTemplateGovernanceIssue | None:
-        reason_codes: list[str] = []
+    def _template_snapshot(db_template: Any) -> dict[str, Any]:
+        return {
+            "id": str(getattr(db_template, "id", "") or ""),
+            "name": str(getattr(db_template, "name", "") or ""),
+            "prompt_type": str(getattr(db_template, "prompt_type", "") or ""),
+            "category": str(getattr(db_template, "category", "") or ""),
+            "variables": getattr(db_template, "variables", None),
+            "is_active": bool(getattr(db_template, "is_active", False)),
+            "is_default": bool(getattr(db_template, "is_default", False)),
+            "updated_at": (
+                getattr(db_template, "updated_at", None).isoformat()
+                if getattr(db_template, "updated_at", None)
+                else None
+            ),
+        }
 
+    @classmethod
+    def _governance_issues_for_row(cls, db_template: Any) -> list[dict[str, str]]:
+        issues: list[dict[str, str]] = []
+        prompt_type = str(getattr(db_template, "prompt_type", "") or "").strip()
         try:
-            PromptType(str(getattr(db_template, "prompt_type", "")))
+            PromptType(prompt_type)
         except ValueError:
-            reason_codes.append("invalid_prompt_type")
+            issues.append(
+                {
+                    "code": "invalid_prompt_type",
+                    "severity": "blocking",
+                    "message": f"prompt_type '{prompt_type}' is not in the allowed runtime taxonomy",
+                }
+            )
 
         variables = getattr(db_template, "variables", None)
-        if isinstance(variables, dict):
-            reason_codes.append("variables_must_be_list_strings")
-        elif isinstance(variables, list):
-            if not all(isinstance(item, str) and item.strip() for item in variables):
-                reason_codes.append("variables_must_be_list_strings")
-        elif isinstance(variables, str):
+        parsed_variables = variables
+        if isinstance(variables, str):
+            import json
+
             try:
-                parsed = json.loads(variables)
+                parsed_variables = json.loads(variables)
             except json.JSONDecodeError:
-                parsed = []
-            if not isinstance(parsed, list) or not all(
-                isinstance(item, str) and item.strip() for item in parsed
-            ):
-                reason_codes.append("variables_must_be_list_strings")
-        elif variables is not None:
-            reason_codes.append("variables_must_be_list_strings")
+                issues.append(
+                    {
+                        "code": "variables_invalid_json",
+                        "severity": "blocking",
+                        "message": "variables is a string but not valid JSON",
+                    }
+                )
+                parsed_variables = None
+        if isinstance(parsed_variables, dict):
+            issues.append(
+                {
+                    "code": "variables_object_schema",
+                    "severity": "blocking",
+                    "message": "variables must be a list[str]; object-shaped historical rows are disabled before runtime use",
+                }
+            )
+        elif parsed_variables is not None and not isinstance(parsed_variables, list):
+            issues.append(
+                {
+                    "code": "variables_not_list",
+                    "severity": "blocking",
+                    "message": "variables must be a list[str]",
+                }
+            )
+        elif isinstance(parsed_variables, list) and not all(
+            isinstance(item, str) and item.strip() for item in parsed_variables
+        ):
+            issues.append(
+                {
+                    "code": "variables_non_string_item",
+                    "severity": "blocking",
+                    "message": "variables must contain only non-empty strings",
+                }
+            )
 
         if not str(getattr(db_template, "template", "") or "").strip():
-            reason_codes.append("template_empty")
+            issues.append(
+                {
+                    "code": "empty_template",
+                    "severity": "blocking",
+                    "message": "template body is empty",
+                }
+            )
+        return issues
 
-        if not reason_codes:
-            return None
-
-        return PromptTemplateGovernanceIssue(
-            template_id=str(getattr(db_template, "id", "")),
-            name=str(getattr(db_template, "name", "") or "(unnamed)"),
-            prompt_type=str(getattr(db_template, "prompt_type", "") or ""),
-            is_active=bool(getattr(db_template, "is_active", False)),
-            is_default=bool(getattr(db_template, "is_default", False)),
-            reason_codes=reason_codes,
-            disabled_by_migration=False,
-        )
-
-    async def list_invalid_template_governance(self) -> PromptTemplateGovernanceReport:
-        """Return visible invalid historical prompt templates without mutating rows."""
+    async def get_governance_status(self, *, limit: int = 1000) -> dict[str, Any]:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
-        result = await self.db.execute(select(PromptTemplateDB))
-        issues = [
-            issue
-            for item in result.scalars().all()
-            if (issue := self._governance_issue_for_row(item)) is not None
-        ]
-        return PromptTemplateGovernanceReport(
-            generated_at=datetime.now(UTC),
-            mode="report_only",
-            issues=issues,
-            migrated_count=0,
-        )
+        result = await self.db.execute(select(PromptTemplateDB).limit(limit))
+        rows = result.scalars().all()
+        invalid_rows: list[dict[str, Any]] = []
+        for row in rows:
+            issues = self._governance_issues_for_row(row)
+            if not issues:
+                continue
+            invalid_rows.append(
+                {
+                    **self._template_snapshot(row),
+                    "issues": issues,
+                    "runtime_status": "disabled_required" if getattr(row, "is_active", False) else "inactive_invalid",
+                    "remediation": "disable_and_clear_default",
+                }
+            )
 
-    async def migrate_invalid_templates(
+        return {
+            "allowed_prompt_types": [item.value for item in PromptType],
+            "policy": {
+                "variables_schema": "list[str]",
+                "invalid_history_runtime_behavior": "visible_in_governance_and_disabled_before_runtime_lookup",
+                "rollback": "restore prior is_active/is_default from prompt_template.governance.remediate_invalid SystemLog details",
+                "audit_action": "prompt_template.governance.remediate_invalid",
+            },
+            "invalid_count": len(invalid_rows),
+            "invalid_templates": invalid_rows,
+            "limit": limit,
+        }
+
+    async def remediate_invalid_templates(
         self,
         *,
-        actor: Any,
+        actor_id: str | None,
         reason: str,
-    ) -> PromptTemplateGovernanceReport:
-        """Disable invalid historical prompt templates and record an audit log.
+        limit: int = 1000,
+    ) -> dict[str, Any]:
+        from common.db.models import PromptTemplate as PromptTemplateDB, SystemLog
 
-        This is intentionally conservative: valid `realtime_scoring` templates are now a
-        first-class prompt type, while rows with malformed variables/template/type are
-        made inactive/default=false so runtime lookup cannot silently select them.
-        """
-        from common.db.models import PromptTemplate as PromptTemplateDB
-        from common.db.models import SystemLog
-
-        result = await self.db.execute(select(PromptTemplateDB))
-        issues: list[PromptTemplateGovernanceIssue] = []
-        migrated_count = 0
+        result = await self.db.execute(select(PromptTemplateDB).limit(limit))
+        rows = result.scalars().all()
+        remediated: list[dict[str, Any]] = []
         now = datetime.now(UTC)
+        trace_id = get_trace_id()
+        normalized_reason = reason.strip() or "prompt governance remediation"
 
-        for row in result.scalars().all():
-            issue = self._governance_issue_for_row(row)
-            if issue is None:
+        for row in rows:
+            issues = self._governance_issues_for_row(row)
+            if not issues:
                 continue
-
-            before = {
-                "id": str(row.id),
-                "prompt_type": row.prompt_type,
-                "variables": row.variables,
-                "is_active": row.is_active,
-                "is_default": row.is_default,
-                "reason_codes": issue.reason_codes,
-            }
-
-            if bool(row.is_active) or bool(row.is_default):
+            before = self._template_snapshot(row)
+            if bool(getattr(row, "is_active", False)) or bool(getattr(row, "is_default", False)):
                 row.is_active = False
                 row.is_default = False
                 row.updated_at = now
-                migrated_count += 1
-                issue.disabled_by_migration = True
+            after = self._template_snapshot(row)
+            remediated.append({"before": before, "after": after, "issues": issues})
 
-            issues.append(issue)
-
+        if remediated:
             self.db.add(
                 SystemLog(
-                    action="prompt_template_invalid_migration",
-                    user_id=str(getattr(actor, "user_id", "") or "") or None,
-                    user_identifier=str(
-                        getattr(actor, "email", None)
-                        or getattr(actor, "wechat_user_id", None)
-                        or getattr(actor, "user_id", None)
-                        or "system"
-                    ),
-                    status="warning",
-                    details=json.dumps(
-                        {
-                            "actor_id": str(getattr(actor, "user_id", "") or ""),
-                            "actor_role": str(getattr(actor, "role", "") or ""),
-                            "reason": reason,
-                            "trace_id": get_trace_id(),
-                            "before": before,
-                            "after": {
-                                "is_active": bool(row.is_active),
-                                "is_default": bool(row.is_default),
-                                "updated_at": now.isoformat(),
-                            },
-                        },
-                        ensure_ascii=False,
-                    ),
+                    user_id=actor_id,
+                    user_identifier=actor_id or "system",
+                    action="prompt_template.governance.remediate_invalid",
+                    status="success",
+                    details={
+                        "reason": normalized_reason,
+                        "trace_id": trace_id,
+                        "count": len(remediated),
+                        "items": remediated,
+                    },
                 )
             )
-
         await self.db.commit()
         await self.loader.invalidate_cache()
-
-        return PromptTemplateGovernanceReport(
-            generated_at=now,
-            mode="migrate_invalid",
-            issues=issues,
-            migrated_count=migrated_count,
-        )
+        return {
+            "remediated_count": len(remediated),
+            "items": remediated,
+            "audit": {
+                "action": "prompt_template.governance.remediate_invalid",
+                "actor_id": actor_id,
+                "reason": normalized_reason,
+                "trace_id": trace_id,
+            },
+        }
 
     async def create_template(
         self,
