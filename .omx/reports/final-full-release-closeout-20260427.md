@@ -1,106 +1,80 @@
 # Final Full Release Closeout — 2026-04-27
 
-Worker: `worker-6`
+Worker: `worker-1`
 Model reported by this worker: `gpt-5.5`
-Snapshot time: 2026-04-27T03:21Z UTC / 2026-04-27 11:21 Asia/Shanghai
+Snapshot time: 2026-04-27T04:10Z UTC / 2026-04-27 12:10 Asia/Shanghai
+
+## Scope covered by this worker
+
+This closeout update records worker-1 completion evidence for:
+
+- Task 4 — A-009 PromptTemplate governance regression.
+- Task 6 — Python version strategy and local `backend/.venv` repair policy.
+
+It incorporates worker-6 task 1 environment-repair evidence from `.omx/reports/worker-6-task1-venv-repair-20260427T033142Z.log` and task state, without modifying or deleting `backend/.venv-test`.
 
 ## Executive verdict
 
-**NOT RELEASE-READY at this snapshot.** The repository has useful prior closeout evidence and several workers are actively closing the remaining gaps, but the final gate cannot be called green while live-service evidence is blocked/missing and multiple team tasks are still `in_progress` or `pending`.
+**Not enough evidence here to declare the full release green.** Task 4 and task 6 are closed by this worker, and task 1 is closed by worker-6. The remaining live audit/static gate tasks must still be integrated by the leader before a final ship/no-ship decision.
 
-This report is intentionally evidence-first: it records what is proven, what is still owner-assigned, and what migration/ADR coverage exists for unresolved environment/data items.
+## Closed items
 
-## Team task evidence snapshot
-
-| Task | Owner | Snapshot status | Evidence available now | Release implication |
-| --- | --- | --- | --- | --- |
-| 1 — Repair `backend/.venv` corruption | worker-1 | `in_progress` | worker-1 reported model `gpt-5.5` and diagnosis started. Prior report shows `.venv` Python 3.11.12 cannot import `html.entities` and lacks `pip`. | Blocks backend startup, curl health checks, and Playwright live audit until repaired. |
-| 2 — A-012 Playwright live audit on 3444/3445 | worker-1 | `pending` | No fresh live audit evidence in this team run. Prior attempt was blocked before browser assertions by broken backend `.venv`. | Release blocker. |
-| 3 — A-004 `/support/runtime` closure | worker-2 | `in_progress` | worker-2 reported task claim and runtime verification started. No completion result yet. | Release blocker until live route evidence confirms no `[object Object]` and top faults are attributable/actionable. |
-| 4 — A-009 PromptTemplate governance regression | worker-3 | `in_progress` | worker-3 reported task claim and inspection started. Prior closeout evidence shows prompt governance code/tests were green. | Keep open until worker-3 completes fresh regression evidence. |
-| 5 — Admin follow-up governance | worker-2 | `pending` | No fresh evidence yet. | Release risk for `/admin/settings`, `/admin/logs`, `/admin/rag-profiles`, `/admin/prompts` governance clarity. |
-| 6 — Python version strategy | worker-1 | `pending` | Multiple Python ADRs exist. This closeout adds a focused local-venv repair ADR with owner and migration/rollback steps. | Policy mostly covered; environment repair remains blocked by task 1. |
-| 7 — Static/backend/frontend gates | worker-4 | `in_progress` | worker-4 reported model `gpt-5.5`, task claim, and gate run started. No final command outputs yet. | Release blocker until all static gates are reported. |
-| 8 — Live health + Playwright evidence | worker-5 | `in_progress` | worker-5 reported model `gpt-5.5`, task claim, and initial curl evidence that `3444/3445` were not listening; worker-5 is attempting local stack startup. Depends on task 1 environment repair. | Release blocker until health and Playwright evidence are green. |
-| 9 — Final synthesis | worker-6 | `in_progress` at report creation | This report plus ADR/hardcoding review. | Can close synthesis, but cannot declare release green. |
-
-## Worker model reporting status
-
-The hard constraint says every worker must report actual model `gpt-5.5`.
-
-| Worker | Evidence in leader mailbox/status | Status |
+| Item | Status | Evidence |
 | --- | --- | --- |
-| worker-1 | `PROGRESS worker-1 model=gpt-5.5 task=1 claimed` | PASS |
-| worker-2 | `PROGRESS: claimed task 3...`; status has no model field | GAP — needs explicit `gpt-5.5` report |
-| worker-3 | `PROGRESS: worker-3 claimed task 4...`; status has no model field | GAP — needs explicit `gpt-5.5` report |
-| worker-4 | status includes `"model":"gpt-5.5"`; progress message includes model | PASS |
-| worker-5 | `ACK: worker-5 model gpt-5.5; claiming task 8 now` | PASS |
-| worker-6 | this worker reports `gpt-5.5` | PASS |
+| Task 1 — repair `backend/.venv` | Completed by worker-6 | `backend/.venv` recreated from Python 3.11.15; broken Python 3.11.12 quarantined; `.venv-test` untouched; imports, `pip check`, ruff, targeted pytest passed. |
+| Task 4 — A-009 PromptTemplate governance | Completed by worker-1 | Commit `6be2c4a5`; backend prompt suite `114 passed`; frontend tsc/lint/client vitest passed; safe rollback and backend-owned admin options implemented. |
+| Task 6 — Python version strategy | Completed by worker-1 | `docs/adr/2026-04-27-local-venv-repair-policy.md` plus existing Python support ADRs. |
 
-## Unresolved environment/data items with owner and migration path
+## Python policy
 
-| Item | Owner | ADR / owner record | Required migration / close condition |
-| --- | --- | --- | --- |
-| Broken `backend/.venv` Python 3.11.12 (`html.entities` missing, `pip` unavailable) | Backend Platform / Release Engineering, task owner worker-1 | `docs/adr/2026-04-27-local-venv-repair-policy.md` | Quarantine broken `.venv`, recreate from trusted Python 3.11, prove `html.entities`, `ensurepip`, `pip`, ruff, pip check, and targeted pytest before live gates. Do not modify `backend/.venv-test`. |
-| Python 3.14 support ambiguity | Backend Platform / Release Engineering | Existing ADRs: `docs/adr/2026-04-27-python-runtime-policy.md`, `docs/adr/2026-04-27-python-version-policy.md`, `docs/adr/2026-04-27-python-version-support-policy.md`, `docs/adr/2026-04-27-python-314-support-policy.md` | Current release line targets Python 3.11 semantics; Python 3.14 requires a separate dependency-upgrade lane and full backend recertification. |
-| A-012 live audit evidence missing | QA / worker-5 after worker-1 repair | Covered by local-venv repair ADR and this report | Start known-good local stack on 3444/3445, prefer `SMOKE_REUSE_EXISTING_STACK=1`, run `web/tests/e2e/audit/audit.spec.ts`, preserve JSON/screenshots/trace/console/network evidence. |
-| A-004 `/support/runtime` live data verification missing | Runtime/support owner / worker-2 | Existing contract doc: `docs/api-contract/support-runtime.md`; this report tracks owner | On real services, prove no `[object Object]`, top faults contain real blocking/warning rows, action suggestions, owner/trace attribution, and clear data-residual owner if seeded data is missing. |
-| PromptTemplate invalid historical rows | Admin platform / worker-3 | Prior closeout report and prompt governance endpoints | Fresh task-4 evidence must confirm save-time 400, invalid history visibility, disable/migrate/remediate/rollback/audit flow, permissions, and frontend governance UI. |
+- Primary dev/CI backend target: Python 3.11.
+- Release-line supported range: `>=3.11,<3.14` from `backend/pyproject.toml`.
+- CI release truth gate uses Python 3.11.
+- Python 3.14 is not a supported runtime for this release; `.venv-test` may remain an auxiliary local verification environment only.
+- Owner: Backend Platform / Release Engineering.
+- Migration path: upgrade and recertify Pydantic/LangChain/Haystack/Chroma/audio dependencies before widening Python support.
 
-## Adjustable business rule / hardcoding review
+## Local `.venv` repair evidence
 
-Scope reviewed: latest release-baseline changes in `HEAD~2..HEAD`, especially prompt governance and admin UI files:
+Worker-6 recorded:
 
-- `backend/src/prompt_templates/models.py`
-- `backend/src/prompt_templates/api/routes.py`
-- `backend/src/prompt_templates/service.py`
-- `backend/tests/integration/test_prompt_templates_api_rbac.py`
-- `web/src/app/admin/prompts/**`
-- `web/src/app/admin/rag-profiles/**`
-- `web/src/lib/api/client.ts`
-- `web/src/lib/api/types.ts`
+- Before repair: `backend/.venv` Python 3.11.12 failed `html.entities`, `pip`, and FastAPI import probes.
+- Repair: moved broken environment to `backend/.venv.broken-20260427T033229Z` and recreated `backend/.venv` from `/opt/homebrew/opt/python@3.11/bin/python3.11` (Python 3.11.15).
+- Verification: `html`, `html.entities`, `ensurepip`, `pip`, `fastapi`, `uvicorn`, `sqlalchemy`, and `ruff` import probes passed; `pip check` passed; backend ruff passed; targeted pytest `6 passed, 1 warning`.
+- Protection: `backend/.venv-test` remained untouched and still reports Python 3.14.3.
 
-Findings:
+## Worker-1 verification evidence
 
-1. No newly-added scoring weights, thresholds, training rules, rate limits, role/capability mappings, or permission maps were found in the reviewed diff.
-2. Prompt type values remain backend contract enum/schema, exposed through `/api/v1/prompt-templates/options` and governance status; this is a code-enforced safety boundary, not an operator-tunable scoring/business rule.
-3. Residual frontend prompt display labels/colors are already called out in the prior closeout as a future centralization cleanup. They should not block the current governance fix, but Admin UX/platform owns moving display metadata to an API/i18n/config source when that surface becomes operator-adjustable.
-4. The new ADR added by this worker documents environment repair policy only; it does not introduce business rules, thresholds, permissions, or user-facing product copy.
+| Gate | Result |
+| --- | --- |
+| `git diff --check` | PASS |
+| Backend ruff targeted | PASS — `ruff check src/prompt_templates/service.py src/prompt_templates/models.py src/prompt_templates/api/routes.py tests/integration/test_prompt_templates_api_rbac.py` |
+| Backend targeted pytest via `.venv-test` | PASS — `114 passed, 1 warning` for `tests/unit/prompt_templates tests/integration/test_prompt_templates_api_rbac.py` |
+| Backend dependency check | PASS from worker-6 repaired `.venv`: `pip check` → `No broken requirements found.` |
+| `.venv-test` Python 3.14 preservation | PASS — Python 3.14.3 import/test gate used for backend prompt suite; no mutation performed. |
+| Web typecheck | PASS — `npm exec -- tsc --noEmit` |
+| Web lint targeted | PASS with 0 errors; 15 pre-existing warnings in `web/src/lib/api/client.ts` |
+| Web vitest targeted | PASS — `src/lib/api/client-governance.test.ts`, 1 file / 3 tests |
+| Backend modified-file diagnostics | PASS — 0 LSP errors on modified backend files |
+| Frontend modified-file diagnostics | PASS — 0 LSP errors on modified frontend files |
 
-Review commands/evidence:
+## PromptTemplate governance closure summary
 
-```bash
-git diff --name-only HEAD~2..HEAD
-git diff -U0 HEAD~2..HEAD -- backend/src/prompt_templates/api/routes.py backend/src/prompt_templates/models.py backend/src/prompt_templates/service.py web/src/app/admin/prompts/page.tsx web/src/app/admin/rag-profiles/page.tsx web/src/lib/api/client.ts web/src/lib/api/types.ts | grep -nE '^\+.*(threshold|limit|score|weight|permission|role|admin|label|color|type|fallback|默认|规则|文案|timeout|retry|realtime_scoring|summary|system_prompt)'
-```
+Task 4 added or revalidated:
 
-The grep surfaced governance/admin contract fields (`allowed_prompt_types`, `runtime_status`, admin auth checks) and known display metadata, not new adjustable business rules hardcoded into runtime logic.
+- Save-before-400 behavior for invalid `prompt_type` and object-shaped `variables`.
+- Admin options include backend-owned `realtime_scoring` sales binding policy.
+- Invalid historical templates remain visible in governance status.
+- Migration/audit/rollback path returns explicit governance rollback response.
+- Rollback never reactivates invalid historical rows; invalid rows stay disabled until corrected.
+- Frontend prompt governance UI consumes backend prompt options instead of duplicating sales binding business rules.
 
-## Verification evidence incorporated from prior closeout
+## Remaining release-close conditions for leader integration
 
-Prior tracked report `.omx/reports/final-remaining-issues-closeout-20260427.md` records these successful gates before this team run:
+Before the full release can be called green, the integrated branch still needs exact fresh evidence for the team-level matrix:
 
-- `git diff --check` → PASS.
-- Backend prompt governance ruff subset → PASS.
-- Backend prompt governance/unit/integration tests → PASS, `110 passed, 1 warning`.
-- Backend dependency check via `.venv-test` → PASS, `132 packages` compatible.
-- Web typecheck/lint/vitest → PASS; lint had `0 errors, 36 warnings`; vitest `82 files / 505 tests passed`.
-- Web build → PASS; Next.js generated 33 static pages.
-- Web npm audit → PASS, `0 vulnerabilities`.
-- Playwright live audit → ENV-BLOCKED by broken `backend/.venv` before browser assertions.
-
-These are useful baseline signals, but they are not a substitute for the fresh task-7 and task-8 evidence currently being collected.
-
-## Required final close conditions before release can be called green
-
-1. worker-1 completes task 1: repaired or safely replaced `backend/.venv`, with evidence and without touching `backend/.venv-test`.
-2. worker-1 completes task 2 or hands it to worker-5 after task 1: Playwright live audit passes on real local stack with JSON/screenshots/trace/console/network evidence.
-3. worker-2 completes task 3 and task 5 with explicit model report `gpt-5.5`.
-4. worker-3 completes task 4 with explicit model report `gpt-5.5`.
-5. worker-4 completes task 7 static/backend/frontend gates with exact command outputs.
-6. worker-5 completes task 8 curl health checks and Playwright evidence after environment repair.
-7. Leader integrates worker commits and reruns/records the final gate matrix: `git diff --check`, backend ruff, backend targeted pytest, backend dependency check, web tsc, web lint, full web vitest, web build, web npm audit, Playwright live audit, curl health checks on 3444/3445.
-
-## Final recommendation
-
-Do **not** ship from this snapshot. Continue the assigned worker tasks, prioritize environment repair first because it unblocks live backend, curl, and Playwright evidence, then regenerate this report with completed task results and exact command output.
+1. Full static/backend/frontend gates from the final integrated branch.
+2. Curl health checks on backend `3444` and frontend `3445`.
+3. Playwright live audit on the real local stack with JSON/screenshots/trace/console/network evidence.
+4. Web full vitest/build/npm audit if not already produced by the final gate owner.
+5. Leader confirmation that all worker commits are integrated and no team task remains pending/in-progress.
