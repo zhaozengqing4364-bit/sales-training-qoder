@@ -244,6 +244,24 @@ export default function AdminPromptsPage() {
     }
   };
 
+  const handleMigrateInvalidTemplates = async () => {
+    if (!canOperate) {
+      toast.error("当前角色无操作权限");
+      return;
+    }
+
+    setIsOperating(true);
+    try {
+      const result = await api.admin.migrateInvalidPromptTemplates("admin prompt governance review");
+      setGovernanceIssues(result.issues || []);
+      await refreshAfterMutation(`已停用 ${result.migrated_count} 个非法历史模板`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
+  };
+
   useEffect(() => {
     if (!selectedTemplate) {
       return;
@@ -283,6 +301,33 @@ export default function AdminPromptsPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
           销售场景仅允许绑定评估/报告类模板。业务角色提示词与知识库策略请在角色中心配置。
         </div>
+        {governanceIssues.length > 0 ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-800">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="font-semibold">发现 {governanceIssues.length} 个非法历史模板</div>
+                <div className="text-xs text-red-700">
+                  这些模板不会被静默用于运行时；请停用后在审计日志中复核原因。
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!canOperate || isOperating}
+                onClick={() => void handleMigrateInvalidTemplates()}
+              >
+                迁移/停用非法模板
+              </Button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {governanceIssues.slice(0, 4).map((issue) => (
+                <Badge key={issue.template_id} className="bg-red-100 text-red-700">
+                  {issue.name}: {issue.reason_codes.join(",")}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-2 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
