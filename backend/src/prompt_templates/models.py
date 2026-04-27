@@ -83,6 +83,42 @@ def _ensure_variables_are_list(value: Any) -> list[str]:
     return _normalize_variable_names(value)
 
 
+ALLOWED_PROMPT_TYPE_VALUES = tuple(item.value for item in PromptType)
+
+
+class PromptTemplateGovernanceIssue(BaseModel):
+    """Visible governance issue for historical prompt-template rows."""
+
+    template_id: str
+    name: str | None = None
+    prompt_type: str | None = None
+    is_active: bool
+    is_default: bool
+    issue_codes: list[str]
+    messages: list[str]
+    recommended_action: str
+
+
+class PromptTemplateGovernanceStatus(BaseModel):
+    """Prompt-template governance status for admin review/remediation."""
+
+    checked_count: int
+    invalid_count: int
+    invalid_active_count: int
+    issues: list[PromptTemplateGovernanceIssue]
+    rollback_policy: str
+    audit_log_action: str
+
+
+class PromptTemplateQuarantineResult(BaseModel):
+    """Result of disabling invalid historical prompt templates."""
+
+    checked_count: int
+    quarantined_count: int
+    issues: list[PromptTemplateGovernanceIssue]
+    audit_log_action: str
+
+
 class PromptTemplateBase(BaseModel):
     """Base model for prompt templates."""
 
