@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-import json
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -1043,7 +1042,8 @@ class PromptTemplateService:
         actor: Any | None = None,
         reason: str = "PromptTemplate governance rollback",
     ) -> PromptTemplate | None:
-        from common.db.models import PromptTemplate as PromptTemplateDB, SystemLog
+        from common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import SystemLog
 
         result = await self.db.execute(
             select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
