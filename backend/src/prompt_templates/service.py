@@ -34,15 +34,13 @@ from prompt_templates.compiled_contract import (
 from prompt_templates.loader import get_loader
 from prompt_templates.models import (
     ALLOWED_PROMPT_TYPE_VALUES,
-    PromptTemplateGovernanceIssue,
-    PromptTemplateGovernanceStatus,
-    PromptTemplateQuarantineResult,
     PromptRenderRequest,
     PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
     PromptTemplateGovernanceIssue,
-    PromptTemplateGovernanceReport,
+    PromptTemplateGovernanceStatus,
+    PromptTemplateQuarantineResult,
     PromptTemplateUpdate,
     PromptType,
     ScenarioPrompt,

@@ -33,13 +33,12 @@ from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from prompt_templates.models import (
     ALLOWED_PROMPT_TYPE_VALUES,
-    PromptTemplateGovernanceStatus,
-    PromptTemplateQuarantineResult,
     PromptRenderRequest,
     PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
-    PromptTemplateGovernanceReport,
+    PromptTemplateGovernanceStatus,
+    PromptTemplateQuarantineResult,
     PromptTemplateUpdate,
     PromptType,
     ScenarioPrompt,
