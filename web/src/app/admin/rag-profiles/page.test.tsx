@@ -159,8 +159,9 @@ describe("RagProfilesPage", () => {
         expect(successToastMock).toHaveBeenCalledWith("删除成功");
     });
 
-    it("distinguishes empty state from API failure and links the migration path", async () => {
-        listRagProfilesMock.mockResolvedValueOnce([]);
+    it("distinguishes load failure from an empty RAG profile state", async () => {
+        listRagProfilesMock.mockReset();
+        listRagProfilesMock.mockRejectedValue(new Error("权限不足"));
 
         render(<RagProfilesPage />);
 
