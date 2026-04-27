@@ -153,8 +153,11 @@ export default function AdminPromptsPage() {
   };
 
   useEffect(() => {
-    void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const timeoutId = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInactive]);
 
   const filteredTemplates = useMemo(() => {
@@ -336,9 +339,12 @@ export default function AdminPromptsPage() {
       return;
     }
 
-    setBindingTemplateId(selectedTemplate.id);
-    setBindingPromptType(selectedTemplate.prompt_type);
-    setBindingScenarioType(selectedTemplate.category === "sales" ? "sales" : "presentation");
+    const timeoutId = window.setTimeout(() => {
+      setBindingTemplateId(selectedTemplate.id);
+      setBindingPromptType(selectedTemplate.prompt_type);
+      setBindingScenarioType(selectedTemplate.category === "sales" ? "sales" : "presentation");
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [selectedTemplate]);
 
   return (
