@@ -235,8 +235,73 @@ class PromptTemplateService:
             "issues": issues,
         }
 
-    async def audit_legacy_templates(self) -> dict[str, Any]:
-        """Inspect historical prompt templates for rows that require governance action."""
+    @classmethod
+    def _governance_issues_for_row(cls, db_template: Any) -> list[dict[str, str]]:
+        issues: list[dict[str, str]] = []
+        prompt_type = str(getattr(db_template, "prompt_type", "") or "").strip()
+        try:
+            PromptType(prompt_type)
+        except ValueError:
+            issues.append(
+                {
+                    "code": "invalid_prompt_type",
+                    "severity": "blocking",
+                    "message": f"prompt_type '{prompt_type}' is not in the allowed runtime taxonomy",
+                }
+            )
+
+        variables = getattr(db_template, "variables", None)
+        parsed_variables = variables
+        if isinstance(variables, str):
+            try:
+                parsed_variables = json.loads(variables)
+            except json.JSONDecodeError:
+                issues.append(
+                    {
+                        "code": "variables_invalid_json",
+                        "severity": "blocking",
+                        "message": "variables is a string but not valid JSON",
+                    }
+                )
+                parsed_variables = None
+        if isinstance(parsed_variables, dict):
+            issues.append(
+                {
+                    "code": "variables_object_schema",
+                    "severity": "blocking",
+                    "message": "variables must be a list[str]; object-shaped historical rows are disabled before runtime use",
+                }
+            )
+        elif parsed_variables is not None and not isinstance(parsed_variables, list):
+            issues.append(
+                {
+                    "code": "variables_not_list",
+                    "severity": "blocking",
+                    "message": "variables must be a list[str]",
+                }
+            )
+        elif isinstance(parsed_variables, list) and not all(
+            isinstance(item, str) and item.strip() for item in parsed_variables
+        ):
+            issues.append(
+                {
+                    "code": "variables_non_string_item",
+                    "severity": "blocking",
+                    "message": "variables must contain only non-empty strings",
+                }
+            )
+
+        if not str(getattr(db_template, "template", "") or "").strip():
+            issues.append(
+                {
+                    "code": "empty_template",
+                    "severity": "blocking",
+                    "message": "template body is empty",
+                }
+            )
+        return issues
+
+    async def get_governance_status(self, *, limit: int = 1000) -> dict[str, Any]:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(select(PromptTemplateDB))
@@ -334,21 +399,65 @@ class PromptTemplateService:
                 }
             )
 
-        if not dry_run and actions:
-            audit_log = SystemLog(
-                action="prompt_template_governance_remediation",
-                user_id=actor_user_id,
-                user_identifier=actor_identifier,
-                status="warning",
-                details=json.dumps(
-                    {
-                        "version": PROMPT_TEMPLATE_GOVERNANCE_VERSION,
-                        "reason": reason,
-                        "actions": actions,
-                    },
-                    ensure_ascii=False,
-                    default=str,
-                ),
+        return {
+            "allowed_prompt_types": [item.value for item in PromptType],
+            "policy": {
+                "variables_schema": "list[str]",
+                "invalid_history_runtime_behavior": "visible_in_governance_and_disabled_before_runtime_lookup",
+                "rollback": "restore prior is_active/is_default from prompt_template.governance.remediate_invalid SystemLog details",
+                "audit_action": "prompt_template.governance.remediate_invalid",
+            },
+            "invalid_count": len(invalid_rows),
+            "invalid_templates": invalid_rows,
+            "limit": limit,
+        }
+
+    async def remediate_invalid_templates(
+        self,
+        *,
+        actor_id: str | None,
+        reason: str,
+        limit: int = 1000,
+    ) -> dict[str, Any]:
+        from common.db.models import PromptTemplate as PromptTemplateDB, SystemLog
+
+        result = await self.db.execute(select(PromptTemplateDB).limit(limit))
+        rows = result.scalars().all()
+        remediated: list[dict[str, Any]] = []
+        now = datetime.now(UTC)
+        trace_id = get_trace_id()
+        normalized_reason = reason.strip() or "prompt governance remediation"
+
+        for row in rows:
+            issues = self._governance_issues_for_row(row)
+            if not issues:
+                continue
+            before = self._template_snapshot(row)
+            if bool(getattr(row, "is_active", False)) or bool(getattr(row, "is_default", False)):
+                row.is_active = False
+                row.is_default = False
+                row.updated_at = now
+            after = self._template_snapshot(row)
+            remediated.append({"before": before, "after": after, "issues": issues})
+
+        if remediated:
+            self.db.add(
+                SystemLog(
+                    user_id=actor_id,
+                    user_identifier=actor_id or "system",
+                    action="prompt_template.governance.remediate_invalid",
+                    status="success",
+                    details=json.dumps(
+                        {
+                            "reason": normalized_reason,
+                            "trace_id": trace_id,
+                            "count": len(remediated),
+                            "items": remediated,
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                )
             )
             self.db.add(audit_log)
             await self.db.commit()
