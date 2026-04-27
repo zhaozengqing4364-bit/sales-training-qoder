@@ -1322,7 +1322,7 @@ export interface AdminSystemLog {
     ip_address?: string | null;
     status: "success" | "failed" | "warning" | string;
     created_at: string;
-    details?: string | null;
+    details?: unknown;
     diagnostics?: AdminSystemLogDiagnosticItem[];
     trace_id?: string | null;
     error_code?: string | null;
@@ -1678,44 +1678,48 @@ export interface PromptTemplateUpdate {
 }
 
 
+export interface PromptTemplateGovernanceIssue {
+    code: string;
+    severity: "blocking" | "warning" | string;
+    message: string;
+}
+
 export interface PromptTemplateGovernanceInvalidTemplate {
     id: string;
     name: string;
     prompt_type: string;
     category: string;
+    variables: unknown;
     is_active: boolean;
     is_default: boolean;
-    variables_shape: string;
-    validation_errors: string[];
-    recommended_action: string;
+    updated_at?: string | null;
+    issues: PromptTemplateGovernanceIssue[];
+    runtime_status: string;
+    remediation: string;
 }
 
 export interface PromptTemplateGovernanceStatus {
-    options: {
-        allowed_prompt_types: PromptType[];
-        form_defaults: {
-            category: string;
-            is_active: boolean;
-            is_default: boolean;
-            variables: string[];
-        };
-        validation: Record<string, string>;
-        permissions: Record<string, string>;
-        audit: { sink: string; actions: string[] };
-        fallback: string;
+    allowed_prompt_types: string[];
+    policy: {
+        variables_schema: string;
+        invalid_history_runtime_behavior: string;
         rollback: string;
+        audit_action: string;
     };
-    invalid_templates: PromptTemplateGovernanceInvalidTemplate[];
     invalid_count: number;
-    active_invalid_count: number;
+    invalid_templates: PromptTemplateGovernanceInvalidTemplate[];
+    limit: number;
 }
 
-export interface PromptTemplateGovernanceRemediationResult {
-    invalid_count: number;
-    disabled_count: number;
-    disabled_ids: string[];
-    invalid_templates: PromptTemplateGovernanceInvalidTemplate[];
-    rollback: string;
+export interface PromptTemplateGovernanceRemediationResponse {
+    remediated_count: number;
+    items: Array<{ before: unknown; after: unknown; issues: PromptTemplateGovernanceIssue[] }>;
+    audit: {
+        action: string;
+        actor_id?: string | null;
+        reason: string;
+        trace_id?: string | null;
+    };
 }
 
 export interface ScenarioPrompt {

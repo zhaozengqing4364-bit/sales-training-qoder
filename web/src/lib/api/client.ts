@@ -58,6 +58,8 @@ import {
     PromptTemplateCreate,
     PromptTemplateGovernanceReport,
     PromptTemplateUpdate,
+    PromptTemplateGovernanceRemediationResponse,
+    PromptTemplateGovernanceStatus,
     ScenarioPrompt,
     ScenarioPromptCreate,
     PromptRenderRequest,
@@ -3126,6 +3128,17 @@ export const api = {
         getPromptTemplate: async (id: string) => {
             const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
             return apiFetch<PromptTemplate>(`/prompt-templates/${normalizedId}`);
+        },
+
+        getPromptTemplateGovernanceStatus: async () => {
+            return apiFetch<PromptTemplateGovernanceStatus>("/prompt-templates/governance/status");
+        },
+
+        remediateInvalidPromptTemplates: async (reason: string) => {
+            return apiFetch<PromptTemplateGovernanceRemediationResponse>("/prompt-templates/governance/remediate-invalid", {
+                method: "POST",
+                body: JSON.stringify({ reason }),
+            });
         },
 
         createPromptTemplate: async (data: PromptTemplateCreate) => {
