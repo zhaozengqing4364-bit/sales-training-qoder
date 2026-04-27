@@ -40,6 +40,20 @@ function buildDiagnosticItems(log: AdminSystemLog): AdminSystemLogDiagnosticItem
         : [];
 }
 
+function formatDetails(details: unknown): string | null {
+    if (details === null || details === undefined || details === "") {
+        return null;
+    }
+    if (typeof details === "string") {
+        return details;
+    }
+    try {
+        return JSON.stringify(details);
+    } catch {
+        return "详情包含不可序列化字段，请使用 trace_id 查询后端审计日志。";
+    }
+}
+
 export default function AdminLogsPage() {
     const toast = useToast();
     const [logs, setLogs] = useState<AdminSystemLog[]>([]);
@@ -179,6 +193,7 @@ export default function AdminLogsPage() {
                             <tbody>
                                 {logs.map((log) => {
                                     const diagnostics = buildDiagnosticItems(log);
+                                    const detailsText = formatDetails(log.details);
                                     return (
                                         <tr key={log.id} className="border-b border-slate-100 last:border-0">
                                             <td className="px-5 py-4 text-slate-600 whitespace-nowrap">
@@ -213,8 +228,8 @@ export default function AdminLogsPage() {
                                                 ) : (
                                                     <span className="text-slate-400">-</span>
                                                 )}
-                                                {log.details && (
-                                                    <div className="mt-2 text-xs text-slate-400 break-words">{log.details}</div>
+                                                {detailsText && (
+                                                    <div className="mt-2 text-xs text-slate-400 break-words">{detailsText}</div>
                                                 )}
                                             </td>
                                         </tr>

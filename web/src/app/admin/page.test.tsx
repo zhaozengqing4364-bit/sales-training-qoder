@@ -62,7 +62,7 @@ describe("AdminDashboardPage", () => {
         expect(screen.getByText("66.7%")).toBeTruthy();
         expect(screen.getByText("58.3%")).toBeTruthy();
         expect(screen.getAllByText("待接真实统计").length).toBeGreaterThanOrEqual(3);
-        expect(screen.getByText(/以下卡片当前只作为 管理入口与待接权威数据提示/)).toBeTruthy();
+        expect(screen.getByText(/以下卡片当前作为管理入口与待接权威数据提示/)).toBeTruthy();
         expect(screen.getByText("当前管理入口")).toBeTruthy();
         expect(screen.getByText("直接进入当前已接入数据源的管理面；首页不提供未接入的表单、日志控制台或自动告警入口。"))
             .toBeTruthy();
