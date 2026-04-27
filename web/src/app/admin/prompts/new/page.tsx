@@ -15,22 +15,19 @@ import { api } from "@/lib/api/client";
 import { PromptType } from "@/lib/api/types";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
-    summary: "总结",
-    system: "系统",
-    system_prompt: "系统提示词",
-    extraction: "提取",
-    scoring: "评分",
-    realtime_scoring: "实时评分",
-    stage: "阶段",
-    realtime_scoring: "实时评分",
-    fuzzy_detection: "模糊检测",
-    realtime_scoring: "实时评分",
-    interruption: "打断检测",
-    tracking: "跟踪",
-    welcome: "欢迎词",
-    evaluation: "实时评价",
-    report: "综合报告",
+  summary: "总结",
+  system: "系统",
+  system_prompt: "系统提示词",
+  extraction: "信息提取",
+  scoring: "评分",
   realtime_scoring: "实时评分",
+  stage: "阶段",
+  fuzzy_detection: "模糊检测",
+  interruption: "打断检测",
+  tracking: "跟踪",
+  welcome: "欢迎词",
+  evaluation: "实时评价",
+  report: "综合报告",
 };
 const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
 

@@ -21,15 +21,12 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   scoring: "评分",
   realtime_scoring: "实时评分",
   stage: "阶段",
-  realtime_scoring: "实时评分",
   fuzzy_detection: "模糊检测",
-  realtime_scoring: "实时评分",
   interruption: "打断检测",
   tracking: "跟踪",
   welcome: "欢迎词",
   evaluation: "实时评价",
   report: "综合报告",
-  realtime_scoring: "实时评分",
 };
 
 const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
@@ -40,15 +37,12 @@ const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
   scoring: "bg-amber-100 text-amber-700",
   realtime_scoring: "bg-violet-100 text-violet-700",
   stage: "bg-orange-100 text-orange-700",
-  realtime_scoring: "bg-lime-100 text-lime-700",
   fuzzy_detection: "bg-rose-100 text-rose-700",
-  realtime_scoring: "bg-violet-100 text-violet-700",
   interruption: "bg-pink-100 text-pink-700",
   tracking: "bg-cyan-100 text-cyan-700",
   welcome: "bg-indigo-100 text-indigo-700",
   evaluation: "bg-teal-100 text-teal-700",
   report: "bg-zinc-200 text-zinc-700",
-  realtime_scoring: "bg-violet-100 text-violet-700",
 };
 const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
 
@@ -107,7 +101,6 @@ export default function AdminPromptsPage() {
       const [templatesResult, scenarioPromptsResult, userResult, governanceResult] = await Promise.allSettled([
         api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
         api.admin.getScenarioPrompts(),
-        api.admin.getPromptTemplateGovernanceStatus(),
         api.user.getMe(),
         api.admin.getPromptTemplateGovernanceStatus(),
       ]);
@@ -122,12 +115,6 @@ export default function AdminPromptsPage() {
         setScenarioPrompts(scenarioPromptsResult.value);
       } else {
         setScenarioPrompts([]);
-      }
-
-      if (governanceResult.status === "fulfilled") {
-        setGovernanceStatus(governanceResult.value);
-      } else {
-        setGovernanceStatus(null);
       }
 
       if (userResult.status === "fulfilled") {
@@ -404,40 +391,6 @@ export default function AdminPromptsPage() {
             ) : null}
           </div>
         </div>
-        {governanceAudit ? (
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-700">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-              <div>
-                <span className="font-semibold">历史模板治理：</span>
-                共 {governanceAudit.total} 条，待处理 {governanceAudit.invalid_count} 条。
-                {governanceAudit.invalid_count > 0 ? (
-                  <span className="ml-1 text-amber-700">
-                    管理员可迁移 variables 字典并禁用无法信任的历史模板，审计日志可回滚。
-                  </span>
-                ) : (
-                  <span className="ml-1 text-emerald-700">当前无非法历史模板。</span>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!canOperate || isOperating || governanceAudit.invalid_count === 0}
-                onClick={() => void handleRemediateGovernance()}
-              >
-                治理历史模板
-              </Button>
-            </div>
-            {governanceAudit.items.length ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {governanceAudit.items.slice(0, 4).map((item) => (
-                  <Badge key={item.template_id} className="bg-amber-100 text-amber-800">
-                    {item.name || item.template_id.slice(0, 8)}：{item.issues.join(" / ")}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-2 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -497,7 +450,7 @@ export default function AdminPromptsPage() {
               variant="outline"
               className="border-red-200 bg-white text-red-700"
               disabled={!canOperate || isOperating || governanceStatus.invalid_active_count === 0}
-              onClick={() => void handleQuarantineInvalidTemplates()}
+              onClick={() => void handleRemediateInvalidTemplates()}
             >
               禁用非法历史模板
             </Button>

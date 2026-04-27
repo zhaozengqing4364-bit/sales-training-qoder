@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
@@ -37,7 +37,6 @@ from prompt_templates.models import (
     PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
-    PromptTemplateGovernanceStatus,
     PromptTemplateQuarantineResult,
     PromptTemplateUpdate,
     PromptType,
@@ -111,11 +110,13 @@ def _validation_error_message(exc: ValidationError) -> str:
 def _parse_prompt_payload_or_error(
     payload: object,
     model_type: type[BaseModel],
+    *,
+    error_code: str = "[PROMPT_DATA_INVALID]",
 ) -> tuple[BaseModel | None, JSONResponse | None]:
     if not isinstance(payload, dict):
         return None, _prompt_error_response(
             status_code=400,
-            error_code="[PROMPT_DATA_INVALID]",
+            error_code=error_code,
             message="提示词数据无效，请提交 JSON 对象。",
         )
     try:
@@ -123,7 +124,7 @@ def _parse_prompt_payload_or_error(
     except ValidationError as exc:
         return None, _prompt_error_response(
             status_code=400,
-            error_code="[PROMPT_DATA_INVALID]",
+            error_code=error_code,
             message=f"提示词数据无效：{_validation_error_message(exc)}",
             exc=exc,
         )
@@ -138,12 +139,14 @@ logger = get_logger(__name__)
 HTTP_500_INTERNAL_SERVER_ERROR = status.HTTP_500_INTERNAL_SERVER_ERROR
 HTTP_503_SERVICE_UNAVAILABLE = status.HTTP_503_SERVICE_UNAVAILABLE
 
-
-
 class PromptGovernanceMigrationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    reason: str = Field(default="PromptTemplate governance migration", min_length=1, max_length=500)
+    reason: str = Field(
+        default="PromptTemplate governance migration",
+        min_length=1,
+        max_length=500,
+    )
     dry_run: bool = False
 
 
@@ -152,14 +155,6 @@ class PromptGovernanceRollbackRequest(BaseModel):
 
     reason: str = Field(default="PromptTemplate governance rollback", min_length=1, max_length=500)
 
-
-def _validation_error_response(exc: ValidationError) -> JSONResponse:
-    return _prompt_error_response(
-        status_code=400,
-        error_code="[PROMPT_DATA_INVALID]",
-        message="提示词数据无效，请检查变量、类型和模板内容。",
-        exc=exc,
-    )
 
 # M016/S02/T01 error-contract inventory:
 # - 4xx branches in this route family already converge on FastAPI detail={error,message}.
@@ -243,16 +238,16 @@ async def get_prompt_template_options(
             {"evaluation", "report", "stage", "scoring"}
         ),
         "variables_schema": "list[str]",
-        "invalid_active_count": status_payload.invalid_active_count,
-        "rollback_policy": status_payload.rollback_policy,
+        "invalid_active_count": int(status_payload.get("invalid_active_count", 0)),
+        "rollback_policy": str(status_payload.get("rollback_policy", "")),
     }
 
 
-@router.get("/governance-status", response_model=PromptTemplateGovernanceStatus)
-async def get_prompt_template_governance_status(
+@router.get("/governance-status")
+async def get_prompt_template_legacy_governance_status(
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> PromptTemplateGovernanceStatus:
+) -> dict[str, Any]:
     """Expose invalid historical rows so admins can remediate them."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -384,14 +379,17 @@ async def create_prompt_template(
     if admin_error is not None:
         return admin_error
 
-    data, parse_error = _parse_prompt_payload_or_error(await request.json(), PromptTemplateCreate)
+    payload, parse_error = _parse_prompt_payload_or_error(
+        data,
+        PromptTemplateCreate,
+        error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
+    )
     if parse_error is not None:
         return parse_error
-    assert isinstance(data, PromptTemplateCreate)
+    assert isinstance(payload, PromptTemplateCreate)
 
     try:
-        payload = PromptTemplateCreate.model_validate(data)
-        return await service.create_template(payload)
+        return await service.create_template(payload, actor=current_user)
     except ValidationError as exc:
         return _prompt_error_response(
             status_code=400,
@@ -451,7 +449,8 @@ async def get_prompt_template_governance_status(
 
 @router.post("/governance/remediate-invalid")
 async def remediate_invalid_prompt_templates(
-    request: PromptTemplateRemediationRequest,
+    request: PromptTemplateRemediationRequest | None = None,
+    reason: str | None = Query(None, min_length=1, max_length=500),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> dict[str, Any]:
@@ -463,13 +462,92 @@ async def remediate_invalid_prompt_templates(
     try:
         return await service.remediate_invalid_templates(
             actor_id=str(getattr(current_user, "user_id", "") or "") or None,
-            reason=request.reason,
+            reason=(
+                request.reason
+                if request is not None
+                else reason or "prompt governance remediation"
+            ),
         )
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.post("/governance/migrate-invalid")
+async def migrate_invalid_prompt_templates(
+    request: PromptGovernanceMigrationRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> dict[str, Any]:
+    """Migrate/disable invalid historical templates with audit evidence."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    migration_request = request or PromptGovernanceMigrationRequest()
+    try:
+        result = await service.migrate_invalid_templates(
+            actor=current_user,
+            reason=migration_request.reason,
+            dry_run=migration_request.dry_run,
+        )
+        return {"success": True, "data": result}
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.post("/governance/{template_id}/rollback", response_model=PromptTemplate)
+async def rollback_prompt_template_governance(
+    template_id: str,
+    request: PromptGovernanceRollbackRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> PromptTemplate:
+    """Rollback the latest governance migration for one template when audit data exists."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    template_uuid, parse_error = _parse_template_id_or_error(template_id)
+    if parse_error is not None:
+        return parse_error
+    assert template_uuid is not None
+
+    rollback_request = request or PromptGovernanceRollbackRequest()
+    try:
+        template = await service.rollback_last_governance_migration(
+            template_id=template_uuid,
+            actor=current_user,
+            reason=rollback_request.reason,
+        )
+        if template is None:
+            return _prompt_error_response(
+                status_code=404,
+                error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
+                message="模板不存在",
+            )
+        return template
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+    except ValueError as exc:
+        return _prompt_error_response(
+            status_code=400,
+            error_code="[PROMPT_GOVERNANCE_ROLLBACK_NOT_AVAILABLE]",
+            message="未找到可回滚的提示词治理审计记录。",
             exc=exc,
         )
 
@@ -532,14 +610,17 @@ async def update_prompt_template(
         return parse_error
     assert template_uuid is not None
 
-    data, payload_error = _parse_prompt_payload_or_error(await request.json(), PromptTemplateUpdate)
+    payload, payload_error = _parse_prompt_payload_or_error(
+        data,
+        PromptTemplateUpdate,
+        error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
+    )
     if payload_error is not None:
         return payload_error
-    assert isinstance(data, PromptTemplateUpdate)
+    assert isinstance(payload, PromptTemplateUpdate)
 
     try:
-        payload = PromptTemplateUpdate.model_validate(data)
-        template = await service.update_template(template_uuid, payload)
+        template = await service.update_template(template_uuid, payload, actor=current_user)
         if not template:
             return _prompt_error_response(
                 status_code=404,

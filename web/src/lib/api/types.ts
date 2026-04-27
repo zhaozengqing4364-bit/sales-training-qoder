@@ -1631,15 +1631,12 @@ export type PromptType =
     | "scoring"
     | "realtime_scoring"
     | "stage"
-    | "realtime_scoring"
     | "fuzzy_detection"
-    | "realtime_scoring"
     | "interruption"
     | "tracking"
     | "welcome"
     | "evaluation"
-    | "report"
-    | "realtime_scoring";
+    | "report";
 
 export interface PromptTemplate {
     id: string;
@@ -1709,6 +1706,18 @@ export interface PromptTemplateGovernanceStatus {
     invalid_count: number;
     invalid_templates: PromptTemplateGovernanceInvalidTemplate[];
     limit: number;
+    checked_count: number;
+    active_invalid_count: number;
+    invalid_active_count: number;
+    issues: Array<{
+        template_id: string;
+        name?: string | null;
+        issue_codes: string[];
+        messages?: string[];
+        recommended_action?: string;
+    }>;
+    rollback_policy: string;
+    audit_log_action: string;
 }
 
 export interface PromptTemplateGovernanceRemediationResponse {
@@ -1720,6 +1729,21 @@ export interface PromptTemplateGovernanceRemediationResponse {
         reason: string;
         trace_id?: string | null;
     };
+}
+
+export interface PromptTemplateOptions {
+    allowed_prompt_types: Array<{ value: string; label: string }>;
+    sales_allowed_prompt_types: string[];
+    variables_schema: string;
+    invalid_active_count: number;
+    rollback_policy: string;
+}
+
+export interface PromptTemplateQuarantineResult {
+    checked_count: number;
+    quarantined_count: number;
+    issues: PromptTemplateGovernanceIssue[];
+    audit_log_action: string;
 }
 
 export interface ScenarioPrompt {

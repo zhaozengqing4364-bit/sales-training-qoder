@@ -34,34 +34,33 @@ class PromptType(str, Enum):
     SCORING = "scoring"
     REALTIME_SCORING = "realtime_scoring"
     STAGE = "stage"
-    REALTIME_SCORING = "realtime_scoring"
     FUZZY_DETECTION = "fuzzy_detection"
-    REALTIME_SCORING = "realtime_scoring"
     INTERRUPTION = "interruption"
     TRACKING = "tracking"
     WELCOME = "welcome"
     EVALUATION = "evaluation"
     REPORT = "report"
-    REALTIME_SCORING = "realtime_scoring"
 
 
+ALLOWED_PROMPT_TYPE_VALUES = tuple(item.value for item in PromptType)
 
 
-def _normalize_variable_names(value: Any) -> list[str]:
-    """Normalize template variable metadata and reject historical dict-shaped payloads.
+def _normalize_variable_list(value: Any, *, allow_json_string: bool) -> list[str]:
+    """Normalize prompt variable metadata to a de-duplicated list[str].
 
-    Prompt variable metadata is a list of variable names. Dict-shaped rows are
-    treated as governance issues because key/value schema objects hide runtime
-    contract drift and previously caused invalid templates to be skipped.
+    Control-plane writes reject dict/object variables so invalid historical rows
+    stay visible to governance instead of being silently coerced to keys. Existing
+    DB reads may accept JSON-encoded list strings when explicitly allowed.
     """
     if value is None:
         return []
     if isinstance(value, str):
+        if not allow_json_string:
+            raise ValueError("variables must be a list of strings")
         try:
-            parsed = json.loads(value)
+            value = json.loads(value)
         except json.JSONDecodeError as exc:
             raise ValueError("variables must be a JSON list of strings") from exc
-        value = parsed
     if isinstance(value, dict):
         raise ValueError("variables must be a list of strings, not an object")
     if not isinstance(value, list):
@@ -73,41 +72,64 @@ def _normalize_variable_names(value: Any) -> list[str]:
             raise ValueError("variables must contain only strings")
         variable = item.strip()
         if not variable:
-            raise ValueError("variables must not contain blank names")
+            raise ValueError("variables must contain non-empty strings only")
         if variable not in normalized:
             normalized.append(variable)
     return normalized
 
 
-def _ensure_variables_are_list(value: Any) -> list[str]:
-    return _normalize_variable_names(value)
+def _validate_jinja_template(value: str) -> str:
+    """Validate author-supplied Jinja2 before saving a template."""
+    if not value:
+        return value
+    try:
+        from jinja2.exceptions import TemplateSyntaxError
+        from jinja2.sandbox import SandboxedEnvironment
 
-
-ALLOWED_PROMPT_TYPE_VALUES = tuple(item.value for item in PromptType)
+        SandboxedEnvironment(autoescape=False).parse(value)
+    except TemplateSyntaxError as exc:
+        raise ValueError("template must be valid Jinja2") from exc
+    return value
 
 
 class PromptTemplateGovernanceIssue(BaseModel):
-    """Visible governance issue for historical prompt-template rows."""
+    """Visible governance issue for a historical prompt-template row."""
 
-    template_id: str
+    code: str
+    severity: str = "blocking"
+    message: str
+
+
+class PromptTemplateGovernanceInvalidTemplate(BaseModel):
+    """Invalid historical prompt-template row shown to administrators."""
+
+    id: str
     name: str | None = None
     prompt_type: str | None = None
+    category: str | None = None
+    variables: Any = None
     is_active: bool
     is_default: bool
-    issue_codes: list[str]
-    messages: list[str]
-    recommended_action: str
+    updated_at: str | None = None
+    issues: list[PromptTemplateGovernanceIssue]
+    runtime_status: str
+    remediation: str
 
 
 class PromptTemplateGovernanceStatus(BaseModel):
     """Prompt-template governance status for admin review/remediation."""
 
-    checked_count: int
+    allowed_prompt_types: list[str]
+    policy: dict[str, str]
     invalid_count: int
-    invalid_active_count: int
-    issues: list[PromptTemplateGovernanceIssue]
-    rollback_policy: str
-    audit_log_action: str
+    invalid_templates: list[PromptTemplateGovernanceInvalidTemplate]
+    limit: int
+    checked_count: int = 0
+    active_invalid_count: int = 0
+    invalid_active_count: int = 0
+    issues: list[dict[str, Any]] = Field(default_factory=list)
+    rollback_policy: str = "restore from SystemLog before snapshot"
+    audit_log_action: str = "prompt_template.governance.remediate_invalid"
 
 
 class PromptTemplateQuarantineResult(BaseModel):
@@ -134,44 +156,21 @@ class PromptTemplateBase(BaseModel):
     is_active: bool = Field(default=True, description="Whether template is active")
     is_default: bool = Field(default=False, description="Whether this is the default for its type")
 
-    @field_validator("variables", mode="before")
+    @field_validator("template")
     @classmethod
-    def validate_variable_list(cls, v: Any) -> list[str]:
-        """Validate persisted/admin-supplied template variables.
-
-        Historical rows have occasionally stored variables as dictionaries.  New writes must
-        fail before save instead of silently coercing them; the governance remediation endpoint
-        owns legacy migration/disable decisions.
-        """
-        if v is None:
-            return []
-        if isinstance(v, str):
-            try:
-                parsed = json.loads(v)
-            except json.JSONDecodeError as exc:
-                raise ValueError("variables must be a JSON list of strings") from exc
-            v = parsed
-        if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
-            raise ValueError("variables must be a list of strings")
-        return list(dict.fromkeys(item.strip() for item in v if item.strip()))
-
+    def validate_template_syntax(cls, value: str) -> str:
+        return _validate_jinja_template(value)
 
     @field_validator("variables", mode="before")
     @classmethod
     def validate_variables_metadata(cls, value: Any) -> list[str]:
-        return _ensure_variables_are_list(value)
+        return _normalize_variable_list(value, allow_json_string=False)
 
 
 class PromptTemplateCreate(PromptTemplateBase):
     """Model for creating a new prompt template."""
 
     model_config = ConfigDict(extra="forbid")
-
-    @field_validator("variables", mode="before")
-    @classmethod
-    def validate_control_plane_variables(cls, value: Any) -> list[str]:
-        """Control-plane writes must provide a list[str], never a dict/map."""
-        return _normalize_variable_list(value, allow_json_string=False)
 
     @model_validator(mode="after")
     def extract_variables(self) -> PromptTemplateCreate:
@@ -182,38 +181,24 @@ class PromptTemplateCreate(PromptTemplateBase):
 
     @staticmethod
     def _extract_variables_from_template(template: str) -> list[str]:
-        """
-        Extract Jinja2 variable names from template.
-
-        Strategy:
-        1. Extract variables from output blocks in appearance order ({{ ... }}).
-        2. For valid Jinja2 templates, merge undeclared vars from AST (captures if/for conditions).
-        3. Keep first-seen order for output vars and append missing AST vars deterministically.
-
-        Returns:
-            List of unique variable names.
-        """
+        """Extract unique Jinja2 variable names in deterministic order."""
 
         def dedupe(values: list[str]) -> list[str]:
             return list(dict.fromkeys(values))
 
         def extract_output_vars(raw_template: str) -> list[str]:
-            """Extract first identifier from each top-level output block, tolerating nested braces."""
             variables: list[str] = []
             depth = 0
             start = -1
             index = 0
-
             while index < len(raw_template) - 1:
                 token = raw_template[index : index + 2]
-
                 if token == "{{":
                     if depth == 0:
                         start = index + 2
                     depth += 1
                     index += 2
                     continue
-
                 if token == "}}" and depth > 0:
                     depth -= 1
                     if depth == 0 and start >= 0:
@@ -223,20 +208,16 @@ class PromptTemplateCreate(PromptTemplateBase):
                         while previous != cleaned:
                             previous = cleaned
                             cleaned = re.sub(r"\{\{[^{}]*\}\}", " ", cleaned)
-
                         match = re.search(r"[A-Za-z_][A-Za-z0-9_]*", cleaned)
                         if match:
                             variables.append(match.group(0))
                         start = -1
                     index += 2
                     continue
-
                 index += 1
-
             return dedupe(variables)
 
         output_vars = extract_output_vars(template)
-
         try:
             from jinja2 import meta
             from jinja2.sandbox import SandboxedEnvironment
@@ -251,7 +232,6 @@ class PromptTemplateCreate(PromptTemplateBase):
         for variable in undeclared_vars:
             if variable not in merged:
                 merged.append(variable)
-
         return dedupe(merged)
 
 
@@ -259,11 +239,6 @@ class PromptTemplateUpdate(BaseModel):
     """Model for updating an existing prompt template (partial update)."""
 
     model_config = ConfigDict(extra="forbid")
-
-    @field_validator("variables", mode="before")
-    @classmethod
-    def validate_author_variables(cls, v: Any) -> list[str]:
-        return _normalize_prompt_variables(v)
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     prompt_type: PromptType | None = None
@@ -273,25 +248,26 @@ class PromptTemplateUpdate(BaseModel):
     is_active: bool | None = None
     is_default: bool | None = None
 
-    @field_validator("variables", mode="before")
+    @field_validator("template")
     @classmethod
-    def validate_variables_metadata(cls, value: Any) -> list[str]:
-        return _ensure_variables_are_list(value)
-
-    @model_validator(mode="after")
-    def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
-        """Re-extract variables if template is updated."""
-        if self.template is not None and self.variables is None:
-            self.variables = PromptTemplateCreate._extract_variables_from_template(self.template)
-        return self
+    def validate_template_syntax(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_jinja_template(value)
 
     @field_validator("variables", mode="before")
     @classmethod
-    def validate_control_plane_variables(cls, value: Any) -> list[str] | None:
-        """Control-plane writes must provide a list[str], never a dict/map."""
+    def validate_variables_metadata(cls, value: Any) -> list[str] | None:
         if value is None:
             return None
         return _normalize_variable_list(value, allow_json_string=False)
+
+    @model_validator(mode="after")
+    def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
+        """Re-extract variables if template is updated without explicit variables."""
+        if self.template is not None and self.variables is None:
+            self.variables = PromptTemplateCreate._extract_variables_from_template(self.template)
+        return self
 
 
 class PromptTemplate(PromptTemplateBase):
@@ -311,24 +287,24 @@ class PromptTemplate(PromptTemplateBase):
 
     @field_validator("variables", mode="before")
     @classmethod
-    def validate_variables(cls, v: Any) -> list[str]:
-        """Ensure variables is always a list of strings."""
-        return _normalize_variable_list(v, allow_json_string=True)
+    def validate_variables(cls, value: Any) -> list[str]:
+        return _normalize_variable_list(value, allow_json_string=True)
 
+    @field_validator("governance_status", mode="before")
+    @classmethod
+    def validate_governance_status(cls, value: Any) -> str:
+        if isinstance(value, str) and value.strip():
+            return value
+        return "valid"
 
-class PromptTemplateGovernanceIssue(BaseModel):
-    """Visible invalid historical prompt-template state."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    template_id: str
-    name: str
-    prompt_type: str
-    is_active: bool
-    is_default: bool
-    reason_codes: list[str]
-    disabled_by_migration: bool = False
-    action: str = "disable_and_review"
+    @field_validator("governance_issues", mode="before")
+    @classmethod
+    def validate_governance_issues(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value if str(item).strip()]
+        return []
 
 
 class PromptTemplateGovernanceReport(BaseModel):
@@ -336,35 +312,9 @@ class PromptTemplateGovernanceReport(BaseModel):
 
     generated_at: datetime
     mode: str
-    issues: list[PromptTemplateGovernanceIssue] = Field(default_factory=list)
+    issues: list[PromptTemplateGovernanceInvalidTemplate] = Field(default_factory=list)
     migrated_count: int = 0
-    audit_action: str = "prompt_template_invalid_migration"
-
-
-def _normalize_variable_list(value: Any, *, allow_json_string: bool) -> list[str]:
-    """Normalize variables while preserving invalid-history visibility.
-
-    Historical rows may still contain JSON-encoded list strings, which remain readable.
-    Dict/map variables are deliberately rejected so they can be disabled by governance
-    migration instead of being silently coerced to keys.
-    """
-    if value is None:
-        return []
-    if isinstance(value, str):
-        if not allow_json_string:
-            raise ValueError("variables must be a list of strings")
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return []
-        if not isinstance(parsed, list):
-            raise ValueError("variables must be a list of strings")
-        value = parsed
-    if not isinstance(value, list):
-        raise ValueError("variables must be a list of strings")
-    if not all(isinstance(item, str) and item.strip() for item in value):
-        raise ValueError("variables must contain non-empty strings only")
-    return list(value)
+    audit_action: str = "prompt_template.governance_migrate"
 
 
 class ScenarioPromptBase(BaseModel):

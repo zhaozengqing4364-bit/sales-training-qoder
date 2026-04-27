@@ -56,17 +56,15 @@ import {
     UserProgressResponse,
     PromptTemplate,
     PromptTemplateCreate,
-    PromptTemplateGovernanceAudit,
-    PromptTemplateGovernanceRemediation,
     PromptTemplateUpdate,
     PromptTemplateGovernanceRemediationResponse,
     PromptTemplateGovernanceStatus,
+    PromptTemplateOptions,
+    PromptTemplateQuarantineResult,
     ScenarioPrompt,
     ScenarioPromptCreate,
     PromptRenderRequest,
     PromptRenderResponse,
-    PromptTemplateGovernanceRemediationResult,
-    PromptTemplateGovernanceStatus,
     ComprehensiveReport,
     RealtimeEvaluationFeedback,
     ScenarioSummary,
@@ -3130,9 +3128,6 @@ export const api = {
             return apiFetch<PromptTemplateOptions>("/prompt-templates/options");
         },
 
-        getPromptTemplateGovernanceStatus: async () => {
-            return apiFetch<PromptTemplateGovernanceStatus>("/prompt-templates/governance-status");
-        },
 
         quarantineInvalidPromptTemplates: async (reason: string) => {
             const query = new URLSearchParams({ reason }).toString();
@@ -3165,16 +3160,6 @@ export const api = {
             });
         },
 
-        getPromptTemplateGovernanceAudit: async () => {
-            return apiFetch<PromptTemplateGovernanceAudit>("/prompt-templates/governance/audit");
-        },
-
-        remediatePromptTemplateGovernance: async (data: { reason: string; dry_run?: boolean }) => {
-            return apiFetch<PromptTemplateGovernanceRemediation>("/prompt-templates/governance/remediate", {
-                method: "POST",
-                body: JSON.stringify(data),
-            });
-        },
 
         updatePromptTemplate: async (id: string, data: PromptTemplateUpdate) => {
             const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
@@ -3222,16 +3207,6 @@ export const api = {
             });
         },
 
-        getPromptTemplateGovernanceStatus: async () => {
-            return apiFetch<PromptTemplateGovernanceStatus>("/prompt-templates/governance/status");
-        },
-
-        remediateInvalidPromptTemplates: async (reason: string) => {
-            const query = new URLSearchParams({ reason });
-            return apiFetch<PromptTemplateGovernanceRemediationResult>(`/prompt-templates/governance/remediate-invalid?${query.toString()}`, {
-                method: "POST",
-            });
-        },
 
         getPromptTemplateForScenario: async (scenarioType: string, promptType: string, scenarioId?: string) => {
             const queryParams = new URLSearchParams({ prompt_type: promptType });

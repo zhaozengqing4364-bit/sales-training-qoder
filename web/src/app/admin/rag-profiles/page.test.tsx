@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import RagProfilesPage from "./page";
@@ -172,8 +171,6 @@ describe("RagProfilesPage", () => {
         expect(screen.getByText(/请检查管理员权限、后端/)).toBeTruthy();
         expect(screen.queryByText("暂无 RAG 配置")).toBeNull();
     });
-});
-
     it("distinguishes empty state from API failure and links the migration path", async () => {
         listRagProfilesMock.mockResolvedValueOnce([]);
 

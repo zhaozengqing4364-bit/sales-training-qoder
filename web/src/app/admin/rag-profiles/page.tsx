@@ -67,7 +67,7 @@ const DEFAULT_CROSS_ENCODER = {
 
 export default function RagProfilesPage() {
     const router = useRouter();
-    const toast = useToast();
+    const { error: showError, success: showSuccess } = useToast();
     const [profiles, setProfiles] = useState<RagProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -98,11 +98,11 @@ export default function RagProfilesPage() {
             const message = error instanceof Error ? error.message : "无法获取 RAG 配置列表";
             setLoadError(message);
             setProfiles([]);
-            toast.error(`加载失败：${message}`);
+            showError(`加载失败：${message}`);
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [showError]);
 
     useEffect(() => {
         void loadProfiles();
@@ -147,7 +147,7 @@ export default function RagProfilesPage() {
 
     const handleSave = useCallback(async () => {
         if (!formName.trim()) {
-            toast.error("名称必填");
+            showError("名称必填");
             return;
         }
         setSaving(true);
@@ -175,20 +175,20 @@ export default function RagProfilesPage() {
 
             if (editingId) {
                 await api.admin.updateRagProfile(editingId, payload);
-                toast.success("更新成功");
+                showSuccess("更新成功");
             } else {
                 await api.admin.createRagProfile(payload as CreateRagProfileRequest);
-                toast.success("创建成功");
+                showSuccess("创建成功");
             }
             resetForm();
             await loadProfiles();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "操作失败";
-            toast.error(`保存失败: ${msg}`);
+            showError(`保存失败: ${msg}`);
         } finally {
             setSaving(false);
         }
-    }, [editingId, formName, formDescription, formChunking, formSemanticCache, formCrossEncoder, loadProfiles, resetForm, toast]);
+    }, [editingId, formName, formDescription, formChunking, formSemanticCache, formCrossEncoder, loadProfiles, resetForm, showError, showSuccess]);
 
     const handleDelete = useCallback(async () => {
         if (!deleteTarget) return;
@@ -196,26 +196,26 @@ export default function RagProfilesPage() {
         setIsDeleting(true);
         try {
             await api.admin.deleteRagProfile(deleteTarget.id);
-            toast.success("删除成功");
+            showSuccess("删除成功");
             setDeleteTarget(null);
             await loadProfiles();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "删除失败";
-            toast.error(`删除失败: ${msg}`);
+            showError(`删除失败: ${msg}`);
         } finally {
             setIsDeleting(false);
         }
-    }, [deleteTarget, loadProfiles, toast]);
+    }, [deleteTarget, loadProfiles, showError, showSuccess]);
 
     const handleSetDefault = useCallback(async (id: string) => {
         try {
             await api.admin.setRagProfileDefault(id);
-            toast.success("已设为默认");
+            showSuccess("已设为默认");
             await loadProfiles();
         } catch {
-            toast.error("操作失败");
+            showError("操作失败");
         }
-    }, [loadProfiles, toast]);
+    }, [loadProfiles, showError, showSuccess]);
 
     // ── Render ──
 
@@ -296,8 +296,12 @@ export default function RagProfilesPage() {
                 <GlassCard className="p-10 text-center border border-red-100 bg-red-50/70">
                     <AlertTriangle className="w-10 h-10 mx-auto text-red-400 mb-3" />
                     <p className="font-medium text-red-800">RAG 配置加载失败</p>
+                    <p className="mt-1 text-sm font-medium text-red-800">RAG 配置接口加载失败</p>
                     <p className="mt-2 text-sm text-red-700">
-                        当前无法确认列表、权限或迁移状态：{loadError}
+                        请检查管理员权限、后端服务状态或检索策略迁移配置。
+                    </p>
+                    <p className="mt-1 text-sm text-red-700">
+                        {loadError}
                     </p>
                     <div className="mt-4 flex justify-center gap-2">
                         <Button variant="outline" size="sm" onClick={loadProfiles}>
@@ -318,12 +322,9 @@ export default function RagProfilesPage() {
                     <Button
                         size="sm"
                         className="mt-4"
-                        onClick={() => {
-                            resetForm();
-                            setShowCreateForm(true);
-                        }}
+                        onClick={() => router.push("/admin/retrieval-strategies")}
                     >
-                        创建第一个配置
+                        前往检索策略
                     </Button>
                 </GlassCard>
             ) : (
