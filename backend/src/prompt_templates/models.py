@@ -133,8 +133,9 @@ class PromptTemplateCreate(PromptTemplateBase):
 
     @field_validator("variables", mode="before")
     @classmethod
-    def validate_author_variables(cls, v: Any) -> list[str]:
-        return _normalize_prompt_variables(v)
+    def validate_control_plane_variables(cls, value: Any) -> list[str]:
+        """Control-plane writes must provide a list[str], never a dict/map."""
+        return _normalize_variable_list(value, allow_json_string=False)
 
     @model_validator(mode="after")
     def extract_variables(self) -> PromptTemplateCreate:
@@ -275,8 +276,59 @@ class PromptTemplate(PromptTemplateBase):
     @field_validator("variables", mode="before")
     @classmethod
     def validate_variables(cls, v: Any) -> list[str]:
-        """Ensure variables is a visible, valid list of strings."""
-        return _ensure_variables_are_list(v)
+        """Ensure variables is always a list of strings."""
+        return _normalize_variable_list(v, allow_json_string=True)
+
+
+class PromptTemplateGovernanceIssue(BaseModel):
+    """Visible invalid historical prompt-template state."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    template_id: str
+    name: str
+    prompt_type: str
+    is_active: bool
+    is_default: bool
+    reason_codes: list[str]
+    disabled_by_migration: bool = False
+    action: str = "disable_and_review"
+
+
+class PromptTemplateGovernanceReport(BaseModel):
+    """Invalid prompt-template governance report."""
+
+    generated_at: datetime
+    mode: str
+    issues: list[PromptTemplateGovernanceIssue] = Field(default_factory=list)
+    migrated_count: int = 0
+    audit_action: str = "prompt_template_invalid_migration"
+
+
+def _normalize_variable_list(value: Any, *, allow_json_string: bool) -> list[str]:
+    """Normalize variables while preserving invalid-history visibility.
+
+    Historical rows may still contain JSON-encoded list strings, which remain readable.
+    Dict/map variables are deliberately rejected so they can be disabled by governance
+    migration instead of being silently coerced to keys.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        if not allow_json_string:
+            raise ValueError("variables must be a list of strings")
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(parsed, list):
+            raise ValueError("variables must be a list of strings")
+        value = parsed
+    if not isinstance(value, list):
+        raise ValueError("variables must be a list of strings")
+    if not all(isinstance(item, str) and item.strip() for item in value):
+        raise ValueError("variables must contain non-empty strings only")
+    return list(value)
 
 
 class ScenarioPromptBase(BaseModel):
