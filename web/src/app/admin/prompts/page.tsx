@@ -86,6 +86,7 @@ export default function AdminPromptsPage() {
   const [scenarioPrompts, setScenarioPrompts] = useState<ScenarioPrompt[]>([]);
   const [governanceStatus, setGovernanceStatus] = useState<PromptTemplateGovernanceStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<PromptType | "all">("all");
   const [showInactive, setShowInactive] = useState(false);
@@ -104,6 +105,7 @@ export default function AdminPromptsPage() {
 
   const loadData = async () => {
     setLoading(true);
+    setLoadWarnings([]);
     try {
       const [templatesResult, scenarioPromptsResult, userResult, governanceResult] = await Promise.allSettled([
         api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
@@ -111,32 +113,39 @@ export default function AdminPromptsPage() {
         api.user.getMe(),
         api.admin.getPromptTemplateGovernanceStatus(),
       ]);
+      const warnings: string[] = [];
 
       if (templatesResult.status === "fulfilled") {
         setTemplates(templatesResult.value);
       } else {
         setTemplates([]);
+        warnings.push(`模板列表加载失败：${getApiErrorMessage(templatesResult.reason)}`);
       }
 
       if (scenarioPromptsResult.status === "fulfilled") {
         setScenarioPrompts(scenarioPromptsResult.value);
       } else {
         setScenarioPrompts([]);
+        warnings.push(`绑定关系加载失败：${getApiErrorMessage(scenarioPromptsResult.reason)}`);
       }
 
       if (userResult.status === "fulfilled") {
         setUserRole(String(userResult.value.role || "user"));
       } else {
         setUserRole("user");
+        warnings.push(`当前用户权限加载失败：${getApiErrorMessage(userResult.reason)}；已按只读处理。`);
       }
 
       if (governanceResult.status === "fulfilled") {
         setGovernanceStatus(governanceResult.value);
       } else {
         setGovernanceStatus(null);
+        warnings.push(`治理状态加载失败：${getApiErrorMessage(governanceResult.reason)}`);
       }
+      setLoadWarnings(warnings);
     } catch (error) {
       debug.error("Failed to load prompt admin data", error);
+      setLoadWarnings(["提示词数据加载失败：请检查权限、后端服务与审计数据源后重试。"]);
       toast.error("提示词数据加载失败");
     } finally {
       setLoading(false);
@@ -366,6 +375,25 @@ export default function AdminPromptsPage() {
           ) : null}
         </div>
       </div>
+
+      {loadWarnings.length > 0 ? (
+        <GlassCard className="border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3 text-amber-900">
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
+            <div>
+              <p className="font-semibold">部分提示词治理数据加载失败</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                {loadWarnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-amber-800">
+                页面保留已加载数据；涉及写操作仍需管理员权限，失败项修复后可点击刷新重试。
+              </p>
+            </div>
+          </div>
+        </GlassCard>
+      ) : null}
 
       <GlassCard className="p-4 space-y-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
