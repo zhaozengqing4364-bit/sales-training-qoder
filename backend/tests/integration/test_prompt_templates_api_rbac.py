@@ -241,7 +241,9 @@ class TestPromptTemplateRBAC:
 
 
 class TestPromptTemplateGovernance:
-    async def test_admin_can_create_realtime_scoring_template(self, async_client, auth_headers):
+    async def test_admin_can_create_realtime_scoring_template(
+        self, async_client, auth_headers
+    ):
         response = await async_client.post(
             "/api/v1/prompt-templates",
             headers=auth_headers["admin"],
@@ -249,21 +251,25 @@ class TestPromptTemplateGovernance:
                 "name": "实时评分模板",
                 "prompt_type": "realtime_scoring",
                 "category": "sales",
-                "template": "请根据分数 {{ score }} 输出反馈",
-                "variables": ["score"],
+                "template": "请根据 {{ transcript }} 输出实时评分",
+                "variables": ["transcript"],
             },
         )
 
         assert response.status_code == 201
-        assert response.json()["prompt_type"] == "realtime_scoring"
+        body = response.json()
+        assert body["prompt_type"] == "realtime_scoring"
+        assert body["governance_status"] == "valid"
 
-    async def test_admin_create_rejects_object_variables_with_400(self, async_client, auth_headers):
+    async def test_admin_create_rejects_variables_object_with_400(
+        self, async_client, auth_headers
+    ):
         response = await async_client.post(
             "/api/v1/prompt-templates",
             headers=auth_headers["admin"],
             json={
                 "name": "非法变量模板",
-                "prompt_type": "realtime_scoring",
+                "prompt_type": "scoring",
                 "category": "sales",
                 "template": "Score {{ score }}",
                 "variables": {"score": "number"},
@@ -273,47 +279,79 @@ class TestPromptTemplateGovernance:
         assert response.status_code == 400
         body = response.json()
         assert body["success"] is False
-        assert body["error"] == "[PROMPT_TEMPLATE_VALIDATION_FAILED]"
-        assert "variables" in body["message"]
+        assert body["error"] == "[PROMPT_DATA_INVALID]"
 
-    async def test_governance_status_and_remediation_disable_invalid_history(
+    async def test_admin_can_see_migrate_audit_and_rollback_historical_variables_object(
         self, async_client, auth_headers, db_session
     ):
-        from common.db.models import PromptTemplate as PromptTemplateDB
+        from sqlalchemy import select
 
-        invalid = PromptTemplateDB(
-            id="123e4567-e89b-12d3-a456-426614174001",
-            name="legacy invalid scoring",
-            prompt_type="legacy_illegal_type",
+        from common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import SystemLog
+
+        legacy = PromptTemplateDB(
+            id="123e4567-e89b-12d3-a456-426614174999",
+            name="历史变量对象模板",
+            prompt_type="scoring",
             category="sales",
-            template="Score {{ score }}",
-            variables={"score": "number"},
+            template="Score {{ score }} for {{ stage }}",
+            variables={"score": "number", "stage": "string"},
             is_active=True,
             is_default=True,
             is_system=False,
         )
-        db_session.add(invalid)
+        db_session.add(legacy)
         await db_session.commit()
 
-        status_response = await async_client.get(
-            "/api/v1/prompt-templates/governance/status",
+        list_response = await async_client.get(
+            "/api/v1/prompt-templates?is_active=true",
             headers=auth_headers["admin"],
         )
-        assert status_response.status_code == 200
-        status_body = status_response.json()
-        assert status_body["invalid_count"] == 1
-        assert status_body["invalid_templates"][0]["runtime_status"] == "disabled_required"
-        assert "realtime_scoring" in status_body["allowed_prompt_types"]
+        assert list_response.status_code == 200
+        listed = [item for item in list_response.json() if item["id"] == legacy.id]
+        assert listed
+        assert listed[0]["variables"] == ["score", "stage"]
+        assert listed[0]["governance_status"] == "needs_review"
+        assert "variables_object_migratable" in listed[0]["governance_issues"]
 
-        remediation_response = await async_client.post(
-            "/api/v1/prompt-templates/governance/remediate-invalid",
+        migrate_response = await async_client.post(
+            "/api/v1/prompt-templates/governance/migrate-invalid",
             headers=auth_headers["admin"],
-            json={"reason": "close A-009 invalid historical template"},
+            json={"reason": "test governance migration", "dry_run": False},
         )
-        assert remediation_response.status_code == 200
-        remediation_body = remediation_response.json()
-        assert remediation_body["remediated_count"] == 1
+        assert migrate_response.status_code == 200
+        migrate_body = migrate_response.json()
+        assert migrate_body["success"] is True
+        assert migrate_body["data"]["remediated"] == 1
+        assert migrate_body["data"]["audit_action"] == "prompt_template.governance_migrate"
 
-        await db_session.refresh(invalid)
-        assert invalid.is_active is False
-        assert invalid.is_default is False
+        await db_session.refresh(legacy)
+        assert legacy.variables == ["score", "stage"]
+        assert legacy.is_active is True
+
+        audit_rows = (
+            await db_session.execute(
+                select(SystemLog).where(SystemLog.action == "prompt_template.governance_migrate")
+            )
+        ).scalars().all()
+        assert len(audit_rows) == 1
+        assert "test governance migration" in (audit_rows[0].details or "")
+
+        rollback_response = await async_client.post(
+            f"/api/v1/prompt-templates/governance/{legacy.id}/rollback",
+            headers=auth_headers["admin"],
+            json={"reason": "test governance rollback"},
+        )
+        assert rollback_response.status_code == 200
+        rollback_body = rollback_response.json()
+        assert rollback_body["governance_status"] == "needs_review"
+        assert rollback_body["variables"] == ["score", "stage"]
+
+        await db_session.refresh(legacy)
+        assert legacy.variables == {"score": "number", "stage": "string"}
+        rollback_audits = (
+            await db_session.execute(
+                select(SystemLog).where(SystemLog.action == "prompt_template.governance_rollback")
+            )
+        ).scalars().all()
+        assert len(rollback_audits) == 1
