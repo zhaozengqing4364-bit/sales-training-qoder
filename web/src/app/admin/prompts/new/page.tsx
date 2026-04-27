@@ -22,6 +22,7 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
     scoring: "评分",
     realtime_scoring: "实时评分",
     stage: "阶段",
+    realtime_scoring: "实时评分",
     fuzzy_detection: "模糊检测",
     realtime_scoring: "实时评分",
     interruption: "打断检测",
