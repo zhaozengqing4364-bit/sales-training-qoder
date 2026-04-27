@@ -56,9 +56,8 @@ import {
     UserProgressResponse,
     PromptTemplate,
     PromptTemplateCreate,
-    PromptTemplateGovernanceStatus,
-    PromptTemplateOptions,
-    PromptTemplateQuarantineResult,
+    PromptTemplateGovernanceAudit,
+    PromptTemplateGovernanceRemediation,
     PromptTemplateUpdate,
     PromptTemplateGovernanceRemediationResponse,
     PromptTemplateGovernanceStatus,
@@ -3145,6 +3144,17 @@ export const api = {
 
         createPromptTemplate: async (data: PromptTemplateCreate) => {
             return apiFetch<PromptTemplate>("/prompt-templates", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        getPromptTemplateGovernanceAudit: async () => {
+            return apiFetch<PromptTemplateGovernanceAudit>("/prompt-templates/governance/audit");
+        },
+
+        remediatePromptTemplateGovernance: async (data: { reason: string; dry_run?: boolean }) => {
+            return apiFetch<PromptTemplateGovernanceRemediation>("/prompt-templates/governance/remediate", {
                 method: "POST",
                 body: JSON.stringify(data),
             });

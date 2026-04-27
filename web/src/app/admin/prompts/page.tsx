@@ -10,7 +10,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { PromptTemplate, PromptTemplateGovernanceStatus, PromptType, ScenarioPrompt } from "@/lib/api/types";
+import { PromptTemplate, PromptTemplateGovernanceAudit, PromptType, ScenarioPrompt } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
@@ -83,7 +83,7 @@ export default function AdminPromptsPage() {
 
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [scenarioPrompts, setScenarioPrompts] = useState<ScenarioPrompt[]>([]);
-  const [governanceStatus, setGovernanceStatus] = useState<PromptTemplateGovernanceStatus | null>(null);
+  const [governanceAudit, setGovernanceAudit] = useState<PromptTemplateGovernanceAudit | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<PromptType | "all">("all");
@@ -109,7 +109,7 @@ export default function AdminPromptsPage() {
         api.admin.getScenarioPrompts(),
         api.admin.getPromptTemplateGovernanceStatus(),
         api.user.getMe(),
-        api.admin.getPromptTemplateGovernanceStatus(),
+        api.admin.getPromptTemplateGovernanceAudit(),
       ]);
 
       if (templatesResult.status === "fulfilled") {
@@ -137,9 +137,9 @@ export default function AdminPromptsPage() {
       }
 
       if (governanceResult.status === "fulfilled") {
-        setGovernanceStatus(governanceResult.value);
+        setGovernanceAudit(governanceResult.value);
       } else {
-        setGovernanceStatus(null);
+        setGovernanceAudit(null);
       }
     } catch (error) {
       debug.error("Failed to load prompt admin data", error);
@@ -311,7 +311,7 @@ export default function AdminPromptsPage() {
     }
   };
 
-  const handleRemediateInvalidTemplates = async () => {
+  const handleRemediateGovernance = async () => {
     if (!canOperate) {
       toast.error("当前角色无操作权限");
       return;
@@ -319,8 +319,10 @@ export default function AdminPromptsPage() {
 
     setIsOperating(true);
     try {
-      const result = await api.admin.remediateInvalidPromptTemplates("A-009 prompt template governance remediation");
-      await refreshAfterMutation(`已停用 ${result.remediated_count} 个非法历史模板`);
+      const result = await api.admin.remediatePromptTemplateGovernance({
+        reason: "admin prompt governance remediation",
+      });
+      await refreshAfterMutation(`已治理 ${result.remediated_count} 条历史模板`);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -377,62 +379,40 @@ export default function AdminPromptsPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
           销售场景仅允许绑定评估/报告/实时评分类模板。业务角色提示词与知识库策略请在角色中心配置。
         </div>
-        <div className={cn(
-          "rounded-xl border px-3 py-3 text-xs",
-          governanceStatus?.invalid_count
-            ? "border-red-200 bg-red-50 text-red-700"
-            : "border-emerald-200 bg-emerald-50 text-emerald-700"
-        )}>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="font-semibold">提示词治理状态</div>
-              <div className="mt-1">
-                {governanceStatus
-                  ? `允许类型 ${governanceStatus.allowed_prompt_types.join(" / ")}；非法历史模板 ${governanceStatus.invalid_count} 个；变量 schema：${governanceStatus.policy.variables_schema}`
-                  : "治理状态暂不可用，请刷新或查看后端日志。"}
+        {governanceAudit ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-700">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <div>
+                <span className="font-semibold">历史模板治理：</span>
+                共 {governanceAudit.total} 条，待处理 {governanceAudit.invalid_count} 条。
+                {governanceAudit.invalid_count > 0 ? (
+                  <span className="ml-1 text-amber-700">
+                    管理员可迁移 variables 字典并禁用无法信任的历史模板，审计日志可回滚。
+                  </span>
+                ) : (
+                  <span className="ml-1 text-emerald-700">当前无非法历史模板。</span>
+                )}
               </div>
-            </div>
-            {governanceStatus?.invalid_count ? (
               <Button
                 variant="outline"
                 size="sm"
-                disabled={!canOperate || isOperating}
-                onClick={() => void handleRemediateInvalidTemplates()}
+                disabled={!canOperate || isOperating || governanceAudit.invalid_count === 0}
+                onClick={() => void handleRemediateGovernance()}
               >
-                停用非法历史模板
+                治理历史模板
               </Button>
+            </div>
+            {governanceAudit.items.length ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {governanceAudit.items.slice(0, 4).map((item) => (
+                  <Badge key={item.template_id} className="bg-amber-100 text-amber-800">
+                    {item.name || item.template_id.slice(0, 8)}：{item.issues.join(" / ")}
+                  </Badge>
+                ))}
+              </div>
             ) : null}
           </div>
-        </div>
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-xs text-blue-800">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="font-semibold">提示词治理状态</div>
-              <div className="mt-1 text-blue-700">
-                允许类型：{governanceStatus?.options.allowed_prompt_types.join("、") || "加载中"}。
-                非法历史模板 {governanceStatus?.invalid_count ?? 0} 个，其中启用中 {governanceStatus?.active_invalid_count ?? 0} 个。
-              </div>
-              <div className="mt-1 text-blue-700">审计：system_logs · 回滚：修正类型/变量/模板后重新启用。</div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!canOperate || isOperating || !governanceStatus?.active_invalid_count}
-              onClick={() => void handleRemediateInvalidTemplates()}
-            >
-              停用非法历史模板
-            </Button>
-          </div>
-          {governanceStatus?.invalid_templates.length ? (
-            <div className="mt-2 space-y-1 text-blue-700">
-              {governanceStatus.invalid_templates.slice(0, 3).map((item) => (
-                <div key={item.id}>
-                  {item.name || item.id} · {item.prompt_type} · {item.validation_errors.join("；")}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        ) : null}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-2 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
