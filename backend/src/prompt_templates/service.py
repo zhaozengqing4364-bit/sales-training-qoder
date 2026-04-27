@@ -273,10 +273,9 @@ class PromptTemplateService:
         before: dict[str, Any] | None,
         after: dict[str, Any] | None,
         reason: str,
-        status: str = "success",
-    ) -> None:
-        if actor is None:
-            return
+        limit: int = 1000,
+    ) -> dict[str, Any]:
+        from common.db.models import PromptTemplate as PromptTemplateDB
         from common.db.models import SystemLog
 
         result = await self.db.execute(select(PromptTemplateDB))
