@@ -3148,6 +3148,21 @@ export const api = {
             });
         },
 
+        migrateInvalidPromptTemplates: async (data: { reason: string; dry_run?: boolean }) => {
+            return apiFetch<{ success: boolean; data: { dry_run: boolean; checked: number; remediated: number; items: Array<Record<string, unknown>>; audit_action?: string | null } }>("/prompt-templates/governance/migrate-invalid", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        rollbackPromptTemplateGovernance: async (id: string, data: { reason: string }) => {
+            const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
+            return apiFetch<PromptTemplate>(`/prompt-templates/governance/${normalizedId}/rollback`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
         renderPromptTemplate: async (id: string, variables: Record<string, unknown>) => {
             const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
             const request: PromptRenderRequest = { template_id: normalizedId, variables };
