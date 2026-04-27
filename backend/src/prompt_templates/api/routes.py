@@ -16,10 +16,12 @@ Endpoints:
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +36,7 @@ from prompt_templates.models import (
     PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
+    PromptTemplateGovernanceReport,
     PromptTemplateUpdate,
     PromptType,
     ScenarioPrompt,
@@ -219,7 +222,7 @@ async def get_template_for_scenario(
 
 @router.post("", response_model=PromptTemplate, status_code=201)
 async def create_prompt_template(
-    data: PromptTemplateCreate,
+    data_payload: dict[str, Any] = Body(...),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -229,7 +232,15 @@ async def create_prompt_template(
         return admin_error
 
     try:
+        data = PromptTemplateCreate.model_validate(data_payload)
         return await service.create_template(data)
+    except ValidationError as exc:
+        return _prompt_error_response(
+            status_code=400,
+            error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
+            message="提示词模板校验失败：类型、正文和变量必须符合治理规则。",
+            exc=exc,
+        )
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -242,6 +253,49 @@ async def create_prompt_template(
             status_code=400,
             error_code="[PROMPT_DATA_INVALID]",
             message="提示词数据无效，请检查后重试。",
+            exc=exc,
+        )
+
+
+@router.get("/governance/invalid", response_model=PromptTemplateGovernanceReport)
+async def list_invalid_prompt_template_governance(
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> PromptTemplateGovernanceReport:
+    """List invalid historical prompt templates so they are visible to admins."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        return await service.list_invalid_template_governance()
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.post("/governance/migrate-invalid", response_model=PromptTemplateGovernanceReport)
+async def migrate_invalid_prompt_templates(
+    reason: str = Body(..., embed=True, min_length=1),
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> PromptTemplateGovernanceReport:
+    """Disable invalid historical prompt templates and record an audit log."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        return await service.migrate_invalid_templates(actor=current_user, reason=reason)
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
 
@@ -290,7 +344,7 @@ async def get_prompt_template(
 @router.put("/{template_id}", response_model=PromptTemplate)
 async def update_prompt_template(
     template_id: str,
-    data: PromptTemplateUpdate,
+    data_payload: dict[str, Any] = Body(...),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -305,6 +359,7 @@ async def update_prompt_template(
     assert template_uuid is not None
 
     try:
+        data = PromptTemplateUpdate.model_validate(data_payload)
         template = await service.update_template(template_uuid, data)
         if not template:
             return _prompt_error_response(
@@ -313,6 +368,13 @@ async def update_prompt_template(
                 message="模板不存在",
             )
         return template
+    except ValidationError as exc:
+        return _prompt_error_response(
+            status_code=400,
+            error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
+            message="提示词模板校验失败：类型、正文和变量必须符合治理规则。",
+            exc=exc,
+        )
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,

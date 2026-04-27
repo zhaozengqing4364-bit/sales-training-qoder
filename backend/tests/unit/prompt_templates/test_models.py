@@ -41,6 +41,7 @@ class TestPromptTypeEnum:
             "scoring",
             "stage",
             "fuzzy_detection",
+            "realtime_scoring",
             "interruption",
             "tracking",
             "welcome",
@@ -54,6 +55,7 @@ class TestPromptTypeEnum:
         """Should compare with string values."""
         assert PromptType.SUMMARY == "summary"
         assert PromptType.SYSTEM == "system"
+        assert PromptType.REALTIME_SCORING == "realtime_scoring"
 
 
 class TestPromptTemplateCreate:
@@ -176,6 +178,16 @@ class TestPromptTemplateCreate:
                 unknown_field="value",
             )
 
+    def test_create_rejects_variables_dict(self):
+        """Control-plane writes must not silently coerce dict variables."""
+        with pytest.raises(ValidationError):
+            PromptTemplateCreate(
+                name="Invalid vars",
+                prompt_type=PromptType.REALTIME_SCORING,
+                template="Score {{ score }}",
+                variables={"score": "number"},
+            )
+
 
 class TestPromptTemplateUpdate:
     """Test PromptTemplateUpdate model."""
@@ -220,6 +232,11 @@ class TestPromptTemplateUpdate:
             variables=["custom"],
         )
         assert update.variables == ["custom"]
+
+    def test_update_rejects_variables_dict(self):
+        """Updates must reject historical dict-shaped variables before persistence."""
+        with pytest.raises(ValidationError):
+            PromptTemplateUpdate(variables={"score": "number"})
 
 
 class TestPromptTemplate:
@@ -299,6 +316,23 @@ class TestPromptTemplate:
             updated_at=now,
         )
         assert template.variables == []
+
+    def test_template_rejects_dict_variables_for_governance_visibility(self):
+        """Historical dict variables are invalid so service migration can disable them."""
+        now = datetime.now(UTC)
+        with pytest.raises(ValidationError):
+            PromptTemplate(
+                id=uuid4(),
+                name="Invalid Historical",
+                prompt_type=PromptType.SCORING,
+                template="Hello",
+                variables={"score": "number"},
+                is_active=True,
+                is_default=False,
+                is_system=False,
+                created_at=now,
+                updated_at=now,
+            )
 
 
 class TestScenarioPromptCreate:

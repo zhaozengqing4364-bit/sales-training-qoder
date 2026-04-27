@@ -12,6 +12,7 @@ Features:
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -23,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.ai.config_manager import get_config_manager
 from common.ai.models import ModelType
 from common.error_handling.result import Result
-from common.monitoring.logger import get_logger
+from common.monitoring.logger import get_logger, get_trace_id
 from prompt_templates.compiled_contract import (
     PROMPT_CONTRACT_VERSION,
     CompiledPromptContract,
@@ -36,6 +37,8 @@ from prompt_templates.models import (
     PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
+    PromptTemplateGovernanceIssue,
+    PromptTemplateGovernanceReport,
     PromptTemplateUpdate,
     PromptType,
     ScenarioPrompt,
@@ -71,11 +74,155 @@ class PromptTemplateService:
             return PromptTemplate.model_validate(db_template)
         except ValidationError as exc:
             logger.warning(
-                "Skipping invalid prompt template row",
+                "Invalid prompt template row requires governance migration",
                 template_id=getattr(db_template, "id", None),
+                prompt_type=getattr(db_template, "prompt_type", None),
+                is_active=getattr(db_template, "is_active", None),
                 error=str(exc),
             )
             return None
+
+    @staticmethod
+    def _governance_issue_for_row(db_template: Any) -> PromptTemplateGovernanceIssue | None:
+        reason_codes: list[str] = []
+
+        try:
+            PromptType(str(getattr(db_template, "prompt_type", "")))
+        except ValueError:
+            reason_codes.append("invalid_prompt_type")
+
+        variables = getattr(db_template, "variables", None)
+        if isinstance(variables, dict):
+            reason_codes.append("variables_must_be_list_strings")
+        elif isinstance(variables, list):
+            if not all(isinstance(item, str) and item.strip() for item in variables):
+                reason_codes.append("variables_must_be_list_strings")
+        elif isinstance(variables, str):
+            try:
+                parsed = json.loads(variables)
+            except json.JSONDecodeError:
+                parsed = []
+            if not isinstance(parsed, list) or not all(
+                isinstance(item, str) and item.strip() for item in parsed
+            ):
+                reason_codes.append("variables_must_be_list_strings")
+        elif variables is not None:
+            reason_codes.append("variables_must_be_list_strings")
+
+        if not str(getattr(db_template, "template", "") or "").strip():
+            reason_codes.append("template_empty")
+
+        if not reason_codes:
+            return None
+
+        return PromptTemplateGovernanceIssue(
+            template_id=str(getattr(db_template, "id", "")),
+            name=str(getattr(db_template, "name", "") or "(unnamed)"),
+            prompt_type=str(getattr(db_template, "prompt_type", "") or ""),
+            is_active=bool(getattr(db_template, "is_active", False)),
+            is_default=bool(getattr(db_template, "is_default", False)),
+            reason_codes=reason_codes,
+            disabled_by_migration=False,
+        )
+
+    async def list_invalid_template_governance(self) -> PromptTemplateGovernanceReport:
+        """Return visible invalid historical prompt templates without mutating rows."""
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        result = await self.db.execute(select(PromptTemplateDB))
+        issues = [
+            issue
+            for item in result.scalars().all()
+            if (issue := self._governance_issue_for_row(item)) is not None
+        ]
+        return PromptTemplateGovernanceReport(
+            generated_at=datetime.now(UTC),
+            mode="report_only",
+            issues=issues,
+            migrated_count=0,
+        )
+
+    async def migrate_invalid_templates(
+        self,
+        *,
+        actor: Any,
+        reason: str,
+    ) -> PromptTemplateGovernanceReport:
+        """Disable invalid historical prompt templates and record an audit log.
+
+        This is intentionally conservative: valid `realtime_scoring` templates are now a
+        first-class prompt type, while rows with malformed variables/template/type are
+        made inactive/default=false so runtime lookup cannot silently select them.
+        """
+        from common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import SystemLog
+
+        result = await self.db.execute(select(PromptTemplateDB))
+        issues: list[PromptTemplateGovernanceIssue] = []
+        migrated_count = 0
+        now = datetime.now(UTC)
+
+        for row in result.scalars().all():
+            issue = self._governance_issue_for_row(row)
+            if issue is None:
+                continue
+
+            before = {
+                "id": str(row.id),
+                "prompt_type": row.prompt_type,
+                "variables": row.variables,
+                "is_active": row.is_active,
+                "is_default": row.is_default,
+                "reason_codes": issue.reason_codes,
+            }
+
+            if bool(row.is_active) or bool(row.is_default):
+                row.is_active = False
+                row.is_default = False
+                row.updated_at = now
+                migrated_count += 1
+                issue.disabled_by_migration = True
+
+            issues.append(issue)
+
+            self.db.add(
+                SystemLog(
+                    action="prompt_template_invalid_migration",
+                    user_id=str(getattr(actor, "user_id", "") or "") or None,
+                    user_identifier=str(
+                        getattr(actor, "email", None)
+                        or getattr(actor, "wechat_user_id", None)
+                        or getattr(actor, "user_id", None)
+                        or "system"
+                    ),
+                    status="warning",
+                    details=json.dumps(
+                        {
+                            "actor_id": str(getattr(actor, "user_id", "") or ""),
+                            "actor_role": str(getattr(actor, "role", "") or ""),
+                            "reason": reason,
+                            "trace_id": get_trace_id(),
+                            "before": before,
+                            "after": {
+                                "is_active": bool(row.is_active),
+                                "is_default": bool(row.is_default),
+                                "updated_at": now.isoformat(),
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            )
+
+        await self.db.commit()
+        await self.loader.invalidate_cache()
+
+        return PromptTemplateGovernanceReport(
+            generated_at=now,
+            mode="migrate_invalid",
+            issues=issues,
+            migrated_count=migrated_count,
+        )
 
     async def create_template(
         self,
