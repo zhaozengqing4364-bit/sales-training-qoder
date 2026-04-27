@@ -3126,6 +3126,22 @@ export const api = {
             return apiFetch<PromptTemplate[]>(`/prompt-templates${query}`);
         },
 
+        getPromptTemplateOptions: async () => {
+            return apiFetch<PromptTemplateOptions>("/prompt-templates/options");
+        },
+
+        getPromptTemplateGovernanceStatus: async () => {
+            return apiFetch<PromptTemplateGovernanceStatus>("/prompt-templates/governance-status");
+        },
+
+        quarantineInvalidPromptTemplates: async (reason: string) => {
+            const query = new URLSearchParams({ reason }).toString();
+            return apiFetch<PromptTemplateQuarantineResult>(
+                `/prompt-templates/governance/quarantine-invalid?${query}`,
+                { method: "POST" },
+            );
+        },
+
         getPromptTemplate: async (id: string) => {
             const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
             return apiFetch<PromptTemplate>(`/prompt-templates/${normalizedId}`);
