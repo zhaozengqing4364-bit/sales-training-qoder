@@ -249,6 +249,10 @@ describe("SupportRuntimePage", () => {
         expect(screen.getByText("sales · scoring · processing")).toBeTruthy();
         expect(screen.getByText("stuck_for_minutes: 35")).toBeTruthy();
         expect(screen.getByText(/SCORING_TIMEOUT/)).toBeTruthy();
+        expect(screen.getByText("可归因资产变更")).toBeTruthy();
+        expect(screen.getByText("知识库 · 产品知识库")).toBeTruthy();
+        expect(screen.getByText(/最近变更：刚刚更新/)).toBeTruthy();
+        expect(screen.getByText("影响：high · 健康：blocking · 变更后会话：2")).toBeTruthy();
         expect(screen.queryByText(/\[object Object\]/)).toBeNull();
         expect(screen.getByText(/下一步：检查评分任务队列/)).toBeTruthy();
     });

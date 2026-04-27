@@ -11,6 +11,7 @@ import { useAuthProtection } from "@/hooks/use-auth-protection";
 import { cn } from "@/lib/utils";
 import { getSupportRuntimeFaultAction } from "@/lib/support/runtime-fault-actions";
 import type {
+    LinkedAssetChangeReference,
     SupportRuntimeFaultItem,
     SupportRuntimeFaultSeverity,
     SupportRuntimeOverview,
@@ -42,11 +43,44 @@ function formatDiagnosticValue(value: unknown): string | null {
 
 function formatDiagnosticEntries(diagnostics: Record<string, unknown>): string[] {
     return Object.entries(diagnostics)
+        .filter(([key]) => key !== "linked_asset_changes")
         .map(([key, value]) => {
             const formatted = formatDiagnosticValue(value);
             return formatted ? `${key}: ${formatted}` : null;
         })
         .filter((entry): entry is string => Boolean(entry));
+}
+
+function LinkedAssetChangeList({ items }: { items: LinkedAssetChangeReference[] }) {
+    if (!items.length) {
+        return null;
+    }
+
+    return (
+        <div className="space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2">
+            <div className="text-xs font-bold text-indigo-900">可归因资产变更</div>
+            <div className="grid gap-2 md:grid-cols-2">
+                {items.map((asset) => (
+                    <a
+                        key={`${asset.asset_type}-${asset.asset_id}-${asset.latest_change_type}`}
+                        href={asset.admin_path}
+                        className="rounded-lg border border-indigo-100 bg-white/80 px-3 py-2 text-xs text-indigo-900 transition hover:border-indigo-300 hover:bg-white"
+                    >
+                        <div className="font-semibold">
+                            {asset.asset_label} · {asset.asset_name}
+                        </div>
+                        <div className="mt-1 text-indigo-700">
+                            最近变更：{asset.latest_change_label}
+                            {asset.last_changed_at ? ` · ${formatDateTime(asset.last_changed_at)}` : ""}
+                        </div>
+                        <div className="mt-1 text-indigo-600">
+                            影响：{asset.impact_level} · 健康：{asset.health_status} · 变更后会话：{asset.sessions_since_change}
+                        </div>
+                    </a>
+                ))}
+            </div>
+        </div>
+    );
 }
 
 function formatAnomalySummary(items: Array<{ kind: string; count: number }>): string {
@@ -346,6 +380,7 @@ export default function SupportRuntimeStatusPage() {
                     <ul className="divide-y divide-slate-100">
                         {faults.map((item, index) => {
                             const diagnostics = formatDiagnosticEntries(item.diagnostics || {});
+                            const linkedAssetChanges = item.diagnostics?.linked_asset_changes || [];
                             const rowKey = `${item.kind}-${item.session_id ?? item.detected_at ?? index}`;
 
                             return (
@@ -378,6 +413,8 @@ export default function SupportRuntimeStatusPage() {
                                                 </span>
                                                 <span>source: {item.source}</span>
                                             </div>
+
+                                            <LinkedAssetChangeList items={linkedAssetChanges} />
 
                                             {diagnostics.length ? (
                                                 <div className="flex flex-wrap gap-2 text-xs text-slate-600">
