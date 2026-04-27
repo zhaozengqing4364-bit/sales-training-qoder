@@ -64,7 +64,7 @@ describe("AdminLogsPage", () => {
                     ip_address: "203.0.*.*",
                     status: "failed",
                     created_at: "2026-04-13T12:00:00Z",
-                    details: null,
+                    details: { before: { role: "user" }, after: { role: "admin" } },
                     trace_id: null,
                     error_code: null,
                     phase: null,
@@ -106,6 +106,8 @@ describe("AdminLogsPage", () => {
         expect(screen.getByText("persist")).toBeTruthy();
         expect(screen.getByText("session-123")).toBeTruthy();
         expect(screen.getByText("user-456")).toBeTruthy();
+        expect(screen.getByText(/"before":/)).toBeTruthy();
+        expect(screen.queryByText("[object Object]")).toBeNull();
         expect(screen.getByText(/日志可见性策略：admin_support_redaction_v1/)).toBeTruthy();
         expect(screen.queryByText("error_code=USER_UPDATE_FAILED · phase=persist · session_id=session-123 · trace_id=trace-123")).toBeNull();
         expect(screen.queryByText("sensitive.user@example.com")).toBeNull();

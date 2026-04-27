@@ -96,8 +96,8 @@ export default function RagProfilesPage() {
             setProfiles(data ?? []);
         } catch (error) {
             const message = error instanceof Error ? error.message : "无法获取 RAG 配置列表";
-            setProfiles([]);
             setLoadError(message);
+            setProfiles([]);
             toast.error(`加载失败：${message}`);
         } finally {
             setLoading(false);
@@ -293,15 +293,20 @@ export default function RagProfilesPage() {
                     <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
                 </div>
             ) : loadError ? (
-                <GlassCard className="p-10 text-center border border-red-100 bg-red-50">
+                <GlassCard className="p-10 text-center border border-red-100 bg-red-50/70">
                     <AlertTriangle className="w-10 h-10 mx-auto text-red-400 mb-3" />
-                    <p className="font-semibold text-red-800">RAG 配置加载失败</p>
+                    <p className="font-medium text-red-800">RAG 配置加载失败</p>
                     <p className="mt-2 text-sm text-red-700">
-                        {loadError}。请检查权限、后端接口和检索策略服务状态。
+                        当前无法确认列表、权限或迁移状态：{loadError}
                     </p>
-                    <Button size="sm" className="mt-4" onClick={loadProfiles}>
-                        重试加载
-                    </Button>
+                    <div className="mt-4 flex justify-center gap-2">
+                        <Button variant="outline" size="sm" onClick={loadProfiles}>
+                            重试加载
+                        </Button>
+                        <Button size="sm" onClick={() => router.push("/admin/retrieval-strategies")}>
+                            前往检索策略页面
+                        </Button>
+                    </div>
                 </GlassCard>
             ) : profiles.length === 0 ? (
                 <GlassCard className="p-10 text-center">

@@ -129,6 +129,16 @@ describe("RagProfilesPage", () => {
         expect(pushMock).toHaveBeenCalledWith("/admin/retrieval-strategies");
     });
 
+    it("distinguishes API failure from an empty profile list", async () => {
+        listRagProfilesMock.mockRejectedValueOnce(new Error("backend unavailable"));
+
+        render(<RagProfilesPage />);
+
+        expect(await screen.findByText("RAG 配置加载失败")).toBeTruthy();
+        expect(screen.getByText(/backend unavailable/)).toBeTruthy();
+        expect(screen.queryByText("暂无 RAG 配置")).toBeNull();
+    });
+
     it("confirms destructive deletion through the shared dialog seam", async () => {
         deleteRagProfileMock.mockResolvedValue(undefined);
 
