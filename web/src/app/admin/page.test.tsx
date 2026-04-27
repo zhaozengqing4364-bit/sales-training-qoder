@@ -62,7 +62,7 @@ describe("AdminDashboardPage", () => {
         expect(screen.getByText("66.7%")).toBeTruthy();
         expect(screen.getByText("58.3%")).toBeTruthy();
         expect(screen.getAllByText("待接真实统计").length).toBeGreaterThanOrEqual(3);
-        expect(screen.getByText(/以下卡片当前只作为 manager\/admin truth surface inventory/)).toBeTruthy();
+        expect(screen.getByText(/以下卡片当前只作为 manager\/admin 待接治理面/)).toBeTruthy();
         expect(screen.getByText("当前真实管理入口")).toBeTruthy();
         expect(screen.getByText("直接进入当前已接真实 authority 的管理面，避免在首页展示未接通的表单、日志控制台或自动告警。"))
             .toBeTruthy();
