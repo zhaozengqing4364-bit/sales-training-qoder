@@ -30,6 +30,12 @@ type AuditRouteResult = {
   screenshotPath: string;
 };
 
+type DevLoginResult = {
+  ok: boolean;
+  status: number | null;
+  error: string | null;
+};
+
 const backendBaseUrl = (
   process.env.SMOKE_BACKEND_BASE_URL || "http://localhost:3444/api/v1"
 ).replace(/\/+$/, "");
@@ -122,13 +128,24 @@ function isIgnorableFailedRequest(request: Request): boolean {
   return url.includes("/_next/webpack-hmr") || url.endsWith("/favicon.ico");
 }
 
-async function loginWithDevEndpoint(context: BrowserContext): Promise<void> {
-  const response = await context.request.post(`${backendBaseUrl}/auth/dev-login`);
+async function loginWithDevEndpoint(context: BrowserContext): Promise<DevLoginResult> {
+  try {
+    const response = await context.request.post(`${backendBaseUrl}/auth/dev-login`, {
+      timeout: 10_000,
+    });
 
-  expect(
-    response.ok(),
-    `dev-login should succeed through APIRequestContext instead of page.evaluate from about:blank (status ${response.status()})`,
-  ).toBeTruthy();
+    return {
+      ok: response.ok(),
+      status: response.status(),
+      error: response.ok() ? null : `dev-login status ${response.status()}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function auditRoute(page: Page, route: AuditRoute): Promise<AuditRouteResult> {
@@ -210,14 +227,39 @@ function isCriticalRouteFailure(result: AuditRouteResult): boolean {
 test.describe("frontend audit routes", () => {
   test("captures structured route evidence and enforces P0 failure thresholds", async ({ context, page }) => {
     fs.mkdirSync(auditOutputDir, { recursive: true });
-    await loginWithDevEndpoint(context);
+    const reportPath = path.join(auditOutputDir, "frontend-audit-routes.json");
+    const devLogin = await loginWithDevEndpoint(context);
+    if (!devLogin.ok) {
+      fs.writeFileSync(
+        reportPath,
+        `${JSON.stringify(
+          {
+            generated_at: new Date().toISOString(),
+            environment: {
+              status: "ENV_BLOCKED",
+              backendBaseUrl,
+              webBaseUrl: test.info().project.use.baseURL,
+              devLogin,
+              retry: "cd web && SMOKE_REUSE_EXISTING_STACK=1 PLAYWRIGHT_SKIP_BROWSER_INSTALL=1 npm exec -- playwright test tests/e2e/audit/audit.spec.ts --reporter=line",
+            },
+            routes: [],
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+    }
+    expect(
+      devLogin.ok,
+      `dev-login must succeed on a running stack before auditing routes; structured ENV_BLOCKED evidence written to ${reportPath}`,
+    ).toBeTruthy();
 
     const results: AuditRouteResult[] = [];
     for (const route of auditRoutes) {
       results.push(await auditRoute(page, route));
     }
 
-    const reportPath = path.join(auditOutputDir, "frontend-audit-routes.json");
     fs.writeFileSync(
       reportPath,
       `${JSON.stringify({ generated_at: new Date().toISOString(), routes: results }, null, 2)}\n`,
