@@ -199,4 +199,15 @@ describe("AdminPromptsPage governance UI", () => {
         expect(screen.getByText("历史变量对象已标记待迁移")).toBeTruthy();
         expect(screen.getByText("提示词类型不在允许列表")).toBeTruthy();
     });
+
+    it("keeps loaded prompt data visible when the governance status request fails", async () => {
+        getPromptTemplateGovernanceStatusMock.mockRejectedValueOnce(new Error("governance down"));
+
+        render(<AdminPromptsPage />);
+
+        expect(await screen.findByText("部分提示词治理数据加载失败")).toBeTruthy();
+        expect(screen.getByText("治理状态加载失败：governance down")).toBeTruthy();
+        expect(screen.getAllByText("Needs review template").length).toBeGreaterThan(0);
+        expect(screen.getByText(/页面保留已加载数据/)).toBeTruthy();
+    });
 });
