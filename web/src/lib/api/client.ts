@@ -62,6 +62,8 @@ import {
     ScenarioPromptCreate,
     PromptRenderRequest,
     PromptRenderResponse,
+    PromptTemplateGovernanceRemediationResult,
+    PromptTemplateGovernanceStatus,
     ComprehensiveReport,
     RealtimeEvaluationFeedback,
     ScenarioSummary,
