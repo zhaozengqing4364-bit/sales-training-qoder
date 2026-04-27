@@ -34,6 +34,10 @@ from prompt_templates.compiled_contract import (
 )
 from prompt_templates.loader import get_loader
 from prompt_templates.models import (
+    ALLOWED_PROMPT_TYPE_VALUES,
+    PromptTemplateGovernanceIssue,
+    PromptTemplateGovernanceStatus,
+    PromptTemplateQuarantineResult,
     PromptRenderRequest,
     PromptRenderResponse,
     PromptTemplate,
@@ -48,14 +52,14 @@ from prompt_templates.models import (
 from prompt_templates.renderer import render_template
 
 logger = get_logger(__name__)
-SALES_PROMPT_SCOPE_ALLOWED_TYPES = {
-    "evaluation",
-    "report",
-    "stage",
-    "scoring",
-    "realtime_scoring",
-}
-PROMPT_TEMPLATE_GOVERNANCE_VERSION = "prompt_template_governance_v1"
+SALES_PROMPT_SCOPE_ALLOWED_TYPES = {"evaluation", "report", "stage", "scoring"}
+PROMPT_GOVERNANCE_AUDIT_ACTION = "prompt_template.governance"
+PROMPT_GOVERNANCE_ROLLBACK_POLICY = (
+    "Invalid historical rows are quarantined by setting is_active=false and "
+    "is_default=false. Rollback is allowed only after an admin fixes prompt_type/"
+    "variables through the prompt editor, then re-enables the template or marks it "
+    "default again; each mutation writes a SystemLog audit entry."
+)
 
 
 class PromptTemplateService:
@@ -200,287 +204,183 @@ class PromptTemplateService:
             return None
 
     @staticmethod
-    def _is_allowed_prompt_type(prompt_type: Any) -> bool:
-        normalized = str(prompt_type or "").strip()
-        return normalized in {item.value for item in PromptType}
-
-    @staticmethod
-    def _normalize_legacy_variables(raw_variables: Any) -> tuple[list[str], str | None]:
-        """Return migrated variables plus a remediation code, or raise for unsafe data."""
-        if raw_variables is None:
-            return [], None
-        if isinstance(raw_variables, str):
-            try:
-                parsed = json.loads(raw_variables)
-            except json.JSONDecodeError as exc:
-                raise ValueError("variables_string_not_json") from exc
-            raw_variables = parsed
-        if isinstance(raw_variables, dict):
-            keys = [str(key).strip() for key in raw_variables.keys() if str(key).strip()]
-            if not keys:
-                return [], "migrated_variables_dict_empty"
-            return list(dict.fromkeys(keys)), "migrated_variables_dict_keys"
-        if isinstance(raw_variables, list) and all(isinstance(item, str) for item in raw_variables):
-            return list(dict.fromkeys(item.strip() for item in raw_variables if item.strip())), None
-        raise ValueError("variables_not_list_of_strings")
-
-    @staticmethod
-    def _governance_record(db_template: Any, issues: list[str]) -> dict[str, Any]:
+    def _template_snapshot(db_template: Any) -> dict[str, Any]:
         return {
-            "template_id": str(getattr(db_template, "id", "")),
-            "name": str(getattr(db_template, "name", "")),
-            "prompt_type": str(getattr(db_template, "prompt_type", "")),
+            "id": str(getattr(db_template, "id", "") or ""),
+            "name": getattr(db_template, "name", None),
+            "prompt_type": getattr(db_template, "prompt_type", None),
+            "category": getattr(db_template, "category", None),
+            "variables": getattr(db_template, "variables", None),
             "is_active": bool(getattr(db_template, "is_active", False)),
             "is_default": bool(getattr(db_template, "is_default", False)),
-            "issues": issues,
+            "is_system": bool(getattr(db_template, "is_system", False)),
         }
 
-    @classmethod
-    def _governance_issues_for_row(cls, db_template: Any) -> list[dict[str, str]]:
-        issues: list[dict[str, str]] = []
-        prompt_type = str(getattr(db_template, "prompt_type", "") or "").strip()
-        try:
-            PromptType(prompt_type)
-        except ValueError:
-            issues.append(
-                {
-                    "code": "invalid_prompt_type",
-                    "severity": "blocking",
-                    "message": f"prompt_type '{prompt_type}' is not in the allowed runtime taxonomy",
-                }
+    @staticmethod
+    def _validate_historical_row(db_template: Any) -> PromptTemplateGovernanceIssue | None:
+        issue_codes: list[str] = []
+        messages: list[str] = []
+        raw_prompt_type = str(getattr(db_template, "prompt_type", "") or "").strip()
+        raw_variables = getattr(db_template, "variables", None)
+
+        if raw_prompt_type not in ALLOWED_PROMPT_TYPE_VALUES:
+            issue_codes.append("PROMPT_TYPE_UNSUPPORTED")
+            messages.append(
+                f"prompt_type={raw_prompt_type or '<empty>'} is not in the allowed admin options."
             )
 
-        variables = getattr(db_template, "variables", None)
-        parsed_variables = variables
-        if isinstance(variables, str):
+        variables_is_valid = isinstance(raw_variables, list) and all(
+            isinstance(item, str) for item in raw_variables
+        )
+        if isinstance(raw_variables, str):
             try:
-                parsed_variables = json.loads(variables)
-            except json.JSONDecodeError:
-                issues.append(
-                    {
-                        "code": "variables_invalid_json",
-                        "severity": "blocking",
-                        "message": "variables is a string but not valid JSON",
-                    }
+                decoded = json.loads(raw_variables)
+                variables_is_valid = isinstance(decoded, list) and all(
+                    isinstance(item, str) for item in decoded
                 )
-                parsed_variables = None
-        if isinstance(parsed_variables, dict):
-            issues.append(
-                {
-                    "code": "variables_object_schema",
-                    "severity": "blocking",
-                    "message": "variables must be a list[str]; object-shaped historical rows are disabled before runtime use",
-                }
-            )
-        elif parsed_variables is not None and not isinstance(parsed_variables, list):
-            issues.append(
-                {
-                    "code": "variables_not_list",
-                    "severity": "blocking",
-                    "message": "variables must be a list[str]",
-                }
-            )
-        elif isinstance(parsed_variables, list) and not all(
-            isinstance(item, str) and item.strip() for item in parsed_variables
-        ):
-            issues.append(
-                {
-                    "code": "variables_non_string_item",
-                    "severity": "blocking",
-                    "message": "variables must contain only non-empty strings",
-                }
-            )
+            except json.JSONDecodeError:
+                variables_is_valid = False
+        if raw_variables is not None and not variables_is_valid:
+            issue_codes.append("VARIABLES_SCHEMA_INVALID")
+            messages.append("variables must be stored as list[str], not object/dict.")
 
         if not str(getattr(db_template, "template", "") or "").strip():
-            issues.append(
-                {
-                    "code": "empty_template",
-                    "severity": "blocking",
-                    "message": "template body is empty",
-                }
-            )
-        return issues
+            issue_codes.append("TEMPLATE_BODY_EMPTY")
+            messages.append("template body is empty.")
 
-    async def get_governance_status(self, *, limit: int = 1000) -> dict[str, Any]:
-        from common.db.models import PromptTemplate as PromptTemplateDB
+        if not issue_codes:
+            return None
 
-        result = await self.db.execute(select(PromptTemplateDB))
-        rows = result.scalars().all()
-        records: list[dict[str, Any]] = []
-        for row in rows:
-            issues: list[str] = []
-            if not self._is_allowed_prompt_type(getattr(row, "prompt_type", None)):
-                issues.append("invalid_prompt_type")
-            try:
-                _, remediation = self._normalize_legacy_variables(
-                    getattr(row, "variables", None)
-                )
-                if remediation:
-                    issues.append(remediation)
-            except ValueError as exc:
-                issues.append(str(exc))
-            if issues:
-                records.append(self._governance_record(row, issues))
-        return {
-            "version": PROMPT_TEMPLATE_GOVERNANCE_VERSION,
-            "total": len(rows),
-            "invalid_count": len(records),
-            "items": records,
-        }
+        return PromptTemplateGovernanceIssue(
+            template_id=str(getattr(db_template, "id", "") or ""),
+            name=getattr(db_template, "name", None),
+            prompt_type=raw_prompt_type or None,
+            is_active=bool(getattr(db_template, "is_active", False)),
+            is_default=bool(getattr(db_template, "is_default", False)),
+            issue_codes=issue_codes,
+            messages=messages,
+            recommended_action=(
+                "Disable/quarantine this historical row, fix prompt_type and variables "
+                "through /admin/prompts, then re-enable only after render validation passes."
+            ),
+        )
 
-    async def remediate_legacy_templates(
+    def _queue_audit_log(
         self,
         *,
-        actor_user_id: str | None,
-        actor_identifier: str,
+        action: str,
+        actor: Any | None,
+        before: dict[str, Any] | None,
+        after: dict[str, Any] | None,
         reason: str,
-        dry_run: bool = False,
-    ) -> dict[str, Any]:
-        """Migrate safe legacy template fields and disable rows that cannot be trusted."""
-        from common.db.models import PromptTemplate as PromptTemplateDB
+        status: str = "success",
+    ) -> None:
+        if actor is None:
+            return
         from common.db.models import SystemLog
 
-        result = await self.db.execute(select(PromptTemplateDB))
-        rows = result.scalars().all()
-        actions: list[dict[str, Any]] = []
-        now = datetime.now(UTC)
-
-        for row in rows:
-            before = {
-                "prompt_type": getattr(row, "prompt_type", None),
-                "variables": getattr(row, "variables", None),
-                "is_active": bool(getattr(row, "is_active", False)),
-                "is_default": bool(getattr(row, "is_default", False)),
-            }
-            row_actions: list[str] = []
-
-            if not self._is_allowed_prompt_type(before["prompt_type"]):
-                row_actions.append("disabled_invalid_prompt_type")
-
-            try:
-                migrated_variables, remediation = self._normalize_legacy_variables(
-                    before["variables"]
-                )
-                if remediation:
-                    row_actions.append(remediation)
-                variables_valid = True
-            except ValueError as exc:
-                migrated_variables = []
-                variables_valid = False
-                row_actions.append(str(exc))
-                row_actions.append("disabled_invalid_variables")
-
-            if not row_actions:
-                continue
-
-            if not dry_run:
-                row.variables = migrated_variables
-                if (
-                    "disabled_invalid_prompt_type" in row_actions
-                    or "disabled_invalid_variables" in row_actions
-                ):
-                    row.is_active = False
-                    row.is_default = False
-                row.updated_at = now
-
-            after = {
-                "prompt_type": getattr(row, "prompt_type", None),
-                "variables": migrated_variables,
-                "is_active": bool(getattr(row, "is_active", False)),
-                "is_default": bool(getattr(row, "is_default", False)),
-            }
-            actions.append(
-                {
-                    "template_id": str(getattr(row, "id", "")),
-                    "name": str(getattr(row, "name", "")),
-                    "actions": row_actions,
-                    "before": before,
-                    "after": after,
-                }
-            )
-
-        return {
-            "allowed_prompt_types": [item.value for item in PromptType],
-            "policy": {
-                "variables_schema": "list[str]",
-                "invalid_history_runtime_behavior": "visible_in_governance_and_disabled_before_runtime_lookup",
-                "rollback": "restore prior is_active/is_default from prompt_template.governance.remediate_invalid SystemLog details",
-                "audit_action": "prompt_template.governance.remediate_invalid",
-            },
-            "invalid_count": len(invalid_rows),
-            "invalid_templates": invalid_rows,
-            "limit": limit,
+        actor_id = str(getattr(actor, "user_id", "") or "") or None
+        actor_identifier = (
+            str(getattr(actor, "email", "") or "").strip()
+            or str(getattr(actor, "wechat_user_id", "") or "").strip()
+            or actor_id
+            or "system"
+        )
+        details = {
+            "reason": reason,
+            "before": before,
+            "after": after,
+            "rollback_policy": PROMPT_GOVERNANCE_ROLLBACK_POLICY,
+            "timestamp": datetime.now(UTC).isoformat(),
         }
+        self.db.add(
+            SystemLog(
+                action=action,
+                user_id=actor_id,
+                user_identifier=actor_identifier,
+                status=status,
+                details=json.dumps(details, ensure_ascii=False, default=str),
+            )
+        )
 
-    async def remediate_invalid_templates(
+    async def get_governance_status(
+        self,
+    ) -> PromptTemplateGovernanceStatus:
+        """Return visible invalid historical prompt-template rows."""
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        result = await self.db.execute(select(PromptTemplateDB))
+        rows = list(result.scalars().all())
+        issues = [
+            issue
+            for row in rows
+            if (issue := self._validate_historical_row(row)) is not None
+        ]
+        return PromptTemplateGovernanceStatus(
+            checked_count=len(rows),
+            invalid_count=len(issues),
+            invalid_active_count=sum(1 for item in issues if item.is_active or item.is_default),
+            issues=issues,
+            rollback_policy=PROMPT_GOVERNANCE_ROLLBACK_POLICY,
+            audit_log_action=PROMPT_GOVERNANCE_AUDIT_ACTION,
+        )
+
+    async def quarantine_invalid_templates(
         self,
         *,
-        actor_id: str | None,
+        actor: Any | None,
         reason: str,
-        limit: int = 1000,
-    ) -> dict[str, Any]:
-        from common.db.models import PromptTemplate as PromptTemplateDB, SystemLog
+    ) -> PromptTemplateQuarantineResult:
+        """Disable invalid historical rows without deleting template data."""
+        from common.db.models import PromptTemplate as PromptTemplateDB
 
-        result = await self.db.execute(select(PromptTemplateDB).limit(limit))
-        rows = result.scalars().all()
-        remediated: list[dict[str, Any]] = []
-        now = datetime.now(UTC)
-        trace_id = get_trace_id()
-        normalized_reason = reason.strip() or "prompt governance remediation"
+        result = await self.db.execute(select(PromptTemplateDB))
+        rows = list(result.scalars().all())
+        issues_by_id = {
+            issue.template_id: issue
+            for row in rows
+            if (issue := self._validate_historical_row(row)) is not None
+        }
 
+        quarantined = 0
         for row in rows:
-            issues = self._governance_issues_for_row(row)
-            if not issues:
+            issue = issues_by_id.get(str(getattr(row, "id", "") or ""))
+            if issue is None:
+                continue
+            if not bool(getattr(row, "is_active", False)) and not bool(
+                getattr(row, "is_default", False)
+            ):
                 continue
             before = self._template_snapshot(row)
-            if bool(getattr(row, "is_active", False)) or bool(getattr(row, "is_default", False)):
-                row.is_active = False
-                row.is_default = False
-                row.updated_at = now
+            row.is_active = False
+            row.is_default = False
+            row.updated_at = datetime.now(UTC)
             after = self._template_snapshot(row)
-            remediated.append({"before": before, "after": after, "issues": issues})
-
-        if remediated:
-            self.db.add(
-                SystemLog(
-                    user_id=actor_id,
-                    user_identifier=actor_id or "system",
-                    action="prompt_template.governance.remediate_invalid",
-                    status="success",
-                    details=json.dumps(
-                        {
-                            "reason": normalized_reason,
-                            "trace_id": trace_id,
-                            "count": len(remediated),
-                            "items": remediated,
-                        },
-                        ensure_ascii=False,
-                        default=str,
-                    ),
-                )
+            quarantined += 1
+            self._queue_audit_log(
+                action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.quarantine_invalid",
+                actor=actor,
+                before=before,
+                after=after,
+                reason=reason,
+                status="warning",
             )
-            self.db.add(audit_log)
-            await self.db.commit()
-            await self.loader.invalidate_cache()
 
-        return {
-            "version": PROMPT_TEMPLATE_GOVERNANCE_VERSION,
-            "dry_run": dry_run,
-            "remediated_count": len(actions),
-            "actions": actions,
-            "rollback": {
-                "source": "system_logs",
-                "action": "prompt_template_governance_remediation",
-                "instruction": "Use the audit log before/after payload to restore variables/is_active/is_default; unknown prompt_type rows remain disabled unless a supported PromptType is added.",
-            },
-        }
+        await self.db.commit()
+        await self.loader.invalidate_cache()
+        return PromptTemplateQuarantineResult(
+            checked_count=len(rows),
+            quarantined_count=quarantined,
+            issues=list(issues_by_id.values()),
+            audit_log_action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.quarantine_invalid",
+        )
 
     async def create_template(
         self,
         data: PromptTemplateCreate,
         *,
-        actor_user_id: str | None = None,
-        actor_user_identifier: str | None = None,
+        actor: Any | None = None,
+        reason: str = "create_prompt_template",
     ) -> PromptTemplate:
         """Create a new prompt template.
 
@@ -510,18 +410,12 @@ class PromptTemplateService:
         )
 
         self.db.add(db_template)
-        self._add_audit_log(
-            action="prompt_template.created",
-            status="success",
-            actor_user_id=actor_user_id,
-            actor_user_identifier=actor_user_identifier,
-            details={
-                "template_id": template_id,
-                "prompt_type": data.prompt_type.value,
-                "category": data.category,
-                "is_active": data.is_active,
-                "is_default": data.is_default,
-            },
+        self._queue_audit_log(
+            action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.create",
+            actor=actor,
+            before=None,
+            after=self._template_snapshot(db_template),
+            reason=reason,
         )
         await self.db.commit()
         await self.db.refresh(db_template)
@@ -566,8 +460,8 @@ class PromptTemplateService:
         template_id: UUID,
         data: PromptTemplateUpdate,
         *,
-        actor_user_id: str | None = None,
-        actor_user_identifier: str | None = None,
+        actor: Any | None = None,
+        reason: str = "update_prompt_template",
     ) -> PromptTemplate | None:
         """Update an existing template.
 
@@ -588,15 +482,7 @@ class PromptTemplateService:
         if not db_template:
             return None
 
-        before_snapshot = {
-            "name": getattr(db_template, "name", None),
-            "prompt_type": getattr(db_template, "prompt_type", None),
-            "category": getattr(db_template, "category", None),
-            "variables": getattr(db_template, "variables", None),
-            "is_active": getattr(db_template, "is_active", None),
-            "is_default": getattr(db_template, "is_default", None),
-        }
-
+        before = self._template_snapshot(db_template)
         # Update fields
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
@@ -605,6 +491,13 @@ class PromptTemplateService:
             setattr(db_template, field, value)
 
         db_template.updated_at = datetime.now(UTC)
+        self._queue_audit_log(
+            action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.update",
+            actor=actor,
+            before=before,
+            after=self._template_snapshot(db_template),
+            reason=reason,
+        )
 
         self._add_audit_log(
             action="prompt_template.updated",
@@ -640,8 +533,8 @@ class PromptTemplateService:
         self,
         template_id: UUID,
         *,
-        actor_user_id: str | None = None,
-        actor_user_identifier: str | None = None,
+        actor: Any | None = None,
+        reason: str = "disable_prompt_template",
     ) -> bool:
         """Delete a template (soft delete by deactivating).
 
@@ -661,15 +554,16 @@ class PromptTemplateService:
         if not db_template:
             return False
 
+        before = self._template_snapshot(db_template)
         # Soft delete - just deactivate
         db_template.is_active = False
         db_template.updated_at = datetime.now(UTC)
-        self._add_audit_log(
-            action="prompt_template.disabled",
-            status="success",
-            actor_user_id=actor_user_id,
-            actor_user_identifier=actor_user_identifier,
-            details={"template_id": str(template_id), "reason": "admin_delete_soft_disable"},
+        self._queue_audit_log(
+            action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.disable",
+            actor=actor,
+            before=before,
+            after=self._template_snapshot(db_template),
+            reason=reason,
         )
 
         await self.db.commit()
@@ -1129,6 +1023,9 @@ class PromptTemplateService:
     async def assign_template_to_scenario(
         self,
         data: ScenarioPromptCreate,
+        *,
+        actor: Any | None = None,
+        reason: str = "assign_scenario_prompt",
     ) -> ScenarioPrompt:
         """Assign a template to a scenario.
 
@@ -1158,6 +1055,20 @@ class PromptTemplateService:
         )
 
         self.db.add(db_assignment)
+        self._queue_audit_log(
+            action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.assign_scenario",
+            actor=actor,
+            before=None,
+            after={
+                "id": assignment_id,
+                "scenario_type": data.scenario_type,
+                "scenario_id": data.scenario_id,
+                "prompt_type": data.prompt_type,
+                "template_id": str(data.template_id),
+                "is_active": data.is_active,
+            },
+            reason=reason,
+        )
         await self.db.commit()
         await self.db.refresh(db_assignment)
 
@@ -1168,8 +1079,8 @@ class PromptTemplateService:
         template_id: UUID,
         prompt_type: PromptType,
         *,
-        actor_user_id: str | None = None,
-        actor_user_identifier: str | None = None,
+        actor: Any | None = None,
+        reason: str = "set_default_prompt_template",
     ) -> bool:
         """Set a template as the default for its type.
 
@@ -1185,6 +1096,14 @@ class PromptTemplateService:
         now = datetime.now(UTC)
 
         # First, unset existing defaults for this prompt type.
+        before_result = await self.db.execute(
+            select(PromptTemplateDB).where(PromptTemplateDB.prompt_type == prompt_type.value)
+        )
+        before_defaults = [
+            self._template_snapshot(item)
+            for item in before_result.scalars().all()
+            if bool(getattr(item, "is_default", False))
+        ]
         await self.db.execute(
             update(PromptTemplateDB)
             .where(
@@ -1205,12 +1124,12 @@ class PromptTemplateService:
 
         template.is_default = True
         template.updated_at = now
-        self._add_audit_log(
-            action="prompt_template.default_set",
-            status="success",
-            actor_user_id=actor_user_id,
-            actor_user_identifier=actor_user_identifier,
-            details={"template_id": str(template_id), "prompt_type": prompt_type.value},
+        self._queue_audit_log(
+            action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.set_default",
+            actor=actor,
+            before={"defaults": before_defaults},
+            after=self._template_snapshot(template),
+            reason=reason,
         )
 
         await self.db.commit()
@@ -1358,6 +1277,9 @@ class PromptTemplateService:
     async def delete_scenario_prompt(
         self,
         assignment_id: UUID,
+        *,
+        actor: Any | None = None,
+        reason: str = "delete_scenario_prompt",
     ) -> bool:
         """Delete a scenario prompt assignment.
 
@@ -1377,7 +1299,22 @@ class PromptTemplateService:
         if not assignment:
             return False
 
+        before = {
+            "id": str(assignment.id),
+            "scenario_type": assignment.scenario_type,
+            "scenario_id": assignment.scenario_id,
+            "prompt_type": assignment.prompt_type,
+            "template_id": str(assignment.template_id),
+            "is_active": bool(assignment.is_active),
+        }
         await self.db.delete(assignment)
+        self._queue_audit_log(
+            action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.delete_scenario",
+            actor=actor,
+            before=before,
+            after=None,
+            reason=reason,
+        )
         await self.db.commit()
 
         return True
@@ -1387,6 +1324,9 @@ class PromptTemplateService:
         assignment_id: UUID,
         is_active: bool | None = None,
         template_id: UUID | None = None,
+        *,
+        actor: Any | None = None,
+        reason: str = "update_scenario_prompt",
     ) -> ScenarioPrompt | None:
         """Update a scenario prompt assignment.
 
@@ -1408,10 +1348,32 @@ class PromptTemplateService:
         if not assignment:
             return None
 
+        before = {
+            "id": str(assignment.id),
+            "scenario_type": assignment.scenario_type,
+            "scenario_id": assignment.scenario_id,
+            "prompt_type": assignment.prompt_type,
+            "template_id": str(assignment.template_id),
+            "is_active": bool(assignment.is_active),
+        }
         if is_active is not None:
             assignment.is_active = is_active
         if template_id is not None:
             assignment.template_id = str(template_id)
+        self._queue_audit_log(
+            action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.update_scenario",
+            actor=actor,
+            before=before,
+            after={
+                "id": str(assignment.id),
+                "scenario_type": assignment.scenario_type,
+                "scenario_id": assignment.scenario_id,
+                "prompt_type": assignment.prompt_type,
+                "template_id": str(assignment.template_id),
+                "is_active": bool(assignment.is_active),
+            },
+            reason=reason,
+        )
 
         await self.db.commit()
         await self.db.refresh(assignment)
