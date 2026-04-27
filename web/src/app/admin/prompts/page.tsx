@@ -60,6 +60,21 @@ function getRoleLabel(role: string): string {
   return "只读";
 }
 
+function formatGovernanceIssue(issue: string): string {
+  switch (issue) {
+    case "variables_object_migratable":
+      return "历史变量对象已标记待迁移";
+    case "variables_string_not_json_array":
+    case "variables_json_not_array":
+    case "variables_not_array":
+      return "变量字段不是字符串数组";
+    case "prompt_type_not_allowed":
+      return "提示词类型不在允许列表";
+    default:
+      return issue;
+  }
+}
+
 export default function AdminPromptsPage() {
   const router = useRouter();
   const toast = useToast();
@@ -200,6 +215,47 @@ export default function AdminPromptsPage() {
     }
   };
 
+
+  const handleMigrateInvalidTemplates = async () => {
+    if (!canOperate) {
+      toast.error("当前角色无操作权限");
+      return;
+    }
+
+    setIsOperating(true);
+    try {
+      const result = await api.admin.migrateInvalidPromptTemplates({
+        reason: "Admin prompt governance migration",
+        dry_run: false,
+      });
+      await loadData();
+      toast.success(`治理迁移完成：${result.data.remediated} 条`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
+  };
+
+  const handleRollbackGovernance = async (template: PromptTemplate) => {
+    if (!canOperate) {
+      toast.error("当前角色无操作权限");
+      return;
+    }
+
+    setIsOperating(true);
+    try {
+      await api.admin.rollbackPromptTemplateGovernance(template.id, {
+        reason: "Admin prompt governance rollback",
+      });
+      await refreshAfterMutation("提示词治理变更已回滚");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
+  };
+
   const handleCreateScenarioBinding = async () => {
     if (!canOperate) {
       toast.error("当前角色无操作权限");
@@ -288,13 +344,23 @@ export default function AdminPromptsPage() {
             刷新
           </Button>
           {isAdmin ? (
-            <Button
-              className="rounded-full bg-slate-900 text-white"
-              onClick={() => router.push("/admin/prompts/new")}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              新建模板
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={() => void handleMigrateInvalidTemplates()}
+                disabled={isOperating}
+              >
+                治理扫描/迁移
+              </Button>
+              <Button
+                className="rounded-full bg-slate-900 text-white"
+                onClick={() => router.push("/admin/prompts/new")}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                新建模板
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
@@ -418,9 +484,14 @@ export default function AdminPromptsPage() {
                         </td>
                         <td className="py-3 pr-3 text-slate-600">{template.category}</td>
                         <td className="py-3 pr-3">
-                          <Badge className={template.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}>
-                            {template.is_active ? "启用" : "停用"}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge className={template.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}>
+                              {template.is_active ? "启用" : "停用"}
+                            </Badge>
+                            {template.governance_status === "needs_review" ? (
+                              <Badge className="bg-red-100 text-red-700">需治理</Badge>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="py-3 pr-3">
                           {template.is_default ? <Badge className="bg-amber-100 text-amber-700">默认</Badge> : "-"}
@@ -444,13 +515,33 @@ export default function AdminPromptsPage() {
                               设为默认
                             </Button>
                             {isAdmin ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => router.push(`/admin/prompts/${template.id}/edit`)}
-                              >
-                                编辑
-                              </Button>
+                              <>
+                                {template.governance_status === "needs_review" ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isOperating}
+                                    onClick={() => void handleMigrateInvalidTemplates()}
+                                  >
+                                    迁移
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => router.push(`/admin/prompts/${template.id}/edit`)}
+                                >
+                                  编辑
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={isOperating}
+                                  onClick={() => void handleRollbackGovernance(template)}
+                                >
+                                  回滚治理
+                                </Button>
+                              </>
                             ) : null}
                           </div>
                         </td>
@@ -475,6 +566,17 @@ export default function AdminPromptsPage() {
               </div>
 
               <div className="text-xs text-slate-500">变量：{selectedTemplate.variables.length ? selectedTemplate.variables.join("、") : "无"}</div>
+
+              {selectedTemplate.governance_status === "needs_review" ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <div className="font-semibold">治理状态：需要处理后才能作为可信运行时模板。</div>
+                  <ul className="mt-1 list-disc pl-4">
+                    {(selectedTemplate.governance_issues || []).map((issue) => (
+                      <li key={issue}>{formatGovernanceIssue(issue)}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               <details className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-slate-800">开发者模式：查看模板正文</summary>
