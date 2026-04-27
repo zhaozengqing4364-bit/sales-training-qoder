@@ -148,4 +148,15 @@ describe("RagProfilesPage", () => {
         });
         expect(successToastMock).toHaveBeenCalledWith("删除成功");
     });
+
+    it("distinguishes load failure from an empty RAG profile state", async () => {
+        listRagProfilesMock.mockRejectedValueOnce(new Error("权限不足"));
+
+        render(<RagProfilesPage />);
+
+        expect(await screen.findByText("RAG 配置加载失败")).toBeTruthy();
+        expect(screen.getByText(/权限不足/)).toBeTruthy();
+        expect(screen.queryByText("暂无 RAG 配置")).toBeNull();
+        expect(errorToastMock).toHaveBeenCalledWith("加载失败：权限不足");
+    });
 });

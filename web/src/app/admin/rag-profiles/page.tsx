@@ -70,6 +70,7 @@ export default function RagProfilesPage() {
     const toast = useToast();
     const [profiles, setProfiles] = useState<RagProfile[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<RagProfile | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -89,11 +90,15 @@ export default function RagProfilesPage() {
 
     const loadProfiles = useCallback(async () => {
         setLoading(true);
+        setLoadError(null);
         try {
             const data = await api.admin.listRagProfiles();
             setProfiles(data ?? []);
-        } catch {
-            toast.error("加载失败：无法获取 RAG 配置列表");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "无法获取 RAG 配置列表";
+            setProfiles([]);
+            setLoadError(message);
+            toast.error(`加载失败：${message}`);
         } finally {
             setLoading(false);
         }
@@ -287,10 +292,24 @@ export default function RagProfilesPage() {
                 <div className="flex items-center justify-center py-20">
                     <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
                 </div>
+            ) : loadError ? (
+                <GlassCard className="p-10 text-center border border-red-100 bg-red-50">
+                    <AlertTriangle className="w-10 h-10 mx-auto text-red-400 mb-3" />
+                    <p className="font-semibold text-red-800">RAG 配置加载失败</p>
+                    <p className="mt-2 text-sm text-red-700">
+                        {loadError}。请检查权限、后端接口和检索策略服务状态。
+                    </p>
+                    <Button size="sm" className="mt-4" onClick={loadProfiles}>
+                        重试加载
+                    </Button>
+                </GlassCard>
             ) : profiles.length === 0 ? (
                 <GlassCard className="p-10 text-center">
                     <Database className="w-10 h-10 mx-auto text-slate-300 mb-3" />
                     <p className="text-slate-500">暂无 RAG 配置</p>
+                    <p className="mt-2 text-xs text-slate-400">
+                        新版检索策略页面是首选管理入口；仅在确认需要维护旧 RAG 配置时创建。
+                    </p>
                     <Button
                         size="sm"
                         className="mt-4"

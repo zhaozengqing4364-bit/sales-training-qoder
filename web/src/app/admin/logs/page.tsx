@@ -86,6 +86,10 @@ export default function AdminLogsPage() {
     };
 
     const maxPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const emptyStateMessage =
+        searchQuery || statusFilter !== "all"
+            ? "未找到匹配当前筛选条件的日志"
+            : "暂无日志数据";
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -158,7 +162,7 @@ export default function AdminLogsPage() {
                 {isLoading ? (
                     <div className="py-20 text-center text-slate-500">加载中...</div>
                 ) : logs.length === 0 ? (
-                    <div className="py-20 text-center text-slate-500">暂无日志数据</div>
+                    <div className="py-20 text-center text-slate-500">{emptyStateMessage}</div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
