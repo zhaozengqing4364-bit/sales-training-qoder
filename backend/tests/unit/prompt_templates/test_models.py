@@ -179,15 +179,26 @@ class TestPromptTemplateCreate:
                 unknown_field="value",
             )
 
-    def test_create_rejects_variables_dict(self):
-        """Control-plane writes must not silently coerce dict variables."""
-        with pytest.raises(ValidationError):
+    def test_create_rejects_legacy_dict_variables(self):
+        """Should reject legacy dict/object variables instead of silently coercing keys."""
+        with pytest.raises(ValidationError) as exc_info:
             PromptTemplateCreate(
-                name="Invalid vars",
+                name="Legacy Variables",
                 prompt_type=PromptType.REALTIME_SCORING,
                 template="Score {{ score }}",
                 variables={"score": "number"},
             )
+        assert "variables must be a list" in str(exc_info.value)
+
+    def test_create_rejects_invalid_jinja_template(self):
+        """Should reject invalid Jinja before saving."""
+        with pytest.raises(ValidationError) as exc_info:
+            PromptTemplateCreate(
+                name="Broken",
+                prompt_type=PromptType.SUMMARY,
+                template="Hello {{ name",
+            )
+        assert "valid Jinja2" in str(exc_info.value)
 
 
 class TestPromptTemplateUpdate:
