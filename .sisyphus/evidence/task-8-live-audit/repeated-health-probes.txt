@@ -1,0 +1,31 @@
+# repeated health probes 2026-04-27T03:56:35Z
+
+## probe 1 2026-04-27T03:56:35Z
+backend_http=200 total=0.064773
+{"service":"sales-training-backend","status":"healthy","ready":true,"readiness":"ready","api_base_path":"/api/v1","checks":{"http":"ok","database":"ok"},"timestamp":"2026-04-27T03:56:35.872451+00:00","version":"1.0.0"}
+frontend_http=200 total=1.675717
+<title>AI 智能练习平台</title>
+
+## probe 2 2026-04-27T03:56:39Z
+backend_http=200 total=0.123258
+{"service":"sales-training-backend","status":"healthy","ready":true,"readiness":"ready","api_base_path":"/api/v1","checks":{"http":"ok","database":"ok"},"timestamp":"2026-04-27T03:56:40.022545+00:00","version":"1.0.0"}
+frontend_http=200 total=1.205690
+<title>AI 智能练习平台</title>
+
+## probe 3 2026-04-27T03:56:43Z
+backend_http=200 total=0.049432
+{"service":"sales-training-backend","status":"healthy","ready":true,"readiness":"ready","api_base_path":"/api/v1","checks":{"http":"ok","database":"ok"},"timestamp":"2026-04-27T03:56:43.665396+00:00","version":"1.0.0"}
+frontend_http=200 total=0.547101
+<title>AI 智能练习平台</title>
+
+## probe 4 2026-04-27T03:56:46Z
+backend_http=200 total=0.035225
+{"service":"sales-training-backend","status":"healthy","ready":true,"readiness":"ready","api_base_path":"/api/v1","checks":{"http":"ok","database":"ok"},"timestamp":"2026-04-27T03:56:46.607267+00:00","version":"1.0.0"}
+frontend_http=200 total=0.556447
+<title>AI 智能练习平台</title>
+
+## probe 5 2026-04-27T03:56:49Z
+backend_http=200 total=0.024456
+{"service":"sales-training-backend","status":"healthy","ready":true,"readiness":"ready","api_base_path":"/api/v1","checks":{"http":"ok","database":"ok"},"timestamp":"2026-04-27T03:56:49.374852+00:00","version":"1.0.0"}
+frontend_http=200 total=0.652871
+<title>AI 智能练习平台</title>
