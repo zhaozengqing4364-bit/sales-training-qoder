@@ -245,7 +245,7 @@ async def get_template_for_scenario(
 
 @router.post("", response_model=PromptTemplate, status_code=201)
 async def create_prompt_template(
-    payload: dict = Body(...),
+    data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -255,17 +255,13 @@ async def create_prompt_template(
         return admin_error
 
     try:
-        data = PromptTemplateCreate.model_validate(payload)
-    except ValidationError as exc:
-        return _validation_error_response(exc)
-
-    try:
-        return await service.create_template(data)
+        payload = PromptTemplateCreate.model_validate(data)
+        return await service.create_template(payload)
     except ValidationError as exc:
         return _prompt_error_response(
             status_code=400,
             error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
-            message="提示词模板校验失败：类型、正文和变量必须符合治理规则。",
+            message="提示词模板校验失败：variables 必须是字符串数组，prompt_type 必须属于允许类型。",
             exc=exc,
         )
     except SQLAlchemyError as exc:
@@ -284,75 +280,61 @@ async def create_prompt_template(
         )
 
 
-@router.post("/governance/migrate-invalid")
-async def migrate_invalid_prompt_templates(
-    request: PromptGovernanceMigrationRequest,
+
+
+class PromptTemplateRemediationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        default="prompt governance remediation",
+        min_length=1,
+        max_length=500,
+    )
+
+
+@router.get("/governance/status")
+async def get_prompt_template_governance_status(
+    limit: int = Query(1000, ge=1, le=5000),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> dict:
-    """Migrate/disable invalid historical PromptTemplate rows with audit evidence."""
+) -> dict[str, Any]:
+    """Return visible governance status for invalid historical prompt templates."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
 
     try:
-        result = await service.migrate_invalid_templates(
-            actor=current_user,
-            reason=request.reason,
-            dry_run=request.dry_run,
-        )
-        return {"success": True, "data": result}
+        return await service.get_governance_status(limit=limit)
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
-            message="提示词治理迁移暂不可用，请稍后重试。",
+            message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
 
 
-@router.post("/governance/{template_id}/rollback", response_model=PromptTemplate)
-async def rollback_prompt_template_governance(
-    template_id: str,
-    request: PromptGovernanceRollbackRequest,
+@router.post("/governance/remediate-invalid")
+async def remediate_invalid_prompt_templates(
+    request: PromptTemplateRemediationRequest,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> PromptTemplate:
-    """Rollback the latest audited governance migration for one template."""
+) -> dict[str, Any]:
+    """Disable invalid historical templates and write an audit log for rollback."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
 
-    template_uuid, parse_error = _parse_template_id_or_error(template_id)
-    if parse_error is not None:
-        return parse_error
-    assert template_uuid is not None
-
     try:
-        template = await service.rollback_last_governance_migration(
-            template_id=template_uuid,
-            actor=current_user,
+        return await service.remediate_invalid_templates(
+            actor_id=str(getattr(current_user, "user_id", "") or "") or None,
             reason=request.reason,
         )
-        if not template:
-            return _prompt_error_response(
-                status_code=404,
-                error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
-                message="模板不存在",
-            )
-        return template
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
-            message="提示词治理回滚暂不可用，请稍后重试。",
-            exc=exc,
-        )
-    except ValueError as exc:
-        return _prompt_error_response(
-            status_code=400,
-            error_code="[PROMPT_GOVERNANCE_ROLLBACK_NOT_AVAILABLE]",
-            message="未找到可回滚的提示词治理审计快照。",
+            message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
 
@@ -401,7 +383,7 @@ async def get_prompt_template(
 @router.put("/{template_id}", response_model=PromptTemplate)
 async def update_prompt_template(
     template_id: str,
-    payload: dict = Body(...),
+    data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -416,12 +398,8 @@ async def update_prompt_template(
     assert template_uuid is not None
 
     try:
-        data = PromptTemplateUpdate.model_validate(payload)
-    except ValidationError as exc:
-        return _validation_error_response(exc)
-
-    try:
-        template = await service.update_template(template_uuid, data)
+        payload = PromptTemplateUpdate.model_validate(data)
+        template = await service.update_template(template_uuid, payload)
         if not template:
             return _prompt_error_response(
                 status_code=404,
@@ -433,7 +411,7 @@ async def update_prompt_template(
         return _prompt_error_response(
             status_code=400,
             error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
-            message="提示词模板校验失败：类型、正文和变量必须符合治理规则。",
+            message="提示词模板校验失败：variables 必须是字符串数组，prompt_type 必须属于允许类型。",
             exc=exc,
         )
     except SQLAlchemyError as exc:
