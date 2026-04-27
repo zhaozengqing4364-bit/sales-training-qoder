@@ -86,7 +86,7 @@ const MODEL_TYPE_CONFIG = {
 
 const SETTINGS_READ_ONLY_TABS = new Set(["general", "security", "notifications"]);
 
-const READ_ONLY_SETTINGS_NOTICE = "这些配置项当前为只读展示；只有“模型配置”页签已接入持久化、权限校验与审计。";
+const READ_ONLY_SETTINGS_NOTICE = "这些配置项当前为只读治理视图；保存入口仅在接入校验、权限、审计与回滚后开放。";
 
 const readOnlyInputClassName = "bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed";
 
