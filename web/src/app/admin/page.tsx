@@ -182,9 +182,9 @@ export default function AdminDashboardPage() {
             <GlassCard className="p-6 border border-emerald-100 bg-emerald-50/60">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">当前真实管理入口</h2>
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">当前管理入口</h2>
                         <p className="mt-2 text-sm text-slate-700 text-pretty">
-                            直接进入当前已接统一数据来源 的管理面，不在首页提供未接入的表单、日志控制台或自动告警入口。
+                            直接进入当前已接入数据源的管理面；首页不提供未接入的表单、日志控制台或自动告警入口。
                         </p>
                     </div>
                     <Badge variant="green">已接入数据源</Badge>

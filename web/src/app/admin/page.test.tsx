@@ -62,9 +62,9 @@ describe("AdminDashboardPage", () => {
         expect(screen.getByText("66.7%")).toBeTruthy();
         expect(screen.getByText("58.3%")).toBeTruthy();
         expect(screen.getAllByText("待接真实统计").length).toBeGreaterThanOrEqual(3);
-        expect(screen.getByText(/以下卡片当前只作为 manager\/admin 待接治理面/)).toBeTruthy();
-        expect(screen.getByText("当前真实管理入口")).toBeTruthy();
-        expect(screen.getByText("直接进入当前已接入统一数据来源的管理面，不在首页提供未接入的表单、日志控制台或自动告警入口。"))
+        expect(screen.getByText(/以下卡片当前只作为 manager\/admin truth surface inventory/)).toBeTruthy();
+        expect(screen.getByText("当前管理入口")).toBeTruthy();
+        expect(screen.getByText("直接进入当前已接入数据源的管理面；首页不提供未接入的表单、日志控制台或自动告警入口。"))
             .toBeTruthy();
         expect(screen.getAllByRole("link", { name: "进入用户管理" }).some((link) => link.getAttribute("href") === "/admin/users"))
             .toBe(true);
