@@ -10,7 +10,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { PromptTemplate, PromptType, ScenarioPrompt } from "@/lib/api/types";
+import { PromptTemplate, PromptTemplateGovernanceIssue, PromptType, ScenarioPrompt } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
@@ -62,6 +62,7 @@ export default function AdminPromptsPage() {
 
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [scenarioPrompts, setScenarioPrompts] = useState<ScenarioPrompt[]>([]);
+  const [governanceIssues, setGovernanceIssues] = useState<PromptTemplateGovernanceIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<PromptType | "all">("all");
@@ -82,10 +83,11 @@ export default function AdminPromptsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [templatesResult, scenarioPromptsResult, userResult] = await Promise.allSettled([
+      const [templatesResult, scenarioPromptsResult, userResult, governanceResult] = await Promise.allSettled([
         api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
         api.admin.getScenarioPrompts(),
         api.user.getMe(),
+        api.admin.getPromptTemplateGovernanceInvalid(),
       ]);
 
       if (templatesResult.status === "fulfilled") {
@@ -104,6 +106,12 @@ export default function AdminPromptsPage() {
         setUserRole(String(userResult.value.role || "user"));
       } else {
         setUserRole("user");
+      }
+
+      if (governanceResult.status === "fulfilled") {
+        setGovernanceIssues(governanceResult.value.issues || []);
+      } else {
+        setGovernanceIssues([]);
       }
     } catch (error) {
       debug.error("Failed to load prompt admin data", error);
