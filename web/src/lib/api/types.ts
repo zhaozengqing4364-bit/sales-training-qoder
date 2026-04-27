@@ -1637,7 +1637,8 @@ export type PromptType =
     | "tracking"
     | "welcome"
     | "evaluation"
-    | "report";
+    | "report"
+    | "realtime_scoring";
 
 export interface PromptTemplate {
     id: string;

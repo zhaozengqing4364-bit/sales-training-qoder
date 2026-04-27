@@ -19,9 +19,9 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,6 +88,43 @@ def _require_prompt_admin_or_error(current_user: User) -> JSONResponse | None:
         error_code="[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]",
         message="仅管理员可访问提示词治理接口。",
     )
+
+
+def _user_identifier(current_user: User) -> str:
+    return str(
+        getattr(current_user, "email", None)
+        or getattr(current_user, "wechat_user_id", None)
+        or getattr(current_user, "name", None)
+        or getattr(current_user, "user_id", "system")
+    )
+
+
+def _validation_error_message(exc: ValidationError) -> str:
+    first = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first.get("loc", [])) or "payload"
+    message = str(first.get("msg") or "invalid")
+    return f"{location}: {message}"
+
+
+def _parse_prompt_payload_or_error(
+    payload: object,
+    model_type: type[BaseModel],
+) -> tuple[BaseModel | None, JSONResponse | None]:
+    if not isinstance(payload, dict):
+        return None, _prompt_error_response(
+            status_code=400,
+            error_code="[PROMPT_DATA_INVALID]",
+            message="提示词数据无效，请提交 JSON 对象。",
+        )
+    try:
+        return model_type.model_validate(payload), None
+    except ValidationError as exc:
+        return None, _prompt_error_response(
+            status_code=400,
+            error_code="[PROMPT_DATA_INVALID]",
+            message=f"提示词数据无效：{_validation_error_message(exc)}",
+            exc=exc,
+        )
 
 
 router = APIRouter(
@@ -245,7 +282,7 @@ async def get_template_for_scenario(
 
 @router.post("", response_model=PromptTemplate, status_code=201)
 async def create_prompt_template(
-    data: dict[str, Any],
+    request: Request,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -254,15 +291,16 @@ async def create_prompt_template(
     if admin_error is not None:
         return admin_error
 
+    data, parse_error = _parse_prompt_payload_or_error(await request.json(), PromptTemplateCreate)
+    if parse_error is not None:
+        return parse_error
+    assert isinstance(data, PromptTemplateCreate)
+
     try:
-        payload = PromptTemplateCreate.model_validate(data)
-        return await service.create_template(payload)
-    except ValidationError as exc:
-        return _prompt_error_response(
-            status_code=400,
-            error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
-            message="提示词模板校验失败：variables 必须是字符串数组，prompt_type 必须属于允许类型。",
-            exc=exc,
+        return await service.create_template(
+            data,
+            actor_user_id=str(current_user.user_id),
+            actor_user_identifier=_user_identifier(current_user),
         )
     except SQLAlchemyError as exc:
         return _prompt_error_response(
@@ -280,31 +318,18 @@ async def create_prompt_template(
         )
 
 
-
-
-class PromptTemplateRemediationRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    reason: str = Field(
-        default="prompt governance remediation",
-        min_length=1,
-        max_length=500,
-    )
-
-
 @router.get("/governance/status")
 async def get_prompt_template_governance_status(
-    limit: int = Query(1000, ge=1, le=5000),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> dict[str, Any]:
-    """Return visible governance status for invalid historical prompt templates."""
+) -> dict:
+    """Expose prompt template governance options and invalid historical rows."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
 
     try:
-        return await service.get_governance_status(limit=limit)
+        return await service.get_governance_status()
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -316,19 +341,20 @@ async def get_prompt_template_governance_status(
 
 @router.post("/governance/remediate-invalid")
 async def remediate_invalid_prompt_templates(
-    request: PromptTemplateRemediationRequest,
+    reason: str = Query(..., min_length=3, max_length=500),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> dict[str, Any]:
-    """Disable invalid historical templates and write an audit log for rollback."""
+) -> dict:
+    """Disable invalid active historical templates and audit the remediation."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
         return admin_error
 
     try:
         return await service.remediate_invalid_templates(
-            actor_id=str(getattr(current_user, "user_id", "") or "") or None,
-            reason=request.reason,
+            reason=reason,
+            actor_user_id=str(current_user.user_id),
+            actor_user_identifier=_user_identifier(current_user),
         )
     except SQLAlchemyError as exc:
         return _prompt_error_response(
@@ -383,7 +409,7 @@ async def get_prompt_template(
 @router.put("/{template_id}", response_model=PromptTemplate)
 async def update_prompt_template(
     template_id: str,
-    data: dict[str, Any],
+    request: Request,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -397,9 +423,18 @@ async def update_prompt_template(
         return parse_error
     assert template_uuid is not None
 
+    data, payload_error = _parse_prompt_payload_or_error(await request.json(), PromptTemplateUpdate)
+    if payload_error is not None:
+        return payload_error
+    assert isinstance(data, PromptTemplateUpdate)
+
     try:
-        payload = PromptTemplateUpdate.model_validate(data)
-        template = await service.update_template(template_uuid, payload)
+        template = await service.update_template(
+            template_uuid,
+            data,
+            actor_user_id=str(current_user.user_id),
+            actor_user_identifier=_user_identifier(current_user),
+        )
         if not template:
             return _prompt_error_response(
                 status_code=404,
@@ -447,7 +482,11 @@ async def delete_prompt_template(
     assert template_uuid is not None
 
     try:
-        success = await service.delete_template(template_uuid)
+        success = await service.delete_template(
+            template_uuid,
+            actor_user_id=str(current_user.user_id),
+            actor_user_identifier=_user_identifier(current_user),
+        )
         if not success:
             return _prompt_error_response(
                 status_code=404,
@@ -523,7 +562,12 @@ async def set_default_template(
     assert template_uuid is not None
 
     try:
-        success = await service.set_default_template(template_uuid, prompt_type)
+        success = await service.set_default_template(
+            template_uuid,
+            prompt_type,
+            actor_user_id=str(current_user.user_id),
+            actor_user_identifier=_user_identifier(current_user),
+        )
         if not success:
             return _prompt_error_response(
                 status_code=404,

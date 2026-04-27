@@ -28,6 +28,7 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   welcome: "欢迎词",
   evaluation: "实时评价",
   report: "综合报告",
+  realtime_scoring: "实时评分",
 };
 
 const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
@@ -45,6 +46,7 @@ const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
   welcome: "bg-indigo-100 text-indigo-700",
   evaluation: "bg-teal-100 text-teal-700",
   report: "bg-zinc-200 text-zinc-700",
+  realtime_scoring: "bg-violet-100 text-violet-700",
 };
 const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
 

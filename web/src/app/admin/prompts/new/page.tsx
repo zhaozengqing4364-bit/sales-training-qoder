@@ -29,6 +29,7 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
     welcome: "欢迎词",
     evaluation: "实时评价",
     report: "综合报告",
+    realtime_scoring: "实时评分",
 };
 const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
 
