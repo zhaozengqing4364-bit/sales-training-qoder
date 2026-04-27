@@ -130,7 +130,7 @@ describe("RagProfilesPage", () => {
     });
 
     it("distinguishes API failure from an empty profile list", async () => {
-        listRagProfilesMock.mockRejectedValueOnce(new Error("backend unavailable"));
+        listRagProfilesMock.mockRejectedValue(new Error("backend unavailable"));
 
         render(<RagProfilesPage />);
 
