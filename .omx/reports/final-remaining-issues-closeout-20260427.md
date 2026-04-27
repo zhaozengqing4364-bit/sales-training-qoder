@@ -1,6 +1,6 @@
 # Final Remaining Issues Closeout — 2026-04-27
 
-Worker: worker-1  
+Worker: worker-1
 Model: gpt-5.5
 
 ## Status Matrix
