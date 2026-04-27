@@ -111,13 +111,13 @@ export default function AdminDashboardPage() {
             <GlassCard className="p-5 border border-amber-100/70 bg-amber-50/60">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">管理首页数据来源说明</h2>
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">管理首页接入状态说明</h2>
                         <p className="mt-2 text-sm text-slate-700 text-pretty">
                             当前只有上方“训练效果核心看板（近7天）”直接读取 <code>api.internal.health()</code> 与 <code>api.analyticsOpen.getDashboard()</code>。
-                            以下卡片当前作为管理入口与待接权威数据提示，用来标记还未接上真实数据源的组织、资源与运维面。
+                            以下卡片用于说明尚未接入统一数据来源的组织、资源与运维能力，避免把待接入能力误认为已可操作。
                         </p>
                     </div>
-                    <Badge variant="secondary">其余卡片为待接权威数据</Badge>
+                    <Badge variant="secondary">其余卡片为待接入能力</Badge>
                 </div>
             </GlassCard>
 
@@ -184,10 +184,10 @@ export default function AdminDashboardPage() {
                     <div>
                         <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">当前真实管理入口</h2>
                         <p className="mt-2 text-sm text-slate-700 text-pretty">
-                            直接进入当前已接真实 authority 的管理面，避免在首页展示未接通的表单、日志控制台或自动告警。
+                            直接进入当前已接统一数据来源 的管理面，不在首页提供未接入的表单、日志控制台或自动告警入口。
                         </p>
                     </div>
-                    <Badge variant="green">live authority only</Badge>
+                    <Badge variant="green">已接入数据源</Badge>
                 </div>
                 <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <GlassCard className="p-5 border border-white/80 bg-white/80">
@@ -240,12 +240,12 @@ export default function AdminDashboardPage() {
             <GlassCard className="p-6 border border-slate-200/70 bg-slate-50/70">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">待接权威数据的管理面</h2>
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">待接入的管理能力</h2>
                         <p className="mt-2 text-sm text-slate-600 text-pretty">
-                            这些区域当前仍然没有统一数据源；首页只保留缺口说明，避免误导主管把草拟 UI 当成已经接通的系统能力。
+                            这些区域当前仍然尚未接入统一数据来源；首页只保留缺口说明，避免误导主管把草拟 UI 当成已经接通的系统能力。
                         </p>
                     </div>
-                    <Badge variant="secondary">待接数据</Badge>
+                    <Badge variant="secondary">待接入</Badge>
                 </div>
                 <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <GlassCard className="p-5 border border-dashed border-slate-200 bg-white/80">
@@ -253,7 +253,7 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">首页动作编排</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    公告发布、批量动作、配置快捷入口等还没有一条首页级 authority；当前只保留到真实管理面的跳转，仅展示缺口与跳转，不展示未接通的操作流。
+                                    公告发布、批量动作、配置快捷入口等还没有一条首页级统一数据来源；当前只保留到真实管理面的跳转，不再假装本页已经具备这些操作流。
                                 </p>
                             </div>
                             <Activity className="w-5 h-5 text-slate-400" />
@@ -265,7 +265,7 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">统一告警与动态</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    当前仓库还没有一条可直接复用到首页的统一告警 / 动态 authority；如果未来恢复，应先明确事件来源、过滤口径和 operator 响应动作。
+                                    当前仓库还没有一条可直接复用到首页的统一告警 / 动态数据来源；如果未来恢复，应先明确事件来源、过滤口径和 operator 响应动作。
                                 </p>
                             </div>
                             <Server className="w-5 h-5 text-slate-400" />
@@ -278,7 +278,7 @@ export default function AdminDashboardPage() {
                                 <h3 className="text-base font-bold text-slate-900">存储与资源遥测</h3>
                                 <div className="mt-2 text-2xl font-black text-slate-900">待接真实统计</div>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    首页当前没有统一的磁盘、对象存储或备份容量数据源；在真实 telemetry 接通之前，这块仅展示入口说明，不展示容量、百分比或扩容建议。
+                                    首页当前没有统一的磁盘、对象存储或备份容量 authority；在真实 telemetry 接通之前，这块继续以待接入状态展示，不显示容量、百分比或扩容建议。
                                 </p>
                             </div>
                             <HardDrive className="w-5 h-5 text-slate-400" />
@@ -303,7 +303,7 @@ export default function AdminDashboardPage() {
                 <GlassCard className="p-6 border border-slate-200/70">
                     <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">首页不再承担的职责</h2>
                     <p className="mt-3 text-sm text-slate-600 text-pretty">
-                        首页只负责显示当前已接通的数据源与待补齐能力；未接入实时运营、配置控制台、动态流或告警能力的区域均以入口说明呈现。
+                        首页只负责显示当前已接通的数据面与待接入缺口，不提供未接入的实时运营、配置控制台、动态流或告警操作入口。
                     </p>
                     <div className="mt-5 flex flex-wrap gap-3">
                         <Badge variant="secondary">不再展示示意日志</Badge>
