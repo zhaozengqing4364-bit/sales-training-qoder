@@ -193,7 +193,8 @@ describe("AdminPromptsPage governance UI", () => {
     it("renders backend governance issue codes as operator-readable copy", async () => {
         render(<AdminPromptsPage />);
 
-        fireEvent.click(await screen.findByText("Needs review template"));
+        const templateLabels = await screen.findAllByText("Needs review template");
+        fireEvent.click(templateLabels[0]);
 
         expect(screen.getByText("历史变量对象已标记待迁移")).toBeTruthy();
         expect(screen.getByText("提示词类型不在允许列表")).toBeTruthy();
