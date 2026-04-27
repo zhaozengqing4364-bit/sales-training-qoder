@@ -86,7 +86,7 @@ const MODEL_TYPE_CONFIG = {
 
 const SETTINGS_READ_ONLY_TABS = new Set(["general", "security", "notifications"]);
 
-const READ_ONLY_SETTINGS_NOTICE = "这些配置项当前为只读展示，尚未接入持久化接口；如需调整生效配置，请使用模型配置页或提交治理工单。";
+const READ_ONLY_SETTINGS_NOTICE = "这些配置项当前为只读治理视图；保存接口、权限、审计与回滚策略尚未接入。";
 
 const readOnlyInputClassName = "bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed";
 

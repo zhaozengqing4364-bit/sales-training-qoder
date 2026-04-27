@@ -94,7 +94,7 @@ export default function RagProfilesPage() {
         try {
             const data = await api.admin.listRagProfiles();
             setProfiles(data ?? []);
-        } catch (error) {
+        } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "无法获取 RAG 配置列表";
             setProfiles([]);
             setLoadError(message);
@@ -293,33 +293,38 @@ export default function RagProfilesPage() {
                     <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
                 </div>
             ) : loadError ? (
-                <GlassCard className="p-10 text-center border-red-200 bg-red-50/60">
-                    <AlertTriangle className="w-10 h-10 mx-auto text-red-400 mb-3" />
-                    <p className="font-medium text-red-700">RAG 配置加载失败</p>
-                    <p className="mt-2 text-sm text-red-600">{loadError}</p>
-                    <Button size="sm" className="mt-4" variant="outline" onClick={loadProfiles}>
-                        重新加载
-                    </Button>
+                <GlassCard className="p-10 text-center border border-red-200 bg-red-50">
+                    <AlertTriangle className="w-10 h-10 mx-auto text-red-500 mb-3" />
+                    <p className="font-medium text-red-800">RAG 配置接口加载失败</p>
+                    <p className="mt-2 text-sm text-red-700">
+                        请检查管理员权限、后端 /admin/rag-profiles API 与迁移状态；新版检索策略入口仍可继续使用。
+                    </p>
+                    <div className="mt-4 flex justify-center gap-2">
+                        <Button size="sm" variant="outline" onClick={loadProfiles}>
+                            重试
+                        </Button>
+                        <Button size="sm" onClick={() => router.push("/admin/retrieval-strategies")}>
+                            前往检索策略页面
+                        </Button>
+                    </div>
                 </GlassCard>
             ) : profiles.length === 0 ? (
                 <GlassCard className="p-10 text-center">
                     <Database className="w-10 h-10 mx-auto text-slate-300 mb-3" />
                     <p className="text-slate-500">暂无 RAG 配置</p>
-                    <p className="mt-2 text-xs text-slate-500">如已迁移到检索策略，请前往新版入口；如仍需保留旧 RAG 配置，可创建第一条配置并记录审计原因。</p>
-                    <div className="mt-4 flex justify-center gap-2">
-                        <Button size="sm" variant="outline" onClick={() => router.push("/admin/retrieval-strategies")}>
-                            前往检索策略
-                        </Button>
-                        <Button
-                            size="sm"
-                            onClick={() => {
-                                resetForm();
-                                setShowCreateForm(true);
-                            }}
-                        >
-                            创建第一个配置
-                        </Button>
-                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                        如已迁移到新版治理，请使用「检索策略」页面创建和审计配置。
+                    </p>
+                    <Button
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => {
+                            resetForm();
+                            setShowCreateForm(true);
+                        }}
+                    >
+                        创建第一个配置
+                    </Button>
                 </GlassCard>
             ) : (
                 <div className="space-y-3">

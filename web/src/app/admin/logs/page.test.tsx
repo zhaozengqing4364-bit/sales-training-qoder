@@ -113,4 +113,17 @@ describe("AdminLogsPage", () => {
         expect(screen.queryByText("sensitive.user@example.com")).toBeNull();
         expect(screen.queryByText("203.0.113.42")).toBeNull();
     });
+
+    it("distinguishes API failure from an empty audit-log result", async () => {
+        getSystemLogsMock.mockRejectedValue(new Error("backend unavailable"));
+
+        render(<AdminLogsPage />);
+
+        await waitFor(() => {
+            expect(errorToastMock).toHaveBeenCalledWith("backend unavailable");
+        });
+
+        expect(screen.getByText("日志接口失败：请检查权限、后端服务与审计日志数据源后重试。")).toBeTruthy();
+        expect(screen.queryByText("暂无日志数据")).toBeNull();
+    });
 });

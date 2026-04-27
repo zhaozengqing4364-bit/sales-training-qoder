@@ -3,14 +3,20 @@ import { debug } from "@/lib/debug";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, RefreshCw, Search, Sparkles } from "lucide-react";
+import { Plus, RefreshCw, Search, ShieldAlert, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { PromptTemplate, PromptTemplateGovernanceAudit, PromptType, ScenarioPrompt } from "@/lib/api/types";
+import {
+  PromptTemplate,
+  PromptTemplateGovernanceStatus,
+  PromptTemplateOptions,
+  PromptType,
+  ScenarioPrompt,
+} from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
@@ -83,7 +89,8 @@ export default function AdminPromptsPage() {
 
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [scenarioPrompts, setScenarioPrompts] = useState<ScenarioPrompt[]>([]);
-  const [governanceAudit, setGovernanceAudit] = useState<PromptTemplateGovernanceAudit | null>(null);
+  const [promptOptions, setPromptOptions] = useState<PromptTemplateOptions | null>(null);
+  const [governanceStatus, setGovernanceStatus] = useState<PromptTemplateGovernanceStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<PromptType | "all">("all");
@@ -104,12 +111,19 @@ export default function AdminPromptsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [templatesResult, scenarioPromptsResult, userResult, governanceResult] = await Promise.allSettled([
+      const [
+        templatesResult,
+        scenarioPromptsResult,
+        userResult,
+        optionsResult,
+        governanceResult,
+      ] = await Promise.allSettled([
         api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
         api.admin.getScenarioPrompts(),
         api.admin.getPromptTemplateGovernanceStatus(),
         api.user.getMe(),
-        api.admin.getPromptTemplateGovernanceAudit(),
+        api.admin.getPromptTemplateOptions(),
+        api.admin.getPromptTemplateGovernanceStatus(),
       ]);
 
       if (templatesResult.status === "fulfilled") {
@@ -136,11 +150,8 @@ export default function AdminPromptsPage() {
         setUserRole("user");
       }
 
-      if (governanceResult.status === "fulfilled") {
-        setGovernanceAudit(governanceResult.value);
-      } else {
-        setGovernanceAudit(null);
-      }
+      setPromptOptions(optionsResult.status === "fulfilled" ? optionsResult.value : null);
+      setGovernanceStatus(governanceResult.status === "fulfilled" ? governanceResult.value : null);
     } catch (error) {
       debug.error("Failed to load prompt admin data", error);
       toast.error("提示词数据加载失败");
@@ -311,18 +322,18 @@ export default function AdminPromptsPage() {
     }
   };
 
-  const handleRemediateGovernance = async () => {
+  const handleQuarantineInvalidTemplates = async () => {
     if (!canOperate) {
       toast.error("当前角色无操作权限");
       return;
     }
-
     setIsOperating(true);
     try {
-      const result = await api.admin.remediatePromptTemplateGovernance({
-        reason: "admin prompt governance remediation",
-      });
-      await refreshAfterMutation(`已治理 ${result.remediated_count} 条历史模板`);
+      const result = await api.admin.quarantineInvalidPromptTemplates(
+        "admin治理：禁用非法历史提示词模板，等待修正后再启用",
+      );
+      await loadData();
+      toast.success(`已禁用 ${result.quarantined_count} 个非法历史模板`);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -377,7 +388,12 @@ export default function AdminPromptsPage() {
 
       <GlassCard className="p-4 space-y-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          销售场景仅允许绑定评估/报告/实时评分类模板。业务角色提示词与知识库策略请在角色中心配置。
+          销售场景仅允许绑定评估/报告类模板。业务角色提示词与知识库策略请在角色中心配置。
+          {promptOptions ? (
+            <span className="ml-2">
+              保存校验：prompt_type 必须来自后台选项，variables 必须为 {promptOptions.variables_schema}。
+            </span>
+          ) : null}
         </div>
         {governanceAudit ? (
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-700">
@@ -445,6 +461,40 @@ export default function AdminPromptsPage() {
           </label>
         </div>
       </GlassCard>
+
+      {governanceStatus && governanceStatus.invalid_count > 0 ? (
+        <GlassCard className="border border-red-200 bg-red-50 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 font-bold text-red-800">
+                <ShieldAlert className="h-4 w-4" />
+                提示词治理发现 {governanceStatus.invalid_count} 条非法历史模板
+              </div>
+              <p className="text-sm text-red-700">
+                {governanceStatus.invalid_active_count} 条仍处于启用/默认状态；运行时会跳过非法模板并记录状态，请先禁用后修正。
+              </p>
+              <p className="text-xs text-red-700 text-pretty">
+                回滚：修正 prompt_type/variables 后重新启用或设为默认；所有操作写入 {governanceStatus.audit_log_action} 审计。
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {governanceStatus.issues.slice(0, 4).map((issue) => (
+                  <Badge key={issue.template_id} className="bg-white text-red-700 border border-red-200">
+                    {issue.name || issue.template_id.slice(0, 8)} · {issue.issue_codes.join("/")}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="border-red-200 bg-white text-red-700"
+              disabled={!canOperate || isOperating || governanceStatus.invalid_active_count === 0}
+              onClick={() => void handleQuarantineInvalidTemplates()}
+            >
+              禁用非法历史模板
+            </Button>
+          </div>
+        </GlassCard>
+      ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <GlassCard className="p-4 xl:col-span-2">

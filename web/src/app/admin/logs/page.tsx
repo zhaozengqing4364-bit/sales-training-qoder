@@ -175,6 +175,10 @@ export default function AdminLogsPage() {
             <GlassCard className="overflow-hidden">
                 {isLoading ? (
                     <div className="py-20 text-center text-slate-500">加载中...</div>
+                ) : error ? (
+                    <div className="py-20 text-center text-red-600">
+                        日志接口失败：请检查权限、后端服务与审计日志数据源后重试。
+                    </div>
                 ) : logs.length === 0 ? (
                     <div className="py-20 text-center text-slate-500">{emptyStateMessage}</div>
                 ) : (
