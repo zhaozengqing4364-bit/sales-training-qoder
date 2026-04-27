@@ -40,6 +40,7 @@ class TestPromptTypeEnum:
             "extraction",
             "scoring",
             "stage",
+            "realtime_scoring",
             "fuzzy_detection",
             "realtime_scoring",
             "interruption",
@@ -313,7 +314,7 @@ class TestPromptTemplate:
         assert template.variables == ["var1", "var2"]
 
     def test_template_rejects_invalid_json_variables(self):
-        """Should reject invalid JSON string variables for governance visibility."""
+        """Invalid historical rows should be visible to governance instead of coerced."""
         now = datetime.now(UTC)
         with pytest.raises(ValidationError):
             PromptTemplate(
@@ -329,31 +330,13 @@ class TestPromptTemplate:
                 updated_at=now,
             )
 
-    def test_create_rejects_object_shaped_variables(self):
-        """Should reject historical object-shaped variable schemas on save."""
+    def test_create_rejects_variables_dict_before_save(self):
         with pytest.raises(ValidationError):
             PromptTemplateCreate(
-                name="Bad Variables",
+                name="Invalid variables",
                 prompt_type=PromptType.REALTIME_SCORING,
                 template="Score {{ score }}",
-                variables={"score": "number"},
-            )
-
-    def test_template_rejects_dict_variables_for_governance_visibility(self):
-        """Historical dict variables are invalid so service migration can disable them."""
-        now = datetime.now(UTC)
-        with pytest.raises(ValidationError):
-            PromptTemplate(
-                id=uuid4(),
-                name="Invalid Historical",
-                prompt_type=PromptType.SCORING,
-                template="Hello",
-                variables={"score": "number"},
-                is_active=True,
-                is_default=False,
-                is_system=False,
-                created_at=now,
-                updated_at=now,
+                variables={"score": "number"},  # type: ignore[arg-type]
             )
 
 
