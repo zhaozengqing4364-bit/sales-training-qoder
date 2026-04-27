@@ -21,6 +21,7 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   scoring: "评分",
   stage: "阶段",
   fuzzy_detection: "模糊检测",
+  realtime_scoring: "实时评分",
   interruption: "打断检测",
   tracking: "跟踪",
   welcome: "欢迎词",
@@ -36,13 +37,14 @@ const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
   scoring: "bg-amber-100 text-amber-700",
   stage: "bg-orange-100 text-orange-700",
   fuzzy_detection: "bg-rose-100 text-rose-700",
+  realtime_scoring: "bg-violet-100 text-violet-700",
   interruption: "bg-pink-100 text-pink-700",
   tracking: "bg-cyan-100 text-cyan-700",
   welcome: "bg-indigo-100 text-indigo-700",
   evaluation: "bg-teal-100 text-teal-700",
   report: "bg-zinc-200 text-zinc-700",
 };
-const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring"];
+const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
 
 function getRoleLabel(role: string): string {
   if (role === "admin") {

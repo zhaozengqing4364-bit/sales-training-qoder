@@ -25,13 +25,14 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
     scoring: "评分",
     stage: "阶段",
     fuzzy_detection: "模糊检测",
+    realtime_scoring: "实时评分",
     interruption: "打断检测",
     tracking: "跟踪",
     welcome: "欢迎词",
     evaluation: "实时评价",
     report: "综合报告",
 };
-const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring"];
+const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring", "realtime_scoring"];
 
 export default function EditPromptTemplatePage() {
     const params = useParams();
