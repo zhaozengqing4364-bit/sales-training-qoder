@@ -58,6 +58,7 @@ import {
     PromptTemplateCreate,
     PromptTemplateUpdate,
     PromptTemplateGovernanceRemediationResponse,
+    PromptTemplateGovernanceRollbackResponse,
     PromptTemplateGovernanceStatus,
     PromptTemplateOptions,
     PromptTemplateQuarantineResult,
@@ -3185,7 +3186,7 @@ export const api = {
 
         rollbackPromptTemplateGovernance: async (id: string, data: { reason: string }) => {
             const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
-            return apiFetch<PromptTemplate>(`/prompt-templates/governance/${normalizedId}/rollback`, {
+            return apiFetch<PromptTemplateGovernanceRollbackResponse>(`/prompt-templates/governance/${normalizedId}/rollback`, {
                 method: "POST",
                 body: JSON.stringify(data),
             });

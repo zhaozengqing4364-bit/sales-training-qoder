@@ -59,13 +59,20 @@ function getRoleLabel(role: string): string {
 function formatGovernanceIssue(issue: string): string {
   switch (issue) {
     case "variables_object_migratable":
+    case "variables_object_schema":
       return "历史变量对象已标记待迁移";
     case "variables_string_not_json_array":
     case "variables_json_not_array":
     case "variables_not_array":
+    case "variables_invalid_json":
+    case "variables_non_string_item":
+    case "variables_not_list":
       return "变量字段不是字符串数组";
     case "prompt_type_not_allowed":
+    case "invalid_prompt_type":
       return "提示词类型不在允许列表";
+    case "empty_template":
+      return "模板内容为空";
     default:
       return issue;
   }

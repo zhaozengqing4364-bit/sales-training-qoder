@@ -1731,6 +1731,14 @@ export interface PromptTemplateGovernanceRemediationResponse {
     };
 }
 
+export interface PromptTemplateGovernanceRollbackResponse {
+    template: PromptTemplate | Record<string, unknown>;
+    governance_status: "valid" | "needs_review" | string;
+    governance_issues: PromptTemplateGovernanceIssue[];
+    audit_action: string;
+    message?: string;
+}
+
 export interface PromptTemplateOptions {
     allowed_prompt_types: Array<{ value: string; label: string }>;
     sales_allowed_prompt_types: string[];
