@@ -34,6 +34,7 @@ class PromptType(str, Enum):
     SCORING = "scoring"
     STAGE = "stage"
     FUZZY_DETECTION = "fuzzy_detection"
+    REALTIME_SCORING = "realtime_scoring"
     INTERRUPTION = "interruption"
     TRACKING = "tracking"
     WELCOME = "welcome"
@@ -61,6 +62,12 @@ class PromptTemplateCreate(PromptTemplateBase):
     """Model for creating a new prompt template."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_control_plane_variables(cls, value: Any) -> list[str]:
+        """Control-plane writes must provide a list[str], never a dict/map."""
+        return _normalize_variable_list(value, allow_json_string=False)
 
     @model_validator(mode="after")
     def extract_variables(self) -> PromptTemplateCreate:
@@ -164,6 +171,14 @@ class PromptTemplateUpdate(BaseModel):
             self.variables = PromptTemplateCreate._extract_variables_from_template(self.template)
         return self
 
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_control_plane_variables(cls, value: Any) -> list[str] | None:
+        """Control-plane writes must provide a list[str], never a dict/map."""
+        if value is None:
+            return None
+        return _normalize_variable_list(value, allow_json_string=False)
+
 
 class PromptTemplate(PromptTemplateBase):
     """Full prompt template model (database representation)."""
@@ -179,16 +194,58 @@ class PromptTemplate(PromptTemplateBase):
     @classmethod
     def validate_variables(cls, v: Any) -> list[str]:
         """Ensure variables is always a list of strings."""
-        if v is None:
+        return _normalize_variable_list(v, allow_json_string=True)
+
+
+class PromptTemplateGovernanceIssue(BaseModel):
+    """Visible invalid historical prompt-template state."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    template_id: str
+    name: str
+    prompt_type: str
+    is_active: bool
+    is_default: bool
+    reason_codes: list[str]
+    disabled_by_migration: bool = False
+    action: str = "disable_and_review"
+
+
+class PromptTemplateGovernanceReport(BaseModel):
+    """Invalid prompt-template governance report."""
+
+    generated_at: datetime
+    mode: str
+    issues: list[PromptTemplateGovernanceIssue] = Field(default_factory=list)
+    migrated_count: int = 0
+    audit_action: str = "prompt_template_invalid_migration"
+
+
+def _normalize_variable_list(value: Any, *, allow_json_string: bool) -> list[str]:
+    """Normalize variables while preserving invalid-history visibility.
+
+    Historical rows may still contain JSON-encoded list strings, which remain readable.
+    Dict/map variables are deliberately rejected so they can be disabled by governance
+    migration instead of being silently coerced to keys.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        if not allow_json_string:
+            raise ValueError("variables must be a list of strings")
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
             return []
-        if isinstance(v, str):
-            # Handle JSON string from database
-            try:
-                parsed = json.loads(v)
-                return parsed if isinstance(parsed, list) else []
-            except json.JSONDecodeError:
-                return []
-        return list(v)
+        if not isinstance(parsed, list):
+            raise ValueError("variables must be a list of strings")
+        value = parsed
+    if not isinstance(value, list):
+        raise ValueError("variables must be a list of strings")
+    if not all(isinstance(item, str) and item.strip() for item in value):
+        raise ValueError("variables must contain non-empty strings only")
+    return list(value)
 
 
 class ScenarioPromptBase(BaseModel):
