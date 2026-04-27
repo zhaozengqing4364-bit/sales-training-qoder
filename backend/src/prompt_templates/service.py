@@ -173,7 +173,15 @@ class PromptTemplateService:
     @staticmethod
     def _safe_model_validate(db_template: Any) -> PromptTemplate | None:
         try:
-            return PromptTemplate.model_validate(db_template)
+            template = PromptTemplate.model_validate(db_template)
+            if template.governance_issues:
+                logger.warning(
+                    "Prompt template row requires governance remediation",
+                    template_id=str(template.id),
+                    governance_issues=template.governance_issues,
+                    is_active=template.is_active,
+                )
+            return template
         except ValidationError as exc:
             logger.warning(
                 "Invalid prompt template row requires governance migration",
