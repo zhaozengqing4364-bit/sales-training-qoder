@@ -41,6 +41,7 @@ class PromptType(str, Enum):
     WELCOME = "welcome"
     EVALUATION = "evaluation"
     REPORT = "report"
+    REALTIME_SCORING = "realtime_scoring"
 
 
 def _normalize_prompt_variables(value: Any) -> list[str]:
@@ -115,6 +116,34 @@ class PromptTemplateBase(BaseModel):
     )
     is_active: bool = Field(default=True, description="Whether template is active")
     is_default: bool = Field(default=False, description="Whether this is the default for its type")
+
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_variable_list(cls, value: Any) -> list[str]:
+        """Reject legacy dict/object variables at write time; DB repair is explicit."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError("variables must be a list of strings") from exc
+            value = parsed
+        if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+            raise ValueError("variables must be a list of non-empty strings")
+        return list(dict.fromkeys(value))
+
+    @field_validator("template")
+    @classmethod
+    def validate_template_syntax(cls, value: str) -> str:
+        """Validate Jinja syntax before a template can be saved."""
+        try:
+            from jinja2.sandbox import SandboxedEnvironment
+
+            SandboxedEnvironment(autoescape=False).parse(value)
+        except Exception as exc:
+            raise ValueError("template must be valid Jinja2 syntax") from exc
+        return value
 
 
 class PromptTemplateCreate(PromptTemplateBase):
@@ -297,11 +326,6 @@ class PromptTemplate(PromptTemplateBase):
         payload["governance_status"] = "needs_review" if issues else "valid"
         return payload
 
-    @field_validator("variables", mode="before")
-    @classmethod
-    def validate_variables(cls, v: Any) -> list[str]:
-        """Ensure variables is always a list of strings for read responses."""
-        return _coerce_legacy_variables_for_read(v)
 
 
 class ScenarioPromptBase(BaseModel):
