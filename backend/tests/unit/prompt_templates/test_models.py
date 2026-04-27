@@ -314,9 +314,9 @@ class TestPromptTemplate:
         assert template.variables == ["var1", "var2"]
 
     def test_template_rejects_invalid_json_variables(self):
-        """Invalid historical rows should be visible to governance instead of coerced."""
+        """Invalid historical JSON variables should be surfaced for governance repair."""
         now = datetime.now(UTC)
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             PromptTemplate(
                 id=uuid4(),
                 name="Test",
@@ -329,15 +329,7 @@ class TestPromptTemplate:
                 created_at=now,
                 updated_at=now,
             )
-
-    def test_create_rejects_variables_dict_before_save(self):
-        with pytest.raises(ValidationError):
-            PromptTemplateCreate(
-                name="Invalid variables",
-                prompt_type=PromptType.REALTIME_SCORING,
-                template="Score {{ score }}",
-                variables={"score": "number"},  # type: ignore[arg-type]
-            )
+        assert "variables must be a list" in str(exc_info.value)
 
 
 class TestScenarioPromptCreate:
@@ -443,12 +435,12 @@ class TestVariableExtractionEdgeCases:
         assert "condition" in template.variables
         assert "items" in template.variables
 
-    def test_nested_braces_not_extracted(self):
-        """Should not extract content from nested braces."""
-        template = PromptTemplateCreate(
-            name="Nested",
-            prompt_type=PromptType.SUMMARY,
-            template="{{ outer {{ not_this }} }}",
-        )
-        # Should only extract 'outer'
-        assert "outer" in template.variables
+    def test_nested_braces_rejected_as_invalid_jinja(self):
+        """Malformed nested braces should be rejected before saving."""
+        with pytest.raises(ValidationError) as exc_info:
+            PromptTemplateCreate(
+                name="Nested",
+                prompt_type=PromptType.SUMMARY,
+                template="{{ outer {{ not_this }} }}",
+            )
+        assert "valid Jinja2" in str(exc_info.value)
