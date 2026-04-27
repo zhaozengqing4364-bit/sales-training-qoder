@@ -161,8 +161,7 @@ class HistoryService:
         if isinstance(duration_seconds, int):
             return max(0, duration_seconds)
         derived = cls._duration_seconds_between(
-            getattr(session, "start_time", None),
-            getattr(session, "end_time", None)
+            getattr(session, "start_time", None), getattr(session, "end_time", None)
         )
         return derived or 0
 
@@ -176,7 +175,9 @@ class HistoryService:
             return None
 
     @staticmethod
-    def _build_feedback_summary(effectiveness_snapshot: dict[str, Any] | None) -> str | None:
+    def _build_feedback_summary(
+        effectiveness_snapshot: dict[str, Any] | None,
+    ) -> str | None:
         if not isinstance(effectiveness_snapshot, dict):
             return None
 
@@ -191,7 +192,9 @@ class HistoryService:
         return None
 
     @classmethod
-    def normalize_intervention_issue_family(cls, issue_family: str | None) -> str | None:
+    def normalize_intervention_issue_family(
+        cls, issue_family: str | None
+    ) -> str | None:
         return manager_intervention_result_resolver.normalize_issue_family(issue_family)
 
     @classmethod
@@ -199,7 +202,9 @@ class HistoryService:
         cls,
         summary: HistorySessionSummary,
     ) -> str | None:
-        return manager_intervention_result_resolver.resolve_summary_issue_family(summary)
+        return manager_intervention_result_resolver.resolve_summary_issue_family(
+            summary
+        )
 
     @classmethod
     def build_manager_intervention_results(
@@ -207,7 +212,9 @@ class HistoryService:
         summaries: list[HistorySessionSummary],
         interventions: list[ManagerIntervention],
     ) -> list[ManagerInterventionResultSummary]:
-        return manager_intervention_result_resolver.build_results(summaries, interventions)
+        return manager_intervention_result_resolver.build_results(
+            summaries, interventions
+        )
 
     @classmethod
     def build_history_entries(
@@ -258,12 +265,16 @@ class HistoryService:
                     logic_score=(
                         projection.logic_score
                         if projection
-                        else cls._coerce_optional_score(getattr(session, "logic_score", None))
+                        else cls._coerce_optional_score(
+                            getattr(session, "logic_score", None)
+                        )
                     ),
                     accuracy_score=(
                         projection.accuracy_score
                         if projection
-                        else cls._coerce_optional_score(getattr(session, "accuracy_score", None))
+                        else cls._coerce_optional_score(
+                            getattr(session, "accuracy_score", None)
+                        )
                     ),
                     completeness_score=(
                         projection.completeness_score
@@ -281,7 +292,9 @@ class HistoryService:
                     ),
                     effectiveness_snapshot=effectiveness_snapshot,
                     overall_result=(projection.overall_result if projection else None),
-                    feedback_summary=cls._build_feedback_summary(effectiveness_snapshot),
+                    feedback_summary=cls._build_feedback_summary(
+                        effectiveness_snapshot
+                    ),
                     stage_summary=(projection.stage_summary if projection else []),
                     main_issue=(projection.main_issue if projection else None),
                     next_goal=(projection.next_goal if projection else None),
@@ -577,7 +590,9 @@ class HistoryService:
             non_completed_sessions,
         ) = cls._split_completed_projection_groups(summaries)
 
-        bucketed_sessions: dict[datetime, list[HistorySessionSummary]] = defaultdict(list)
+        bucketed_sessions: dict[datetime, list[HistorySessionSummary]] = defaultdict(
+            list
+        )
         for summary in sorted(completed_sessions, key=lambda item: item.start_time):
             bucket_start = cls._normalize_bucket_start(
                 summary.start_time,
@@ -605,12 +620,17 @@ class HistoryService:
                 2,
             )
             average_accuracy = round(
-                sum(float(summary.accuracy_score or 0.0) for summary in evaluable_bucket)
+                sum(
+                    float(summary.accuracy_score or 0.0) for summary in evaluable_bucket
+                )
                 / len(evaluable_bucket),
                 2,
             )
             average_completeness = round(
-                sum(float(summary.completeness_score or 0.0) for summary in evaluable_bucket)
+                sum(
+                    float(summary.completeness_score or 0.0)
+                    for summary in evaluable_bucket
+                )
                 / len(evaluable_bucket),
                 2,
             )
@@ -774,10 +794,16 @@ class HistoryService:
 
         total: int | None = None
         if include_total:
-            count_query = select(func.count()).select_from(query.order_by(None).subquery())
+            count_query = select(func.count()).select_from(
+                query.order_by(None).subquery()
+            )
             total = int((await db.execute(count_query)).scalar() or 0)
 
-        order_clause = desc(PracticeSession.start_time) if order_desc else PracticeSession.start_time
+        order_clause = (
+            desc(PracticeSession.start_time)
+            if order_desc
+            else PracticeSession.start_time
+        )
         query = query.order_by(order_clause)
         if offset is not None:
             query = query.offset(offset)
@@ -1125,7 +1151,9 @@ class HistoryService:
             summaries = await self._build_history_summaries(db, sessions=sessions)
             results = [
                 item.to_payload()
-                for item in self.build_manager_intervention_results(summaries, interventions)
+                for item in self.build_manager_intervention_results(
+                    summaries, interventions
+                )
             ]
             self._log_history_query(
                 query_name="admin_user_intervention_results",

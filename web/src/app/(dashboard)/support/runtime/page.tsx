@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthProtection } from "@/hooks/use-auth-protection";
 import { cn } from "@/lib/utils";
+import { getSupportRuntimeFaultAction } from "@/lib/support/runtime-fault-actions";
 import type {
     SupportRuntimeFaultItem,
     SupportRuntimeFaultSeverity,
@@ -28,7 +29,10 @@ function formatDiagnosticValue(value: unknown): string | null {
         return null;
     }
     if (Array.isArray(value)) {
-        return value.map((entry) => String(entry)).join(", ");
+        const formattedItems = value
+            .map((entry) => formatDiagnosticValue(entry))
+            .filter((entry): entry is string => Boolean(entry));
+        return formattedItems.length ? formattedItems.join(", ") : null;
     }
     if (typeof value === "object") {
         return JSON.stringify(value);
@@ -361,6 +365,9 @@ export default function SupportRuntimeStatusPage() {
                                             </div>
 
                                             <p className="text-sm font-medium text-slate-900 text-pretty">{item.summary}</p>
+                                            <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800 text-pretty">
+                                                {getSupportRuntimeFaultAction(item.kind)}
+                                            </p>
 
                                             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                                                 {item.session_id ? (

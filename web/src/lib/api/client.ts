@@ -228,6 +228,9 @@ function triggerSessionExpiredOnce(): void {
 
 const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[NETWORK_ERROR]": "网络连接失败，请检查后端服务或网络设置后重试。",
+    "[HTTP_404]": "请求的配置接口暂未开通或资源不存在，请刷新后重试或联系管理员。",
+    "[BUSINESS_RULE_KEY_UNSUPPORTED]": "业务规则配置暂不支持该类型，请刷新后重试或联系管理员。",
+    "[BUSINESS_RULE_SCHEMA_INVALID]": "业务规则配置校验未通过，请检查必填项、唯一性和兜底策略。",
     "[REQUEST_VALIDATION_ERROR]": "请求参数缺失或格式不正确，请检查后重试。",
     "[INVALID_CLIENT_PAYLOAD]": "请求参数无效，请刷新页面后重试。",
     "[AUTHENTICATION_REQUIRED]": "当前请求需要登录后才能继续。",

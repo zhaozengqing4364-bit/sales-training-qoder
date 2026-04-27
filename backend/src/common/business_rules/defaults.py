@@ -9,6 +9,7 @@ from typing import Any
 ACHIEVEMENT_RULES_KEY = "growth.achievement.rules"
 AI_COACH_RULES_KEY = "growth.ai_coach.rules"
 NEXT_PRACTICE_RECOMMENDATION_KEY = "recommendation.next_practice.ruleset"
+SALES_COMBINATIONS_RULESET_KEY = "sales.training.combinations.ruleset"
 
 BUSINESS_RULE_SCHEMA_VERSION = "business_rule_config_v1"
 
@@ -99,6 +100,105 @@ DEFAULT_RECOMMENDATION_RULESET: dict[str, Any] = {
     },
 }
 
+DEFAULT_SALES_COMBINATIONS_RULESET: dict[str, Any] = {
+    "rule_set_id": "sales-combinations-default-v1",
+    "version": "sales_combinations_v1",
+    "enabled": True,
+    "fallback_policy": "client_default_v1",
+    "combinations": [
+        {
+            "id": "c1",
+            "capability": "破冰建立信任",
+            "role": "冷淡型客户",
+            "priority": 1,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c2",
+            "capability": "破冰建立信任",
+            "role": "强势质疑型客户",
+            "priority": 2,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c3",
+            "capability": "需求挖掘",
+            "role": "价格敏感型客户",
+            "priority": 3,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c4",
+            "capability": "需求挖掘",
+            "role": "拖延决策型客户",
+            "priority": 4,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c5",
+            "capability": "价值表达",
+            "role": "竞品比较型客户",
+            "priority": 5,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c6",
+            "capability": "价值表达",
+            "role": "价格敏感型客户",
+            "priority": 6,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c7",
+            "capability": "异议处理",
+            "role": "强势质疑型客户",
+            "priority": 7,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c8",
+            "capability": "异议处理",
+            "role": "竞品比较型客户",
+            "priority": 8,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c9",
+            "capability": "推进下一步行动",
+            "role": "拖延决策型客户",
+            "priority": 9,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+        {
+            "id": "c10",
+            "capability": "推进下一步行动",
+            "role": "冷淡型客户",
+            "priority": 10,
+            "enabled": True,
+            "required_agent_match": [],
+            "required_persona_match": [],
+        },
+    ],
+}
+
 
 @dataclass(frozen=True)
 class BusinessRuleDefinition:
@@ -182,6 +282,24 @@ _BUSINESS_RULE_DEFINITIONS = {
         audit_policy="publish/rollback/disable require actor, before/after version, reason, trace_id",
         fallback_policy="use bundled default ruleset and expose ruleset_source in payload",
         rollback_policy="restore a prior archived/published version for this key",
+    ),
+    SALES_COMBINATIONS_RULESET_KEY: BusinessRuleDefinition(
+        key=SALES_COMBINATIONS_RULESET_KEY,
+        domain="sales_training_combinations",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_SALES_COMBINATIONS_RULESET,
+        type="rule_json",
+        range_or_allowlist={
+            "fallback_policy": ["client_default_v1", "hide_all"],
+            "priority": {"min_inclusive": 1},
+            "unique_fields": ["id", "capability_role_pair"],
+        },
+        read_path="common.api.business_rules.get_active_sales_combinations",
+        admin_entry="/admin/business-rules/sales-combinations",
+        permission="admin_publish_only",
+        audit_policy="validate/preview/publish/rollback/disable/delete_draft require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled default sales-combination ruleset when database config is missing or invalid; hide_all suppresses combinations when explicitly configured",
+        rollback_policy="restore a prior archived/published sales-combination ruleset version",
     ),
 }
 

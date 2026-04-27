@@ -8,7 +8,9 @@ from common.effectiveness import (
 )
 
 
-def test_canonical_dimension_definitions_share_rollups_across_sales_and_presentation() -> None:
+def test_canonical_dimension_definitions_share_rollups_across_sales_and_presentation() -> (
+    None
+):
     sales_dimensions = get_canonical_dimension_definitions("sales")
     presentation_dimensions = get_canonical_dimension_definitions("presentation")
 
@@ -30,11 +32,15 @@ def test_canonical_dimension_definitions_share_rollups_across_sales_and_presenta
     ]
 
     sales_rollups = {
-        item.dimension_id: [(part.rollup_id, part.weight) for part in item.rollup_contributions]
+        item.dimension_id: [
+            (part.rollup_id, part.weight) for part in item.rollup_contributions
+        ]
         for item in sales_dimensions
     }
     presentation_rollups = {
-        item.dimension_id: [(part.rollup_id, part.weight) for part in item.rollup_contributions]
+        item.dimension_id: [
+            (part.rollup_id, part.weight) for part in item.rollup_contributions
+        ]
         for item in presentation_dimensions
     }
 
@@ -48,7 +54,9 @@ def test_canonical_dimension_definitions_share_rollups_across_sales_and_presenta
 
 def test_surface_reader_plan_marks_canonical_consumers_and_compat_mirrors() -> None:
     report_plan = get_surface_reader_plan(surface_id="report", scenario_type="sales")
-    admin_plan = get_surface_reader_plan(surface_id="admin", scenario_type="presentation")
+    admin_plan = get_surface_reader_plan(
+        surface_id="admin", scenario_type="presentation"
+    )
     legacy_plan = get_surface_reader_plan(
         surface_id="comprehensive_report",
         scenario_type="sales",
@@ -72,6 +80,8 @@ def test_projection_kernel_contract_exposes_shared_kernel_metadata() -> None:
         "scenario_type": "sales",
         "primary_reader_id": "session_evidence_projection_v1",
         "mode": "canonical_consumer",
+        "ruleset_version": "session_evidence_projection_v1",
+        "score_basis": "session_evidence_projection_evaluable_only",
         "dimension_ids": [
             "value_expression",
             "customer_benefit_connection",
@@ -95,6 +105,8 @@ def test_projection_kernel_contract_exposes_shared_kernel_metadata() -> None:
         "scenario_type": "presentation",
         "primary_reader_id": "session_evidence_projection_v1",
         "mode": "canonical_consumer",
+        "ruleset_version": "session_evidence_projection_v1",
+        "score_basis": "session_evidence_projection_evaluable_only",
         "dimension_ids": [
             "fluency_coherence",
             "factual_accuracy",

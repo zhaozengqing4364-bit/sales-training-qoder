@@ -63,7 +63,9 @@ async def test_business_rule_service_publishes_and_resolves_database_ruleset(tes
 
 
 @pytest.mark.asyncio
-async def test_business_rule_resolver_uses_previous_valid_version_when_active_corrupt(test_db):
+async def test_business_rule_resolver_uses_previous_valid_version_when_active_corrupt(
+    test_db,
+):
     admin = await _admin(test_db)
     service = BusinessRuleConfigService(test_db)
 
@@ -146,8 +148,8 @@ async def test_business_rule_seed_defaults_is_idempotent(test_db):
     await test_db.commit()
     rows = await service.list_configs()
 
-    assert len(first) == 3
+    assert len(first) == 4
     assert second == []
-    assert len(rows) == 3
+    assert len(rows) == 4
     assert all(row.status == "published" for row in rows)
     assert {row.version for row in rows} == {1}

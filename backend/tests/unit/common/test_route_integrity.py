@@ -44,6 +44,8 @@ def test_key_business_routers_are_mounted() -> None:
         ("POST", "/api/v1/admin/knowledge/{kb_id}/search"),
         ("POST", "/api/v1/internal/knowledge/{kb_id}/search"),
         ("GET", "/api/v1/admin/presentations"),
+        ("GET", "/api/v1/admin/business-rules/definitions"),
+        ("GET", "/api/v1/business-rules/sales-combinations/active"),
     }
 
     missing = expected_routes - actual
@@ -71,6 +73,8 @@ def test_prompt_templates_static_route_precedes_dynamic_route() -> None:
         and str(getattr(route, "path", "")).startswith("/api/v1/prompt-templates")
     ]
 
-    by_scenario_index = prompt_routes.index("/api/v1/prompt-templates/by-scenario/{scenario_type}")
+    by_scenario_index = prompt_routes.index(
+        "/api/v1/prompt-templates/by-scenario/{scenario_type}"
+    )
     template_id_index = prompt_routes.index("/api/v1/prompt-templates/{template_id}")
     assert by_scenario_index < template_id_index

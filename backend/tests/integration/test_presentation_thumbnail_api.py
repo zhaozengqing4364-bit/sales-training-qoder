@@ -53,7 +53,7 @@ async def test_upload_presentation_sets_page_image_url(
     fake_parser = _FakePPTParser(tmp_path)
     monkeypatch.setattr(presentations_api, "get_ppt_parser", lambda: fake_parser)
 
-    file_stream = io.BytesIO(b"fake-pptx-content")
+    file_stream = io.BytesIO(b"PK\x03\x04fake-pptx-content")
     response = await async_client.post(
         "/api/v1/presentations",
         headers=auth_headers,
@@ -103,7 +103,7 @@ async def test_thumbnail_endpoint_returns_image_payload(
         files={
             "file": (
                 "thumb.pptx",
-                io.BytesIO(b"fake"),
+                io.BytesIO(b"PK\x03\x04fake"),
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             )
         },

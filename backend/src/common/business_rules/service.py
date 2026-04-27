@@ -84,7 +84,9 @@ class BusinessRuleConfigService:
     async def get_config(self, config_id: str) -> BusinessRuleConfig | None:
         return await self._db.get(BusinessRuleConfig, config_id)
 
-    async def seed_defaults(self, *, actor_id: str | None = None) -> list[BusinessRuleConfig]:
+    async def seed_defaults(
+        self, *, actor_id: str | None = None
+    ) -> list[BusinessRuleConfig]:
         created: list[BusinessRuleConfig] = []
         for definition in list_business_rule_definitions():
             existing = await self._latest_config_for_key(definition.key)
@@ -267,7 +269,9 @@ class BusinessRuleConfigService:
                 row.updated_at = datetime.now(UTC)
 
         draft.value_json = normalized
-        draft.status = "published" if normalized.get("enabled") is not False else "disabled"
+        draft.status = (
+            "published" if normalized.get("enabled") is not False else "disabled"
+        )
         draft.enabled = normalized.get("enabled") is not False
         draft.validation_errors_json = []
         draft.updated_by = actor_id
@@ -314,7 +318,9 @@ class BusinessRuleConfigService:
                 row.updated_at = datetime.now(UTC)
 
         target.value_json = normalized
-        target.status = "published" if normalized.get("enabled") is not False else "disabled"
+        target.status = (
+            "published" if normalized.get("enabled") is not False else "disabled"
+        )
         target.enabled = normalized.get("enabled") is not False
         target.validation_errors_json = []
         target.updated_by = actor_id
@@ -393,7 +399,9 @@ class BusinessRuleConfigService:
         if active is not None:
             try:
                 value = validate_business_rule_value(key, dict(active.value_json or {}))
-                source = "database_disabled" if value.get("enabled") is False else "database"
+                source = (
+                    "database_disabled" if value.get("enabled") is False else "database"
+                )
                 return BusinessRuleResolution(
                     key=key,
                     domain=definition.domain,
@@ -403,7 +411,12 @@ class BusinessRuleConfigService:
                     version=int(active.version),
                     status=str(active.status),
                 )
-            except (BusinessRuleValidationError, KeyError, TypeError, ValueError) as exc:
+            except (
+                BusinessRuleValidationError,
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as exc:
                 logger.warning(
                     "business_rule_active_invalid_fallback",
                     key=key,
@@ -421,11 +434,17 @@ class BusinessRuleConfigService:
         else:
             fallback_reason = "active_missing"
 
-        fallback = fallback_value if fallback_value is not None else get_default_business_rule_value(key)
+        fallback = (
+            fallback_value
+            if fallback_value is not None
+            else get_default_business_rule_value(key)
+        )
         try:
             value = validate_business_rule_value(key, deepcopy(fallback))
         except (BusinessRuleValidationError, KeyError, TypeError, ValueError):
-            value = validate_business_rule_value(key, get_default_business_rule_value(key))
+            value = validate_business_rule_value(
+                key, get_default_business_rule_value(key)
+            )
             fallback_source = "default"
             fallback_reason = "fallback_invalid_used_default"
         return BusinessRuleResolution(
@@ -445,7 +464,9 @@ class BusinessRuleConfigService:
         statement = select(BusinessRuleConfigAuditLog)
         if key:
             statement = statement.where(BusinessRuleConfigAuditLog.config_key == key)
-        statement = statement.order_by(BusinessRuleConfigAuditLog.created_at.desc()).limit(limit)
+        statement = statement.order_by(
+            BusinessRuleConfigAuditLog.created_at.desc()
+        ).limit(limit)
         result = await self._db.execute(statement)
         return list(result.scalars().all())
 
@@ -488,7 +509,9 @@ class BusinessRuleConfigService:
         result = await self._db.execute(
             select(BusinessRuleConfig)
             .where(BusinessRuleConfig.key == key)
-            .order_by(BusinessRuleConfig.version.desc(), BusinessRuleConfig.updated_at.desc())
+            .order_by(
+                BusinessRuleConfig.version.desc(), BusinessRuleConfig.updated_at.desc()
+            )
             .limit(1)
         )
         return result.scalar_one_or_none()
@@ -497,14 +520,18 @@ class BusinessRuleConfigService:
         result = await self._db.execute(
             select(BusinessRuleConfig)
             .where(BusinessRuleConfig.key == key, BusinessRuleConfig.status == "draft")
-            .order_by(BusinessRuleConfig.version.desc(), BusinessRuleConfig.updated_at.desc())
+            .order_by(
+                BusinessRuleConfig.version.desc(), BusinessRuleConfig.updated_at.desc()
+            )
             .limit(1)
         )
         return result.scalar_one_or_none()
 
     async def _next_version(self, key: str) -> int:
         result = await self._db.execute(
-            select(func.max(BusinessRuleConfig.version)).where(BusinessRuleConfig.key == key)
+            select(func.max(BusinessRuleConfig.version)).where(
+                BusinessRuleConfig.key == key
+            )
         )
         latest = result.scalar() or 0
         return int(latest) + 1
@@ -596,7 +623,9 @@ class BusinessRuleConfigService:
                 BusinessRuleConfig.status.in_(_HISTORY_STATUSES),
                 BusinessRuleConfig.version < before_version,
             )
-            .order_by(BusinessRuleConfig.version.desc(), BusinessRuleConfig.updated_at.desc())
+            .order_by(
+                BusinessRuleConfig.version.desc(), BusinessRuleConfig.updated_at.desc()
+            )
         )
         for row in result.scalars().all():
             try:
@@ -638,7 +667,9 @@ class BusinessRuleConfigService:
 
         before_payload = before_snapshot
         if before_payload is None and before is not None:
-            before_payload = before if isinstance(before, dict) else self.snapshot(before)
+            before_payload = (
+                before if isinstance(before, dict) else self.snapshot(before)
+            )
         after_payload = after_snapshot
         if after_payload is None and after is not None:
             after_payload = after if isinstance(after, dict) else self.snapshot(after)
@@ -662,7 +693,9 @@ class BusinessRuleConfigService:
     @staticmethod
     def _preview_summary(key: str, value: dict[str, Any]) -> dict[str, Any]:
         if key.endswith("achievement.rules"):
-            achievements = [item for item in value.get("achievements", []) if isinstance(item, dict)]
+            achievements = [
+                item for item in value.get("achievements", []) if isinstance(item, dict)
+            ]
             return {
                 "enabled": value.get("enabled") is not False,
                 "ruleset_version": value.get("version"),
@@ -679,7 +712,9 @@ class BusinessRuleConfigService:
                 ),
             }
         if key.endswith("ai_coach.rules"):
-            dimensions = [item for item in value.get("dimensions", []) if isinstance(item, dict)]
+            dimensions = [
+                item for item in value.get("dimensions", []) if isinstance(item, dict)
+            ]
             return {
                 "enabled": value.get("enabled") is not False,
                 "ruleset_version": value.get("version"),
@@ -689,6 +724,22 @@ class BusinessRuleConfigService:
                     value.get("notification_template"),
                     dict,
                 ),
+            }
+        if key.endswith("sales.training.combinations.ruleset") or key.startswith(
+            "sales."
+        ):
+            combinations = [
+                item for item in value.get("combinations", []) if isinstance(item, dict)
+            ]
+            return {
+                "enabled": value.get("enabled") is not False,
+                "ruleset_version": value.get("version"),
+                "rule_set_id": value.get("rule_set_id"),
+                "combination_count": len(combinations),
+                "enabled_combination_count": sum(
+                    1 for item in combinations if item.get("enabled", True) is not False
+                ),
+                "fallback_policy": value.get("fallback_policy"),
             }
         raw_recommendation_dimensions = value.get("dimensions")
         recommendation_dimensions: dict[str, Any] = (
