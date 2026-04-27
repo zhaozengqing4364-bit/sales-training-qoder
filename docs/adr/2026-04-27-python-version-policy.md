@@ -1,23 +1,26 @@
-# ADR 2026-04-27: Backend Python version support policy
+# ADR: Backend Python Version Policy for Release Closeout
 
-## Status
-Accepted
+Date: 2026-04-27
+Status: Accepted for current release gate
+Owner: Backend platform / release engineering
 
 ## Context
-The backend package declares `requires-python = ">=3.11"` and mypy targets Python 3.11, while local verification may run with Python 3.14. Python 3.14 currently emits upstream compatibility warnings from dependencies such as LangChain/Pydantic v1 compatibility shims and ChromaDB telemetry. The warnings do not fail the current test suite, but they are not a release signal that Python 3.14 is fully supported.
+
+The backend declares `requires-python >=3.11` in `backend/pyproject.toml`, while static tooling pins Ruff/Black/Mypy behavior to Python 3.11. Prior closeout evidence showed local Python 3.14 can emit upstream dependency warnings from Pydantic/LangChain/resource cleanup paths. Those warnings are not a runtime support contract.
 
 ## Decision
-- Development and CI support is pinned to Python 3.11 until the Pydantic/LangChain/ChromaDB dependency stack is explicitly upgraded and verified on a newer Python minor.
-- Python 3.14 is allowed only as a best-effort local smoke environment; warnings from upstream packages must be documented in closeout reports and must not be hidden by test skips.
-- Any future change to officially support Python 3.14 must include dependency upgrades, `backend/pyproject.toml` updates, full backend tests, `ruff`, and `pip check` evidence.
+
+- Dev and CI support target is Python 3.11 for this release train.
+- Python 3.12/3.13 may be used only after the full backend gate passes in that environment.
+- Python 3.14 is not a supported release/runtime target until a separate dependency-upgrade lane validates Pydantic, LangChain, Chroma/Haystack, torch/funasr, and the full backend test suite.
+- Dependency drift must be caught with `backend/venv/bin/python -m pip check` and the non-performance pytest gate.
 
 ## Consequences
-- CI remains aligned with `.github/workflows/*` Python 3.11 configuration and `backend/pyproject.toml` mypy settings.
-- The current remediation pass treats Python 3.14 as `deferred-with-ADR`, not silently ignored.
-- No dependency upgrades are made solely to silence local 3.14 warnings unless the full backend gate can be re-run safely.
 
-## Owner
-Platform/backend maintainers.
+- We do not silently treat Python 3.14 warnings as green release evidence.
+- CI images and local onboarding should prefer Python 3.11.
+- Any future Python 3.14 enablement must include dependency upgrade notes, full backend tests, and rollback instructions.
 
-## Rollback
-If Python 3.14 support is required for release, supersede this ADR with an upgrade ADR and update CI, dependency pins, and backend verification gates in one change.
+## Rollback / Future Change
+
+A future ADR can supersede this policy after a clean Python 3.14 gate with upgraded dependencies and no new runtime warnings.
