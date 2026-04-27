@@ -83,6 +83,42 @@ def _ensure_variables_are_list(value: Any) -> list[str]:
     return _normalize_variable_names(value)
 
 
+ALLOWED_PROMPT_TYPE_VALUES = tuple(item.value for item in PromptType)
+
+
+class PromptTemplateGovernanceIssue(BaseModel):
+    """Visible governance issue for historical prompt-template rows."""
+
+    template_id: str
+    name: str | None = None
+    prompt_type: str | None = None
+    is_active: bool
+    is_default: bool
+    issue_codes: list[str]
+    messages: list[str]
+    recommended_action: str
+
+
+class PromptTemplateGovernanceStatus(BaseModel):
+    """Prompt-template governance status for admin review/remediation."""
+
+    checked_count: int
+    invalid_count: int
+    invalid_active_count: int
+    issues: list[PromptTemplateGovernanceIssue]
+    rollback_policy: str
+    audit_log_action: str
+
+
+class PromptTemplateQuarantineResult(BaseModel):
+    """Result of disabling invalid historical prompt templates."""
+
+    checked_count: int
+    quarantined_count: int
+    issues: list[PromptTemplateGovernanceIssue]
+    audit_log_action: str
+
+
 class PromptTemplateBase(BaseModel):
     """Base model for prompt templates."""
 
@@ -98,26 +134,13 @@ class PromptTemplateBase(BaseModel):
     is_active: bool = Field(default=True, description="Whether template is active")
     is_default: bool = Field(default=False, description="Whether this is the default for its type")
 
-    @field_validator("variables", mode="before")
+    @field_validator("variables")
     @classmethod
-    def validate_variable_list(cls, v: Any) -> list[str]:
-        """Validate persisted/admin-supplied template variables.
-
-        Historical rows have occasionally stored variables as dictionaries.  New writes must
-        fail before save instead of silently coercing them; the governance remediation endpoint
-        owns legacy migration/disable decisions.
-        """
-        if v is None:
-            return []
-        if isinstance(v, str):
-            try:
-                parsed = json.loads(v)
-            except json.JSONDecodeError as exc:
-                raise ValueError("variables must be a JSON list of strings") from exc
-            v = parsed
+    def validate_variables_are_string_list(cls, v: list[str]) -> list[str]:
+        """Reject dict/object variables before persistence."""
         if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
             raise ValueError("variables must be a list of strings")
-        return list(dict.fromkeys(item.strip() for item in v if item.strip()))
+        return v
 
 
 class PromptTemplateCreate(PromptTemplateBase):
@@ -268,8 +291,26 @@ class PromptTemplate(PromptTemplateBase):
     )
     governance_issues: list[str] = Field(default_factory=list)
 
-    # variables validation is inherited from PromptTemplateBase so historical invalid rows
-    # become visible through governance audit/remediation instead of being silently coerced.
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_variables(cls, v: Any) -> list[str]:
+        """Ensure variables is always a list of strings."""
+        if v is None:
+            return []
+        if isinstance(v, str):
+            # Handle JSON string from database
+            try:
+                parsed = json.loads(v)
+            except json.JSONDecodeError as exc:
+                raise ValueError("variables JSON must decode to a list of strings") from exc
+            if not isinstance(parsed, list) or not all(
+                isinstance(item, str) for item in parsed
+            ):
+                raise ValueError("variables JSON must decode to a list of strings")
+            return parsed
+        if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
+            raise ValueError("variables must be a list of strings")
+        return v
 
 
 class ScenarioPromptBase(BaseModel):
