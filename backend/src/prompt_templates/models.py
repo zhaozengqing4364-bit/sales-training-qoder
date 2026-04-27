@@ -32,6 +32,7 @@ class PromptType(str, Enum):
     SYSTEM_PROMPT = "system_prompt"
     EXTRACTION = "extraction"
     SCORING = "scoring"
+    REALTIME_SCORING = "realtime_scoring"
     STAGE = "stage"
     FUZZY_DETECTION = "fuzzy_detection"
     REALTIME_SCORING = "realtime_scoring"
@@ -40,6 +41,64 @@ class PromptType(str, Enum):
     WELCOME = "welcome"
     EVALUATION = "evaluation"
     REPORT = "report"
+
+
+def _normalize_prompt_variables(value: Any) -> list[str]:
+    """Normalize author-provided variables while rejecting legacy object payloads.
+
+    Historical rows may contain a JSON object; those are handled by the read model so
+    operators can see and migrate them. New writes must be a flat list of non-empty
+    strings to keep the runtime contract deterministic.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError("variables must be a JSON array of strings") from exc
+        value = parsed
+    if isinstance(value, dict):
+        raise ValueError("variables must be a list of strings, not an object")
+    if not isinstance(value, list):
+        raise ValueError("variables must be a list of strings")
+
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError("variables must contain only strings")
+        variable = item.strip()
+        if not variable:
+            raise ValueError("variables cannot contain empty names")
+        if variable not in normalized:
+            normalized.append(variable)
+    return normalized
+
+
+def _legacy_variable_issue(value: Any) -> str | None:
+    if isinstance(value, dict):
+        return "variables_object_migratable"
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return "variables_string_not_json_array"
+        if isinstance(parsed, dict):
+            return "variables_object_migratable"
+        if not isinstance(parsed, list):
+            return "variables_json_not_array"
+    elif value is not None and not isinstance(value, list):
+        return "variables_not_array"
+    return None
+
+
+def _coerce_legacy_variables_for_read(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        return [str(key) for key in value.keys() if str(key).strip()]
+    try:
+        return _normalize_prompt_variables(value)
+    except ValueError:
+        return []
 
 
 class PromptTemplateBase(BaseModel):
@@ -65,9 +124,8 @@ class PromptTemplateCreate(PromptTemplateBase):
 
     @field_validator("variables", mode="before")
     @classmethod
-    def validate_control_plane_variables(cls, value: Any) -> list[str]:
-        """Control-plane writes must provide a list[str], never a dict/map."""
-        return _normalize_variable_list(value, allow_json_string=False)
+    def validate_author_variables(cls, v: Any) -> list[str]:
+        return _normalize_prompt_variables(v)
 
     @model_validator(mode="after")
     def extract_variables(self) -> PromptTemplateCreate:
@@ -156,6 +214,11 @@ class PromptTemplateUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_author_variables(cls, v: Any) -> list[str]:
+        return _normalize_prompt_variables(v)
+
     name: str | None = Field(default=None, min_length=1, max_length=255)
     prompt_type: PromptType | None = None
     category: str | None = Field(default=None, min_length=1, max_length=100)
@@ -189,63 +252,56 @@ class PromptTemplate(PromptTemplateBase):
     is_system: bool = Field(default=False, description="Whether this is a system template")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    governance_status: str = Field(
+        default="valid",
+        description="valid or needs_review for historical rows requiring governance action",
+    )
+    governance_issues: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def attach_governance_state(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            raw_variables = data.get("variables")
+            payload = dict(data)
+        else:
+            raw_variables = getattr(data, "variables", None)
+            payload = {
+                "id": getattr(data, "id", None),
+                "name": getattr(data, "name", None),
+                "prompt_type": getattr(data, "prompt_type", None),
+                "category": getattr(data, "category", None),
+                "template": getattr(data, "template", None),
+                "variables": raw_variables,
+                "is_active": getattr(data, "is_active", None),
+                "is_default": getattr(data, "is_default", None),
+                "is_system": getattr(data, "is_system", None),
+                "created_at": getattr(data, "created_at", None),
+                "updated_at": getattr(data, "updated_at", None),
+            }
+
+        issues: list[str] = []
+        variable_issue = _legacy_variable_issue(raw_variables)
+        if variable_issue:
+            issues.append(variable_issue)
+            payload["variables"] = _coerce_legacy_variables_for_read(raw_variables)
+
+        prompt_type = str(payload.get("prompt_type") or "")
+        if prompt_type:
+            try:
+                PromptType(prompt_type)
+            except ValueError:
+                issues.append("prompt_type_not_allowed")
+
+        payload["governance_issues"] = issues
+        payload["governance_status"] = "needs_review" if issues else "valid"
+        return payload
 
     @field_validator("variables", mode="before")
     @classmethod
     def validate_variables(cls, v: Any) -> list[str]:
-        """Ensure variables is always a list of strings."""
-        return _normalize_variable_list(v, allow_json_string=True)
-
-
-class PromptTemplateGovernanceIssue(BaseModel):
-    """Visible invalid historical prompt-template state."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    template_id: str
-    name: str
-    prompt_type: str
-    is_active: bool
-    is_default: bool
-    reason_codes: list[str]
-    disabled_by_migration: bool = False
-    action: str = "disable_and_review"
-
-
-class PromptTemplateGovernanceReport(BaseModel):
-    """Invalid prompt-template governance report."""
-
-    generated_at: datetime
-    mode: str
-    issues: list[PromptTemplateGovernanceIssue] = Field(default_factory=list)
-    migrated_count: int = 0
-    audit_action: str = "prompt_template_invalid_migration"
-
-
-def _normalize_variable_list(value: Any, *, allow_json_string: bool) -> list[str]:
-    """Normalize variables while preserving invalid-history visibility.
-
-    Historical rows may still contain JSON-encoded list strings, which remain readable.
-    Dict/map variables are deliberately rejected so they can be disabled by governance
-    migration instead of being silently coerced to keys.
-    """
-    if value is None:
-        return []
-    if isinstance(value, str):
-        if not allow_json_string:
-            raise ValueError("variables must be a list of strings")
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return []
-        if not isinstance(parsed, list):
-            raise ValueError("variables must be a list of strings")
-        value = parsed
-    if not isinstance(value, list):
-        raise ValueError("variables must be a list of strings")
-    if not all(isinstance(item, str) and item.strip() for item in value):
-        raise ValueError("variables must contain non-empty strings only")
-    return list(value)
+        """Ensure variables is always a list of strings for read responses."""
+        return _coerce_legacy_variables_for_read(v)
 
 
 class ScenarioPromptBase(BaseModel):
@@ -295,6 +351,8 @@ class PromptTemplateResponse(BaseModel):
     is_system: bool
     created_at: datetime
     updated_at: datetime
+    governance_status: str = "valid"
+    governance_issues: list[str] = Field(default_factory=list)
 
 
 class ScenarioPromptResponse(BaseModel):
