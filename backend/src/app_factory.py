@@ -6,9 +6,12 @@ import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app_lifespan import lifespan
+from common.api.response import error_response
 from common.error_handling.middleware import (
     ErrorHandlerMiddleware,
     global_exception_handler,
@@ -113,7 +116,25 @@ def _configure_middleware(app: FastAPI) -> None:
     app.add_middleware(MetricsMiddleware)
 
     app.exception_handler(HTTPException)(http_exception_handler)
+    app.exception_handler(RequestValidationError)(_request_validation_exception_handler)
     app.exception_handler(Exception)(global_exception_handler)
+
+
+async def _request_validation_exception_handler(request, exc: RequestValidationError):
+    """Map prompt-template save validation to the governance-required 400 contract."""
+    if request.url.path.startswith("/api/v1/prompt-templates"):
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "[PROMPT_DATA_INVALID]",
+                message="提示词数据无效，请检查 prompt_type、variables 与模板内容。",
+            )
+            | {"detail": exc.errors()},
+        )
+
+    from fastapi.exception_handlers import request_validation_exception_handler
+
+    return await request_validation_exception_handler(request, exc)
 
 
 def create_app() -> FastAPI:

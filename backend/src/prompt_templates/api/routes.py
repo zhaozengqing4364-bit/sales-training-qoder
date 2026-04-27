@@ -32,6 +32,9 @@ from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from prompt_templates.models import (
+    ALLOWED_PROMPT_TYPE_VALUES,
+    PromptTemplateGovernanceStatus,
+    PromptTemplateQuarantineResult,
     PromptRenderRequest,
     PromptRenderResponse,
     PromptTemplate,
@@ -222,6 +225,79 @@ def _parse_template_id_or_error(
         )
 
 
+@router.get("/options")
+async def get_prompt_template_options(
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> dict:
+    """Return admin-selectable prompt-template options and governance policy."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    status_payload = await service.get_governance_status()
+    return {
+        "allowed_prompt_types": [
+            {"value": value, "label": value} for value in ALLOWED_PROMPT_TYPE_VALUES
+        ],
+        "sales_allowed_prompt_types": sorted(
+            {"evaluation", "report", "stage", "scoring"}
+        ),
+        "variables_schema": "list[str]",
+        "invalid_active_count": status_payload.invalid_active_count,
+        "rollback_policy": status_payload.rollback_policy,
+    }
+
+
+@router.get("/governance-status", response_model=PromptTemplateGovernanceStatus)
+async def get_prompt_template_governance_status(
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> PromptTemplateGovernanceStatus:
+    """Expose invalid historical rows so admins can remediate them."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        return await service.get_governance_status()
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.post(
+    "/governance/quarantine-invalid",
+    response_model=PromptTemplateQuarantineResult,
+)
+async def quarantine_invalid_prompt_templates(
+    reason: str = Query(..., min_length=3, max_length=500),
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> PromptTemplateQuarantineResult:
+    """Disable invalid historical templates without deleting source data."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        return await service.quarantine_invalid_templates(
+            actor=current_user,
+            reason=reason,
+        )
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
 @router.get("", response_model=list[PromptTemplate])
 async def list_prompt_templates(
     prompt_type: PromptType | None = Query(None, description="Filter by prompt type"),
@@ -315,10 +391,7 @@ async def create_prompt_template(
     assert isinstance(data, PromptTemplateCreate)
 
     try:
-        data = PromptTemplateCreate.model_validate(raw_data)
-        return await service.create_template(data)
-    except ValidationError as exc:
-        return _validation_error_response(exc)
+        return await service.create_template(data, actor=current_user)
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -454,8 +527,7 @@ async def update_prompt_template(
     assert isinstance(data, PromptTemplateUpdate)
 
     try:
-        data = PromptTemplateUpdate.model_validate(raw_data)
-        template = await service.update_template(template_uuid, data)
+        template = await service.update_template(template_uuid, data, actor=current_user)
         if not template:
             return _prompt_error_response(
                 status_code=404,
@@ -498,11 +570,7 @@ async def delete_prompt_template(
     assert template_uuid is not None
 
     try:
-        success = await service.delete_template(
-            template_uuid,
-            actor_user_id=str(current_user.user_id),
-            actor_user_identifier=_user_identifier(current_user),
-        )
+        success = await service.delete_template(template_uuid, actor=current_user)
         if not success:
             return _prompt_error_response(
                 status_code=404,
@@ -581,8 +649,7 @@ async def set_default_template(
         success = await service.set_default_template(
             template_uuid,
             prompt_type,
-            actor_user_id=str(current_user.user_id),
-            actor_user_identifier=_user_identifier(current_user),
+            actor=current_user,
         )
         if not success:
             return _prompt_error_response(
@@ -662,7 +729,7 @@ async def create_scenario_prompt(
         return admin_error
 
     try:
-        return await service.assign_template_to_scenario(data)
+        return await service.assign_template_to_scenario(data, actor=current_user)
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -728,6 +795,7 @@ async def update_scenario_prompt(
             assignment_id=assignment_id,
             is_active=is_active,
             template_id=template_id,
+            actor=current_user,
         )
         if not assignment:
             return _prompt_error_response(
@@ -766,7 +834,10 @@ async def delete_scenario_prompt(
         return admin_error
 
     try:
-        success = await service.delete_scenario_prompt(assignment_id)
+        success = await service.delete_scenario_prompt(
+            assignment_id,
+            actor=current_user,
+        )
         if not success:
             return _prompt_error_response(
                 status_code=404,
