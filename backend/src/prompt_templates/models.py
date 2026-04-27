@@ -232,8 +232,10 @@ class PromptTemplateUpdate(BaseModel):
 
     @field_validator("variables", mode="before")
     @classmethod
-    def validate_variables_metadata(cls, value: Any) -> list[str]:
-        return _ensure_variables_are_list(value)
+    def validate_variable_list(cls, v: Any) -> list[str] | None:
+        if v is None:
+            return None
+        return PromptTemplateBase.validate_variable_list(v)
 
     @model_validator(mode="after")
     def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
