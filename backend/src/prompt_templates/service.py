@@ -588,6 +588,25 @@ class PromptTemplateService:
             },
         )
 
+        self._add_audit_log(
+            action="prompt_template.updated",
+            status="success",
+            actor_user_id=actor_user_id,
+            actor_user_identifier=actor_user_identifier,
+            details={
+                "template_id": str(template_id),
+                "before": before_snapshot,
+                "after": {
+                    "name": getattr(db_template, "name", None),
+                    "prompt_type": getattr(db_template, "prompt_type", None),
+                    "category": getattr(db_template, "category", None),
+                    "variables": getattr(db_template, "variables", None),
+                    "is_active": getattr(db_template, "is_active", None),
+                    "is_default": getattr(db_template, "is_default", None),
+                },
+            },
+        )
+
         await self.db.commit()
         await self.db.refresh(db_template)
 
