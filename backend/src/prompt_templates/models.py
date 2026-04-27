@@ -34,6 +34,7 @@ class PromptType(str, Enum):
     SCORING = "scoring"
     REALTIME_SCORING = "realtime_scoring"
     STAGE = "stage"
+    REALTIME_SCORING = "realtime_scoring"
     FUZZY_DETECTION = "fuzzy_detection"
     REALTIME_SCORING = "realtime_scoring"
     INTERRUPTION = "interruption"
@@ -99,37 +100,24 @@ class PromptTemplateBase(BaseModel):
 
     @field_validator("variables", mode="before")
     @classmethod
-    def validate_variable_list(cls, value: Any) -> list[str]:
-        """Reject legacy dict/object variables at write time; DB repair is explicit."""
-        if value is None:
+    def validate_variable_list(cls, v: Any) -> list[str]:
+        """Validate persisted/admin-supplied template variables.
+
+        Historical rows have occasionally stored variables as dictionaries.  New writes must
+        fail before save instead of silently coercing them; the governance remediation endpoint
+        owns legacy migration/disable decisions.
+        """
+        if v is None:
             return []
-        if isinstance(value, str):
+        if isinstance(v, str):
             try:
-                parsed = json.loads(value)
+                parsed = json.loads(v)
             except json.JSONDecodeError as exc:
-                raise ValueError("variables must be a list of strings") from exc
-            value = parsed
-        if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
-            raise ValueError("variables must be a list of non-empty strings")
-        return list(dict.fromkeys(value))
-
-    @field_validator("template")
-    @classmethod
-    def validate_template_syntax(cls, value: str) -> str:
-        """Validate Jinja syntax before a template can be saved."""
-        try:
-            from jinja2.sandbox import SandboxedEnvironment
-
-            SandboxedEnvironment(autoescape=False).parse(value)
-        except Exception as exc:
-            raise ValueError("template must be valid Jinja2 syntax") from exc
-        return value
-
-
-    @field_validator("variables", mode="before")
-    @classmethod
-    def validate_variables_metadata(cls, value: Any) -> list[str]:
-        return _ensure_variables_are_list(value)
+                raise ValueError("variables must be a JSON list of strings") from exc
+            v = parsed
+        if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
+            raise ValueError("variables must be a list of strings")
+        return list(dict.fromkeys(item.strip() for item in v if item.strip()))
 
 
 class PromptTemplateCreate(PromptTemplateBase):
@@ -278,11 +266,8 @@ class PromptTemplate(PromptTemplateBase):
     )
     governance_issues: list[str] = Field(default_factory=list)
 
-    @model_validator(mode="before")
-    @classmethod
-    def validate_variables(cls, v: Any) -> list[str]:
-        """Ensure variables is a visible, valid list of strings."""
-        return _ensure_variables_are_list(v)
+    # variables validation is inherited from PromptTemplateBase so historical invalid rows
+    # become visible through governance audit/remediation instead of being silently coerced.
 
 
 class ScenarioPromptBase(BaseModel):
