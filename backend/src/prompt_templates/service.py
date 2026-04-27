@@ -1041,7 +1041,7 @@ class PromptTemplateService:
         template_id: UUID,
         actor: Any | None = None,
         reason: str = "PromptTemplate governance rollback",
-    ) -> PromptTemplate | None:
+    ) -> dict[str, Any] | None:
         from common.db.models import PromptTemplate as PromptTemplateDB
         from common.db.models import SystemLog
 
@@ -1096,7 +1096,26 @@ class PromptTemplateService:
         await self.db.commit()
         await self.db.refresh(row)
         await self.loader.invalidate_cache(template_id)
-        return self._safe_model_validate(row)
+        normalized = self._safe_model_validate(row)
+        if normalized is not None:
+            return {
+                "template": normalized.model_dump(mode="json"),
+                "governance_status": "valid",
+                "governance_issues": [],
+                "audit_action": "prompt_template.governance_rollback",
+            }
+
+        issues = self._governance_issues_for_row(row)
+        return {
+            "template": self._template_snapshot(row),
+            "governance_status": "needs_review",
+            "governance_issues": issues,
+            "audit_action": "prompt_template.governance_rollback",
+            "message": (
+                "Rollback restored historical invalid data; the template remains "
+                "visible in governance status until remediated again."
+            ),
+        }
 
     async def assign_template_to_scenario(
         self,
