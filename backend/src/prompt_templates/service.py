@@ -1105,11 +1105,11 @@ class PromptTemplateService:
                 "audit_action": "prompt_template.governance_rollback",
             }
 
-        issues = self._governance_issues_for_row(row)
+        remaining_issues = self._governance_issues_for_row(row)
         return {
             "template": self._template_snapshot(row),
             "governance_status": "needs_review",
-            "governance_issues": issues,
+            "governance_issues": remaining_issues,
             "audit_action": "prompt_template.governance_rollback",
             "message": (
                 "Rollback restored historical invalid data; the template remains "
