@@ -314,9 +314,9 @@ class TestPromptTemplate:
         assert template.variables == ["var1", "var2"]
 
     def test_template_rejects_invalid_json_variables(self):
-        """Invalid historical JSON variables should be surfaced for governance repair."""
+        """Invalid historical rows should be visible to governance instead of coerced."""
         now = datetime.now(UTC)
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ValidationError):
             PromptTemplate(
                 id=uuid4(),
                 name="Test",
@@ -329,7 +329,15 @@ class TestPromptTemplate:
                 created_at=now,
                 updated_at=now,
             )
-        assert "variables must be a list" in str(exc_info.value)
+
+    def test_create_rejects_variables_dict_before_save(self):
+        with pytest.raises(ValidationError):
+            PromptTemplateCreate(
+                name="Invalid variables",
+                prompt_type=PromptType.REALTIME_SCORING,
+                template="Score {{ score }}",
+                variables={"score": "number"},  # type: ignore[arg-type]
+            )
 
 
 class TestScenarioPromptCreate:

@@ -1679,37 +1679,34 @@ export interface PromptTemplateUpdate {
 
 export interface PromptTemplateGovernanceIssue {
     template_id: string;
-    name?: string | null;
-    prompt_type?: string | null;
+    name: string;
+    prompt_type: string;
     is_active: boolean;
     is_default: boolean;
-    issue_codes: string[];
-    messages: string[];
-    recommended_action: string;
+    issues: string[];
 }
 
-export interface PromptTemplateGovernanceStatus {
-    checked_count: number;
+export interface PromptTemplateGovernanceAudit {
+    version: string;
+    total: number;
     invalid_count: number;
-    invalid_active_count: number;
-    issues: PromptTemplateGovernanceIssue[];
-    rollback_policy: string;
-    audit_log_action: string;
+    items: PromptTemplateGovernanceIssue[];
 }
 
-export interface PromptTemplateOptions {
-    allowed_prompt_types: Array<{ value: PromptType; label: string }>;
-    sales_allowed_prompt_types: PromptType[];
-    variables_schema: "list[str]";
-    invalid_active_count: number;
-    rollback_policy: string;
-}
-
-export interface PromptTemplateQuarantineResult {
-    checked_count: number;
-    quarantined_count: number;
-    issues: PromptTemplateGovernanceIssue[];
-    audit_log_action: string;
+export interface PromptTemplateGovernanceRemediation {
+    version: string;
+    dry_run: boolean;
+    remediated_count: number;
+    actions: Array<{
+        template_id: string;
+        name: string;
+        actions: string[];
+    }>;
+    rollback: {
+        source: string;
+        action: string;
+        instruction: string;
+    };
 }
 
 export interface ScenarioPrompt {

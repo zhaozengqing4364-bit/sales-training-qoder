@@ -390,7 +390,10 @@ async def create_prompt_template(
     assert isinstance(data, PromptTemplateCreate)
 
     try:
-        return await service.create_template(data, actor=current_user)
+        data = PromptTemplateCreate.model_validate(raw_data)
+        return await service.create_template(data)
+    except ValidationError as exc:
+        return _validation_error_response(exc)
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -526,7 +529,8 @@ async def update_prompt_template(
     assert isinstance(data, PromptTemplateUpdate)
 
     try:
-        template = await service.update_template(template_uuid, data, actor=current_user)
+        data = PromptTemplateUpdate.model_validate(raw_data)
+        template = await service.update_template(template_uuid, data)
         if not template:
             return _prompt_error_response(
                 status_code=404,

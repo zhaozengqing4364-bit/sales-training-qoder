@@ -10,13 +10,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import {
-  PromptTemplate,
-  PromptTemplateGovernanceStatus,
-  PromptTemplateOptions,
-  PromptType,
-  ScenarioPrompt,
-} from "@/lib/api/types";
+import { PromptTemplate, PromptTemplateGovernanceAudit, PromptType, ScenarioPrompt } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
@@ -89,8 +83,7 @@ export default function AdminPromptsPage() {
 
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [scenarioPrompts, setScenarioPrompts] = useState<ScenarioPrompt[]>([]);
-  const [promptOptions, setPromptOptions] = useState<PromptTemplateOptions | null>(null);
-  const [governanceStatus, setGovernanceStatus] = useState<PromptTemplateGovernanceStatus | null>(null);
+  const [governanceAudit, setGovernanceAudit] = useState<PromptTemplateGovernanceAudit | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<PromptType | "all">("all");
@@ -111,19 +104,12 @@ export default function AdminPromptsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [
-        templatesResult,
-        scenarioPromptsResult,
-        userResult,
-        optionsResult,
-        governanceResult,
-      ] = await Promise.allSettled([
+      const [templatesResult, scenarioPromptsResult, userResult, governanceResult] = await Promise.allSettled([
         api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
         api.admin.getScenarioPrompts(),
         api.admin.getPromptTemplateGovernanceStatus(),
         api.user.getMe(),
-        api.admin.getPromptTemplateOptions(),
-        api.admin.getPromptTemplateGovernanceStatus(),
+        api.admin.getPromptTemplateGovernanceAudit(),
       ]);
 
       if (templatesResult.status === "fulfilled") {
@@ -150,8 +136,11 @@ export default function AdminPromptsPage() {
         setUserRole("user");
       }
 
-      setPromptOptions(optionsResult.status === "fulfilled" ? optionsResult.value : null);
-      setGovernanceStatus(governanceResult.status === "fulfilled" ? governanceResult.value : null);
+      if (governanceResult.status === "fulfilled") {
+        setGovernanceAudit(governanceResult.value);
+      } else {
+        setGovernanceAudit(null);
+      }
     } catch (error) {
       debug.error("Failed to load prompt admin data", error);
       toast.error("提示词数据加载失败");
@@ -322,18 +311,18 @@ export default function AdminPromptsPage() {
     }
   };
 
-  const handleQuarantineInvalidTemplates = async () => {
+  const handleRemediateGovernance = async () => {
     if (!canOperate) {
       toast.error("当前角色无操作权限");
       return;
     }
+
     setIsOperating(true);
     try {
-      const result = await api.admin.quarantineInvalidPromptTemplates(
-        "admin治理：禁用非法历史提示词模板，等待修正后再启用",
-      );
-      await loadData();
-      toast.success(`已禁用 ${result.quarantined_count} 个非法历史模板`);
+      const result = await api.admin.remediatePromptTemplateGovernance({
+        reason: "admin prompt governance remediation",
+      });
+      await refreshAfterMutation(`已治理 ${result.remediated_count} 条历史模板`);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -388,12 +377,7 @@ export default function AdminPromptsPage() {
 
       <GlassCard className="p-4 space-y-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          销售场景仅允许绑定评估/报告类模板。业务角色提示词与知识库策略请在角色中心配置。
-          {promptOptions ? (
-            <span className="ml-2">
-              保存校验：prompt_type 必须来自后台选项，variables 必须为 {promptOptions.variables_schema}。
-            </span>
-          ) : null}
+          销售场景仅允许绑定评估/报告/实时评分类模板。业务角色提示词与知识库策略请在角色中心配置。
         </div>
         {governanceAudit ? (
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-700">

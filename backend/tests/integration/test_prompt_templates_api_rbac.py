@@ -243,7 +243,7 @@ class TestPromptTemplateRBAC:
         assert body["message"] == "模板不存在"
         assert body.get("trace_id")
 
-    async def test_admin_create_rejects_invalid_variables_with_400(
+    async def test_admin_create_invalid_variables_returns_save_time_400(
         self, async_client, auth_headers
     ):
         response = await async_client.post(
@@ -251,95 +251,128 @@ class TestPromptTemplateRBAC:
             headers=auth_headers["admin"],
             json={
                 "name": "非法变量模板",
-                "prompt_type": "summary",
-                "category": "common",
-                "template": "hello {{name}}",
-                "variables": {"name": "not-list"},
+                "prompt_type": "realtime_scoring",
+                "category": "sales",
+                "template": "评分：{{ score }}",
+                "variables": {"score": "number"},
             },
         )
 
         assert response.status_code == 400
         body = response.json()
         assert body["success"] is False
-        assert body["error"] == "[PROMPT_DATA_INVALID]"
-        assert "variables" in str(body["detail"])
+        assert body["error"] == "[PROMPT_TEMPLATE_VALIDATION_FAILED]"
+        assert body.get("trace_id")
 
-    async def test_admin_governance_status_and_quarantine_invalid_history(
-        self,
-        async_client,
-        auth_headers,
-        db_session,
-    ):
-        invalid = PromptTemplate(
-            name="历史 realtime scoring",
-            prompt_type="realtime_scoring",
-            category="sales",
-            template="score {{ payload }}",
-            variables={"payload": "dict-is-invalid"},
-            is_active=True,
-            is_default=True,
-            is_system=False,
-        )
-        db_session.add(invalid)
-        await db_session.commit()
-        await db_session.refresh(invalid)
-
-        status_response = await async_client.get(
-            "/api/v1/prompt-templates/governance-status",
-            headers=auth_headers["admin"],
-        )
-
-        assert status_response.status_code == 200
-        status_body = status_response.json()
-        assert status_body["invalid_count"] == 1
-        assert status_body["invalid_active_count"] == 1
-        assert status_body["issues"][0]["template_id"] == invalid.id
-        assert set(status_body["issues"][0]["issue_codes"]) == {
-            "PROMPT_TYPE_UNSUPPORTED",
-            "VARIABLES_SCHEMA_INVALID",
-        }
-
-        quarantine_response = await async_client.post(
-            "/api/v1/prompt-templates/governance/quarantine-invalid"
-            "?reason=disable_invalid_history_for_release",
-            headers=auth_headers["admin"],
-        )
-
-        assert quarantine_response.status_code == 200
-        quarantine_body = quarantine_response.json()
-        assert quarantine_body["quarantined_count"] == 1
-
-        await db_session.refresh(invalid)
-        assert invalid.is_active is False
-        assert invalid.is_default is False
-
-        audit_rows = (
-            await db_session.execute(
-                SystemLog.__table__.select().where(
-                    SystemLog.action
-                    == "prompt_template.governance.quarantine_invalid"
-                )
-            )
-        ).all()
-        assert audit_rows
-
-    async def test_admin_options_expose_runtime_prompt_type_allowlist(
+    async def test_realtime_scoring_is_supported_as_admin_prompt_option(
         self, async_client, auth_headers
     ):
-        response = await async_client.get(
-            "/api/v1/prompt-templates/options",
+        response = await async_client.post(
+            "/api/v1/prompt-templates",
             headers=auth_headers["admin"],
+            json={
+                "name": "销售实时评分模板",
+                "prompt_type": "realtime_scoring",
+                "category": "sales",
+                "template": "请根据 {{ transcript }} 输出实时评分。",
+                "variables": ["transcript"],
+            },
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["prompt_type"] == "realtime_scoring"
+
+    async def test_governance_remediation_migrates_dict_variables_and_audits(
+        self, async_client, auth_headers, db_session
+    ):
+        legacy_id = str(uuid4())
+        db_session.add(
+            PromptTemplate(
+                id=legacy_id,
+                name="历史实时评分模板",
+                prompt_type="realtime_scoring",
+                category="sales",
+                template="请根据 {{ transcript }} 评分。",
+                variables={"transcript": {"type": "string"}, "score": "number"},
+                is_active=True,
+                is_default=True,
+                is_system=False,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await db_session.commit()
+
+        audit_response = await async_client.get(
+            "/api/v1/prompt-templates/governance/audit",
+            headers=auth_headers["admin"],
+        )
+        assert audit_response.status_code == 200
+        audit_body = audit_response.json()
+        assert audit_body["invalid_count"] == 1
+        assert audit_body["items"][0]["issues"] == ["migrated_variables_dict_keys"]
+
+        response = await async_client.post(
+            "/api/v1/prompt-templates/governance/remediate",
+            headers=auth_headers["admin"],
+            json={"reason": "close A-009 legacy variables", "dry_run": False},
         )
 
         assert response.status_code == 200
         body = response.json()
-        values = {item["value"] for item in body["allowed_prompt_types"]}
-        assert "summary" in values
-        assert "realtime_scoring" not in values
-        assert body["variables_schema"] == "list[str]"
-        assert body["sales_allowed_prompt_types"] == [
-            "evaluation",
-            "report",
-            "scoring",
-            "stage",
-        ]
+        assert body["remediated_count"] == 1
+        assert body["actions"][0]["actions"] == ["migrated_variables_dict_keys"]
+        assert body["rollback"]["source"] == "system_logs"
+
+        db_template = await db_session.get(PromptTemplate, legacy_id)
+        assert db_template is not None
+        assert db_template.variables == ["transcript", "score"]
+        assert db_template.is_active is True
+        assert db_template.is_default is True
+
+        log_result = await db_session.execute(
+            select(SystemLog).where(
+                SystemLog.action == "prompt_template_governance_remediation"
+            )
+        )
+        assert log_result.scalar_one().user_identifier == "prompt-admin@example.com"
+
+    async def test_governance_remediation_disables_untrusted_legacy_rows(
+        self, async_client, auth_headers, db_session
+    ):
+        legacy_id = str(uuid4())
+        db_session.add(
+            PromptTemplate(
+                id=legacy_id,
+                name="未知类型模板",
+                prompt_type="legacy_experiment",
+                category="sales",
+                template="legacy",
+                variables="not-json",
+                is_active=True,
+                is_default=True,
+                is_system=False,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await db_session.commit()
+
+        response = await async_client.post(
+            "/api/v1/prompt-templates/governance/remediate",
+            headers=auth_headers["admin"],
+            json={"reason": "quarantine unsafe prompt rows"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["remediated_count"] == 1
+        assert "disabled_invalid_prompt_type" in body["actions"][0]["actions"]
+        assert "disabled_invalid_variables" in body["actions"][0]["actions"]
+
+        db_template = await db_session.get(PromptTemplate, legacy_id)
+        assert db_template is not None
+        assert db_template.variables == []
+        assert db_template.is_active is False
+        assert db_template.is_default is False
