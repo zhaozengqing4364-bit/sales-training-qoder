@@ -226,10 +226,10 @@ describe('Property 2: AudioWorklet Communication', () => {
           
           const sentBuffer = (mockPostMessage.mock.calls[0][0] as { buffer: Float32Array }).buffer
           
-          // Verify all samples are preserved
-          for (let i = 0; i < 1024; i++) {
-            expect(sentBuffer[i]).toBeCloseTo(audioSamples[i], 5)
-          }
+          // Verify all samples are preserved without issuing 1024 assertions per
+          // property run; the processor slices the Float32Array after the input
+          // has already been quantized to Float32 precision.
+          expect(sentBuffer).toEqual(input)
         }
       ),
       { numRuns: 100 }
