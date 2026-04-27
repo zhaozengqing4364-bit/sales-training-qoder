@@ -1631,6 +1631,7 @@ export type PromptType =
     | "scoring"
     | "realtime_scoring"
     | "stage"
+    | "realtime_scoring"
     | "fuzzy_detection"
     | "realtime_scoring"
     | "interruption"
