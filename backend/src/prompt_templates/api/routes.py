@@ -19,9 +19,9 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -180,6 +180,24 @@ def _scope_violation_response(exc: ValueError) -> JSONResponse:
         error_code="[PROMPT_SCOPE_VIOLATION]",
         message=str(exc),
         exc=exc,
+    )
+
+
+def _validation_error_response(exc: ValidationError) -> JSONResponse:
+    return _prompt_error_response(
+        status_code=400,
+        error_code="[PROMPT_TEMPLATE_VALIDATION_FAILED]",
+        message="提示词模板保存前校验失败，请检查类型、变量列表和模板内容。",
+        exc=exc,
+    )
+
+
+def _actor_identifier(current_user: User) -> str:
+    return str(
+        getattr(current_user, "email", None)
+        or getattr(current_user, "wechat_user_id", None)
+        or getattr(current_user, "user_id", None)
+        or "unknown"
     )
 
 
