@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/Users/zhaozengqing/.local/share/uv/python/cpython-3.11.12-macos-aarch64-none/lib/python3.11/html/__init__.py", line 6, in <module>
+    from html.entities import html5 as _html5
+ModuleNotFoundError: No module named 'html.entities'
+/Users/zhaozengqing/github/销售训练qoder/backend/.venv/bin/python

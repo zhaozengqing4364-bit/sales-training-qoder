@@ -1,0 +1,41 @@
+# python environment probe 2026-04-27T03:23:37Z
+total 2408
+drwxr-xr-x  25 zhaozengqing  staff     800 Apr 27 11:22 .
+drwxr-xr-x  54 zhaozengqing  staff    1728 Apr 27 11:22 ..
+-rw-r--r--   1 zhaozengqing  staff    5001 Apr 27 11:22 .env
+-rw-r--r--   1 zhaozengqing  staff    5001 Apr 27 11:08 .env.example
+drwxr-xr-x   3 zhaozengqing  staff      96 Apr 27 11:08 .github
+-rw-r--r--   1 zhaozengqing  staff    1848 Apr 27 11:08 AGENTS.md
+drwxr-xr-x   5 zhaozengqing  staff     160 Apr 27 11:08 alembic
+-rw-r--r--   1 zhaozengqing  staff    3206 Apr 27 11:08 alembic.ini
+drwxr-xr-x   3 zhaozengqing  staff      96 Apr 27 11:08 backend
+-rw-r--r--   1 zhaozengqing  staff  993212 Apr 27 11:08 coverage.json
+drwxr-xr-x   4 zhaozengqing  staff     128 Apr 27 11:08 data
+-rw-r--r--   1 zhaozengqing  staff    4571 Apr 27 11:08 process_pending_docs.py
+-rw-r--r--   1 zhaozengqing  staff    1325 Apr 27 11:08 pyproject.toml
+-rw-r--r--   1 zhaozengqing  staff     606 Apr 27 11:08 pyrightconfig.json
+-rw-r--r--   1 zhaozengqing  staff    5665 Apr 27 11:08 reprocess_failed_docs.py
+-rw-r--r--   1 zhaozengqing  staff    1559 Apr 27 11:08 requirements.txt
+-rw-r--r--   1 zhaozengqing  staff     941 Apr 27 11:08 reset_db.py
+drwxr-xr-x   8 zhaozengqing  staff     256 Apr 27 11:08 scripts
+-rw-r--r--   1 zhaozengqing  staff     592 Apr 27 11:08 sitecustomize.py
+drwxr-xr-x  17 zhaozengqing  staff     544 Apr 27 11:08 src
+drwxr-xr-x   5 zhaozengqing  staff     160 Apr 27 11:08 test-results
+drwxr-xr-x  12 zhaozengqing  staff     384 Apr 27 11:08 tests
+-rw-r--r--   1 zhaozengqing  staff     592 Apr 27 11:08 usercustomize.py
+-rw-r--r--   1 zhaozengqing  staff  172030 Apr 27 11:08 uv.lock
+lrwxr-xr-x   1 zhaozengqing  staff      57 Apr 27 11:08 venv -> /Users/zhaozengqing/github/销售训练qoder/backend/venv
+## python candidates
+### backend/venv/bin/python missing
+### backend/.venv/bin/python missing
+### backend/.venv-test/bin/python missing
+### python3 -> /opt/homebrew/bin/python3
+Python 3.14.3
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import sys; print(sys.executable); import html.entities; print("html.entities ok"); import uvicorn; print("uvicorn ok", uvicorn.__version__)
+                                                                                        ^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'uvicorn'
+/opt/homebrew/opt/python@3.14/bin/python3.14
+html.entities ok
+### python missing
