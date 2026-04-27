@@ -141,6 +141,19 @@ class PromptTemplateQuarantineResult(BaseModel):
     audit_log_action: str
 
 
+class PromptTemplateGovernanceRollbackResponse(BaseModel):
+    """Safe rollback result for a prompt-template governance migration."""
+
+    template_id: str
+    rolled_back: bool
+    runtime_status: str
+    before: dict[str, Any]
+    after: dict[str, Any]
+    issues: list[PromptTemplateGovernanceIssue] = Field(default_factory=list)
+    safety_overrides: list[str] = Field(default_factory=list)
+    audit_log_action: str = "prompt_template.governance_rollback"
+
+
 class PromptTemplateBase(BaseModel):
     """Base model for prompt templates."""
 
