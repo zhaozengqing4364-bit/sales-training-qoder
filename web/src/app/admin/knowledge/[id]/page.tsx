@@ -79,6 +79,44 @@ const formatFileSize = (bytes: number): string => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const ALLOWED_UPLOAD_EXTENSIONS = ["pdf", "docx", "txt", "md", "xlsx", "xls"] as const;
+const MAX_UPLOAD_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+const BATCH_UPLOAD_CONCURRENCY = 3;
+
+type UploadQueueStatus = "queued" | "uploading" | "success" | "failed";
+
+interface UploadQueueItem {
+    id: string;
+    name: string;
+    size: number;
+    status: UploadQueueStatus;
+    progress: number;
+    message: string;
+}
+
+const uploadStatusConfig: Record<UploadQueueStatus, { label: string; color: string; progressColor: string }> = {
+    queued: {
+        label: "等待上传",
+        color: "bg-slate-50 text-slate-600 border-slate-200",
+        progressColor: "bg-slate-300",
+    },
+    uploading: {
+        label: "上传中",
+        color: "bg-blue-50 text-blue-700 border-blue-200",
+        progressColor: "bg-blue-500",
+    },
+    success: {
+        label: "已提交",
+        color: "bg-green-50 text-green-700 border-green-200",
+        progressColor: "bg-green-500",
+    },
+    failed: {
+        label: "失败",
+        color: "bg-red-50 text-red-700 border-red-200",
+        progressColor: "bg-red-500",
+    },
+};
+
 const formatDocumentError = (message?: string): string => {
     if (!message) return "";
     if (
@@ -91,6 +129,19 @@ const formatDocumentError = (message?: string): string => {
         return "文档文本已解析，但未配置 Embedding 服务，暂时无法建立知识检索索引。";
     }
     return message;
+};
+
+const validateUploadFile = (file: File): string | null => {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !ALLOWED_UPLOAD_EXTENSIONS.includes(ext as typeof ALLOWED_UPLOAD_EXTENSIONS[number])) {
+        return "不支持的文件类型，请上传 PDF、DOCX、TXT、MD、XLSX 或 XLS 文件";
+    }
+
+    if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+        return "文件大小不能超过 50MB";
+    }
+
+    return null;
 };
 
 type PreviewChunk = { index: number; content: string };
@@ -129,8 +180,8 @@ export default function KnowledgeDetailPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [isUploading, setIsUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+    const [isUploadDragActive, setIsUploadDragActive] = useState(false);
     const [reprocessingDocId, setReprocessingDocId] = useState<string | null>(null);
 
     const [previewDoc, setPreviewDoc] = useState<AdminKnowledgeDocument | null>(null);
@@ -214,6 +265,12 @@ export default function KnowledgeDetailPage() {
         () => docs.filter((doc) => doc.status === "failed"),
         [docs],
     );
+    const uploadQueueSummary = useMemo(() => ({
+        active: uploadQueue.filter((item) => item.status === "queued" || item.status === "uploading").length,
+        successful: uploadQueue.filter((item) => item.status === "success").length,
+        failed: uploadQueue.filter((item) => item.status === "failed").length,
+    }), [uploadQueue]);
+    const isUploading = uploadQueueSummary.active > 0;
 
     const searchReadiness = useMemo(() => {
         if (readyDocuments.length > 0) {
@@ -248,52 +305,136 @@ export default function KnowledgeDetailPage() {
         };
     }, [failedDocuments.length, pendingDocuments.length, readyDocuments.length]);
 
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    const patchUploadQueueItem = useCallback((id: string, patch: Partial<UploadQueueItem>) => {
+        setUploadQueue((prev) => prev.map((item) => (
+            item.id === id ? { ...item, ...patch } : item
+        )));
+    }, []);
 
-        const allowedTypes = ["pdf", "docx", "txt", "md", "xlsx", "xls"];
-        const ext = file.name.split(".").pop()?.toLowerCase();
-        if (!ext || !allowedTypes.includes(ext)) {
-            toast.error("不支持的文件类型，请上传 PDF、DOCX、TXT、MD、XLSX 或 XLS 文件");
-            e.target.value = "";
+    const advanceUploadProgress = useCallback((id: string) => {
+        setUploadQueue((prev) => prev.map((item) => (
+            item.id === id
+                ? { ...item, progress: Math.min(item.progress + 12, 90) }
+                : item
+        )));
+    }, []);
+
+    const uploadFiles = useCallback(async (selectedFiles: File[]) => {
+        if (selectedFiles.length === 0) return;
+
+        const queueItems = selectedFiles.map((file, index): UploadQueueItem => {
+            const validationMessage = validateUploadFile(file);
+            return {
+                id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+                name: file.name,
+                size: file.size,
+                status: validationMessage ? "failed" : "queued",
+                progress: validationMessage ? 100 : 0,
+                message: validationMessage || "等待上传",
+            };
+        });
+        const uploadTargets = selectedFiles
+            .map((file, index) => ({ file, item: queueItems[index] }))
+            .filter(({ item }) => item.status === "queued");
+
+        setUploadQueue(queueItems);
+
+        const invalidCount = queueItems.length - uploadTargets.length;
+        if (invalidCount > 0) {
+            toast.error(`${invalidCount} 个文件未加入上传队列，请检查类型或大小。`);
+        }
+        if (uploadTargets.length === 0) {
             return;
         }
 
-        if (file.size > 50 * 1024 * 1024) {
-            toast.error("文件大小不能超过 50MB");
-            e.target.value = "";
-            return;
-        }
+        let nextIndex = 0;
+        let successCount = 0;
+        let failedCount = invalidCount;
 
-        setIsUploading(true);
-        setUploadProgress(0);
+        const uploadOne = async ({ file, item }: { file: File; item: UploadQueueItem }) => {
+            let progressInterval: ReturnType<typeof setInterval> | null = null;
 
-        let progressInterval: ReturnType<typeof setInterval> | null = null;
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("title", file.name);
+            patchUploadQueueItem(item.id, {
+                status: "uploading",
+                progress: 8,
+                message: "正在上传并提交解析任务…",
+            });
 
-            progressInterval = setInterval(() => {
-                setUploadProgress((prev) => Math.min(prev + 10, 90));
-            }, 200);
+            try {
+                progressInterval = setInterval(() => {
+                    advanceUploadProgress(item.id);
+                }, 250);
 
-            await api.admin.uploadDocument(kbId, formData);
-            setUploadProgress(100);
-            toast.success("文档上传成功，系统已开始重新解析与建索引。");
-            await loadData();
-        } catch (err) {
-            debug.error("Upload failed:", err);
-            toast.error(`上传失败：${getApiErrorMessage(err)}`);
-        } finally {
-            if (progressInterval) {
-                clearInterval(progressInterval);
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("title", file.name);
+
+                await api.admin.uploadDocument(kbId, formData);
+                successCount += 1;
+                patchUploadQueueItem(item.id, {
+                    status: "success",
+                    progress: 100,
+                    message: "上传成功，已提交解析与建索引。",
+                });
+            } catch (err) {
+                failedCount += 1;
+                debug.error("Upload failed:", err);
+                patchUploadQueueItem(item.id, {
+                    status: "failed",
+                    progress: 100,
+                    message: `失败：${getApiErrorMessage(err)}`,
+                });
+            } finally {
+                if (progressInterval) {
+                    clearInterval(progressInterval);
+                }
             }
-            setIsUploading(false);
-            setUploadProgress(0);
-            e.target.value = "";
+        };
+
+        const runNext = async () => {
+            while (nextIndex < uploadTargets.length) {
+                const target = uploadTargets[nextIndex];
+                nextIndex += 1;
+                await uploadOne(target);
+            }
+        };
+
+        await Promise.all(Array.from(
+            { length: Math.min(BATCH_UPLOAD_CONCURRENCY, uploadTargets.length) },
+            () => runNext(),
+        ));
+
+        if (successCount > 0) {
+            await loadData();
+            toast.success(
+                failedCount > 0
+                    ? `${successCount} 个文件上传成功，${failedCount} 个失败。`
+                    : `${successCount} 个文件上传成功，系统已开始解析与建索引。`,
+            );
         }
+        if (failedCount > 0) {
+            toast.error(`${failedCount} 个文件上传失败，请查看队列详情后重试。`);
+        }
+    }, [advanceUploadProgress, kbId, loadData, patchUploadQueueItem, toast]);
+
+    const handleUploadInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFiles = Array.from(e.target.files ?? []);
+        e.target.value = "";
+        if (isUploading) {
+            toast.error("当前上传队列仍在处理，请完成后再选择新文件。");
+            return;
+        }
+        void uploadFiles(selectedFiles);
+    };
+
+    const handleUploadDrop = (event: React.DragEvent<HTMLLabelElement>) => {
+        event.preventDefault();
+        setIsUploadDragActive(false);
+        if (isUploading) {
+            toast.error("当前上传队列仍在处理，请完成后再拖入新文件。");
+            return;
+        }
+        void uploadFiles(Array.from(event.dataTransfer.files));
     };
 
     const handlePreview = async (doc: AdminKnowledgeDocument) => {
@@ -500,12 +641,26 @@ export default function KnowledgeDetailPage() {
                     <Button onClick={() => void loadData()} variant="outline" className="rounded-full">
                         <RefreshCcw className="w-4 h-4 mr-2" /> 刷新
                     </Button>
-                    <label className="cursor-pointer">
+                    <label
+                        className={`cursor-pointer rounded-2xl border border-dashed p-2 transition-colors ${
+                            isUploadDragActive
+                                ? "border-blue-300 bg-blue-50"
+                                : "border-slate-200 bg-white/60 hover:border-slate-300 hover:bg-white"
+                        } ${isUploading ? "opacity-75" : ""}`}
+                        onDragOver={(event) => {
+                            event.preventDefault();
+                            setIsUploadDragActive(true);
+                        }}
+                        onDragLeave={() => setIsUploadDragActive(false)}
+                        onDrop={handleUploadDrop}
+                        aria-label="批量上传知识文档"
+                    >
                         <input
                             type="file"
                             className="hidden"
                             accept=".pdf,.docx,.txt,.md,.xlsx,.xls"
-                            onChange={handleUpload}
+                            multiple
+                            onChange={handleUploadInputChange}
                             disabled={isUploading}
                         />
                         <Button
@@ -515,12 +670,15 @@ export default function KnowledgeDetailPage() {
                         >
                             <span>
                                 {isUploading ? (
-                                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 上传中 {uploadProgress}%</>
+                                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 队列上传中 {uploadQueueSummary.successful + uploadQueueSummary.failed}/{uploadQueue.length}</>
                                 ) : (
-                                    <><Upload className="w-4 h-4 mr-2" /> 上传文档</>
+                                    <><Upload className="w-4 h-4 mr-2" /> 批量上传文档</>
                                 )}
                             </span>
                         </Button>
+                        <span className="mt-1 block px-2 text-center text-[11px] font-medium text-slate-500">
+                            支持多选/拖拽 · 最多 3 个并发
+                        </span>
                     </label>
                 </div>
             </div>
@@ -528,6 +686,56 @@ export default function KnowledgeDetailPage() {
             {kb.description && (
                 <GlassCard className="p-4">
                     <p className="text-slate-600 text-pretty">{kb.description}</p>
+                </GlassCard>
+            )}
+
+            {uploadQueue.length > 0 && (
+                <GlassCard className="p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                            <h2 className="font-bold text-slate-900">批量上传队列</h2>
+                            <p className="text-sm text-slate-500">
+                                {uploadQueue.length} 个文件 · 并发上限 {BATCH_UPLOAD_CONCURRENCY} · 成功 {uploadQueueSummary.successful} · 失败 {uploadQueueSummary.failed}
+                            </p>
+                        </div>
+                        {isUploading ? (
+                            <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100">
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" /> 处理中
+                            </Badge>
+                        ) : null}
+                    </div>
+                    <div className="space-y-2">
+                        {uploadQueue.map((item) => {
+                            const queueStatus = uploadStatusConfig[item.status];
+                            return (
+                                <div key={item.id} className="rounded-2xl border border-slate-100 bg-white/70 p-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-3 min-w-0">
+                                            <div className="mt-0.5 rounded-lg bg-slate-50 p-2 text-slate-500">
+                                                <FileText className="w-4 h-4" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-semibold text-slate-900 truncate">{item.name}</p>
+                                                <p className="text-xs text-slate-500">{formatFileSize(item.size)}</p>
+                                            </div>
+                                        </div>
+                                        <Badge variant="secondary" className={`${queueStatus.color} shrink-0`}>
+                                            {queueStatus.label}
+                                        </Badge>
+                                    </div>
+                                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div
+                                            className={`h-full rounded-full transition-all ${queueStatus.progressColor}`}
+                                            style={{ width: `${item.progress}%` }}
+                                        />
+                                    </div>
+                                    <p className={`mt-2 text-xs ${item.status === "failed" ? "text-red-600" : "text-slate-500"}`}>
+                                        {item.message}
+                                    </p>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </GlassCard>
             )}
 

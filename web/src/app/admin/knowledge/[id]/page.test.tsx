@@ -301,6 +301,7 @@ describe("KnowledgeDetailPage", () => {
         expect(fileInput).toBeTruthy();
         expect(fileInput?.accept).toContain(".xlsx");
         expect(fileInput?.accept).toContain(".xls");
+        expect(fileInput?.multiple).toBe(true);
 
         const file = new File(["PK\u0003\u0004"], "新增资料.xlsx", {
             type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -314,6 +315,86 @@ describe("KnowledgeDetailPage", () => {
             expect(uploadDocumentMock).toHaveBeenCalledTimes(1);
         });
         expect(uploadDocumentMock).toHaveBeenCalledWith("kb-1", expect.any(FormData));
+    });
+
+    it("runs batch uploads through a three-file queue and keeps per-file failures visible", async () => {
+        let activeUploads = 0;
+        let maxActiveUploads = 0;
+        const pendingUploads: Array<{
+            title: string;
+            resolve: () => void;
+            reject: (error: Error) => void;
+        }> = [];
+
+        uploadDocumentMock.mockImplementation((_kbId: string, formData: FormData) => {
+            const title = String(formData.get("title"));
+            activeUploads += 1;
+            maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+
+            return new Promise((resolve, reject) => {
+                pendingUploads.push({
+                    title,
+                    resolve: () => {
+                        activeUploads -= 1;
+                        resolve({
+                            id: `uploaded-${title}`,
+                            file_name: title,
+                            file_type: "txt",
+                            file_size: 128,
+                            chunk_count: 0,
+                            status: "pending",
+                            created_at: "2026-03-23T00:00:00Z",
+                        });
+                    },
+                    reject: (error: Error) => {
+                        activeUploads -= 1;
+                        reject(error);
+                    },
+                });
+            });
+        });
+
+        const { container } = render(<KnowledgeDetailPage />);
+
+        await screen.findByText("石犀产品资料库");
+        const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement | null;
+        expect(fileInput).toBeTruthy();
+
+        const files = [
+            new File(["a"], "产品手册-a.txt", { type: "text/plain" }),
+            new File(["b"], "产品手册-b.txt", { type: "text/plain" }),
+            new File(["c"], "失败资料.md", { type: "text/markdown" }),
+            new File(["d"], "产品手册-d.txt", { type: "text/plain" }),
+        ];
+
+        fireEvent.change(fileInput as HTMLInputElement, {
+            target: { files },
+        });
+
+        expect(await screen.findByText("批量上传队列")).toBeTruthy();
+        expect(screen.getByText("产品手册-d.txt")).toBeTruthy();
+        await waitFor(() => {
+            expect(uploadDocumentMock).toHaveBeenCalledTimes(3);
+        });
+        expect(maxActiveUploads).toBe(3);
+
+        pendingUploads.find((item) => item.title === "产品手册-a.txt")?.resolve();
+
+        await waitFor(() => {
+            expect(uploadDocumentMock).toHaveBeenCalledTimes(4);
+        });
+        expect(maxActiveUploads).toBe(3);
+
+        pendingUploads.find((item) => item.title === "产品手册-b.txt")?.resolve();
+        pendingUploads.find((item) => item.title === "失败资料.md")?.reject(new Error("解析失败"));
+        pendingUploads.find((item) => item.title === "产品手册-d.txt")?.resolve();
+
+        await waitFor(() => {
+            expect(successToastMock).toHaveBeenCalledWith("3 个文件上传成功，1 个失败。");
+        });
+        expect(errorToastMock).toHaveBeenCalledWith("1 个文件上传失败，请查看队列详情后重试。");
+        expect(await screen.findByText("失败：解析失败")).toBeTruthy();
+        expect(screen.getByText(/成功 3 · 失败 1/)).toBeTruthy();
     });
 
     it("shows the global knowledge-answer config console and allows switching active version", async () => {
