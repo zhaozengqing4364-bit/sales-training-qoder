@@ -11,7 +11,7 @@ import logging
 import os
 from contextlib import suppress
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -90,7 +90,7 @@ class AudioArchivalJob:
             for session in sessions:
                 try:
                     # Get audio file path
-                    audio_path = session.audio_url
+                    audio_path = cast(str, session.audio_url)
 
                     if not os.path.exists(audio_path):
                         logger.warning(
@@ -118,9 +118,9 @@ class AudioArchivalJob:
                     os.rename(audio_path, archive_path)
 
                     # Update database
-                    session.audio_url = archive_path
-                    session.archived = True
-                    session.archived_at = datetime.now()
+                    setattr(session, "audio_url", archive_path)
+                    setattr(session, "archived", True)
+                    setattr(session, "archived_at", datetime.now())
 
                     archived_count += 1
                     freed_space += file_size

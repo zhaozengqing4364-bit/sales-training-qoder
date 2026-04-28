@@ -204,6 +204,18 @@ class Settings:
     ENABLE_BROWSER_ASR_FALLBACK: bool = (
         os.getenv("ENABLE_BROWSER_ASR_FALLBACK", "true").lower() == "true"
     )
+    ASR_BROWSER_FALLBACK_PROVIDER: str = os.getenv(
+        "ASR_BROWSER_FALLBACK_PROVIDER",
+        "browser_web_speech",
+    )
+    ASR_BROWSER_HANDOFF_MESSAGE: str = os.getenv(
+        "ASR_BROWSER_HANDOFF_MESSAGE",
+        "语音识别服务暂时不可用，请切换到浏览器语音识别或文本输入。",
+    )
+    ASR_BROWSER_HANDOFF_ACTION: str = os.getenv(
+        "ASR_BROWSER_HANDOFF_ACTION",
+        "请启用浏览器麦克风权限，或改用文本输入继续练习。",
+    )
     ENABLE_ANALYTICS: bool = os.getenv("ENABLE_ANALYTICS", "true").lower() == "true"
     ENABLE_LEADERBOARD: bool = os.getenv("ENABLE_LEADERBOARD", "true").lower() == "true"
 

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.error_handling.result import Result
 from common.jobs.audio_archival import AudioArchivalJob, AudioArchivalScheduler
@@ -60,7 +63,9 @@ async def test_should_filter_unarchived_sessions_with_sqlalchemy_boolean_express
     """Regression: do not use Python ``not`` against SQLAlchemy boolean columns."""
     db = _CapturingAsyncSession()
 
-    result = await AudioArchivalJob().archive_old_audio(db, batch_size=25)
+    result = await AudioArchivalJob().archive_old_audio(
+        cast(AsyncSession, db), batch_size=25
+    )
 
     assert result.is_success
     assert db.statement is not None
