@@ -6,9 +6,12 @@ Implements Constitution Principles:
 - V. Cost control - Efficient storage cleanup
 """
 
+import asyncio
 import logging
 import os
+from contextlib import suppress
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -31,10 +34,22 @@ class AudioArchivalJob:
     - Clean up local files
     """
 
-    def __init__(self):
-        self.retention_days = 365  # 1 year retention
-        self.audio_storage_path = "/data/audio"
-        self.archive_storage_path = "/data/audio_archived"
+    def __init__(
+        self,
+        *,
+        retention_days: int | None = None,
+        audio_storage_path: str | None = None,
+        archive_storage_path: str | None = None,
+    ):
+        self.retention_days = retention_days or int(
+            os.getenv("AUDIO_ARCHIVAL_RETENTION_DAYS", "365")
+        )
+        self.audio_storage_path = audio_storage_path or os.getenv(
+            "AUDIO_STORAGE_PATH", "/data/audio"
+        )
+        self.archive_storage_path = archive_storage_path or os.getenv(
+            "AUDIO_ARCHIVE_STORAGE_PATH", "/data/audio_archived"
+        )
 
     async def archive_old_audio(
         self, db: AsyncSession, batch_size: int = 100
@@ -275,5 +290,158 @@ class AudioArchivalJob:
             return Result.fail(fallback="[STATS_FAILED]")
 
 
+class AudioArchivalScheduler:
+    """Small lifespan-owned scheduler for the audio archival job.
+
+    This intentionally uses the existing in-process lifespan/background-task
+    pattern instead of adding a new scheduler dependency. The application only
+    starts it when an explicit env/config flag enables scheduling.
+    """
+
+    def __init__(
+        self,
+        *,
+        job: AudioArchivalJob,
+        session_factory: Any,
+        interval_seconds: int,
+        batch_size: int,
+    ) -> None:
+        self.job = job
+        self.session_factory = session_factory
+        self.interval_seconds = interval_seconds
+        self.batch_size = batch_size
+        self._task: asyncio.Task | None = None
+        self._running = False
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the background scheduler task is currently active."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the periodic archival loop."""
+        if self._running:
+            return
+
+        self._running = True
+        self._task = asyncio.create_task(
+            self._run_loop(),
+            name="audio-archival-scheduler",
+        )
+        logger.info(
+            "Audio archival scheduler started",
+            extra={
+                "interval_seconds": self.interval_seconds,
+                "batch_size": self.batch_size,
+            },
+        )
+
+    async def stop(self) -> None:
+        """Stop the periodic archival loop."""
+        self._running = False
+
+        if self._task:
+            self._task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
+
+        logger.info("Audio archival scheduler stopped")
+
+    async def run_once(self) -> Result[dict]:
+        """Run one archival batch with a fresh database session."""
+        try:
+            async with self.session_factory() as db:
+                result = await self.job.archive_old_audio(
+                    db=db,
+                    batch_size=self.batch_size,
+                )
+
+            if result.is_success:
+                logger.info(
+                    "Audio archival scheduled batch complete",
+                    extra={"stats": result.value},
+                )
+            else:
+                logger.warning(
+                    "Audio archival scheduled batch degraded",
+                    extra={"fallback": result.fallback},
+                )
+            return result
+        except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
+            logger.error(
+                "Audio archival scheduled batch failed",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
+            return Result.fail(fallback="[ARCHIVAL_FAILED]")
+
+    async def _run_loop(self) -> None:
+        try:
+            while self._running:
+                await asyncio.sleep(self.interval_seconds)
+                if self._running:
+                    await self.run_once()
+        except asyncio.CancelledError:
+            raise
+        except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
+            self._running = False
+            logger.error(
+                "Audio archival scheduler stopped unexpectedly",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
+
+
 # Singleton instance
 audio_archival_job = AudioArchivalJob()
+_audio_archival_scheduler: AudioArchivalScheduler | None = None
+
+
+def get_audio_archival_scheduler(
+    *,
+    interval_seconds: int,
+    batch_size: int,
+    job: AudioArchivalJob | None = None,
+    session_factory: Any | None = None,
+) -> AudioArchivalScheduler:
+    """Get or create the process-local audio archival scheduler."""
+    global _audio_archival_scheduler
+    if _audio_archival_scheduler is None:
+        if session_factory is None:
+            from common.db.session import AsyncSessionLocal
+
+            session_factory = AsyncSessionLocal
+        _audio_archival_scheduler = AudioArchivalScheduler(
+            job=job or audio_archival_job,
+            session_factory=session_factory,
+            interval_seconds=interval_seconds,
+            batch_size=batch_size,
+        )
+    return _audio_archival_scheduler
+
+
+async def init_audio_archival_scheduler(
+    *,
+    enabled: bool,
+    interval_seconds: int,
+    batch_size: int,
+) -> None:
+    """Initialize audio archival scheduling on application startup."""
+    if not enabled:
+        logger.info("Audio archival scheduler disabled")
+        return
+
+    scheduler = get_audio_archival_scheduler(
+        interval_seconds=interval_seconds,
+        batch_size=batch_size,
+    )
+    await scheduler.start()
+
+
+async def shutdown_audio_archival_scheduler() -> None:
+    """Shutdown audio archival scheduling on application shutdown."""
+    global _audio_archival_scheduler
+    if _audio_archival_scheduler:
+        await _audio_archival_scheduler.stop()
+        _audio_archival_scheduler = None

@@ -119,6 +119,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Service preloading failed: {str(e)}")
 
+    from common.jobs.audio_archival import (
+        init_audio_archival_scheduler,
+        shutdown_audio_archival_scheduler,
+    )
     from common.websocket.session_manager import (
         init_session_manager,
         shutdown_session_manager,
@@ -130,9 +134,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await init_session_manager()
     await init_session_state_service()
+    await init_audio_archival_scheduler(
+        enabled=settings.AUDIO_ARCHIVAL_SCHEDULER_ENABLED,
+        interval_seconds=settings.AUDIO_ARCHIVAL_INTERVAL_SECONDS,
+        batch_size=settings.AUDIO_ARCHIVAL_BATCH_SIZE,
+    )
 
     yield
 
+    await shutdown_audio_archival_scheduler()
     await shutdown_session_state_service()
     await shutdown_session_manager()
     logger.info("Shutting down AI Practice System backend")
