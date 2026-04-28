@@ -75,6 +75,30 @@ describe("authHandler", () => {
         unsubscribe();
     });
 
+    it("coalesces repeated session-expired calls while the login redirect is pending", () => {
+        vi.useFakeTimers();
+        const listener = vi.fn();
+        const navigateMock = vi.fn();
+        const unsubscribe = authHandler.subscribe(listener);
+        const unregisterNavigator = authHandler.setNavigator(navigateMock);
+
+        authHandler.sessionExpired();
+        vi.advanceTimersByTime(1300);
+        authHandler.sessionExpired();
+
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(navigateMock).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(200);
+
+        expect(navigateMock).toHaveBeenCalledTimes(1);
+        expect(navigateMock).toHaveBeenCalledWith("/login", { mode: "replace" });
+
+        unregisterNavigator();
+        unsubscribe();
+        vi.useRealTimers();
+    });
+
     it("supports silent logout without emitting toast event or clearing local storage", () => {
         const listener = vi.fn();
         const unsubscribe = authHandler.subscribe(listener);

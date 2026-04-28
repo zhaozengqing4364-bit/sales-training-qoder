@@ -34,6 +34,21 @@ describe("API client 401 handling", () => {
         expect(sessionExpiredSpy).toHaveBeenCalledTimes(1);
     });
 
+    it("delegates each authenticated 401 to the auth handler without a client-side cooldown", async () => {
+        const sessionExpiredSpy = vi.spyOn(authHandler, "sessionExpired").mockImplementation(() => {});
+
+        mockFetchResponse(401, {
+            success: false,
+            error: "[INVALID_TOKEN]",
+            message: "invalid token",
+        });
+
+        await expect(api.user.getMe()).rejects.toBeInstanceOf(ApiRequestError);
+        await expect(api.user.getMe()).rejects.toBeInstanceOf(ApiRequestError);
+
+        expect(sessionExpiredSpy).toHaveBeenCalledTimes(2);
+    });
+
     it("does not trigger session-expired flow for login 401", async () => {
         const sessionExpiredSpy = vi.spyOn(authHandler, "sessionExpired").mockImplementation(() => {});
 
