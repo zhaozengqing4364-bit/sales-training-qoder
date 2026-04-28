@@ -15,7 +15,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -522,8 +522,16 @@ async def test_list_users_role_filter_applies_before_pagination_and_total(
     db_session: AsyncSession,
 ) -> None:
     """Role filtering should not page unfiltered rows before counting returned users."""
-    admin_user.created_at = datetime(2026, 1, 4, 10, 0, tzinfo=UTC)
-    non_admin_user.created_at = datetime(2026, 1, 3, 10, 0, tzinfo=UTC)
+    await db_session.execute(
+        update(User)
+        .where(User.user_id == str(admin_user.user_id))
+        .values(created_at=datetime(2026, 1, 4, 10, 0, tzinfo=UTC))
+    )
+    await db_session.execute(
+        update(User)
+        .where(User.user_id == str(non_admin_user.user_id))
+        .values(created_at=datetime(2026, 1, 3, 10, 0, tzinfo=UTC))
+    )
 
     second_user = User(
         user_id=str(uuid.uuid4()),
