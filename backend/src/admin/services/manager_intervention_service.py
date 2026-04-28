@@ -6,7 +6,6 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +22,15 @@ from common.db.schemas import (
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class ManagerInterventionServiceError(Exception):
+    """Business-rule failure raised by intervention services for route translation."""
+
+    def __init__(self, *, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
 
 
 class ManagerInterventionWriteService:
@@ -110,7 +118,10 @@ class ManagerInterventionWriteService:
         intervention = await self._get_intervention(intervention_id=intervention_id)
         fields_set = set(payload.model_fields_set)
         if not fields_set:
-            raise HTTPException(status_code=400, detail="[INTERVENTION_EMPTY_UPDATE]")
+            raise ManagerInterventionServiceError(
+                status_code=400,
+                detail="[INTERVENTION_EMPTY_UPDATE]",
+            )
 
         if "note" in fields_set:
             intervention.note = payload.note
@@ -172,7 +183,10 @@ class ManagerInterventionWriteService:
                 intervention_id=str(payload.intervention_id),
             )
             if str(intervention.user_id) != target_user_id:
-                raise HTTPException(status_code=400, detail="[INTERVENTION_USER_MISMATCH]")
+                raise ManagerInterventionServiceError(
+                    status_code=400,
+                    detail="[INTERVENTION_USER_MISMATCH]",
+                )
         else:
             intervention = await self._latest_open_intervention_for_user(user_id=target_user_id)
 
@@ -208,13 +222,19 @@ class ManagerInterventionWriteService:
     async def _get_target_user(self, *, user_id: str) -> User:
         user = await self.db.get(User, user_id)
         if not user:
-            raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
+            raise ManagerInterventionServiceError(
+                status_code=404,
+                detail="[USER_NOT_FOUND]",
+            )
         return user
 
     async def _get_intervention(self, *, intervention_id: str) -> ManagerIntervention:
         intervention = await self.db.get(ManagerIntervention, intervention_id)
         if not intervention:
-            raise HTTPException(status_code=404, detail="[INTERVENTION_NOT_FOUND]")
+            raise ManagerInterventionServiceError(
+                status_code=404,
+                detail="[INTERVENTION_NOT_FOUND]",
+            )
         return intervention
 
     async def _validate_resolving_session(
@@ -225,12 +245,12 @@ class ManagerInterventionWriteService:
     ) -> None:
         session = await self.db.get(PracticeSession, resolving_session_id)
         if not session:
-            raise HTTPException(
+            raise ManagerInterventionServiceError(
                 status_code=404,
                 detail="[INTERVENTION_RESOLVING_SESSION_NOT_FOUND]",
             )
         if str(session.user_id) != intervention_user_id:
-            raise HTTPException(
+            raise ManagerInterventionServiceError(
                 status_code=400,
                 detail="[INTERVENTION_RESOLVING_SESSION_USER_MISMATCH]",
             )
@@ -268,7 +288,7 @@ class ManagerInterventionWriteService:
             )
 
         if due_state == ManagerInterventionDueState.RESOLVED.value:
-            raise HTTPException(
+            raise ManagerInterventionServiceError(
                 status_code=400,
                 detail="[INTERVENTION_RESOLVING_SESSION_REQUIRED]",
             )
