@@ -9,7 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin.services import ManagerInterventionServiceError, ManagerInterventionWriteService
+from admin.services import (
+    ManagerInterventionServiceError,
+    ManagerInterventionWriteService,
+)
 from common.auth.service import get_current_admin_user
 from common.db.models import ManagerIntervention, PracticeSession, User
 from common.db.schemas import (
