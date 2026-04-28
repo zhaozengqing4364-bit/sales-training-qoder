@@ -10,6 +10,7 @@ Tests for:
 
 import asyncio
 import time
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -62,6 +63,64 @@ class TestCircuitBreaker:
         assert "name" in stats
         assert "state" in stats
         assert stats["name"] == "test_circuit"
+
+    def test_concurrent_failures_open_once(self):
+        """Concurrent failure recording should produce one closed->open transition."""
+        from common.resilience.circuit_breaker import CircuitBreaker, CircuitState
+
+        transitions: list[tuple[CircuitState, CircuitState]] = []
+        breaker = CircuitBreaker(
+            name="concurrent_failure_circuit",
+            failure_threshold=1,
+            on_state_change=lambda old, new: transitions.append((old, new)),
+        )
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(lambda _: breaker.record_failure(), range(8)))
+
+        stats = breaker.get_stats()
+        assert breaker.is_open
+        assert stats["total_failures"] == 8
+        assert transitions == [(CircuitState.CLOSED, CircuitState.OPEN)]
+
+    def test_concurrent_half_open_probe_limit_counts_transitioning_call(self):
+        """The call that moves OPEN -> HALF_OPEN should consume one probe slot."""
+        from common.resilience.circuit_breaker import CircuitBreaker
+
+        breaker = CircuitBreaker(
+            name="half_open_probe_limit_circuit",
+            failure_threshold=1,
+            timeout_seconds=0,
+            half_open_max_calls=2,
+        )
+        breaker.record_failure()
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            allowed = list(executor.map(lambda _: breaker.can_execute(), range(8)))
+
+        assert sum(allowed) == 2
+        assert breaker.is_half_open
+
+    def test_half_open_failure_resets_success_count_for_next_recovery_window(self):
+        """A failed half-open probe should not carry stale successes into retry."""
+        from common.resilience.circuit_breaker import CircuitBreaker
+
+        breaker = CircuitBreaker(
+            name="half_open_success_reset_circuit",
+            failure_threshold=1,
+            success_threshold=2,
+            timeout_seconds=0,
+        )
+        breaker.record_failure()
+        assert breaker.can_execute()
+        breaker.record_success()
+        breaker.record_failure()
+
+        assert breaker.can_execute()
+        breaker.record_success()
+
+        assert breaker.is_half_open
+        assert breaker.get_stats()["success_count"] == 1
 
 
 class TestSessionManager:
