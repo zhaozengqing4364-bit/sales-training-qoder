@@ -243,6 +243,49 @@ async def test_remind_route_marks_existing_intervention_sent(
 
 
 @pytest.mark.asyncio
+async def test_remind_route_translates_intervention_user_mismatch_business_error(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    trainee_user: User,
+    db_session: AsyncSession,
+) -> None:
+    create_response = await async_client.post(
+        "/api/v1/admin/interventions",
+        json={
+            "user_id": str(trainee_user.user_id),
+            "issue_family": "value_expression",
+            "note": "先建立价值表达重点。",
+        },
+        headers=admin_headers,
+    )
+    intervention_id = create_response.json()["data"]["intervention_id"]
+    other_user = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"other_trainee_{uuid.uuid4().hex[:8]}",
+        name="Other Trainee",
+        department="Sales",
+        email=f"other-trainee-{uuid.uuid4().hex[:8]}@example.com",
+        role="user",
+        is_active=True,
+    )
+    db_session.add(other_user)
+    await db_session.commit()
+
+    remind_response = await async_client.post(
+        "/api/v1/admin/interventions/remind",
+        json={
+            "user_id": str(other_user.user_id),
+            "intervention_id": intervention_id,
+            "note": "请本周补一次围绕价值表达的练习。",
+        },
+        headers=admin_headers,
+    )
+
+    assert remind_response.status_code == 400
+    assert remind_response.json()["detail"] == "[INTERVENTION_USER_MISMATCH]"
+
+
+@pytest.mark.asyncio
 async def test_manager_lite_remind_without_intervention_id_updates_latest_open_focus(
     async_client: AsyncClient,
     admin_headers: dict[str, str],
