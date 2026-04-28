@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona, Persona
@@ -15,9 +16,6 @@ from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import Scenario, User
 from common.db.session import get_db
-from common.monitoring.logger import get_logger
-
-logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -87,10 +85,13 @@ async def list_scenarios(
 
         return response_data
 
-    except (RuntimeError, ValueError, OSError) as e:
-        logger.error(f"Failed to list scenarios: {str(e)}")
-        # Return empty list on error instead of throwing
-        return []
+    except (SQLAlchemyError, RuntimeError, ValueError, OSError) as e:
+        return build_server_error(
+            "[SCENARIOS_LIST_FAILED]",
+            message="Failed to list scenarios",
+            exc=e,
+            scenario_type=scenario_type,
+        )
 
 
 @router.get("/scenarios/sales/runtime-contract")
@@ -151,9 +152,13 @@ async def list_sales_personas(
 
         return list(unique_personas.values())
 
-    except (RuntimeError, ValueError, OSError) as e:
-        logger.warning(f"Could not load sales personas from database: {str(e)}")
-        return []
+    except (SQLAlchemyError, RuntimeError, ValueError, OSError) as e:
+        return build_server_error(
+            "[SALES_PERSONAS_LIST_FAILED]",
+            message="Failed to list sales personas",
+            exc=e,
+            agent_id=agent_id,
+        )
 
 
 @router.get("/scenarios/{scenario_id}")
