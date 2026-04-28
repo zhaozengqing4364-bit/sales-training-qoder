@@ -1504,7 +1504,7 @@ async function apiFetchBlob(
         if (!response.ok) {
             const responseJson = await response.json().catch(() => ({}));
             if (response.status === 401 && !skipSessionExpiredHandling) {
-                triggerSessionExpired();
+                triggerSessionExpiredOnce();
             }
             throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
         }
