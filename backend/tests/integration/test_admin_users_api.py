@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -29,6 +29,7 @@ from admin.api.security_inventory import (
 )
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
+from admin.api.users import _assert_admin_demotion_keeps_active_admin
 
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
@@ -679,6 +680,70 @@ async def test_role_update_rejects_self_downgrade(
 
     assert response.status_code == 400
     assert "[CANNOT_DOWNGRADE_SELF]" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_last_admin_demotion_guard_recounts_inside_current_transaction(
+    db_session: AsyncSession,
+) -> None:
+    """Last-admin guard should not accept stale caller-provided counts."""
+    only_admin = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"only_admin_{uuid.uuid4().hex[:8]}",
+        name="Only Admin",
+        department="Ops",
+        email=f"only-admin-{uuid.uuid4().hex[:8]}@example.com",
+        role="admin",
+        is_active=True,
+    )
+    db_session.add(only_admin)
+    await db_session.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _assert_admin_demotion_keeps_active_admin(
+            db_session,
+            current_role="admin",
+            new_role="support",
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "[CANNOT_REMOVE_LAST_ADMIN]"
+
+
+@pytest.mark.asyncio
+async def test_last_admin_demotion_guard_allows_when_backup_admin_exists(
+    db_session: AsyncSession,
+) -> None:
+    """Transaction-local recount should allow demotion when another active admin remains."""
+    db_session.add_all(
+        [
+            User(
+                user_id=str(uuid.uuid4()),
+                wechat_user_id=f"primary_admin_{uuid.uuid4().hex[:8]}",
+                name="Primary Admin",
+                department="Ops",
+                email=f"primary-admin-{uuid.uuid4().hex[:8]}@example.com",
+                role="admin",
+                is_active=True,
+            ),
+            User(
+                user_id=str(uuid.uuid4()),
+                wechat_user_id=f"backup_admin_{uuid.uuid4().hex[:8]}",
+                name="Backup Admin",
+                department="Ops",
+                email=f"backup-admin-{uuid.uuid4().hex[:8]}@example.com",
+                role="admin",
+                is_active=True,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    await _assert_admin_demotion_keeps_active_admin(
+        db_session,
+        current_role="admin",
+        new_role="support",
+    )
 
 
 @pytest.mark.asyncio
