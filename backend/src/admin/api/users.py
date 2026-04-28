@@ -288,20 +288,76 @@ def _assert_role_transition_allowed(
     is_self: bool,
     current_role: str | None,
     new_role: str,
-    active_admin_count: int | None = None,
 ) -> None:
-    """Validate role transition guardrails and raise explicit error codes."""
+    """Validate caller-independent role transition guardrails."""
     if new_role not in {"user", "support", "admin"}:
         raise HTTPException(status_code=400, detail="[INVALID_ROLE]")
 
     if is_self and new_role != "admin":
         raise HTTPException(status_code=400, detail="[CANNOT_DOWNGRADE_SELF]")
 
-    if new_role != "admin" and current_role == "admin":
-        if active_admin_count is None:
-            raise ValueError("active_admin_count is required when demoting an admin")
-        if active_admin_count <= 1:
-            raise HTTPException(status_code=400, detail="[CANNOT_REMOVE_LAST_ADMIN]")
+
+_ROW_LOCKING_DIALECTS = frozenset({"postgresql", "mysql", "mariadb", "oracle"})
+
+
+def _requires_last_admin_guard(*, current_role: str | None, new_role: str) -> bool:
+    """Return whether a role transition could remove an active administrator."""
+    return current_role == "admin" and new_role != "admin"
+
+
+def _dialect_supports_row_locks(dialect_name: str | None) -> bool:
+    """Return whether SELECT ... FOR UPDATE can serialize the admin recount."""
+    return (dialect_name or "").split("+", maxsplit=1)[0] in _ROW_LOCKING_DIALECTS
+
+
+def _active_admin_recount_statement(*, lock_rows: bool):
+    """Build the authoritative active-admin recount statement.
+
+    Row locks are requested only for dialects that support them. SQLite ignores
+    row-level locking, so tests document that limitation while the service still
+    avoids stale caller-provided counts by recounting inside the active
+    transaction immediately before mutation.
+    """
+    statement = select(User.user_id).where(
+        User.role == "admin",
+        User.is_active.is_(True),
+    )
+    return statement.with_for_update() if lock_rows else statement
+
+
+def _session_dialect_name(db: AsyncSession) -> str:
+    """Resolve the SQLAlchemy dialect name for guard capability checks."""
+    bind = db.get_bind()
+    return str(getattr(getattr(bind, "dialect", None), "name", "") or "unknown")
+
+
+async def _count_active_admins_for_role_guard(db: AsyncSession) -> int:
+    """Recount active admins in the current transaction, locking rows if possible."""
+    dialect_name = _session_dialect_name(db)
+    lock_rows = _dialect_supports_row_locks(dialect_name)
+    result = await db.execute(_active_admin_recount_statement(lock_rows=lock_rows))
+
+    if not lock_rows:
+        logger.warning(
+            "admin_last_admin_guard_row_lock_unavailable",
+            dialect=dialect_name,
+        )
+
+    return len(result.scalars().all())
+
+
+async def _assert_admin_demotion_keeps_active_admin(
+    db: AsyncSession,
+    *,
+    current_role: str | None,
+    new_role: str,
+) -> None:
+    """Reject admin demotion when the transaction-local recount sees no backup admin."""
+    if not _requires_last_admin_guard(current_role=current_role, new_role=new_role):
+        return
+
+    if await _count_active_admins_for_role_guard(db) <= 1:
+        raise HTTPException(status_code=400, detail="[CANNOT_REMOVE_LAST_ADMIN]")
 
 
 @router.get("", response_model=dict)
@@ -897,18 +953,16 @@ async def update_user_role(
         raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
 
     is_self = str(current_user.user_id) == user_id
-    active_admin_count: int | None = None
-    if payload.role != "admin" and user.role == "admin":
-        admin_count = await db.execute(
-            select(func.count()).select_from(User).where(User.role == "admin", User.is_active.is_(True))
-        )
-        active_admin_count = admin_count.scalar() or 0
 
     _assert_role_transition_allowed(
         is_self=is_self,
         current_role=user.role,
         new_role=payload.role,
-        active_admin_count=active_admin_count,
+    )
+    await _assert_admin_demotion_keeps_active_admin(
+        db,
+        current_role=user.role,
+        new_role=payload.role,
     )
 
     before_snapshot = _user_audit_snapshot(user)
