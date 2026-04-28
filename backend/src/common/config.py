@@ -176,6 +176,25 @@ class Settings:
     # Service Preloading
     PRELOAD_SERVICES: bool = os.getenv("PRELOAD_SERVICES", "false").lower() == "true"
 
+    # Audio archival scheduling. Disabled by default because the archival job moves
+    # files and updates session rows; operators must opt in after storage paths are
+    # configured for the deployment.
+    AUDIO_ARCHIVAL_SCHEDULER_ENABLED: bool = (
+        os.getenv("AUDIO_ARCHIVAL_SCHEDULER_ENABLED", "false").lower() == "true"
+    )
+    AUDIO_ARCHIVAL_INTERVAL_SECONDS: int = _env_int(
+        "AUDIO_ARCHIVAL_INTERVAL_SECONDS",
+        86400,
+        minimum=300,
+        maximum=604800,
+    )
+    AUDIO_ARCHIVAL_BATCH_SIZE: int = _env_int(
+        "AUDIO_ARCHIVAL_BATCH_SIZE",
+        100,
+        minimum=1,
+        maximum=10000,
+    )
+
     # Monitoring
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
