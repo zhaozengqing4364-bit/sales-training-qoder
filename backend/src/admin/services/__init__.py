@@ -1,5 +1,8 @@
 """Admin service package."""
 
-from .manager_intervention_service import ManagerInterventionWriteService
+from .manager_intervention_service import (
+    ManagerInterventionServiceError,
+    ManagerInterventionWriteService,
+)
 
-__all__ = ["ManagerInterventionWriteService"]
+__all__ = ["ManagerInterventionServiceError", "ManagerInterventionWriteService"]
