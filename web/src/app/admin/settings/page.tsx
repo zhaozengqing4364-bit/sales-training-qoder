@@ -40,7 +40,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/glass-modal";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     AdminModelConfigCreateRequest as CreateModelConfigRequest,
     AdminModelConfigDetail as ModelConfigDetail,
