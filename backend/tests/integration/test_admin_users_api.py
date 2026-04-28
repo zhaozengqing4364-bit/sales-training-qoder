@@ -29,6 +29,7 @@ from admin.api.security_inventory import (
 )
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
+from admin.api.users import _assert_admin_demotion_keeps_active_admin
 
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
