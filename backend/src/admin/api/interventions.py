@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NoReturn
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin.services import ManagerInterventionWriteService
+from admin.services import ManagerInterventionServiceError, ManagerInterventionWriteService
 from common.auth.service import get_current_admin_user
 from common.db.models import ManagerIntervention, PracticeSession, User
 from common.db.schemas import (
@@ -34,6 +34,11 @@ def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
 
 def _serialize_intervention(intervention: ManagerIntervention) -> dict[str, Any]:
     return ManagerInterventionResponse.model_validate(intervention).model_dump(mode="json")
+
+
+def _raise_service_http_error(error: ManagerInterventionServiceError) -> NoReturn:
+    """Translate intervention business errors at the HTTP boundary."""
+    raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
 @router.get("/lists")
@@ -188,10 +193,13 @@ async def list_manager_interventions(
 
     del current_user
 
-    response = await ManagerInterventionWriteService(db).list_interventions(
-        user_id=user_id,
-        limit=limit,
-    )
+    try:
+        response = await ManagerInterventionWriteService(db).list_interventions(
+            user_id=user_id,
+            limit=limit,
+        )
+    except ManagerInterventionServiceError as error:
+        _raise_service_http_error(error)
     return success_response(response.model_dump(mode="json"))
 
 
@@ -203,10 +211,13 @@ async def create_manager_intervention(
 ) -> dict[str, Any]:
     """Create a minimal manager intervention record tied to the current admin chain."""
 
-    intervention = await ManagerInterventionWriteService(db).create_intervention(
-        payload=payload,
-        current_user=current_user,
-    )
+    try:
+        intervention = await ManagerInterventionWriteService(db).create_intervention(
+            payload=payload,
+            current_user=current_user,
+        )
+    except ManagerInterventionServiceError as error:
+        _raise_service_http_error(error)
     return success_response(_serialize_intervention(intervention))
 
 
@@ -221,10 +232,13 @@ async def update_manager_intervention(
 
     del current_user
 
-    intervention = await ManagerInterventionWriteService(db).update_intervention(
-        intervention_id=intervention_id,
-        payload=payload,
-    )
+    try:
+        intervention = await ManagerInterventionWriteService(db).update_intervention(
+            intervention_id=intervention_id,
+            payload=payload,
+        )
+    except ManagerInterventionServiceError as error:
+        _raise_service_http_error(error)
     return success_response(_serialize_intervention(intervention))
 
 
@@ -236,8 +250,11 @@ async def remind_user(
 ) -> dict[str, Any]:
     """Log a manager reminder and update the current intervention when one exists."""
 
-    result = await ManagerInterventionWriteService(db).remind_user(
-        payload=payload,
-        current_user=current_user,
-    )
+    try:
+        result = await ManagerInterventionWriteService(db).remind_user(
+            payload=payload,
+            current_user=current_user,
+        )
+    except ManagerInterventionServiceError as error:
+        _raise_service_http_error(error)
     return success_response(result)
