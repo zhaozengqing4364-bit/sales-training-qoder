@@ -514,6 +514,68 @@ async def test_multiple_updates_keep_list_and_detail_consistent(
 
 
 @pytest.mark.asyncio
+async def test_list_users_role_filter_applies_before_pagination_and_total(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    admin_user: User,
+    non_admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Role filtering should not page unfiltered rows before counting returned users."""
+    admin_user.created_at = datetime(2026, 1, 4, 10, 0, tzinfo=UTC)
+    non_admin_user.created_at = datetime(2026, 1, 3, 10, 0, tzinfo=UTC)
+
+    second_user = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"role_filter_user_{uuid.uuid4().hex[:8]}",
+        name="Second Role Filter User",
+        department="Sales",
+        email="second-role-filter-user@example.com",
+        role="user",
+        is_active=True,
+        created_at=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
+    )
+    support_user = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"role_filter_support_{uuid.uuid4().hex[:8]}",
+        name="Role Filter Support",
+        department="Support",
+        email="role-filter-support@example.com",
+        role="support",
+        is_active=True,
+        created_at=datetime(2026, 1, 2, 10, 0, tzinfo=UTC),
+    )
+    db_session.add_all([second_user, support_user])
+    await db_session.commit()
+
+    first_page_response = await async_client.get(
+        "/api/v1/admin/users",
+        params={"role": "user", "page": 1, "page_size": 1},
+        headers=admin_headers,
+    )
+    assert first_page_response.status_code == 200
+    first_page = first_page_response.json()["data"]
+
+    assert first_page["total"] == 2
+    assert first_page["has_more"] is True
+    assert [item["role"] for item in first_page["items"]] == ["user"]
+    assert first_page["items"][0]["id"] == str(non_admin_user.user_id)
+
+    second_page_response = await async_client.get(
+        "/api/v1/admin/users",
+        params={"role": "user", "page": 2, "page_size": 1},
+        headers=admin_headers,
+    )
+    assert second_page_response.status_code == 200
+    second_page = second_page_response.json()["data"]
+
+    assert second_page["total"] == 2
+    assert second_page["has_more"] is False
+    assert [item["role"] for item in second_page["items"]] == ["user"]
+    assert second_page["items"][0]["id"] == str(second_user.user_id)
+
+
+@pytest.mark.asyncio
 async def test_admin_can_update_user_role_and_persist_audit_fields(
     async_client: AsyncClient,
     admin_headers: dict[str, str],

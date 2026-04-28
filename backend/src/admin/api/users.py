@@ -394,7 +394,11 @@ async def list_users(
         query = query.where(User.is_active == is_active)
         count_query = count_query.where(User.is_active == is_active)
 
-    # Note: role filter is handled at response level since User model doesn't have role field
+    # Apply role filter before counting and paginating. User.role is persisted on the
+    # users table, so SQL-level filtering keeps total/items/has_more consistent.
+    if role:
+        query = query.where(User.role == role)
+        count_query = count_query.where(User.role == role)
 
     # Get total count
     total = (await db.execute(count_query)).scalar() or 0
@@ -409,10 +413,6 @@ async def list_users(
 
     # Convert to response format
     items = [user_to_response(u) for u in users]
-
-    # Apply role filter at response level if needed
-    if role:
-        items = [item for item in items if item.role == role]
 
     response = UserListResponse(
         items=items,
