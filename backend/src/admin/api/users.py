@@ -310,7 +310,7 @@ def _dialect_supports_row_locks(dialect_name: str | None) -> bool:
     return (dialect_name or "").split("+", maxsplit=1)[0] in _ROW_LOCKING_DIALECTS
 
 
-def _active_admin_recount_statement(*, lock_rows: bool):
+def _active_admin_recount_statement(*, lock_rows: bool) -> Any:
     """Build the authoritative active-admin recount statement.
 
     Row locks are requested only for dialects that support them. SQLite ignores

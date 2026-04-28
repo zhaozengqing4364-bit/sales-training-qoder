@@ -5,12 +5,15 @@ Unit tests for admin users API request models and audit helpers.
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql, sqlite
 
 from admin.api.users import (
     CreateUserRequest,
     UpdateUserRequest,
     UpdateUserRoleRequest,
+    _active_admin_recount_statement,
     _assert_role_transition_allowed,
+    _dialect_supports_row_locks,
     _mask_email,
     _user_audit_snapshot,
 )
@@ -144,17 +147,36 @@ def test_user_audit_snapshot_masks_sensitive_email() -> None:
 
 
 def test_role_transition_guard_rejects_removing_last_active_admin() -> None:
-    """Guardrail should reject demoting the last active admin."""
+    """Static guardrail should reject self downgrade before recounting admins."""
     with pytest.raises(HTTPException) as exc_info:
         _assert_role_transition_allowed(
-            is_self=False,
+            is_self=True,
             current_role="admin",
             new_role="user",
-            active_admin_count=1,
         )
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "[CANNOT_REMOVE_LAST_ADMIN]"
+    assert exc_info.value.detail == "[CANNOT_DOWNGRADE_SELF]"
+
+
+def test_active_admin_recount_statement_requests_row_lock_for_supported_dialects() -> None:
+    """Transaction-local recount should request row locks when SQL supports them."""
+    statement = _active_admin_recount_statement(lock_rows=True)
+
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert _dialect_supports_row_locks("postgresql")
+    assert "FOR UPDATE" in compiled
+
+
+def test_active_admin_recount_statement_documents_sqlite_row_lock_limitation() -> None:
+    """SQLite cannot serialize the recount with SELECT FOR UPDATE."""
+    statement = _active_admin_recount_statement(lock_rows=False)
+
+    compiled = str(statement.compile(dialect=sqlite.dialect()))
+
+    assert not _dialect_supports_row_locks("sqlite")
+    assert "FOR UPDATE" not in compiled
 
 
 class _RecordingBoundLogger:
