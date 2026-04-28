@@ -190,7 +190,6 @@ async def get_scenario(
     except HTTPException:
         raise
     except (RuntimeError, ValueError, OSError) as e:
-        logger.error(f"Failed to get scenario: {str(e)}")
         return build_server_error(
             "[SCENARIO_LOAD_FAILED]",
             message="Failed to load scenario",
