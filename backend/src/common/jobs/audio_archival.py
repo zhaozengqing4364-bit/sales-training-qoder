@@ -37,9 +37,7 @@ class AudioArchivalJob:
         self.archive_storage_path = "/data/audio_archived"
 
     async def archive_old_audio(
-        self,
-        db: AsyncSession,
-        batch_size: int = 100
+        self, db: AsyncSession, batch_size: int = 100
     ) -> Result[dict]:
         """
         Archive audio files for sessions older than retention period
@@ -62,11 +60,13 @@ class AudioArchivalJob:
             sessions = result.scalars().all()
 
             if not sessions:
-                return Result(value={
-                    "archived_count": 0,
-                    "failed_count": 0,
-                    "freed_space_bytes": 0,
-                })
+                return Result(
+                    value={
+                        "archived_count": 0,
+                        "failed_count": 0,
+                        "freed_space_bytes": 0,
+                    }
+                )
 
             archived_count = 0
             failed_count = 0
@@ -80,7 +80,10 @@ class AudioArchivalJob:
                     if not os.path.exists(audio_path):
                         logger.warning(
                             "Audio file not found",
-                            extra={"session_id": str(session.session_id), "path": audio_path}
+                            extra={
+                                "session_id": str(session.session_id),
+                                "path": audio_path,
+                            },
                         )
                         continue
 
@@ -89,13 +92,14 @@ class AudioArchivalJob:
 
                     # Create archive directory
                     archive_dir = os.path.join(
-                        self.archive_storage_path,
-                        str(session.session_id)
+                        self.archive_storage_path, str(session.session_id)
                     )
                     os.makedirs(archive_dir, exist_ok=True)
 
                     # Move file to archive
-                    archive_path = os.path.join(archive_dir, os.path.basename(audio_path))
+                    archive_path = os.path.join(
+                        archive_dir, os.path.basename(audio_path)
+                    )
                     os.rename(audio_path, archive_path)
 
                     # Update database
@@ -111,14 +115,14 @@ class AudioArchivalJob:
                         extra={
                             "session_id": str(session.session_id),
                             "archive_path": archive_path,
-                        }
+                        },
                     )
 
                 except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
                     logger.error(
                         "Failed to archive audio file",
                         extra={"session_id": str(session.session_id), "error": str(e)},
-                        exc_info=True
+                        exc_info=True,
                     )
                     failed_count += 1
 
@@ -131,10 +135,7 @@ class AudioArchivalJob:
                 "freed_space_mb": round(freed_space / 1024 / 1024, 2),
             }
 
-            logger.info(
-                "Audio archival batch complete",
-                extra=stats
-            )
+            logger.info("Audio archival batch complete", extra=stats)
 
             return Result(value=stats)
 
@@ -142,15 +143,12 @@ class AudioArchivalJob:
             logger.error(
                 "Failed to run audio archival job",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             await db.rollback()
             return Result.fail(fallback="[ARCHIVAL_FAILED]")
 
-    async def cleanup_orphaned_audio(
-        self,
-        db: AsyncSession
-    ) -> Result[dict]:
+    async def cleanup_orphaned_audio(self, db: AsyncSession) -> Result[dict]:
         """
         Clean up audio files that don't have corresponding sessions
 
@@ -167,10 +165,12 @@ class AudioArchivalJob:
             freed_space = 0
 
             if not os.path.exists(self.audio_storage_path):
-                return Result(value={
-                    "orphaned_count": 0,
-                    "freed_space_bytes": 0,
-                })
+                return Result(
+                    value={
+                        "orphaned_count": 0,
+                        "freed_space_bytes": 0,
+                    }
+                )
 
             for root, dirs, files in os.walk(self.audio_storage_path):
                 for file in files:
@@ -193,13 +193,18 @@ class AudioArchivalJob:
 
                             logger.info(
                                 "Orphaned audio file removed",
-                                extra={"file_path": file_path}
+                                extra={"file_path": file_path},
                             )
 
-                        except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
+                        except (
+                            SQLAlchemyError,
+                            OSError,
+                            ValueError,
+                            RuntimeError,
+                        ) as e:
                             logger.error(
                                 "Failed to remove orphaned file",
-                                extra={"file_path": file_path, "error": str(e)}
+                                extra={"file_path": file_path, "error": str(e)},
                             )
 
             stats = {
@@ -208,10 +213,7 @@ class AudioArchivalJob:
                 "freed_space_mb": round(freed_space / 1024 / 1024, 2),
             }
 
-            logger.info(
-                "Orphaned audio cleanup complete",
-                extra=stats
-            )
+            logger.info("Orphaned audio cleanup complete", extra=stats)
 
             return Result(value=stats)
 
@@ -219,14 +221,11 @@ class AudioArchivalJob:
             logger.error(
                 "Failed to cleanup orphaned audio",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[CLEANUP_FAILED]")
 
-    async def get_storage_stats(
-        self,
-        db: AsyncSession
-    ) -> Result[dict]:
+    async def get_storage_stats(self, db: AsyncSession) -> Result[dict]:
         """
         Get storage statistics for audio files
 
@@ -265,18 +264,13 @@ class AudioArchivalJob:
                 "total_size_mb": round((active_size + archived_size) / 1024 / 1024, 2),
             }
 
-            logger.info(
-                "Storage stats calculated",
-                extra=stats
-            )
+            logger.info("Storage stats calculated", extra=stats)
 
             return Result(value=stats)
 
         except (SQLAlchemyError, OSError, ValueError, RuntimeError) as e:
             logger.error(
-                "Failed to get storage stats",
-                extra={"error": str(e)},
-                exc_info=True
+                "Failed to get storage stats", extra={"error": str(e)}, exc_info=True
             )
             return Result.fail(fallback="[STATS_FAILED]")
 

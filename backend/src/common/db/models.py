@@ -481,7 +481,9 @@ class BusinessRuleConfigAuditLog(Base):
     domain = Column(String(80), nullable=False, index=True)
     config_key = Column(String(160), nullable=False, index=True)
     action = Column(String(40), nullable=False, index=True)
-    actor_id = Column(String(36), ForeignKey("users.user_id"), nullable=True, index=True)
+    actor_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=True, index=True
+    )
     before_version = Column(Integer, nullable=True)
     after_version = Column(Integer, nullable=True)
     before_snapshot_json = Column(
@@ -754,7 +756,9 @@ class PracticeSession(Base):
     accuracy_score = Column(Float)
     completeness_score = Column(Float)
     audio_url = Column(String(500))
-    archived = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    archived = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     archived_at = Column(DateTime(timezone=True), nullable=True)
     transcript_url = Column(String(500))
     total_duration_seconds = Column(Integer)
