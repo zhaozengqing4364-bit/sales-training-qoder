@@ -217,17 +217,10 @@ async function fetchWithLoopbackRetry(url: string, options: RequestInit): Promis
 // Active request tracking for cancellation on page transitions
 const activeRequests = new Map<string, AbortController>();
 let requestCounter = 0;
-let lastSessionExpiredAt = 0;
-const SESSION_EXPIRED_NOTIFY_COOLDOWN_MS = 1500;
 const CSRF_COOKIE_NAME = "app_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";
 
-function triggerSessionExpiredOnce(): void {
-    const now = Date.now();
-    if (now - lastSessionExpiredAt < SESSION_EXPIRED_NOTIFY_COOLDOWN_MS) {
-        return;
-    }
-    lastSessionExpiredAt = now;
+function triggerSessionExpired(): void {
     authHandler.sessionExpired();
 }
 
@@ -1368,7 +1361,7 @@ async function apiFetch<T>(
             const normalized = normalizeApiErrorPayload(response.status, responseJson);
 
             if (response.status === 401 && !skipSessionExpiredHandling) {
-                triggerSessionExpiredOnce();
+                triggerSessionExpired();
             }
 
             throw new ApiRequestError(normalized);
@@ -1442,7 +1435,7 @@ async function apiUpload<T>(
 
         if (!response.ok) {
             if (response.status === 401 && !skipSessionExpiredHandling) {
-                triggerSessionExpiredOnce();
+                triggerSessionExpired();
             }
             throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
         }
@@ -1511,7 +1504,7 @@ async function apiFetchBlob(
         if (!response.ok) {
             const responseJson = await response.json().catch(() => ({}));
             if (response.status === 401 && !skipSessionExpiredHandling) {
-                triggerSessionExpiredOnce();
+                triggerSessionExpired();
             }
             throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
         }
@@ -1542,7 +1535,7 @@ async function apiFetchBlob(
  * M019/S03/T01 domain client seam inventory
  *
  * Cross-cutting seam that must stay centralized even after client.ts is split:
- * - auth/session expiry handling: authHandler + triggerSessionExpiredOnce
+ * - auth/session expiry handling: authHandler + triggerSessionExpired
  * - request transport: apiFetch / apiUpload / fetchWithLoopbackRetry
  * - trace propagation: createHeaders(buildTraceHeaders(...))
  * - error normalization: normalizeApiErrorPayload -> ApiRequestError -> getApiErrorMessage

@@ -331,11 +331,11 @@ class AuthHandler {
      * Handle session expired — show a brief toast then redirect to login.
      */
     sessionExpired(): void {
-        this.logout("登录已过期，请重新登录", { redirectTo: null });
-
         if (this.sessionExpiredTimer !== null) {
             return;
         }
+
+        this.logout("登录已过期，请重新登录", { redirectTo: null });
 
         const performRedirect = () => {
             this.sessionExpiredTimer = null;
