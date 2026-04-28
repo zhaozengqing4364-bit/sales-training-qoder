@@ -54,7 +54,7 @@ class AudioArchivalJob:
                 select(PracticeSession)
                 .where(PracticeSession.start_time < cutoff_time)
                 .where(PracticeSession.audio_url.isnot(None))
-                .where(not PracticeSession.archived)  # Assuming we add this field
+                .where(PracticeSession.archived.is_(False))
                 .limit(batch_size)
             )
 

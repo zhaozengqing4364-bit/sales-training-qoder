@@ -754,6 +754,8 @@ class PracticeSession(Base):
     accuracy_score = Column(Float)
     completeness_score = Column(Float)
     audio_url = Column(String(500))
+    archived = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    archived_at = Column(DateTime(timezone=True), nullable=True)
     transcript_url = Column(String(500))
     total_duration_seconds = Column(Integer)
     llm_tokens_used = Column(Integer, default=0)
