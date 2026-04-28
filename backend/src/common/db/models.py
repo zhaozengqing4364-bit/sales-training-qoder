@@ -93,7 +93,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=True)
     role = Column(String(20), default="user", nullable=False)  # user, admin, support
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     last_login = Column(DateTime(timezone=True))
     is_active = Column(Boolean, default=True)
@@ -591,7 +591,7 @@ class Scenario(Base):
     persona_prompt = Column(String)  # For sales bot
     is_active = Column(Boolean, default=True)
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     __table_args__ = (
@@ -614,7 +614,7 @@ class Presentation(Base):
     file_url = Column(String(500), nullable=False)
     file_size_bytes = Column(Integer)
     upload_date = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     version_number = Column(Integer, default=1)
     status = Column(String(20), default="processing", index=True)
@@ -686,7 +686,7 @@ class RequiredTalkingPoint(Base):
     is_ai_generated = Column(Boolean, default=False)
     confirmed_by_admin = Column(Boolean, default=True)
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     __table_args__ = (
@@ -755,7 +755,7 @@ class PracticeSession(Base):
     effectiveness_snapshot = Column(JSON, nullable=True)
 
     start_time = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
     )
     end_time = Column(DateTime(timezone=True))
     status = Column(String(20), default="preparing", index=True)
@@ -820,6 +820,9 @@ class PracticeSession(Base):
     # Audio segments for browser-direct OSS upload audit trail
     audio_segments = relationship(
         "SessionAudioSegment", back_populates="session", cascade="all, delete-orphan"
+    )
+    highlight_reviews = relationship(
+        "HighlightReview", back_populates="session", cascade="all, delete-orphan"
     )
 
 
@@ -1088,7 +1091,7 @@ class InterruptionEvent(Base):
         index=True,
     )
     timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     interruption_type = Column(String(30), nullable=False)
     trigger_content = Column(String)
@@ -1177,7 +1180,7 @@ class LeaderboardEntry(Base):
     total_sessions = Column(Integer, default=1)
     rank = Column(Integer, index=True)
     last_updated = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     __table_args__ = (
@@ -1231,7 +1234,7 @@ class SystemLog(Base):
     )  # success, failed, warning
     details = Column(String, nullable=True)  # JSON string for additional details
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
     )
 
     __table_args__ = (
@@ -1262,12 +1265,12 @@ class PromptTemplate(Base):
     is_default = Column(Boolean, nullable=False, default=False)
     is_system = Column(Boolean, nullable=False, default=False)
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (
@@ -1288,7 +1291,7 @@ class ScenarioPrompt(Base):
     template_id = Column(String(36), ForeignKey("prompt_templates.id"), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     template = relationship("PromptTemplate")
@@ -1338,7 +1341,7 @@ class StagedEvaluationResult(Base):
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=text("CURRENT_TIMESTAMP"),
     )
 
@@ -1392,7 +1395,7 @@ class ComprehensiveReport(Base):
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=text("CURRENT_TIMESTAMP"),
     )
 
@@ -1504,12 +1507,12 @@ class ReleaseVerificationRecord(Base):
 
     # Traceability
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (
@@ -1572,12 +1575,12 @@ class ReleaseVerificationSummary(Base):
 
     # Audit
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
     finalized_at = Column(DateTime(timezone=True), nullable=True)
     finalized_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
@@ -1667,7 +1670,7 @@ class KnowledgeConfigVersion(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
@@ -1708,7 +1711,7 @@ class KnowledgeQueryProfile(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
@@ -1750,7 +1753,7 @@ class KnowledgeIntentRule(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
@@ -1787,7 +1790,7 @@ class KnowledgeEntityAlias(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
@@ -1841,7 +1844,7 @@ class KnowledgeRankingProfile(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
@@ -1884,7 +1887,7 @@ class KnowledgeChunkingPreset(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
@@ -1924,7 +1927,7 @@ class KnowledgeAnswerabilityProfile(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
@@ -1974,7 +1977,7 @@ class KnowledgeAnswerRun(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
@@ -2020,7 +2023,7 @@ class KnowledgeAnswerRunStep(Base):
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
