@@ -192,3 +192,9 @@ vendor/
 .codex/skills/.system/**
 !.codex/prompts/
 !.codex/prompts/**
+
+# Symphony local runtime artifacts
+.symphony-workspaces/
+symphony-workspaces/
+symphony-log/
+symphony-logs/

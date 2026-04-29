@@ -1,13 +1,13 @@
 ---
 name: team
-description: N coordinated agents on shared task list using tmux-based orchestration
+description: "[OMX] N coordinated agents on shared task list using tmux-based orchestration"
 ---
 
 # Team Skill
 
 `$team` is the tmux-based parallel execution mode for OMX. It starts real worker Codex and/or Claude CLI sessions in split panes and coordinates them through `.omx/state/team/...` files plus CLI team interop (`omx team api ...`) and state files.
 
-This skill is operationally sensitive. Treat it as an operator workflow, not a generic prompt pattern.
+This skill is operationally sensitive. Treat it as an operator workflow, not a generic prompt pattern. In Codex App or plain outside-tmux sessions, do not present `$team` / `omx team` as directly available; launch OMX CLI from shell first, or stay on the nearest app-safe surface until the user explicitly wants the tmux runtime.
 
 ## Team vs Native Subagents
 
@@ -109,6 +109,7 @@ Before launching `omx team`, require a grounded context snapshot:
    - unknowns/open questions
    - likely codebase touchpoints
 4. If ambiguity remains high, run `explore` first for brownfield facts, then run `$deep-interview --quick <task>` before team launch.
+5. If current correctness depends on official docs, version-aware framework guidance, best practices, or external dependency behavior, auto-delegate `researcher` as an evidence lane before or alongside worker launch instead of relying on repo-local recall alone.
 
 Do not start worker panes until this gate is satisfied; if forced to proceed quickly, state explicit scope/risk limitations in the launch report.
 
