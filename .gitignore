@@ -25,6 +25,14 @@ wheels/
 *.egg
 MANIFEST
 .pytest_cache/
+
+# Local type/lint/test caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.venv-test/
+backend/.venv-test/
 .coverage
 htmlcov/
 .tox/
@@ -85,6 +93,10 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 data/db/
 data/*.db
 
