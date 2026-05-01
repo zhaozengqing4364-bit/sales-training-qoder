@@ -496,6 +496,17 @@ async def update_model_config(
         model_type = ModelType(config.model_type)
 
         if request.base_url is not None:
+            if (
+                _requires_base_url(model_type, provider)
+                and not request.base_url.strip()
+            ):
+                return _error_response(
+                    ModelConfigErrorResponse(
+                        error="Base URL is required for this provider",
+                        error_code="[MODEL_CONFIG_BASE_URL_REQUIRED]",
+                        trace_id=get_trace_id(),
+                    )
+                )
             try:
                 config.base_url = _normalized_provider_base_url(
                     model_type, provider, request.base_url

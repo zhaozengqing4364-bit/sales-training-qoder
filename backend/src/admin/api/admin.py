@@ -148,9 +148,9 @@ async def upload_presentation(
         upload_dir = os.getenv("PPT_UPLOAD_DIR", "/data/uploads")
         content_type = (file.content_type or "application/octet-stream").lower()
         if content_type not in ALLOWED_PRESENTATION_CONTENT_TYPES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported upload MIME type: {content_type}",
+            logger.warning(
+                "Presentation upload MIME type did not match PPT allowlist; extension policy remains authoritative",
+                content_type=content_type,
             )
         upload_path, original_filename = _safe_presentation_upload_path(
             file.filename, upload_dir
