@@ -52,6 +52,7 @@ QUALITY_GATE_THRESHOLDS = {
 @dataclass
 class TestExecutionResult:
     """Result of test execution"""
+
     test_type: str
     passed: bool
     total_tests: int
@@ -70,6 +71,7 @@ class TestExecutionResult:
 @dataclass
 class CoverageReport:
     """Test coverage report"""
+
     coverage_percentage: float
     covered_lines: int
     total_lines: int
@@ -80,6 +82,7 @@ class CoverageReport:
 @dataclass
 class HealthCheckResult:
     """Result of health check execution"""
+
     check_type: str  # database, api, websocket, external_deps
     passed: bool
     duration_ms: int
@@ -90,6 +93,7 @@ class HealthCheckResult:
 @dataclass
 class SecurityCheckResult:
     """Result of security check execution"""
+
     check_type: str  # bandit, safety, secrets, sensitive_data
     passed: bool
     issues_found: int
@@ -104,6 +108,7 @@ class SecurityCheckResult:
 @dataclass
 class DocumentationCheckResult:
     """Result of documentation update verification"""
+
     check_type: str  # api_contract, readme, deployment
     passed: bool
     up_to_date: bool
@@ -181,12 +186,16 @@ class VerificationRunner:
 
             logger.info(f"Running {check_name} check...")
             check_result = await check_func(db, release_candidate_id)
-            await self._sync_check_result_record(db, release_candidate_id, check_name, check_result)
-            results["checks"].append({
-                "check_name": check_name,
-                "check_category": "core",
-                "result": check_result,
-            })
+            await self._sync_check_result_record(
+                db, release_candidate_id, check_name, check_result
+            )
+            results["checks"].append(
+                {
+                    "check_name": check_name,
+                    "check_category": "core",
+                    "result": check_result,
+                }
+            )
 
         # Run additional checks
         for check_name, check_func in additional_checks:
@@ -196,12 +205,16 @@ class VerificationRunner:
 
             logger.info(f"Running {check_name} check...")
             check_result = await check_func(db, release_candidate_id)
-            await self._sync_check_result_record(db, release_candidate_id, check_name, check_result)
-            results["checks"].append({
-                "check_name": check_name,
-                "check_category": "additional",
-                "result": check_result,
-            })
+            await self._sync_check_result_record(
+                db, release_candidate_id, check_name, check_result
+            )
+            results["checks"].append(
+                {
+                    "check_name": check_name,
+                    "check_category": "additional",
+                    "result": check_result,
+                }
+            )
 
         # Generate summary
         results["summary"] = self._generate_summary(results["checks"])
@@ -251,12 +264,16 @@ class VerificationRunner:
                 failed_tests=test_stats.get("failed", 0),
                 skipped_tests=test_stats.get("skipped", 0),
                 duration_ms=duration_ms,
-                test_output=result.stdout[:2000] if result.stdout else None,  # Store first 2000 chars
+                test_output=result.stdout[:2000]
+                if result.stdout
+                else None,  # Store first 2000 chars
                 details={
                     "returncode": result.returncode,
                     "coverage": coverage_report.__dict__ if coverage_report else None,
                     "test_stats": test_stats,
-                } if coverage_report else None,
+                }
+                if coverage_report
+                else None,
                 error_message=result.stderr[:500] if result.stderr else None,
             )
 
@@ -465,7 +482,9 @@ class VerificationRunner:
                 error_message=result.stderr[:500] if result.stderr else None,
             )
 
-            logger.info(f"Integration tests completed: passed={passed}, duration={duration_ms}ms")
+            logger.info(
+                f"Integration tests completed: passed={passed}, duration={duration_ms}ms"
+            )
             return TestExecutionResult(
                 test_type="integration_tests",
                 passed=passed,
@@ -548,7 +567,9 @@ class VerificationRunner:
                 error_message=result.stderr[:500] if result.stderr else None,
             )
 
-            logger.info(f"Contract tests completed: passed={passed}, duration={duration_ms}ms")
+            logger.info(
+                f"Contract tests completed: passed={passed}, duration={duration_ms}ms"
+            )
             return TestExecutionResult(
                 test_type="contract",
                 passed=passed,
@@ -624,33 +645,48 @@ class VerificationRunner:
             failing_thresholds = []
 
             # NFR1: End-to-end latency P95 < 300ms
-            p95_latency = performance_metrics.get("end_to_end_p95_ms", float('inf'))
+            p95_latency = performance_metrics.get("end_to_end_p95_ms", float("inf"))
             if p95_latency > QUALITY_GATE_THRESHOLDS["performance_p95_latency_ms"]:
                 passed = False
-                failing_thresholds.append(f"End-to-end P95: {p95_latency:.0f}ms > {QUALITY_GATE_THRESHOLDS['performance_p95_latency_ms']}ms")
+                failing_thresholds.append(
+                    f"End-to-end P95: {p95_latency:.0f}ms > {QUALITY_GATE_THRESHOLDS['performance_p95_latency_ms']}ms"
+                )
 
             # NFR2: ASR P95 < 200ms
-            asr_p95 = performance_metrics.get("asr_p95_ms", float('inf'))
+            asr_p95 = performance_metrics.get("asr_p95_ms", float("inf"))
             if asr_p95 > QUALITY_GATE_THRESHOLDS["asr_p95_latency_ms"]:
                 passed = False
-                failing_thresholds.append(f"ASR P95: {asr_p95:.0f}ms > {QUALITY_GATE_THRESHOLDS['asr_p95_latency_ms']}ms")
+                failing_thresholds.append(
+                    f"ASR P95: {asr_p95:.0f}ms > {QUALITY_GATE_THRESHOLDS['asr_p95_latency_ms']}ms"
+                )
 
             # NFR3: Interruption P95 < 100ms
-            interruption_p95 = performance_metrics.get("interruption_p95_ms", float('inf'))
-            if interruption_p95 > QUALITY_GATE_THRESHOLDS["interruption_p95_latency_ms"]:
+            interruption_p95 = performance_metrics.get(
+                "interruption_p95_ms", float("inf")
+            )
+            if (
+                interruption_p95
+                > QUALITY_GATE_THRESHOLDS["interruption_p95_latency_ms"]
+            ):
                 passed = False
-                failing_thresholds.append(f"Interruption P95: {interruption_p95:.0f}ms > {QUALITY_GATE_THRESHOLDS['interruption_p95_latency_ms']}ms")
+                failing_thresholds.append(
+                    f"Interruption P95: {interruption_p95:.0f}ms > {QUALITY_GATE_THRESHOLDS['interruption_p95_latency_ms']}ms"
+                )
 
             # NFR4: API P95 < 100ms, P99 < 200ms
-            api_p95 = performance_metrics.get("api_p95_ms", float('inf'))
+            api_p95 = performance_metrics.get("api_p95_ms", float("inf"))
             if api_p95 > QUALITY_GATE_THRESHOLDS["api_p95_latency_ms"]:
                 passed = False
-                failing_thresholds.append(f"API P95: {api_p95:.0f}ms > {QUALITY_GATE_THRESHOLDS['api_p95_latency_ms']}ms")
+                failing_thresholds.append(
+                    f"API P95: {api_p95:.0f}ms > {QUALITY_GATE_THRESHOLDS['api_p95_latency_ms']}ms"
+                )
 
-            api_p99 = performance_metrics.get("api_p99_ms", float('inf'))
+            api_p99 = performance_metrics.get("api_p99_ms", float("inf"))
             if api_p99 > QUALITY_GATE_THRESHOLDS["api_p99_latency_ms"]:
                 passed = False
-                failing_thresholds.append(f"API P99: {api_p99:.0f}ms > {QUALITY_GATE_THRESHOLDS['api_p99_latency_ms']}ms")
+                failing_thresholds.append(
+                    f"API P99: {api_p99:.0f}ms > {QUALITY_GATE_THRESHOLDS['api_p99_latency_ms']}ms"
+                )
 
             details = {
                 "returncode": result.returncode,
@@ -661,7 +697,9 @@ class VerificationRunner:
 
             error_message = result.stderr[:500] if result.stderr else None
             if failing_thresholds and not error_message:
-                error_message = "Performance thresholds not met: " + "; ".join(failing_thresholds)
+                error_message = "Performance thresholds not met: " + "; ".join(
+                    failing_thresholds
+                )
 
             # Update verification record
             await self._update_verification_record(
@@ -675,7 +713,9 @@ class VerificationRunner:
                 error_message=error_message,
             )
 
-            logger.info(f"Performance tests completed: passed={passed}, duration={duration_ms}ms")
+            logger.info(
+                f"Performance tests completed: passed={passed}, duration={duration_ms}ms"
+            )
             return TestExecutionResult(
                 test_type="performance",
                 passed=passed,
@@ -758,7 +798,7 @@ class VerificationRunner:
             if "src" in parts:
                 src_idx = parts.index("src")
                 if src_idx + 1 < len(parts):
-                    return ".".join(parts[src_idx + 1:])
+                    return ".".join(parts[src_idx + 1 :])
             return Path(file_path).stem
         except Exception:
             return Path(file_path).stem
@@ -806,7 +846,8 @@ class VerificationRunner:
             if old_status != status:
                 summary_result = await db.execute(
                     select(ReleaseVerificationSummary).where(
-                        ReleaseVerificationSummary.release_candidate_id == release_candidate_id
+                        ReleaseVerificationSummary.release_candidate_id
+                        == release_candidate_id
                     )
                 )
                 summary = summary_result.scalar_one_or_none()
@@ -843,18 +884,20 @@ class VerificationRunner:
                     "release_candidate_id": release_candidate_id,
                     "passed": passed,
                     "duration_ms": duration_ms,
-                }
+                },
             )
         else:
             logger.warning(
                 f"Verification record not found for {check_type}",
-                extra={"release_candidate_id": release_candidate_id}
+                extra={"release_candidate_id": release_candidate_id},
             )
 
     def _generate_summary(self, check_results: list[dict[str, Any]]) -> dict[str, Any]:
         """Generate summary of all check results"""
         total_checks = len(check_results)
-        failed_checks_list = [r for r in check_results if self._is_check_failed(r["result"])]
+        failed_checks_list = [
+            r for r in check_results if self._is_check_failed(r["result"])
+        ]
         passed_checks = total_checks - len(failed_checks_list)
         failed_checks = total_checks - passed_checks
 
@@ -862,21 +905,27 @@ class VerificationRunner:
         core_checks = [r for r in check_results if r.get("check_category") == "core"]
         # Identify blocking failures
         blocking_failures = [
-            r["check_name"] for r in check_results
-            if self._is_check_failed(r["result"]) and self._is_blocking_check(r["check_name"])
+            r["check_name"]
+            for r in check_results
+            if self._is_check_failed(r["result"])
+            and self._is_blocking_check(r["check_name"])
         ]
 
         # Identify warnings (non-blocking failures)
         warnings = [
-            r["check_name"] for r in check_results
-            if self._is_check_failed(r["result"]) and not self._is_blocking_check(r["check_name"])
+            r["check_name"]
+            for r in check_results
+            if self._is_check_failed(r["result"])
+            and not self._is_blocking_check(r["check_name"])
         ]
 
         return {
             "total_checks": total_checks,
             "passed_checks": passed_checks,
             "failed_checks": failed_checks,
-            "core_checks_passed": sum(1 for r in core_checks if not self._is_check_failed(r["result"])),
+            "core_checks_passed": sum(
+                1 for r in core_checks if not self._is_check_failed(r["result"])
+            ),
             "core_checks_total": len(core_checks),
             "blocking_failures": blocking_failures,
             "warnings": warnings,
@@ -1026,10 +1075,14 @@ class VerificationRunner:
                 passed=all_passed,
                 duration_ms=duration_ms,
                 details=details,
-                error_message=None if all_passed else "One or more health checks failed",
+                error_message=None
+                if all_passed
+                else "One or more health checks failed",
             )
 
-            logger.info(f"Health checks completed: all_passed={all_passed}, duration={duration_ms}ms")
+            logger.info(
+                f"Health checks completed: all_passed={all_passed}, duration={duration_ms}ms"
+            )
             return result
 
         except Exception as e:
@@ -1054,19 +1107,25 @@ class VerificationRunner:
                 await conn.execute(text("SELECT 1"))
                 await conn.commit()
 
-            return ("database", HealthCheckResult(
-                check_type="database",
-                passed=True,
-                duration_ms=0,
-                details={"query": "SELECT 1 successful"},
-            ))
+            return (
+                "database",
+                HealthCheckResult(
+                    check_type="database",
+                    passed=True,
+                    duration_ms=0,
+                    details={"query": "SELECT 1 successful"},
+                ),
+            )
         except Exception as e:
-            return ("database", HealthCheckResult(
-                check_type="database",
-                passed=False,
-                duration_ms=0,
-                error_message=str(e)[:200],
-            ))
+            return (
+                "database",
+                HealthCheckResult(
+                    check_type="database",
+                    passed=False,
+                    duration_ms=0,
+                    error_message=str(e)[:200],
+                ),
+            )
 
     async def _check_api_health(self) -> tuple[str, HealthCheckResult]:
         """Check API health endpoints"""
@@ -1079,66 +1138,87 @@ class VerificationRunner:
                 # For now, we'll assume endpoint exists
                 pass
 
-            return ("api", HealthCheckResult(
-                check_type="api",
-                passed=True,
-                duration_ms=0,
-                details={"endpoints_checked": endpoints_to_check},
-            ))
+            return (
+                "api",
+                HealthCheckResult(
+                    check_type="api",
+                    passed=True,
+                    duration_ms=0,
+                    details={"endpoints_checked": endpoints_to_check},
+                ),
+            )
         except Exception as e:
-            return ("api", HealthCheckResult(
-                check_type="api",
-                passed=False,
-                duration_ms=0,
-                error_message=str(e)[:200],
-            ))
+            return (
+                "api",
+                HealthCheckResult(
+                    check_type="api",
+                    passed=False,
+                    duration_ms=0,
+                    error_message=str(e)[:200],
+                ),
+            )
 
     async def _check_websocket_health(self) -> tuple[str, HealthCheckResult]:
         """Check WebSocket capability"""
         try:
             # Check WebSocket handler can be imported and initialized
 
-            return ("websocket", HealthCheckResult(
-                check_type="websocket",
-                passed=True,
-                duration_ms=0,
-                details={"handler_available": True},
-            ))
+            return (
+                "websocket",
+                HealthCheckResult(
+                    check_type="websocket",
+                    passed=True,
+                    duration_ms=0,
+                    details={"handler_available": True},
+                ),
+            )
         except Exception as e:
-            return ("websocket", HealthCheckResult(
-                check_type="websocket",
-                passed=False,
-                duration_ms=0,
-                error_message=str(e)[:200],
-            ))
+            return (
+                "websocket",
+                HealthCheckResult(
+                    check_type="websocket",
+                    passed=False,
+                    duration_ms=0,
+                    error_message=str(e)[:200],
+                ),
+            )
 
     async def _check_external_dependencies(self) -> tuple[str, HealthCheckResult]:
         """Check external dependencies availability"""
         try:
             # Check for required environment variables
             import os
+
             required_vars = ["DATABASE_URL", "ALIYUN_DASHSCOPE_API_KEY"]
 
             missing_vars = [v for v in required_vars if not os.getenv(v)]
             all_present = len(missing_vars) == 0
 
-            return ("external_deps", HealthCheckResult(
-                check_type="external_deps",
-                passed=all_present,
-                duration_ms=0,
-                details={
-                    "required_vars": required_vars,
-                    "missing_vars": missing_vars if missing_vars else None,
-                },
-                error_message=f"Missing required env vars: {', '.join(missing_vars)}" if not all_present else None,
-            ))
+            return (
+                "external_deps",
+                HealthCheckResult(
+                    check_type="external_deps",
+                    passed=all_present,
+                    duration_ms=0,
+                    details={
+                        "required_vars": required_vars,
+                        "missing_vars": missing_vars if missing_vars else None,
+                    },
+                    error_message=f"Missing required env vars: {', '.join(missing_vars)}"
+                    if not all_present
+                    else None,
+                ),
+            )
         except Exception as e:
-            return ("external_deps", HealthCheckResult(
-                check_type="external_deps",
-                passed=False,
-                duration_ms=0,
-                error_message=str(e)[:200],
-            ))
+            return (
+                "external_deps",
+                HealthCheckResult(
+                    check_type="external_deps",
+                    passed=False,
+                    duration_ms=0,
+                    error_message=str(e)[:200],
+                ),
+            )
 
     async def _run_security_checks(
         self, db, release_candidate_id: str
@@ -1251,50 +1331,62 @@ class VerificationRunner:
                 medium = sum(1 for i in issues if i.get("issue_severity") == "MEDIUM")
                 low = sum(1 for i in issues if i.get("issue_severity") == "LOW")
 
-                return ("bandit", SecurityCheckResult(
-                    check_type="bandit",
-                    passed=high == 0,  # Only pass if no HIGH severity issues
-                    issues_found=len(issues),
-                    high_severity=high,
-                    medium_severity=medium,
-                    low_severity=low,
-                    duration_ms=0,
-                    details={"issues_count": len(issues)},
-                ))
+                return (
+                    "bandit",
+                    SecurityCheckResult(
+                        check_type="bandit",
+                        passed=high == 0,  # Only pass if no HIGH severity issues
+                        issues_found=len(issues),
+                        high_severity=high,
+                        medium_severity=medium,
+                        low_severity=low,
+                        duration_ms=0,
+                        details={"issues_count": len(issues)},
+                    ),
+                )
             else:
-                return ("bandit", SecurityCheckResult(
+                return (
+                    "bandit",
+                    SecurityCheckResult(
+                        check_type="bandit",
+                        passed=False,
+                        issues_found=1,
+                        high_severity=1,
+                        medium_severity=0,
+                        low_severity=0,
+                        duration_ms=0,
+                        error_message="Bandit scan failed to complete",
+                    ),
+                )
+        except FileNotFoundError:
+            # Bandit not installed, skip with warning
+            return (
+                "bandit",
+                SecurityCheckResult(
                     check_type="bandit",
-                    passed=False,
-                    issues_found=1,
-                    high_severity=1,
+                    passed=True,  # Don't fail if tool not installed
+                    issues_found=0,
+                    high_severity=0,
                     medium_severity=0,
                     low_severity=0,
                     duration_ms=0,
-                    error_message="Bandit scan failed to complete",
-                ))
-        except FileNotFoundError:
-            # Bandit not installed, skip with warning
-            return ("bandit", SecurityCheckResult(
-                check_type="bandit",
-                passed=True,  # Don't fail if tool not installed
-                issues_found=0,
-                high_severity=0,
-                medium_severity=0,
-                low_severity=0,
-                duration_ms=0,
-                details={"skipped": "bandit not installed"},
-            ))
+                    details={"skipped": "bandit not installed"},
+                ),
+            )
         except Exception as e:
-            return ("bandit", SecurityCheckResult(
-                check_type="bandit",
-                passed=False,
-                issues_found=1,
-                high_severity=0,
-                medium_severity=0,
-                low_severity=0,
-                duration_ms=0,
-                error_message=str(e)[:200],
-            ))
+            return (
+                "bandit",
+                SecurityCheckResult(
+                    check_type="bandit",
+                    passed=False,
+                    issues_found=1,
+                    high_severity=0,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=0,
+                    error_message=str(e)[:200],
+                ),
+            )
 
     async def _run_safety_scan(self) -> tuple[str, SecurityCheckResult]:
         """Run Safety dependency vulnerability scan"""
@@ -1314,18 +1406,57 @@ class VerificationRunner:
                     # Safety output format varies, simplified parsing
                     pass
 
-                return ("safety", SecurityCheckResult(
-                    check_type="safety",
-                    passed=len(vulnerabilities) == 0,
-                    issues_found=len(vulnerabilities),
-                    high_severity=sum(1 for v in vulnerabilities if v.get("severity") == "high"),
-                    medium_severity=sum(1 for v in vulnerabilities if v.get("severity") == "medium"),
-                    low_severity=sum(1 for v in vulnerabilities if v.get("severity") == "low"),
-                    duration_ms=0,
-                    details={"vulnerabilities": vulnerabilities},
-                ))
+                return (
+                    "safety",
+                    SecurityCheckResult(
+                        check_type="safety",
+                        passed=len(vulnerabilities) == 0,
+                        issues_found=len(vulnerabilities),
+                        high_severity=sum(
+                            1 for v in vulnerabilities if v.get("severity") == "high"
+                        ),
+                        medium_severity=sum(
+                            1 for v in vulnerabilities if v.get("severity") == "medium"
+                        ),
+                        low_severity=sum(
+                            1 for v in vulnerabilities if v.get("severity") == "low"
+                        ),
+                        duration_ms=0,
+                        details={"vulnerabilities": vulnerabilities},
+                    ),
+                )
             else:
-                return ("safety", SecurityCheckResult(
+                return (
+                    "safety",
+                    SecurityCheckResult(
+                        check_type="safety",
+                        passed=False,
+                        issues_found=1,
+                        high_severity=0,
+                        medium_severity=0,
+                        low_severity=0,
+                        duration_ms=0,
+                        error_message="Safety scan failed to complete",
+                    ),
+                )
+        except FileNotFoundError:
+            return (
+                "safety",
+                SecurityCheckResult(
+                    check_type="safety",
+                    passed=True,  # Don't fail if tool not installed
+                    issues_found=0,
+                    high_severity=0,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=0,
+                    details={"skipped": "safety not installed"},
+                ),
+            )
+        except Exception as e:
+            return (
+                "safety",
+                SecurityCheckResult(
                     check_type="safety",
                     passed=False,
                     issues_found=1,
@@ -1333,30 +1464,9 @@ class VerificationRunner:
                     medium_severity=0,
                     low_severity=0,
                     duration_ms=0,
-                    error_message="Safety scan failed to complete",
-                ))
-        except FileNotFoundError:
-            return ("safety", SecurityCheckResult(
-                check_type="safety",
-                passed=True,  # Don't fail if tool not installed
-                issues_found=0,
-                high_severity=0,
-                medium_severity=0,
-                low_severity=0,
-                duration_ms=0,
-                details={"skipped": "safety not installed"},
-            ))
-        except Exception as e:
-            return ("safety", SecurityCheckResult(
-                check_type="safety",
-                passed=False,
-                issues_found=1,
-                high_severity=0,
-                medium_severity=0,
-                low_severity=0,
-                duration_ms=0,
-                error_message=str(e)[:200],
-            ))
+                    error_message=str(e)[:200],
+                ),
+            )
 
     async def _run_secrets_scan(self) -> tuple[str, SecurityCheckResult]:
         """Scan for secrets/sensitive data leakage"""
@@ -1376,7 +1486,7 @@ class VerificationRunner:
 
             for file_path in source_files:
                 try:
-                    with open(file_path, encoding='utf-8', errors='ignore') as f:
+                    with open(file_path, encoding="utf-8", errors="ignore") as f:
                         content = f.read()
                         for pattern in secret_patterns:
                             if re.search(pattern, content, re.IGNORECASE):
@@ -1384,27 +1494,36 @@ class VerificationRunner:
                 except Exception:
                     continue
 
-            return ("secrets", SecurityCheckResult(
-                check_type="secrets",
-                passed=issues_found == 0,
-                issues_found=issues_found,
-                high_severity=issues_found,  # Treat as high severity
-                medium_severity=0,
-                low_severity=0,
-                duration_ms=0,
-                details={"files_scanned": len(source_files), "potential_secrets": issues_found},
-            ))
+            return (
+                "secrets",
+                SecurityCheckResult(
+                    check_type="secrets",
+                    passed=issues_found == 0,
+                    issues_found=issues_found,
+                    high_severity=issues_found,  # Treat as high severity
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=0,
+                    details={
+                        "files_scanned": len(source_files),
+                        "potential_secrets": issues_found,
+                    },
+                ),
+            )
         except Exception as e:
-            return ("secrets", SecurityCheckResult(
-                check_type="secrets",
-                passed=False,
-                issues_found=1,
-                high_severity=0,
-                medium_severity=0,
-                low_severity=0,
-                duration_ms=0,
-                error_message=str(e)[:200],
-            ))
+            return (
+                "secrets",
+                SecurityCheckResult(
+                    check_type="secrets",
+                    passed=False,
+                    issues_found=1,
+                    high_severity=0,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=0,
+                    error_message=str(e)[:200],
+                ),
+            )
 
     async def _run_documentation_checks(
         self, db, release_candidate_id: str
@@ -1497,7 +1616,11 @@ class VerificationRunner:
     def _check_api_contracts(self) -> DocumentationCheckResult:
         """Check if API contract documentation exists"""
         try:
-            api_contract_dir = Path(__file__).parent.parent.parent.parent.parent / "docs" / "api-contract"
+            api_contract_dir = (
+                Path(__file__).parent.parent.parent.parent.parent
+                / "docs"
+                / "api-contract"
+            )
 
             # Required contract files per NFR19
             required_files = [
@@ -1532,7 +1655,9 @@ class VerificationRunner:
     def _check_readme(self) -> DocumentationCheckResult:
         """Check if README exists and is updated"""
         try:
-            readme_file = Path(__file__).parent.parent.parent.parent.parent / "README.md"
+            readme_file = (
+                Path(__file__).parent.parent.parent.parent.parent / "README.md"
+            )
 
             if not readme_file.exists():
                 return DocumentationCheckResult(
@@ -1571,9 +1696,11 @@ class VerificationRunner:
 
             existing_docs = []
             for pattern in deployment_files:
-                if (docs_dir / f"{pattern}.md").exists() or \
-                   (docs_dir / f"{pattern}").is_dir() or \
-                   list(docs_dir.glob(f"{pattern}*.md")):
+                if (
+                    (docs_dir / f"{pattern}.md").exists()
+                    or (docs_dir / f"{pattern}").is_dir()
+                    or list(docs_dir.glob(f"{pattern}*.md"))
+                ):
                     existing_docs.append(pattern)
 
             missing = [f for f in deployment_files if f not in existing_docs]
@@ -1596,11 +1723,11 @@ class VerificationRunner:
     def _parse_performance_metrics(self, output: str) -> dict[str, float]:
         """Parse performance metrics from test output"""
         metrics = {
-            "end_to_end_p95_ms": float('inf'),
-            "asr_p95_ms": float('inf'),
-            "interruption_p95_ms": float('inf'),
-            "api_p95_ms": float('inf'),
-            "api_p99_ms": float('inf'),
+            "end_to_end_p95_ms": float("inf"),
+            "asr_p95_ms": float("inf"),
+            "interruption_p95_ms": float("inf"),
+            "api_p95_ms": float("inf"),
+            "api_p99_ms": float("inf"),
         }
 
         if not output:
@@ -1609,11 +1736,11 @@ class VerificationRunner:
         # Parse P95/P99 values from output
         # Expected format: "End-to-End P95: 250ms"
         patterns = {
-            "end_to_end_p95_ms": r'End[-\s]*to[-\s]*End\s+P95\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms',
-            "asr_p95_ms": r'ASR\s+P95\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms',
-            "interruption_p95_ms": r'Interruption\s+P95\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms',
-            "api_p95_ms": r'API\s+P95\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms',
-            "api_p99_ms": r'API\s+P99\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms',
+            "end_to_end_p95_ms": r"End[-\s]*to[-\s]*End\s+P95\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms",
+            "asr_p95_ms": r"ASR\s+P95\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms",
+            "interruption_p95_ms": r"Interruption\s+P95\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms",
+            "api_p95_ms": r"API\s+P95\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms",
+            "api_p99_ms": r"API\s+P99\s*[:=]\s*(\d+(?:\.\d+)?)\s*ms",
         }
 
         for metric_name, pattern in patterns.items():

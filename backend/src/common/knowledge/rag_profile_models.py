@@ -31,9 +31,7 @@ class RagProfile(Base):
 
     __tablename__ = "rag_profiles"
 
-    id = Column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(100), nullable=False, unique=True)
     description = Column(String(500), nullable=True)
 
@@ -41,20 +39,14 @@ class RagProfile(Base):
     is_system_default = Column(Integer, default=0, nullable=False)
 
     # ── Chunking configuration ──
-    chunking_strategy = Column(
-        String(50), nullable=False, default="element_boundary"
-    )
+    chunking_strategy = Column(String(50), nullable=False, default="element_boundary")
     chunk_size = Column(Integer, nullable=False, default=500)
     chunk_overlap = Column(Integer, nullable=False, default=50)
 
     # ── Semantic cache configuration ──
     semantic_cache_enabled = Column(Integer, nullable=False, default=1)
-    semantic_cache_similarity_threshold = Column(
-        Float, nullable=False, default=0.95
-    )
-    semantic_cache_ttl_seconds = Column(
-        Integer, nullable=False, default=300
-    )
+    semantic_cache_similarity_threshold = Column(Float, nullable=False, default=0.95)
+    semantic_cache_ttl_seconds = Column(Integer, nullable=False, default=300)
 
     # ── Cross-encoder reranker configuration ──
     cross_encoder_backend = Column(String(20), nullable=True)

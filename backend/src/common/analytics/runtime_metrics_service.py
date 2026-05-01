@@ -29,10 +29,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RuntimeMetrics:
     """Runtime metrics for system health and policy effectiveness"""
+
     # Reliability metrics
     recovery_success_rate: float  # 恢复成功率 (NFR8: >=99%)
-    false_trigger_rate: float     # 误触发率 (NFR11: <1%)
-    completeness_rate: float      # 评估字段完整率 (NFR10: >=98%)
+    false_trigger_rate: float  # 误触发率 (NFR11: <1%)
+    completeness_rate: float  # 评估字段完整率 (NFR10: >=98%)
 
     # Session metrics
     total_sessions: int
@@ -45,7 +46,7 @@ class RuntimeMetrics:
     legacy_sessions: int
 
     # Performance metrics
-    average_latency_ms: float     # Average end-to-end latency
+    average_latency_ms: float  # Average end-to-end latency
 
     # Time window
     time_range: str
@@ -55,6 +56,7 @@ class RuntimeMetrics:
 @dataclass
 class PolicyEffectiveness:
     """Policy effectiveness metrics by Agent"""
+
     agent_id: str
     agent_name: str
     session_count: int
@@ -67,6 +69,7 @@ class PolicyEffectiveness:
 @dataclass
 class VoiceModeComparison:
     """Comparison between voice modes (StepFun vs Legacy)"""
+
     voice_mode: str
     session_count: int
     average_score: float
@@ -78,6 +81,7 @@ class VoiceModeComparison:
 @dataclass
 class FallbackMetrics:
     """Fallback and degradation metrics"""
+
     total_fallbacks: int
     fallback_rate: float
     tts_fallbacks: int
@@ -115,9 +119,7 @@ class RuntimeMetricsService:
     """
 
     async def get_runtime_metrics(
-        self,
-        db: AsyncSession,
-        time_range: str = "30d"
+        self, db: AsyncSession, time_range: str = "30d"
     ) -> Result[RuntimeMetrics]:
         """
         Get key runtime metrics for dashboard
@@ -144,21 +146,24 @@ class RuntimeMetricsService:
             completed_result = await db.execute(
                 select(func.count(PracticeSession.session_id)).where(
                     PracticeSession.start_time >= start_date,
-                    PracticeSession.status == "completed"
+                    PracticeSession.status == "completed",
                 )
             )
             completed_sessions = completed_result.scalar() or 0
 
             # Calculate completion rate
             completion_rate = round(
-                (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0, 1
+                (completed_sessions / total_sessions * 100)
+                if total_sessions > 0
+                else 0,
+                1,
             )
 
             # Average duration
             duration_result = await db.execute(
                 select(func.avg(PracticeSession.total_duration_seconds)).where(
                     PracticeSession.start_time >= start_date,
-                    PracticeSession.total_duration_seconds.isnot(None)
+                    PracticeSession.total_duration_seconds.isnot(None),
                 )
             )
             avg_duration = round(duration_result.scalar() or 0, 1)
@@ -167,7 +172,7 @@ class RuntimeMetricsService:
             stepfun_result = await db.execute(
                 select(func.count(PracticeSession.session_id)).where(
                     PracticeSession.start_time >= start_date,
-                    PracticeSession.voice_mode == "stepfun_realtime"
+                    PracticeSession.voice_mode == "stepfun_realtime",
                 )
             )
             stepfun_sessions = stepfun_result.scalar() or 0
@@ -175,7 +180,7 @@ class RuntimeMetricsService:
             legacy_result = await db.execute(
                 select(func.count(PracticeSession.session_id)).where(
                     PracticeSession.start_time >= start_date,
-                    PracticeSession.voice_mode == "legacy"
+                    PracticeSession.voice_mode == "legacy",
                 )
             )
             legacy_sessions = legacy_result.scalar() or 0
@@ -187,13 +192,16 @@ class RuntimeMetricsService:
                     PracticeSession.status == "completed",
                     PracticeSession.logic_score.isnot(None),
                     PracticeSession.accuracy_score.isnot(None),
-                    PracticeSession.completeness_score.isnot(None)
+                    PracticeSession.completeness_score.isnot(None),
                 )
             )
             complete_scores = complete_scores_result.scalar() or 0
 
             completeness_rate = round(
-                (complete_scores / completed_sessions * 100) if completed_sessions > 0 else 0, 1
+                (complete_scores / completed_sessions * 100)
+                if completed_sessions > 0
+                else 0,
+                1,
             )
 
             # Recovery success rate (simulated - would need actual recovery tracking)
@@ -220,7 +228,7 @@ class RuntimeMetricsService:
                 legacy_sessions=legacy_sessions,
                 average_latency_ms=average_latency_ms,
                 time_range=time_range,
-                calculated_at=datetime.now().isoformat()
+                calculated_at=datetime.now().isoformat(),
             )
 
             logger.info(
@@ -228,8 +236,8 @@ class RuntimeMetricsService:
                 extra={
                     "time_range": time_range,
                     "total_sessions": total_sessions,
-                    "completeness_rate": completeness_rate
-                }
+                    "completeness_rate": completeness_rate,
+                },
             )
 
             return Result(value=metrics)
@@ -238,15 +246,12 @@ class RuntimeMetricsService:
             logger.error(
                 "Failed to calculate runtime metrics",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[METRICS_FAILED]")
 
     async def get_policy_effectiveness(
-        self,
-        db: AsyncSession,
-        time_range: str = "30d",
-        limit: int = 10
+        self, db: AsyncSession, time_range: str = "30d", limit: int = 10
     ) -> Result[list[PolicyEffectiveness]]:
         """
         Get policy effectiveness metrics by Agent
@@ -265,51 +270,51 @@ class RuntimeMetricsService:
             start_date = _get_time_range_start(time_range)
 
             # Query for agent-level statistics
-            query = select(
-                Agent.id,
-                Agent.name,
-                func.count(PracticeSession.session_id).label("session_count"),
-                func.avg(
-                    PracticeSession.logic_score * 0.4 +
-                    PracticeSession.accuracy_score * 0.3 +
-                    PracticeSession.completeness_score * 0.3
-                ).label("avg_score"),
-                func.sum(case((PracticeSession.status == "completed", 1), else_=0)).label("completed"),
-                func.count(PracticeSession.session_id).label("total"),
-                PracticeSession.voice_mode
-            ).join(
-                PracticeSession, Agent.id == PracticeSession.agent_id
-            ).where(
-                PracticeSession.start_time >= start_date
-            ).group_by(
-                Agent.id, Agent.name, PracticeSession.voice_mode
-            ).order_by(
-                func.count(PracticeSession.session_id).desc()
-            ).limit(limit)
+            query = (
+                select(
+                    Agent.id,
+                    Agent.name,
+                    func.count(PracticeSession.session_id).label("session_count"),
+                    func.avg(
+                        PracticeSession.logic_score * 0.4
+                        + PracticeSession.accuracy_score * 0.3
+                        + PracticeSession.completeness_score * 0.3
+                    ).label("avg_score"),
+                    func.sum(
+                        case((PracticeSession.status == "completed", 1), else_=0)
+                    ).label("completed"),
+                    func.count(PracticeSession.session_id).label("total"),
+                    PracticeSession.voice_mode,
+                )
+                .join(PracticeSession, Agent.id == PracticeSession.agent_id)
+                .where(PracticeSession.start_time >= start_date)
+                .group_by(Agent.id, Agent.name, PracticeSession.voice_mode)
+                .order_by(func.count(PracticeSession.session_id).desc())
+                .limit(limit)
+            )
 
             result = await db.execute(query)
             rows = result.all()
 
             effectiveness_list = []
             for row in rows:
-                effectiveness_list.append(PolicyEffectiveness(
-                    agent_id=str(row.id),
-                    agent_name=row.name or "Unknown",
-                    session_count=row.session_count,
-                    average_score=round(row.avg_score or 0, 1),
-                    completion_rate=round(
-                        (row.completed / row.total * 100) if row.total > 0 else 0, 1
-                    ),
-                    recovery_success_rate=99.5,  # Placeholder
-                    voice_mode=row.voice_mode or "unknown"
-                ))
+                effectiveness_list.append(
+                    PolicyEffectiveness(
+                        agent_id=str(row.id),
+                        agent_name=row.name or "Unknown",
+                        session_count=row.session_count,
+                        average_score=round(row.avg_score or 0, 1),
+                        completion_rate=round(
+                            (row.completed / row.total * 100) if row.total > 0 else 0, 1
+                        ),
+                        recovery_success_rate=99.5,  # Placeholder
+                        voice_mode=row.voice_mode or "unknown",
+                    )
+                )
 
             logger.info(
                 "Policy effectiveness calculated",
-                extra={
-                    "time_range": time_range,
-                    "agents": len(effectiveness_list)
-                }
+                extra={"time_range": time_range, "agents": len(effectiveness_list)},
             )
 
             return Result(value=effectiveness_list)
@@ -318,14 +323,12 @@ class RuntimeMetricsService:
             logger.error(
                 "Failed to calculate policy effectiveness",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[POLICY_EFFECTIVENESS_FAILED]")
 
     async def get_voice_mode_comparison(
-        self,
-        db: AsyncSession,
-        time_range: str = "30d"
+        self, db: AsyncSession, time_range: str = "30d"
     ) -> Result[list[VoiceModeComparison]]:
         """
         Compare performance between voice modes (StepFun vs Legacy)
@@ -341,20 +344,22 @@ class RuntimeMetricsService:
             start_date = _get_time_range_start(time_range)
 
             # Query for voice mode statistics
-            query = select(
-                PracticeSession.voice_mode,
-                func.count(PracticeSession.session_id).label("session_count"),
-                func.avg(
-                    PracticeSession.logic_score * 0.4 +
-                    PracticeSession.accuracy_score * 0.3 +
-                    PracticeSession.completeness_score * 0.3
-                ).label("avg_score"),
-                func.sum(case((PracticeSession.status == "completed", 1), else_=0)).label("completed"),
-                func.count(PracticeSession.session_id).label("total")
-            ).where(
-                PracticeSession.start_time >= start_date
-            ).group_by(
-                PracticeSession.voice_mode
+            query = (
+                select(
+                    PracticeSession.voice_mode,
+                    func.count(PracticeSession.session_id).label("session_count"),
+                    func.avg(
+                        PracticeSession.logic_score * 0.4
+                        + PracticeSession.accuracy_score * 0.3
+                        + PracticeSession.completeness_score * 0.3
+                    ).label("avg_score"),
+                    func.sum(
+                        case((PracticeSession.status == "completed", 1), else_=0)
+                    ).label("completed"),
+                    func.count(PracticeSession.session_id).label("total"),
+                )
+                .where(PracticeSession.start_time >= start_date)
+                .group_by(PracticeSession.voice_mode)
             )
 
             result = await db.execute(query)
@@ -362,23 +367,26 @@ class RuntimeMetricsService:
 
             comparison_list = []
             for row in rows:
-                comparison_list.append(VoiceModeComparison(
-                    voice_mode=row.voice_mode or "unknown",
-                    session_count=row.session_count,
-                    average_score=round(row.avg_score or 0, 1),
-                    completion_rate=round(
-                        (row.completed / row.total * 100) if row.total > 0 else 0, 1
-                    ),
-                    average_latency_ms=180.0 if row.voice_mode == "stepfun_realtime" else 250.0,  # Placeholder
-                    recovery_success_rate=99.8 if row.voice_mode == "stepfun_realtime" else 99.2  # Placeholder
-                ))
+                comparison_list.append(
+                    VoiceModeComparison(
+                        voice_mode=row.voice_mode or "unknown",
+                        session_count=row.session_count,
+                        average_score=round(row.avg_score or 0, 1),
+                        completion_rate=round(
+                            (row.completed / row.total * 100) if row.total > 0 else 0, 1
+                        ),
+                        average_latency_ms=180.0
+                        if row.voice_mode == "stepfun_realtime"
+                        else 250.0,  # Placeholder
+                        recovery_success_rate=99.8
+                        if row.voice_mode == "stepfun_realtime"
+                        else 99.2,  # Placeholder
+                    )
+                )
 
             logger.info(
                 "Voice mode comparison calculated",
-                extra={
-                    "time_range": time_range,
-                    "modes": len(comparison_list)
-                }
+                extra={"time_range": time_range, "modes": len(comparison_list)},
             )
 
             return Result(value=comparison_list)
@@ -387,14 +395,12 @@ class RuntimeMetricsService:
             logger.error(
                 "Failed to calculate voice mode comparison",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[VOICE_MODE_COMPARISON_FAILED]")
 
     async def get_fallback_metrics(
-        self,
-        db: AsyncSession,
-        time_range: str = "30d"
+        self, db: AsyncSession, time_range: str = "30d"
     ) -> Result[FallbackMetrics]:
         """
         Get fallback and degradation metrics
@@ -420,10 +426,12 @@ class RuntimeMetricsService:
             # In production, these would come from a fallback_events table
             # For now, we use placeholder values
             total_fallbacks = int(total_sessions * 0.02)  # ~2% fallback rate
-            tts_fallbacks = int(total_fallbacks * 0.6)     # 60% are TTS fallbacks
-            asr_fallbacks = int(total_fallbacks * 0.3)     # 30% are ASR fallbacks
-            llm_fallbacks = int(total_fallbacks * 0.1)     # 10% are LLM fallbacks
-            browser_tts_uses = int(tts_fallbacks * 0.3)     # 30% of TTS fallbacks use browser
+            tts_fallbacks = int(total_fallbacks * 0.6)  # 60% are TTS fallbacks
+            asr_fallbacks = int(total_fallbacks * 0.3)  # 30% are ASR fallbacks
+            llm_fallbacks = int(total_fallbacks * 0.1)  # 10% are LLM fallbacks
+            browser_tts_uses = int(
+                tts_fallbacks * 0.3
+            )  # 30% of TTS fallbacks use browser
 
             fallback_rate = round(
                 (total_fallbacks / total_sessions * 100) if total_sessions > 0 else 0, 2
@@ -435,15 +443,12 @@ class RuntimeMetricsService:
                 tts_fallbacks=tts_fallbacks,
                 asr_fallbacks=asr_fallbacks,
                 llm_fallbacks=llm_fallbacks,
-                browser_tts_uses=browser_tts_uses
+                browser_tts_uses=browser_tts_uses,
             )
 
             logger.info(
                 "Fallback metrics calculated",
-                extra={
-                    "time_range": time_range,
-                    "total_fallbacks": total_fallbacks
-                }
+                extra={"time_range": time_range, "total_fallbacks": total_fallbacks},
             )
 
             return Result(value=metrics)
@@ -452,7 +457,7 @@ class RuntimeMetricsService:
             logger.error(
                 "Failed to calculate fallback metrics",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[FALLBACK_METRICS_FAILED]")
 

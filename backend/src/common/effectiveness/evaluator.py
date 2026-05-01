@@ -54,7 +54,9 @@ SALES_STAGE_ALIASES: dict[SalesStageKey, tuple[str, ...]] = {
     ),
 }
 
-SALES_STAGE_PRIORITY_DIMENSIONS: dict[SalesStageKey, tuple[SalesCoachingDimension, ...]] = {
+SALES_STAGE_PRIORITY_DIMENSIONS: dict[
+    SalesStageKey, tuple[SalesCoachingDimension, ...]
+] = {
     "discovery": ("客户收益连接", "价值表达", "证据使用"),
     "objection": ("异议处理", "证据使用", "推进下一步"),
     "closing": ("推进下一步", "异议处理", "证据使用"),
@@ -184,7 +186,9 @@ def _normalize_sales_dimension_scores(
                 resolved_score = _clamp_score(value)
                 break
         normalized[canonical_name] = (
-            resolved_score if resolved_score is not None else _clamp_score(overall_score)
+            resolved_score
+            if resolved_score is not None
+            else _clamp_score(overall_score)
         )
     return normalized
 
@@ -345,14 +349,16 @@ def _sales_report_payloads_for_focus(
     )
 
 
-
 def _coerce_main_issue(value: Any) -> MainIssue | None:
     if not isinstance(value, dict):
         return None
     issue_type = value.get("issue_type")
     issue_text = value.get("issue_text")
     recovery_rule = value.get("recovery_rule")
-    if not all(isinstance(item, str) and item.strip() for item in (issue_type, issue_text, recovery_rule)):
+    if not all(
+        isinstance(item, str) and item.strip()
+        for item in (issue_type, issue_text, recovery_rule)
+    ):
         return None
     return {
         "issue_type": issue_type.strip(),
@@ -361,14 +367,15 @@ def _coerce_main_issue(value: Any) -> MainIssue | None:
     }
 
 
-
 def _coerce_next_goal(value: Any) -> NextGoal | None:
     if not isinstance(value, dict):
         return None
     goal_type = value.get("goal_type")
     goal_text = value.get("goal_text")
     rule = value.get("rule")
-    if not all(isinstance(item, str) and item.strip() for item in (goal_type, goal_text, rule)):
+    if not all(
+        isinstance(item, str) and item.strip() for item in (goal_type, goal_text, rule)
+    ):
         return None
     return {
         "goal_type": goal_type.strip(),
@@ -385,7 +392,6 @@ SALES_CLAIM_TRUTH_LABELS = {
 }
 SALES_UNSUPPORTED_EVIDENCE_MAX = 55.0
 SALES_VERIFIED_EVIDENCE_MIN = 75.0
-
 
 
 def _build_claim_truth(
@@ -407,7 +413,6 @@ def _build_claim_truth(
     if isinstance(closure_state, str) and closure_state.strip():
         payload["closure_state"] = closure_state.strip()
     return payload
-
 
 
 def _coerce_claim_truth(value: Any) -> dict[str, Any] | None:
@@ -445,8 +450,9 @@ def _coerce_claim_truth(value: Any) -> dict[str, Any] | None:
     return payload
 
 
-
-def _resolve_alignment_evidence_score(score_snapshot: dict[str, Any] | None) -> float | None:
+def _resolve_alignment_evidence_score(
+    score_snapshot: dict[str, Any] | None,
+) -> float | None:
     if not isinstance(score_snapshot, dict):
         return None
 
@@ -469,7 +475,6 @@ def _resolve_alignment_evidence_score(score_snapshot: dict[str, Any] | None) -> 
                 return _clamp_score(score)
 
     return None
-
 
 
 def _resolve_claim_truth_from_evidence_score(
@@ -495,7 +500,6 @@ def _resolve_claim_truth_from_evidence_score(
         evidence_score=evidence_score,
         closure_state=closure_state,
     )
-
 
 
 def _resolve_sales_claim_truth(
@@ -554,7 +558,11 @@ def _resolve_sales_claim_truth(
 
     evidence_score = _resolve_alignment_evidence_score(score_snapshot)
     evidence_source = "score_snapshot"
-    if evidence_score is None and isinstance(metrics, dict) and _has_sales_metrics(metrics):
+    if (
+        evidence_score is None
+        and isinstance(metrics, dict)
+        and _has_sales_metrics(metrics)
+    ):
         evidence_score = _resolve_sales_scores(metrics)["证据使用"]
         evidence_source = "metrics"
 
@@ -598,11 +606,12 @@ def _resolve_sales_claim_truth(
 
     return _build_claim_truth(
         "evidence_pending",
-        source="fallback_snapshot" if isinstance(fallback_snapshot, dict) else "score_snapshot",
+        source="fallback_snapshot"
+        if isinstance(fallback_snapshot, dict)
+        else "score_snapshot",
         reason="missing_evidence_score",
         closure_state=closure_state,
     )
-
 
 
 def _has_alignment_dimension_scores(score_snapshot: dict[str, Any] | None) -> bool:
@@ -620,7 +629,6 @@ def _has_alignment_dimension_scores(score_snapshot: dict[str, Any] | None) -> bo
         if canonical_name is not None
     }
     return len(resolved_dimensions) == len(SALES_DIMENSION_ALIASES)
-
 
 
 def _resolve_sales_report_alignment_fallback(
@@ -664,9 +672,10 @@ def _resolve_sales_report_alignment_fallback(
     generic_issue = _coerce_main_issue(generic_snapshot.get("main_issue"))
     generic_goal = _coerce_next_goal(generic_snapshot.get("next_goal"))
     if generic_issue is None or generic_goal is None:
-        raise ValueError("sales alignment fallback should always produce report-compatible payloads")
+        raise ValueError(
+            "sales alignment fallback should always produce report-compatible payloads"
+        )
     return generic_issue, generic_goal
-
 
 
 def resolve_sales_report_alignment(
@@ -709,7 +718,9 @@ def resolve_sales_report_alignment(
     if alignment_used and focus_type is not None:
         main_issue, next_goal = _sales_report_payloads_for_focus(focus_type)
     else:
-        main_issue, next_goal = _resolve_sales_report_alignment_fallback(fallback_snapshot)
+        main_issue, next_goal = _resolve_sales_report_alignment_fallback(
+            fallback_snapshot
+        )
 
     claim_truth = _resolve_sales_claim_truth(
         score_snapshot=score_context,
@@ -727,7 +738,6 @@ def resolve_sales_report_alignment(
         "next_goal": next_goal,
         "claim_truth": claim_truth,
     }
-
 
 
 def build_live_session_conclusion_summary(
@@ -767,7 +777,6 @@ def build_live_session_conclusion_summary(
     }
 
 
-
 def coerce_live_session_conclusion_summary(
     value: Any,
 ) -> dict[str, Any] | None:
@@ -803,7 +812,6 @@ def coerce_live_session_conclusion_summary(
         "next_goal": dict(next_goal) if next_goal is not None else None,
         "claim_truth": claim_truth,
     }
-
 
 
 def build_sales_rollup_scores(
@@ -855,7 +863,9 @@ def build_sales_effectiveness_metrics(
             accuracy_score if accuracy_score is not None else rollups["accuracy_score"]
         )
         completeness_value = _clamp_score(
-            completeness_score if completeness_score is not None else rollups["completeness_score"]
+            completeness_score
+            if completeness_score is not None
+            else rollups["completeness_score"]
         )
     else:
         logic_value = _clamp_score(logic_score, overall_score)
@@ -936,8 +946,7 @@ def evaluate_pass_flags(metrics: dict[str, Any]) -> PassFlags:
             ),
             "pass_5turn_defense": sales_scores["异议处理"] >= 70.0,
             "pass_4step_structure": (
-                sales_scores["证据使用"] >= 68.0
-                and sales_scores["推进下一步"] >= 65.0
+                sales_scores["证据使用"] >= 68.0 and sales_scores["推进下一步"] >= 65.0
             ),
         }
 
@@ -967,7 +976,6 @@ def _sales_main_issue(metrics: dict[str, Any]) -> MainIssue:
     _, focus_type = min(candidates, key=lambda item: item[0])
     main_issue, _ = _sales_report_payloads_for_focus(focus_type)
     return main_issue
-
 
 
 def _sales_next_goal(metrics: dict[str, Any]) -> NextGoal:
@@ -1130,7 +1138,13 @@ def evaluate_effectiveness_snapshot(
         metrics=metrics,
         focus_type=(
             main_issue["issue_type"]
-            if main_issue.get("issue_type") in {"evidence_gap", "objection_handling_gap", "next_step_gap", "value_translation_gap"}
+            if main_issue.get("issue_type")
+            in {
+                "evidence_gap",
+                "objection_handling_gap",
+                "next_step_gap",
+                "value_translation_gap",
+            }
             else None
         ),
         evaluable=bool(evaluable),
@@ -1163,9 +1177,15 @@ def build_action_card(
 ) -> ActionCard | None:
     """Build a single actionable card from realtime signals."""
     detections = [item for item in (fuzzy_detections or []) if isinstance(item, dict)]
-    tips = [tip.strip() for tip in (suggestions or []) if isinstance(tip, str) and tip.strip()]
+    tips = [
+        tip.strip()
+        for tip in (suggestions or [])
+        if isinstance(tip, str) and tip.strip()
+    ]
 
-    has_rich_sales_context = isinstance(stage_context, dict) or isinstance(score_context, dict)
+    has_rich_sales_context = isinstance(stage_context, dict) or isinstance(
+        score_context, dict
+    )
     if has_rich_sales_context:
         coaching_focus = resolve_sales_coaching_focus(
             stage_context=stage_context if isinstance(stage_context, dict) else None,
@@ -1189,9 +1209,7 @@ def build_action_card(
             issue = f"检测到表达问题：{', '.join(str(x) for x in matched[:3])}"
         else:
             issue = "检测到表达不够具体"
-        replacement = str(
-            first.get("suggestion") or "请改用更具体的业务表达。"
-        ).strip()
+        replacement = str(first.get("suggestion") or "请改用更具体的业务表达。").strip()
     elif tips:
         issue = "当前轮次有1个关键改进点"
         replacement = tips[0]

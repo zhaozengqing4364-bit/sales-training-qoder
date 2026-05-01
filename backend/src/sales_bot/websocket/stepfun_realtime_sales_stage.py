@@ -176,6 +176,7 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
     module = sys.modules.get("sales_bot.websocket.stepfun_realtime_handler")
     return getattr(module, name, fallback) if module is not None else fallback
 
+
 class StepFunRealtimeSalesStageMixin:
     async def _ensure_sales_stage_context(self) -> None:
         """Initialize sales-stage capability context once per handler session."""

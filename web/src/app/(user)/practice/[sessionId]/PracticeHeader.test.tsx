@@ -12,6 +12,7 @@ describe("PracticeHeader", () => {
 
     it("renders sales status labels and wires lifecycle actions without changing button semantics", () => {
         const onExit = vi.fn();
+        const onBackToTraining = vi.fn();
         const onTogglePauseResume = vi.fn();
         const onEndSession = vi.fn();
 
@@ -30,6 +31,7 @@ describe("PracticeHeader", () => {
                 isSessionTerminal={false}
                 endButtonLabel="生成报告中..."
                 onExit={onExit}
+                onBackToTraining={onBackToTraining}
                 onTogglePauseResume={onTogglePauseResume}
                 onEndSession={onEndSession}
             />,
@@ -42,10 +44,12 @@ describe("PracticeHeader", () => {
         expect(screen.getByText("经典模式")).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "退出练习并返回首页" }));
+        fireEvent.click(screen.getByRole("button", { name: /返回训练大厅/ }));
         fireEvent.click(screen.getAllByRole("button", { name: /暂停/ })[0]);
         fireEvent.click(screen.getByRole("button", { name: /结束练习/ }));
 
         expect(onExit).toHaveBeenCalledTimes(1);
+        expect(onBackToTraining).toHaveBeenCalledTimes(1);
         expect(onTogglePauseResume).toHaveBeenCalledTimes(1);
         expect(onEndSession).toHaveBeenCalledTimes(1);
     });
@@ -66,6 +70,7 @@ describe("PracticeHeader", () => {
                 isSessionTerminal={false}
                 endButtonLabel="保存音频中..."
                 onExit={vi.fn()}
+                onBackToTraining={vi.fn()}
                 onTogglePauseResume={vi.fn()}
                 onEndSession={vi.fn()}
             />,

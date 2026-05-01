@@ -23,6 +23,7 @@ Usage:
             # Implementation
             return CapabilityResult(success=True, data={"result": "value"})
 """
+
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -183,7 +184,7 @@ class BaseCapability(ABC):
         # Size limit check
         try:
             config_json = json.dumps(self.config, ensure_ascii=False)
-            config_size = len(config_json.encode('utf-8'))
+            config_size = len(config_json.encode("utf-8"))
             if config_size > MAX_CONFIG_SIZE_BYTES:
                 raise ValueError(
                     f"Config size {config_size} bytes exceeds "

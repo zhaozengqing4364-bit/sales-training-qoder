@@ -15,10 +15,7 @@ class KeywordTrigger(BaseTrigger):
     """
 
     def __init__(
-        self,
-        keywords: list[str],
-        cooldown_turns: int = 3,
-        match_mode: str = "any"
+        self, keywords: list[str], cooldown_turns: int = 3, match_mode: str = "any"
     ):
         """
         Initialize keyword trigger.

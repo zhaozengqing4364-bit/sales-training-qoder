@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 
 class ExtractedPoints(BaseModel):
     """Extracted talking points from LLM"""
-    required_points: list[str] = Field(description="List of required talking points for this slide")
+
+    required_points: list[str] = Field(
+        description="List of required talking points for this slide"
+    )
     key_concepts: list[str] = Field(description="Key concepts that should be mentioned")
     success_criteria: list[str] = Field(description="What makes this slide successful")
 
@@ -59,13 +62,13 @@ Your task:
 
 Provide actionable, specific talking points.""",
             input_variables=["title", "content", "page_context"],
-            partial_variables={"format_instructions": self.parser.get_format_instructions()}
+            partial_variables={
+                "format_instructions": self.parser.get_format_instructions()
+            },
         )
 
     async def extract_points_for_page(
-        self,
-        page: PPTPage,
-        page_context: str = "general"
+        self, page: PPTPage, page_context: str = "general"
     ) -> Result[ExtractedPoints]:
         """
         Extract talking points for a single page
@@ -77,7 +80,7 @@ Provide actionable, specific talking points.""",
             prompt_value = self.extraction_prompt.format(
                 title=page.title,
                 content=page.content or "No text content",
-                page_context=page_context
+                page_context=page_context,
             )
 
             # Call LLM
@@ -91,15 +94,14 @@ Provide actionable, specific talking points.""",
                 extra={
                     "page_number": page.page_number,
                     "points_count": len(points.required_points),
-                }
+                },
             )
 
             return Result(value=points)
 
         except TimeoutError:
             logger.warning(
-                "LLM timeout extracting points",
-                extra={"page_number": page.page_number}
+                "LLM timeout extracting points", extra={"page_number": page.page_number}
             )
             # Fallback to rule-based extraction
             return Result(value=self._extract_points_fallback(page))
@@ -107,13 +109,12 @@ Provide actionable, specific talking points.""",
             logger.error(
                 "Failed to extract points",
                 extra={"page_number": page.page_number, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[EXTRACTION_FAILED]")
 
     async def extract_points_for_presentation(
-        self,
-        pages: list[PPTPage]
+        self, pages: list[PPTPage]
     ) -> Result[dict[int, ExtractedPoints]]:
         """
         Extract talking points for all pages in a presentation
@@ -134,7 +135,7 @@ Provide actionable, specific talking points.""",
 
             logger.info(
                 "Talking points extracted for presentation",
-                extra={"total_pages": len(pages), "extracted": len(results)}
+                extra={"total_pages": len(pages), "extracted": len(results)},
             )
 
             return Result(value=results)
@@ -143,7 +144,7 @@ Provide actionable, specific talking points.""",
             logger.error(
                 "Failed to extract points for presentation",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[EXTRACTION_FAILED]")
 
@@ -160,7 +161,7 @@ Provide actionable, specific talking points.""",
 
         # Extract key concepts from content (sentences)
         if page.content:
-            sentences = [s.strip() for s in page.content.split('.') if s.strip()]
+            sentences = [s.strip() for s in page.content.split(".") if s.strip()]
             key_concepts = sentences[:3]  # First 3 sentences as key concepts
         else:
             key_concepts = [f"Main concept of {page.title}"]
@@ -175,7 +176,7 @@ Provide actionable, specific talking points.""",
         return ExtractedPoints(
             required_points=required_points,
             key_concepts=key_concepts,
-            success_criteria=success_criteria
+            success_criteria=success_criteria,
         )
 
 

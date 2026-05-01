@@ -150,7 +150,6 @@ def error_response(
     )
 
 
-
 def _is_admin_user(user: User) -> bool:
     return str(getattr(user, "role", "user")).lower() == "admin"
 
@@ -277,7 +276,8 @@ def _calculate_session_overall_score(session: PracticeSession) -> float | None:
 
 
 def _build_sales_realtime_not_evaluable_snapshot(
-    *, reason: str,
+    *,
+    reason: str,
 ) -> dict[str, Any]:
     return evaluate_effectiveness_snapshot(
         metrics=build_sales_effectiveness_metrics(
@@ -347,7 +347,9 @@ async def _sync_sales_realtime_terminal_evidence(
     )
     row = result.first()
     persisted_score_snapshot = row[0] if row else None
-    if _apply_sales_realtime_score_snapshot_to_session(session, persisted_score_snapshot):
+    if _apply_sales_realtime_score_snapshot_to_session(
+        session, persisted_score_snapshot
+    ):
         return "stepfun_message_analysis"
 
     session.effectiveness_snapshot = _build_sales_realtime_not_evaluable_snapshot(
@@ -555,7 +557,9 @@ def _session_has_persisted_scores(session: PracticeSession) -> bool:
     )
 
 
-def _apply_sales_summary_scores_if_missing(session: PracticeSession, summary: Any) -> None:
+def _apply_sales_summary_scores_if_missing(
+    session: PracticeSession, summary: Any
+) -> None:
     """Idempotent score assignment for sales summary."""
     if session.logic_score is None:
         session.logic_score = summary.score_confidence
@@ -731,7 +735,9 @@ async def control_session_lifecycle(
             "[SESSION_END_FAILED]"
             if payload.action.value == "end"
             else "[SESSION_LIFECYCLE_FAILED]",
-            message="会话结束失败" if payload.action.value == "end" else "会话生命周期控制失败",
+            message="会话结束失败"
+            if payload.action.value == "end"
+            else "会话生命周期控制失败",
             exc=exc,
             session_id=session_id,
             action=payload.action.value,
@@ -898,9 +904,11 @@ async def get_session_next_recommendation(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    recommendation_result = await NextPracticeRecommendationService().build_for_session_with_db(
-        db=db,
-        session=session,
+    recommendation_result = (
+        await NextPracticeRecommendationService().build_for_session_with_db(
+            db=db,
+            session=session,
+        )
     )
     if not recommendation_result.is_success:
         return build_server_error(
@@ -930,7 +938,9 @@ async def get_session_report(
         return error_response("[ACCESS_DENIED]", status_code=403)
 
     scenario_type_result = await db.execute(
-        select(Scenario.scenario_type).where(Scenario.scenario_id == session.scenario_id)
+        select(Scenario.scenario_type).where(
+            Scenario.scenario_id == session.scenario_id
+        )
     )
     scenario_type_value = scenario_type_result.scalar_one_or_none()
     normalized_scenario_type = (
@@ -1016,16 +1026,24 @@ async def get_session_knowledge_check(
         if live_claim_truth is None and isinstance(live_session_summary, dict):
             live_claim_truth = deepcopy(live_session_summary.get("claim_truth"))
         if live_claim_truth is None:
-            live_claim_truth = deepcopy(getattr(live_handler, "_latest_claim_truth", None))
+            live_claim_truth = deepcopy(
+                getattr(live_handler, "_latest_claim_truth", None)
+            )
         if live_knowledge_answer_diagnostics is None:
             live_knowledge_answer_diagnostics = deepcopy(
                 getattr(live_handler, "_latest_knowledge_answer_diagnostics", None)
             )
         if live_coach_health is None:
             live_coach_health = {
-                "status": str(getattr(live_handler, "_coach_health", "healthy") or "healthy"),
+                "status": str(
+                    getattr(live_handler, "_coach_health", "healthy") or "healthy"
+                ),
                 "reason": getattr(live_handler, "_coach_health_reason", None),
-                "message": getattr(live_handler, "_coach_health_message", lambda status: "实时辅导正常。")(getattr(live_handler, "_coach_health", "healthy")),
+                "message": getattr(
+                    live_handler,
+                    "_coach_health_message",
+                    lambda status: "实时辅导正常。",
+                )(getattr(live_handler, "_coach_health", "healthy")),
             }
 
     projection_effectiveness_snapshot = None
@@ -1033,7 +1051,10 @@ async def get_session_knowledge_check(
     projection_evidence_degradation = None
     evidence_service = _practice_services(db).evidence
     resolved_scenario_type = evidence_service.resolve_scenario_type(session)
-    if resolved_scenario_type == "sales" and session.status == SessionStatus.COMPLETED.value:
+    if (
+        resolved_scenario_type == "sales"
+        and session.status == SessionStatus.COMPLETED.value
+    ):
         projection_result = await evidence_service.get_projection(
             session_id=session_id,
             session=session,
@@ -1047,7 +1068,9 @@ async def get_session_knowledge_check(
                 projection_result.value.effectiveness_snapshot
             )
             projection_conclusion_evidence = projection_result.value.conclusion_evidence
-            projection_evidence_degradation = projection_result.value.evidence_degradation
+            projection_evidence_degradation = (
+                projection_result.value.evidence_degradation
+            )
         elif not projection_result.is_success:
             logger.warning(
                 "practice_session_knowledge_check_projection_unavailable",
@@ -1176,8 +1199,12 @@ async def get_practice_history(
                     )
                     if isinstance(session.effectiveness_snapshot, dict)
                     and (
-                        isinstance(session.effectiveness_snapshot.get("main_issue"), dict)
-                        or isinstance(session.effectiveness_snapshot.get("next_goal"), dict)
+                        isinstance(
+                            session.effectiveness_snapshot.get("main_issue"), dict
+                        )
+                        or isinstance(
+                            session.effectiveness_snapshot.get("next_goal"), dict
+                        )
                     )
                     else None
                 ),
@@ -1617,7 +1644,11 @@ async def generate_audio_upload_url(
 ):
     """Generate a presigned PUT URL for browser-direct audio segment upload."""
     segment_sequence = body.get("segment_sequence")
-    if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
+    if (
+        segment_sequence is None
+        or not isinstance(segment_sequence, int)
+        or segment_sequence < 0
+    ):
         return error_response(
             "[INVALID_SEGMENT_SEQUENCE]",
             status_code=422,
@@ -1680,7 +1711,11 @@ async def register_audio_segment(
 ):
     """Register a successfully uploaded audio segment."""
     segment_sequence = body.get("segment_sequence")
-    if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
+    if (
+        segment_sequence is None
+        or not isinstance(segment_sequence, int)
+        or segment_sequence < 0
+    ):
         return error_response(
             "[INVALID_SEGMENT_SEQUENCE]",
             status_code=422,
@@ -1756,13 +1791,15 @@ async def list_audio_segments(
 
 
 # Allowed error tokens for audio segment failure registration.
-_AUDIO_FAILURE_TOKENS = frozenset({
-    "signing_failed",
-    "oss_put_failed",
-    "register_failed",
-    "network_error",
-    "unknown",
-})
+_AUDIO_FAILURE_TOKENS = frozenset(
+    {
+        "signing_failed",
+        "oss_put_failed",
+        "register_failed",
+        "network_error",
+        "unknown",
+    }
+)
 
 
 @router.post("/practice/sessions/{session_id}/audio-segments/failure")
@@ -1774,7 +1811,11 @@ async def register_audio_segment_failure(
 ):
     """Register a failed audio segment upload attempt."""
     segment_sequence = body.get("segment_sequence")
-    if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
+    if (
+        segment_sequence is None
+        or not isinstance(segment_sequence, int)
+        or segment_sequence < 0
+    ):
         return error_response(
             "[INVALID_SEGMENT_SEQUENCE]",
             status_code=422,
@@ -1799,7 +1840,9 @@ async def register_audio_segment_failure(
         return error_response("[ACCESS_DENIED]", status_code=403)
 
     try:
-        payload = await _practice_services(db).audio_segments.register_audio_segment_failure(
+        payload = await _practice_services(
+            db
+        ).audio_segments.register_audio_segment_failure(
             session_id=session_id,
             session=session,
             segment_sequence=segment_sequence,

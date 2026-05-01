@@ -103,7 +103,10 @@ class PracticeRuntimeDescriptorService:
     ) -> SessionResponse:
         payload = SessionResponse.model_validate(session)
         resolved_scenario_type = scenario_type
-        if not resolved_scenario_type and getattr(session, "scenario", None) is not None:
+        if (
+            not resolved_scenario_type
+            and getattr(session, "scenario", None) is not None
+        ):
             resolved_scenario_type = getattr(session.scenario, "scenario_type", None)
 
         try:
@@ -127,7 +130,6 @@ class PracticeRuntimeDescriptorService:
         return payload
 
 
-
 class PracticeSessionCreateService:
     """Orchestrate session creation while keeping route handlers thin."""
 
@@ -138,7 +140,9 @@ class PracticeSessionCreateService:
         runtime_policy_service: VoiceRuntimePolicyService | None = None,
     ) -> None:
         self.db = db
-        self.runtime_policy_service = runtime_policy_service or VoiceRuntimePolicyService(db)
+        self.runtime_policy_service = (
+            runtime_policy_service or VoiceRuntimePolicyService(db)
+        )
         self.logger = logger
 
     async def create_session(
@@ -171,15 +175,17 @@ class PracticeSessionCreateService:
             persona_id_str=persona_id_str,
         )
 
-        effective_voice_policy = await self.runtime_policy_service.resolve_effective_policy(
-            agent_id=agent_id_str,
-            persona_id=persona_id_str,
-            voice_mode_override=session_data.voice_mode,
-            runtime_profile_override=(
-                str(session_data.runtime_profile_id)
-                if session_data.runtime_profile_id
-                else None
-            ),
+        effective_voice_policy = (
+            await self.runtime_policy_service.resolve_effective_policy(
+                agent_id=agent_id_str,
+                persona_id=persona_id_str,
+                voice_mode_override=session_data.voice_mode,
+                runtime_profile_override=(
+                    str(session_data.runtime_profile_id)
+                    if session_data.runtime_profile_id
+                    else None
+                ),
+            )
         )
         if association_override_config:
             effective_voice_policy = {
@@ -266,7 +272,9 @@ class PracticeSessionCreateService:
         return requested_scenario
 
     @staticmethod
-    def _resolve_agent_persona_pair(session_data: SessionCreate) -> tuple[str | None, str | None]:
+    def _resolve_agent_persona_pair(
+        session_data: SessionCreate,
+    ) -> tuple[str | None, str | None]:
         return (
             str(session_data.agent_id) if session_data.agent_id else None,
             str(session_data.persona_id) if session_data.persona_id else None,
@@ -302,7 +310,9 @@ class PracticeSessionCreateService:
         from agent.models import Agent, AgentPersona
         from agent.models import Persona as AgentPersonaModel
 
-        agent_result = await self.db.execute(select(Agent).where(Agent.id == agent_id_str))
+        agent_result = await self.db.execute(
+            select(Agent).where(Agent.id == agent_id_str)
+        )
         agent = agent_result.scalar_one_or_none()
         if not agent:
             raise PracticeServiceError("[AGENT_NOT_FOUND]", status_code=404)
@@ -366,7 +376,9 @@ class PracticeSessionCreateService:
             customer_pressure_source=str(customer_pressure.get("source") or "none"),
             customer_pressure_focus=str(pressure_direction.get("sales_focus") or ""),
             question_strategy=str(follow_up_behavior.get("question_strategy") or ""),
-            revisit_on_evasion=bool(follow_up_behavior.get("revisit_on_evasion", False)),
+            revisit_on_evasion=bool(
+                follow_up_behavior.get("revisit_on_evasion", False)
+            ),
             require_evidence=bool(follow_up_behavior.get("require_evidence", False)),
             instruction_contract_hash=str(
                 effective_voice_policy.get("instruction_contract_hash") or ""
@@ -428,7 +440,9 @@ class PracticeSessionCreateService:
         if persona_id_str:
             session.persona_id = persona_id_str
         session.voice_mode = effective_voice_policy.get("voice_mode", "legacy")
-        session.voice_runtime_profile_id = effective_voice_policy.get("runtime_profile_id")
+        session.voice_runtime_profile_id = effective_voice_policy.get(
+            "runtime_profile_id"
+        )
         session.voice_policy_snapshot = deepcopy(session_policy_snapshot)
         if requested_scenario:
             session.scenario_id = requested_scenario.scenario_id
@@ -534,7 +548,9 @@ class PracticeSessionLifecycleApplicationService:
             **_lifecycle_log_context(result.transition),
             changed=result.transition.changed,
         )
-        await self.lifecycle_service.trigger_report_generation_if_needed(result.transition)
+        await self.lifecycle_service.trigger_report_generation_if_needed(
+            result.transition
+        )
         live_handler_synced = await _sync_live_handler_after_lifecycle_transition(
             result.transition
         )
@@ -586,9 +602,13 @@ class PracticeSessionLifecycleApplicationService:
             scenario_type=scenario_type,
         )
 
-    async def resolve_session_scenario_type(self, session: PracticeSession) -> str | None:
+    async def resolve_session_scenario_type(
+        self, session: PracticeSession
+    ) -> str | None:
         scenario_result = await self.db.execute(
-            select(Scenario.scenario_type).where(Scenario.scenario_id == session.scenario_id)
+            select(Scenario.scenario_type).where(
+                Scenario.scenario_id == session.scenario_id
+            )
         )
         scenario_type = scenario_result.scalar_one_or_none()
         return str(scenario_type) if scenario_type else None
@@ -741,7 +761,9 @@ def _session_has_persisted_scores(session: PracticeSession) -> bool:
     )
 
 
-def _apply_sales_summary_scores_if_missing(session: PracticeSession, summary: Any) -> None:
+def _apply_sales_summary_scores_if_missing(
+    session: PracticeSession, summary: Any
+) -> None:
     if session.logic_score is None:
         session.logic_score = summary.score_confidence
     if session.accuracy_score is None:
@@ -830,7 +852,9 @@ async def _sync_sales_realtime_terminal_evidence(
     )
     row = result.first()
     persisted_score_snapshot = row[0] if row else None
-    if _apply_sales_realtime_score_snapshot_to_session(session, persisted_score_snapshot):
+    if _apply_sales_realtime_score_snapshot_to_session(
+        session, persisted_score_snapshot
+    ):
         return "stepfun_message_analysis"
 
     session.effectiveness_snapshot = _build_sales_realtime_not_evaluable_snapshot(
@@ -871,7 +895,9 @@ def _log_sales_terminal_evidence_state(
 
 
 def _resolve_ws_scenario(scenario_type: str | None) -> str:
-    return "presentation" if (scenario_type or "").lower() == "presentation" else "sales"
+    return (
+        "presentation" if (scenario_type or "").lower() == "presentation" else "sales"
+    )
 
 
 def _build_ws_status_payload(transition: SessionLifecycleTransition) -> dict[str, Any]:
@@ -936,7 +962,9 @@ async def _sync_live_handler_after_lifecycle_transition(
     return await session_manager.sync_lifecycle_transition(transition)
 
 
-async def _close_live_handler_if_terminal(transition: SessionLifecycleTransition) -> bool:
+async def _close_live_handler_if_terminal(
+    transition: SessionLifecycleTransition,
+) -> bool:
     if not transition.session_ended:
         return False
 

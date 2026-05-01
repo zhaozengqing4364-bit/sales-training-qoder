@@ -305,10 +305,14 @@ def get_aliyun_tts_service(
     """获取单例TTS服务"""
     global _aliyun_tts_service
     if _aliyun_tts_service is None:
-        _aliyun_tts_service = AliyunStreamingTTS(api_key=api_key, default_voice=default_voice)
+        _aliyun_tts_service = AliyunStreamingTTS(
+            api_key=api_key, default_voice=default_voice
+        )
     else:
         if api_key and _aliyun_tts_service.api_key != api_key:
-            _aliyun_tts_service = AliyunStreamingTTS(api_key=api_key, default_voice=default_voice)
+            _aliyun_tts_service = AliyunStreamingTTS(
+                api_key=api_key, default_voice=default_voice
+            )
         elif default_voice:
             _aliyun_tts_service.default_voice = default_voice
     return _aliyun_tts_service

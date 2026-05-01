@@ -34,10 +34,14 @@ class KnowledgeRetrievalPlanner:
     ) -> None:
         self._query_profiles = dict(query_profiles or {})
 
-    def build_plan(self, classification: KnowledgeIntentClassification) -> KnowledgeRetrievalPlan:
+    def build_plan(
+        self, classification: KnowledgeIntentClassification
+    ) -> KnowledgeRetrievalPlan:
         profile = self._query_profiles.get(classification.profile_key)
         if profile is None:
-            raise KeyError(f"Unknown knowledge query profile: {classification.profile_key}")
+            raise KeyError(
+                f"Unknown knowledge query profile: {classification.profile_key}"
+            )
 
         steps = self._build_steps(classification=classification, profile=profile)
         deduped_terms = _dedupe_preserve_order(classification.matched_terms)
@@ -62,8 +66,12 @@ class KnowledgeRetrievalPlanner:
         classification: KnowledgeIntentClassification,
         profile: KnowledgeQueryProfileConfig,
     ) -> list[KnowledgeRetrievalStep]:
-        raw_queries = self._build_queries(classification=classification, profile=profile)
-        deduped_queries = _dedupe_preserve_order(raw_queries)[: max(1, profile.max_rewrite_queries)]
+        raw_queries = self._build_queries(
+            classification=classification, profile=profile
+        )
+        deduped_queries = _dedupe_preserve_order(raw_queries)[
+            : max(1, profile.max_rewrite_queries)
+        ]
         return [
             KnowledgeRetrievalStep(
                 query=query,
@@ -79,12 +87,19 @@ class KnowledgeRetrievalPlanner:
         classification: KnowledgeIntentClassification,
         profile: KnowledgeQueryProfileConfig,
     ) -> list[str]:
-        primary_query = classification.normalized_query.strip() or classification.original_query.strip()
+        primary_query = (
+            classification.normalized_query.strip()
+            or classification.original_query.strip()
+        )
         if profile.rewrite_strategy == "single_query":
             return [primary_query]
 
         queries = [primary_query]
-        entity_focus = classification.resolved_entities[0].strip() if classification.resolved_entities else ""
+        entity_focus = (
+            classification.resolved_entities[0].strip()
+            if classification.resolved_entities
+            else ""
+        )
         for suffix in _rewrite_suffixes(profile.profile_key):
             if entity_focus:
                 queries.append(f"{entity_focus} {suffix}".strip())

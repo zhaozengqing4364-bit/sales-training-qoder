@@ -47,7 +47,13 @@ from prompt_templates.models import (
 from prompt_templates.renderer import render_template
 
 logger = get_logger(__name__)
-SALES_PROMPT_SCOPE_ALLOWED_TYPES = {"evaluation", "report", "stage", "scoring", "realtime_scoring"}
+SALES_PROMPT_SCOPE_ALLOWED_TYPES = {
+    "evaluation",
+    "report",
+    "stage",
+    "scoring",
+    "realtime_scoring",
+}
 PROMPT_GOVERNANCE_AUDIT_ACTION = "prompt_template.governance"
 
 
@@ -76,7 +82,11 @@ class PromptTemplateService:
         if actor is None:
             return None, "system"
         actor_id = getattr(actor, "user_id", None) or getattr(actor, "id", None)
-        identifier = getattr(actor, "email", None) or getattr(actor, "name", None) or str(actor_id or "system")
+        identifier = (
+            getattr(actor, "email", None)
+            or getattr(actor, "name", None)
+            or str(actor_id or "system")
+        )
         return str(actor_id) if actor_id else None, identifier
 
     @staticmethod
@@ -349,7 +359,9 @@ class PromptTemplateService:
                 "is_default": snapshot["is_default"],
                 "updated_at": snapshot["updated_at"],
                 "issues": issues,
-                "runtime_status": "disabled_required" if snapshot["is_active"] else "inactive_invalid",
+                "runtime_status": "disabled_required"
+                if snapshot["is_active"]
+                else "inactive_invalid",
                 "remediation": "disable_and_clear_default",
             }
             invalid_rows.append(invalid_row)
@@ -363,7 +375,9 @@ class PromptTemplateService:
                 }
             )
 
-        active_invalid_count = sum(1 for item in invalid_rows if item["is_active"] or item["is_default"])
+        active_invalid_count = sum(
+            1 for item in invalid_rows if item["is_active"] or item["is_default"]
+        )
         policy = {
             "variables_schema": "list[str]",
             "invalid_history_runtime_behavior": "visible_in_governance_and_disabled_before_runtime_lookup",
@@ -406,7 +420,9 @@ class PromptTemplateService:
             if not issues:
                 continue
             before = self._template_snapshot(row)
-            if bool(getattr(row, "is_active", False)) or bool(getattr(row, "is_default", False)):
+            if bool(getattr(row, "is_active", False)) or bool(
+                getattr(row, "is_default", False)
+            ):
                 row.is_active = False
                 row.is_default = False
                 row.updated_at = now
@@ -824,9 +840,7 @@ class PromptTemplateService:
                     ),
                     missing_variables=render_result.missing_variables,
                 )
-                return Result.fail(
-                    f"[PROMPT_CONTRACT_MISSING_VARIABLES:{missing}]"
-                )
+                return Result.fail(f"[PROMPT_CONTRACT_MISSING_VARIABLES:{missing}]")
             logger.warning(
                 "Prompt contract compilation failed due to render error",
                 template_id=str(template.id),
@@ -845,7 +859,9 @@ class PromptTemplateService:
             return Result.fail("[PROMPT_CONTRACT_EMPTY_RENDERED_PROMPT]")
 
         config_manager = get_config_manager()
-        effective_config = model_config or config_manager.get_effective_config(ModelType.LLM)
+        effective_config = model_config or config_manager.get_effective_config(
+            ModelType.LLM
+        )
         runtime_policy = config_manager.describe_runtime_policy(
             ModelType.LLM,
             effective_config,
@@ -945,7 +961,9 @@ class PromptTemplateService:
         """Compatibility wrapper that disables invalid historical templates."""
         status_before = await self.get_governance_status()
         actor_id, _ = self._audit_identifier(actor)
-        result = await self.remediate_invalid_templates(actor_id=actor_id, reason=reason)
+        result = await self.remediate_invalid_templates(
+            actor_id=actor_id, reason=reason
+        )
         issues = [
             issue
             for item in result.get("items", [])
@@ -956,7 +974,11 @@ class PromptTemplateService:
             checked_count=int(status_before.get("checked_count", 0)),
             quarantined_count=int(result.get("remediated_count", 0)),
             issues=issues,
-            audit_log_action=str(result.get("audit", {}).get("action", "prompt_template.governance.remediate_invalid")),
+            audit_log_action=str(
+                result.get("audit", {}).get(
+                    "action", "prompt_template.governance.remediate_invalid"
+                )
+            ),
         )
 
     async def migrate_invalid_templates(
@@ -990,7 +1012,9 @@ class PromptTemplateService:
             actions: list[str] = []
 
             if any(issue.startswith("variables_") for issue in issue_codes):
-                after["variables"] = self._normalize_legacy_variables(getattr(row, "variables", None))
+                after["variables"] = self._normalize_legacy_variables(
+                    getattr(row, "variables", None)
+                )
                 actions.append("migrate_variables_to_list")
 
             if "invalid_prompt_type" in issue_codes:
@@ -1067,7 +1091,9 @@ class PromptTemplateService:
                 details = json.loads(audit.details or "{}")
             except json.JSONDecodeError:
                 continue
-            if str(details.get("template_id")) == str(template_id) and isinstance(details.get("before"), dict):
+            if str(details.get("template_id")) == str(template_id) and isinstance(
+                details.get("before"), dict
+            ):
                 before = details["before"]
                 issues = [
                     str(issue.get("code", ""))
@@ -1195,7 +1221,9 @@ class PromptTemplateService:
 
         # First, unset existing defaults for this prompt type.
         before_result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.prompt_type == prompt_type.value)
+            select(PromptTemplateDB).where(
+                PromptTemplateDB.prompt_type == prompt_type.value
+            )
         )
         before_defaults = [
             self._template_snapshot(item)
@@ -1263,7 +1291,7 @@ class PromptTemplateService:
         query = select(ScenarioPromptDB).join(
             PromptTemplateDB,
             ScenarioPromptDB.template_id == PromptTemplateDB.id,
-            isouter=True
+            isouter=True,
         )
 
         if scenario_type:

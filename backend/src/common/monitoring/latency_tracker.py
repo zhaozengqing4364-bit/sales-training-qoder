@@ -10,6 +10,7 @@ Constitution Principle VII: Observability - Structured logging with trace_id
 
 Requirements: Voice Practice Optimization - Performance Monitoring
 """
+
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -23,6 +24,7 @@ logger = get_logger(__name__)
 @dataclass
 class LatencyStage:
     """Represents a single stage in the latency pipeline."""
+
     stage: str
     timestamp: float
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -31,17 +33,20 @@ class LatencyStage:
 @dataclass
 class LatencyTrace:
     """Complete latency trace for a single interaction."""
+
     trace_id: str
     stages: list[LatencyStage] = field(default_factory=list)
     start_time: float = field(default_factory=time.time)
 
     def add_stage(self, stage: str, metadata: dict[str, Any] | None = None) -> None:
         """Add a stage to the trace."""
-        self.stages.append(LatencyStage(
-            stage=stage,
-            timestamp=time.time(),
-            metadata=metadata or {},
-        ))
+        self.stages.append(
+            LatencyStage(
+                stage=stage,
+                timestamp=time.time(),
+                metadata=metadata or {},
+            )
+        )
 
     def get_total_latency_ms(self) -> float:
         """Get total latency from first to last stage in milliseconds."""
@@ -132,10 +137,7 @@ class LatencyTracker:
         return trace
 
     def record(
-        self,
-        trace_id: str,
-        stage: str,
-        metadata: dict[str, Any] | None = None
+        self, trace_id: str, stage: str, metadata: dict[str, Any] | None = None
     ) -> None:
         """
         Record a latency stage.

@@ -12,6 +12,7 @@ const {
     getPromptTemplatesMock,
     getScenarioPromptsMock,
     getPromptTemplateGovernanceStatusMock,
+    getPromptTemplateOptionsMock,
     remediateInvalidPromptTemplatesMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
     getPromptTemplatesMock: vi.fn(),
     getScenarioPromptsMock: vi.fn(),
     getPromptTemplateGovernanceStatusMock: vi.fn(),
+    getPromptTemplateOptionsMock: vi.fn(),
     remediateInvalidPromptTemplatesMock: vi.fn(),
 }));
 
@@ -82,6 +84,7 @@ vi.mock("@/lib/api/client", async () => {
                 getPromptTemplates: getPromptTemplatesMock,
                 getScenarioPrompts: getScenarioPromptsMock,
                 getPromptTemplateGovernanceStatus: getPromptTemplateGovernanceStatusMock,
+                getPromptTemplateOptions: getPromptTemplateOptionsMock,
                 remediateInvalidPromptTemplates: remediateInvalidPromptTemplatesMock,
                 migrateInvalidPromptTemplates: vi.fn(),
                 rollbackPromptTemplateGovernance: vi.fn(),
@@ -147,6 +150,17 @@ describe("AdminPromptsPage governance UI", () => {
         getMeMock.mockResolvedValue({ role: "admin" });
         getScenarioPromptsMock.mockResolvedValue([]);
         getPromptTemplateGovernanceStatusMock.mockResolvedValue(governanceStatus);
+        getPromptTemplateOptionsMock.mockResolvedValue({
+            allowed_prompt_types: [
+                { value: "summary", label: "总结" },
+                { value: "realtime_scoring", label: "实时评分" },
+                { value: "report", label: "综合报告" },
+            ],
+            sales_allowed_prompt_types: ["summary", "realtime_scoring", "report"],
+            variables_schema: "list[str]",
+            invalid_history_runtime_behavior: "visible_in_governance_and_disabled_before_runtime_lookup",
+            rollback_policy: "restore from audit snapshot",
+        });
         remediateInvalidPromptTemplatesMock.mockResolvedValue({
             remediated_count: 1,
             items: [],

@@ -71,7 +71,9 @@ class ManagerInterventionWriteService:
         await self._get_target_user(user_id=target_user_id)
 
         resolving_session_id = (
-            str(payload.resolving_session_id) if payload.resolving_session_id is not None else None
+            str(payload.resolving_session_id)
+            if payload.resolving_session_id is not None
+            else None
         )
         if resolving_session_id:
             await self._validate_resolving_session(
@@ -146,7 +148,9 @@ class ManagerInterventionWriteService:
                 )
 
         requested_due_state = (
-            payload.due_state.value if payload.due_state is not None else intervention.due_state
+            payload.due_state.value
+            if payload.due_state is not None
+            else intervention.due_state
         )
         due_state, reminder_status, reminder_sent_at = self._normalize_state(
             due_state=requested_due_state,
@@ -188,7 +192,9 @@ class ManagerInterventionWriteService:
                     detail="[INTERVENTION_USER_MISMATCH]",
                 )
         else:
-            intervention = await self._latest_open_intervention_for_user(user_id=target_user_id)
+            intervention = await self._latest_open_intervention_for_user(
+                user_id=target_user_id
+            )
 
         if intervention is not None:
             if payload.note is not None:
@@ -264,9 +270,13 @@ class ManagerInterventionWriteService:
             select(ManagerIntervention)
             .where(
                 ManagerIntervention.user_id == user_id,
-                ManagerIntervention.due_state != ManagerInterventionDueState.RESOLVED.value,
+                ManagerIntervention.due_state
+                != ManagerInterventionDueState.RESOLVED.value,
             )
-            .order_by(ManagerIntervention.updated_at.desc(), ManagerIntervention.created_at.desc())
+            .order_by(
+                ManagerIntervention.updated_at.desc(),
+                ManagerIntervention.created_at.desc(),
+            )
             .limit(1)
         )
         return result.scalar_one_or_none()

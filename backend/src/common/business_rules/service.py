@@ -697,7 +697,9 @@ class BusinessRuleConfigService:
             combinations = [
                 item for item in value.get("combinations", []) if isinstance(item, dict)
             ]
-            enabled = [item for item in combinations if item.get("enabled", True) is not False]
+            enabled = [
+                item for item in combinations if item.get("enabled", True) is not False
+            ]
             return {
                 "enabled": True,
                 "ruleset_version": value.get("version"),

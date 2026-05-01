@@ -4,7 +4,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-AnswerabilityType = Literal["sufficient", "partial", "insufficient", "blocked", "unanswered"]
+AnswerabilityType = Literal[
+    "sufficient", "partial", "insufficient", "blocked", "unanswered"
+]
 SourceStatusType = Literal["ready", "blocked", "not_run"]
 
 
@@ -45,7 +47,9 @@ class KnowledgeAnswerRequest(BaseModel):
 class KnowledgeAnswerResult(BaseModel):
     """Project-owned result contract with stable observability fields."""
 
-    final_text: str | None = Field(None, description="Grounded answer text when available")
+    final_text: str | None = Field(
+        None, description="Grounded answer text when available"
+    )
     blocked_text: str | None = Field(
         None,
         description="Learner-safe blocked response when grounded answering cannot proceed",
@@ -92,5 +96,7 @@ class KnowledgeAuditStep(BaseModel):
         default_factory=dict,
         description="Bounded output payload for the step",
     )
-    duration_ms: int = Field(default=0, ge=0, description="Step duration in milliseconds")
+    duration_ms: int = Field(
+        default=0, ge=0, description="Step duration in milliseconds"
+    )
     status: str = Field(default="not_run", description="Step outcome status")

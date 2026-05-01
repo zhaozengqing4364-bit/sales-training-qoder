@@ -6,7 +6,6 @@ Implements Constitution Principles:
 - VI. Data Privacy - Session-based access control
 """
 
-
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -62,7 +61,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Extract token from Authorization header
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
-            return self._unauthorized_response("Missing or invalid Authorization header")
+            return self._unauthorized_response(
+                "Missing or invalid Authorization header"
+            )
 
         # Validate token (in real implementation, this would verify JWT)
         # For now, we'll pass through and let route handlers handle auth via Depends(get_current_user)

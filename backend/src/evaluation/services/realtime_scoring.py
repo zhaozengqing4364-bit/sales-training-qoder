@@ -139,11 +139,18 @@ class IncrementalScoreState:
             else:
                 # Weighted average of historical scores
                 weighted_sum = sum(
-                    history[i] * (self.HISTORY_WEIGHT if i < len(history) - 1 else self.CURRENT_WEIGHT)
+                    history[i]
+                    * (
+                        self.HISTORY_WEIGHT
+                        if i < len(history) - 1
+                        else self.CURRENT_WEIGHT
+                    )
                     for i in range(len(history))
                 )
                 # Normalize weights
-                total_weight = self.HISTORY_WEIGHT * (len(history) - 1) + self.CURRENT_WEIGHT
+                total_weight = (
+                    self.HISTORY_WEIGHT * (len(history) - 1) + self.CURRENT_WEIGHT
+                )
                 incremental_dimensions[dim] = round(weighted_sum / total_weight, 1)
 
         return {
@@ -196,7 +203,7 @@ class RealtimeScoringService:
 
     # Score update thresholds
     MIN_TURNS_BEFORE_SCORE = 5  # Minimum turns before first score
-    SCORE_UPDATE_INTERVAL = 3   # Update score every N turns
+    SCORE_UPDATE_INTERVAL = 3  # Update score every N turns
 
     def __init__(
         self,
@@ -262,8 +269,7 @@ class RealtimeScoringService:
             # Extract scores from result
             scoring_data = scoring_result.value
             dimension_scores = {
-                d["name"]: d["score"]
-                for d in scoring_data.get("dimensions", [])
+                d["name"]: d["score"] for d in scoring_data.get("dimensions", [])
             }
             overall_score = scoring_data.get("overall", 0)
 
@@ -325,7 +331,9 @@ class RealtimeScoringService:
             return False
 
         # Update every N turns after minimum
-        return (turn_number - self.MIN_TURNS_BEFORE_SCORE) % self.SCORE_UPDATE_INTERVAL == 0
+        return (
+            turn_number - self.MIN_TURNS_BEFORE_SCORE
+        ) % self.SCORE_UPDATE_INTERVAL == 0
 
     def _get_or_create_state(self, session_id: str) -> IncrementalScoreState:
         """Get or create score state for session.
@@ -337,7 +345,9 @@ class RealtimeScoringService:
             IncrementalScoreState for the session
         """
         if session_id not in self._score_states:
-            self._score_states[session_id] = IncrementalScoreState(session_id=session_id)
+            self._score_states[session_id] = IncrementalScoreState(
+                session_id=session_id
+            )
         return self._score_states[session_id]
 
     async def _generate_suggestions(
@@ -360,8 +370,7 @@ class RealtimeScoringService:
 
         # Identify low-scoring dimensions
         low_dimensions = [
-            (name, score) for name, score in dimension_scores.items()
-            if score < 70
+            (name, score) for name, score in dimension_scores.items() if score < 70
         ]
 
         # Sort by score (lowest first)
@@ -387,7 +396,9 @@ class RealtimeScoringService:
 
         return suggestions[:3]  # Max 3 suggestions
 
-    def _get_dimension_suggestion(self, dimension: str, stage: str, score: float) -> str:
+    def _get_dimension_suggestion(
+        self, dimension: str, stage: str, score: float
+    ) -> str:
         """Get suggestion for a specific dimension.
 
         Args:
@@ -471,7 +482,9 @@ class RealtimeScoringService:
 
         return f"{dimension}得分{score:.0f}分，建议针对性加强练习"
 
-    def _get_stage_suggestion(self, stage: str, dimension_scores: dict[str, float]) -> str:
+    def _get_stage_suggestion(
+        self, stage: str, dimension_scores: dict[str, float]
+    ) -> str:
         """Get stage-specific suggestion.
 
         Args:
@@ -565,7 +578,9 @@ class RealtimeScoringService:
             # Get current scoring summary
             summary = self.get_session_summary(session_id)
             if not summary:
-                return Result.fail(f"[SCORING_CONTEXT_NOT_FOUND] No scoring data for session {session_id}")
+                return Result.fail(
+                    f"[SCORING_CONTEXT_NOT_FOUND] No scoring data for session {session_id}"
+                )
 
             # Get full state for scoring history
             state = self._score_states.get(session_id)
@@ -585,7 +600,9 @@ class RealtimeScoringService:
 
                     # Update session with scoring data
                     result = await db_session.execute(
-                        select(PracticeSession).where(PracticeSession.session_id == session_id)
+                        select(PracticeSession).where(
+                            PracticeSession.session_id == session_id
+                        )
                     )
                     session = result.scalar_one_or_none()
 
@@ -684,7 +701,9 @@ class RealtimeScoringService:
             if isinstance(snapshot, dict) and "realtime_scores" in snapshot:
                 return Result.ok(snapshot["realtime_scores"])
 
-            return Result.fail("[SCORING_CONTEXT_NOT_FOUND] No realtime scoring data available")
+            return Result.fail(
+                "[SCORING_CONTEXT_NOT_FOUND] No realtime scoring data available"
+            )
 
         except Exception as e:
             logger.error(

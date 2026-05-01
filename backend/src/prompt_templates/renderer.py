@@ -184,6 +184,7 @@ class PromptRenderer:
 
             # Find all variable references
             from jinja2 import meta
+
             undeclared = meta.find_undeclared_variables(parsed)
 
             return sorted(list(undeclared))

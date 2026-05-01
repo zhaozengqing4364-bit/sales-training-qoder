@@ -63,6 +63,7 @@ class CrossEncoderSettings(BaseModel):
 
 class CrossEncoderSettingsSafe(BaseModel):
     """Cross-encoder settings without API key for responses."""
+
     backend: str | None = None
     model: str | None = None
     device: str | None = None
@@ -74,12 +75,8 @@ class CreateRagProfileRequest(BaseModel):
     description: str | None = Field(None, max_length=500)
     is_system_default: bool = False
     chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
-    semantic_cache: SemanticCacheSettings = Field(
-        default_factory=SemanticCacheSettings
-    )
-    cross_encoder: CrossEncoderSettings = Field(
-        default_factory=CrossEncoderSettings
-    )
+    semantic_cache: SemanticCacheSettings = Field(default_factory=SemanticCacheSettings)
+    cross_encoder: CrossEncoderSettings = Field(default_factory=CrossEncoderSettings)
 
 
 class UpdateRagProfileRequest(BaseModel):
@@ -115,10 +112,7 @@ class AssignRagProfileRequest(BaseModel):
 
 def _row_to_response(row: Any, applied_kb_count: int = 0) -> dict[str, Any]:
     """Convert a RagProfile DB row to API response dict."""
-    has_api_key = bool(
-        row.cross_encoder_api_key
-        and row.cross_encoder_api_key.strip()
-    )
+    has_api_key = bool(row.cross_encoder_api_key and row.cross_encoder_api_key.strip())
     return {
         "id": row.id,
         "name": row.name,
@@ -248,9 +242,7 @@ async def list_rag_profiles(
 
     return {
         "success": True,
-        "data": [
-            _row_to_response(p, kb_counts.get(p.id, 0)) for p in profiles
-        ],
+        "data": [_row_to_response(p, kb_counts.get(p.id, 0)) for p in profiles],
     }
 
 
@@ -262,9 +254,7 @@ async def get_rag_profile(
     """Get a single RAG configuration profile."""
     from common.knowledge.rag_profile_models import RagProfile
 
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="RAG profile not found")
@@ -285,9 +275,7 @@ async def update_rag_profile(
     """Update a RAG configuration profile."""
     from common.knowledge.rag_profile_models import RagProfile
 
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="RAG profile not found")
@@ -320,9 +308,7 @@ async def delete_rag_profile(
     from common.knowledge.models import KnowledgeBase
     from common.knowledge.rag_profile_models import RagProfile
 
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="RAG profile not found")
@@ -360,9 +346,7 @@ async def set_default_rag_profile(
     """Set a profile as the system default."""
     from common.knowledge.rag_profile_models import RagProfile
 
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="RAG profile not found")
@@ -394,9 +378,7 @@ async def get_profile_knowledge_bases(
     from common.knowledge.rag_profile_models import RagProfile
 
     # Verify profile exists
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="RAG profile not found")
 

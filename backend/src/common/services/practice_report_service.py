@@ -36,13 +36,15 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_AUDIO_FAILURE_TOKENS = frozenset({
-    "signing_failed",
-    "oss_put_failed",
-    "register_failed",
-    "network_error",
-    "unknown",
-})
+_AUDIO_FAILURE_TOKENS = frozenset(
+    {
+        "signing_failed",
+        "oss_put_failed",
+        "register_failed",
+        "network_error",
+        "unknown",
+    }
+)
 
 
 class PracticeAudioAuditService:
@@ -74,7 +76,9 @@ class PracticeAudioAuditService:
 
         voice_policy = session.voice_policy_snapshot or {}
         runtime_metrics = (
-            voice_policy.get("runtime_metrics") if isinstance(voice_policy, dict) else None
+            voice_policy.get("runtime_metrics")
+            if isinstance(voice_policy, dict)
+            else None
         )
         audio_audit_raw: dict[str, Any] = {}
         if isinstance(runtime_metrics, dict):
@@ -105,9 +109,7 @@ class PracticeAudioAuditService:
 
             playback_path = None
             if seg.upload_status == "uploaded":
-                playback_path = (
-                    f"/api/v1/sessions/{session_id}/audio-segments/{seg.segment_sequence}"
-                )
+                playback_path = f"/api/v1/sessions/{session_id}/audio-segments/{seg.segment_sequence}"
 
             segment_schemas.append(
                 AudioAuditSegmentSchema(
@@ -142,7 +144,9 @@ class PracticeAudioAuditService:
             failed_segments=failed_count,
             total_bytes=total_bytes,
             latest_segment_sequence=latest_sequence,
-            storage_prefix=audio_audit_raw.get("storage_prefix", f"audio/{session_id}/"),
+            storage_prefix=audio_audit_raw.get(
+                "storage_prefix", f"audio/{session_id}/"
+            ),
             last_uploaded_at=last_uploaded_at,
             learner_status=learner_status,
             degraded_reasons=degraded_reasons,
@@ -182,7 +186,9 @@ class PracticeReportService:
                 accuracy_score=session.accuracy_score or 0,
                 completeness_score=session.completeness_score or 0,
                 overall_score=self._overall_score(session),
-                suggestions=["Great practice! Keep working on your presentation skills."],
+                suggestions=[
+                    "Great practice! Keep working on your presentation skills."
+                ],
                 audio_url=session.audio_url,
                 transcript_url=session.transcript_url,
                 voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
@@ -211,7 +217,10 @@ class PracticeReportService:
         await self._maybe_generate_comprehensive_sales_report(session_id)
         suggestions = ["会话已结束，可查看历史反馈并继续练习。"]
         if summary is not None:
-            suggestions = [*summary.strengths, f"Improvement: {summary.actionable_feedback}"]
+            suggestions = [
+                *summary.strengths,
+                f"Improvement: {summary.actionable_feedback}",
+            ]
 
         return SessionReport(
             session_id=session_id,
@@ -338,7 +347,9 @@ class PracticeReportService:
                 else projection.effectiveness_snapshot
             ),
             pass_flags=(
-                None if scenario_type_enum == ScenarioType.PRESENTATION else projection.pass_flags
+                None
+                if scenario_type_enum == ScenarioType.PRESENTATION
+                else projection.pass_flags
             ),
             main_capability_passed=(
                 None
@@ -351,16 +362,24 @@ class PracticeReportService:
                 else projection.overall_result
             ),
             main_issue=(
-                None if scenario_type_enum == ScenarioType.PRESENTATION else projection.main_issue
+                None
+                if scenario_type_enum == ScenarioType.PRESENTATION
+                else projection.main_issue
             ),
             next_goal=(
-                None if scenario_type_enum == ScenarioType.PRESENTATION else projection.next_goal
+                None
+                if scenario_type_enum == ScenarioType.PRESENTATION
+                else projection.next_goal
             ),
             stage_summary=(
-                [] if scenario_type_enum == ScenarioType.PRESENTATION else projection.stage_summary
+                []
+                if scenario_type_enum == ScenarioType.PRESENTATION
+                else projection.stage_summary
             ),
             evaluable=(
-                None if scenario_type_enum == ScenarioType.PRESENTATION else projection.evaluable
+                None
+                if scenario_type_enum == ScenarioType.PRESENTATION
+                else projection.evaluable
             ),
             not_evaluable_reason=(
                 None
@@ -406,9 +425,7 @@ class PracticeReportService:
             presentation_page_metadata_complete=evidence_completeness.get(
                 "page_metadata_complete"
             ),
-            presentation_degraded_reasons=evidence_completeness.get(
-                "degraded_reasons"
-            ),
+            presentation_degraded_reasons=evidence_completeness.get("degraded_reasons"),
         )
         return report
 
@@ -419,7 +436,9 @@ class PracticeReportService:
         fallback_ruleset_version: str,
         fallback_score_basis: str,
     ) -> tuple[str, str, dict[str, Any] | None]:
-        active = await ScoringRulesetService(self.db).get_active_or_default(scenario_type)
+        active = await ScoringRulesetService(self.db).get_active_or_default(
+            scenario_type
+        )
         if active.source == "default":
             return fallback_ruleset_version, fallback_score_basis, None
         metadata = ScoringRulesetService.report_metadata_for_view(active)
@@ -449,7 +468,9 @@ class PracticeReportService:
                 fallback_logic_score,
                 fallback_accuracy_score,
                 fallback_completeness_score,
-                float(presentation_review.get("overall_score") or fallback_overall_score),
+                float(
+                    presentation_review.get("overall_score") or fallback_overall_score
+                ),
             )
 
         by_name: dict[str, float] = {}
@@ -708,7 +729,9 @@ class PracticeAudioSegmentService:
             "upload_status": segment.upload_status,
             "size_bytes": segment.size_bytes,
             "duration_ms": segment.duration_ms,
-            "created_at": segment.created_at.isoformat() if segment.created_at else None,
+            "created_at": segment.created_at.isoformat()
+            if segment.created_at
+            else None,
         }
 
     async def list_audio_segments(self, *, session_id: str) -> list[dict[str, Any]]:
@@ -801,7 +824,9 @@ class PracticeAudioSegmentService:
             "segment_sequence": segment.segment_sequence,
             "upload_status": segment.upload_status,
             "error_message": segment.error_message,
-            "created_at": segment.created_at.isoformat() if segment.created_at else None,
+            "created_at": segment.created_at.isoformat()
+            if segment.created_at
+            else None,
         }
 
     async def _update_uploaded_audio_audit_metrics(

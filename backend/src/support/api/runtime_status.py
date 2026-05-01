@@ -121,7 +121,9 @@ class SupportRuntimeFaultsEnvelope(BaseModel):
 
 @router.get("/overview", response_model=SupportRuntimeOverviewEnvelope)
 async def get_runtime_overview(
-    window_hours: int = Query(24, ge=1, le=168, description="Rolling time window in hours"),
+    window_hours: int = Query(
+        24, ge=1, le=168, description="Rolling time window in hours"
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:

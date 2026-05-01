@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 import { HighlightList } from "@/components/highlights";
-import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { AudioAuditCardWithSession as AudioAuditCard } from "@/components/audio/AudioAuditCard";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -1421,8 +1420,6 @@ export default function ComprehensiveReportPage() {
                     </p>
                 </div>
             </GlassCard>
-
-            <LearnerHelpCard context="report" className="mb-6" />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <GlassCard className="p-6 border border-blue-100 bg-blue-50/40">

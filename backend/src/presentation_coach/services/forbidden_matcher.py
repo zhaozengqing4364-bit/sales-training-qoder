@@ -2,6 +2,7 @@
 Forbidden Word Pattern Matcher
 Regex-based forbidden phrase detection
 """
+
 import re
 
 from common.monitoring.logger import get_logger
@@ -30,7 +31,7 @@ class ForbiddenWordMatcher:
                 try:
                     self.patterns[phrase] = {
                         "pattern": re.compile(phrase, re.IGNORECASE),
-                        "suggested": word.get("suggested_alternative", "")
+                        "suggested": word.get("suggested_alternative", ""),
                     }
                 except re.error as e:
                     logger.error(f"Invalid regex pattern '{phrase}': {str(e)}")
@@ -39,7 +40,7 @@ class ForbiddenWordMatcher:
                 escaped = re.escape(phrase)
                 self.patterns[phrase] = {
                     "pattern": re.compile(escaped, re.IGNORECASE),
-                    "suggested": word.get("suggested_alternative", "")
+                    "suggested": word.get("suggested_alternative", ""),
                 }
 
     def find_matches(self, transcript: str) -> list[dict]:
@@ -55,11 +56,13 @@ class ForbiddenWordMatcher:
             pattern = config["pattern"]
 
             if pattern.search(transcript):
-                matches.append({
-                    "phrase": phrase,
-                    "suggested_alternative": config["suggested"],
-                    "match": transcript  # Return full matched segment
-                })
+                matches.append(
+                    {
+                        "phrase": phrase,
+                        "suggested_alternative": config["suggested"],
+                        "match": transcript,  # Return full matched segment
+                    }
+                )
 
         return matches
 

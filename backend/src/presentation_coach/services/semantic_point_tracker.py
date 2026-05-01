@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 @dataclass
 class PointCoverageResult:
     """Result of checking if a talking point is covered"""
+
     point_id: str
     point_content: str
     is_covered: bool
@@ -94,7 +95,9 @@ class SemanticPointTracker:
         )
 
         if not transcript_embedding_result.is_success:
-            logger.warning("Failed to get transcript embedding, falling back to keyword matching")
+            logger.warning(
+                "Failed to get transcript embedding, falling back to keyword matching"
+            )
             return self._fallback_keyword_matching(transcript)
 
         transcript_embedding = transcript_embedding_result.value
@@ -198,19 +201,105 @@ class SemanticPointTracker:
 
         # Filter out common stop words
         stop_words = {
-            "the", "a", "an", "is", "are", "was", "were", "be", "been",
-            "being", "have", "has", "had", "do", "does", "did", "will",
-            "would", "could", "should", "may", "might", "must", "shall",
-            "can", "need", "dare", "ought", "used", "to", "of", "in",
-            "for", "on", "with", "at", "by", "from", "as", "into",
-            "through", "during", "before", "after", "above", "below",
-            "between", "under", "again", "further", "then", "once",
-            "here", "there", "when", "where", "why", "how", "all",
-            "each", "few", "more", "most", "other", "some", "such",
-            "no", "nor", "not", "only", "own", "same", "so", "than",
-            "too", "very", "just", "and", "but", "if", "or", "because",
-            "until", "while", "这", "那", "的", "了", "是", "在", "有",
-            "我", "你", "他", "她", "它", "我们", "你们", "他们",
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "ought",
+            "used",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "under",
+            "again",
+            "further",
+            "then",
+            "once",
+            "here",
+            "there",
+            "when",
+            "where",
+            "why",
+            "how",
+            "all",
+            "each",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "nor",
+            "not",
+            "only",
+            "own",
+            "same",
+            "so",
+            "than",
+            "too",
+            "very",
+            "just",
+            "and",
+            "but",
+            "if",
+            "or",
+            "because",
+            "until",
+            "while",
+            "这",
+            "那",
+            "的",
+            "了",
+            "是",
+            "在",
+            "有",
+            "我",
+            "你",
+            "他",
+            "她",
+            "它",
+            "我们",
+            "你们",
+            "他们",
         }
 
         return [w for w in words if w not in stop_words and len(w) > 1]
@@ -362,14 +451,18 @@ class FeedbackDeduplicator:
         self._last_feedback[feedback_key] = now
         return True
 
-    def record_feedback(self, feedback_type: str, content: str, metadata: dict[str, Any] | None = None) -> None:
+    def record_feedback(
+        self, feedback_type: str, content: str, metadata: dict[str, Any] | None = None
+    ) -> None:
         """Record feedback that was sent"""
-        self._feedback_history.append({
-            "type": feedback_type,
-            "content": content,
-            "timestamp": datetime.now(),
-            "metadata": metadata or {},
-        })
+        self._feedback_history.append(
+            {
+                "type": feedback_type,
+                "content": content,
+                "timestamp": datetime.now(),
+                "metadata": metadata or {},
+            }
+        )
 
     def get_recent_feedback(self, count: int = 10) -> list[dict[str, Any]]:
         """Get recent feedback history"""

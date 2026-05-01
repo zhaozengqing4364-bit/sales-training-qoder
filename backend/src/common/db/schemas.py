@@ -371,7 +371,9 @@ class PresentationReviewPageSummary(BaseModel):
     key_points: list[str] = Field(default_factory=list)
     matched_required_points: list[str] = Field(default_factory=list)
     missing_required_points: list[str] = Field(default_factory=list)
-    issue_clusters: list[PresentationReviewPageIssueCluster] = Field(default_factory=list)
+    issue_clusters: list[PresentationReviewPageIssueCluster] = Field(
+        default_factory=list
+    )
     summary: str
 
 
@@ -399,7 +401,9 @@ class PresentationReviewDiagnostics(BaseModel):
 
 class PresentationReview(BaseModel):
     overall_score: float = Field(..., ge=0, le=100)
-    dimension_scores: list[PresentationReviewDimensionScore] = Field(default_factory=list)
+    dimension_scores: list[PresentationReviewDimensionScore] = Field(
+        default_factory=list
+    )
     page_summaries: list[PresentationReviewPageSummary] = Field(default_factory=list)
     required_talking_points: PresentationRequiredTalkingPointCoverage
     issue_counts: dict[str, int] = Field(default_factory=dict)
@@ -459,25 +463,47 @@ class InterruptionEventResponse(BaseModel):
 # ========== Audio Audit Schemas ==========
 class AudioAuditSegmentSchema(BaseModel):
     """Single audio segment metadata for the learner-facing audit trail."""
-    segment_sequence: int = Field(..., description="Zero-based segment index within the session")
-    created_at: datetime | None = Field(None, description="Segment registration timestamp")
-    duration_ms: int | None = Field(None, description="Segment duration in milliseconds")
+
+    segment_sequence: int = Field(
+        ..., description="Zero-based segment index within the session"
+    )
+    created_at: datetime | None = Field(
+        None, description="Segment registration timestamp"
+    )
+    duration_ms: int | None = Field(
+        None, description="Segment duration in milliseconds"
+    )
     size_bytes: int | None = Field(None, description="Segment upload size in bytes")
-    upload_status: str = Field(..., description="Upload status: pending | uploaded | failed")
-    playback_path: str | None = Field(None, description="Stable handoff path for signed-URL redirect")
-    error_message: str | None = Field(None, description="Compact error token when upload_status is 'failed'")
+    upload_status: str = Field(
+        ..., description="Upload status: pending | uploaded | failed"
+    )
+    playback_path: str | None = Field(
+        None, description="Stable handoff path for signed-URL redirect"
+    )
+    error_message: str | None = Field(
+        None, description="Compact error token when upload_status is 'failed'"
+    )
 
 
 class AudioAuditSummarySchema(BaseModel):
     """Aggregated audio recording status for a session."""
-    recording_status: str = Field(..., description="Raw recording status from runtime metrics")
+
+    recording_status: str = Field(
+        ..., description="Raw recording status from runtime metrics"
+    )
     total_segments: int = Field(0, description="Total segments registered")
     uploaded_segments: int = Field(0, description="Segments successfully uploaded")
     failed_segments: int = Field(0, description="Segments that failed to upload")
     total_bytes: int = Field(0, description="Total uploaded bytes across all segments")
-    latest_segment_sequence: int | None = Field(None, description="Highest segment sequence seen")
-    storage_prefix: str | None = Field(None, description="OSS storage prefix for this session's audio")
-    last_uploaded_at: str | None = Field(None, description="ISO-8601 timestamp of last upload")
+    latest_segment_sequence: int | None = Field(
+        None, description="Highest segment sequence seen"
+    )
+    storage_prefix: str | None = Field(
+        None, description="OSS storage prefix for this session's audio"
+    )
+    last_uploaded_at: str | None = Field(
+        None, description="ISO-8601 timestamp of last upload"
+    )
     learner_status: Literal["available", "partial", "missing"] = Field(
         "missing",
         description="Derived learner-facing status: available if all uploaded, partial if some, missing if none",
@@ -490,6 +516,7 @@ class AudioAuditSummarySchema(BaseModel):
 
 class AudioAuditPayloadSchema(BaseModel):
     """Full audio audit payload included in report and replay responses."""
+
     summary: AudioAuditSummarySchema
     segments: list[AudioAuditSegmentSchema] = Field(default_factory=list)
 

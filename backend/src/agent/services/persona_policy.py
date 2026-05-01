@@ -176,16 +176,20 @@ def _normalize_customer_pressure(
     raw_pressure_direction = _as_dict(raw_customer_pressure.get("pressure_direction"))
     raw_follow_up_behavior = _as_dict(raw_customer_pressure.get("follow_up_behavior"))
 
-    explicit_has_pressure = bool(raw_pressure_direction) or bool(raw_follow_up_behavior) or any(
-        key in raw_customer_pressure
-        for key in (
-            "sales_focus",
-            "value_axes",
-            "objection_axes",
-            "expected_customer_questions",
-            "question_strategy",
-            "revisit_on_evasion",
-            "require_evidence",
+    explicit_has_pressure = (
+        bool(raw_pressure_direction)
+        or bool(raw_follow_up_behavior)
+        or any(
+            key in raw_customer_pressure
+            for key in (
+                "sales_focus",
+                "value_axes",
+                "objection_axes",
+                "expected_customer_questions",
+                "question_strategy",
+                "revisit_on_evasion",
+                "require_evidence",
+            )
         )
     )
     legacy_has_pressure = any(
@@ -310,7 +314,9 @@ def normalize_persona_policy(
     """
     policy = _as_dict(raw_policy)
 
-    system_prompt = str(policy.get("system_prompt") or fallback_system_prompt or "").strip()
+    system_prompt = str(
+        policy.get("system_prompt") or fallback_system_prompt or ""
+    ).strip()
 
     knowledge_base_ids = _dedupe_kb_ids(
         policy.get("knowledge_base_ids")
@@ -408,4 +414,6 @@ def sync_legacy_persona_fields(persona: Any, persona_policy: dict[str, Any]) -> 
     if persona is None:
         return
     persona.system_prompt = str(persona_policy.get("system_prompt", "") or "").strip()
-    persona.knowledge_base_ids = _dedupe_kb_ids(persona_policy.get("knowledge_base_ids"))
+    persona.knowledge_base_ids = _dedupe_kb_ids(
+        persona_policy.get("knowledge_base_ids")
+    )

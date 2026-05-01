@@ -16,8 +16,6 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import httpx
-import jwt
 from jwt import InvalidTokenError as JWTError
 from passlib.context import CryptContext
 from sqlalchemy import cast, or_, select

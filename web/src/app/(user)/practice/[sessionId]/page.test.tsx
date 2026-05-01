@@ -51,11 +51,16 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-    Button: ({ children, asChild: _asChild, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => (
-        <button type="button" {...props}>
-            {children}
-        </button>
-    ),
+    Button: ({ children, asChild, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => {
+        if (asChild) {
+            return <>{children}</>;
+        }
+        return (
+            <button type="button" {...props}>
+                {children}
+            </button>
+        );
+    },
 }));
 
 vi.mock("@/components/ui/chat-bubble", () => ({
@@ -304,7 +309,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(getPresentationProgressMock).toHaveBeenCalledWith("presentation-1");
     });
 
-    it("renders a minimal sales preflight brief before the learner starts speaking", async () => {
+    it("omits the sales preflight and inline help while exposing a header training-lobby return", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
             lockedVoiceMode: "legacy",
@@ -318,18 +323,19 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         render(<PracticeSessionPage />);
         await flushPreflightEffects();
 
-        expect(await screen.findByText("开始前先看本次练习重点")).toBeTruthy();
-        expect(screen.getByText("围绕「企业版销售教练」进行销售对练，开口前先想好价值主张和下一步推进。", { exact: true })).toBeTruthy();
-        expect(screen.getByText("系统会重点看价值翻译、证据支撑和异议推进的完成度。", { exact: true })).toBeTruthy();
-        expect(screen.getByText("谨慎型采购经理：会反复确认投入产出、落地周期和风险控制。", { exact: true })).toBeTruthy();
-        expect(screen.getByText("练习中遇到异常怎么办？")).toBeTruthy();
-        expect(screen.getByText(/麦克风或连接异常时，先按故障面板动作重试/)).toBeTruthy();
+        expect(screen.getByText("销售对练")).toBeTruthy();
+        expect(screen.queryByText("开练前预告")).toBeNull();
+        expect(screen.queryByText("开始前先看本次练习重点")).toBeNull();
+        expect(screen.queryByText("练习中遇到异常怎么办？")).toBeNull();
+        expect(screen.queryByText(/麦克风或连接异常时，先按故障面板动作重试/)).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: /返回训练大厅/ }));
+        expect(pushMock).toHaveBeenCalledWith("/training");
         const mobileQuickActions = screen.getByRole("navigation", { name: "移动快捷入口" });
         expect(mobileQuickActions).toBeTruthy();
         expect(within(mobileQuickActions).getByRole("link", { name: /训练大厅/ }).getAttribute("href")).toBe("/training");
     });
 
-    it("shows a presentation page focus in preflight and the learner panel", async () => {
+    it("shows a presentation page focus in the learner panel without restoring preflight", async () => {
         searchParamsMock.current = "scenario_type=presentation&presentation_id=presentation-1&focus=presentation_page&page=2&source_session_id=session-previous";
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "presentation",
@@ -344,10 +350,10 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         render(<PracticeSessionPage />);
         await flushPreflightEffects();
 
-        expect(await screen.findByText("开始前先看本次练习重点")).toBeTruthy();
-        expect(screen.getAllByText("本轮重点页").length).toBeGreaterThan(0);
-        expect(screen.getByText("第 2 页")).toBeTruthy();
-        expect(screen.getAllByText(/先补齐这一页的必讲点、缺失点或案例证据/).length).toBeGreaterThan(0);
+        expect(screen.queryByText("开始前先看本次练习重点")).toBeNull();
+        expect(screen.queryByText("本轮重点页")).toBeNull();
+        expect(screen.queryByText("第 2 页")).toBeNull();
+        expect(screen.queryByText(/先补齐这一页的必讲点、缺失点或案例证据/)).toBeNull();
         expect(screen.getAllByText("panel-focus-page:2").length).toBeGreaterThan(0);
     });
 
@@ -377,8 +383,8 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         render(<PracticeSessionPage />);
         await flushPreflightEffects();
 
-        expect(await screen.findByText("开始前先看本次练习重点")).toBeTruthy();
-        expect(screen.getByText("第 3 页")).toBeTruthy();
+        expect(screen.queryByText("开始前先看本次练习重点")).toBeNull();
+        expect(screen.queryByText("第 3 页")).toBeNull();
         expect(screen.queryByText("第 2 页")).toBeNull();
         expect(screen.getAllByText("panel-focus-page:3").length).toBeGreaterThan(0);
     });
@@ -398,7 +404,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         render(<PracticeSessionPage />);
         await flushPreflightEffects();
 
-        expect(await screen.findByText("开始前先看本次练习重点")).toBeTruthy();
+        expect(screen.queryByText("开始前先看本次练习重点")).toBeNull();
         expect(screen.queryByText("本轮重点页")).toBeNull();
         expect(screen.queryByText(/panel-focus-page/)).toBeNull();
     });

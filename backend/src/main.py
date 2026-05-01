@@ -7,42 +7,56 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
+from contextlib import asynccontextmanager
+
+# Add src to path for imports when this module is imported as src.main
+# or executed directly as main.py.
+sys.path.insert(0, os.path.dirname(__file__))
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket
-from fastapi.responses import JSONResponse, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Add src to path for imports when this module is executed directly.
-sys.path.insert(0, os.path.dirname(__file__))
-
+import websocket_routes as _presentation_websocket_routes
 from admin.api.admin import router as admin_presentations_router
-from admin.api.model_configs import router as model_configs_router
-from admin.api.system_logs import router as admin_system_logs_router
-from admin.api.training_records import router as admin_training_records_router
 from admin.api.analytics import router as admin_analytics_router
 from admin.api.interventions import router as admin_interventions_router
-from admin.api.voice_runtime import router as voice_runtime_router
-from admin.api.presentation_ai import router as presentation_ai_router
-from admin.api.release_verification import router as release_verification_router
 from admin.api.knowledge_answer_config import router as knowledge_answer_config_router
+from admin.api.model_configs import router as model_configs_router
+from admin.api.presentation_ai import router as presentation_ai_router
 from admin.api.rag_profiles import router as rag_profiles_router
+from admin.api.release_verification import router as release_verification_router
+from admin.api.system_logs import router as admin_system_logs_router
+from admin.api.training_records import router as admin_training_records_router
 
 # Admin API (users, training records, system logs)
 from admin.api.users import router as admin_users_router
+from admin.api.voice_runtime import router as voice_runtime_router
 from agent.api.agent_personas import admin_router as agent_persona_admin_router
 
 # Agent Platform API
 from agent.api.agents import admin_router as agent_admin_router
 from agent.api.agents import user_router as agent_user_router
 from agent.api.personas import admin_router as persona_admin_router
+from app_factory import create_app as _create_app
+from app_lifespan import lifespan as _factory_lifespan
 from common.api import analytics, dashboard, practice, training, users
 from common.api.knowledge_debug import router as knowledge_debug_router
-from common.auth.api import error_response, router as auth_router
-from common.auth.api import get_auth_config_diagnostics
+from common.auth.api import error_response, get_auth_config_diagnostics
+from common.auth.api import router as auth_router
 
 # Development mode auth (for testing without WeChat SSO)
 from common.auth.service import (
@@ -58,14 +72,15 @@ from common.auth.service import (
     set_auth_session_cookie,
     should_enforce_csrf,
     validate_csrf_request,
+    verify_token,
 )
 
 # Conversation Replay API
 from common.conversation.api import router as replay_router
 from common.db.models import PracticeSession, Scenario
 from common.db.session import (
-    AsyncSessionLocal,
     STARTUP_DB_AUTHORITY,
+    AsyncSessionLocal,
     get_db,
     init_db,
 )
@@ -74,13 +89,13 @@ from common.error_handling.middleware import (
     global_exception_handler,
     http_exception_handler,
 )
-from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 
 # Knowledge API
 from common.knowledge.api import admin_router as knowledge_admin_router
 from common.knowledge.api import internal_router as knowledge_internal_router
-from common.monitoring.logger import configure_logging, get_logger
+from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.health import build_health_payload
+from common.monitoring.logger import configure_logging, get_logger
 from common.monitoring.metrics import (
     MetricsMiddleware,
     get_metrics,
@@ -88,17 +103,24 @@ from common.monitoring.metrics import (
 )
 from common.monitoring.otel import initialize_otel
 from common.monitoring.trace_context import normalize_trace_id
+from common.websocket.session_manager import get_session_manager
+
+# Evaluation API
+from evaluation.api import router as evaluation_router
 from presentation_coach.api import presentations
+from presentation_coach.websocket.presentation_handler import (
+    PresentationWebSocketHandler,
+)
+from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
+    PresentationStepFunRealtimeHandler,
+)
 
 # Prompt Templates API
 from prompt_templates.api.routes import router as prompt_templates_router
 from prompt_templates.api.routes import scenario_router as scenario_prompts_router
-from support.api.runtime_status import router as support_runtime_router
-
-# Evaluation API
-from evaluation.api import router as evaluation_router
 from sales_bot.api.scenarios import router as scenarios_router
 from sales_bot.websocket.router import router as sales_ws_router
+from support.api.runtime_status import router as support_runtime_router
 
 load_dotenv()
 configure_logging(os.getenv("LOG_LEVEL", "INFO"))
@@ -164,8 +186,8 @@ async def lifespan(app: FastAPI):
     initialize_otel(app)
 
     # P0-1: Validate JWT secret in non-development environments
-    from common.config import settings
     from common.auth.service import JWT_SECRET
+    from common.config import settings
 
     env = settings.ENVIRONMENT
     if env != "development" and (not settings.SECRET_KEY or settings.SECRET_KEY == ""):
@@ -359,7 +381,9 @@ async def enforce_cookie_session_csrf(request: Request, call_next):
         try:
             validate_csrf_request(request)
         except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            return JSONResponse(
+                status_code=exc.status_code, content={"detail": exc.detail}
+            )
 
     return await call_next(request)
 
@@ -535,6 +559,7 @@ app.include_router(
     tags=["admin-interventions"],
     dependencies=[Depends(get_current_admin_user)],
 )
+app.include_router(release_verification_router, prefix="/api/v1")
 app.include_router(
     admin_system_logs_router,
     prefix="/api/v1",
@@ -616,6 +641,7 @@ async def _handle_presentation_websocket(
 ) -> None:
     """
     Backward-compatible presentation WebSocket helper.
+    """
 
     resolved_session_id = _parse_session_id(session_id)
     if not resolved_session_id:
@@ -812,6 +838,52 @@ async def _is_presentation_kb_lock_unbound_session(session_id: str) -> bool:
 
 
 app.include_router(sales_ws_router, tags=["sales-websocket"])
+
+
+create_app = _create_app
+lifespan = _factory_lifespan
+
+_parse_session_id = _presentation_websocket_routes._parse_session_id
+_reject_invalid_presentation_session = (
+    _presentation_websocket_routes._reject_invalid_presentation_session
+)
+_normalize_requested_voice_mode = (
+    _presentation_websocket_routes._normalize_requested_voice_mode
+)
+_default_voice_mode = _presentation_websocket_routes._default_voice_mode
+_resolve_presentation_runtime = (
+    _presentation_websocket_routes._resolve_presentation_runtime
+)
+_is_presentation_kb_lock_unbound_session = (
+    _presentation_websocket_routes._is_presentation_kb_lock_unbound_session
+)
+_resolve_presentation_session_owner_id = (
+    _presentation_websocket_routes._resolve_presentation_session_owner_id
+)
+_is_admin_user_id = _presentation_websocket_routes._is_admin_user_id
+
+
+async def _handle_presentation_websocket(
+    websocket: WebSocket,
+    session_id: str | None,
+    token: str,
+    voice_mode: str | None = None,
+    trace_id: str = "",
+) -> None:
+    await _presentation_websocket_routes._handle_presentation_websocket(
+        websocket,
+        session_id,
+        token,
+        voice_mode,
+        trace_id,
+        resolve_runtime=_resolve_presentation_runtime,
+        is_kb_lock_unbound=_is_presentation_kb_lock_unbound_session,
+        resolve_owner_id=_resolve_presentation_session_owner_id,
+        is_admin_user_id=_is_admin_user_id,
+    )
+
+
+app = create_app()
 
 
 if __name__ == "__main__":

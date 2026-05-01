@@ -131,6 +131,9 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
 from sales_bot.websocket.components.stepfun_tool_helpers import (
     build_stepfun_tools_from_policy,
 )
+from sales_bot.websocket.components.stepfun_tts_contracts import (
+    DEFAULT_TTS_CHUNK_PROTOCOL_VERSION,
+)
 from sales_bot.websocket.components.stepfun_upstream_router import (
     UpstreamEventRoute,
     classify_upstream_event,
@@ -204,10 +207,19 @@ STEPFUN_RUNTIME_EVENT_INVENTORY: tuple[dict[str, Any], ...] = (
         "hidden_risk": "the timeout is now intentionally silent for learners, so operators still need diagnostics to distinguish a suppressed ASR timeout from an ordinary no-response turn.",
     },
 )
+from sales_bot.websocket.stepfun_realtime_connection import (
+    StepFunRealtimeConnectionMixin,
+)
 from sales_bot.websocket.stepfun_realtime_policy import StepFunRealtimePolicyMixin
 from sales_bot.websocket.stepfun_realtime_feedback import StepFunRealtimeFeedbackMixin
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
-from sales_bot.websocket.stepfun_realtime_sales_stage import StepFunRealtimeSalesStageMixin
+from sales_bot.websocket.stepfun_realtime_sales_stage import (
+    StepFunRealtimeSalesStageMixin,
+)
+from sales_bot.websocket.stepfun_runtime_types import (
+    FunctionCallState,
+    RealtimeResponseState,
+)
 
 
 class StepFunRealtimeHandler(
@@ -261,6 +273,7 @@ class StepFunRealtimeHandler(
             os.getenv("STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE", "24000")
         )
         self._stepfun_playback_rate = 1.0
+        self._tts_chunk_protocol_version = DEFAULT_TTS_CHUNK_PROTOCOL_VERSION
         self._stepfun_input_transcription_enabled = str(
             os.getenv("STEPFUN_REALTIME_ENABLE_INPUT_TRANSCRIPTION", "true")
         ).strip().lower() in {"1", "true", "yes", "on"}
@@ -900,87 +913,8 @@ class StepFunRealtimeHandler(
         )
 
     async def _restore_session_state(self, state: SessionStateSnapshot):
-        """Restore the minimal StepFun runtime subset required to continue training."""
+        """Restore reconnect state using the StepFun connection mixin authority."""
         await super()._restore_session_state(state)
-
-        runtime_state = (
-            state.runtime_state if isinstance(state.runtime_state, dict) else {}
-        )
-        reconnect_state_raw = runtime_state.get("reconnect_state")
-        reconnect_state: dict[str, Any] = (
-            copy.deepcopy(reconnect_state_raw)
-            if isinstance(reconnect_state_raw, dict)
-            else {}
-        )
-        self._connection_epoch = self._normalize_connection_epoch(
-            reconnect_state.get("connection_epoch")
-        )
-        self._connection_epoch = max(1, self._connection_epoch + 1)
-        self._last_disconnect_reason = (
-            str(reconnect_state.get("last_disconnect_reason") or "").strip() or None
-        )
-        self._last_runtime_error = self._copy_runtime_error(
-            reconnect_state.get("last_error")
-        )
-        await self._cancel_pending_response_after_commit()
-        self.session_id = state.session_id or self.session_id
-        self.user_id = state.user_id or self.user_id
-        self.turn_count = state.turn_count
-        self.session_status = state.session_status or self.session_status
-        self.ai_state = state.ai_state or "idle"
-        self.current_request_id = int(runtime_state.get("current_request_id") or 0)
-        self._last_emitted_stage = runtime_state.get("last_emitted_stage")
-        latest_score_snapshot = runtime_state.get("latest_score_snapshot")
-        self._latest_score_snapshot = normalize_score_snapshot(latest_score_snapshot)
-        latest_live_session_summary = runtime_state.get("latest_live_session_summary")
-        self._latest_live_session_summary = coerce_live_session_conclusion_summary(
-            latest_live_session_summary
-        )
-        latest_claim_truth = runtime_state.get("latest_claim_truth")
-        self._latest_claim_truth = (
-            copy.deepcopy(latest_claim_truth)
-            if isinstance(latest_claim_truth, dict)
-            else None
-        )
-        self._latest_action_card = None
-        self._objection_ledger = normalize_objection_ledger(
-            runtime_state.get("objection_ledger")
-        )
-        self._feedback_pacing_state = RealtimeFeedbackPacingState.from_dict(
-            runtime_state.get("feedback_pacing_state")
-        )
-        restored_coach_health = runtime_state.get("coach_health")
-        if isinstance(restored_coach_health, dict):
-            restored_status = str(restored_coach_health.get("status") or "healthy")
-            if restored_status not in {"healthy", "degraded", "resumed"}:
-                restored_status = "healthy"
-            restored_reason = restored_coach_health.get("reason")
-            self._coach_health = restored_status
-            self._coach_health_reason = (
-                str(restored_reason).strip()
-                if isinstance(restored_reason, str) and restored_reason.strip()
-                else None
-            )
-        else:
-            self._coach_health = "healthy"
-            self._coach_health_reason = None
-
-        self._reset_turn_runtime_state()
-        self._pending_response_after_commit = False
-        self._grounding_preparation_in_progress = False
-        self._last_final_transcript_text = ""
-        self._last_final_transcript_turn = None
-        self._last_final_transcript_at = 0.0
-
-        logger.info(
-            "Restored StepFun reconnect snapshot",
-            session_id=state.session_id,
-            turn_count=self.turn_count,
-            session_status=self.session_status,
-            ai_state=self.ai_state,
-            restored_runtime_keys=sorted(runtime_state.keys()),
-        )
-        await self._send_reconnection_success(self._create_state_snapshot())
 
     async def _save_session_state(self):
         """Persist reconnectable state, or clear dirty snapshots after terminal exits."""
@@ -3472,23 +3406,8 @@ class StepFunRealtimeHandler(
         return False
 
     async def sync_lifecycle_transition(self, transition) -> None:
-        """Mirror REST lifecycle transitions into the live StepFun runtime."""
+        """Mirror REST lifecycle transitions through the StepFun upstream mixin."""
         await super().sync_lifecycle_transition(transition)
-        self.session_scenario_type = transition.scenario_type or self.scenario
-
-        if transition.action in {"pause", "end"}:
-            await self._cancel_pending_response_after_commit()
-            self._reset_turn_runtime_state()
-            if self.upstream_ws is not None:
-                try:
-                    await self._clear_upstream_generation()
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Failed to sync StepFun upstream after REST lifecycle change",
-                        session_id=self.session_id,
-                        action=transition.action,
-                        error=str(exc),
-                    )
 
     async def _receive_upstream_events(self):
         """Receive events from StepFun and map them to frontend messages."""
@@ -3927,8 +3846,8 @@ class StepFunRealtimeHandler(
             )
 
     async def _handle_upstream_error(self, event: dict) -> None:
-        """Normalize upstream error and forward to frontend."""
-        await self._send_error("[STEPFUN_API_ERROR]", extract_error_message(event))
+        """Normalize upstream errors through the StepFun upstream mixin."""
+        await super()._handle_upstream_error(event)
 
     async def _flush_active_response(self, response_done_event: dict) -> bool:
         """Finalize active response and send final marker (or fallback)."""
@@ -4042,56 +3961,8 @@ class StepFunRealtimeHandler(
         return True
 
     async def _forward_audio_delta_chunk(self, delta_b64: str):
-        """Forward one upstream audio delta as frontend tts_chunk for low-latency playback."""
-        response_state = self._active_response
-        if not response_state:
-            return
-
-        chunk_index = response_state.chunk_index
-        output_format = self._stepfun_output_audio_format.lower()
-
-        try:
-            raw_bytes = base64.b64decode(delta_b64)
-        except (ValueError, RuntimeError):
-            logger.warning("Failed to decode StepFun audio delta")
-            return
-
-        if output_format == "pcm16":
-            duration_ms = int(
-                len(raw_bytes) / 2 / self._stepfun_output_sample_rate * 1000
-            )
-            audio_payload = base64.b64encode(raw_bytes).decode("utf-8")
-        else:
-            # Approximate mp3/other encoded chunk duration
-            duration_ms = max(1, len(raw_bytes) // 16)
-            audio_payload = delta_b64
-
-        response_state.total_duration_ms += max(0, duration_ms)
-
-        await self.manager.send_json(
-            self.websocket,
-            {
-                "type": "tts_chunk",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "stream_id": response_state.stream_id,
-                "request_id": response_state.request_id,
-                "data": {
-                    "chunk_index": chunk_index,
-                    "audio": audio_payload,
-                    "duration_ms": duration_ms,
-                    "is_final": False,
-                    "audio_format": output_format,
-                    "sample_rate": self._stepfun_output_sample_rate,
-                    "playback_rate": self._stepfun_playback_rate,
-                },
-            },
-        )
-
-        if not response_state.first_chunk_sent:
-            response_state.first_chunk_sent = True
-            await self._send_status("speaking")
-
-        response_state.chunk_index += 1
+        """Forward audio deltas through the StepFun upstream TTS contract builder."""
+        await super()._forward_audio_delta_chunk(delta_b64)
 
     async def _accumulate_function_call_arguments(
         self, event: dict, done: bool = False

@@ -7,16 +7,6 @@ import {
 } from "./runtime-faults";
 
 describe("runtime-faults", () => {
-  const faultBase = {
-    source: "session",
-    severity: "warning",
-    summary: "runtime fault",
-    detected_at: "2026-03-25T08:00:00Z",
-    scenario_type: "sales",
-    session_status: "completed",
-    report_status: "completed",
-  } satisfies Omit<SupportRuntimeFaultItem, "kind" | "session_id" | "diagnostics">;
-
   const runtimeFaults = [
     {
       source: "session",

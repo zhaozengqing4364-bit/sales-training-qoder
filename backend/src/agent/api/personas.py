@@ -8,6 +8,7 @@ References:
 - Design: Section 5 (Persona Service)
 - API Contract: docs/api-contract/personas.md
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -57,7 +58,7 @@ async def commit_or_500(db: AsyncSession, action: str) -> JSONResponse | None:
 async def create_persona(
     request: CreatePersonaRequest,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Create a new Persona - R3.1"""
     service = PersonaService(db)
@@ -76,8 +77,8 @@ async def create_persona(
             id=persona.id,
             name=persona.name,
             status=persona.status,
-            created_at=persona.created_at
-        ).model_dump()
+            created_at=persona.created_at,
+        ).model_dump(),
     }
 
 
@@ -89,7 +90,7 @@ async def list_personas(
     difficulty: str | None = Query(None),
     status: str | None = Query(None),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get paginated Persona list - R3.2"""
     service = PersonaService(db)
@@ -98,17 +99,14 @@ async def list_personas(
         page_size=page_size,
         category=category,
         difficulty=difficulty,
-        status=status
+        status=status,
     )
 
     return {
         "success": True,
         "data": PersonaListResponse(
-            personas=items,
-            total=total,
-            page=page,
-            page_size=page_size
-        ).model_dump()
+            personas=items, total=total, page=page, page_size=page_size
+        ).model_dump(),
     }
 
 
@@ -144,7 +142,7 @@ async def get_persona_policy_health(
 async def get_persona(
     persona_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get Persona details - R3.3"""
     service = PersonaService(db)
@@ -156,7 +154,7 @@ async def get_persona(
     persona = result.value
     return {
         "success": True,
-        "data": PersonaResponse.model_validate(persona).model_dump()
+        "data": PersonaResponse.model_validate(persona).model_dump(),
     }
 
 
@@ -165,7 +163,7 @@ async def update_persona(
     persona_id: str,
     request: UpdatePersonaRequest,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Update Persona - R3.4"""
     service = PersonaService(db)
@@ -180,7 +178,7 @@ async def update_persona(
         return commit_error
     return {
         "success": True,
-        "data": PersonaResponse.model_validate(persona).model_dump()
+        "data": PersonaResponse.model_validate(persona).model_dump(),
     }
 
 
@@ -188,7 +186,7 @@ async def update_persona(
 async def delete_persona(
     persona_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Delete Persona - R3.5"""
     service = PersonaService(db)
@@ -198,24 +196,21 @@ async def delete_persona(
         if result.fallback == "[PERSONA_IN_USE]":
             raise HTTPException(
                 status_code=400,
-                detail="Persona is linked to agents and cannot be deleted"
+                detail="Persona is linked to agents and cannot be deleted",
             )
         raise HTTPException(status_code=404, detail=result.fallback)
 
     commit_error = await commit_or_500(db, "delete_persona")
     if commit_error is not None:
         return commit_error
-    return {
-        "success": True,
-        "data": {"deleted": True}
-    }
+    return {"success": True, "data": {"deleted": True}}
 
 
 @admin_router.post("/{persona_id}/duplicate", response_model=dict)
 async def duplicate_persona(
     persona_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Duplicate Persona - R3.6"""
     service = PersonaService(db)
@@ -234,6 +229,6 @@ async def duplicate_persona(
             id=persona.id,
             name=persona.name,
             status=persona.status,
-            created_at=persona.created_at
-        ).model_dump()
+            created_at=persona.created_at,
+        ).model_dump(),
     }

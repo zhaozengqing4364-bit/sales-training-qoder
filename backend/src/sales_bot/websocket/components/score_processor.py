@@ -129,11 +129,13 @@ class ScoreProcessor:
                     trace_id=trace_id,
                 )
 
-            return Result.ok({
-                "overall_score": score_event.overall_score,
-                "dimension_scores": score_event.dimension_scores,
-                "suggestions": score_event.suggestions,
-            })
+            return Result.ok(
+                {
+                    "overall_score": score_event.overall_score,
+                    "dimension_scores": score_event.dimension_scores,
+                    "suggestions": score_event.suggestions,
+                }
+            )
 
         except Exception as e:
             logger.error(

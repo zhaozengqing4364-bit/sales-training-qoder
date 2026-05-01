@@ -2,6 +2,7 @@
 Required Talking Point Tracker
 Tracks which required points have been covered
 """
+
 from typing import Any
 
 from common.monitoring.logger import get_logger
@@ -42,14 +43,18 @@ class PointTracker:
         # Calculate coverage
         covered = list(self.covered_points)
         missing = [p for p in self.required_points if p not in self.covered_points]
-        coverage_percent = (len(covered) / len(self.required_points)) * 100 if self.required_points else 100
+        coverage_percent = (
+            (len(covered) / len(self.required_points)) * 100
+            if self.required_points
+            else 100
+        )
 
         return {
             "covered": covered,
             "missing": missing,
             "coverage_percent": coverage_percent,
             "total_required": len(self.required_points),
-            "total_covered": len(covered)
+            "total_covered": len(covered),
         }
 
     def get_missing_points(self) -> list[str]:

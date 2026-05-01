@@ -37,6 +37,7 @@ router = APIRouter(prefix="/admin/analytics", tags=["admin-analytics"])
 # Response schemas
 class GrowthMetrics(BaseModel):
     """Growth metrics compared to previous period"""
+
     users_rate: float
     sessions_rate: float
     score_rate: float
@@ -44,6 +45,7 @@ class GrowthMetrics(BaseModel):
 
 class OverviewResponse(BaseModel):
     """System overview response"""
+
     total_users: int
     active_users_today: int
     active_users_week: int
@@ -58,6 +60,7 @@ class OverviewResponse(BaseModel):
 
 class TrendDataPoint(BaseModel):
     """Single trend data point"""
+
     date: str
     sessions_count: int
     average_score: float
@@ -66,20 +69,23 @@ class TrendDataPoint(BaseModel):
 
 class ScoreDistribution(BaseModel):
     """Score distribution buckets"""
+
     excellent: int  # 90-100
-    good: int       # 70-89
-    fair: int       # 50-69
-    poor: int       # 0-49
+    good: int  # 70-89
+    fair: int  # 50-69
+    poor: int  # 0-49
 
 
 class TrendsResponse(BaseModel):
     """Trends data response"""
+
     trend_data: list[TrendDataPoint]
     score_distribution: ScoreDistribution
 
 
 class AgentStatsItem(BaseModel):
     """Agent statistics item"""
+
     agent_id: str
     agent_name: str
     category: str
@@ -90,6 +96,7 @@ class AgentStatsItem(BaseModel):
 
 class PersonaStatsItem(BaseModel):
     """Persona statistics item"""
+
     persona_id: str
     persona_name: str
     difficulty: str
@@ -99,6 +106,7 @@ class PersonaStatsItem(BaseModel):
 
 class AgentsResponse(BaseModel):
     """Agent and Persona statistics response"""
+
     agent_stats: list[AgentStatsItem]
     persona_stats: list[PersonaStatsItem]
     scenario_distribution: dict[str, int]
@@ -106,6 +114,7 @@ class AgentsResponse(BaseModel):
 
 class LeaderboardEntry(BaseModel):
     """Leaderboard entry"""
+
     rank: int
     user_id: str
     user_name: str
@@ -118,16 +127,13 @@ class LeaderboardEntry(BaseModel):
 
 class LeaderboardResponse(BaseModel):
     """Leaderboard response"""
+
     leaderboard: list[LeaderboardEntry]
 
 
 def success_response(data: Any, trace_id: str | None = None) -> dict:
     """Create unified success response"""
-    return {
-        "success": True,
-        "data": data,
-        "trace_id": trace_id or get_trace_id()
-    }
+    return {"success": True, "data": data, "trace_id": trace_id or get_trace_id()}
 
 
 def error_response(error_code: str, message: str, trace_id: str | None = None) -> dict:
@@ -136,16 +142,20 @@ def error_response(error_code: str, message: str, trace_id: str | None = None) -
         "success": False,
         "error": error_code,
         "message": message,
-        "trace_id": trace_id or get_trace_id()
+        "trace_id": trace_id or get_trace_id(),
     }
 
 
 @router.get("/overview", response_model=dict)
 async def get_analytics_overview(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
-    scenario_type: Literal["presentation", "sales"] | None = Query(None, description="Filter by scenario type"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "30d", description="Time range filter"
+    ),
+    scenario_type: Literal["presentation", "sales"] | None = Query(
+        None, description="Filter by scenario type"
+    ),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get system overview statistics
@@ -161,24 +171,22 @@ async def get_analytics_overview(
         extra={
             "time_range": time_range,
             "scenario_type": scenario_type,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await admin_analytics_service.get_overview_stats(
-        db=db,
-        time_range=time_range,
-        scenario_type=scenario_type
+        db=db, time_range=time_range, scenario_type=scenario_type
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[OVERVIEW_FAILED]",
-            "Failed to load overview statistics"
+            result.fallback or "[OVERVIEW_FAILED]", "Failed to load overview statistics"
         )
 
     # Convert dataclass to dict
     from dataclasses import asdict
+
     data = asdict(result.value)
 
     return success_response(data)
@@ -186,10 +194,14 @@ async def get_analytics_overview(
 
 @router.get("/trends", response_model=dict)
 async def get_trends_data(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
-    granularity: Literal["day", "week", "month"] = Query("day", description="Data granularity"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "30d", description="Time range filter"
+    ),
+    granularity: Literal["day", "week", "month"] = Query(
+        "day", description="Data granularity"
+    ),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get trend data for charts
@@ -203,20 +215,17 @@ async def get_trends_data(
         extra={
             "time_range": time_range,
             "granularity": granularity,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await admin_analytics_service.get_trends_data(
-        db=db,
-        time_range=time_range,
-        granularity=granularity
+        db=db, time_range=time_range, granularity=granularity
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[TRENDS_FAILED]",
-            "Failed to load trends data"
+            result.fallback or "[TRENDS_FAILED]", "Failed to load trends data"
         )
 
     return success_response(result.value)
@@ -224,10 +233,12 @@ async def get_trends_data(
 
 @router.get("/agents", response_model=dict)
 async def get_agent_stats(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "30d", description="Time range filter"
+    ),
     limit: int = Query(10, ge=1, le=50, description="Max items to return"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get Agent and Persona usage statistics
@@ -242,20 +253,17 @@ async def get_agent_stats(
         extra={
             "time_range": time_range,
             "limit": limit,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await admin_analytics_service.get_agent_stats(
-        db=db,
-        time_range=time_range,
-        limit=limit
+        db=db, time_range=time_range, limit=limit
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[AGENTS_FAILED]",
-            "Failed to load agent statistics"
+            result.fallback or "[AGENTS_FAILED]", "Failed to load agent statistics"
         )
 
     return success_response(result.value)
@@ -263,10 +271,12 @@ async def get_agent_stats(
 
 @router.get("/leaderboard", response_model=dict)
 async def get_leaderboard(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "30d", description="Time range filter"
+    ),
     limit: int = Query(50, ge=1, le=100, description="Max users to return"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get user leaderboard
@@ -281,20 +291,17 @@ async def get_leaderboard(
         extra={
             "time_range": time_range,
             "limit": limit,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await admin_analytics_service.get_leaderboard(
-        db=db,
-        time_range=time_range,
-        limit=limit
+        db=db, time_range=time_range, limit=limit
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[LEADERBOARD_FAILED]",
-            "Failed to load leaderboard"
+            result.fallback or "[LEADERBOARD_FAILED]", "Failed to load leaderboard"
         )
 
     return success_response({"leaderboard": result.value})
@@ -302,10 +309,16 @@ async def get_leaderboard(
 
 @router.get("/operating-pack", response_model=dict)
 async def get_operating_pack(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("7d", description="Time range filter"),
-    scenario_type: Literal["presentation", "sales"] | None = Query(None, description="Filter by scenario type"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "7d", description="Time range filter"
+    ),
+    scenario_type: Literal["presentation", "sales"] | None = Query(
+        None, description="Filter by scenario type"
+    ),
     limit: int = Query(10, ge=1, le=50, description="Max users per operating list"),
-    inactive_days: int = Query(7, ge=1, le=90, description="Minimum inactivity days for risk list"),
+    inactive_days: int = Query(
+        7, ge=1, le=90, description="Minimum inactivity days for risk list"
+    ),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -348,9 +361,11 @@ async def get_operating_pack(
 
 @router.get("/runtime-metrics", response_model=dict)
 async def get_runtime_metrics(
-    time_range: Literal["1h", "24h", "7d", "30d", "90d"] = Query("30d", description="Time range filter"),
+    time_range: Literal["1h", "24h", "7d", "30d", "90d"] = Query(
+        "30d", description="Time range filter"
+    ),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get key runtime metrics for dashboard (FR39)
@@ -367,21 +382,17 @@ async def get_runtime_metrics(
 
     logger.info(
         "Getting runtime metrics",
-        extra={
-            "time_range": time_range,
-            "user_id": str(current_user.user_id)
-        }
+        extra={"time_range": time_range, "user_id": str(current_user.user_id)},
     )
 
     result = await runtime_metrics_service.get_runtime_metrics(
-        db=db,
-        time_range=time_range
+        db=db, time_range=time_range
     )
 
     if not result.is_success:
         return error_response(
             result.fallback or "[RUNTIME_METRICS_FAILED]",
-            "Failed to load runtime metrics"
+            "Failed to load runtime metrics",
         )
 
     return success_response(asdict(result.value))
@@ -389,10 +400,12 @@ async def get_runtime_metrics(
 
 @router.get("/policy-effectiveness", response_model=dict)
 async def get_policy_effectiveness(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "30d", description="Time range filter"
+    ),
     limit: int = Query(10, ge=1, le=50, description="Max items to return"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get policy effectiveness metrics by Agent (FR39)
@@ -408,32 +421,30 @@ async def get_policy_effectiveness(
         extra={
             "time_range": time_range,
             "limit": limit,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await runtime_metrics_service.get_policy_effectiveness(
-        db=db,
-        time_range=time_range,
-        limit=limit
+        db=db, time_range=time_range, limit=limit
     )
 
     if not result.is_success:
         return error_response(
             result.fallback or "[POLICY_EFFECTIVENESS_FAILED]",
-            "Failed to load policy effectiveness"
+            "Failed to load policy effectiveness",
         )
 
-    return success_response({
-        "effectiveness": [asdict(item) for item in result.value]
-    })
+    return success_response({"effectiveness": [asdict(item) for item in result.value]})
 
 
 @router.get("/voice-mode-comparison", response_model=dict)
 async def get_voice_mode_comparison(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "30d", description="Time range filter"
+    ),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Compare performance between voice modes (StepFun vs Legacy) (FR39)
@@ -446,33 +457,29 @@ async def get_voice_mode_comparison(
 
     logger.info(
         "Getting voice mode comparison",
-        extra={
-            "time_range": time_range,
-            "user_id": str(current_user.user_id)
-        }
+        extra={"time_range": time_range, "user_id": str(current_user.user_id)},
     )
 
     result = await runtime_metrics_service.get_voice_mode_comparison(
-        db=db,
-        time_range=time_range
+        db=db, time_range=time_range
     )
 
     if not result.is_success:
         return error_response(
             result.fallback or "[VOICE_MODE_COMPARISON_FAILED]",
-            "Failed to load voice mode comparison"
+            "Failed to load voice mode comparison",
         )
 
-    return success_response({
-        "comparison": [asdict(item) for item in result.value]
-    })
+    return success_response({"comparison": [asdict(item) for item in result.value]})
 
 
 @router.get("/fallback-metrics", response_model=dict)
 async def get_fallback_metrics(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "30d", description="Time range filter"
+    ),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get fallback and degradation metrics (FR39)
@@ -485,21 +492,17 @@ async def get_fallback_metrics(
 
     logger.info(
         "Getting fallback metrics",
-        extra={
-            "time_range": time_range,
-            "user_id": str(current_user.user_id)
-        }
+        extra={"time_range": time_range, "user_id": str(current_user.user_id)},
     )
 
     result = await runtime_metrics_service.get_fallback_metrics(
-        db=db,
-        time_range=time_range
+        db=db, time_range=time_range
     )
 
     if not result.is_success:
         return error_response(
             result.fallback or "[FALLBACK_METRICS_FAILED]",
-            "Failed to load fallback metrics"
+            "Failed to load fallback metrics",
         )
 
     return success_response(asdict(result.value))
@@ -507,10 +510,12 @@ async def get_fallback_metrics(
 
 @router.get("/export")
 async def export_analytics(
-    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query(
+        "30d", description="Time range filter"
+    ),
     format: Literal["csv"] = Query("csv", description="Export format"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """
     Export analytics data as CSV
@@ -522,14 +527,16 @@ async def export_analytics(
         extra={
             "time_range": time_range,
             "format": format,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     # Fetch all data
     overview_result = await admin_analytics_service.get_overview_stats(db, time_range)
     trends_result = await admin_analytics_service.get_trends_data(db, time_range)
-    leaderboard_result = await admin_analytics_service.get_leaderboard(db, time_range, limit=100)
+    leaderboard_result = await admin_analytics_service.get_leaderboard(
+        db, time_range, limit=100
+    )
 
     # Create CSV content
     output = io.StringIO()
@@ -541,6 +548,7 @@ async def export_analytics(
 
     if overview_result.is_success:
         from dataclasses import asdict
+
         overview = asdict(overview_result.value)
         writer.writerow(["总用户数", overview["total_users"]])
         writer.writerow(["今日活跃用户", overview["active_users_today"]])
@@ -572,30 +580,36 @@ async def export_analytics(
 
     if trends_result.is_success:
         for point in trends_result.value.get("trend_data", []):
-            writer.writerow([
-                point["date"],
-                point["sessions_count"],
-                point["average_score"],
-                point["active_users"]
-            ])
+            writer.writerow(
+                [
+                    point["date"],
+                    point["sessions_count"],
+                    point["average_score"],
+                    point["active_users"],
+                ]
+            )
 
     writer.writerow([])
 
     # Leaderboard section
     writer.writerow(["=== 用户排行榜 ==="])
-    writer.writerow(["排名", "姓名", "部门", "练习次数", "平均分", "最高分", "总时长(分钟)"])
+    writer.writerow(
+        ["排名", "姓名", "部门", "练习次数", "平均分", "最高分", "总时长(分钟)"]
+    )
 
     if leaderboard_result.is_success:
         for entry in leaderboard_result.value:
-            writer.writerow([
-                entry["rank"],
-                entry["user_name"],
-                entry["department"] or "-",
-                entry["total_sessions"],
-                entry["average_score"],
-                entry["best_score"],
-                entry["total_duration_minutes"]
-            ])
+            writer.writerow(
+                [
+                    entry["rank"],
+                    entry["user_name"],
+                    entry["department"] or "-",
+                    entry["total_sessions"],
+                    entry["average_score"],
+                    entry["best_score"],
+                    entry["total_duration_minutes"],
+                ]
+            )
 
     # Generate filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -608,6 +622,6 @@ async def export_analytics(
         media_type="text/csv",
         headers={
             "Content-Disposition": f"attachment; filename={filename}",
-            "Content-Type": "text/csv; charset=utf-8-sig"  # BOM for Excel
-        }
+            "Content-Type": "text/csv; charset=utf-8-sig",  # BOM for Excel
+        },
     )

@@ -59,7 +59,9 @@ class ComprehensiveReportStageSummary(BaseModel):
     stage_number: int = Field(..., description="Stage number")
     start_turn: int = Field(default=0, description="Start turn index")
     end_turn: int = Field(default=0, description="End turn index")
-    average_score: float = Field(default=0.0, description="Average score for this stage")
+    average_score: float = Field(
+        default=0.0, description="Average score for this stage"
+    )
     key_points: list[str] = Field(default_factory=list, description="Key points")
     summary: str = Field(default="", description="Stage summary text")
 
@@ -80,14 +82,20 @@ class ComprehensiveReportResponse(BaseModel):
     """
 
     session_id: str = Field(default="", description="Practice session ID")
-    generated_at: str = Field(default="", description="Report generation timestamp (ISO format)")
+    generated_at: str = Field(
+        default="", description="Report generation timestamp (ISO format)"
+    )
     overall_score: float = Field(..., ge=0.0, le=100.0)
-    dimension_scores: dict[str, float] | list[ComprehensiveReportDimensionScore] = Field(default_factory=dict)
+    dimension_scores: dict[str, float] | list[ComprehensiveReportDimensionScore] = (
+        Field(default_factory=dict)
+    )
     key_strengths: list[str] = Field(default_factory=list)
     key_improvements: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     detailed_feedback: str = Field(default="")
-    stage_summaries: dict[str, Any] | list[ComprehensiveReportStageSummary] = Field(default_factory=dict)
+    stage_summaries: dict[str, Any] | list[ComprehensiveReportStageSummary] = Field(
+        default_factory=dict
+    )
 
 
 class DimensionScore(BaseModel):

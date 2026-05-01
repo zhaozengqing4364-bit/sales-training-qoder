@@ -3,6 +3,7 @@ ASR Provider Abstract Interface
 Constitution Principle II: Real-Time Priority - <200ms streaming latency
 Constitution Principle I: Graceful degradation with Result types
 """
+
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
@@ -21,9 +22,7 @@ class ASRProvider(ABC):
 
     @abstractmethod
     async def stream_transcribe(
-        self,
-        audio_stream: AsyncIterator[bytes],
-        sample_rate: int = 16000
+        self, audio_stream: AsyncIterator[bytes], sample_rate: int = 16000
     ) -> AsyncIterator[Result[str]]:
         """
         Stream transcribe audio chunks

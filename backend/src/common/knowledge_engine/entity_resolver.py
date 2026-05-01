@@ -105,12 +105,15 @@ class KnowledgeEntityResolver:
             normalized_query=normalized_query,
             resolved=bool(matches),
             canonical_entities=canonical_entities,
-            matches=sorted(matches, key=lambda item: (item.start_index, item.end_index)),
+            matches=sorted(
+                matches, key=lambda item: (item.start_index, item.end_index)
+            ),
         )
 
     @staticmethod
     def _build_canonical_index(
-        entity_aliases: tuple[KnowledgeEntityAliasConfig, ...] | list[KnowledgeEntityAliasConfig],
+        entity_aliases: tuple[KnowledgeEntityAliasConfig, ...]
+        | list[KnowledgeEntityAliasConfig],
     ) -> dict[str, KnowledgeEntityAliasConfig]:
         canonical_index: dict[str, KnowledgeEntityAliasConfig] = {}
         for alias_config in entity_aliases:

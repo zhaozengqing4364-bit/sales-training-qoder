@@ -3,6 +3,7 @@ RealtimeScoringCapability - 实时评分能力
 
 基于对话内容实时计算销售训练所需的价值表达与异议处理评分。
 """
+
 from __future__ import annotations
 
 from typing import Any, ClassVar
@@ -175,7 +176,9 @@ class RealtimeScoringCapability(BaseCapability):
             if dim["weight"] <= 0:
                 logger.warning(f"Non-positive weight for dimension: {dim}")
                 continue
-            valid_dimensions.append({"name": str(dim["name"]), "weight": float(dim["weight"])})
+            valid_dimensions.append(
+                {"name": str(dim["name"]), "weight": float(dim["weight"])}
+            )
 
         if not valid_dimensions:
             logger.warning("No valid dimensions found, using defaults")
@@ -238,7 +241,10 @@ class RealtimeScoringCapability(BaseCapability):
                 context.state[prev_key] = score
 
             overall_score = round(
-                sum(canonical_scores[dim["name"]] * float(dim["weight"]) for dim in dimensions),
+                sum(
+                    canonical_scores[dim["name"]] * float(dim["weight"])
+                    for dim in dimensions
+                ),
                 2,
             )
             canonical_kernel, compatibility_readers = build_canonical_views(
@@ -333,8 +339,12 @@ class RealtimeScoringCapability(BaseCapability):
         benefit_terms = ["收益", "roi", "成本", "效率", "营收", "转化", "留存", "复购"]
 
         score = base_score
-        positive_matches = self._count_matches(text_lower, list(rules.get("positive", [])))
-        negative_matches = self._count_matches(text_lower, list(rules.get("negative", [])))
+        positive_matches = self._count_matches(
+            text_lower, list(rules.get("positive", []))
+        )
+        negative_matches = self._count_matches(
+            text_lower, list(rules.get("negative", []))
+        )
 
         score += min(positive_matches * 5, 25)
         score -= min(negative_matches * 6, 18)
@@ -348,18 +358,26 @@ class RealtimeScoringCapability(BaseCapability):
             benefit_signal = self._count_matches(text_lower, benefit_terms)
             if feature_signal > 0 and benefit_signal == 0:
                 score -= 8
-            if any(token in text_lower for token in ("帮助你们", "对你们", "对贵司", "帮助贵司")):
+            if any(
+                token in text_lower
+                for token in ("帮助你们", "对你们", "对贵司", "帮助贵司")
+            ):
                 score += 6
 
         if dim_name == "证据使用":
-            if any(token in text_lower for token in ("案例", "数据", "roi", "benchmark")):
+            if any(
+                token in text_lower for token in ("案例", "数据", "roi", "benchmark")
+            ):
                 score += 4
             if any(token in text_lower for token in ("大概", "应该", "也许", "可能")):
                 score -= 8
 
         if dim_name == "异议处理":
             objection_terms = ["价格", "预算", "竞品", "风险", "顾虑", "担心"]
-            if self._count_matches(context_text, objection_terms) > 0 and self._count_matches(text_lower, objection_terms) > 0:
+            if (
+                self._count_matches(context_text, objection_terms) > 0
+                and self._count_matches(text_lower, objection_terms) > 0
+            ):
                 score += 5
             if any(token in text_lower for token in ("理解", "顾虑", "担心")):
                 score += 4
@@ -367,7 +385,10 @@ class RealtimeScoringCapability(BaseCapability):
         if dim_name == "推进下一步":
             if any(token in text_lower for token in ("本周", "下周", "今天", "明天")):
                 score += 4
-            if any(token in text_lower for token in ("负责人", "时间", "试点", "会议", "demo")):
+            if any(
+                token in text_lower
+                for token in ("负责人", "时间", "试点", "会议", "demo")
+            ):
                 score += 4
 
         if len(text) >= 60:

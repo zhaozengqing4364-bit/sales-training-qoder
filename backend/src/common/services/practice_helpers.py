@@ -143,8 +143,12 @@ class PracticeRetryEntryAssembler:
     ) -> dict[str, Any]:
         retry_entry: dict[str, Any] = {
             "scenario_type": scenario_type,
-            "agent_id": str(session.agent_id) if getattr(session, "agent_id", None) else None,
-            "persona_id": str(session.persona_id) if getattr(session, "persona_id", None) else None,
+            "agent_id": str(session.agent_id)
+            if getattr(session, "agent_id", None)
+            else None,
+            "persona_id": str(session.persona_id)
+            if getattr(session, "persona_id", None)
+            else None,
             "presentation_id": (
                 str(session.presentation_id)
                 if getattr(session, "presentation_id", None)

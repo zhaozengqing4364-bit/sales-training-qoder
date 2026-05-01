@@ -7,6 +7,7 @@ References:
 - Requirements: R5 (知识库检索)
 - Design: Section 7 (Knowledge Retrieval Capability)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -49,27 +50,27 @@ class KnowledgeRetrievalCapability(BaseCapability):
                 "minimum": 1,
                 "maximum": 10,
                 "default": 3,
-                "description": "返回最相关的K个结果"
+                "description": "返回最相关的K个结果",
             },
             "similarity_threshold": {
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1,
                 "default": 0.7,
-                "description": "相似度阈值"
+                "description": "相似度阈值",
             },
             "include_source": {
                 "type": "boolean",
                 "default": True,
-                "description": "是否在结果中包含来源信息"
-            }
-        }
+                "description": "是否在结果中包含来源信息",
+            },
+        },
     }
 
     def __init__(
         self,
         config: CapabilityConfig,
-        knowledge_service: KnowledgeService | None = None
+        knowledge_service: KnowledgeService | None = None,
     ) -> None:
         super().__init__(config)
         self._knowledge_service = knowledge_service
@@ -91,8 +92,7 @@ class KnowledgeRetrievalCapability(BaseCapability):
             # 验证输入
             if not isinstance(input_data, str) or not input_data.strip():
                 return CapabilityResult(
-                    success=True,
-                    data={"context": "", "results": []}
+                    success=True, data={"context": "", "results": []}
                 )
 
             query = input_data.strip()
@@ -102,12 +102,10 @@ class KnowledgeRetrievalCapability(BaseCapability):
 
             if not kb_ids:
                 logger.debug(
-                    "No knowledge bases configured",
-                    session_id=context.session_id
+                    "No knowledge bases configured", session_id=context.session_id
                 )
                 return CapabilityResult(
-                    success=True,
-                    data={"context": "", "results": []}
+                    success=True, data={"context": "", "results": []}
                 )
 
             # 使用 KnowledgeService 的 search_multiple 方法
@@ -121,8 +119,7 @@ class KnowledgeRetrievalCapability(BaseCapability):
                 )
             else:
                 logger.warning(
-                    "Knowledge service not available",
-                    session_id=context.session_id
+                    "Knowledge service not available", session_id=context.session_id
                 )
 
             # 格式化为 LLM 上下文
@@ -130,14 +127,14 @@ class KnowledgeRetrievalCapability(BaseCapability):
 
             # 更新统计
             self._update_usage_count(context)
-            context.state["knowledge_retrieval_count"] = (
-                context.state.get("knowledge_retrieval_count", 0) + len(all_results)
-            )
+            context.state["knowledge_retrieval_count"] = context.state.get(
+                "knowledge_retrieval_count", 0
+            ) + len(all_results)
 
             logger.debug(
                 "Knowledge retrieval completed",
                 session_id=context.session_id,
-                result_count=len(all_results)
+                result_count=len(all_results),
             )
 
             return CapabilityResult(
@@ -146,18 +143,16 @@ class KnowledgeRetrievalCapability(BaseCapability):
                     "context": formatted_context,
                     "results": all_results,
                     "query": query,
-                    "kb_ids": kb_ids
-                }
+                    "kb_ids": kb_ids,
+                },
             )
 
         except (RuntimeError, ValueError, KeyError) as e:
             logger.error(
-                f"Knowledge retrieval failed: {e}",
-                session_id=context.session_id
+                f"Knowledge retrieval failed: {e}", session_id=context.session_id
             )
             return CapabilityResult(
-                success=False,
-                fallback="[KNOWLEDGE_RETRIEVAL_FAILED]"
+                success=False, fallback="[KNOWLEDGE_RETRIEVAL_FAILED]"
             )
 
     async def _search_knowledge(
@@ -240,7 +235,9 @@ class KnowledgeRetrievalCapability(BaseCapability):
         merged_results.sort(key=lambda x: x.get("score", 0), reverse=True)
         return merged_results[: self._top_k]
 
-    def _normalize_search_response(self, raw_result: Any) -> tuple[list[dict[str, Any]], bool]:
+    def _normalize_search_response(
+        self, raw_result: Any
+    ) -> tuple[list[dict[str, Any]], bool]:
         """标准化检索结果；返回 (results, 是否识别为有效格式)。"""
         if raw_result is None:
             return [], True
@@ -301,7 +298,5 @@ class KnowledgeRetrievalCapability(BaseCapability):
 
     async def on_session_end(self, context: AgentContext) -> dict[str, Any]:
         stats = await super().on_session_end(context)
-        stats["total_retrievals"] = context.state.get(
-            "knowledge_retrieval_count", 0
-        )
+        stats["total_retrievals"] = context.state.get("knowledge_retrieval_count", 0)
         return stats

@@ -280,7 +280,9 @@ class CircuitBreakerRegistry:
     def get_all_stats(self) -> dict:
         """Get stats for all circuit breakers"""
         with self._lock:
-            return {name: breaker.get_stats() for name, breaker in self._breakers.items()}
+            return {
+                name: breaker.get_stats() for name, breaker in self._breakers.items()
+            }
 
 
 # Global registry

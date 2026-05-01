@@ -37,14 +37,18 @@ class EmailService(ABC):
     """Abstract email transport for password reset delivery."""
 
     @abstractmethod
-    async def send_password_reset_email(self, *, recipient: str, reset_url: str) -> None:
+    async def send_password_reset_email(
+        self, *, recipient: str, reset_url: str
+    ) -> None:
         """Deliver a password-reset message to the recipient."""
 
 
 class ConsoleEmailService(EmailService):
     """Development email transport that logs a local-only reset link."""
 
-    async def send_password_reset_email(self, *, recipient: str, reset_url: str) -> None:
+    async def send_password_reset_email(
+        self, *, recipient: str, reset_url: str
+    ) -> None:
         logger.info(
             "password_reset_email_console_transport",
             recipient=_mask_email(recipient),
@@ -84,7 +88,9 @@ class PasswordResetService:
 
     async def request_password_reset(self, email: str) -> None:
         normalized_email = email.strip().lower()
-        result = await self.db.execute(select(User).where(User.email == normalized_email))
+        result = await self.db.execute(
+            select(User).where(User.email == normalized_email)
+        )
         user = result.scalar_one_or_none()
 
         if user is None or not getattr(user, "is_active", False):
@@ -144,7 +150,9 @@ class PasswordResetService:
         now = datetime.now(UTC)
 
         result = await self.db.execute(
-            select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+            select(PasswordResetToken).where(
+                PasswordResetToken.token_hash == token_hash
+            )
         )
         reset_token = result.scalar_one_or_none()
 

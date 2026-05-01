@@ -10,6 +10,7 @@ Response Format:
 
 Requirements: 3.1, 3.2, 3.3
 """
+
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -33,8 +34,10 @@ router = APIRouter()
 
 # ========== Schemas ==========
 
+
 class TrainingCategory(BaseModel):
     """Training category definition"""
+
     id: str
     title: str
     description: str
@@ -47,6 +50,7 @@ class TrainingCategory(BaseModel):
 
 class SessionItem(BaseModel):
     """Session history item"""
+
     id: str
     title: str
     agent_type: str
@@ -57,6 +61,7 @@ class SessionItem(BaseModel):
 
 class PaginatedSessions(BaseModel):
     """Paginated session list response"""
+
     total: int
     items: list[SessionItem]
     page: int
@@ -75,7 +80,7 @@ TRAINING_CATEGORIES = [
         icon_key="Briefcase",
         color_theme="bg-blue-50 text-blue-600",
         tags=["销售", "沟通", "谈判"],
-        status="active"
+        status="active",
     ),
     TrainingCategory(
         id="presentation",
@@ -84,17 +89,16 @@ TRAINING_CATEGORIES = [
         icon_key="Presentation",
         color_theme="bg-purple-50 text-purple-600",
         tags=["演讲", "表达", "PPT"],
-        status="active"
+        status="active",
     ),
 ]
 
 
 # ========== Endpoints ==========
 
+
 @router.get("/training-categories")
-async def get_training_categories(
-    db: AsyncSession = Depends(get_db)
-):
+async def get_training_categories(db: AsyncSession = Depends(get_db)):
     """
     Get list of training categories
 
@@ -106,12 +110,11 @@ async def get_training_categories(
         # Get agent counts per category from database
         from agent.models import Agent
 
-        agent_counts_stmt = select(
-            Agent.category,
-            func.count(Agent.id).label("count")
-        ).where(
-            Agent.status == "published"
-        ).group_by(Agent.category)
+        agent_counts_stmt = (
+            select(Agent.category, func.count(Agent.id).label("count"))
+            .where(Agent.status == "published")
+            .group_by(Agent.category)
+        )
 
         result = await db.execute(agent_counts_stmt)
         agent_counts = {row.category: row.count for row in result}
@@ -137,7 +140,7 @@ async def get_sessions(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     sort: str = Query("start_time:desc", description="Sort field and direction"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get user's session history with pagination
@@ -173,8 +176,10 @@ async def get_sessions(
         )
 
         # Get total count
-        count_query = select(func.count()).select_from(PracticeSession).where(
-            PracticeSession.user_id == user_id
+        count_query = (
+            select(func.count())
+            .select_from(PracticeSession)
+            .where(PracticeSession.user_id == user_id)
         )
         total = (await db.execute(count_query)).scalar() or 0
 
@@ -184,9 +189,9 @@ async def get_sessions(
         elif sort_field == "score":
             # Sort by average score
             order_col = (
-                func.coalesce(PracticeSession.logic_score, 0) +
-                func.coalesce(PracticeSession.accuracy_score, 0) +
-                func.coalesce(PracticeSession.completeness_score, 0)
+                func.coalesce(PracticeSession.logic_score, 0)
+                + func.coalesce(PracticeSession.accuracy_score, 0)
+                + func.coalesce(PracticeSession.completeness_score, 0)
             ) / 3
         elif sort_field == "duration":
             order_col = PracticeSession.total_duration_seconds
@@ -214,7 +219,9 @@ async def get_sessions(
             if session.total_duration_seconds:
                 duration_seconds = session.total_duration_seconds
             elif session.end_time and session.start_time:
-                duration_seconds = int((session.end_time - session.start_time).total_seconds())
+                duration_seconds = int(
+                    (session.end_time - session.start_time).total_seconds()
+                )
             else:
                 duration_seconds = 0
 
@@ -222,7 +229,11 @@ async def get_sessions(
             logic = session.logic_score or 0
             accuracy = session.accuracy_score or 0
             completeness = session.completeness_score or 0
-            score = round((logic + accuracy + completeness) / 3, 1) if any([logic, accuracy, completeness]) else 0
+            score = (
+                round((logic + accuracy + completeness) / 3, 1)
+                if any([logic, accuracy, completeness])
+                else 0
+            )
 
             # Determine agent type and title
             agent_type = "sales_bot"  # Default
@@ -246,21 +257,25 @@ async def get_sessions(
             if persona:
                 title = f"{title} - {persona.name}"
 
-            items.append(SessionItem(
-                id=str(session.session_id),
-                title=title,
-                agent_type=agent_type,
-                start_time=session.start_time.isoformat() if session.start_time else datetime.now(UTC).isoformat(),
-                duration_seconds=duration_seconds,
-                score=score
-            ).model_dump())
+            items.append(
+                SessionItem(
+                    id=str(session.session_id),
+                    title=title,
+                    agent_type=agent_type,
+                    start_time=session.start_time.isoformat()
+                    if session.start_time
+                    else datetime.now(UTC).isoformat(),
+                    duration_seconds=duration_seconds,
+                    score=score,
+                ).model_dump()
+            )
 
         response_data = {
             "total": total,
             "items": items,
             "page": page,
             "page_size": effective_page_size,
-            "has_more": (page * effective_page_size) < total
+            "has_more": (page * effective_page_size) < total,
         }
 
         return success_response(response_data)

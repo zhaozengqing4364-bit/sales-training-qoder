@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PPTVersion:
     """Represents a version of a PPT"""
+
     version_id: uuid.UUID
     presentation_id: uuid.UUID
     version_number: int
@@ -54,7 +55,7 @@ class VersionManager:
         db: AsyncSession,
         presentation_id: uuid.UUID,
         file_path: str,
-        filename: str
+        filename: str,
     ) -> Result[PPTVersion]:
         """
         Create a new version for a presentation
@@ -64,7 +65,9 @@ class VersionManager:
         try:
             # Get current version number
             result = await db.execute(
-                select(Presentation).where(Presentation.presentation_id == presentation_id)
+                select(Presentation).where(
+                    Presentation.presentation_id == presentation_id
+                )
             )
             presentation = result.scalar_one_or_none()
 
@@ -76,9 +79,7 @@ class VersionManager:
 
             # Create version directory
             version_dir = os.path.join(
-                self.storage_base_path,
-                str(presentation_id),
-                f"v{version_number}"
+                self.storage_base_path, str(presentation_id), f"v{version_number}"
             )
             os.makedirs(version_dir, exist_ok=True)
 
@@ -99,7 +100,7 @@ class VersionManager:
                 filename=filename,
                 file_path=version_file_path,
                 uploaded_at=datetime.now(),
-                is_current=True
+                is_current=True,
             )
 
             logger.info(
@@ -107,7 +108,7 @@ class VersionManager:
                 extra={
                     "presentation_id": str(presentation_id),
                     "version": version_number,
-                }
+                },
             )
 
             return Result(value=version)
@@ -116,14 +117,12 @@ class VersionManager:
             logger.error(
                 "Failed to create version",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[VERSION_CREATE_FAILED]")
 
     async def get_version_history(
-        self,
-        db: AsyncSession,
-        presentation_id: uuid.UUID
+        self, db: AsyncSession, presentation_id: uuid.UUID
     ) -> Result[list[PPTVersion]]:
         """
         Get version history for a presentation
@@ -152,7 +151,9 @@ class VersionManager:
                         file_path = os.path.join(version_path, filename)
 
                         # Get file modification time
-                        uploaded_at = datetime.fromtimestamp(os.path.getmtime(file_path))
+                        uploaded_at = datetime.fromtimestamp(
+                            os.path.getmtime(file_path)
+                        )
 
                         version = PPTVersion(
                             version_id=uuid.uuid4(),
@@ -161,7 +162,10 @@ class VersionManager:
                             filename=filename,
                             file_path=file_path,
                             uploaded_at=uploaded_at,
-                            is_current=(version_number == self._get_current_version(db, presentation_id))
+                            is_current=(
+                                version_number
+                                == self._get_current_version(db, presentation_id)
+                            ),
                         )
 
                         versions.append(version)
@@ -175,15 +179,12 @@ class VersionManager:
             logger.error(
                 "Failed to get version history",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[VERSION_HISTORY_FAILED]")
 
     async def rollback_to_version(
-        self,
-        db: AsyncSession,
-        presentation_id: uuid.UUID,
-        version_number: int
+        self, db: AsyncSession, presentation_id: uuid.UUID, version_number: int
     ) -> Result[bool]:
         """
         Rollback presentation to a specific version
@@ -193,9 +194,7 @@ class VersionManager:
         try:
             # Get version file path
             version_file_path = os.path.join(
-                self.storage_base_path,
-                str(presentation_id),
-                f"v{version_number}"
+                self.storage_base_path, str(presentation_id), f"v{version_number}"
             )
 
             if not os.path.exists(version_file_path):
@@ -210,17 +209,19 @@ class VersionManager:
 
             # Copy file to current location
             current_file_path = os.path.join(
-                "/data/presentations",
-                str(presentation_id),
-                version_filename
+                "/data/presentations", str(presentation_id), version_filename
             )
 
             os.makedirs(os.path.dirname(current_file_path), exist_ok=True)
-            shutil.copy2(os.path.join(version_file_path, version_filename), current_file_path)
+            shutil.copy2(
+                os.path.join(version_file_path, version_filename), current_file_path
+            )
 
             # Update presentation version
             result = await db.execute(
-                select(Presentation).where(Presentation.presentation_id == presentation_id)
+                select(Presentation).where(
+                    Presentation.presentation_id == presentation_id
+                )
             )
             presentation = result.scalar_one_or_none()
 
@@ -234,7 +235,7 @@ class VersionManager:
                 extra={
                     "presentation_id": str(presentation_id),
                     "version": version_number,
-                }
+                },
             )
 
             return Result(value=True)
@@ -245,16 +246,14 @@ class VersionManager:
                 extra={
                     "presentation_id": str(presentation_id),
                     "version": version_number,
-                    "error": str(e)
+                    "error": str(e),
                 },
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[ROLLBACK_FAILED]")
 
     async def cleanup_old_versions(
-        self,
-        db: AsyncSession,
-        presentation_id: uuid.UUID
+        self, db: AsyncSession, presentation_id: uuid.UUID
     ) -> Result[bool]:
         """
         Clean up old versions, keeping only the most recent N versions
@@ -274,13 +273,13 @@ class VersionManager:
                 return Result(value=True)
 
             # Delete old versions
-            versions_to_delete = versions[self.max_versions_per_presentation:]
+            versions_to_delete = versions[self.max_versions_per_presentation :]
 
             for version in versions_to_delete:
                 version_dir = os.path.join(
                     self.storage_base_path,
                     str(presentation_id),
-                    f"v{version.version_number}"
+                    f"v{version.version_number}",
                 )
 
                 if os.path.exists(version_dir):
@@ -291,7 +290,7 @@ class VersionManager:
                 extra={
                     "presentation_id": str(presentation_id),
                     "deleted": len(versions_to_delete),
-                }
+                },
             )
 
             return Result(value=True)
@@ -300,7 +299,7 @@ class VersionManager:
             logger.error(
                 "Failed to cleanup old versions",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[CLEANUP_FAILED]")
 
@@ -311,7 +310,9 @@ class VersionManager:
 
             async def _get():
                 result = await db.execute(
-                    select(Presentation).where(Presentation.presentation_id == presentation_id)
+                    select(Presentation).where(
+                        Presentation.presentation_id == presentation_id
+                    )
                 )
                 presentation = result.scalar_one_or_none()
                 return presentation.version if presentation else 0

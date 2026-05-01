@@ -13,6 +13,7 @@ Usage:
             return error_response("[USER_NOT_FOUND]")
         return success_response(user_data)
 """
+
 from typing import Any
 
 from common.monitoring.logger import get_trace_id

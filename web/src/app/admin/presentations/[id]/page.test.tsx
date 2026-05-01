@@ -1,3 +1,5 @@
+/* eslint-disable @next/next/no-img-element */
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";

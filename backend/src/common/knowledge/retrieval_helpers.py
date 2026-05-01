@@ -329,7 +329,9 @@ def build_answerability_assessment(
 ) -> dict[str, Any]:
     citations = [
         {
-            "claim": _truncate_text(_normalize_whitespace(item.get("snippet") or ""), 120),
+            "claim": _truncate_text(
+                _normalize_whitespace(item.get("snippet") or ""), 120
+            ),
             "knowledge_base_id": item.get("knowledge_base_id"),
             "knowledge_base_name": item.get("knowledge_base_name"),
             "document_title": item.get("document_title") or None,
@@ -340,7 +342,12 @@ def build_answerability_assessment(
         if isinstance(item, dict) and _normalize_whitespace(item.get("snippet"))
     ]
 
-    if source_status in {"search_failed", "kb_not_ready", "no_kb_bound", "missing_query"}:
+    if source_status in {
+        "search_failed",
+        "kb_not_ready",
+        "no_kb_bound",
+        "missing_query",
+    }:
         answerability = "blocked"
     elif not results:
         answerability = "insufficient"
@@ -477,7 +484,9 @@ def transform_search_rows(
             retrieval_modes.add(retrieval_mode)
 
         raw_metadata = row.get("metadata")
-        metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
+        metadata: dict[str, Any] = (
+            raw_metadata if isinstance(raw_metadata, dict) else {}
+        )
         result_item = {
             "knowledge_base_id": row.get("knowledge_base_id"),
             "knowledge_base_name": row.get("knowledge_base_name"),

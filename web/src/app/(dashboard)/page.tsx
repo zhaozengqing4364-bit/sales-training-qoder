@@ -4,7 +4,6 @@ import packageJson from "../../../package.json";
 import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { MobileQuickActions } from "@/components/layout/mobile-quick-actions";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
@@ -17,11 +16,10 @@ import {
     Presentation,
     Trophy,
     Flame,
-    Target,
 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api/client";
-import { DashboardStats, GrowthDashboardResponse, HistorySessionSummary, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
+import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
     Dialog,
@@ -80,12 +78,6 @@ const DEFAULT_RECOMMENDATION: Recommendation = {
     reason: "欢迎使用训练系统，开始一次练习来提升您的技能吧！",
     action_label: "开始训练",
     target_path: "/training",
-};
-
-const DEFAULT_GROWTH: GrowthDashboardResponse = {
-    achievements: { unlocked: [] },
-    notifications: { items: [], unread_count: 0 },
-    goal: null,
 };
 
 function getGreeting(): string {
@@ -269,7 +261,20 @@ function getDashboardHistoryActions(item: SessionItem): {
         };
     }
 
-    if (item.status !== "completed") {
+    const reportStatus = typeof item.report_status === "string" ? item.report_status : null;
+    const hasCompletedReport = reportStatus === "completed" || Boolean(item.report_generated_at);
+    const isReportStillGenerating = reportStatus === "pending" || reportStatus === "processing";
+
+    if (reportStatus === "failed") {
+        return {
+            historyHref: "/history",
+            reportHref: null,
+            reportLabel: "报告暂不可用",
+            disabledReason: "报告生成失败，请到历史页核对这条记录。",
+        };
+    }
+
+    if (isReportStillGenerating || (item.status !== "completed" && !hasCompletedReport)) {
         return {
             historyHref: "/history",
             reportHref: null,
@@ -286,10 +291,6 @@ function getDashboardHistoryActions(item: SessionItem): {
     };
 }
 
-function getOnboardingTitle(hasHistory: boolean): string {
-    return hasHistory ? "继续按这 3 步推进训练" : "第一次来，先这样开始";
-}
-
 export default function HomePage() {
     const router = useRouter();
     const { data: currentUser } = useCurrentUser();
@@ -303,7 +304,6 @@ export default function HomePage() {
     const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
     const [recommendation, setRecommendation] = useState<Recommendation>(DEFAULT_RECOMMENDATION);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
-    const [growth, setGrowth] = useState<GrowthDashboardResponse>(DEFAULT_GROWTH);
     const [dashboardDegradedSections, setDashboardDegradedSections] = useState<string[]>([]);
     const [openIntervention, setOpenIntervention] = useState<LearnerOpenIntervention | null>(null);
     const [momentumSessions, setMomentumSessions] = useState<MomentumSessionSource[]>([]);
@@ -328,7 +328,6 @@ export default function HomePage() {
             setIsStatsLoading(true);
             setIsRecommendationLoading(true);
             setIsHistoryLoading(true);
-            setGrowth(DEFAULT_GROWTH);
 
             void api.dashboard.getStats()
                 .then((value) => {
@@ -358,18 +357,6 @@ export default function HomePage() {
                 })
                 .finally(() => {
                     if (!cancelled) setIsRecommendationLoading(false);
-                });
-
-            void api.dashboard.getGrowth()
-                .then((value) => {
-                    if (cancelled) return;
-                    setGrowth(value);
-                    markSection("成长中心", false);
-                })
-                .catch(() => {
-                    if (cancelled) return;
-                    setGrowth(DEFAULT_GROWTH);
-                    markSection("成长中心", true);
                 });
 
             void api.dashboard.getHistory(30)
@@ -433,11 +420,10 @@ export default function HomePage() {
 
             return rightTime - leftTime;
         })[0];
-    const hasHistory = historyItems.length > 0;
     const isStatsDegraded = dashboardDegradedSections.includes("训练统计");
     const isRecommendationDegraded = dashboardDegradedSections.includes("推荐入口");
-    const isGrowthDegraded = dashboardDegradedSections.includes("成长中心");
     const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
+    const hasHistory = historyItems.length > 0;
     const isStatsUnavailable = isStatsLoading || isStatsDegraded;
     const isRecommendationUnavailable = isRecommendationLoading || isRecommendationDegraded;
     const learnerMomentum = buildLearnerMomentum(momentumSessions);
@@ -460,50 +446,11 @@ export default function HomePage() {
         : getRecommendationSourceCopy(displayRecommendation);
     const shouldShowTodayRetryCard = !isRecommendationUnavailable && isTodayRetryRecommendation(displayRecommendation);
     const suggestedDurationCopy = formatSuggestedDuration(displayRecommendation);
-    const adaptiveDryRun = growth.adaptive_difficulty;
-    const latestAdaptiveItem = adaptiveDryRun?.items?.[0] ?? null;
     const todayRetryDetails = [
         displayRecommendation.due_reason ? `到期原因：${displayRecommendation.due_reason}` : null,
         displayRecommendation.focus ? `本次焦点：${displayRecommendation.focus}` : null,
         suggestedDurationCopy ? `建议时长：${suggestedDurationCopy}` : null,
     ].filter((detail): detail is string => Boolean(detail));
-    const onboardingSteps = [
-        {
-            key: "train",
-            badge: "第 1 步",
-            title: displayRecommendation.title,
-            description: displayRecommendation.reason,
-            href: displayRecommendation.target_path,
-            actionLabel: displayRecommendation.action_label,
-            icon: Zap,
-            accentClassName: "bg-blue-50 text-blue-700 border-blue-100",
-            buttonClassName: "rounded-full bg-slate-900 text-white hover:bg-slate-800",
-        },
-        {
-            key: "history",
-            badge: "第 2 步",
-            title: "去历史页复盘",
-            description: "完整记录、筛选与复练线索统一收口在历史页。",
-            href: "/history",
-            actionLabel: "去历史页",
-            icon: Presentation,
-            accentClassName: "bg-violet-50 text-violet-700 border-violet-100",
-            buttonClassName: "rounded-full",
-        },
-        {
-            key: "report",
-            badge: "第 3 步",
-            title: reportShortcut ? "打开最近一次可用报告" : "完成训练后看统一报告",
-            description: reportShortcut
-                ? `最近一次可用报告：${reportShortcut.item.title}`
-                : "报告生成后，可从最近记录或历史页进入统一报告。",
-            href: reportShortcut?.historyActions.reportHref ?? "/history",
-            actionLabel: "报告入口",
-            icon: CheckCircle2,
-            accentClassName: "bg-emerald-50 text-emerald-700 border-emerald-100",
-            buttonClassName: "rounded-full",
-        },
-    ];
     const versionDialogHighlights = [
         {
             title: displayRecommendation.title,
@@ -678,55 +625,6 @@ export default function HomePage() {
                 </div>
             )}
 
-            <section className="grid grid-cols-1 xl:grid-cols-[0.9fr_2.1fr] gap-4">
-                <GlassCard className="p-6 bg-white/80 border-none shadow-sm ring-1 ring-slate-100">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
-                            <Zap className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">最小上手指引</p>
-                            <h2 className="text-xl font-bold text-slate-900 mt-1">{getOnboardingTitle(hasHistory)}</h2>
-                        </div>
-                    </div>
-                    <p className="text-sm leading-6 text-slate-600">
-                        {displayRecommendation.reason}
-                    </p>
-                    <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-xs leading-6 text-slate-500">
-                        先训练，再去历史页和统一报告复盘；首页不再放看起来能点、实际没有闭环的装饰性按钮。
-                    </div>
-                </GlassCard>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {onboardingSteps.map((step) => {
-                        const Icon = step.icon;
-                        return (
-                            <GlassCard key={step.key} className="p-5 bg-white/80 border-none shadow-sm ring-1 ring-slate-100 flex flex-col gap-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide", step.accentClassName)}>
-                                            {step.badge}
-                                        </span>
-                                        <h3 className="text-base font-bold text-slate-900 mt-3">{step.title}</h3>
-                                    </div>
-                                    <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", step.accentClassName)}>
-                                        <Icon className="w-5 h-5" />
-                                    </div>
-                                </div>
-                                <p className="text-sm leading-6 text-slate-600 min-h-[72px]">{step.description}</p>
-                                <Link href={step.href}>
-                                    <Button variant={step.key === "train" ? "primary" : "outline"} className={step.buttonClassName}>
-                                        {step.actionLabel} <ArrowRight className="ml-2 w-4 h-4" />
-                                    </Button>
-                                </Link>
-                            </GlassCard>
-                        );
-                    })}
-                </div>
-            </section>
-
-            <LearnerHelpCard context="dashboard" />
-
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <GlassCard className="p-5 border border-orange-100 bg-orange-50/70">
                     <div className="flex items-center gap-3">
@@ -878,124 +776,6 @@ export default function HomePage() {
                 </GlassCard>
             </section>
 
-            <section className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
-                <GlassCard className="p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Trophy className="h-5 w-5 text-amber-500" />
-                        <h2 className="text-lg font-bold text-slate-900">徽章墙</h2>
-                    </div>
-                    {growth.achievements.unlocked.length > 0 ? (
-                        <div className="space-y-3">
-                            {growth.achievements.unlocked.slice(0, 3).map((achievement) => (
-                                <div key={achievement.code} className="rounded-2xl border border-amber-100 bg-amber-50/60 p-3">
-                                    <p className="text-sm font-bold text-amber-900">{achievement.name}</p>
-                                    <p className="mt-1 text-xs text-amber-700">{achievement.description}</p>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-sm text-slate-500">
-                            {isGrowthDegraded ? "徽章暂不可用，完成训练仍会保留原始记录。" : "完成可评估训练后解锁徽章。"}
-                        </p>
-                    )}
-                </GlassCard>
-
-                <GlassCard className="p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Flame className="h-5 w-5 text-rose-500" />
-                        <h2 className="text-lg font-bold text-slate-900">练习目标</h2>
-                    </div>
-                    {growth.goal ? (
-                        <>
-                            <div className="flex items-end justify-between gap-3">
-                                <div>
-                                    <p className="text-3xl font-black text-slate-900">{growth.goal.current_progress}/{growth.goal.target_count}</p>
-                                    <p className="text-xs text-slate-500 mt-1">{growth.goal.period === "weekly" ? "本周期目标" : "本月目标"}</p>
-                                </div>
-                                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                                    {Math.round(growth.goal.progress_ratio * 100)}%
-                                </span>
-                            </div>
-                            <div className="mt-4 h-2 rounded-full bg-slate-100">
-                                <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.min(100, Math.round(growth.goal.progress_ratio * 100))}%` }} />
-                            </div>
-                        </>
-                    ) : (
-                        <p className="text-sm text-slate-500">
-                            {isGrowthDegraded ? "目标暂不可用。" : "设置练习目标后，这里会显示完成进度。"}
-                        </p>
-                    )}
-                </GlassCard>
-
-                <GlassCard className="p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Target className="h-5 w-5 text-indigo-500" />
-                        <h2 className="text-lg font-bold text-slate-900">自适应难度 dry-run</h2>
-                    </div>
-                    {adaptiveDryRun && !isGrowthDegraded ? (
-                        <div className="space-y-3">
-                            <p className="text-sm leading-6 text-slate-600">
-                                {adaptiveDryRun.explanation || "只展示建议，不改变真实训练难度。"}
-                            </p>
-                            {latestAdaptiveItem ? (
-                                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
-                                    <p className="text-xs font-semibold text-indigo-700">
-                                        最近建议：{latestAdaptiveItem.current_difficulty} → {latestAdaptiveItem.suggested_difficulty}
-                                    </p>
-                                    <p className="mt-1 text-xs leading-5 text-indigo-800">
-                                        {latestAdaptiveItem.explanation || "当前策略未给出调整建议。"}
-                                    </p>
-                                </div>
-                            ) : (
-                                <p className="text-sm text-slate-500">暂无 completed/evaluable 训练样本。</p>
-                            )}
-                            <p className="text-xs text-slate-500">
-                                候选 {adaptiveDryRun.summary.candidate_count ?? 0} · 阻塞 {adaptiveDryRun.summary.blocked_count ?? 0} · 不写入训练配置
-                            </p>
-                        </div>
-                    ) : (
-                        <p className="text-sm text-slate-500">
-                            {isGrowthDegraded ? "自适应 dry-run 暂不可用。" : "完成可评估训练后展示 dry-run 建议。"}
-                        </p>
-                    )}
-                </GlassCard>
-
-                <GlassCard className="p-6">
-                    <div className="flex items-center justify-between gap-2 mb-4">
-                        <div className="flex items-center gap-2">
-                            <Zap className="h-5 w-5 text-blue-500" />
-                            <h2 className="text-lg font-bold text-slate-900">通知与 AI 教练</h2>
-                        </div>
-                        {growth.notifications.unread_count > 0 && (
-                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                                {growth.notifications.unread_count}
-                            </span>
-                        )}
-                    </div>
-                    {growth.notifications.items.length > 0 ? (
-                        <div className="space-y-3">
-                            {growth.notifications.items.slice(0, 2).map((notification) => (
-                                <div key={notification.notification_id} className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
-                                    <p className="text-sm font-bold text-blue-950">{notification.title}</p>
-                                    <p className="mt-1 text-xs leading-5 text-blue-800">{notification.content}</p>
-                                    {notification.action_path && notification.action_label && (
-                                        <Link href={notification.action_path}>
-                                            <Button variant="ghost" size="sm" className="mt-2 h-auto rounded-full px-0 text-blue-700">
-                                                {notification.action_label}
-                                            </Button>
-                                        </Link>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-sm text-slate-500">
-                            {isGrowthDegraded ? "通知暂不可用。" : "暂无未读通知；AI 教练只会基于真实可评估训练触达。"}
-                        </p>
-                    )}
-                </GlassCard>
-            </section>
-
             <section>
                 <div className="flex items-center justify-between mb-6 px-2 gap-3 flex-wrap">
                     <h2 className="text-xl font-bold text-slate-900 flex items-center gap-3">
@@ -1044,11 +824,11 @@ export default function HomePage() {
                                                     </p>
                                                 </div>
                                             </div>
-                                            <Link href={historyActions.historyHref}>
-                                                <Button variant="ghost" size="sm" className="rounded-full text-slate-500 hover:text-slate-700">
+                                            <Button asChild variant="ghost" size="sm" className="rounded-full text-slate-500 hover:text-slate-700">
+                                                <Link href={historyActions.historyHref}>
                                                     查看历史
-                                                </Button>
-                                            </Link>
+                                                </Link>
+                                            </Button>
                                         </div>
 
                                         <div className="px-5 pb-5 space-y-4">
@@ -1074,13 +854,13 @@ export default function HomePage() {
                                                     </p>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2 sm:justify-end">
-                                                    <Link href={historyActions.historyHref}>
-                                                        <Button variant="outline" className="rounded-full">历史页</Button>
-                                                    </Link>
+                                                    <Button asChild variant="outline" className="rounded-full">
+                                                        <Link href={historyActions.historyHref}>历史页</Link>
+                                                    </Button>
                                                     {historyActions.reportHref ? (
-                                                        <Link href={historyActions.reportHref}>
-                                                            <Button className="rounded-full bg-slate-900 text-white">{historyActions.reportLabel}</Button>
-                                                        </Link>
+                                                        <Button asChild className="rounded-full bg-slate-900 text-white">
+                                                            <Link href={historyActions.reportHref}>{historyActions.reportLabel}</Link>
+                                                        </Button>
                                                     ) : (
                                                         <Button disabled className="rounded-full">{historyActions.reportLabel}</Button>
                                                     )}

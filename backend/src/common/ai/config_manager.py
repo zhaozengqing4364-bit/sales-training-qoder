@@ -268,9 +268,7 @@ class ConfigManager:
                     "provider": os.getenv(
                         "EMBEDDING_PROVIDER", ModelProvider.OPENAI.value
                     ),
-                    "base_url": os.getenv(
-                        "EMBEDDING_BASE_URL"
-                    )
+                    "base_url": os.getenv("EMBEDDING_BASE_URL")
                     or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
                     "api_key": legacy_openai_api_key,
                     "model_name": os.getenv(
@@ -336,7 +334,9 @@ class ConfigManager:
         config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Describe provider/base_url policy for the effective runtime config."""
-        effective = config if config is not None else self.get_effective_config(model_type)
+        effective = (
+            config if config is not None else self.get_effective_config(model_type)
+        )
         effective = effective or {}
 
         provider = str(effective.get("provider") or "").strip().lower()

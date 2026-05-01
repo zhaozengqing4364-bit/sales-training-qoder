@@ -128,8 +128,13 @@ class ComprehensiveReportService:
             )
             if resolved_scenario_type == "presentation":
                 presentation_service = PresentationReportService(self.db)
-                presentation_result = await presentation_service.build_report(session_id)
-                if not presentation_result.is_success or presentation_result.value is None:
+                presentation_result = await presentation_service.build_report(
+                    session_id
+                )
+                if (
+                    not presentation_result.is_success
+                    or presentation_result.value is None
+                ):
                     return Result.fail(
                         presentation_result.fallback or "[PRESENTATION_REPORT_FAILED]"
                     )
@@ -158,7 +163,9 @@ class ComprehensiveReportService:
                 stage_results if stage_results else [],
                 resolved_scenario_type,
             )
-            detailed_feedback = feedback_result.value if feedback_result.is_success else ""
+            detailed_feedback = (
+                feedback_result.value if feedback_result.is_success else ""
+            )
 
             # Generate recommendations
             recommendations = await self._generate_recommendations(
@@ -243,10 +250,13 @@ class ComprehensiveReportService:
         # 1. Try database conversation_messages first (EnhancedSalesHandler path)
         try:
             from common.conversation.models import ConversationMessage
+
             result = await self.db.execute(
                 select(ConversationMessage)
                 .where(ConversationMessage.session_id == session_id)
-                .order_by(ConversationMessage.turn_number, ConversationMessage.timestamp)
+                .order_by(
+                    ConversationMessage.turn_number, ConversationMessage.timestamp
+                )
             )
             messages = list(result.scalars().all())
 
@@ -260,6 +270,7 @@ class ComprehensiveReportService:
                     return lines_str
         except (RuntimeError, ValueError, OSError, ImportError) as e:
             from common.monitoring.logger import get_logger
+
             get_logger(__name__).debug(f"DB conversation query failed: {e}")
 
         # 2. Fallback to in-memory context_manager (SimpleSalesHandler path)
@@ -268,7 +279,9 @@ class ComprehensiveReportService:
 
             from sales_bot.services.context_manager import context_manager
 
-            context_result = await context_manager.get_context(uuid_mod.UUID(session_id))
+            context_result = await context_manager.get_context(
+                uuid_mod.UUID(session_id)
+            )
             if not context_result.is_success:
                 return ""
 
@@ -352,12 +365,14 @@ class ComprehensiveReportService:
             values = dimension_values.get(dim_name, [])
             avg_score = sum(values) / len(values) if values else 50.0
 
-            dimension_scores.append(DimensionScore(
-                name=dim_name,
-                score=avg_score,
-                weight=weight,
-                description=self._get_dimension_description(dim_name),
-            ))
+            dimension_scores.append(
+                DimensionScore(
+                    name=dim_name,
+                    score=avg_score,
+                    weight=weight,
+                    description=self._get_dimension_description(dim_name),
+                )
+            )
 
         return dimension_scores
 
@@ -450,16 +465,20 @@ class ComprehensiveReportService:
         summaries = []
 
         for stage in stage_results:
-            avg_score = sum(stage.scores.values()) / len(stage.scores) if stage.scores else 0
+            avg_score = (
+                sum(stage.scores.values()) / len(stage.scores) if stage.scores else 0
+            )
 
-            summaries.append({
-                "stage_number": stage.stage_number,
-                "start_turn": stage.start_turn,
-                "end_turn": stage.end_turn,
-                "average_score": round(avg_score, 1),
-                "key_points": stage.strengths[:3],
-                "summary": stage.summary,
-            })
+            summaries.append(
+                {
+                    "stage_number": stage.stage_number,
+                    "start_turn": stage.start_turn,
+                    "end_turn": stage.end_turn,
+                    "average_score": round(avg_score, 1),
+                    "key_points": stage.strengths[:3],
+                    "summary": stage.summary,
+                }
+            )
 
         return summaries
 
@@ -524,7 +543,9 @@ class ComprehensiveReportService:
             elif isinstance(raw_value, dict):
                 raw_payload = raw_value
 
-            parse_result = await parse_llm_response(llm_result.value, ComprehensiveReportResponse)
+            parse_result = await parse_llm_response(
+                llm_result.value, ComprehensiveReportResponse
+            )
             if not parse_result.is_success:
                 if isinstance(raw_payload, dict):
                     detailed_feedback = str(raw_payload.get("detailed_feedback", ""))

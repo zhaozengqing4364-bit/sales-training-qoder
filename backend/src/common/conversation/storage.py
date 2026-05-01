@@ -9,6 +9,7 @@ References:
 - Design: Section 11 (Message Storage Service)
 - API Contract: docs/api-contract/replay.md
 """
+
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -66,9 +67,7 @@ def _merge_transcript_metadata(
     objection_ledger: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
     metadata = (
-        dict(transcript_metadata)
-        if isinstance(transcript_metadata, dict)
-        else {}
+        dict(transcript_metadata) if isinstance(transcript_metadata, dict) else {}
     )
     normalized_ledger = normalize_objection_ledger(objection_ledger)
     if normalized_ledger is not None:
@@ -106,7 +105,7 @@ class MessageStorageService:
         content: str,
         audio_url: str | None = None,
         duration_ms: int | None = None,
-        analysis_data: dict[str, Any] | None = None
+        analysis_data: dict[str, Any] | None = None,
     ) -> Result[ConversationMessage]:
         """
         Save a conversation message to the database.
@@ -131,7 +130,9 @@ class MessageStorageService:
         try:
             # Validate role
             if role not in ("user", "assistant"):
-                return Result.fail(f"[INVALID_ROLE] Role must be 'user' or 'assistant', got '{role}'")
+                return Result.fail(
+                    f"[INVALID_ROLE] Role must be 'user' or 'assistant', got '{role}'"
+                )
 
             # Create message
             message = ConversationMessage(
@@ -142,7 +143,7 @@ class MessageStorageService:
                 content=content,
                 audio_url=audio_url,
                 duration_ms=duration_ms,
-                timestamp=datetime.now(UTC)
+                timestamp=datetime.now(UTC),
             )
 
             # Apply analysis data if provided
@@ -155,7 +156,10 @@ class MessageStorageService:
                     if isinstance(analysis_data.get("transcript_metadata"), dict)
                     else None
                 )
-                if transcript_metadata is not None or "objection_ledger" in analysis_data:
+                if (
+                    transcript_metadata is not None
+                    or "objection_ledger" in analysis_data
+                ):
                     message.transcript_metadata = _merge_transcript_metadata(
                         transcript_metadata,
                         analysis_data.get("objection_ledger"),
@@ -220,21 +224,33 @@ class MessageStorageService:
             message = result.scalar_one_or_none()
 
             if not message:
-                return Result.fail(f"[MESSAGE_NOT_FOUND] Message with id '{message_id}' not found")
+                return Result.fail(
+                    f"[MESSAGE_NOT_FOUND] Message with id '{message_id}' not found"
+                )
 
             # Update fields if provided
             if fuzzy_words is not None:
                 message.fuzzy_words = fuzzy_words
             if transcript_metadata is not None or objection_ledger is not None:
                 message.transcript_metadata = _merge_transcript_metadata(
-                    transcript_metadata if transcript_metadata is not None else message.transcript_metadata,
+                    transcript_metadata
+                    if transcript_metadata is not None
+                    else message.transcript_metadata,
                     objection_ledger,
                 )
             if sales_stage is not None:
                 # Validate sales stage
-                valid_stages = {"opening", "discovery", "presentation", "objection", "closing"}
+                valid_stages = {
+                    "opening",
+                    "discovery",
+                    "presentation",
+                    "objection",
+                    "closing",
+                }
                 if sales_stage not in valid_stages:
-                    return Result.fail(f"[INVALID_SALES_STAGE] Invalid sales stage: {sales_stage}")
+                    return Result.fail(
+                        f"[INVALID_SALES_STAGE] Invalid sales stage: {sales_stage}"
+                    )
                 message.sales_stage = sales_stage
             if score_snapshot is not None:
                 message.score_snapshot = score_snapshot
@@ -254,10 +270,7 @@ class MessageStorageService:
             return Result.fail(f"[ANALYSIS_UPDATE_FAILED] {str(e)}")
 
     async def mark_highlight(
-        self,
-        message_id: str,
-        highlight_type: str,
-        highlight_reason: str
+        self, message_id: str, highlight_type: str, highlight_reason: str
     ) -> Result[ConversationMessage]:
         """
         Mark a message as a key moment (highlight).
@@ -282,7 +295,9 @@ class MessageStorageService:
 
             # Validate reason length
             if len(highlight_reason) > 200:
-                return Result.fail("[HIGHLIGHT_REASON_TOO_LONG] Highlight reason must be 200 characters or less")
+                return Result.fail(
+                    "[HIGHLIGHT_REASON_TOO_LONG] Highlight reason must be 200 characters or less"
+                )
 
             # Find message
             stmt = select(ConversationMessage).where(
@@ -292,7 +307,9 @@ class MessageStorageService:
             message = result.scalar_one_or_none()
 
             if not message:
-                return Result.fail(f"[MESSAGE_NOT_FOUND] Message with id '{message_id}' not found")
+                return Result.fail(
+                    f"[MESSAGE_NOT_FOUND] Message with id '{message_id}' not found"
+                )
 
             # Update highlight fields
             message.is_highlight = True
@@ -332,7 +349,9 @@ class MessageStorageService:
             message = result.scalar_one_or_none()
 
             if not message:
-                return Result.fail(f"[MESSAGE_NOT_FOUND] Message with id '{message_id}' not found")
+                return Result.fail(
+                    f"[MESSAGE_NOT_FOUND] Message with id '{message_id}' not found"
+                )
 
             return Result.ok(message)
 
@@ -341,10 +360,7 @@ class MessageStorageService:
             return Result.fail(f"[MESSAGE_GET_FAILED] {str(e)}")
 
     async def get_messages_by_session(
-        self,
-        session_id: str,
-        page: int = 1,
-        page_size: int = 50
+        self, session_id: str, page: int = 1, page_size: int = 50
     ) -> Result[tuple[list[ConversationMessage], int]]:
         """
         Get messages for a session with pagination.
@@ -364,8 +380,11 @@ class MessageStorageService:
 
             # Count total
             from sqlalchemy import func
-            count_stmt = select(func.count()).select_from(ConversationMessage).where(
-                ConversationMessage.session_id == session_id
+
+            count_stmt = (
+                select(func.count())
+                .select_from(ConversationMessage)
+                .where(ConversationMessage.session_id == session_id)
             )
             total_result = await self.db.execute(count_stmt)
             total = total_result.scalar() or 0

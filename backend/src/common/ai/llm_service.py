@@ -9,6 +9,7 @@ References:
 - Design: model-config-management/design.md
 - Constitution Principle IV: Fault Tolerance & Cost Control
 """
+
 import os
 from typing import Any
 
@@ -88,12 +89,12 @@ class CostTrackingHandler(AsyncCallbackHandler):
 
     async def on_llm_end(self, response, **kwargs):
         """Track token usage"""
-        if hasattr(response, 'llm_output') and response.llm_output:
-            if 'token_usage' in response.llm_output:
-                usage = response.llm_output['token_usage']
-                self.total_tokens = usage.get('total_tokens', 0)
-                self.prompt_tokens = usage.get('prompt_tokens', 0)
-                self.completion_tokens = usage.get('completion_tokens', 0)
+        if hasattr(response, "llm_output") and response.llm_output:
+            if "token_usage" in response.llm_output:
+                usage = response.llm_output["token_usage"]
+                self.total_tokens = usage.get("total_tokens", 0)
+                self.prompt_tokens = usage.get("prompt_tokens", 0)
+                self.completion_tokens = usage.get("completion_tokens", 0)
 
                 logger.info(
                     f"LLM tokens used - Session: {self.session_id}, "
@@ -126,9 +127,11 @@ class LLMService:
         self._config_manager = get_config_manager()
         self._config = config
         self._effective_config: dict[str, Any] | None = None
-        self._runtime_policy: dict[str, Any] = self._config_manager.describe_runtime_policy(
-            ModelType.LLM,
-            None,
+        self._runtime_policy: dict[str, Any] = (
+            self._config_manager.describe_runtime_policy(
+                ModelType.LLM,
+                None,
+            )
         )
 
         # Cost tracking (¥0.05/1K tokens default)
@@ -162,7 +165,9 @@ class LLMService:
             }
         else:
             # Get from ConfigManager (database or env fallback)
-            self._effective_config = self._config_manager.get_effective_config(ModelType.LLM)
+            self._effective_config = self._config_manager.get_effective_config(
+                ModelType.LLM
+            )
 
         self._runtime_policy = self._config_manager.describe_runtime_policy(
             ModelType.LLM,
@@ -172,7 +177,9 @@ class LLMService:
         if not self._effective_config:
             logger.warning(
                 "No LLM configuration available",
-                base_url_policy=str(self._runtime_policy.get("base_url_status") or "unknown"),
+                base_url_policy=str(
+                    self._runtime_policy.get("base_url_status") or "unknown"
+                ),
             )
             return
 
@@ -205,14 +212,28 @@ class LLMService:
 
         # Initialize based on provider
         if provider == ModelProvider.AZURE.value or provider == "azure":
-            self._init_azure_client(api_key, base_url, model_name, temperature, timeout, max_retries, extra_config)
+            self._init_azure_client(
+                api_key,
+                base_url,
+                model_name,
+                temperature,
+                timeout,
+                max_retries,
+                extra_config,
+            )
         elif provider == ModelProvider.ANTHROPIC.value or provider == "anthropic":
-            self._init_anthropic_client(api_key, base_url, model_name, temperature, timeout, max_retries)
+            self._init_anthropic_client(
+                api_key, base_url, model_name, temperature, timeout, max_retries
+            )
         else:
             # Default to OpenAI-compatible
-            self._init_openai_client(api_key, base_url, model_name, temperature, timeout, max_retries)
+            self._init_openai_client(
+                api_key, base_url, model_name, temperature, timeout, max_retries
+            )
 
-        logger.info(f"LLM service initialized with provider: {provider}, model: {model_name}")
+        logger.info(
+            f"LLM service initialized with provider: {provider}, model: {model_name}"
+        )
 
     def _init_openai_client(
         self,
@@ -221,7 +242,7 @@ class LLMService:
         model_name: str,
         temperature: float,
         timeout: float,
-        max_retries: int
+        max_retries: int,
     ) -> None:
         """Initialize OpenAI-compatible client"""
         self._llm = ChatOpenAI(
@@ -241,7 +262,7 @@ class LLMService:
         temperature: float,
         timeout: float,
         max_retries: int,
-        extra_config: dict
+        extra_config: dict,
     ) -> None:
         """Initialize Azure OpenAI client"""
         api_version = extra_config.get("api_version", "2024-02-15-preview")
@@ -264,13 +285,14 @@ class LLMService:
         model_name: str,
         temperature: float,
         timeout: float,
-        max_retries: int
+        max_retries: int,
     ) -> None:
         """Initialize Anthropic client (via OpenAI-compatible interface)"""
         # Anthropic can be used via OpenAI-compatible interface
         # or via langchain_anthropic if installed
         try:
             from langchain_anthropic import ChatAnthropic
+
             self._llm = ChatAnthropic(
                 anthropic_api_key=api_key,
                 model=model_name,
@@ -279,8 +301,12 @@ class LLMService:
                 timeout=timeout,
             )
         except ImportError:
-            logger.warning("langchain_anthropic not installed, using OpenAI-compatible interface")
-            self._init_openai_client(api_key, base_url, model_name, temperature, timeout, max_retries)
+            logger.warning(
+                "langchain_anthropic not installed, using OpenAI-compatible interface"
+            )
+            self._init_openai_client(
+                api_key, base_url, model_name, temperature, timeout, max_retries
+            )
 
     @property
     def is_configured(self) -> bool:
@@ -330,7 +356,9 @@ class LLMService:
         bucket.append(dict(event))
 
     def get_session_runtime_events(self, session_id: str) -> list[dict[str, Any]]:
-        return [dict(event) for event in self.session_runtime_events.get(session_id, [])]
+        return [
+            dict(event) for event in self.session_runtime_events.get(session_id, [])
+        ]
 
     def _log_compiled_prompt_contract(self, contract: CompiledPromptContract) -> None:
         """Emit explicit diagnostics for compiled prompt consumers."""
@@ -349,8 +377,7 @@ class LLMService:
                 logger.info("Compiled prompt contract diagnostic", **log_kwargs)
 
     @retry(
-        stop=stop_after_attempt(2),
-        wait=wait_exponential(multiplier=1, min=2, max=10)
+        stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=10)
     )
     async def generate(
         self,
@@ -427,18 +454,19 @@ class LLMService:
 
             # Generate with cost tracking
             cost_handler = CostTrackingHandler(session_id)
-            result = await self._llm.agenerate(
-                [messages],
-                callbacks=[cost_handler]
-            )
+            result = await self._llm.agenerate([messages], callbacks=[cost_handler])
 
             # Extract response text
             generation = result.generations[0][0]
-            response_text = getattr(generation, 'text', None) or getattr(generation, 'content', str(generation))
+            response_text = getattr(generation, "text", None) or getattr(
+                generation, "content", str(generation)
+            )
 
             # Track cost
             cost = (cost_handler.total_tokens / 1000) * self.cost_per_1k_tokens
-            self.session_costs[session_id] = self.session_costs.get(session_id, 0) + cost
+            self.session_costs[session_id] = (
+                self.session_costs.get(session_id, 0) + cost
+            )
             self._record_runtime_event(
                 session_id,
                 build_runtime_event(
@@ -527,9 +555,7 @@ class LLMService:
             return Result.fail(f"[LLM_GENERATION_ERROR:{type(e).__name__}]")
 
     def _get_fallback_response(
-        self,
-        prompt: str,
-        context: dict[str, Any] | None
+        self, prompt: str, context: dict[str, Any] | None
     ) -> str:
         """
         Get predefined fallback response based on context.
@@ -632,7 +658,11 @@ class LLMService:
         try:
             response_text = result.value.strip()
             if response_text.startswith("```"):
-                response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text
+                response_text = (
+                    response_text.split("\n", 1)[1]
+                    if "\n" in response_text
+                    else response_text
+                )
                 if response_text.endswith("```"):
                     response_text = response_text[:-3]
                 response_text = response_text.strip()
@@ -654,19 +684,21 @@ class LLMService:
                     },
                 ),
             )
-            return Result.ok({
-                "scores": {
-                    "communication": 60,
-                    "product_knowledge": 60,
-                    "problem_solving": 60,
-                    "customer_focus": 60,
-                    "professionalism": 60,
-                },
-                "strengths": ["完成了对话"],
-                "weaknesses": ["需要更多练习"],
-                "suggestions": ["继续练习以提高表现"],
-                "summary": "完成了销售对话练习",
-            })
+            return Result.ok(
+                {
+                    "scores": {
+                        "communication": 60,
+                        "product_knowledge": 60,
+                        "problem_solving": 60,
+                        "customer_focus": 60,
+                        "professionalism": 60,
+                    },
+                    "strengths": ["完成了对话"],
+                    "weaknesses": ["需要更多练习"],
+                    "suggestions": ["继续练习以提高表现"],
+                    "summary": "完成了销售对话练习",
+                }
+            )
 
     async def generate_report(
         self,

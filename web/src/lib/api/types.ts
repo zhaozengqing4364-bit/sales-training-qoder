@@ -159,6 +159,8 @@ export interface SessionItem {
     duration_seconds: number;
     start_time: string;
     status: SessionStatus;
+    report_status?: "pending" | "processing" | "completed" | "failed" | string | null;
+    report_generated_at?: string | null;
     user_id?: string;
     username?: string;
     session_id?: string;

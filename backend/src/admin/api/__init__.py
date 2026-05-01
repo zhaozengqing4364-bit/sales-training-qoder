@@ -6,6 +6,7 @@ Contains admin endpoints for:
 - Training records management
 - System logs
 """
+
 from .admin import router as admin_router
 from .business_rules import router as business_rules_router
 from .knowledge_answer_config import router as knowledge_answer_config_router

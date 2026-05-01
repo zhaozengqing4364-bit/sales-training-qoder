@@ -47,19 +47,22 @@ logger = get_logger(__name__)
 
 class ServiceType(str, Enum):
     """Types of voice services to monitor"""
+
     ASR = "asr"
     TTS = "tts"
 
 
 class PolicyState(str, Enum):
     """State of voice policy"""
-    ACTIVE = "active"           # Using primary policy
-    ROLLED_BACK = "rolled_back" # Using fallback policy
-    COOLING_DOWN = "cooling_down" # In cooldown after rollback
+
+    ACTIVE = "active"  # Using primary policy
+    ROLLED_BACK = "rolled_back"  # Using fallback policy
+    COOLING_DOWN = "cooling_down"  # In cooldown after rollback
 
 
 class AlertLevel(str, Enum):
     """Alert severity levels"""
+
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
@@ -68,6 +71,7 @@ class AlertLevel(str, Enum):
 @dataclass
 class ServiceMetrics:
     """Metrics for a single voice service"""
+
     service_type: ServiceType
     provider: str  # aliyun, edge, browser
 
@@ -133,6 +137,7 @@ class ServiceMetrics:
 @dataclass
 class RollbackConfig:
     """Configuration for automatic rollback behavior"""
+
     # Latency thresholds (ms)
     p95_latency_threshold: float = 300.0  # P95 > 300ms triggers rollback
     p99_latency_threshold: float = 500.0  # P99 > 500ms triggers immediate rollback
@@ -155,6 +160,7 @@ class RollbackConfig:
 @dataclass
 class RollbackEvent:
     """Record of a rollback event for audit"""
+
     event_id: str
     session_id: str | None
     service_type: ServiceType
@@ -213,7 +219,9 @@ class VoicePolicyMonitor:
 
         # Metrics storage
         self._metrics: dict[ServiceType, dict[str, ServiceMetrics]] = defaultdict(
-            lambda: defaultdict(lambda: ServiceMetrics(service_type=ServiceType.ASR, provider=""))
+            lambda: defaultdict(
+                lambda: ServiceMetrics(service_type=ServiceType.ASR, provider="")
+            )
         )
 
         # Policy state
@@ -345,9 +353,7 @@ class VoicePolicyMonitor:
                 {"provider": provider, "latency_ms": latency_ms},
             )
 
-    def evaluate_rollback_decision(
-        self, service_type: ServiceType
-    ) -> dict[str, Any]:
+    def evaluate_rollback_decision(self, service_type: ServiceType) -> dict[str, Any]:
         """
         Evaluate if a rollback should be triggered based on metrics
 
@@ -389,7 +395,10 @@ class VoicePolicyMonitor:
         sample_count = max(metrics.total_requests, len(metrics.latencies))
 
         # Check if we have enough samples
-        if not decision["should_rollback"] and sample_count < self.config.min_sample_size:
+        if (
+            not decision["should_rollback"]
+            and sample_count < self.config.min_sample_size
+        ):
             decision["reason"] = (
                 f"Insufficient samples: {sample_count} "
                 f"(min {self.config.min_sample_size})"
@@ -413,7 +422,10 @@ class VoicePolicyMonitor:
             )
 
         # Check success rate threshold
-        if not decision["should_rollback"] and metrics.success_rate < self.config.min_success_rate:
+        if (
+            not decision["should_rollback"]
+            and metrics.success_rate < self.config.min_success_rate
+        ):
             decision["should_rollback"] = True
             decision["reason"] = (
                 f"Success rate {metrics.success_rate:.0%} "
@@ -520,9 +532,7 @@ class VoicePolicyMonitor:
 
         return Result.ok(rollback_event)
 
-    def check_recovery(
-        self, service_type: ServiceType
-    ) -> Result[dict[str, Any]]:
+    def check_recovery(self, service_type: ServiceType) -> Result[dict[str, Any]]:
         """
         Check if primary provider has recovered and can be restored
 
@@ -534,13 +544,14 @@ class VoicePolicyMonitor:
         """
         # Check if cooldown period has passed
         if self._is_in_recovery_cooldown(service_type):
-            return Result.ok({
-                "should_restore": False,
-                "reason": "Still in recovery cooldown period"
-            })
+            return Result.ok(
+                {"should_restore": False, "reason": "Still in recovery cooldown period"}
+            )
 
         if self._policy_state[service_type] == PolicyState.ACTIVE:
-            return Result.ok({"should_restore": False, "reason": "Already using primary provider"})
+            return Result.ok(
+                {"should_restore": False, "reason": "Already using primary provider"}
+            )
 
         current_provider = self._current_provider[service_type]
         primary_provider = self._get_primary_provider(service_type)
@@ -549,10 +560,12 @@ class VoicePolicyMonitor:
         metrics = self._get_or_create_metrics(service_type, primary_provider)
 
         if metrics.total_requests < self.config.min_sample_size:
-            return Result.ok({
-                "should_restore": False,
-                "reason": f"Insufficient samples for primary: {metrics.total_requests}"
-            })
+            return Result.ok(
+                {
+                    "should_restore": False,
+                    "reason": f"Insufficient samples for primary: {metrics.total_requests}",
+                }
+            )
 
         # Check if primary has recovered
         recovered = (
@@ -567,10 +580,12 @@ class VoicePolicyMonitor:
             if circuit_key in self._circuit_breakers:
                 circuit = self._circuit_breakers[circuit_key]
                 if circuit.is_open:
-                    return Result.ok({
-                        "should_restore": False,
-                        "reason": "Primary provider circuit is still open"
-                    })
+                    return Result.ok(
+                        {
+                            "should_restore": False,
+                            "reason": "Primary provider circuit is still open",
+                        }
+                    )
 
             # Restore primary
             self._current_provider[service_type] = primary_provider
@@ -590,25 +605,29 @@ class VoicePolicyMonitor:
                 },
             )
 
-            return Result.ok({
-                "should_restore": True,
-                "reason": "Primary provider metrics within thresholds",
+            return Result.ok(
+                {
+                    "should_restore": True,
+                    "reason": "Primary provider metrics within thresholds",
+                    "metrics_snapshot": {
+                        "p95_latency_ms": round(metrics.p95_latency, 2),
+                        "success_rate": round(metrics.success_rate, 4),
+                    },
+                }
+            )
+
+        return Result.ok(
+            {
+                "should_restore": False,
+                "reason": "Primary provider metrics not yet recovered",
                 "metrics_snapshot": {
                     "p95_latency_ms": round(metrics.p95_latency, 2),
                     "success_rate": round(metrics.success_rate, 4),
+                    "p95_threshold": self.config.p95_latency_threshold,
+                    "success_rate_threshold": self.config.min_success_rate,
                 },
-            })
-
-        return Result.ok({
-            "should_restore": False,
-            "reason": "Primary provider metrics not yet recovered",
-            "metrics_snapshot": {
-                "p95_latency_ms": round(metrics.p95_latency, 2),
-                "success_rate": round(metrics.success_rate, 4),
-                "p95_threshold": self.config.p95_latency_threshold,
-                "success_rate_threshold": self.config.min_success_rate,
-            },
-        })
+            }
+        )
 
     def get_current_provider(self, service_type: ServiceType) -> str:
         """Get current provider for a service"""
@@ -759,15 +778,17 @@ class VoicePolicyMonitor:
                 user_id=None,  # System-initiated
                 user_identifier="system",
                 status="warning",  # Rollback is a warning event
-                details=str({
-                    "event_id": event.event_id,
-                    "service_type": event.service_type.value,
-                    "from_provider": event.from_provider,
-                    "to_provider": event.to_provider,
-                    "trigger_reason": event.trigger_reason,
-                    "metrics_snapshot": event.metrics_snapshot,
-                    "timestamp": event.timestamp.isoformat(),
-                }),
+                details=str(
+                    {
+                        "event_id": event.event_id,
+                        "service_type": event.service_type.value,
+                        "from_provider": event.from_provider,
+                        "to_provider": event.to_provider,
+                        "trigger_reason": event.trigger_reason,
+                        "metrics_snapshot": event.metrics_snapshot,
+                        "timestamp": event.timestamp.isoformat(),
+                    }
+                ),
             )
             self.db.add(log_entry)
             await self.db.flush()

@@ -21,7 +21,9 @@ class KnowledgeAnswerAssembler:
         execution_result: KnowledgeHaystackExecutionResult,
     ) -> KnowledgeAnswerResult:
         _ = query
-        blocked_reason = _normalize_optional(answerability_result.audit.get("blocked_reason"))
+        blocked_reason = _normalize_optional(
+            answerability_result.audit.get("blocked_reason")
+        )
         rewritten_queries = _collect_rewritten_queries(execution_result)
         retrieval_summary = {
             "hit_count": sum(1 for row in rows if isinstance(row, dict)),
@@ -30,7 +32,10 @@ class KnowledgeAnswerAssembler:
             "blocked_reason": blocked_reason,
         }
 
-        if answerability_result.answerability == "blocked" or answerability_result.source_status == "blocked":
+        if (
+            answerability_result.answerability == "blocked"
+            or answerability_result.source_status == "blocked"
+        ):
             return KnowledgeAnswerResult(
                 final_text=None,
                 blocked_text=_BLOCKED_TEXT,
@@ -69,7 +74,9 @@ class KnowledgeAnswerAssembler:
                     citations.append(
                         KnowledgeCitation(
                             document_id=_normalize_optional(row.get("document_id")),
-                            document_title=_normalize_optional(row.get("document_title")),
+                            document_title=_normalize_optional(
+                                row.get("document_title")
+                            ),
                             chunk_id=_normalize_optional(row.get("chunk_id")),
                             snippet=snippet,
                             score=_normalize_score(row.get("score")),
@@ -113,7 +120,9 @@ def _collect_rewritten_queries(
 def _render_final_text(claims: list[str]) -> str | None:
     if not claims:
         return None
-    numbered_claims = [f"{index}. {claim}" for index, claim in enumerate(claims, start=1)]
+    numbered_claims = [
+        f"{index}. {claim}" for index, claim in enumerate(claims, start=1)
+    ]
     return "根据知识库证据：\n" + "\n".join(numbered_claims)
 
 
@@ -138,7 +147,13 @@ def _normalize_score(value: Any) -> float | None:
 def _normalize_metadata(row: dict[str, Any]) -> dict[str, Any]:
     metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
     normalized = dict(metadata)
-    for key in ("knowledge_base_id", "knowledge_base_name", "retrieval_mode", "ranking_passed", "score_breakdown"):
+    for key in (
+        "knowledge_base_id",
+        "knowledge_base_name",
+        "retrieval_mode",
+        "ranking_passed",
+        "score_breakdown",
+    ):
         if key in row:
             normalized[key] = row.get(key)
     return normalized

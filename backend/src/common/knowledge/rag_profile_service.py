@@ -58,9 +58,7 @@ async def resolve_rag_profile(
 
     # Try explicit profile first
     if profile_id:
-        result = await db.execute(
-            select(RagProfile).where(RagProfile.id == profile_id)
-        )
+        result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
         profile = result.scalar_one_or_none()
         if profile:
             return _profile_to_resolved(profile)
@@ -99,7 +97,11 @@ async def resolve_rag_profile_for_search(
 
     # Collect distinct profile IDs
     for kb_id, ctx in kb_contexts.items():
-        pid = getattr(ctx, "rag_profile_id", None) if hasattr(ctx, "rag_profile_id") else None
+        pid = (
+            getattr(ctx, "rag_profile_id", None)
+            if hasattr(ctx, "rag_profile_id")
+            else None
+        )
         if pid and pid not in seen_profile_ids:
             seen_profile_ids.add(pid)
 

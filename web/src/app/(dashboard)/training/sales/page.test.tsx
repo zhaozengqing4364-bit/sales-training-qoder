@@ -10,18 +10,12 @@ const {
     getSalesAgentsMock,
     listScenariosMock,
     getSalesPersonasMock,
-    getRecommendationMock,
-    getMyHistoryMock,
-    getActiveSalesCombinationsMock,
 } = vi.hoisted(() => ({
     backMock: vi.fn(),
     pushMock: vi.fn(),
     getSalesAgentsMock: vi.fn(),
     listScenariosMock: vi.fn(),
     getSalesPersonasMock: vi.fn(),
-    getRecommendationMock: vi.fn(),
-    getMyHistoryMock: vi.fn(),
-    getActiveSalesCombinationsMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -55,20 +49,11 @@ vi.mock("@/lib/api/client", async () => {
             training: {
                 ...actual.api.training,
                 getSalesAgents: getSalesAgentsMock,
-                getActiveSalesCombinations: getActiveSalesCombinationsMock,
             },
             scenarios: {
                 ...actual.api.scenarios,
                 list: listScenariosMock,
                 getSalesPersonas: getSalesPersonasMock,
-            },
-            dashboard: {
-                ...actual.api.dashboard,
-                getRecommendation: getRecommendationMock,
-            },
-            user: {
-                ...actual.api.user,
-                getMyHistory: getMyHistoryMock,
             },
         },
     };
@@ -93,16 +78,13 @@ vi.mock("lucide-react", async () => {
     };
 });
 
-describe("SalesTrainingPage core combinations", () => {
+describe("SalesTrainingPage", () => {
     beforeEach(() => {
         backMock.mockReset();
         pushMock.mockReset();
         getSalesAgentsMock.mockReset();
         listScenariosMock.mockReset();
         getSalesPersonasMock.mockReset();
-        getRecommendationMock.mockReset();
-        getMyHistoryMock.mockReset();
-        getActiveSalesCombinationsMock.mockReset();
 
         getSalesAgentsMock.mockResolvedValue([
             {
@@ -140,128 +122,21 @@ describe("SalesTrainingPage core combinations", () => {
                 difficulty: "hard",
             },
         ]);
-        getRecommendationMock.mockResolvedValue({
-            title: "继续训练",
-            reason: "完成一次新的可评估销售训练。",
-            action_label: "开始训练",
-            target_path: "/training/sales",
-            recommendation_kind: "onboarding",
-            scenario_type: "sales",
-        });
-        getMyHistoryMock.mockResolvedValue({
-            sessions: [],
-            total: 0,
-            page: 1,
-            page_size: 5,
-            total_pages: 0,
-        });
-        getActiveSalesCombinationsMock.mockResolvedValue(null);
     });
 
-    it("turns matched 80/20 combinations into focused start routes", async () => {
+    it("loads the sales entry stats and published agents without the 80/20 combination module", async () => {
         render(<SalesTrainingPage />);
 
-        expect((await screen.findAllByText("去开练：销售陪练 · 价格敏感型")).length).toBeGreaterThan(0);
+        expect(await screen.findByText("销售能力训练")).toBeTruthy();
+        expect(screen.getByText("可用销售场景")).toBeTruthy();
+        expect(screen.getByText("可选客户画像")).toBeTruthy();
+        expect(screen.getByText("发布中的智能体")).toBeTruthy();
+        expect(screen.getByRole("button", { name: /销售陪练选择角色开始对练/ })).toBeTruthy();
 
-        fireEvent.click(screen.getByRole("button", { name: /组合 3\s+需求挖掘\s+客户角色：价格敏感型客户/ }));
-
-        expect(pushMock).toHaveBeenCalledTimes(1);
-        const pushedUrl = pushMock.mock.calls[0][0] as string;
-        expect(pushedUrl).toContain("/agents/agent-sales?persona_id=persona-price");
-
-        const params = new URLSearchParams(pushedUrl.split("?")[1]);
-        const focusIntent = JSON.parse(params.get("focus_intent") || "{}") as {
-            version?: string;
-            main_issue?: { issue_text?: string };
-            next_goal?: { goal_text?: string };
-        };
-        expect(focusIntent.version).toBe("sales_core_combination_v1");
-        expect(focusIntent.main_issue?.issue_text).toContain("需求挖掘");
-        expect(focusIntent.main_issue?.issue_text).toContain("价格敏感型客户");
-        expect(focusIntent.next_goal?.goal_text).toContain("需求挖掘 × 价格敏感型客户");
-        expect(getRecommendationMock).toHaveBeenCalledTimes(1);
-        expect(getMyHistoryMock).toHaveBeenCalledWith({ page: 1, page_size: 5, scenario_type: "sales" });
-    });
-
-    it("prioritizes a core combination from the latest retry recommendation", async () => {
-        const focusIntent = {
-            version: "sales_retry_v1",
-            source_session_id: "session-previous",
-            main_issue: {
-                issue_type: "需求挖掘",
-                issue_text: "上次在价格敏感型客户场景中需求挖掘不足。",
-                recovery_rule: "围绕价格敏感型客户先确认预算和 ROI。",
-            },
-            next_goal: {
-                goal_type: "需求挖掘",
-                goal_text: "下一轮练习需求挖掘 × 价格敏感型客户。",
-                rule: "retry",
-            },
-        };
-        getRecommendationMock.mockResolvedValueOnce({
-            title: "复练需求挖掘",
-            reason: "基于上次可评估销售报告。",
-            action_label: "按目标再练",
-            target_path: `/agents/agent-sales?persona_id=persona-price&focus_intent=${encodeURIComponent(JSON.stringify(focusIntent))}`,
-            recommendation_kind: "sales_retry",
-            scenario_type: "sales",
-            source_session_id: "session-previous",
-        });
-
-        render(<SalesTrainingPage />);
-
-        expect(await screen.findByRole("button", {
-            name: /组合 1\s+基于上次报告推荐\s+需求挖掘\s+客户角色：价格敏感型客户/,
-        })).toBeTruthy();
-    });
-
-    it("falls back to recent sales history when the recommendation has no matching focus", async () => {
-        getRecommendationMock.mockResolvedValueOnce({
-            title: "普通训练",
-            reason: "先完成一次可评估训练。",
-            action_label: "开始训练",
-            target_path: "/training/sales",
-            recommendation_kind: "onboarding",
-            scenario_type: "sales",
-        });
-        getMyHistoryMock.mockResolvedValueOnce({
-            sessions: [
-                {
-                    session_id: "history-1",
-                    scenario_name: "销售对练",
-                    scenario_type: "sales",
-                    persona_name: "强势质疑型客户",
-                    agent_name: "销售陪练",
-                    start_time: "2026-04-19T10:00:00.000Z",
-                    duration_seconds: 600,
-                    overall_score: 72,
-                    report_status: "completed",
-                    report_generated_at: "2026-04-19T10:12:00.000Z",
-                    status: "completed",
-                    feedback_summary: "对强势质疑型客户需要更稳地回应。",
-                    main_issue: {
-                        issue_type: "异议处理",
-                        issue_text: "面对强势质疑型客户时异议处理容易绕开关键问题。",
-                        recovery_rule: "先复述质疑，再给证据。",
-                    },
-                    next_goal: {
-                        goal_type: "异议处理",
-                        goal_text: "下一轮练习异议处理 × 强势质疑型客户。",
-                        rule: "retry",
-                    },
-                },
-            ],
-            total: 1,
-            page: 1,
-            page_size: 5,
-            total_pages: 1,
-        });
-
-        render(<SalesTrainingPage />);
-
-        expect(await screen.findByRole("button", {
-            name: /组合 1\s+基于上次报告推荐\s+异议处理\s+客户角色：强势质疑型客户/,
-        })).toBeTruthy();
+        expect(screen.queryByText("核心 10 组合（80/20）")).toBeNull();
+        expect(screen.queryByText(/后台配置/)).toBeNull();
+        expect(screen.queryByText(/安全兜底/)).toBeNull();
+        expect(screen.queryByText(/组合 1/)).toBeNull();
     });
 
     it("uses an explicit training lobby return route instead of browser history", async () => {
@@ -273,24 +148,12 @@ describe("SalesTrainingPage core combinations", () => {
         expect(backMock).not.toHaveBeenCalled();
     });
 
-    it("makes missing persona combinations visibly unavailable instead of leaving inert cards", async () => {
-        getSalesPersonasMock.mockResolvedValueOnce([
-            {
-                id: "persona-price",
-                name: "价格敏感型",
-                description: "重点关注价格和 ROI。",
-                characteristics: ["价格敏感型客户"],
-                difficulty: "hard",
-            },
-        ]);
-
+    it("opens the selected agent role page from the agent card", async () => {
         render(<SalesTrainingPage />);
 
-        expect((await screen.findAllByText("管理员尚未配置「冷淡型客户」角色")).length).toBeGreaterThan(0);
+        fireEvent.click(await screen.findByRole("button", { name: /销售陪练选择角色开始对练/ }));
 
-        fireEvent.click(screen.getByRole("button", { name: /组合 1\s+破冰建立信任\s+客户角色：冷淡型客户/ }));
-
-        expect(pushMock).not.toHaveBeenCalled();
+        expect(pushMock).toHaveBeenCalledWith("/agents/agent-sales");
     });
 
     it("separates partial API failure from real empty counts on the sales entry", async () => {
@@ -303,77 +166,6 @@ describe("SalesTrainingPage core combinations", () => {
         expect(screen.getByText("加载失败")).toBeTruthy();
         expect(screen.getByText("可选客户画像")).toBeTruthy();
         expect(screen.queryByText("发布中的智能体 0")).toBeNull();
-    });
-
-    it("renders a valid admin-configured ruleset and keeps personalized priority inside the server list", async () => {
-        const focusIntent = {
-            version: "sales_retry_v1",
-            source_session_id: "session-previous",
-            main_issue: {
-                issue_type: "异议处理",
-                issue_text: "面对强势质疑型客户时异议处理不足。",
-                recovery_rule: "先复述质疑，再给证据。",
-            },
-            next_goal: {
-                goal_type: "异议处理",
-                goal_text: "下一轮练习异议处理 × 强势质疑型客户。",
-                rule: "retry",
-            },
-        };
-        getActiveSalesCombinationsMock.mockResolvedValueOnce({
-            rule_set_id: "sales-core",
-            version: "v2026.04",
-            status: "published",
-            effective_at: "2026-04-24T00:00:00.000Z",
-            fallback_policy: "client_default_v1",
-            audit_summary: {
-                published_by: "教研运营",
-                published_at: "2026-04-24T00:00:00.000Z",
-                reason: "上线核心组合后台配置",
-            },
-            combinations: [
-                {
-                    id: "server-price",
-                    capability: "需求挖掘",
-                    role: "价格敏感型客户",
-                    priority: 1,
-                    enabled: true,
-                },
-                {
-                    id: "server-objection",
-                    capability: "异议处理",
-                    role: "强势质疑型客户",
-                    priority: 2,
-                    enabled: true,
-                },
-            ],
-        });
-        getRecommendationMock.mockResolvedValueOnce({
-            title: "复练异议处理",
-            reason: "基于上次可评估销售报告。",
-            action_label: "按目标再练",
-            target_path: `/agents/agent-sales?persona_id=persona-cold&focus_intent=${encodeURIComponent(JSON.stringify(focusIntent))}`,
-            recommendation_kind: "sales_retry",
-            scenario_type: "sales",
-            source_session_id: "session-previous",
-        });
-
-        render(<SalesTrainingPage />);
-
-        expect(await screen.findByText("后台配置 · v2026.04")).toBeTruthy();
-        expect(await screen.findByRole("button", {
-            name: /组合 1\s+基于上次报告推荐\s+异议处理\s+客户角色：强势质疑型客户/,
-        })).toBeTruthy();
-        expect(screen.queryByText("推进下一步行动")).toBeNull();
-    });
-
-    it("uses the client fallback combinations when the active ruleset API fails", async () => {
-        getActiveSalesCombinationsMock.mockRejectedValueOnce(new Error("rules unavailable"));
-
-        render(<SalesTrainingPage />);
-
-        expect(await screen.findByText("后台组合配置读取失败，已使用前端安全兜底。 原因：rules unavailable")).toBeTruthy();
-        expect(screen.getByText("安全兜底 · client_default_v1")).toBeTruthy();
-        expect(screen.getByRole("button", { name: /组合 3\s+需求挖掘\s+客户角色：价格敏感型客户/ })).toBeTruthy();
+        expect(screen.queryByText("核心 10 组合（80/20）")).toBeNull();
     });
 });

@@ -119,9 +119,7 @@ class RuntimeStatusService:
         sessions_since_change = 0
         if last_changed_dt is not None:
             sessions_since_change = sum(
-                1
-                for started_at in started_at_values
-                if started_at >= last_changed_dt
+                1 for started_at in started_at_values if started_at >= last_changed_dt
             )
 
         anomalies = [
@@ -136,8 +134,12 @@ class RuntimeStatusService:
         )
         anomalies.sort(key=lambda item: item.get("detected_at") or "", reverse=True)
 
-        blocking_count = sum(1 for item in anomalies if item.get("severity") == "blocking")
-        warning_count = sum(1 for item in anomalies if item.get("severity") == "warning")
+        blocking_count = sum(
+            1 for item in anomalies if item.get("severity") == "blocking"
+        )
+        warning_count = sum(
+            1 for item in anomalies if item.get("severity") == "warning"
+        )
         impacted_user_ids = entry.get("impacted_user_ids") or set()
         impacted_user_count = len(impacted_user_ids)
         recent_session_count = int(entry.get("recent_session_count") or 0)
@@ -154,7 +156,9 @@ class RuntimeStatusService:
                 "recent_session_count": recent_session_count,
                 "active_session_count": active_session_count,
                 "impacted_user_count": impacted_user_count,
-                "last_session_at": cls._serialize_timestamp(entry.get("last_session_at")),
+                "last_session_at": cls._serialize_timestamp(
+                    entry.get("last_session_at")
+                ),
             },
             "recent_change_summary": {
                 "last_changed_at": cls._serialize_timestamp(last_changed_dt),
@@ -199,8 +203,12 @@ class RuntimeStatusService:
             session_id = str(getattr(session, "session_id", "") or "").strip()
             fault_items = faults_by_session.get(session_id, [])
             started_at = cls._coerce_datetime(getattr(session, "start_time", None))
-            activity_at = cls._coerce_datetime(getattr(session, "end_time", None)) or started_at
-            in_window = cls._started_in_window(session, now=now, window_hours=window_hours)
+            activity_at = (
+                cls._coerce_datetime(getattr(session, "end_time", None)) or started_at
+            )
+            in_window = cls._started_in_window(
+                session, now=now, window_hours=window_hours
+            )
             is_active = str(getattr(session, "status", "") or "") in (
                 ACTIVE_SESSION_STATUSES | {TERMINAL_SCORING_STATUS}
             )
@@ -256,16 +264,22 @@ class RuntimeStatusService:
 
         if asset_ids["knowledge_base"]:
             kb_result = await self.db.execute(
-                select(KnowledgeBase).where(KnowledgeBase.id.in_(tuple(asset_ids["knowledge_base"])))
+                select(KnowledgeBase).where(
+                    KnowledgeBase.id.in_(tuple(asset_ids["knowledge_base"]))
+                )
             )
             doc_result = await self.db.execute(
                 select(KnowledgeDocument).where(
-                    KnowledgeDocument.knowledge_base_id.in_(tuple(asset_ids["knowledge_base"]))
+                    KnowledgeDocument.knowledge_base_id.in_(
+                        tuple(asset_ids["knowledge_base"])
+                    )
                 )
             )
             docs_by_kb: dict[str, list[KnowledgeDocument]] = {}
             for document in doc_result.scalars().all():
-                docs_by_kb.setdefault(str(document.knowledge_base_id), []).append(document)
+                docs_by_kb.setdefault(str(document.knowledge_base_id), []).append(
+                    document
+                )
 
             for kb in kb_result.scalars().all():
                 kb_id = str(kb.id)
@@ -273,8 +287,10 @@ class RuntimeStatusService:
                 kb_updated_at = self._coerce_datetime(getattr(kb, "updated_at", None))
                 latest_document = max(
                     documents,
-                    key=lambda document: self._coerce_datetime(document.created_at)
-                    or datetime.min.replace(tzinfo=UTC),
+                    key=lambda document: (
+                        self._coerce_datetime(document.created_at)
+                        or datetime.min.replace(tzinfo=UTC)
+                    ),
                     default=None,
                 )
                 latest_document_created_at = (
@@ -288,7 +304,10 @@ class RuntimeStatusService:
                 if (
                     latest_document is not None
                     and latest_document_created_at is not None
-                    and (kb_updated_at is None or latest_document_created_at >= kb_updated_at)
+                    and (
+                        kb_updated_at is None
+                        or latest_document_created_at >= kb_updated_at
+                    )
                 ):
                     last_changed_at = latest_document_created_at
                     latest_change_type = "document_uploaded"
@@ -297,7 +316,10 @@ class RuntimeStatusService:
                 change_count_7d = sum(
                     1
                     for document in documents
-                    if (self._coerce_datetime(document.created_at) or datetime.min.replace(tzinfo=UTC))
+                    if (
+                        self._coerce_datetime(document.created_at)
+                        or datetime.min.replace(tzinfo=UTC)
+                    )
                     >= seven_days_ago
                 )
                 if kb_updated_at is not None and kb_updated_at >= seven_days_ago:
@@ -334,7 +356,9 @@ class RuntimeStatusService:
                         last_changed_at=updated_at,
                         latest_change_type="persona_updated",
                         latest_change_label="角色配置更新",
-                        change_count_7d=1 if updated_at and updated_at >= seven_days_ago else 0,
+                        change_count_7d=1
+                        if updated_at and updated_at >= seven_days_ago
+                        else 0,
                     ),
                 )
                 if ref is not None:
@@ -348,7 +372,9 @@ class RuntimeStatusService:
             )
             for presentation in presentation_result.scalars().all():
                 presentation_id = str(presentation.presentation_id)
-                upload_date = self._coerce_datetime(getattr(presentation, "upload_date", None))
+                upload_date = self._coerce_datetime(
+                    getattr(presentation, "upload_date", None)
+                )
                 latest_change_label = (
                     f"PPT 已替换到 V{presentation.version_number}"
                     if int(getattr(presentation, "version_number", 1) or 1) > 1
@@ -363,7 +389,9 @@ class RuntimeStatusService:
                         last_changed_at=upload_date,
                         latest_change_type="presentation_uploaded",
                         latest_change_label=latest_change_label,
-                        change_count_7d=1 if upload_date and upload_date >= seven_days_ago else 0,
+                        change_count_7d=1
+                        if upload_date and upload_date >= seven_days_ago
+                        else 0,
                     ),
                 )
                 if ref is not None:
@@ -392,7 +420,9 @@ class RuntimeStatusService:
                         last_changed_at=updated_at,
                         latest_change_type="runtime_profile_updated",
                         latest_change_label=latest_change_label,
-                        change_count_7d=1 if updated_at and updated_at >= seven_days_ago else 0,
+                        change_count_7d=1
+                        if updated_at and updated_at >= seven_days_ago
+                        else 0,
                     ),
                 )
                 if ref is not None:
@@ -448,11 +478,19 @@ class RuntimeStatusService:
             "asset_id": asset_id,
             "asset_name": asset_name,
             "admin_path": registration.build_admin_path(asset_id),
-            "latest_change_label": str(recent_change.get("latest_change_label") or "最近有配置改动"),
-            "latest_change_type": str(recent_change.get("latest_change_type") or "updated"),
-            "last_changed_at": cls._serialize_timestamp(recent_change.get("last_changed_at")),
+            "latest_change_label": str(
+                recent_change.get("latest_change_label") or "最近有配置改动"
+            ),
+            "latest_change_type": str(
+                recent_change.get("latest_change_type") or "updated"
+            ),
+            "last_changed_at": cls._serialize_timestamp(
+                recent_change.get("last_changed_at")
+            ),
             "change_count_7d": change_count_7d,
-            "sessions_since_change": int(recent_change.get("sessions_since_change") or 0),
+            "sessions_since_change": int(
+                recent_change.get("sessions_since_change") or 0
+            ),
             "impact_level": str(impact_summary.get("impact_level") or "low"),
             "health_status": str(health_summary.get("status") or "healthy"),
         }
@@ -466,7 +504,11 @@ class RuntimeStatusService:
         window_start = now - timedelta(hours=window_hours)
         sessions = await self._load_recent_sessions(window_start=window_start)
         messages_by_session = await self._load_messages_by_session(
-            sessions=[session for session in sessions if session.status == TERMINAL_COMPLETED_STATUS]
+            sessions=[
+                session
+                for session in sessions
+                if session.status == TERMINAL_COMPLETED_STATUS
+            ]
         )
         records = await self._build_runtime_records(
             sessions=sessions,
@@ -482,7 +524,9 @@ class RuntimeStatusService:
             governance_indexes=governance_indexes,
             now=now,
         )
-        supplemental_logs = await self._load_supplemental_logs(window_start=window_start)
+        supplemental_logs = await self._load_supplemental_logs(
+            window_start=window_start
+        )
         faults = self.build_faults_payload(
             records,
             now=now,
@@ -532,7 +576,9 @@ class RuntimeStatusService:
             .where(
                 or_(
                     PracticeSession.start_time >= window_start,
-                    PracticeSession.status.in_(tuple(ACTIVE_SESSION_STATUSES | {TERMINAL_SCORING_STATUS})),
+                    PracticeSession.status.in_(
+                        tuple(ACTIVE_SESSION_STATUSES | {TERMINAL_SCORING_STATUS})
+                    ),
                 )
             )
             .order_by(PracticeSession.start_time.desc())
@@ -602,8 +648,10 @@ class RuntimeStatusService:
                     projection_error = f"[SESSION_EVIDENCE_FAILED] {exc}"
 
                 if projection_error is None and scenario_type == "presentation":
-                    review_result = await presentation_report_service.build_presentation_review(
-                        str(session.session_id)
+                    review_result = (
+                        await presentation_report_service.build_presentation_review(
+                            str(session.session_id)
+                        )
                     )
                     if review_result.is_success:
                         presentation_review = review_result.value
@@ -695,10 +743,14 @@ class RuntimeStatusService:
         started_in_window = [
             record
             for record in records
-            if cls._started_in_window(record.session, now=now, window_hours=window_hours)
+            if cls._started_in_window(
+                record.session, now=now, window_hours=window_hours
+            )
         ]
         completed_in_window = [
-            record for record in started_in_window if record.session.status == TERMINAL_COMPLETED_STATUS
+            record
+            for record in started_in_window
+            if record.session.status == TERMINAL_COMPLETED_STATUS
         ]
         not_evaluable_completed = [
             record
@@ -706,7 +758,9 @@ class RuntimeStatusService:
             if getattr(record.projection, "evaluable", None) is False
         ]
         scoring_records = [
-            record for record in records if str(getattr(record.session, "status", "")) == TERMINAL_SCORING_STATUS
+            record
+            for record in records
+            if str(getattr(record.session, "status", "")) == TERMINAL_SCORING_STATUS
         ]
         active_sessions = [
             record
@@ -714,10 +768,16 @@ class RuntimeStatusService:
             if str(getattr(record.session, "status", "")) in ACTIVE_SESSION_STATUSES
         ]
         stuck_scoring_count = sum(
-            1 for record in scoring_records if cls._is_stuck_scoring(record.session, now=now)
+            1
+            for record in scoring_records
+            if cls._is_stuck_scoring(record.session, now=now)
         )
-        blocking_items = [item for item in typed_items if item.get("severity") == "blocking"]
-        warning_items = [item for item in typed_items if item.get("severity") == "warning"]
+        blocking_items = [
+            item for item in typed_items if item.get("severity") == "blocking"
+        ]
+        warning_items = [
+            item for item in typed_items if item.get("severity") == "warning"
+        ]
 
         completion_rate = (
             round((len(completed_in_window) / len(started_in_window)) * 100, 2)
@@ -747,10 +807,18 @@ class RuntimeStatusService:
                 "warning_count": len(warning_items),
                 "typed_anomaly_count": len(typed_items),
                 "blocking_sessions_count": len(
-                    {item.get("session_id") for item in blocking_items if item.get("session_id")}
+                    {
+                        item.get("session_id")
+                        for item in blocking_items
+                        if item.get("session_id")
+                    }
                 ),
                 "warning_sessions_count": len(
-                    {item.get("session_id") for item in warning_items if item.get("session_id")}
+                    {
+                        item.get("session_id")
+                        for item in warning_items
+                        if item.get("session_id")
+                    }
                 ),
                 "supplemental_warning_log_count": len(supplemental_logs),
             },
@@ -830,12 +898,14 @@ class RuntimeStatusService:
                 runtime_events = knowledge.get("runtime_events")
                 if isinstance(runtime_events, list) and runtime_events:
                     item_diagnostics["runtime_events"] = [
-                        dict(event) for event in runtime_events if isinstance(event, dict)
+                        dict(event)
+                        for event in runtime_events
+                        if isinstance(event, dict)
                     ]
                 if session_id:
-                    linked_asset_changes = (
-                        asset_change_refs_by_session or {}
-                    ).get(session_id, [])
+                    linked_asset_changes = (asset_change_refs_by_session or {}).get(
+                        session_id, []
+                    )
                     if linked_asset_changes:
                         item_diagnostics["linked_asset_changes"] = linked_asset_changes
                 items.append(
@@ -899,14 +969,19 @@ class RuntimeStatusService:
                     },
                 )
 
-            if scenario_type == "presentation" and isinstance(record.presentation_review, dict):
+            if scenario_type == "presentation" and isinstance(
+                record.presentation_review, dict
+            ):
                 diagnostics = record.presentation_review.get("diagnostics")
                 degraded_reasons = (
                     diagnostics.get("degraded_reasons")
                     if isinstance(diagnostics, dict)
                     else []
                 )
-                if isinstance(degraded_reasons, list) and "missing_page_metadata" in degraded_reasons:
+                if (
+                    isinstance(degraded_reasons, list)
+                    and "missing_page_metadata" in degraded_reasons
+                ):
                     add_item(
                         severity="warning",
                         kind="presentation_degraded_missing_page_metadata",
@@ -985,13 +1060,13 @@ class RuntimeStatusService:
                     )
 
             if bool(knowledge.get("upstream_unstable")):
-                disconnect_count = int(knowledge.get("upstream_disconnect_count_5m") or 0)
+                disconnect_count = int(
+                    knowledge.get("upstream_disconnect_count_5m") or 0
+                )
                 add_item(
                     severity="warning",
                     kind="upstream_unstable",
-                    summary=(
-                        "上游实时链路最近 5 分钟断连次数偏高，存在不稳定迹象。"
-                    ),
+                    summary=("上游实时链路最近 5 分钟断连次数偏高，存在不稳定迹象。"),
                     detected_at=knowledge.get("updated_at")
                     or getattr(session, "end_time", None)
                     or getattr(session, "start_time", None),
@@ -1021,7 +1096,11 @@ class RuntimeStatusService:
                         },
                     )
                 elif learner_status == "partial" and failed_seg > 0:
-                    severity = "blocking" if (total_seg > 0 and failed_seg > total_seg / 2) else "warning"
+                    severity = (
+                        "blocking"
+                        if (total_seg > 0 and failed_seg > total_seg / 2)
+                        else "warning"
+                    )
                     summary = (
                         "会话音频上传大部分失败，录音严重缺失。"
                         if severity == "blocking"
@@ -1052,7 +1131,9 @@ class RuntimeStatusService:
                     "severity": "warning",
                     "kind": f"system_log_{str(log.status)}",
                     "summary": f"系统日志告警：{log.action}",
-                    "detected_at": log.created_at.isoformat() if log.created_at else None,
+                    "detected_at": log.created_at.isoformat()
+                    if log.created_at
+                    else None,
                     "session_id": None,
                     "scenario_type": None,
                     "session_status": None,
@@ -1082,7 +1163,9 @@ class RuntimeStatusService:
     def _is_stuck_scoring(cls, session: Any, *, now: datetime) -> bool:
         if str(getattr(session, "status", "") or "") != TERMINAL_SCORING_STATUS:
             return False
-        reference_time = getattr(session, "end_time", None) or getattr(session, "start_time", None)
+        reference_time = getattr(session, "end_time", None) or getattr(
+            session, "start_time", None
+        )
         if not isinstance(reference_time, datetime):
             return False
         if reference_time.tzinfo is None:
@@ -1093,7 +1176,9 @@ class RuntimeStatusService:
 
     @classmethod
     def _stuck_minutes(cls, session: Any, *, now: datetime) -> int | None:
-        reference_time = getattr(session, "end_time", None) or getattr(session, "start_time", None)
+        reference_time = getattr(session, "end_time", None) or getattr(
+            session, "start_time", None
+        )
         if not isinstance(reference_time, datetime):
             return None
         if reference_time.tzinfo is None:
@@ -1187,7 +1272,9 @@ class RuntimeStatusService:
         counts = Counter(item.get("kind") for item in items if item.get("kind"))
         return [
             {"kind": kind, "count": counts[kind]}
-            for kind in sorted(counts, key=lambda current: (-counts[current], str(current)))
+            for kind in sorted(
+                counts, key=lambda current: (-counts[current], str(current))
+            )
         ]
 
     @staticmethod

@@ -36,10 +36,7 @@ class IngestionService:
             self._vector_store = get_vector_store()
         return self._vector_store
 
-    async def ingest_presentation(
-        self,
-        extraction: PPTExtraction
-    ) -> Result[bool]:
+    async def ingest_presentation(self, extraction: PPTExtraction) -> Result[bool]:
         """
         Ingest all pages from a PPT into vector store
 
@@ -58,12 +55,14 @@ class IngestionService:
                 texts.append(full_text)
 
                 # Metadata for filtering
-                metadatas.append({
-                    "presentation_id": str(extraction.presentation_id),
-                    "page_number": page.page_number,
-                    "title": page.title,
-                    "filename": extraction.filename,
-                })
+                metadatas.append(
+                    {
+                        "presentation_id": str(extraction.presentation_id),
+                        "page_number": page.page_number,
+                        "title": page.title,
+                        "filename": extraction.filename,
+                    }
+                )
 
                 # Unique ID
                 ids.append(f"{extraction.presentation_id}_page_{page.page_number}")
@@ -73,13 +72,13 @@ class IngestionService:
                 collection_name=self.collection_name,
                 texts=texts,
                 metadatas=metadatas,
-                ids=ids
+                ids=ids,
             )
 
             if not result.is_success:
                 logger.error(
                     "Failed to add documents to vector store",
-                    extra={"presentation_id": str(extraction.presentation_id)}
+                    extra={"presentation_id": str(extraction.presentation_id)},
                 )
                 return Result.fail(fallback="[INGESTION_FAILED]")
 
@@ -88,7 +87,7 @@ class IngestionService:
                 extra={
                     "presentation_id": str(extraction.presentation_id),
                     "pages": len(texts),
-                }
+                },
             )
 
             return Result(value=True)
@@ -96,8 +95,11 @@ class IngestionService:
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to ingest presentation",
-                extra={"presentation_id": str(extraction.presentation_id), "error": str(e)},
-                exc_info=True
+                extra={
+                    "presentation_id": str(extraction.presentation_id),
+                    "error": str(e),
+                },
+                exc_info=True,
             )
             return Result.fail(fallback="[INGESTION_FAILED]")
 
@@ -107,7 +109,7 @@ class IngestionService:
         page_number: int,
         title: str,
         content: str,
-        filename: str
+        filename: str,
     ) -> Result[bool]:
         """
         Update a single page in the vector store
@@ -134,7 +136,7 @@ class IngestionService:
                 collection_name=self.collection_name,
                 doc_id=doc_id,
                 text=full_text,
-                metadata=metadata
+                metadata=metadata,
             )
 
             if not result.is_success:
@@ -143,7 +145,7 @@ class IngestionService:
                     collection_name=self.collection_name,
                     texts=[full_text],
                     metadatas=[metadata],
-                    ids=[doc_id]
+                    ids=[doc_id],
                 )
 
                 if not add_result.is_success:
@@ -154,7 +156,7 @@ class IngestionService:
                 extra={
                     "presentation_id": str(presentation_id),
                     "page_number": page_number,
-                }
+                },
             )
 
             return Result(value=True)
@@ -165,16 +167,13 @@ class IngestionService:
                 extra={
                     "presentation_id": str(presentation_id),
                     "page_number": page_number,
-                    "error": str(e)
+                    "error": str(e),
                 },
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[UPDATE_FAILED]")
 
-    async def delete_presentation(
-        self,
-        presentation_id: uuid.UUID
-    ) -> Result[bool]:
+    async def delete_presentation(self, presentation_id: uuid.UUID) -> Result[bool]:
         """
         Delete all pages for a presentation from vector store
 
@@ -184,7 +183,7 @@ class IngestionService:
             # Delete by metadata filter
             result = await self._get_vector_store().delete_by_metadata(
                 collection_name=self.collection_name,
-                metadata_filter={"presentation_id": str(presentation_id)}
+                metadata_filter={"presentation_id": str(presentation_id)},
             )
 
             if not result.is_success:
@@ -192,7 +191,7 @@ class IngestionService:
 
             logger.info(
                 "Presentation deleted from vector store",
-                extra={"presentation_id": str(presentation_id)}
+                extra={"presentation_id": str(presentation_id)},
             )
 
             return Result(value=True)
@@ -201,7 +200,7 @@ class IngestionService:
             logger.error(
                 "Failed to delete presentation",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[DELETE_FAILED]")
 
@@ -210,7 +209,7 @@ class IngestionService:
         query: str,
         presentation_id: uuid.UUID,
         page_number: int,
-        n_results: int = 3
+        n_results: int = 3,
     ) -> Result[list[dict]]:
         """
         Search for similar pages in the presentation
@@ -225,9 +224,9 @@ class IngestionService:
                 query_texts=[query],
                 where={
                     "presentation_id": str(presentation_id),
-                    "page_number": {"$ne": page_number}  # Exclude current page
+                    "page_number": {"$ne": page_number},  # Exclude current page
                 },
-                n_results=n_results
+                n_results=n_results,
             )
 
             if not result.is_success:
@@ -239,7 +238,7 @@ class IngestionService:
                     "presentation_id": str(presentation_id),
                     "page_number": page_number,
                     "results": len(result.value),
-                }
+                },
             )
 
             return Result(value=result.value)
@@ -250,9 +249,9 @@ class IngestionService:
                 extra={
                     "presentation_id": str(presentation_id),
                     "page_number": page_number,
-                    "error": str(e)
+                    "error": str(e),
                 },
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[SEARCH_FAILED]")
 

@@ -8,6 +8,7 @@ References:
 - Requirements: R5 (Knowledge Base management)
 - Design: Section 16-17 (Data Models)
 """
+
 import enum
 import uuid
 from datetime import UTC, datetime
@@ -30,6 +31,7 @@ from common.db.models import Base
 
 class KnowledgeBaseCategory(str, enum.Enum):
     """Knowledge base categories"""
+
     PRODUCT = "product"
     COMPETITOR = "competitor"
     FAQ = "faq"
@@ -38,12 +40,14 @@ class KnowledgeBaseCategory(str, enum.Enum):
 
 class KnowledgeBaseStatus(str, enum.Enum):
     """Knowledge base status"""
+
     ACTIVE = "active"
     ARCHIVED = "archived"
 
 
 class DocumentStatus(str, enum.Enum):
     """Document processing status"""
+
     PENDING = "pending"
     PROCESSING = "processing"
     READY = "ready"
@@ -52,6 +56,7 @@ class DocumentStatus(str, enum.Enum):
 
 class DocumentFileType(str, enum.Enum):
     """Supported document file types"""
+
     PDF = "pdf"
     DOCX = "docx"
     TXT = "txt"
@@ -70,6 +75,7 @@ class KnowledgeBase(Base):
     Requirements: R5
     Design: Section 16
     """
+
     __tablename__ = "knowledge_bases"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -103,16 +109,19 @@ class KnowledgeBase(Base):
 
     # Audit
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('active', 'archived')",
-            name="ck_knowledge_base_status"
+            "status IN ('active', 'archived')", name="ck_knowledge_base_status"
         ),
         CheckConstraint(
             "category IN ('product', 'competitor', 'faq', 'policy')",
-            name="ck_knowledge_base_category"
+            name="ck_knowledge_base_category",
         ),
         Index("idx_knowledge_bases_status", "status"),
         Index("idx_knowledge_bases_category", "category"),
@@ -123,7 +132,7 @@ class KnowledgeBase(Base):
     documents = relationship(
         "KnowledgeDocument",
         back_populates="knowledge_base",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
     rag_profile = relationship(
         "RagProfile",
@@ -141,13 +150,12 @@ class KnowledgeDocument(Base):
     Requirements: R5
     Design: Section 17
     """
+
     __tablename__ = "knowledge_documents"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     knowledge_base_id = Column(
-        String(36),
-        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
-        nullable=False
+        String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False
     )
 
     # Document metadata
@@ -158,7 +166,9 @@ class KnowledgeDocument(Base):
     content_hash = Column(String(64), nullable=True, index=True)
 
     # Processing status
-    status = Column(String(20), default="pending", index=True)  # pending|processing|ready|failed
+    status = Column(
+        String(20), default="pending", index=True
+    )  # pending|processing|ready|failed
     chunk_count = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
 
@@ -168,11 +178,11 @@ class KnowledgeDocument(Base):
     __table_args__ = (
         CheckConstraint(
             "status IN ('pending', 'processing', 'ready', 'failed')",
-            name="ck_knowledge_document_status"
+            name="ck_knowledge_document_status",
         ),
         CheckConstraint(
             "file_type IN ('pdf', 'docx', 'txt', 'md', 'xlsx', 'xls')",
-            name="ck_knowledge_document_file_type"
+            name="ck_knowledge_document_file_type",
         ),
         UniqueConstraint(
             "knowledge_base_id",

@@ -105,7 +105,9 @@ class SessionStateService:
 
     @staticmethod
     def _summarize_snapshot(state: SessionStateSnapshot) -> dict[str, Any]:
-        runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        runtime_state = (
+            state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        )
         reconnect_state = runtime_state.get("reconnect_state")
         normalized_reconnect_state = (
             dict(reconnect_state) if isinstance(reconnect_state, dict) else None
@@ -114,7 +116,9 @@ class SessionStateService:
         connection_epoch = 0
         last_disconnect_reason = None
         if normalized_reconnect_state is not None:
-            connection_epoch = int(normalized_reconnect_state.get("connection_epoch") or 0)
+            connection_epoch = int(
+                normalized_reconnect_state.get("connection_epoch") or 0
+            )
             last_disconnect_reason = normalized_reconnect_state.get(
                 "last_disconnect_reason"
             )
@@ -425,7 +429,9 @@ class SessionStateService:
             "last_loaded_snapshot": dict(self.last_loaded_snapshot)
             if isinstance(self.last_loaded_snapshot, dict)
             else None,
-            "last_error": dict(self.last_error) if isinstance(self.last_error, dict) else None,
+            "last_error": dict(self.last_error)
+            if isinstance(self.last_error, dict)
+            else None,
         }
 
 
@@ -438,7 +444,9 @@ def get_session_state_service() -> SessionStateService:
     global _session_state_service
     if _session_state_service is None:
         ttl = int(os.getenv("SESSION_STATE_TTL_SECONDS", "1800"))
-        cleanup_interval = int(os.getenv("SESSION_STATE_CLEANUP_INTERVAL_SECONDS", "300"))
+        cleanup_interval = int(
+            os.getenv("SESSION_STATE_CLEANUP_INTERVAL_SECONDS", "300")
+        )
         _session_state_service = SessionStateService(
             state_ttl=ttl,
             cleanup_interval=cleanup_interval,

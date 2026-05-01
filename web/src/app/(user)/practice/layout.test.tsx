@@ -53,6 +53,7 @@ describe("PracticeLayout learner help entry", () => {
             </PracticeLayout>,
         );
 
+        expect(screen.getByTestId("practice-layout").className).toContain("overflow-hidden");
         expect(screen.getByRole("button", { name: "帮助与反馈" })).toBeTruthy();
         expect(screen.getByText("/practice/session-42")).toBeTruthy();
         expect(screen.getByText("session-42")).toBeTruthy();
@@ -71,5 +72,21 @@ describe("PracticeLayout learner help entry", () => {
         expect(screen.getByText("/practice/session-42")).toBeTruthy();
         expect(screen.queryByText(/secret-token/)).toBeNull();
         expect(screen.queryByText(/extra/)).toBeNull();
+    });
+
+    it("omits the floating help entry and allows scrolling on report pages", () => {
+        usePathnameMock.mockReturnValue("/practice/session-42/report");
+
+        render(
+            <PracticeLayout>
+                <div>report content</div>
+            </PracticeLayout>,
+        );
+
+        const layout = screen.getByTestId("practice-layout");
+        expect(layout.className).toContain("overflow-y-auto");
+        expect(layout.className).not.toContain("overflow-hidden");
+        expect(screen.queryByRole("button", { name: "帮助与反馈" })).toBeNull();
+        expect(screen.getByText("report content")).toBeTruthy();
     });
 });

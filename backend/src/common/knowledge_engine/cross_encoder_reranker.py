@@ -87,7 +87,9 @@ class CrossEncoderReranker:
             elif self.backend == "cohere":
                 results = await self._rerank_cohere(query, documents, top_k)
             else:
-                logger.warning("Unknown cross-encoder backend, passthrough", backend=self.backend)
+                logger.warning(
+                    "Unknown cross-encoder backend, passthrough", backend=self.backend
+                )
                 return documents[: max(1, top_k)]
 
             elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
@@ -128,7 +130,9 @@ class CrossEncoderReranker:
                 max_length=self.max_length,
             )
             self._model_loaded = True
-            logger.info("Cross-encoder model loaded", model=self.model_name, device=self.device)
+            logger.info(
+                "Cross-encoder model loaded", model=self.model_name, device=self.device
+            )
             return True
         except Exception as exc:  # noqa: BLE001
             self._model_failed = True
@@ -211,7 +215,9 @@ class CrossEncoderReranker:
             if idx >= len(documents):
                 continue
             row = dict(documents[idx])
-            row["cross_encoder_score"] = round(float(item.get("relevance_score", 0.0)), 4)
+            row["cross_encoder_score"] = round(
+                float(item.get("relevance_score", 0.0)), 4
+            )
             row["rerank_strategy"] = "cross_encoder_cohere"
             output.append(row)
 

@@ -1722,7 +1722,9 @@ class KnowledgeService:
 
                     # Get content from collection for the matched chunk
                     try:
-                        chunk_data = collection.get(ids=[chunk_id], include=["documents"])
+                        chunk_data = collection.get(
+                            ids=[chunk_id], include=["documents"]
+                        )
                         content = ""
                         if isinstance(chunk_data, dict):
                             docs = chunk_data.get("documents", [])
@@ -1762,14 +1764,22 @@ class KnowledgeService:
                 continue
 
             raw_ids = raw_chunks.get("ids", []) if isinstance(raw_chunks, dict) else []
-            raw_docs = raw_chunks.get("documents", []) if isinstance(raw_chunks, dict) else []
-            raw_metas = raw_chunks.get("metadatas", []) if isinstance(raw_chunks, dict) else []
+            raw_docs = (
+                raw_chunks.get("documents", []) if isinstance(raw_chunks, dict) else []
+            )
+            raw_metas = (
+                raw_chunks.get("metadatas", []) if isinstance(raw_chunks, dict) else []
+            )
 
             for index, content in enumerate(raw_docs):
                 if not isinstance(content, str) or not content.strip():
                     continue
 
-                metadata = raw_metas[index] if index < len(raw_metas) and isinstance(raw_metas[index], dict) else {}
+                metadata = (
+                    raw_metas[index]
+                    if index < len(raw_metas) and isinstance(raw_metas[index], dict)
+                    else {}
+                )
 
                 if not self._metadata_matches(metadata, metadata_filter):
                     continue

@@ -176,11 +176,15 @@ class VoiceInstructionCompiler:
             or customer_pressure.get("expected_customer_questions")
             or persona_policy.get("expected_customer_questions")
         )
-        question_strategy = str(
-            follow_up_behavior.get("question_strategy")
-            or customer_pressure.get("question_strategy")
-            or ""
-        ).strip().lower()
+        question_strategy = (
+            str(
+                follow_up_behavior.get("question_strategy")
+                or customer_pressure.get("question_strategy")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
         has_pressure_context = any(
             [
                 sales_focus,
@@ -225,12 +229,16 @@ class VoiceInstructionCompiler:
         ]
 
         if question_strategy == "single_issue" or not question_strategy:
-            lines.append("每次只选择一个最关键的主问题继续施压，直到销售给出可验证信息。")
+            lines.append(
+                "每次只选择一个最关键的主问题继续施压，直到销售给出可验证信息。"
+            )
         else:
             lines.append("追问要围绕当前阻塞点逐步展开，避免同时切换多个主题。")
 
         if revisit_on_evasion:
-            lines.append("如果销售回避当前问题，必须回到同一阻塞点继续追问，不接受换题带过。")
+            lines.append(
+                "如果销售回避当前问题，必须回到同一阻塞点继续追问，不接受换题带过。"
+            )
         if require_evidence:
             lines.append(
                 "除非销售给出可验证证据、案例、数据或明确承诺边界，否则不要视为问题已解决。"

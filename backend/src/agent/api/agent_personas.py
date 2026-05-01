@@ -8,6 +8,7 @@ References:
 - Design: Section 15 (AgentPersona)
 - API Contract: docs/api-contract/personas.md
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -69,7 +70,7 @@ async def add_persona_to_agent(
     agent_id: str,
     request: CreateAgentPersonaRequest,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Add a Persona to an Agent - R4.1"""
     service = AgentPersonaService(db)
@@ -85,7 +86,9 @@ async def add_persona_to_agent(
         if result.fallback == "[PERSONA_INACTIVE]":
             return error_response("[PERSONA_INACTIVE]", status_code=400)
         if result.fallback == "[PERSONA_ALREADY_LINKED]":
-            raise HTTPException(status_code=400, detail="Persona already linked to this agent")
+            raise HTTPException(
+                status_code=400, detail="Persona already linked to this agent"
+            )
         raise HTTPException(status_code=400, detail=result.fallback)
 
     link = result.value
@@ -101,8 +104,8 @@ async def add_persona_to_agent(
             display_order=link.display_order,
             is_default=link.is_default,
             override_config=link.override_config,
-            created_at=link.created_at
-        ).model_dump()
+            created_at=link.created_at,
+        ).model_dump(),
     }
 
 
@@ -110,7 +113,7 @@ async def add_persona_to_agent(
 async def list_agent_personas(
     agent_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get all Personas linked to an Agent - R4.2"""
     service = AgentPersonaService(db)
@@ -123,7 +126,7 @@ async def list_agent_personas(
         "success": True,
         "data": AgentPersonaListResponse(
             personas=[item.model_dump() for item in result.value]
-        ).model_dump()
+        ).model_dump(),
     }
 
 
@@ -133,7 +136,7 @@ async def update_agent_persona(
     persona_id: str,
     request: UpdateAgentPersonaRequest,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Update Agent-Persona association - R4.3"""
     service = AgentPersonaService(db)
@@ -165,8 +168,8 @@ async def update_agent_persona(
             display_order=link.display_order,
             is_default=link.is_default,
             override_config=link.override_config,
-            created_at=link.created_at
-        ).model_dump()
+            created_at=link.created_at,
+        ).model_dump(),
     }
 
 
@@ -175,7 +178,7 @@ async def remove_persona_from_agent(
     agent_id: str,
     persona_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Remove Persona from Agent - R4.4"""
     service = AgentPersonaService(db)
@@ -187,7 +190,4 @@ async def remove_persona_from_agent(
     commit_error = await commit_or_500(db, "remove_persona_from_agent")
     if commit_error is not None:
         return commit_error
-    return {
-        "success": True,
-        "data": {"removed": True}
-    }
+    return {"success": True, "data": {"removed": True}}

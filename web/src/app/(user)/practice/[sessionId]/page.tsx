@@ -17,7 +17,6 @@ import { useContinuousAudioUploader } from "@/hooks/use-continuous-audio-uploade
 import { RightPanelContent } from "@/components/practice/RightPanelContent";
 import type { ActionCompletionStatus } from "@/components/practice/RightPanelContent";
 import { CoachHealthNotice } from "@/components/practice/CoachHealthNotice";
-import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { MobileQuickActions } from "@/components/layout/mobile-quick-actions";
 import { api } from "@/lib/api/client";
 import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
@@ -58,12 +57,6 @@ function buildActionCardKey(actionCard: ActionCard): string {
     return [actionCard.issue, actionCard.replacement, actionCard.next_turn_rule].join("|");
 }
 
-type PracticePreflightBrief = {
-    trainingGoal: string;
-    evaluationCopy: string;
-    roleCopy: string;
-};
-
 type PresentationPageFocus = {
     pageNumber: number;
 };
@@ -97,22 +90,6 @@ function getPresentationPageFocusFromIntent(
         return null;
     }
     return { pageNumber };
-}
-
-function buildFallbackPreflightBrief(scenarioType: "sales" | "presentation"): PracticePreflightBrief {
-    if (scenarioType === "presentation") {
-        return {
-            trainingGoal: "围绕当前 PPT 完成一轮演讲表达，开口前先想清楚开场、重点页和收尾推进。",
-            evaluationCopy: "系统会重点看流畅连贯、内容准确、专业表达、互动问答与整体表现。",
-            roleCopy: "你将面对会关注表达清晰度和现场问答的评委/听众角色。",
-        };
-    }
-
-    return {
-        trainingGoal: "围绕当前销售主题进行一轮销售对练，开口前先想好价值主张和下一步推进。",
-        evaluationCopy: "系统会重点看价值翻译、证据支撑和异议推进的完成度。",
-        roleCopy: "你将面对一个会持续追问价值、证据和下一步动作的客户角色。",
-    };
 }
 
 type PracticeFaultSeverity = "error" | "warning" | "info";
@@ -231,7 +208,6 @@ export default function PracticeSessionPage() {
     const [isPanelOpen, setIsPanelOpen] = React.useState(false);
     const [sessionTime, setSessionTime] = React.useState(0);
     const [sessionStartedAtMs, setSessionStartedAtMs] = React.useState<number | null>(null);
-    const [preflightBrief, setPreflightBrief] = React.useState<PracticePreflightBrief>(() => buildFallbackPreflightBrief(queryScenarioType));
     const [presentationProgress, setPresentationProgress] = React.useState<PresentationProgressHint | null>(null);
     const messagesListRef = React.useRef<HTMLDivElement>(null);
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -424,77 +400,6 @@ export default function PracticeSessionPage() {
         [focusIntent],
     );
     const showCarryForwardFocus = scenarioType === "sales" && Boolean(focusIntent);
-
-    React.useEffect(() => {
-        let isCancelled = false;
-
-        const applyFallback = () => {
-            if (!isCancelled) {
-                setPreflightBrief(buildFallbackPreflightBrief(scenarioType));
-            }
-        };
-
-        const loadPreflightBrief = async () => {
-            if (scenarioType === "sales") {
-                if (!lockedAgentId) {
-                    applyFallback();
-                    return;
-                }
-
-                try {
-                    const agent = await api.agents.getAgentWithPersonas(lockedAgentId);
-                    if (isCancelled) {
-                        return;
-                    }
-                    const persona = lockedPersonaId
-                        ? agent.personas?.find((item) => item.id === lockedPersonaId)
-                        : null;
-                    setPreflightBrief({
-                        trainingGoal: `围绕「${agent.name || "当前销售主题"}」进行销售对练，开口前先想好价值主张和下一步推进。`,
-                        evaluationCopy: "系统会重点看价值翻译、证据支撑和异议推进的完成度。",
-                        roleCopy: persona?.description
-                            ? `${persona.name}：${persona.description}`
-                            : persona?.name
-                            ? `${persona.name}：会围绕当前销售对话持续追问，并判断你是否把价值和下一步说清楚。`
-                            : "你将面对一个会持续追问价值、证据和下一步动作的客户角色。",
-                    });
-                } catch {
-                    applyFallback();
-                }
-                return;
-            }
-
-            if (!lockedPresentationId) {
-                applyFallback();
-                return;
-            }
-
-            try {
-                const presentation = await api.presentations.get(lockedPresentationId);
-                if (isCancelled) {
-                    return;
-                }
-                const presentationTitle = typeof presentation?.title === "string" && presentation.title.trim()
-                    ? presentation.title.trim()
-                    : "当前 PPT";
-                setPreflightBrief({
-                    trainingGoal: presentationPageFocus
-                        ? `本轮重点页：第 ${presentationPageFocus.pageNumber} 页。围绕《${presentationTitle}》先补齐这一页的必讲点、缺失点或案例证据。`
-                        : `围绕《${presentationTitle}》完成一轮演讲表达，开口前先想清楚开场、重点页和收尾推进。`,
-                    evaluationCopy: "系统会重点看流畅连贯、内容准确、专业表达、互动问答与整体表现。",
-                    roleCopy: "你将面对会关注表达清晰度、页级重点覆盖和临场问答的评委/听众角色。",
-                });
-            } catch {
-                applyFallback();
-            }
-        };
-
-        void loadPreflightBrief();
-
-        return () => {
-            isCancelled = true;
-        };
-    }, [lockedAgentId, lockedPersonaId, lockedPresentationId, presentationPageFocus, scenarioType]);
 
     React.useEffect(() => {
         if (scenarioType !== "presentation" || !lockedPresentationId || presentationPageFocus) {
@@ -965,6 +870,7 @@ export default function PracticeSessionPage() {
                     isSessionTerminal={isSessionTerminal}
                     endButtonLabel={audioEvidenceStatus.status === "flushing" ? "保存音频中..." : "生成报告中..."}
                     onExit={() => router.push("/")}
+                    onBackToTraining={() => router.push("/training")}
                     onTogglePauseResume={handleTogglePauseResume}
                     onEndSession={handleEndSession}
                 />
@@ -1031,38 +937,6 @@ export default function PracticeSessionPage() {
                     </div>
                 )}
 
-                {messages.length === 0 && !isSessionTerminal && (
-                    <div className="mx-4 mt-4 rounded-2xl border border-slate-200 bg-white/90 p-4 text-slate-700 shadow-sm">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
-                                开练前预告
-                            </span>
-                            <p className="text-sm font-semibold text-slate-900">开始前先看本次练习重点</p>
-                        </div>
-                        {presentationPageFocus && (
-                            <div className="mt-3 rounded-xl border border-purple-100 bg-purple-50/80 p-3">
-                                <p className="text-xs font-semibold text-purple-700">本轮重点页</p>
-                                <p className="mt-1 text-sm text-purple-950">第 {presentationPageFocus.pageNumber} 页</p>
-                                <p className="mt-2 text-xs text-purple-800">先补齐这一页的必讲点、缺失点或案例证据，再推进后续页。</p>
-                            </div>
-                        )}
-                        <div className="mt-3 grid gap-3 md:grid-cols-3">
-                            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                                <p className="text-xs font-semibold text-slate-500">训练目标</p>
-                                <p className="mt-1 text-sm text-slate-900">{preflightBrief.trainingGoal}</p>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                                <p className="text-xs font-semibold text-slate-500">评价标准</p>
-                                <p className="mt-1 text-sm text-slate-900">{preflightBrief.evaluationCopy}</p>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                                <p className="text-xs font-semibold text-slate-500">角色简介</p>
-                                <p className="mt-1 text-sm text-slate-900">{preflightBrief.roleCopy}</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 {reportTransition.status === "ready" && (
                     <div className="mx-4 mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/90 p-4 text-emerald-900 shadow-sm">
                         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1094,8 +968,6 @@ export default function PracticeSessionPage() {
                 )}
 
                 <PracticeFaultPanel faults={practiceFaults} />
-
-                <LearnerHelpCard context="practice" className="mx-4 mt-4" />
 
                 {/* 网络慢提示 */}
                 {isNetworkSlow && (

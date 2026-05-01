@@ -242,7 +242,7 @@ export default function SupportRuntimeStatusPage() {
             return () => window.clearTimeout(timeoutId);
         }
         return undefined;
-    }, [authLoading, isAuthorized]);
+    }, [authLoading, isAuthorized, loadData]);
 
     if (authLoading || !isAuthorized) {
         return (

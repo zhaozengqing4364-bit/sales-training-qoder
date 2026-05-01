@@ -85,8 +85,12 @@ class ManagerInterventionResultResolver:
         cls,
         summary: HistorySessionSummary,
     ) -> str | None:
-        main_issue = summary.main_issue if isinstance(summary.main_issue, dict) else None
-        issue_type = main_issue.get("issue_type") if isinstance(main_issue, dict) else None
+        main_issue = (
+            summary.main_issue if isinstance(summary.main_issue, dict) else None
+        )
+        issue_type = (
+            main_issue.get("issue_type") if isinstance(main_issue, dict) else None
+        )
         if not isinstance(issue_type, str) or not issue_type.strip():
             return None
         return cls.normalize_issue_family(issue_type)
@@ -133,7 +137,9 @@ class ManagerInterventionResultResolver:
         if summary.evaluable is False:
             status = "not_evaluable"
             reason = "session_not_evaluable"
-            summary_text = "最近一次已完成训练证据不足，暂时还不能判断这个主管重点是否改善。"
+            summary_text = (
+                "最近一次已完成训练证据不足，暂时还不能判断这个主管重点是否改善。"
+            )
         elif summary.overall_result in {"pass", "strong_pass"}:
             status = "improved"
             reason = "session_passed"
@@ -145,7 +151,9 @@ class ManagerInterventionResultResolver:
         ):
             status = "improved"
             reason = "issue_family_shifted"
-            summary_text = "最近一次可评估训练的主问题已转向其他家族，说明这个主管重点已有改善。"
+            summary_text = (
+                "最近一次可评估训练的主问题已转向其他家族，说明这个主管重点已有改善。"
+            )
         else:
             status = "still_blocked"
             reason = "same_issue_family_still_primary"
@@ -164,8 +172,14 @@ class ManagerInterventionResultResolver:
             overall_result=summary.overall_result,
             evaluable=summary.evaluable,
             not_evaluable_reason=summary.not_evaluable_reason,
-            main_issue=(dict(summary.main_issue) if isinstance(summary.main_issue, dict) else None),
-            next_goal=(dict(summary.next_goal) if isinstance(summary.next_goal, dict) else None),
+            main_issue=(
+                dict(summary.main_issue)
+                if isinstance(summary.main_issue, dict)
+                else None
+            ),
+            next_goal=(
+                dict(summary.next_goal) if isinstance(summary.next_goal, dict) else None
+            ),
         )
 
     @classmethod
@@ -193,7 +207,8 @@ class ManagerInterventionResultResolver:
             later_completed = [
                 summary
                 for summary in completed_summaries
-                if cls._normalize_timestamp(summary.start_time) >= intervention_created_at
+                if cls._normalize_timestamp(summary.start_time)
+                >= intervention_created_at
             ]
             latest_evaluable = next(
                 (
@@ -204,10 +219,14 @@ class ManagerInterventionResultResolver:
                 None,
             )
             if latest_evaluable is not None:
-                results.append(cls._build_completed_result(intervention, latest_evaluable))
+                results.append(
+                    cls._build_completed_result(intervention, latest_evaluable)
+                )
                 continue
             if later_completed:
-                results.append(cls._build_completed_result(intervention, later_completed[-1]))
+                results.append(
+                    cls._build_completed_result(intervention, later_completed[-1])
+                )
                 continue
             results.append(cls._build_pending_result(intervention))
 
@@ -219,7 +238,9 @@ class ManagerInterventionResultResolver:
         summaries: list[HistorySessionSummary],
         interventions: list[ManagerIntervention],
     ) -> list[dict[str, Any]]:
-        return [item.to_payload() for item in cls.build_results(summaries, interventions)]
+        return [
+            item.to_payload() for item in cls.build_results(summaries, interventions)
+        ]
 
 
 manager_intervention_result_resolver = ManagerInterventionResultResolver()

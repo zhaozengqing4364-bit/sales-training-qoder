@@ -70,8 +70,12 @@ class ReportTrendService:
         )
 
     @classmethod
-    def _point(cls, session: PracticeSession, current_session_id: str) -> dict[str, Any]:
-        scenario_type = getattr(getattr(session, "scenario", None), "scenario_type", None)
+    def _point(
+        cls, session: PracticeSession, current_session_id: str
+    ) -> dict[str, Any]:
+        scenario_type = getattr(
+            getattr(session, "scenario", None), "scenario_type", None
+        )
         return {
             "session_id": str(session.session_id),
             "date": _coerce_datetime(session.start_time).isoformat(),
@@ -165,7 +169,9 @@ class ReportTrendService:
                 qualified,
                 key=lambda item: _coerce_datetime(item.start_time),
             )[-normalized_limit:]
-            points = [self._point(session, str(target.session_id)) for session in qualified]
+            points = [
+                self._point(session, str(target.session_id)) for session in qualified
+            ]
 
             current_index = next(
                 (

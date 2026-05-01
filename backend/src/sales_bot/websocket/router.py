@@ -4,6 +4,7 @@ Sales Bot WebSocket Router.
 Routes WebSocket connections for persona-centered sales sessions.
 Legacy simple-handler mode is disabled to prevent policy bypass.
 """
+
 import os
 import uuid
 
@@ -45,7 +46,10 @@ SALES_WS_AUTH_POLICY: dict[str, list[str] | dict[str, int] | str] = {
 async def sales_websocket(
     websocket: WebSocket,
     session_id: str | None = Query(None, description="Practice session UUID"),
-    token: str = Query("", description="JWT authentication token (deprecated; use Authorization header)"),
+    token: str = Query(
+        "",
+        description="JWT authentication token (deprecated; use Authorization header)",
+    ),
     agent_id: str | None = Query(None, description="Agent UUID for enhanced mode"),
     persona_id: str | None = Query(None, description="Persona UUID for enhanced mode"),
     voice_mode: str = Query("", description="Voice mode: legacy | stepfun_realtime"),
@@ -66,7 +70,10 @@ async def sales_websocket(
 async def sales_websocket_with_path(
     websocket: WebSocket,
     session_id: str,
-    token: str = Query("", description="JWT authentication token (deprecated; use Authorization header)"),
+    token: str = Query(
+        "",
+        description="JWT authentication token (deprecated; use Authorization header)",
+    ),
     agent_id: str | None = Query(None, description="Agent UUID for enhanced mode"),
     persona_id: str | None = Query(None, description="Persona UUID for enhanced mode"),
     voice_mode: str = Query("", description="Voice mode: legacy | stepfun_realtime"),
@@ -95,7 +102,9 @@ def _parse_session_id(session_id: str | None) -> str | None:
 
 
 async def _reject_invalid_session_id(websocket: WebSocket, session_id: str | None):
-    logger.warning("Rejected /ws/sales connection due to invalid session_id", session_id=session_id)
+    logger.warning(
+        "Rejected /ws/sales connection due to invalid session_id", session_id=session_id
+    )
     await websocket.accept()
     await websocket.close(code=4400, reason="INVALID_SESSION_ID")
 
@@ -148,9 +157,7 @@ async def _handle_sales_websocket(
         persisted_voice_mode,
         persisted_agent_id,
         persisted_persona_id,
-    ) = await _resolve_session_runtime(
-        resolved_session_id
-    )
+    ) = await _resolve_session_runtime(resolved_session_id)
     if session_scenario_type and session_scenario_type != "sales":
         logger.warning(
             "Rejected /ws/sales connection due to scenario mismatch",
@@ -349,9 +356,7 @@ async def _resolve_session_owner_id(session_id: str) -> str | None:
 async def _is_admin_user_id(user_id: str) -> bool:
     try:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(User.role).where(User.user_id == user_id)
-            )
+            result = await db.execute(select(User.role).where(User.user_id == user_id))
             role = result.scalar_one_or_none()
             return str(role or "").lower() == "admin"
     except Exception as exc:  # noqa: BLE001
@@ -367,9 +372,7 @@ async def _is_kb_lock_unbound_session(session_id: str) -> bool:
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(PracticeSession).where(
-                    PracticeSession.session_id == session_id
-                )
+                select(PracticeSession).where(PracticeSession.session_id == session_id)
             )
             session = result.scalar_one_or_none()
             if not session:
@@ -471,7 +474,9 @@ async def _handle_enhanced_connection(
     # Extract user_id from token
     user_id = _extract_user_id_from_token(token)
     if user_id is None:
-        logger.warning(f"WebSocket auth rejected: invalid token for session {session_id}")
+        logger.warning(
+            f"WebSocket auth rejected: invalid token for session {session_id}"
+        )
         await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return

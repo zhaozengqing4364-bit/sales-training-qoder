@@ -159,17 +159,7 @@ export default function AdminPromptsPage() {
         setPromptOptions(null);
       }
 
-      if (optionsResult.status === "fulfilled") {
-        setPromptOptions(optionsResult.value);
-      } else {
-        setPromptOptions(null);
-      }
-
-      if (optionsResult.status === "fulfilled") {
-        setPromptOptions(optionsResult.value);
-      } else {
-        setPromptOptions(null);
-      }
+      setLoadWarnings(warnings);
     } catch (error) {
       debug.error("Failed to load prompt admin data", error);
       setLoadWarnings(["提示词数据加载失败：请检查权限、后端服务与审计数据源后重试。"]);

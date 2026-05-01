@@ -89,9 +89,7 @@ class ModelConfig(Base):
     last_test_status = Column(String(20), nullable=True)  # success/failed
 
     # Audit
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

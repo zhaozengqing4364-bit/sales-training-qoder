@@ -204,9 +204,7 @@ class PromptTemplateLoader:
             Dictionary with cache stats
         """
         total = len(self._cache)
-        expired = sum(
-            1 for c in self._cache.values() if c.is_expired(self.ttl_seconds)
-        )
+        expired = sum(1 for c in self._cache.values() if c.is_expired(self.ttl_seconds))
 
         return {
             "total_entries": total,

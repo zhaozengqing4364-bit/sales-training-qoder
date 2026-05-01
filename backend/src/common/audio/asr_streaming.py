@@ -14,6 +14,7 @@ Use for:
 - Low-latency interactive scenarios
 - Production environments requiring streaming
 """
+
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
@@ -200,7 +201,9 @@ class LocalStreamingASRProvider(ASRProvider):
                 if final_result:
                     accumulated_texts.append(final_result)
                     total_text = "".join(accumulated_texts)
-                    logger.debug(f"ASR final chunk result: '{final_result}' -> total: '{total_text}'")
+                    logger.debug(
+                        f"ASR final chunk result: '{final_result}' -> total: '{total_text}'"
+                    )
                     yield Result.ok(total_text)
             else:
                 # Send final signal to get any remaining text
@@ -208,7 +211,9 @@ class LocalStreamingASRProvider(ASRProvider):
                 if final_result:
                     accumulated_texts.append(final_result)
                     total_text = "".join(accumulated_texts)
-                    logger.debug(f"ASR finalize result: '{final_result}' -> total: '{total_text}'")
+                    logger.debug(
+                        f"ASR finalize result: '{final_result}' -> total: '{total_text}'"
+                    )
                     yield Result.ok(total_text)
 
             total_text = "".join(accumulated_texts)

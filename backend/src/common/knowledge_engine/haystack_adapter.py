@@ -67,7 +67,9 @@ class KnowledgeHaystackAdapter:
                 rerank_top_k=rerank_top_k,
             )
             if not isinstance(search_result, Result):
-                raise TypeError("search_multiple must return Result[list[dict[str, Any]]]")
+                raise TypeError(
+                    "search_multiple must return Result[list[dict[str, Any]]]"
+                )
 
             if not search_result.is_success:
                 error = str(search_result.fallback or "unknown_error")

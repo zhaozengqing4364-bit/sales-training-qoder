@@ -7,6 +7,7 @@ References:
 - Requirements: 7.1, 7.2, 7.3
 - Design: Section "System Logs API"
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -110,7 +111,10 @@ def build_system_log_exposure_policy() -> SystemLogExposurePolicy:
 def log_to_response(log: SystemLog) -> SystemLogResponse:
     """Convert SystemLog model to the admin/support-safe response contract."""
     context = extract_admin_log_context(log.details)
-    diagnostics = [SystemLogDiagnosticItem(**item) for item in build_admin_log_diagnostics(log.details)]
+    diagnostics = [
+        SystemLogDiagnosticItem(**item)
+        for item in build_admin_log_diagnostics(log.details)
+    ]
     return SystemLogResponse(
         id=str(log.log_id),
         action=log.action,
@@ -132,7 +136,9 @@ async def list_system_logs(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
     search: str | None = Query(None, description="Search by action or user"),
-    status: str | None = Query(None, description="Filter by status (success/failed/warning)"),
+    status: str | None = Query(
+        None, description="Filter by status (success/failed/warning)"
+    ),
     action: str | None = Query(None, description="Filter by action type"),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),

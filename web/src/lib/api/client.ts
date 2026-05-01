@@ -9,11 +9,9 @@ import {
     DashboardStats,
     GrowthDashboardResponse,
     SessionItem,
-    PracticeSessionRuntime,
     Recommendation,
     TrainingCategory,
     Agent,
-    Persona,
     AnalyticsOverview,
     AnalyticsTrends,
     AnalyticsAgents,
@@ -70,31 +68,19 @@ import {
     RealtimeEvaluationFeedback,
     ScenarioSummary,
     SalesPersonaOption,
-    ReplayData,
-    ReplayMessagesResponse,
-    HighlightsResponse,
-    HighlightReviewItemPayload,
-    HighlightReviewResponse,
-    HighlightReviewShareCreateResponse,
     SalesCombinationPreviewResponse,
     SalesCombinationRuleMutationResponse,
     SalesCombinationRuleSet,
     SalesCombinationRuleSetListResponse,
     SalesCombinationRuleValidationResult,
-    SessionStats,
-    PracticeSessionReport,
     HistoryListResponse,
     HistoryStatistics,
     HistoryTrendPoint,
-    KnowledgeCheckDiagnostics,
     OpenAnalyticsDashboard,
     OpenScoreDistribution,
     SupportRuntimeFaultsResponse,
     SupportRuntimeOverview,
     SessionStatus,
-    SessionLifecycleAction,
-    SessionLifecycleRequest,
-    SessionLifecycleResponse,
     RetryFocusIntent,
     PresentationAIPolicyScopeResponse,
     PresentationAIPolicyPreviewResponse,
@@ -406,6 +392,8 @@ type HistoryApiItem = {
     total_duration_seconds?: number;
     start_time?: string;
     status?: string;
+    report_status?: string | null;
+    report_generated_at?: string | null;
     effectiveness_snapshot?: Record<string, unknown> | null;
     evaluable?: boolean | null;
     not_evaluable_reason?: string | null;
@@ -1229,13 +1217,6 @@ type ApiFetchOptions = RequestInit & {
     skipSessionExpiredHandling?: boolean;
 };
 
-type AdminTTSPreviewRequest = {
-    text: string;
-    voice?: string;
-    rate?: string;
-    volume?: string;
-    pitch?: string;
-};
 
 function createHeaders(
     existingHeaders: HeadersInit | undefined,
@@ -1785,6 +1766,8 @@ export const api = {
                 duration_seconds: Number(item.duration_seconds || item.total_duration_seconds || 0),
                 start_time: typeof item.start_time === "string" ? item.start_time : new Date(0).toISOString(),
                 status: normalizeSessionStatus(item.status),
+                report_status: typeof item.report_status === "string" ? item.report_status : null,
+                report_generated_at: typeof item.report_generated_at === "string" ? item.report_generated_at : null,
                 user_id: typeof item.user_id === "string" ? item.user_id : undefined,
                 username: typeof item.username === "string"
                     ? item.username

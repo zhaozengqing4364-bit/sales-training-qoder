@@ -10,6 +10,7 @@ References:
 - Constitution Principle I: Fallback to browser TTS on failure
 - Voice Practice Optimization: Streaming TTS (Requirements 2.1, 2.6)
 """
+
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from typing import Any
 
 try:
     import edge_tts as _edge_tts
+
     _EDGE_TTS_IMPORT_ERROR: Exception | None = None
 except Exception as exc:  # pragma: no cover - depends on optional runtime deps
     _edge_tts = SimpleNamespace(Communicate=None)
@@ -34,7 +36,10 @@ logger = get_logger(__name__)
 
 def _get_edge_tts_module() -> Any:
     """Return the edge_tts module or raise the captured import error lazily."""
-    if getattr(edge_tts, "Communicate", None) is None and _EDGE_TTS_IMPORT_ERROR is not None:
+    if (
+        getattr(edge_tts, "Communicate", None) is None
+        and _EDGE_TTS_IMPORT_ERROR is not None
+    ):
         raise RuntimeError("edge_tts is unavailable") from _EDGE_TTS_IMPORT_ERROR
     return edge_tts
 
@@ -52,6 +57,7 @@ class TTSChunk:
         text: Full text (only included in final chunk)
         total_duration_ms: Total duration (only included in final chunk)
     """
+
     chunk_index: int
     audio: bytes
     duration_ms: int
@@ -111,11 +117,15 @@ class TTSService:
             }
         else:
             # Get from ConfigManager (database or env fallback)
-            self._effective_config = self._config_manager.get_effective_config(ModelType.TTS)
+            self._effective_config = self._config_manager.get_effective_config(
+                ModelType.TTS
+            )
 
         if self._effective_config:
             # Apply configuration
-            self.voice = self._effective_config.get("model_name", "zh-CN-XiaoxiaoNeural")
+            self.voice = self._effective_config.get(
+                "model_name", "zh-CN-XiaoxiaoNeural"
+            )
             extra_config = self._effective_config.get("extra_config", {})
             self.rate = extra_config.get("rate", "+0%")
             self.volume = extra_config.get("volume", "+0%")
@@ -148,9 +158,7 @@ class TTSService:
         self._init_config()
 
     async def synthesize(
-        self,
-        text: str,
-        voice: str | None = None
+        self, text: str, voice: str | None = None
     ) -> Result[AsyncIterator[bytes]]:
         """
         Synthesize text to speech.
@@ -275,10 +283,7 @@ class TTSService:
             return Result.fail("[USE_BROWSER_TTS]")
 
     async def synthesize_to_file(
-        self,
-        text: str,
-        output_file: str,
-        voice: str | None = None
+        self, text: str, output_file: str, voice: str | None = None
     ) -> Result[bool]:
         """
         Synthesize speech to file.
@@ -313,7 +318,7 @@ class TTSService:
         self,
         rate: str | None = None,
         volume: str | None = None,
-        pitch: str | None = None
+        pitch: str | None = None,
     ) -> None:
         """Set voice synthesis parameters"""
         if rate:

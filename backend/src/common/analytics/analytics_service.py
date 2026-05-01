@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AnalyticsStats:
     """Aggregated analytics statistics"""
+
     # Completion metrics
     total_sessions: int
     completed_sessions: int
@@ -50,6 +51,7 @@ class AnalyticsStats:
 @dataclass
 class ScoreDistribution:
     """Score distribution data"""
+
     excellent: int  # 90-100
     good: int  # 70-89
     fair: int  # 50-69
@@ -59,6 +61,7 @@ class ScoreDistribution:
 @dataclass
 class CommonGaps:
     """Common talking point gaps"""
+
     point_text: str
     miss_count: int
     miss_rate: float
@@ -76,10 +79,7 @@ class AnalyticsService:
     """
 
     async def get_dashboard_stats(
-        self,
-        db: AsyncSession,
-        scenario_type: str | None = None,
-        days: int = 30
+        self, db: AsyncSession, scenario_type: str | None = None, days: int = 30
     ) -> Result[AnalyticsStats]:
         """
         Get aggregated dashboard statistics
@@ -98,12 +98,14 @@ class AnalyticsService:
                     ).label("completed_sessions"),
                     func.avg(PracticeSession.logic_score).label("avg_logic"),
                     func.avg(PracticeSession.accuracy_score).label("avg_accuracy"),
-                    func.avg(PracticeSession.completeness_score).label("avg_completeness"),
+                    func.avg(PracticeSession.completeness_score).label(
+                        "avg_completeness"
+                    ),
                     func.avg(
-                        PracticeSession.logic_score * 0.4 +
-                         PracticeSession.accuracy_score * 0.3 +
-                         PracticeSession.completeness_score * 0.3
-                    ).label("avg_overall")
+                        PracticeSession.logic_score * 0.4
+                        + PracticeSession.accuracy_score * 0.3
+                        + PracticeSession.completeness_score * 0.3
+                    ).label("avg_overall"),
                 )
                 .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
                 .where(PracticeSession.start_time >= cutoff_time)
@@ -203,7 +205,9 @@ class AnalyticsService:
             stats = AnalyticsStats(
                 total_sessions=total_sessions,
                 completed_sessions=completed_sessions,
-                completion_rate=round(completed_sessions / total_sessions * 100, 1) if total_sessions > 0 else 0,
+                completion_rate=round(completed_sessions / total_sessions * 100, 1)
+                if total_sessions > 0
+                else 0,
                 average_logic_score=round(row.avg_logic or 0, 2),
                 average_accuracy_score=round(row.avg_accuracy or 0, 2),
                 average_completeness_score=round(row.avg_completeness or 0, 2),
@@ -212,10 +216,22 @@ class AnalyticsService:
                 average_interruptions_per_session=0.0,  # Would need interruption count
                 sessions_with_high_vagueness=0,
                 sessions_with_forbidden_words=0,
-                pass_rate_3min_flow=round((pass_3_count / evaluable_total) * 100, 2) if evaluable_total > 0 else 0.0,
-                pass_rate_5turn_defense=round((pass_5_count / evaluable_total) * 100, 2) if evaluable_total > 0 else 0.0,
-                pass_rate_4step_structure=round((pass_4_count / evaluable_total) * 100, 2) if evaluable_total > 0 else 0.0,
-                next_day_retry_rate=round((next_day_retry_hits / evaluable_total) * 100, 2) if evaluable_total > 0 else 0.0,
+                pass_rate_3min_flow=round((pass_3_count / evaluable_total) * 100, 2)
+                if evaluable_total > 0
+                else 0.0,
+                pass_rate_5turn_defense=round((pass_5_count / evaluable_total) * 100, 2)
+                if evaluable_total > 0
+                else 0.0,
+                pass_rate_4step_structure=round(
+                    (pass_4_count / evaluable_total) * 100, 2
+                )
+                if evaluable_total > 0
+                else 0.0,
+                next_day_retry_rate=round(
+                    (next_day_retry_hits / evaluable_total) * 100, 2
+                )
+                if evaluable_total > 0
+                else 0.0,
             )
 
             logger.info(
@@ -224,7 +240,7 @@ class AnalyticsService:
                     "scenario_type": scenario_type,
                     "days": days,
                     "total_sessions": total_sessions,
-                }
+                },
             )
 
             return Result(value=stats)
@@ -233,15 +249,12 @@ class AnalyticsService:
             logger.error(
                 "Failed to calculate dashboard stats",
                 extra={"scenario_type": scenario_type, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[ANALYTICS_FAILED]")
 
     async def get_score_distribution(
-        self,
-        db: AsyncSession,
-        scenario_type: str | None = None,
-        days: int = 30
+        self, db: AsyncSession, scenario_type: str | None = None, days: int = 30
     ) -> Result[ScoreDistribution]:
         """
         Get distribution of scores
@@ -255,9 +268,11 @@ class AnalyticsService:
             query = (
                 select(
                     PracticeSession.session_id,
-                    (PracticeSession.logic_score * 0.4 +
-                     PracticeSession.accuracy_score * 0.3 +
-                     PracticeSession.completeness_score * 0.3).label("overall_score")
+                    (
+                        PracticeSession.logic_score * 0.4
+                        + PracticeSession.accuracy_score * 0.3
+                        + PracticeSession.completeness_score * 0.3
+                    ).label("overall_score"),
                 )
                 .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
                 .where(PracticeSession.start_time >= cutoff_time)
@@ -277,10 +292,7 @@ class AnalyticsService:
             poor = sum(1 for _, score in rows if score < 50)
 
             distribution = ScoreDistribution(
-                excellent=excellent,
-                good=good,
-                fair=fair,
-                poor=poor
+                excellent=excellent, good=good, fair=fair, poor=poor
             )
 
             logger.info(
@@ -288,7 +300,7 @@ class AnalyticsService:
                 extra={
                     "scenario_type": scenario_type,
                     "total": len(rows),
-                }
+                },
             )
 
             return Result(value=distribution)
@@ -297,7 +309,7 @@ class AnalyticsService:
             logger.error(
                 "Failed to calculate score distribution",
                 extra={"scenario_type": scenario_type, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[DISTRIBUTION_FAILED]")
 
@@ -306,7 +318,7 @@ class AnalyticsService:
         db: AsyncSession,
         scenario_type: str | None = None,
         days: int = 30,
-        limit: int = 10
+        limit: int = 10,
     ) -> Result[list[CommonGaps]]:
         """
         Get most commonly missed talking points
@@ -319,7 +331,11 @@ class AnalyticsService:
             # Get required talking points
             query = (
                 select(RequiredTalkingPoint)
-                .join(PracticeSession, RequiredTalkingPoint.presentation_id == PracticeSession.presentation_id)
+                .join(
+                    PracticeSession,
+                    RequiredTalkingPoint.presentation_id
+                    == PracticeSession.presentation_id,
+                )
                 .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
                 .where(PracticeSession.start_time >= cutoff_time)
                 .where(PracticeSession.status == "completed")
@@ -339,11 +355,13 @@ class AnalyticsService:
                 miss_count = 1  # Placeholder
                 miss_rate = 0.5  # Placeholder
 
-                gaps.append(CommonGaps(
-                    point_text=point.point_text,
-                    miss_count=miss_count,
-                    miss_rate=miss_rate
-                ))
+                gaps.append(
+                    CommonGaps(
+                        point_text=point.point_text,
+                        miss_count=miss_count,
+                        miss_rate=miss_rate,
+                    )
+                )
 
             # Sort by miss count
             gaps.sort(key=lambda g: g.miss_count, reverse=True)
@@ -354,7 +372,7 @@ class AnalyticsService:
                 extra={
                     "scenario_type": scenario_type,
                     "gaps": len(gaps),
-                }
+                },
             )
 
             return Result(value=gaps)
@@ -363,15 +381,12 @@ class AnalyticsService:
             logger.error(
                 "Failed to calculate common gaps",
                 extra={"scenario_type": scenario_type, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[GAPS_FAILED]")
 
     async def get_trend_data(
-        self,
-        db: AsyncSession,
-        scenario_type: str | None = None,
-        days: int = 30
+        self, db: AsyncSession, scenario_type: str | None = None, days: int = 30
     ) -> Result[dict]:
         """
         Get trend data for charts (daily aggregates)
@@ -386,11 +401,11 @@ class AnalyticsService:
                 select(
                     func.date(PracticeSession.start_time).label("date"),
                     func.avg(
-                        PracticeSession.logic_score * 0.4 +
-                         PracticeSession.accuracy_score * 0.3 +
-                         PracticeSession.completeness_score * 0.3
+                        PracticeSession.logic_score * 0.4
+                        + PracticeSession.accuracy_score * 0.3
+                        + PracticeSession.completeness_score * 0.3
                     ).label("avg_score"),
-                    func.count(PracticeSession.session_id).label("session_count")
+                    func.count(PracticeSession.session_id).label("session_count"),
                 )
                 .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
                 .where(PracticeSession.start_time >= cutoff_time)
@@ -409,7 +424,7 @@ class AnalyticsService:
             trend_data = {
                 str(row.date): {
                     "avg_score": round(row.avg_score or 0, 2),
-                    "session_count": row.session_count
+                    "session_count": row.session_count,
                 }
                 for row in rows
             }
@@ -419,7 +434,7 @@ class AnalyticsService:
                 extra={
                     "scenario_type": scenario_type,
                     "days": len(trend_data),
-                }
+                },
             )
 
             return Result(value=trend_data)
@@ -428,7 +443,7 @@ class AnalyticsService:
             logger.error(
                 "Failed to calculate trend data",
                 extra={"scenario_type": scenario_type, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[TREND_FAILED]")
 

@@ -24,6 +24,7 @@ export interface PracticeHeaderProps {
     isSessionTerminal: boolean;
     endButtonLabel: string;
     onExit: () => void;
+    onBackToTraining: () => void;
     onTogglePauseResume: () => void;
     onEndSession: () => void;
 }
@@ -75,6 +76,7 @@ export function PracticeHeader({
     isSessionTerminal,
     endButtonLabel,
     onExit,
+    onBackToTraining,
     onTogglePauseResume,
     onEndSession,
 }: PracticeHeaderProps) {
@@ -111,6 +113,15 @@ export function PracticeHeader({
                 </div>
             </div>
             <div className="flex items-center gap-2">
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onBackToTraining}
+                    className="hidden md:flex rounded-full"
+                >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    返回训练大厅
+                </Button>
                 <Button
                     variant="secondary"
                     size="sm"
@@ -153,6 +164,14 @@ export function PracticeHeader({
                             结束练习
                         </>
                     )}
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onBackToTraining}
+                    className="md:hidden"
+                >
+                    训练大厅
                 </Button>
                 <Button
                     variant="ghost"

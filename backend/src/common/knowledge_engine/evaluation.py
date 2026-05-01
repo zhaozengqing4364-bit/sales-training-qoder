@@ -40,7 +40,9 @@ class KnowledgeAnswerEvalExpectation:
             rewritten_queries=_string_list(payload.get("rewritten_queries")),
             executed_queries=_string_list(payload.get("executed_queries")),
             profile_key=_normalize_optional_text(payload.get("profile_key")),
-            compat_source_status=_normalize_optional_text(payload.get("compat_source_status")),
+            compat_source_status=_normalize_optional_text(
+                payload.get("compat_source_status")
+            ),
             search_failure_count=_optional_int(payload.get("search_failure_count")),
             blocked_reason=_normalize_optional_text(payload.get("blocked_reason")),
         )
@@ -60,11 +62,19 @@ class KnowledgeAnswerEvalCase:
         if not case_id:
             raise ValueError("Knowledge answer eval case requires non-empty id")
         if not query:
-            raise ValueError(f"Knowledge answer eval case {case_id} requires non-empty query")
+            raise ValueError(
+                f"Knowledge answer eval case {case_id} requires non-empty query"
+            )
         expected_payload = payload.get("expected")
         if not isinstance(expected_payload, dict):
-            raise ValueError(f"Knowledge answer eval case {case_id} requires expected dict")
-        runtime_options = dict(payload.get("runtime_options")) if isinstance(payload.get("runtime_options"), dict) else {}
+            raise ValueError(
+                f"Knowledge answer eval case {case_id} requires expected dict"
+            )
+        runtime_options = (
+            dict(payload.get("runtime_options"))
+            if isinstance(payload.get("runtime_options"), dict)
+            else {}
+        )
         return cls(
             case_id=case_id,
             query=query,
@@ -113,9 +123,13 @@ class KnowledgeAnswerEngineEvaluationHarness:
         runtime_options_builder: RuntimeOptionsBuilder | None = None,
     ) -> None:
         self._engine = engine
-        self._runtime_options_builder = runtime_options_builder or (lambda case: dict(case.runtime_options))
+        self._runtime_options_builder = runtime_options_builder or (
+            lambda case: dict(case.runtime_options)
+        )
 
-    def evaluate_cases(self, cases: list[KnowledgeAnswerEvalCase]) -> KnowledgeAnswerEvalRunResult:
+    def evaluate_cases(
+        self, cases: list[KnowledgeAnswerEvalCase]
+    ) -> KnowledgeAnswerEvalRunResult:
         results = [self.evaluate_case(case) for case in cases]
         failed_case_ids = [result.case_id for result in results if not result.passed]
         return KnowledgeAnswerEvalRunResult(
@@ -126,7 +140,9 @@ class KnowledgeAnswerEngineEvaluationHarness:
             results=results,
         )
 
-    def evaluate_case(self, case: KnowledgeAnswerEvalCase) -> KnowledgeAnswerEvalCaseResult:
+    def evaluate_case(
+        self, case: KnowledgeAnswerEvalCase
+    ) -> KnowledgeAnswerEvalCaseResult:
         result = self._engine.answer(
             KnowledgeAnswerRequest(
                 query=case.query,
@@ -136,7 +152,9 @@ class KnowledgeAnswerEngineEvaluationHarness:
             )
         )
         executed_queries = _extract_executed_queries(result)
-        mismatches = _compare_case_result(case=case, result=result, executed_queries=executed_queries)
+        mismatches = _compare_case_result(
+            case=case, result=result, executed_queries=executed_queries
+        )
         retrieval_summary = dict(result.retrieval_summary)
         return KnowledgeAnswerEvalCaseResult(
             case_id=case.case_id,
@@ -166,22 +184,45 @@ def _compare_case_result(
     expected = case.expected
     retrieval_summary = dict(result.retrieval_summary)
 
-    _append_mismatch(mismatches, "answerability", expected.answerability, result.answerability)
-    _append_mismatch(mismatches, "source_status", expected.source_status, result.source_status)
-    _append_mismatch(mismatches, "blocked_text", expected.blocked_text, result.blocked_text)
+    _append_mismatch(
+        mismatches, "answerability", expected.answerability, result.answerability
+    )
+    _append_mismatch(
+        mismatches, "source_status", expected.source_status, result.source_status
+    )
+    _append_mismatch(
+        mismatches, "blocked_text", expected.blocked_text, result.blocked_text
+    )
     _append_mismatch(mismatches, "final_text", expected.final_text, result.final_text)
-    _append_mismatch(mismatches, "unsupported_claims", expected.unsupported_claims, list(result.unsupported_claims))
+    _append_mismatch(
+        mismatches,
+        "unsupported_claims",
+        expected.unsupported_claims,
+        list(result.unsupported_claims),
+    )
     _append_mismatch(
         mismatches,
         "citation_titles",
         expected.citation_titles,
         [citation.document_title for citation in result.citations],
     )
-    _append_mismatch(mismatches, "rewritten_queries", expected.rewritten_queries, list(result.rewritten_queries))
-    _append_mismatch(mismatches, "executed_queries", expected.executed_queries, executed_queries)
+    _append_mismatch(
+        mismatches,
+        "rewritten_queries",
+        expected.rewritten_queries,
+        list(result.rewritten_queries),
+    )
+    _append_mismatch(
+        mismatches, "executed_queries", expected.executed_queries, executed_queries
+    )
 
     if expected.profile_key is not None:
-        _append_mismatch(mismatches, "profile_key", expected.profile_key, retrieval_summary.get("profile_key"))
+        _append_mismatch(
+            mismatches,
+            "profile_key",
+            expected.profile_key,
+            retrieval_summary.get("profile_key"),
+        )
     if expected.compat_source_status is not None:
         _append_mismatch(
             mismatches,
@@ -196,7 +237,10 @@ def _compare_case_result(
             expected.search_failure_count,
             retrieval_summary.get("search_failure_count"),
         )
-    if expected.blocked_reason is not None or retrieval_summary.get("blocked_reason") is not None:
+    if (
+        expected.blocked_reason is not None
+        or retrieval_summary.get("blocked_reason") is not None
+    ):
         _append_mismatch(
             mismatches,
             "blocked_reason",
@@ -214,12 +258,18 @@ def _append_mismatch(
     actual: Any,
 ) -> None:
     if expected != actual:
-        mismatches.append(KnowledgeAnswerEvalMismatch(field=field, expected=expected, actual=actual))
+        mismatches.append(
+            KnowledgeAnswerEvalMismatch(field=field, expected=expected, actual=actual)
+        )
 
 
 def _extract_executed_queries(result: KnowledgeAnswerResult) -> list[str]:
     execution_trace = result.retrieval_summary.get("execution_trace")
-    executed_steps = execution_trace.get("executed_steps") if isinstance(execution_trace, dict) else []
+    executed_steps = (
+        execution_trace.get("executed_steps")
+        if isinstance(execution_trace, dict)
+        else []
+    )
     queries: list[str] = []
     for step in executed_steps:
         if not isinstance(step, dict):

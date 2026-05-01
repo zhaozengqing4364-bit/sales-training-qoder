@@ -48,7 +48,9 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
-async def migrate_persona_policy(db: AsyncSession, *, apply_changes: bool) -> dict[str, Any]:
+async def migrate_persona_policy(
+    db: AsyncSession, *, apply_changes: bool
+) -> dict[str, Any]:
     personas_result = await db.execute(
         select(Persona).options(
             selectinload(Persona.agent_personas).selectinload(AgentPersona.agent)
@@ -82,7 +84,10 @@ async def migrate_persona_policy(db: AsyncSession, *, apply_changes: bool) -> di
                 continue
 
             merged_kb_ids = sorted(
-                set(base_kb_ids + _as_list(getattr(agent, "default_knowledge_base_ids", [])))
+                set(
+                    base_kb_ids
+                    + _as_list(getattr(agent, "default_knowledge_base_ids", []))
+                )
             )
             kb_signature = tuple(merged_kb_ids)
             kb_variants.add(kb_signature)
@@ -92,7 +97,9 @@ async def migrate_persona_policy(db: AsyncSession, *, apply_changes: bool) -> di
             policy_override = _as_dict(
                 getattr(policy, "tool_policy_override", {}) if policy else {}
             )
-            requires_kb_grounding = bool(policy_override.get("require_kb_grounding", False))
+            requires_kb_grounding = bool(
+                policy_override.get("require_kb_grounding", False)
+            )
             kb_grounding_variants.add(requires_kb_grounding)
             kb_grounding_agents[requires_kb_grounding].append(str(agent.id))
 
@@ -116,7 +123,10 @@ async def migrate_persona_policy(db: AsyncSession, *, apply_changes: bool) -> di
 
         target_kb_ids = list(next(iter(kb_variants), tuple(base_kb_ids)))
         target_require_kb_grounding = bool(
-            next(iter(kb_grounding_variants), bool(base_tool_policy.get("require_kb_grounding", False)))
+            next(
+                iter(kb_grounding_variants),
+                bool(base_tool_policy.get("require_kb_grounding", False)),
+            )
         )
 
         next_policy = {
@@ -174,4 +184,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

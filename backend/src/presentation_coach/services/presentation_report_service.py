@@ -248,7 +248,9 @@ class PresentationReportService:
                 phrase = str(getattr(forbidden_word, "phrase", "") or "").strip()
                 if not phrase:
                     continue
-                page_number = page_number_by_id.get(getattr(forbidden_word, "page_id", None))
+                page_number = page_number_by_id.get(
+                    getattr(forbidden_word, "page_id", None)
+                )
                 if page_number is None:
                     global_forbidden_words.append(phrase)
                 else:
@@ -277,7 +279,9 @@ class PresentationReportService:
         forbidden_words_by_page: dict[int, list[str]],
         global_forbidden_words: list[str],
     ) -> dict[str, Any]:
-        normalized_texts = [_normalize_text(message.content) for message in user_messages]
+        normalized_texts = [
+            _normalize_text(message.content) for message in user_messages
+        ]
         combined_text = "".join(normalized_texts)
 
         message_page_numbers = [
@@ -289,7 +293,9 @@ class PresentationReportService:
             for message in user_messages
         ]
         explicit_page_numbers = [
-            page_number for page_number in message_page_numbers if page_number is not None
+            page_number
+            for page_number in message_page_numbers
+            if page_number is not None
         ]
         has_page_metadata = bool(message_page_numbers) and all(
             page_number is not None for page_number in message_page_numbers
@@ -298,7 +304,9 @@ class PresentationReportService:
             page_number if page_number is not None else 1
             for page_number in message_page_numbers
         ] or [1]
-        pages_with_messages = len(set(explicit_page_numbers)) if explicit_page_numbers else 0
+        pages_with_messages = (
+            len(set(explicit_page_numbers)) if explicit_page_numbers else 0
+        )
         scoring_page_coverage_ratio = round(
             len(set(scoring_page_numbers)) / max(1, total_pages),
             4,
@@ -438,7 +446,9 @@ class PresentationReportService:
                 "required_points_missing": coverage["missing"],
                 "required_coverage_ratio": coverage["coverage_ratio"],
                 "degraded_reasons": degraded_reasons,
-                "page_issue_cluster_count": page_issue_diagnostics["page_issue_cluster_count"],
+                "page_issue_cluster_count": page_issue_diagnostics[
+                    "page_issue_cluster_count"
+                ],
                 "page_issue_types": page_issue_diagnostics["page_issue_types"],
             },
         }
@@ -648,13 +658,18 @@ class PresentationReportService:
             ):
                 if page_number is None:
                     continue
-                if normalized_trigger in normalized_text or normalized_text in normalized_trigger:
+                if (
+                    normalized_trigger in normalized_text
+                    or normalized_text in normalized_trigger
+                ):
                     return max(1, page_number)
                 message_content = str(getattr(message, "content", "") or "")
                 if trigger_content and trigger_content in message_content:
                     return max(1, page_number)
         explicit_pages = [
-            page_number for page_number in message_page_numbers if page_number is not None
+            page_number
+            for page_number in message_page_numbers
+            if page_number is not None
         ]
         if len(set(explicit_pages)) == 1:
             return explicit_pages[0]
@@ -674,7 +689,9 @@ class PresentationReportService:
         )
 
         for event in interruption_events:
-            interruption_type = str(getattr(event, "interruption_type", "") or "").strip()
+            interruption_type = str(
+                getattr(event, "interruption_type", "") or ""
+            ).strip()
             if not interruption_type:
                 continue
             trigger_content = str(getattr(event, "trigger_content", "") or "").strip()
@@ -699,7 +716,10 @@ class PresentationReportService:
                     continue
                 if not normalized_trigger:
                     continue
-                if normalized_trigger in normalized_text or normalized_text in normalized_trigger:
+                if (
+                    normalized_trigger in normalized_text
+                    or normalized_text in normalized_trigger
+                ):
                     matched_turn_numbers.append(int(message.turn_number))
 
             if not matched_turn_numbers:
@@ -741,7 +761,9 @@ class PresentationReportService:
         if not has_page_metadata:
             return {}
 
-        grouped_messages: dict[int, list[tuple[ConversationMessage, str]]] = defaultdict(list)
+        grouped_messages: dict[int, list[tuple[ConversationMessage, str]]] = (
+            defaultdict(list)
+        )
         for message, normalized_text, page_number in zip(
             user_messages,
             normalized_texts,
@@ -764,7 +786,9 @@ class PresentationReportService:
             message_pairs = grouped_messages[page_number]
             matched_points = list(coverage["matched_by_page"].get(page_number, []))
             missing_points = list(coverage["missing_by_page"].get(page_number, []))
-            page_turn_numbers = sorted({int(message.turn_number) for message, _ in message_pairs})
+            page_turn_numbers = sorted(
+                {int(message.turn_number) for message, _ in message_pairs}
+            )
 
             off_page_points: dict[int, set[str]] = defaultdict(set)
             off_page_turns: set[int] = set()
@@ -779,11 +803,7 @@ class PresentationReportService:
             if off_page_points:
                 related_pages = sorted(off_page_points.keys())
                 linked_points = sorted(
-                    {
-                        point
-                        for points in off_page_points.values()
-                        for point in points
-                    }
+                    {point for points in off_page_points.values() for point in points}
                 )
                 evidence = [
                     f"第 {target_page_number} 页要点：{', '.join(sorted(points))}"
@@ -805,7 +825,10 @@ class PresentationReportService:
 
             page_forbidden_words = list(
                 dict.fromkeys(
-                    [*forbidden_words_by_page.get(page_number, []), *global_forbidden_words]
+                    [
+                        *forbidden_words_by_page.get(page_number, []),
+                        *global_forbidden_words,
+                    ]
                 )
             )
             matched_phrases: set[str] = set()
@@ -824,7 +847,9 @@ class PresentationReportService:
                             f"第 {page_number} 页触发了禁忌表达，"
                             "建议改成更稳妥、可验证的说法。"
                         ),
-                        evidence=[f"触发短语：{phrase}" for phrase in sorted(matched_phrases)],
+                        evidence=[
+                            f"触发短语：{phrase}" for phrase in sorted(matched_phrases)
+                        ],
                         turn_numbers=sorted(forbidden_turns),
                         linked_phrases=sorted(matched_phrases),
                     )
@@ -845,7 +870,9 @@ class PresentationReportService:
                 )
 
             required_points = list(required_points_by_page.get(page_number, []))
-            page_char_count = sum(len(normalized_text) for _, normalized_text in message_pairs)
+            page_char_count = sum(
+                len(normalized_text) for _, normalized_text in message_pairs
+            )
             long_turn_numbers = sorted(
                 {
                     int(message.turn_number)
@@ -922,7 +949,9 @@ class PresentationReportService:
             return []
 
         grouped_messages: dict[int, list[ConversationMessage]] = defaultdict(list)
-        for message, page_number in zip(user_messages, message_page_numbers, strict=False):
+        for message, page_number in zip(
+            user_messages, message_page_numbers, strict=False
+        ):
             if page_number is None:
                 continue
             grouped_messages[max(1, page_number)].append(message)
@@ -932,7 +961,9 @@ class PresentationReportService:
             messages = grouped_messages[page_number]
             matched_points = list(coverage["matched_by_page"].get(page_number, []))
             missing_points = list(coverage["missing_by_page"].get(page_number, []))
-            combined_page_text = "".join(_normalize_text(message.content) for message in messages)
+            combined_page_text = "".join(
+                _normalize_text(message.content) for message in messages
+            )
             avg_score = _clamp_score(
                 58
                 + min(18, len(combined_page_text) / 80)
@@ -1032,7 +1063,9 @@ class PresentationReportService:
         if metrics["required_coverage_ratio"] < 0.65:
             improvements.append("部分页面的关键点覆盖还不够完整")
         if not has_page_metadata:
-            improvements.append("历史记录缺少页码元数据，逐页总结与覆盖判断只能降级展示")
+            improvements.append(
+                "历史记录缺少页码元数据，逐页总结与覆盖判断只能降级展示"
+            )
         return improvements[:5] or ["可以继续增加更多案例与互动设计"]
 
     def _build_recommendations(
@@ -1044,19 +1077,33 @@ class PresentationReportService:
     ) -> list[str]:
         recommendations: list[str] = []
         if dimension_values["流畅连贯性"] < 80:
-            recommendations.append("按页做 60 秒小段脱稿复述训练，重点减少“嗯、然后、这个”等口头语。")
+            recommendations.append(
+                "按页做 60 秒小段脱稿复述训练，重点减少“嗯、然后、这个”等口头语。"
+            )
         if dimension_values["准确性"] < 80:
-            recommendations.append("逐页对照石犀资料和讲稿自检一次，重点核对产品功能、版本和术语表述。")
+            recommendations.append(
+                "逐页对照石犀资料和讲稿自检一次，重点核对产品功能、版本和术语表述。"
+            )
         if dimension_values["专业性"] < 80:
-            recommendations.append("每页至少补入 1 个产品术语或技术原理解释，再用通俗语言复述一遍。")
+            recommendations.append(
+                "每页至少补入 1 个产品术语或技术原理解释，再用通俗语言复述一遍。"
+            )
         if dimension_values["生动性"] < 80:
-            recommendations.append("每 2-3 页补一个客户案例、业务场景或类比，提升讲解画面感。")
+            recommendations.append(
+                "每 2-3 页补一个客户案例、业务场景或类比，提升讲解画面感。"
+            )
         if dimension_values["互动问答"] < 80:
-            recommendations.append("每个主题段主动加入 1 个引导性问题或自问自答，带动听众参与。")
+            recommendations.append(
+                "每个主题段主动加入 1 个引导性问题或自问自答，带动听众参与。"
+            )
         if metrics["required_coverage_ratio"] < 0.7:
-            recommendations.append("给每页整理 2-3 个必须讲到的关键词，演练时逐页打勾确认。")
+            recommendations.append(
+                "给每页整理 2-3 个必须讲到的关键词，演练时逐页打勾确认。"
+            )
         if not has_page_metadata:
-            recommendations.append("后续请沿用支持页码落库的新版运行链路完成一轮翻页演练，补齐逐页证据。")
+            recommendations.append(
+                "后续请沿用支持页码落库的新版运行链路完成一轮翻页演练，补齐逐页证据。"
+            )
         return recommendations[:6] or ["保持当前节奏，继续通过整场演练巩固表达稳定性。"]
 
     def _build_detailed_feedback(

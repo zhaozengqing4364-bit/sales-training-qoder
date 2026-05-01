@@ -122,20 +122,6 @@ export function useContinuousAudioUploader(
     const pendingUploadCountRef = useRef(0);
     const uploadErrorRef = useRef<string | null>(null);
 
-    const resetState = useCallback(() => {
-        segmentSequenceRef.current = 0;
-        isStoppingRef.current = false;
-        isUploadingRef.current = false;
-        pendingUploadPromisesRef.current.clear();
-        pendingUploadCountRef.current = 0;
-        uploadErrorRef.current = null;
-        setSegmentCount(0);
-        setPendingUploads(0);
-        setLastError(null);
-        setUploadStatus("idle");
-        setIsUploading(false);
-    }, []);
-
     const cleanupStream = useCallback(() => {
         if (streamRef.current && ownsStreamRef.current) {
             streamRef.current.getTracks().forEach((t) => t.stop());

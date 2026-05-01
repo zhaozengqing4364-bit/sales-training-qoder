@@ -53,7 +53,9 @@ class CacheManager:
         self._redis: Any | None = None
         self._memory_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._use_memory_fallback = True
-        self._memory_max_entries = memory_max_entries or settings.CACHE_MEMORY_MAX_ENTRIES
+        self._memory_max_entries = (
+            memory_max_entries or settings.CACHE_MEMORY_MAX_ENTRIES
+        )
 
     async def connect(self, redis_url: str = "redis://localhost:6379"):
         """Connect to Redis"""
@@ -123,9 +125,7 @@ class CacheManager:
                     await self._redis.delete(*keys)
             elif self._use_memory_fallback:
                 keys_to_delete = [
-                    k
-                    for k in self._memory_cache.keys()
-                    if fnmatch.fnmatch(k, pattern)
+                    k for k in self._memory_cache.keys() if fnmatch.fnmatch(k, pattern)
                 ]
                 for k in keys_to_delete:
                     del self._memory_cache[k]

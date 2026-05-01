@@ -46,8 +46,17 @@ class KnowledgeIntentClassifier:
         self._query_profiles = dict(query_profiles or {})
         self._intent_rules = tuple(
             sorted(
-                (rule for rule in (intent_rules or []) if rule.profile_key in self._query_profiles),
-                key=lambda item: (item.priority, item.intent_key, item.profile_key, item.pattern),
+                (
+                    rule
+                    for rule in (intent_rules or [])
+                    if rule.profile_key in self._query_profiles
+                ),
+                key=lambda item: (
+                    item.priority,
+                    item.intent_key,
+                    item.profile_key,
+                    item.pattern,
+                ),
             )
         )
 
@@ -57,8 +66,12 @@ class KnowledgeIntentClassifier:
         *,
         entity_resolution: KnowledgeEntityResolution | None = None,
     ) -> KnowledgeIntentClassification:
-        normalized_query = (entity_resolution.normalized_query if entity_resolution else query).strip()
-        resolved_entities = list(entity_resolution.canonical_entities if entity_resolution else [])
+        normalized_query = (
+            entity_resolution.normalized_query if entity_resolution else query
+        ).strip()
+        resolved_entities = list(
+            entity_resolution.canonical_entities if entity_resolution else []
+        )
 
         for rule in self._intent_rules:
             matched_terms = self._match_rule(

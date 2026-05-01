@@ -57,14 +57,35 @@ _LEDGER_FAMILY_CONFIG: dict[str, dict[str, Any]] = {
         "promised_proof": "补充报价依据和版本差异",
         "next_expected_evidence": "说明报价逻辑、预算回收或折扣边界",
         "detect_any": ("价格", "报价", "预算", "折扣", "成本", "price", "budget"),
-        "evidence_any": ("价格", "报价", "预算", "折扣", "席位", "版本", "回收", "回本", "%", "元"),
+        "evidence_any": (
+            "价格",
+            "报价",
+            "预算",
+            "折扣",
+            "席位",
+            "版本",
+            "回收",
+            "回本",
+            "%",
+            "元",
+        ),
     },
     "competitor_alternative": {
         "focus_dimension": "异议处理",
         "promised_proof": "补充竞品差异和替代依据",
         "next_expected_evidence": "说明为什么比现有方案更稳妥",
         "detect_any": ("竞品", "竞对", "对比", "替代", "差异", "competitor"),
-        "evidence_any": ("竞品", "对比", "替代", "差异", "迁移", "案例", "SLA", "成本", "收益"),
+        "evidence_any": (
+            "竞品",
+            "对比",
+            "替代",
+            "差异",
+            "迁移",
+            "案例",
+            "SLA",
+            "成本",
+            "收益",
+        ),
     },
     "implementation_risk": {
         "focus_dimension": "异议处理",
@@ -230,7 +251,8 @@ def _should_open_new_ledger(
     score_context: dict[str, Any] | None,
 ) -> bool:
     stage_name = _normalize_text(
-        (stage_context or {}).get("current_stage") or (stage_context or {}).get("stage_name")
+        (stage_context or {}).get("current_stage")
+        or (stage_context or {}).get("stage_name")
     )
     weakest_dimension = _resolve_weakest_sales_dimension(score_context)
     family_focus = _LEDGER_FAMILY_CONFIG[detected_family]["focus_dimension"]
@@ -238,7 +260,11 @@ def _should_open_new_ledger(
     if detected_family == "roi_proof":
         if not _looks_like_unresolved_roi_pressure(stage_name, score_context):
             return False
-    elif stage_name not in {"objection", "异议处理", "价格博弈"} and weakest_dimension not in {
+    elif stage_name not in {
+        "objection",
+        "异议处理",
+        "价格博弈",
+    } and weakest_dimension not in {
         "证据使用",
         "异议处理",
     }:
@@ -256,16 +282,49 @@ def _looks_like_new_pressure(normalized_text: str, family: str) -> bool:
         return False
 
     if family == "roi_proof":
-        return any(token in normalized_text for token in ("证明", "凭什么", "没有", "缺", "不足", "担心", "顾虑", "怎么", "为何")) and any(
-            token in normalized_text for token in ("roi", "回本", "案例", "数据", "证据", "收益")
+        return any(
+            token in normalized_text
+            for token in (
+                "证明",
+                "凭什么",
+                "没有",
+                "缺",
+                "不足",
+                "担心",
+                "顾虑",
+                "怎么",
+                "为何",
+            )
+        ) and any(
+            token in normalized_text
+            for token in ("roi", "回本", "案例", "数据", "证据", "收益")
         )
     if family == "price_pressure":
-        return any(token in normalized_text for token in ("价格", "报价", "预算", "折扣", "贵", "成本", "担心", "顾虑"))
+        return any(
+            token in normalized_text
+            for token in ("价格", "报价", "预算", "折扣", "贵", "成本", "担心", "顾虑")
+        )
     if family == "competitor_alternative":
-        return any(token in normalized_text for token in ("竞品", "竞对", "替代", "对比", "差异", "担心", "顾虑"))
+        return any(
+            token in normalized_text
+            for token in ("竞品", "竞对", "替代", "对比", "差异", "担心", "顾虑")
+        )
     if family == "implementation_risk":
-        return any(token in normalized_text for token in ("实施", "落地", "上线", "排期", "试点", "风险", "担心", "顾虑")) and any(
-            token in normalized_text for token in ("实施", "落地", "上线", "排期", "试点", "风险")
+        return any(
+            token in normalized_text
+            for token in (
+                "实施",
+                "落地",
+                "上线",
+                "排期",
+                "试点",
+                "风险",
+                "担心",
+                "顾虑",
+            )
+        ) and any(
+            token in normalized_text
+            for token in ("实施", "落地", "上线", "排期", "试点", "风险")
         )
     return False
 
@@ -322,7 +381,9 @@ def _looks_like_evidence_provided(normalized_text: str, family: str) -> bool:
     if not isinstance(config, dict):
         return False
 
-    has_family_signal = any(token in normalized_text for token in config["evidence_any"])
+    has_family_signal = any(
+        token in normalized_text for token in config["evidence_any"]
+    )
     if not has_family_signal:
         return False
 
@@ -334,5 +395,14 @@ def _looks_like_evidence_provided(normalized_text: str, family: str) -> bool:
 
     return bool(_NUMERIC_SIGNAL_RE.search(normalized_text)) or any(
         token in normalized_text
-        for token in ("benchmark", "%", "提升", "下降", "回本周期", "回收周期", "月内", "周内")
+        for token in (
+            "benchmark",
+            "%",
+            "提升",
+            "下降",
+            "回本周期",
+            "回收周期",
+            "月内",
+            "周内",
+        )
     )

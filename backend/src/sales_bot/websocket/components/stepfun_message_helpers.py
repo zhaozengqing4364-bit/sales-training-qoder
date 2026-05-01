@@ -26,7 +26,9 @@ def _coerce_bounded_score(value: Any) -> float | None:
     return max(0.0, min(100.0, normalized))
 
 
-def normalize_score_snapshot(score_snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
+def normalize_score_snapshot(
+    score_snapshot: dict[str, Any] | None,
+) -> dict[str, Any] | None:
     """Canonicalize score snapshots to the stable `overall_score` contract."""
     if not isinstance(score_snapshot, dict):
         return None

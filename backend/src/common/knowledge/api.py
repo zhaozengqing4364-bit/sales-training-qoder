@@ -369,10 +369,10 @@ async def list_knowledge_bases(
         item_updated_at = RuntimeStatusService._coerce_datetime(item.updated_at)
         latest_document = max(
             documents,
-            key=lambda document: RuntimeStatusService._coerce_datetime(
-                document.created_at
-            )
-            or datetime.min.replace(tzinfo=UTC),
+            key=lambda document: (
+                RuntimeStatusService._coerce_datetime(document.created_at)
+                or datetime.min.replace(tzinfo=UTC)
+            ),
             default=None,
         )
         latest_document_created_at = (

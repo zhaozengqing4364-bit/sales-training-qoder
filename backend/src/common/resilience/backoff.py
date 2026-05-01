@@ -21,7 +21,9 @@ def compute_jitter_backoff_seconds(
     normalized_attempt = max(1, int(attempt))
     normalized_base = max(0.0, float(base_delay_seconds))
     normalized_cap = max(normalized_base, float(max_delay_seconds))
-    capped_delay = min(normalized_cap, normalized_base * (2 ** (normalized_attempt - 1)))
+    capped_delay = min(
+        normalized_cap, normalized_base * (2 ** (normalized_attempt - 1))
+    )
 
     if capped_delay <= 0:
         return 0.0

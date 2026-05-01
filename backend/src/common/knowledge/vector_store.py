@@ -10,6 +10,7 @@ References:
 - Requirements: R5 (Knowledge Base management)
 - Design: Section 27 (Vector Store)
 """
+
 import asyncio
 import os
 from typing import Any
@@ -54,10 +55,7 @@ class KnowledgeVectorStore:
 
             self.client = chromadb.PersistentClient(
                 path=self.persist_dir,
-                settings=Settings(
-                    anonymized_telemetry=False,
-                    allow_reset=True
-                )
+                settings=Settings(anonymized_telemetry=False, allow_reset=True),
             )
 
             self._initialized = True
@@ -79,8 +77,8 @@ class KnowledgeVectorStore:
                 metadata={
                     "hnsw:space": "cosine",
                     "hnsw:construction_ef": 200,
-                    "hnsw:M": 16
-                }
+                    "hnsw:M": 16,
+                },
             )
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to get collection {collection_name}: {e}")
@@ -136,17 +134,21 @@ class KnowledgeVectorStore:
                 metadatas = []
 
                 for chunk in chunks:
-                    chunk_type = (chunk.get("metadata") or {}).get("chunk_type", "child")
+                    chunk_type = (chunk.get("metadata") or {}).get(
+                        "chunk_type", "child"
+                    )
                     chunk_id = f"{document_id}_{chunk['index']}"
                     ids.append(chunk_id)
                     documents.append(chunk["content"])
-                    metadatas.append({
-                        "document_id": document_id,
-                        "document_title": document_title,
-                        "chunk_index": chunk["index"],
-                        "chunk_type": chunk_type,
-                        **chunk.get("metadata", {})
-                    })
+                    metadatas.append(
+                        {
+                            "document_id": document_id,
+                            "document_title": document_title,
+                            "chunk_index": chunk["index"],
+                            "chunk_type": chunk_type,
+                            **chunk.get("metadata", {}),
+                        }
+                    )
 
                 # Best-effort pre-cleanup for idempotent retries.
                 try:
@@ -161,12 +163,12 @@ class KnowledgeVectorStore:
                     ids=ids,
                     embeddings=embeddings,
                     documents=documents,
-                    metadatas=metadatas
+                    metadatas=metadatas,
                 )
 
                 logger.info(
                     f"Added {len(chunks)} chunks to collection {collection_name}",
-                    document_id=document_id
+                    document_id=document_id,
                 )
                 return Result.ok(len(chunks))
 
@@ -220,7 +222,9 @@ class KnowledgeVectorStore:
             if isinstance(metadata_filter, dict):
                 for key, expected in metadata_filter.items():
                     if isinstance(expected, list):
-                        where_clauses.append({key: {"$in": [item for item in expected]}})
+                        where_clauses.append(
+                            {key: {"$in": [item for item in expected]}}
+                        )
                     else:
                         where_clauses.append({key: expected})
 
@@ -235,7 +239,7 @@ class KnowledgeVectorStore:
                 query_embeddings=[query_embedding],
                 n_results=top_k,
                 where=where,
-                include=["documents", "metadatas", "distances"]
+                include=["documents", "metadatas", "distances"],
             )
 
             # Format results
@@ -248,17 +252,21 @@ class KnowledgeVectorStore:
                     similarity = 1 - distance
 
                     if similarity >= similarity_threshold:
-                        metadata = results["metadatas"][0][i] if results["metadatas"] else {}
-                        formatted.append({
-                            "content": doc,
-                            "score": round(similarity, 4),
-                            "source": metadata.get("document_title", "未知来源"),
-                            "metadata": {
-                                "document_id": metadata.get("document_id"),
-                                "document_title": metadata.get("document_title"),
-                                "chunk_index": metadata.get("chunk_index"),
+                        metadata = (
+                            results["metadatas"][0][i] if results["metadatas"] else {}
+                        )
+                        formatted.append(
+                            {
+                                "content": doc,
+                                "score": round(similarity, 4),
+                                "source": metadata.get("document_title", "未知来源"),
+                                "metadata": {
+                                    "document_id": metadata.get("document_id"),
+                                    "document_title": metadata.get("document_title"),
+                                    "chunk_index": metadata.get("chunk_index"),
+                                },
                             }
-                        })
+                        )
 
             logger.debug(
                 f"Search in {collection_name}: {len(formatted)} results above threshold"
@@ -306,11 +314,13 @@ class KnowledgeVectorStore:
             if results and results["documents"]:
                 for i, doc in enumerate(results["documents"]):
                     metadata = results["metadatas"][i] if results["metadatas"] else {}
-                    parents.append({
-                        "content": doc,
-                        "metadata": metadata,
-                        "id": results["ids"][i],
-                    })
+                    parents.append(
+                        {
+                            "content": doc,
+                            "metadata": metadata,
+                            "id": results["ids"][i],
+                        }
+                    )
 
             return Result.ok(parents)
 
@@ -341,10 +351,7 @@ class KnowledgeVectorStore:
         async with self._write_lock:
             try:
                 # Get all chunk IDs for this document
-                results = collection.get(
-                    where={"document_id": document_id},
-                    include=[]
-                )
+                results = collection.get(where={"document_id": document_id}, include=[])
 
                 if results and results["ids"]:
                     collection.delete(ids=results["ids"])
@@ -439,15 +446,11 @@ class VectorStore:
 
             self.client = chromadb.PersistentClient(
                 path=self.persist_dir,
-                settings=Settings(
-                    anonymized_telemetry=False,
-                    allow_reset=True
-                )
+                settings=Settings(anonymized_telemetry=False, allow_reset=True),
             )
 
             self.collection = self.client.get_or_create_collection(
-                name=self.collection_name,
-                metadata={"hnsw:space": "cosine"}
+                name=self.collection_name, metadata={"hnsw:space": "cosine"}
             )
 
             self._initialized = True
@@ -480,11 +483,7 @@ class VectorStore:
             return Result.fail("[USE_KEYWORD_SEARCH]")
 
         try:
-            collection.add(
-                documents=texts,
-                metadatas=metadatas,
-                ids=ids
-            )
+            collection.add(documents=texts, metadatas=metadatas, ids=ids)
             return Result.ok(True)
         except Exception as e:
             logger.error(f"Failed to add documents: {e}")
@@ -503,11 +502,7 @@ class VectorStore:
             return Result.fail("[USE_KEYWORD_SEARCH]")
 
         try:
-            collection.update(
-                ids=[doc_id],
-                documents=[text],
-                metadatas=[metadata]
-            )
+            collection.update(ids=[doc_id], documents=[text], metadatas=[metadata])
             return Result.ok(True)
         except Exception as e:
             logger.error(f"Failed to update document: {e}")
@@ -519,7 +514,7 @@ class VectorStore:
         presentation_id: str,
         page_number: int | None = None,
         n_results: int = 3,
-        **kwargs
+        **kwargs,
     ) -> Result[list[dict[str, Any]]]:
         """Query vector store for similar documents."""
         collection = self._get_legacy_collection()
@@ -537,21 +532,19 @@ class VectorStore:
                 }
 
             results = collection.query(
-                query_texts=[query_text],
-                where=where,
-                n_results=n_results
+                query_texts=[query_text], where=where, n_results=n_results
             )
 
             formatted = []
             if results and results["documents"] and results["documents"][0]:
                 for i, doc in enumerate(results["documents"][0]):
-                    metadata = results["metadatas"][0][i] if results["metadatas"] else {}
+                    metadata = (
+                        results["metadatas"][0][i] if results["metadatas"] else {}
+                    )
                     distance = results["distances"][0][i] if results["distances"] else 0
-                    formatted.append({
-                        "content": doc,
-                        "metadata": metadata,
-                        "distance": distance
-                    })
+                    formatted.append(
+                        {"content": doc, "metadata": metadata, "distance": distance}
+                    )
 
             return Result.ok(formatted)
         except Exception as e:
@@ -580,8 +573,7 @@ class VectorStore:
     async def delete_presentation(self, presentation_id: str) -> Result[bool]:
         """Delete all documents for a presentation."""
         return await self.delete_by_metadata(
-            self.collection_name,
-            {"presentation_id": presentation_id}
+            self.collection_name, {"presentation_id": presentation_id}
         )
 
     async def search_by_keyword(
@@ -603,11 +595,10 @@ class VectorStore:
             if results and results["documents"]:
                 for i, doc in enumerate(results["documents"]):
                     if keyword.lower() in doc.lower():
-                        metadata = results["metadatas"][i] if results["metadatas"] else {}
-                        matches.append({
-                            "content": doc,
-                            "metadata": metadata
-                        })
+                        metadata = (
+                            results["metadatas"][i] if results["metadatas"] else {}
+                        )
+                        matches.append({"content": doc, "metadata": metadata})
 
             return matches
         except Exception as e:

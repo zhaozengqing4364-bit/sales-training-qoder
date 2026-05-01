@@ -1,215 +1,37 @@
 "use client";
 import { debug } from "@/lib/debug";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Users2, Target } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import {
     Agent,
-    HistorySessionSummary,
-    Recommendation,
-    RetryFocusIntent,
     SalesPersonaOption,
     ScenarioSummary,
 } from "@/lib/api/types";
 import { AgentCard } from "@/components/ui/agent-card";
-import {
-    buildClientDefaultSalesCombinationResolution,
-    formatSalesCombinationFallbackReason,
-    resolveSalesCombinationRuleSet,
-    type SalesCombinationResolution,
-    type SalesCombinationViewModel,
-} from "@/lib/api/sales-combinations";
-
-type PersonalizedCombination = {
-    combinationId: string;
-    sourceLabel: string;
-};
-
-const normalizeCombinationText = (value: string) => value
-    .toLowerCase()
-    .replace(/客户/g, "")
-    .replace(/[^\p{Letter}\p{Number}]/gu, "");
-
-function textMatchesTarget(text: string | undefined, target: string): boolean {
-    if (!text) return false;
-    const normalizedText = normalizeCombinationText(text);
-    const normalizedTarget = normalizeCombinationText(target);
-    return normalizedText.includes(normalizedTarget) || normalizedTarget.includes(normalizedText);
-}
-
-function resolvePersonaForRole(personas: SalesPersonaOption[], role: string) {
-    return personas.find((persona) => {
-        const characteristics = persona.characteristics || [];
-        return (
-            textMatchesTarget(persona.name, role)
-            || textMatchesTarget(persona.description, role)
-            || characteristics.some((item) => textMatchesTarget(item, role))
-        );
-    }) || null;
-}
-
-function resolveAgentForCapability(agents: Agent[], capability: string) {
-    return agents.find((agent) => {
-        const tags = agent.ui_metadata?.tags || [];
-        return (
-            textMatchesTarget(agent.name, capability)
-            || textMatchesTarget(agent.role, capability)
-            || textMatchesTarget(agent.description, capability)
-            || tags.some((tag) => textMatchesTarget(tag, capability))
-        );
-    }) || agents[0] || null;
-}
-
-function parseFocusIntentFromTargetPath(targetPath: string | undefined): RetryFocusIntent | null {
-    if (!targetPath) return null;
-
-    try {
-        const url = new URL(targetPath, "https://local.sales-training");
-        const rawFocusIntent = url.searchParams.get("focus_intent");
-        if (!rawFocusIntent) return null;
-
-        const parsed = JSON.parse(rawFocusIntent) as Partial<RetryFocusIntent>;
-        if (typeof parsed.version !== "string" || typeof parsed.source_session_id !== "string") {
-            return null;
-        }
-
-        return {
-            version: parsed.version,
-            source_session_id: parsed.source_session_id,
-            main_issue: parsed.main_issue ?? null,
-            next_goal: parsed.next_goal ?? null,
-        };
-    } catch {
-        return null;
-    }
-}
-
-function combinationMatchesEvidence(combination: SalesCombinationViewModel, evidenceText: string): boolean {
-    return textMatchesTarget(evidenceText, combination.capability)
-        && textMatchesTarget(evidenceText, combination.role);
-}
-
-function resolveCombinationFromEvidence(
-    evidenceParts: Array<string | null | undefined>,
-    combinations: SalesCombinationViewModel[],
-): SalesCombinationViewModel | null {
-    const evidenceText = evidenceParts.filter(Boolean).join(" ");
-    if (!evidenceText) return null;
-
-    return combinations.find((combination) => combinationMatchesEvidence(combination, evidenceText)) || null;
-}
-
-function resolvePersonalizedCombination(
-    recommendation: Recommendation | null,
-    historySessions: HistorySessionSummary[],
-    combinations: SalesCombinationViewModel[],
-): PersonalizedCombination | null {
-    const recommendationFocusIntent = parseFocusIntentFromTargetPath(recommendation?.target_path);
-    const isSalesRecommendation = recommendation
-        ? recommendation.recommendation_kind === "sales_retry"
-            || recommendation.scenario_type === "sales"
-            || recommendation.target_path.startsWith("/agents/")
-        : false;
-
-    if (recommendation && isSalesRecommendation) {
-        const recommendedCombination = resolveCombinationFromEvidence([
-            recommendation.focus,
-            recommendation.title,
-            recommendation.reason,
-            recommendationFocusIntent?.main_issue?.issue_type,
-            recommendationFocusIntent?.main_issue?.issue_text,
-            recommendationFocusIntent?.main_issue?.recovery_rule,
-            recommendationFocusIntent?.next_goal?.goal_type,
-            recommendationFocusIntent?.next_goal?.goal_text,
-            recommendationFocusIntent?.next_goal?.rule,
-        ], combinations);
-
-        if (recommendedCombination) {
-            return {
-                combinationId: recommendedCombination.id,
-                sourceLabel: "基于上次报告推荐",
-            };
-        }
-    }
-
-    for (const session of historySessions) {
-        if (session.scenario_type !== "sales") continue;
-
-        const historyCombination = resolveCombinationFromEvidence([
-            session.persona_name,
-            session.agent_name,
-            session.feedback_summary,
-            session.main_issue?.issue_type,
-            session.main_issue?.issue_text,
-            session.main_issue?.recovery_rule,
-            session.next_goal?.goal_type,
-            session.next_goal?.goal_text,
-            session.next_goal?.rule,
-        ], combinations);
-
-        if (historyCombination) {
-            return {
-                combinationId: historyCombination.id,
-                sourceLabel: "基于上次报告推荐",
-            };
-        }
-    }
-
-    return null;
-}
-
-function buildCombinationFocusIntent(
-    combination: SalesCombinationViewModel,
-): RetryFocusIntent {
-    return {
-        version: "sales_core_combination_v1",
-        source_session_id: `sales-core-combination-${combination.id}`,
-        main_issue: {
-            issue_type: combination.capability,
-            issue_text: `本轮重点练习「${combination.capability}」在「${combination.role}」场景下的对话短板。`,
-            recovery_rule: `围绕${combination.role}，优先演练${combination.capability}。`,
-        },
-        next_goal: {
-            goal_type: combination.capability,
-            goal_text: `用一轮完整销售对练完成「${combination.capability} × ${combination.role}」。`,
-            rule: "sales_core_combination",
-        },
-    };
-}
 
 export default function SalesTrainingPage() {
     const router = useRouter();
     const [agents, setAgents] = useState<Agent[]>([]);
     const [salesScenarios, setSalesScenarios] = useState<ScenarioSummary[]>([]);
     const [salesPersonas, setSalesPersonas] = useState<SalesPersonaOption[]>([]);
-    const [latestRecommendation, setLatestRecommendation] = useState<Recommendation | null>(null);
-    const [salesHistory, setSalesHistory] = useState<HistorySessionSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [failedSections, setFailedSections] = useState<string[]>([]);
-    const [combinationRules, setCombinationRules] = useState<SalesCombinationResolution>(
-        () => buildClientDefaultSalesCombinationResolution("not_loaded"),
-    );
 
     const loadSalesTrainingData = useCallback(async () => {
         setIsLoading(true);
         setLoadError(null);
         setFailedSections([]);
-        setLatestRecommendation(null);
-        setSalesHistory([]);
-        setCombinationRules(buildClientDefaultSalesCombinationResolution("not_loaded"));
 
         try {
-            const [agentResult, scenarioResult, personasResult, recommendationResult, historyResult, combinationRulesResult] = await Promise.allSettled([
+            const [agentResult, scenarioResult, personasResult] = await Promise.allSettled([
                 api.training.getSalesAgents(),
                 api.scenarios.list("sales"),
                 api.scenarios.getSalesPersonas(),
-                api.dashboard.getRecommendation(),
-                api.user.getMyHistory({ page: 1, page_size: 5, scenario_type: "sales" }),
-                api.training.getActiveSalesCombinations(),
             ]);
 
             const failedSections: string[] = [];
@@ -232,32 +54,6 @@ export default function SalesTrainingPage() {
                 setSalesPersonas([]);
                 failedSections.push("角色画像");
             }
-            if (recommendationResult.status === "fulfilled") {
-                setLatestRecommendation(recommendationResult.value);
-            }
-            if (historyResult.status === "fulfilled") {
-                setSalesHistory(historyResult.value.sessions || []);
-            }
-            if (combinationRulesResult.status === "fulfilled") {
-                const resolvedRules = resolveSalesCombinationRuleSet(combinationRulesResult.value);
-                setCombinationRules(resolvedRules);
-                if (resolvedRules.source === "client_default") {
-                    debug.warn("[SalesTraining] Active sales-combination ruleset rejected; using client default", {
-                        fallbackReason: resolvedRules.fallbackReason,
-                        invalidReason: resolvedRules.invalidReason,
-                    });
-                }
-            } else {
-                setCombinationRules(buildClientDefaultSalesCombinationResolution(
-                    "api_error",
-                    combinationRulesResult.reason instanceof Error
-                        ? combinationRulesResult.reason.message
-                        : "active sales-combination ruleset API failed",
-                ));
-                debug.warn("[SalesTraining] Active sales-combination ruleset unavailable; using client default", {
-                    error: combinationRulesResult.reason,
-                });
-            }
 
             setFailedSections(failedSections);
             if (failedSections.length > 0) {
@@ -279,49 +75,6 @@ export default function SalesTrainingPage() {
         // 跳转到角色选择页面
         router.push(`/agents/${agentId}`);
     };
-
-    const personalizedCombination = useMemo(
-        () => resolvePersonalizedCombination(latestRecommendation, salesHistory, combinationRules.combinations),
-        [combinationRules.combinations, latestRecommendation, salesHistory],
-    );
-
-    const combinationCards = useMemo(() => {
-        const cards = combinationRules.combinations.map((combination) => {
-            const agent = resolveAgentForCapability(agents, combination.capability);
-            const persona = resolvePersonaForRole(salesPersonas, combination.role);
-            const focusIntent = buildCombinationFocusIntent(combination);
-            const focusIntentParam = encodeURIComponent(JSON.stringify(focusIntent));
-            const href = agent && persona
-                ? `/agents/${agent.id}?persona_id=${encodeURIComponent(persona.id)}&focus_intent=${focusIntentParam}`
-                : null;
-
-            return {
-                ...combination,
-                href,
-                agentName: agent?.name || null,
-                personaName: persona?.name || null,
-                isPersonalized: personalizedCombination?.combinationId === combination.id,
-                sourceLabel: personalizedCombination?.combinationId === combination.id
-                    ? personalizedCombination.sourceLabel
-                    : null,
-                unavailableReason: agent
-                    ? `管理员尚未配置「${combination.role}」角色`
-                    : "管理员尚未发布销售智能体",
-            };
-        });
-
-        if (!personalizedCombination) {
-            return cards;
-        }
-
-        return [...cards].sort((left, right) => {
-            if (left.id === personalizedCombination.combinationId) return -1;
-            if (right.id === personalizedCombination.combinationId) return 1;
-            return 0;
-        });
-    }, [agents, combinationRules.combinations, personalizedCombination, salesPersonas]);
-
-    const combinationFallbackCopy = formatSalesCombinationFallbackReason(combinationRules);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -380,81 +133,6 @@ export default function SalesTrainingPage() {
                     </Button>
                 </div>
             )}
-
-            <div className="rounded-3xl border border-slate-100 bg-white/70 p-6">
-                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                    <div>
-                        <h2 className="text-lg font-bold text-slate-900">
-                            核心 {combinationCards.length || combinationRules.combinations.length || 10} 组合（80/20）
-                        </h2>
-                        {combinationFallbackCopy && (
-                            <p className="mt-1 text-xs font-medium text-amber-700">
-                                {combinationFallbackCopy}
-                                {combinationRules.invalidReason ? ` 原因：${combinationRules.invalidReason}` : ""}
-                            </p>
-                        )}
-                    </div>
-                    <div className="flex flex-col items-start gap-1 sm:items-end">
-                        <span className="text-xs text-slate-500">首期优先练这些组合，先拿稳定效果</span>
-                        <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-bold text-slate-600">
-                            {combinationRules.source === "server"
-                                ? `后台配置 · ${combinationRules.version}`
-                                : `安全兜底 · ${combinationRules.version}`}
-                        </span>
-                    </div>
-                </div>
-                {combinationCards.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {combinationCards.map((item, idx) => (
-                        <button
-                            key={item.id}
-                            type="button"
-                            disabled={!item.href}
-                            onClick={() => {
-                                if (item.href) {
-                                    router.push(item.href);
-                                }
-                            }}
-                            className={`rounded-2xl border p-3 text-left transition-colors ${
-                                item.href
-                                    ? "border-slate-200 bg-slate-50/70 hover:border-blue-300 hover:bg-blue-50"
-                                    : "cursor-not-allowed border-amber-200 bg-amber-50/60"
-                            }`}
-                        >
-                            <div className="flex items-center justify-between gap-2">
-                                <p className="text-[11px] text-slate-500 font-semibold">
-                                    组合 {idx + 1}
-                                </p>
-                                {item.sourceLabel && (
-                                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">
-                                        {item.sourceLabel}
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-sm font-bold text-slate-900 mt-1">
-                                {item.capability}
-                            </p>
-                            <p className="text-xs text-slate-600 mt-1">
-                                客户角色：{item.role}
-                            </p>
-                            {item.href ? (
-                                <p className="mt-2 text-xs font-bold text-blue-600">
-                                    去开练：{item.agentName} · {item.personaName}
-                                </p>
-                            ) : (
-                                <p className="mt-2 text-xs font-bold text-amber-700">
-                                    {item.unavailableReason}
-                                </p>
-                            )}
-                        </button>
-                    ))}
-                    </div>
-                ) : (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
-                        后台当前显式隐藏了全部销售训练组合。你仍可从下方已发布销售智能体进入角色选择页。
-                    </div>
-                )}
-            </div>
 
             {/* Agents Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

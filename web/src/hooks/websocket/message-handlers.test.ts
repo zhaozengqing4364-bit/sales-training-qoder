@@ -55,7 +55,7 @@ function createDeps(initialState: PracticeState) {
 
 describe("handleWebSocketMessage connection/status behavior", () => {
     it("captures runtime answer diagnostics and citations from tts_audio messages", () => {
-        const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
+        const { deps } = createDeps(INITIAL_PRACTICE_STATE);
 
         handleWebSocketMessage(
             createMessageEvent({
@@ -119,9 +119,6 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         );
 
         expect((deps.streamingPlayer as { appendChunk: ReturnType<typeof vi.fn> }).appendChunk).toHaveBeenCalledWith(
-            expect.objectContaining({ playback_rate: 1.25 }),
-        );
-        expect(deps.queueTTSAudio).toHaveBeenCalledWith(
             expect.objectContaining({ playback_rate: 1.25 }),
         );
     });

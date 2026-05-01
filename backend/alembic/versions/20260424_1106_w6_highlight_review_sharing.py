@@ -51,18 +51,21 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "user_id", "session_id", name="uq_highlight_reviews_user_session"
         ),
+        if_not_exists=True,
     )
     op.create_index(
         "idx_highlight_reviews_user_updated",
         "highlight_reviews",
         ["user_id", "updated_at"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "idx_highlight_reviews_session",
         "highlight_reviews",
         ["session_id"],
         unique=False,
+        if_not_exists=True,
     )
 
     op.create_table(
@@ -101,18 +104,21 @@ def upgrade() -> None:
             "message_id",
             name="uq_highlight_review_items_review_message",
         ),
+        if_not_exists=True,
     )
     op.create_index(
         "idx_highlight_review_items_review",
         "highlight_review_items",
         ["review_id"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "idx_highlight_review_items_message",
         "highlight_review_items",
         ["message_id"],
         unique=False,
+        if_not_exists=True,
     )
 
     op.create_table(
@@ -164,36 +170,42 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["users.user_id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["revoked_by_user_id"], ["users.user_id"]),
         sa.PrimaryKeyConstraint("share_id"),
+        if_not_exists=True,
     )
     op.create_index(
         op.f("ix_highlight_review_shares_token_hash"),
         "highlight_review_shares",
         ["token_hash"],
         unique=True,
+        if_not_exists=True,
     )
     op.create_index(
         op.f("ix_highlight_review_shares_expires_at"),
         "highlight_review_shares",
         ["expires_at"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         op.f("ix_highlight_review_shares_revoked_at"),
         "highlight_review_shares",
         ["revoked_at"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "idx_highlight_review_shares_review",
         "highlight_review_shares",
         ["review_id"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "idx_highlight_review_shares_user",
         "highlight_review_shares",
         ["user_id"],
         unique=False,
+        if_not_exists=True,
     )
 
     op.create_table(
@@ -230,18 +242,21 @@ def upgrade() -> None:
             ["share_id"], ["highlight_review_shares.share_id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("log_id"),
+        if_not_exists=True,
     )
     op.create_index(
         "idx_highlight_share_access_logs_share",
         "highlight_review_share_access_logs",
         ["share_id", "created_at"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "idx_highlight_share_access_logs_actor",
         "highlight_review_share_access_logs",
         ["actor_user_id", "created_at"],
         unique=False,
+        if_not_exists=True,
     )
 
 
@@ -249,41 +264,60 @@ def downgrade() -> None:
     op.drop_index(
         "idx_highlight_share_access_logs_actor",
         table_name="highlight_review_share_access_logs",
+        if_exists=True,
     )
     op.drop_index(
         "idx_highlight_share_access_logs_share",
         table_name="highlight_review_share_access_logs",
+        if_exists=True,
     )
-    op.drop_table("highlight_review_share_access_logs")
+    op.drop_table("highlight_review_share_access_logs", if_exists=True)
 
     op.drop_index(
-        "idx_highlight_review_shares_user", table_name="highlight_review_shares"
+        "idx_highlight_review_shares_user",
+        table_name="highlight_review_shares",
+        if_exists=True,
     )
     op.drop_index(
-        "idx_highlight_review_shares_review", table_name="highlight_review_shares"
+        "idx_highlight_review_shares_review",
+        table_name="highlight_review_shares",
+        if_exists=True,
     )
     op.drop_index(
         op.f("ix_highlight_review_shares_revoked_at"),
         table_name="highlight_review_shares",
+        if_exists=True,
     )
     op.drop_index(
         op.f("ix_highlight_review_shares_expires_at"),
         table_name="highlight_review_shares",
+        if_exists=True,
     )
     op.drop_index(
         op.f("ix_highlight_review_shares_token_hash"),
         table_name="highlight_review_shares",
+        if_exists=True,
     )
-    op.drop_table("highlight_review_shares")
+    op.drop_table("highlight_review_shares", if_exists=True)
 
     op.drop_index(
-        "idx_highlight_review_items_message", table_name="highlight_review_items"
+        "idx_highlight_review_items_message",
+        table_name="highlight_review_items",
+        if_exists=True,
     )
     op.drop_index(
-        "idx_highlight_review_items_review", table_name="highlight_review_items"
+        "idx_highlight_review_items_review",
+        table_name="highlight_review_items",
+        if_exists=True,
     )
-    op.drop_table("highlight_review_items")
+    op.drop_table("highlight_review_items", if_exists=True)
 
-    op.drop_index("idx_highlight_reviews_session", table_name="highlight_reviews")
-    op.drop_index("idx_highlight_reviews_user_updated", table_name="highlight_reviews")
-    op.drop_table("highlight_reviews")
+    op.drop_index(
+        "idx_highlight_reviews_session", table_name="highlight_reviews", if_exists=True
+    )
+    op.drop_index(
+        "idx_highlight_reviews_user_updated",
+        table_name="highlight_reviews",
+        if_exists=True,
+    )
+    op.drop_table("highlight_reviews", if_exists=True)

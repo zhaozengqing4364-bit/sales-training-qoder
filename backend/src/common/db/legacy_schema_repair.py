@@ -47,12 +47,13 @@ def repair_persona_policy_legacy_schema(sync_conn, *, repair_surface: str) -> bo
         if dialect == "postgresql":
             sync_conn.execute(
                 text(
-                    "ALTER TABLE personas "
-                    "ADD COLUMN IF NOT EXISTS persona_policy JSON"
+                    "ALTER TABLE personas ADD COLUMN IF NOT EXISTS persona_policy JSON"
                 )
             )
         else:
-            sync_conn.execute(text("ALTER TABLE personas ADD COLUMN persona_policy JSON"))
+            sync_conn.execute(
+                text("ALTER TABLE personas ADD COLUMN persona_policy JSON")
+            )
 
     rows = sync_conn.execute(
         text(
@@ -75,9 +76,7 @@ def repair_persona_policy_legacy_schema(sync_conn, *, repair_surface: str) -> bo
         payload = json.dumps(persona_policy_payload, ensure_ascii=False)
         sync_conn.execute(
             text(
-                "UPDATE personas "
-                "SET persona_policy = :payload "
-                "WHERE id = :persona_id"
+                "UPDATE personas SET persona_policy = :payload WHERE id = :persona_id"
             ),
             {"payload": payload, "persona_id": str(row.get("id"))},
         )
@@ -230,7 +229,9 @@ def knowledge_documents_needs_legacy_repair(sync_conn) -> bool:
     if "knowledge_documents" not in set(inspector.get_table_names()):
         return False
 
-    columns = {column["name"] for column in inspector.get_columns("knowledge_documents")}
+    columns = {
+        column["name"] for column in inspector.get_columns("knowledge_documents")
+    }
     file_type_constraint_sql = _get_check_constraint_sql(
         sync_conn,
         "knowledge_documents",
@@ -247,7 +248,9 @@ def repair_knowledge_document_legacy_schema(sync_conn, *, repair_surface: str) -
     if "knowledge_documents" not in set(inspector.get_table_names()):
         return False
 
-    columns = {column["name"] for column in inspector.get_columns("knowledge_documents")}
+    columns = {
+        column["name"] for column in inspector.get_columns("knowledge_documents")
+    }
     dialect = str(getattr(sync_conn.dialect, "name", "")).lower()
     file_type_constraint_sql = _get_check_constraint_sql(
         sync_conn,

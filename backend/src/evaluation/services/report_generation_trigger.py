@@ -41,6 +41,7 @@ async def get_db_session() -> AsyncSession:
 
 class ReportGenerationError(Exception):
     """Raised when report generation fails after all retries."""
+
     pass
 
 
@@ -130,7 +131,9 @@ class ReportGenerationTrigger:
                 logger.info(
                     "report_generation_completed",
                     session_id=session_id,
-                    overall_score=result.value.overall_score if hasattr(result.value, 'overall_score') else None,
+                    overall_score=result.value.overall_score
+                    if hasattr(result.value, "overall_score")
+                    else None,
                 )
             else:
                 error_msg = result.fallback or "Unknown error"
@@ -257,6 +260,7 @@ class ReportGenerationTrigger:
         scoring_context = None
         try:
             from evaluation.services.realtime_scoring import RealtimeScoringService
+
             scoring_result = await RealtimeScoringService.get_scoring_context_from_db(
                 session_id=session_id,
                 db_session=self.db,
@@ -306,9 +310,7 @@ class ReportGenerationTrigger:
             status: New report generation status
             error: Error message if failed
         """
-        stmt = select(PracticeSession).where(
-            PracticeSession.session_id == session_id
-        )
+        stmt = select(PracticeSession).where(PracticeSession.session_id == session_id)
         result = await self.db.execute(stmt)
         session = result.scalar_one_or_none()
 
@@ -343,21 +345,23 @@ class ReportGenerationTrigger:
         Returns:
             Result with status info
         """
-        stmt = select(PracticeSession).where(
-            PracticeSession.session_id == session_id
-        )
+        stmt = select(PracticeSession).where(PracticeSession.session_id == session_id)
         result = await self.db.execute(stmt)
         session = result.scalar_one_or_none()
 
         if not session:
             return Result.fail("[SESSION_NOT_FOUND]")
 
-        return Result.ok({
-            "session_id": session_id,
-            "report_status": session.report_status,
-            "report_generated_at": session.report_generated_at.isoformat() if session.report_generated_at else None,
-            "report_error": session.report_error,
-        })
+        return Result.ok(
+            {
+                "session_id": session_id,
+                "report_status": session.report_status,
+                "report_generated_at": session.report_generated_at.isoformat()
+                if session.report_generated_at
+                else None,
+                "report_error": session.report_error,
+            }
+        )
 
 
 # Singleton instance for fire-and-forget triggers

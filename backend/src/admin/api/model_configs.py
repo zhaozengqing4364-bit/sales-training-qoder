@@ -8,6 +8,7 @@ References:
 - Requirements: R2 (CRUD API)
 - Design: model-config-management/design.md
 """
+
 import asyncio
 import time
 import uuid
@@ -77,7 +78,10 @@ def _is_provider_supported(model_type: ModelType, provider: ModelProvider) -> bo
 
 
 def _requires_api_key(model_type: ModelType, provider: ModelProvider) -> bool:
-    if model_type == ModelType.ASR and provider in {ModelProvider.LOCAL, ModelProvider.LOCAL_STREAMING}:
+    if model_type == ModelType.ASR and provider in {
+        ModelProvider.LOCAL,
+        ModelProvider.LOCAL_STREAMING,
+    }:
         return False
     if model_type == ModelType.TTS and provider == ModelProvider.LOCAL:
         return False
@@ -87,7 +91,10 @@ def _requires_api_key(model_type: ModelType, provider: ModelProvider) -> bool:
 def _requires_base_url(model_type: ModelType, provider: ModelProvider) -> bool:
     if model_type == ModelType.TTS:
         return False
-    if model_type == ModelType.ASR and provider in {ModelProvider.LOCAL, ModelProvider.LOCAL_STREAMING}:
+    if model_type == ModelType.ASR and provider in {
+        ModelProvider.LOCAL,
+        ModelProvider.LOCAL_STREAMING,
+    }:
         return False
     return True
 
@@ -148,36 +155,43 @@ async def _refresh_runtime_services() -> None:
 
     try:
         from common.ai.llm_service import reload_llm_service
+
         await reload_llm_service()
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to reload LLM service: {exc}")
 
     try:
         from common.ai.embedding_service import reload_embedding_service
+
         await reload_embedding_service()
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to reload Embedding service: {exc}")
 
     try:
         from common.audio.asr_service import reload_asr_service
+
         await reload_asr_service()
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to reload ASR service: {exc}")
 
     try:
         from common.audio.tts_service import reload_tts_service
+
         await reload_tts_service()
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to reload TTS service: {exc}")
 
     try:
         from common.audio.tts_factory import reset_tts_service_with_fallback
+
         reset_tts_service_with_fallback()
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to reset TTS fallback service: {exc}")
 
 
-def _config_to_response(config: ModelConfig, api_key_plain: str | None = None) -> ModelConfigResponse:
+def _config_to_response(
+    config: ModelConfig, api_key_plain: str | None = None
+) -> ModelConfigResponse:
     """Convert ModelConfig to response with masked API key"""
     if api_key_plain is not None:
         masked_key = mask_api_key(api_key_plain) if api_key_plain else "未设置"
@@ -396,7 +410,9 @@ async def get_model_config(
             if decrypt_result.is_success:
                 api_key_plain = decrypt_result.value
 
-        return ModelConfigSuccessResponse(data=_config_to_response(config, api_key_plain), trace_id=get_trace_id())
+        return ModelConfigSuccessResponse(
+            data=_config_to_response(config, api_key_plain), trace_id=get_trace_id()
+        )
 
     except SQLAlchemyError as e:
         logger.error(f"Failed to get model config: {e}")
@@ -407,7 +423,9 @@ async def get_model_config(
         )
 
 
-@router.api_route("/{config_id}", methods=["PUT", "PATCH"], response_model=ModelConfigSuccessResponse)
+@router.api_route(
+    "/{config_id}", methods=["PUT", "PATCH"], response_model=ModelConfigSuccessResponse
+)
 async def update_model_config(
     config_id: str,
     request: UpdateModelConfigRequest,
@@ -435,7 +453,11 @@ async def update_model_config(
         provider = ModelProvider(config.provider)
         model_type = ModelType(config.model_type)
 
-        if request.base_url is not None and _requires_base_url(model_type, provider) and not request.base_url.strip():
+        if (
+            request.base_url is not None
+            and _requires_base_url(model_type, provider)
+            and not request.base_url.strip()
+        ):
             return ModelConfigErrorResponse(
                 error="Base URL is required for this provider",
                 error_code="[MODEL_CONFIG_BASE_URL_REQUIRED]",
@@ -478,8 +500,12 @@ async def update_model_config(
         if request.is_default is not None and request.is_default:
             await _clear_defaults(db, model_type)
             config.is_default = True
-        elif config.is_default and (request.is_default is False or request.is_active is False):
-            replacement = await _find_replacement_default(db, config.model_type, config.id)
+        elif config.is_default and (
+            request.is_default is False or request.is_active is False
+        ):
+            replacement = await _find_replacement_default(
+                db, config.model_type, config.id
+            )
             if not replacement:
                 return ModelConfigErrorResponse(
                     error="Cannot remove the only active default configuration for this type",
@@ -548,7 +574,9 @@ async def delete_model_config(
 
         # Check if it's the only default
         if config.is_default:
-            replacement_config = await _find_replacement_default(db, config.model_type, config.id)
+            replacement_config = await _find_replacement_default(
+                db, config.model_type, config.id
+            )
             if not replacement_config:
                 return ModelConfigErrorResponse(
                     error="Cannot delete the only active configuration for this type",
@@ -568,7 +596,9 @@ async def delete_model_config(
             admin_user_id=str(current_user.user_id),
             deleted_config_id=config.id,
             model_type=config.model_type,
-            replacement_default_id=replacement_config.id if replacement_config else None,
+            replacement_default_id=replacement_config.id
+            if replacement_config
+            else None,
         )
 
         return ModelConfigSuccessResponse(data=None, trace_id=get_trace_id())
@@ -599,6 +629,7 @@ async def _clear_defaults(db: AsyncSession, model_type: ModelType) -> None:
 
 
 # ========== Test Connection Endpoint ==========
+
 
 @router.post("/{config_id}/test", response_model=TestConfigSuccessResponse)
 async def test_model_config(
@@ -645,8 +676,7 @@ async def test_model_config(
         start_time = time.time()
         try:
             test_result = await asyncio.wait_for(
-                _run_model_test(model_type, config, api_key),
-                timeout=10.0
+                _run_model_test(model_type, config, api_key), timeout=10.0
             )
         except TimeoutError:
             test_result = TestConfigResponse(
@@ -673,7 +703,14 @@ async def test_model_config(
 
         return TestConfigSuccessResponse(data=test_result)
 
-    except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError, SQLAlchemyError) as e:
+    except (
+        ConnectionError,
+        TimeoutError,
+        ValueError,
+        RuntimeError,
+        OSError,
+        SQLAlchemyError,
+    ) as e:
         logger.error(f"Failed to test model config: {e}")
         return TestConfigSuccessResponse(
             data=TestConfigResponse(
@@ -726,7 +763,7 @@ async def test_model_config_inline(
         try:
             test_result = await asyncio.wait_for(
                 _run_model_test(request.model_type, temp_config, request.api_key),
-                timeout=10.0
+                timeout=10.0,
             )
         except TimeoutError:
             test_result = TestConfigResponse(
@@ -761,9 +798,7 @@ async def test_model_config_inline(
 
 
 async def _run_model_test(
-    model_type: ModelType,
-    config: ModelConfig,
-    api_key: str
+    model_type: ModelType, config: ModelConfig, api_key: str
 ) -> TestConfigResponse:
     """
     Run the actual model test based on type.
@@ -950,6 +985,7 @@ async def _test_tts(config: ModelConfig, api_key: str) -> TestConfigResponse:
 
 # ========== TTS Preview Endpoint ==========
 
+
 @router.post("/tts/preview")
 async def preview_tts(
     text: str = Query("你好，这是一段语音试听测试。", description="Text to synthesize"),
@@ -995,9 +1031,7 @@ async def preview_tts(
         return StreamingResponse(
             audio_buffer,
             media_type="audio/mpeg",
-            headers={
-                "Content-Disposition": "inline; filename=preview.mp3"
-            }
+            headers={"Content-Disposition": "inline; filename=preview.mp3"},
         )
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:

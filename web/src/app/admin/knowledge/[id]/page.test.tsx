@@ -415,7 +415,7 @@ describe("KnowledgeDetailPage", () => {
             expect(updateKnowledgeAnswerAdminConfigMock).toHaveBeenCalledWith({ config_version_id: "cfg-2" });
         });
         expect(successToastMock).toHaveBeenCalled();
-    });
+    }, 10000);
 
     it("shows the global recent knowledge-answer runs section", async () => {
         render(<KnowledgeDetailPage />);

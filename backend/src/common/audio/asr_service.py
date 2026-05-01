@@ -10,6 +10,7 @@ References:
 - Constitution Principle II: Real-Time Priority - <200ms streaming latency
 - Constitution Principle V: Cost Control - ¥0.00033/s (API) vs free (local)
 """
+
 from typing import TYPE_CHECKING, Any
 
 from common.ai.config_manager import get_config_manager
@@ -38,7 +39,9 @@ class ASRService:
     Requirements: R6.3 (ASR Service loads from ConfigManager)
     """
 
-    def __init__(self, config: ModelConfig | None = None, provider: ASRProvider | None = None):
+    def __init__(
+        self, config: ModelConfig | None = None, provider: ASRProvider | None = None
+    ):
         """
         Initialize ASR service.
 
@@ -76,11 +79,14 @@ class ASRService:
             }
         else:
             # Get from ConfigManager (database or env fallback)
-            self._effective_config = self._config_manager.get_effective_config(ModelType.ASR)
+            self._effective_config = self._config_manager.get_effective_config(
+                ModelType.ASR
+            )
 
         if not self._effective_config:
             logger.warning("No ASR configuration available, using local fallback")
             from common.audio.asr_local import LocalASRProvider
+
             self._provider = LocalASRProvider(device="cuda")
             return
 
@@ -98,13 +104,20 @@ class ASRService:
                     extra_config=self._effective_config.get("extra_config", {}),
                 )
             else:
-                logger.warning("Alibaba ASR API key not configured, using local fallback")
+                logger.warning(
+                    "Alibaba ASR API key not configured, using local fallback"
+                )
                 from common.audio.asr_local import LocalASRProvider
+
                 self._provider = LocalASRProvider(device="cuda")
-        elif provider_name == ModelProvider.LOCAL_STREAMING.value or provider_name == "local_streaming":
+        elif (
+            provider_name == ModelProvider.LOCAL_STREAMING.value
+            or provider_name == "local_streaming"
+        ):
             # Use streaming Paraformer model for real-time scenarios
             logger.info("Using local streaming ASR (Paraformer-zh-streaming)")
             from common.audio.asr_streaming import LocalStreamingASRProvider
+
             extra_config = self._effective_config.get("extra_config", {})
             device = extra_config.get("device", "cuda")
             chunk_size_ms = extra_config.get("chunk_size_ms", 600)
@@ -116,7 +129,10 @@ class ASRService:
             # Default to local model (non-streaming)
             logger.info("Using local ASR model")
             from common.audio.asr_local import LocalASRProvider
-            device = self._effective_config.get("extra_config", {}).get("device", "cuda")
+
+            device = self._effective_config.get("extra_config", {}).get(
+                "device", "cuda"
+            )
             self._provider = LocalASRProvider(device=device)
 
         logger.info(f"ASR service initialized with provider: {provider_name}")

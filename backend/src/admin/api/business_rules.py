@@ -134,8 +134,12 @@ def _audit_entry(row: BusinessRuleConfigAuditLog) -> dict[str, Any]:
         "id": str(row.id),
         "actor": str(row.actor_id) if row.actor_id else None,
         "action": row.action,
-        "before_version": str(row.before_version) if row.before_version is not None else None,
-        "after_version": str(row.after_version) if row.after_version is not None else None,
+        "before_version": str(row.before_version)
+        if row.before_version is not None
+        else None,
+        "after_version": str(row.after_version)
+        if row.after_version is not None
+        else None,
         "reason": row.reason,
         "trace_id": row.trace_id,
         "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -172,7 +176,9 @@ def _row_to_sales_ruleset(
     )
     if publish_audit is not None:
         payload["audit_summary"] = {
-            "published_by": str(publish_audit.actor_id) if publish_audit.actor_id else None,
+            "published_by": str(publish_audit.actor_id)
+            if publish_audit.actor_id
+            else None,
             "published_at": publish_audit.created_at.isoformat()
             if publish_audit.created_at
             else None,
@@ -203,7 +209,10 @@ async def _sales_ruleset_row_by_public_id(
         if row.status not in statuses:
             continue
         value = row.value_json if isinstance(row.value_json, dict) else {}
-        if str(row.id) == ruleset_id or str(value.get("rule_set_id") or "") == ruleset_id:
+        if (
+            str(row.id) == ruleset_id
+            or str(value.get("rule_set_id") or "") == ruleset_id
+        ):
             return row
     return None
 
@@ -347,7 +356,9 @@ async def list_sales_combination_rulesets(
     resolution = await service.resolve_active_config(SALES_COMBINATION_RULES_KEY)
     active_payload = sales_combination_ruleset_payload(resolution)
     if resolution.config_id:
-        active_row = next((row for row in rows if str(row.id) == resolution.config_id), None)
+        active_row = next(
+            (row for row in rows if str(row.id) == resolution.config_id), None
+        )
         if active_row is not None:
             active_payload = _row_to_sales_ruleset(active_row, audits=audits)
 
@@ -459,7 +470,9 @@ async def publish_sales_combination_ruleset(
         )
         await db.commit()
         await db.refresh(row)
-        audits = await service.list_audit_logs(key=SALES_COMBINATION_RULES_KEY, limit=20)
+        audits = await service.list_audit_logs(
+            key=SALES_COMBINATION_RULES_KEY, limit=20
+        )
         latest_audit = audits[0] if audits else None
         return success_response(
             {
@@ -497,7 +510,9 @@ async def rollback_sales_combination_ruleset(
         )
         await db.commit()
         await db.refresh(row)
-        audits = await service.list_audit_logs(key=SALES_COMBINATION_RULES_KEY, limit=20)
+        audits = await service.list_audit_logs(
+            key=SALES_COMBINATION_RULES_KEY, limit=20
+        )
         latest_audit = audits[0] if audits else None
         return success_response(
             {

@@ -112,8 +112,12 @@ async def list_answer_runs(
         None,
         description="Optional session filter for one practice session",
     ),
-    query: str | None = Query(None, description="Optional substring filter for query text"),
-    answerability: str | None = Query(None, description="Optional answerability filter"),
+    query: str | None = Query(
+        None, description="Optional substring filter for query text"
+    ),
+    answerability: str | None = Query(
+        None, description="Optional answerability filter"
+    ),
     final_status: str | None = Query(None, description="Optional final status filter"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:

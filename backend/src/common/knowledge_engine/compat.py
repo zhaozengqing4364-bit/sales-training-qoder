@@ -48,9 +48,12 @@ def build_answerability_diagnostics(
     result: KnowledgeAnswerResult,
     strict_kb_mode: bool,
 ) -> dict[str, Any]:
-    compat_source_status = str(
-        result.retrieval_summary.get("compat_source_status") or result.source_status
-    ).strip() or result.source_status
+    compat_source_status = (
+        str(
+            result.retrieval_summary.get("compat_source_status") or result.source_status
+        ).strip()
+        or result.source_status
+    )
     resolved_query = str(
         result.retrieval_summary.get("resolved_query") or request_query
     ).strip()
@@ -81,9 +84,12 @@ def build_search_payload_from_answer_result(
         result=result,
         strict_kb_mode=strict_kb_mode,
     )
-    compat_source_status = str(
-        result.retrieval_summary.get("compat_source_status") or result.source_status
-    ).strip() or result.source_status
+    compat_source_status = (
+        str(
+            result.retrieval_summary.get("compat_source_status") or result.source_status
+        ).strip()
+        or result.source_status
+    )
     retrieval_mode = _derive_retrieval_mode(result)
     results = [_compat_result_row(item) for item in result.citations]
 
@@ -206,7 +212,9 @@ async def execute_knowledge_answer_engine(
 
     engine = KnowledgeAnswerEngine(
         config_repository=_StaticConfigRepository(config_snapshot),
-        haystack_adapter=KnowledgeHaystackAdapter(search_multiple=_compat_search_multiple),
+        haystack_adapter=KnowledgeHaystackAdapter(
+            search_multiple=_compat_search_multiple
+        ),
         reranker=KnowledgeReranker(
             ranking_profiles=getattr(config_snapshot, "ranking_profiles", {})
         ),
@@ -270,7 +278,9 @@ def attach_rollout_diagnostics(
     diagnostics["knowledge_answer_rollout"] = rollout_payload
 
     payload["_answerability"] = enrich_knowledge_answer_diagnostics(
-        payload.get("_answerability") if isinstance(payload.get("_answerability"), dict) else None,
+        payload.get("_answerability")
+        if isinstance(payload.get("_answerability"), dict)
+        else None,
         rollout_mode=rollout_mode,
         path_mode=path_mode,
         live_audit_run_id=live_audit_run_id,
@@ -293,12 +303,20 @@ async def _persist_answer_result_audit(
         repo = KnowledgeAnswerAuditRepository(sync_session)
         persisted = repo.create_run(
             session_id=request.session_id,
-            config_version_id=_optional_text(result.retrieval_summary.get("config_version_id")),
+            config_version_id=_optional_text(
+                result.retrieval_summary.get("config_version_id")
+            ),
             entrypoint=str(request.entrypoint or "unknown"),
-            query_text=str(result.retrieval_summary.get("resolved_query") or request.query),
+            query_text=str(
+                result.retrieval_summary.get("resolved_query") or request.query
+            ),
             answerability=result.answerability,
-            final_status="blocked" if result.answerability == "blocked" else "completed",
-            blocked_reason=_optional_text(result.retrieval_summary.get("blocked_reason")),
+            final_status="blocked"
+            if result.answerability == "blocked"
+            else "completed",
+            blocked_reason=_optional_text(
+                result.retrieval_summary.get("blocked_reason")
+            ),
             citations=[citation.model_dump() for citation in result.citations],
             retrieval_summary=dict(result.retrieval_summary),
             steps=_synthesized_audit_steps(request=request, result=result),
@@ -355,7 +373,9 @@ def _synthesized_audit_steps(
             input_payload={"profile_key": retrieval_summary.get("profile_key")},
             output_payload={
                 "citation_count": len(result.citations),
-                "citations": [_compat_citation_payload(citation) for citation in result.citations],
+                "citations": [
+                    _compat_citation_payload(citation) for citation in result.citations
+                ],
             },
             duration_ms=0,
             status="completed",

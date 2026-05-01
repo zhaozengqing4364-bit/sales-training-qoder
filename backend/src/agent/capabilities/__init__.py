@@ -18,6 +18,7 @@ References:
 - Requirements: R5, R6, R7, R8 (Capability modules)
 - Design: Sections 1-3, 7-10
 """
+
 from .base import (
     BaseCapability,
     CapabilityConfig,

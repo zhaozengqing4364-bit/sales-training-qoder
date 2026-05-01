@@ -34,12 +34,14 @@ router = APIRouter(prefix="/admin/release-verification", tags=["release-verifica
 # Request/Response schemas
 class CreateReleaseCandidateRequest(BaseModel):
     """Request to create a new release candidate"""
+
     release_version: str = Field(..., description="Version string (e.g., v1.2.0)")
     release_candidate_id: str = Field(..., description="Unique RC identifier")
 
 
 class VerificationCheckInput(BaseModel):
     """Input for a verification check"""
+
     check_type: Literal["migration", "contract", "performance", "manual"]
     check_name: str
     check_description: str | None = None
@@ -47,6 +49,7 @@ class VerificationCheckInput(BaseModel):
 
 class CreateReleaseCandidateWithChecksRequest(BaseModel):
     """Request to create RC with custom checks"""
+
     release_version: str
     release_candidate_id: str
     checks: list[VerificationCheckInput] | None = None
@@ -54,6 +57,7 @@ class CreateReleaseCandidateWithChecksRequest(BaseModel):
 
 class UpdateCheckResultRequest(BaseModel):
     """Request to update a check result"""
+
     status: Literal["pending", "passed", "failed", "skipped"]
     passed: bool
     details: dict[str, Any] | None = None
@@ -63,17 +67,14 @@ class UpdateCheckResultRequest(BaseModel):
 
 class GoNoGoDecisionRequest(BaseModel):
     """Request to make a go/no-go decision"""
+
     decision: Literal["go", "no_go", "conditional"]
     reason: str
 
 
 def success_response(data: Any, trace_id: str | None = None) -> dict:
     """Create unified success response"""
-    return {
-        "success": True,
-        "data": data,
-        "trace_id": trace_id or get_trace_id()
-    }
+    return {"success": True, "data": data, "trace_id": trace_id or get_trace_id()}
 
 
 def error_response(error_code: str, message: str, trace_id: str | None = None) -> dict:
@@ -82,7 +83,7 @@ def error_response(error_code: str, message: str, trace_id: str | None = None) -
         "success": False,
         "error": error_code,
         "message": message,
-        "trace_id": trace_id or get_trace_id()
+        "trace_id": trace_id or get_trace_id(),
     }
 
 
@@ -90,7 +91,7 @@ def error_response(error_code: str, message: str, trace_id: str | None = None) -
 async def create_release_candidate(
     request: CreateReleaseCandidateWithChecksRequest,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Create a new release candidate with verification checks
@@ -106,8 +107,8 @@ async def create_release_candidate(
         extra={
             "release_version": request.release_version,
             "release_candidate_id": request.release_candidate_id,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     checks = None
@@ -115,11 +116,12 @@ async def create_release_candidate(
         from common.analytics.release_verification_service import (
             VerificationCheckInput as CheckInput,
         )
+
         checks = [
             CheckInput(
                 check_type=c.check_type,
                 check_name=c.check_name,
-                check_description=c.check_description
+                check_description=c.check_description,
             )
             for c in request.checks
         ]
@@ -129,62 +131,57 @@ async def create_release_candidate(
         release_version=request.release_version,
         release_candidate_id=request.release_candidate_id,
         checks=checks,
-        created_by=str(current_user.user_id)
+        created_by=str(current_user.user_id),
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[CREATE_FAILED]",
-            "Failed to create release candidate"
+            result.fallback or "[CREATE_FAILED]", "Failed to create release candidate"
         )
 
     from dataclasses import asdict
+
     return success_response(asdict(result.value))
 
 
 @router.get("/candidates", response_model=dict)
 async def list_release_candidates(
-    status: Literal["pending", "passed", "failed"] | None = Query(None, description="Filter by status"),
+    status: Literal["pending", "passed", "failed"] | None = Query(
+        None, description="Filter by status"
+    ),
     limit: int = Query(20, ge=1, le=100, description="Max items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     List release candidates with optional status filter
     """
     logger.info(
         "Listing release candidates",
-        extra={
-            "status": status,
-            "user_id": str(current_user.user_id)
-        }
+        extra={"status": status, "user_id": str(current_user.user_id)},
     )
 
     result = await release_verification_service.list_release_candidates(
-        db=db,
-        status=status,
-        limit=limit,
-        offset=offset
+        db=db, status=status, limit=limit, offset=offset
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[LIST_FAILED]",
-            "Failed to list release candidates"
+            result.fallback or "[LIST_FAILED]", "Failed to list release candidates"
         )
 
     from dataclasses import asdict
-    return success_response({
-        "candidates": [asdict(c) for c in result.value],
-        "total": len(result.value)
-    })
+
+    return success_response(
+        {"candidates": [asdict(c) for c in result.value], "total": len(result.value)}
+    )
 
 
 @router.get("/candidates/latest", response_model=dict)
 async def get_latest_release_candidate(
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get the latest release candidate
@@ -194,13 +191,14 @@ async def get_latest_release_candidate(
     if not result.is_success:
         return error_response(
             result.fallback or "[GET_LATEST_FAILED]",
-            "Failed to get latest release candidate"
+            "Failed to get latest release candidate",
         )
 
     if result.value is None:
         return success_response({"candidate": None})
 
     from dataclasses import asdict
+
     return success_response({"candidate": asdict(result.value)})
 
 
@@ -208,7 +206,7 @@ async def get_latest_release_candidate(
 async def get_verification_report(
     release_candidate_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get complete verification report for a release candidate
@@ -223,29 +221,30 @@ async def get_verification_report(
         "Getting verification report",
         extra={
             "release_candidate_id": release_candidate_id,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await release_verification_service.get_verification_report(
-        db=db,
-        release_candidate_id=release_candidate_id
+        db=db, release_candidate_id=release_candidate_id
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[REPORT_FAILED]",
-            "Failed to get verification report"
+            result.fallback or "[REPORT_FAILED]", "Failed to get verification report"
         )
 
     from dataclasses import asdict
+
     report = result.value
-    return success_response({
-        "summary": asdict(report.summary),
-        "checks": [asdict(c) for c in report.checks],
-        "gate_status": report.gate_status,
-        "recommendations": report.recommendations
-    })
+    return success_response(
+        {
+            "summary": asdict(report.summary),
+            "checks": [asdict(c) for c in report.checks],
+            "gate_status": report.gate_status,
+            "recommendations": report.recommendations,
+        }
+    )
 
 
 @router.put("/checks/{record_id}", response_model=dict)
@@ -253,7 +252,7 @@ async def update_check_result(
     record_id: str,
     request: UpdateCheckResultRequest,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Update a verification check result
@@ -270,8 +269,8 @@ async def update_check_result(
             "record_id": record_id,
             "status": request.status,
             "passed": request.passed,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await release_verification_service.update_check_result(
@@ -282,16 +281,16 @@ async def update_check_result(
         details=request.details,
         error_message=request.error_message,
         duration_ms=request.duration_ms,
-        executed_by=str(current_user.user_id)
+        executed_by=str(current_user.user_id),
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[UPDATE_FAILED]",
-            "Failed to update check result"
+            result.fallback or "[UPDATE_FAILED]", "Failed to update check result"
         )
 
     from dataclasses import asdict
+
     return success_response(asdict(result.value))
 
 
@@ -300,7 +299,7 @@ async def make_go_no_go_decision(
     release_candidate_id: str,
     request: GoNoGoDecisionRequest,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Make a go/no-go decision for a release candidate
@@ -317,8 +316,8 @@ async def make_go_no_go_decision(
         extra={
             "release_candidate_id": release_candidate_id,
             "decision": request.decision,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await release_verification_service.make_go_no_go_decision(
@@ -326,25 +325,27 @@ async def make_go_no_go_decision(
         release_candidate_id=release_candidate_id,
         decision=request.decision,
         reason=request.reason,
-        finalized_by=str(current_user.user_id)
+        finalized_by=str(current_user.user_id),
     )
 
     if not result.is_success:
         return error_response(
-            result.fallback or "[DECISION_FAILED]",
-            "Failed to make go/no-go decision"
+            result.fallback or "[DECISION_FAILED]", "Failed to make go/no-go decision"
         )
 
     from dataclasses import asdict
+
     return success_response(asdict(result.value))
 
 
 @router.post("/candidates/{release_candidate_id}/run-verification", response_model=dict)
 async def run_automated_verification(
     release_candidate_id: str,
-    skip_checks: list[str] | None = Query(None, description="List of check types to skip"),
+    skip_checks: list[str] | None = Query(
+        None, description="List of check types to skip"
+    ),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Run automated verification checks for a release candidate
@@ -368,23 +369,21 @@ async def run_automated_verification(
         extra={
             "release_candidate_id": release_candidate_id,
             "skip_checks": skip_checks,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     # Import here to avoid circular dependency
     from common.analytics.verification_runner import verification_runner
 
     result = await verification_runner.run_all_checks(
-        db=db,
-        release_candidate_id=release_candidate_id,
-        skip_checks=skip_checks
+        db=db, release_candidate_id=release_candidate_id, skip_checks=skip_checks
     )
 
     if not result.is_success:
         return error_response(
             result.fallback or "[VERIFICATION_FAILED]",
-            "Automated verification failed to execute"
+            "Automated verification failed to execute",
         )
 
     # Commit all database updates made by runner
@@ -394,8 +393,8 @@ async def run_automated_verification(
         "Automated verification completed",
         extra={
             "release_candidate_id": release_candidate_id,
-            "summary": result.value.get("summary", {})
-        }
+            "summary": result.value.get("summary", {}),
+        },
     )
 
     return success_response(result.value)
@@ -405,7 +404,7 @@ async def run_automated_verification(
 async def check_quality_gate_status(
     release_candidate_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Check quality gate status for a release candidate
@@ -420,19 +419,18 @@ async def check_quality_gate_status(
         "Checking quality gate status",
         extra={
             "release_candidate_id": release_candidate_id,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await release_verification_service.check_quality_gate(
-        db=db,
-        release_candidate_id=release_candidate_id
+        db=db, release_candidate_id=release_candidate_id
     )
 
     if not result.is_success:
         return error_response(
             result.fallback or "[GATE_CHECK_FAILED]",
-            "Failed to check quality gate status"
+            "Failed to check quality gate status",
         )
 
     return success_response(result.value)
@@ -442,7 +440,7 @@ async def check_quality_gate_status(
 async def make_automated_decision(
     release_candidate_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Make automated go/no-go decision based on quality gate results
@@ -458,21 +456,22 @@ async def make_automated_decision(
         "Making automated go/no-go decision",
         extra={
             "release_candidate_id": release_candidate_id,
-            "user_id": str(current_user.user_id)
-        }
+            "user_id": str(current_user.user_id),
+        },
     )
 
     result = await release_verification_service.make_automated_decision(
         db=db,
         release_candidate_id=release_candidate_id,
-        finalized_by=str(current_user.user_id)
+        finalized_by=str(current_user.user_id),
     )
 
     if not result.is_success:
         return error_response(
             result.fallback or "[AUTO_DECISION_FAILED]",
-            result.fallback or "Failed to make automated decision"
+            result.fallback or "Failed to make automated decision",
         )
 
     from dataclasses import asdict
+
     return success_response(asdict(result.value))

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -218,14 +218,6 @@ export function SidebarContent({
 }
 
 function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo: UserInfo | null }) {
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => {
-        const timeoutId = window.setTimeout(() => {
-            setMounted(true);
-        }, 0);
-        return () => window.clearTimeout(timeoutId);
-    }, []);
-
     const displayName = userInfo?.display_name || userInfo?.name || "用户";
     const department = userInfo?.department || "未设置部门";
 

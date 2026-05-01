@@ -111,7 +111,9 @@ class GrowthSafetyPolicyService:
         lower_threshold = float(normalized.get("lower_score_threshold", 55.0))
         raise_threshold = float(normalized.get("raise_score_threshold", 85.0))
         if not 0 <= lower_threshold < raise_threshold <= 100:
-            raise ValueError("adaptive thresholds must satisfy 0 <= lower < raise <= 100")
+            raise ValueError(
+                "adaptive thresholds must satisfy 0 <= lower < raise <= 100"
+            )
         normalized["lower_score_threshold"] = lower_threshold
         normalized["raise_score_threshold"] = raise_threshold
 
@@ -266,7 +268,9 @@ class GrowthSafetyPolicyService:
         return Result.ok(
             {
                 "feature": "adaptive_difficulty",
-                "status": "dry_run" if policy["mode"] == "dry_run" else "active_candidate",
+                "status": "dry_run"
+                if policy["mode"] == "dry_run"
+                else "active_candidate",
                 "enabled": True,
                 "mode": policy["mode"],
                 "policy_version": policy["version"],

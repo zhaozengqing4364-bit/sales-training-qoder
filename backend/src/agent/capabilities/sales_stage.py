@@ -7,6 +7,7 @@ References:
 - Requirements: R7 (销售阶段识别)
 - Design: Section 9 (Sales Stage Capability)
 """
+
 from __future__ import annotations
 
 from typing import Any, ClassVar
@@ -42,36 +43,36 @@ class SalesStageCapability(BaseCapability):
             "name": "开场破冰",
             "key_actions": ["建立信任", "了解背景"],
             "keywords": ["你好", "介绍", "了解", "认识"],
-            "guidance": "建立良好的第一印象"
+            "guidance": "建立良好的第一印象",
         },
         {
             "id": "discovery",
             "name": "需求挖掘",
             "key_actions": ["深入痛点", "确认需求"],
             "keywords": ["需求", "问题", "痛点", "挑战", "目标"],
-            "guidance": "深入挖掘客户需求和痛点"
+            "guidance": "深入挖掘客户需求和痛点",
         },
         {
             "id": "presentation",
             "name": "方案呈现",
             "key_actions": ["匹配需求", "展示价值"],
             "keywords": ["方案", "产品", "功能", "价值", "优势"],
-            "guidance": "展示产品价值，匹配客户需求"
+            "guidance": "展示产品价值，匹配客户需求",
         },
         {
             "id": "objection",
             "name": "异议处理",
             "key_actions": ["处理疑虑", "提供证据"],
             "keywords": ["但是", "担心", "价格", "竞品", "考虑"],
-            "guidance": "耐心处理客户疑虑"
+            "guidance": "耐心处理客户疑虑",
         },
         {
             "id": "closing",
             "name": "促成成交",
             "key_actions": ["推动决策", "行动号召"],
             "keywords": ["合作", "签约", "下一步", "决定", "购买"],
-            "guidance": "推动客户做出决策"
-        }
+            "guidance": "推动客户做出决策",
+        },
     ]
 
     # Valid stage transitions (state machine)
@@ -93,9 +94,9 @@ class SalesStageCapability(BaseCapability):
             "enforce_transitions": {
                 "type": "boolean",
                 "default": False,
-                "description": "Whether to enforce valid stage transitions"
-            }
-        }
+                "description": "Whether to enforce valid stage transitions",
+            },
+        },
     }
 
     def __init__(self, config: CapabilityConfig) -> None:
@@ -129,7 +130,7 @@ class SalesStageCapability(BaseCapability):
                     logger.debug(
                         "Invalid stage transition "
                         f"{previous_stage} -> {current_stage}, keeping current",
-                        session_id=context.session_id
+                        session_id=context.session_id,
                     )
                     current_stage = previous_stage
 
@@ -142,11 +143,13 @@ class SalesStageCapability(BaseCapability):
 
             stage_changed = current_stage != previous_stage
             if stage_changed and previous_stage is not None:
-                context.state["stage_history"].append({
-                    "from": previous_stage,
-                    "to": current_stage,
-                    "turn": context.turn_count
-                })
+                context.state["stage_history"].append(
+                    {
+                        "from": previous_stage,
+                        "to": current_stage,
+                        "turn": context.turn_count,
+                    }
+                )
 
             self._update_usage_count(context)
 
@@ -156,7 +159,7 @@ class SalesStageCapability(BaseCapability):
                 "key_actions": stage_info.get("key_actions", []),
                 "guidance": stage_info.get("guidance", ""),
                 "progress": progress,
-                "stage_changed": stage_changed
+                "stage_changed": stage_changed,
             }
 
             if previous_stage:
@@ -166,20 +169,19 @@ class SalesStageCapability(BaseCapability):
                 "Sales stage analysis completed",
                 session_id=context.session_id,
                 current_stage=current_stage,
-                stage_changed=stage_changed
+                stage_changed=stage_changed,
             )
 
             return CapabilityResult(
                 success=True,
                 data=result_data,
                 should_interrupt=stage_changed,
-                feedback=self._generate_feedback(stage_info, stage_changed)
+                feedback=self._generate_feedback(stage_info, stage_changed),
             )
 
         except (RuntimeError, ValueError, KeyError) as e:
             logger.error(
-                f"Sales stage analysis failed: {e}",
-                session_id=context.session_id
+                f"Sales stage analysis failed: {e}", session_id=context.session_id
             )
             return CapabilityResult(success=False, fallback="[SALES_STAGE_FAILED]")
 
@@ -189,7 +191,7 @@ class SalesStageCapability(BaseCapability):
             return "opening"
 
         # Get recent messages
-        recent = history[-self._history_window:]
+        recent = history[-self._history_window :]
         text = " ".join([m.get("content", "") for m in recent]).lower()
 
         # Score each stage based on keyword matches
@@ -267,10 +269,7 @@ class SalesStageCapability(BaseCapability):
         await super().on_session_start(context)
         context.state["current_stage"] = "opening"
         context.state["stage_history"] = []
-        logger.info(
-            "Sales stage capability initialized",
-            session_id=context.session_id
-        )
+        logger.info("Sales stage capability initialized", session_id=context.session_id)
 
     async def on_session_end(self, context: AgentContext) -> dict[str, Any]:
         """会话结束时返回统计数据"""
@@ -283,6 +282,6 @@ class SalesStageCapability(BaseCapability):
             "Sales stage session ended",
             session_id=context.session_id,
             final_stage=stats["final_stage"],
-            transitions=stats["stage_transitions"]
+            transitions=stats["stage_transitions"],
         )
         return stats

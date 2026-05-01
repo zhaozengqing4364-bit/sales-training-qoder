@@ -12,7 +12,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-
 revision: str = "20260424_1100_033"
 down_revision: str | None = "20260421_0645_032"
 branch_labels: str | Sequence[str] | None = None
@@ -65,36 +64,53 @@ def upgrade() -> None:
             "version",
             name="uq_scoring_ruleset_scenario_version",
         ),
+        if_not_exists=True,
     )
     op.create_index(
         "ix_scoring_rulesets_scenario_type",
         "scoring_rulesets",
         ["scenario_type"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "ix_scoring_rulesets_is_active",
         "scoring_rulesets",
         ["is_active"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "ix_scoring_rulesets_status",
         "scoring_rulesets",
         ["status"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "idx_scoring_rulesets_scenario_active",
         "scoring_rulesets",
         ["scenario_type", "is_active"],
         unique=False,
+        if_not_exists=True,
     )
 
 
 def downgrade() -> None:
-    op.drop_index("idx_scoring_rulesets_scenario_active", table_name="scoring_rulesets")
-    op.drop_index("ix_scoring_rulesets_status", table_name="scoring_rulesets")
-    op.drop_index("ix_scoring_rulesets_is_active", table_name="scoring_rulesets")
-    op.drop_index("ix_scoring_rulesets_scenario_type", table_name="scoring_rulesets")
-    op.drop_table("scoring_rulesets")
+    op.drop_index(
+        "idx_scoring_rulesets_scenario_active",
+        table_name="scoring_rulesets",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_scoring_rulesets_status", table_name="scoring_rulesets", if_exists=True
+    )
+    op.drop_index(
+        "ix_scoring_rulesets_is_active", table_name="scoring_rulesets", if_exists=True
+    )
+    op.drop_index(
+        "ix_scoring_rulesets_scenario_type",
+        table_name="scoring_rulesets",
+        if_exists=True,
+    )
+    op.drop_table("scoring_rulesets", if_exists=True)

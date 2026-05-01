@@ -188,14 +188,10 @@ def _build_blocked_user_message(status: str) -> str:
             "请联系管理员先完成知识库绑定后再继续。"
         )
     if status == "blocked_not_ready":
-        return (
-            "当前会话已开启知识库强制模式，但知识库文档尚未处理完成。"
-            "请稍后重试。"
-        )
+        return "当前会话已开启知识库强制模式，但知识库文档尚未处理完成。请稍后重试。"
     if status == "blocked_search_failed":
         return (
-            "当前会话已开启知识库强制模式，但知识检索失败。"
-            "请稍后重试或联系管理员排查。"
+            "当前会话已开启知识库强制模式，但知识检索失败。请稍后重试或联系管理员排查。"
         )
     return (
         "当前会话已开启知识库强制模式，但未检索到可引用的内部依据。"
@@ -420,9 +416,7 @@ async def evaluate_kb_lock_decision(
         effective_min_pass_score = min_pass_score_keyword
     phase_breakdown.setdefault("max_score", round(max_score, 4))
     phase_breakdown.setdefault("min_pass_score", round(effective_min_pass_score, 4))
-    phase_breakdown.setdefault(
-        "min_pass_score_vector", round(min_pass_score, 4)
-    )
+    phase_breakdown.setdefault("min_pass_score_vector", round(min_pass_score, 4))
     phase_breakdown.setdefault(
         "min_pass_score_keyword", round(min_pass_score_keyword, 4)
     )
@@ -457,7 +451,9 @@ async def evaluate_kb_lock_decision(
         status = "pass"
 
     if status != "pass":
-        if kb_lock_mode == "coach_mode" and not is_product_overview_query(normalized_query):
+        if kb_lock_mode == "coach_mode" and not is_product_overview_query(
+            normalized_query
+        ):
             coach_status_map = {
                 "blocked_search_failed": "coach_search_failed",
                 "blocked_no_kb": "coach_no_kb",

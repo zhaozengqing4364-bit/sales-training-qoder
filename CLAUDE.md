@@ -432,7 +432,7 @@ web/src/app/
 - structlog, tenacity, aiohttp, dashscope
 
 ### 前端
-- Next.js 16.1.1, React 19.2.3, TypeScript 5+
+- Next.js 16.2.3, React 19.2.3, TypeScript 5+
 - Tailwind CSS 4+, Radix UI, Zustand, Vitest
 
 ## Code Style

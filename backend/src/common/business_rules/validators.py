@@ -303,11 +303,15 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
     enabled_count = 0
     for index, item in enumerate(combinations):
         if not isinstance(item, dict):
-            raise BusinessRuleValidationError(f"combinations[{index}] must be an object")
+            raise BusinessRuleValidationError(
+                f"combinations[{index}] must be an object"
+            )
 
         combination_id = _required_string(item, "id", max_length=80)
         if combination_id in seen_ids:
-            raise BusinessRuleValidationError(f"duplicate combination id: {combination_id}")
+            raise BusinessRuleValidationError(
+                f"duplicate combination id: {combination_id}"
+            )
         seen_ids.add(combination_id)
 
         capability = _required_string(item, "capability", max_length=120)
