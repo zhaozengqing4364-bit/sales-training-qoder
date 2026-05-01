@@ -16,7 +16,6 @@ from common.analytics.verification_runner import (
     QUALITY_GATE_THRESHOLDS,
     DocumentationCheckResult,
     HealthCheckResult,
-    SecurityCheckResult,
     TestExecutionResult,
     VerificationRunner,
 )
