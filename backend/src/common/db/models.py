@@ -1376,6 +1376,10 @@ class ComprehensiveReport(Base):
         default=list,
         server_default=text("'[]'"),
     )
+    scoring_metadata = Column(
+        _jsonb_compatible_type(),
+        nullable=True,
+    )
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,

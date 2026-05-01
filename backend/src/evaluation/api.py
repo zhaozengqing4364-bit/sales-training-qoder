@@ -122,6 +122,11 @@ def _build_response(report) -> ComprehensiveReportResponse:
             )
             for s in report.stage_summaries
         ],
+        ruleset_id=getattr(report, "ruleset_id", None),
+        ruleset_version=getattr(report, "ruleset_version", None),
+        score_basis=getattr(report, "score_basis", None),
+        ruleset_source=getattr(report, "ruleset_source", None),
+        scoring_metadata=getattr(report, "scoring_metadata", None),
     )
 
 

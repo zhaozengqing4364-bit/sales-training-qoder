@@ -96,6 +96,26 @@ class ComprehensiveReportResponse(BaseModel):
     stage_summaries: dict[str, Any] | list[ComprehensiveReportStageSummary] = Field(
         default_factory=dict
     )
+    ruleset_id: str | None = Field(
+        default=None,
+        description="Active scoring ruleset id; null for bundled default fallback.",
+    )
+    ruleset_version: str | None = Field(
+        default=None,
+        description="Active/default scoring ruleset version used by the report.",
+    )
+    score_basis: str | None = Field(
+        default=None,
+        description="Named score basis used for report calculation.",
+    )
+    ruleset_source: str | None = Field(
+        default=None,
+        description="Scoring ruleset source: admin or default.",
+    )
+    scoring_metadata: dict[str, Any] | None = Field(
+        default=None,
+        description="Ruleset provenance metadata for release evidence.",
+    )
 
 
 class DimensionScore(BaseModel):
