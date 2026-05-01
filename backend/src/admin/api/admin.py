@@ -169,16 +169,26 @@ async def upload_presentation(
 
         extraction = extraction_result.value
 
-        # Create page records
+        # Create page records using the current Presentation/Page schema.
+        pages_by_number: dict[int, Page] = {}
         for page_data in extraction.pages:
+            text_parts = [
+                part
+                for part in (
+                    getattr(page_data, "title", None),
+                    getattr(page_data, "content", None),
+                )
+                if part
+            ]
             page = Page(
-                page_id=uuid.uuid4(),
-                presentation_id=presentation.presentation_id,
+                page_id=str(uuid.uuid4()),
+                presentation_id=str(presentation.presentation_id),
                 page_number=page_data.page_number,
-                title=page_data.title,
-                content=page_data.content,
-                image_count=page_data.image_count,
+                ocr_extracted_text="\n\n".join(text_parts),
+                extraction_confidence=None,
+                needs_manual_review=False,
             )
+            pages_by_number[page_data.page_number] = page
             db.add(page)
 
         presentation.total_pages = extraction.total_pages
@@ -198,13 +208,17 @@ async def upload_presentation(
             if points_result.is_success:
                 for page_num, points in points_result.value.items():
                     # Add required talking points to database
-                    for i, point_text in enumerate(points.required_points):
+                    page = pages_by_number.get(page_num)
+                    if page is None:
+                        continue
+                    for point_text in points.required_points:
                         talking_point = RequiredTalkingPoint(
-                            point_id=uuid.uuid4(),
-                            presentation_id=presentation.presentation_id,
-                            page_number=page_num,
-                            point_text=point_text,
-                            point_order=i,
+                            point_id=str(uuid.uuid4()),
+                            page_id=page.page_id,
+                            description=point_text,
+                            created_by="ai",
+                            is_ai_generated=True,
+                            confirmed_by_admin=False,
                             created_at=datetime.now(),
                         )
                         db.add(talking_point)
