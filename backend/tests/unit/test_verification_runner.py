@@ -14,6 +14,7 @@ from common.analytics.verification_runner import (
     QUALITY_GATE_THRESHOLDS,
     DocumentationCheckResult,
     HealthCheckResult,
+    SecurityCheckResult,
     TestExecutionResult,
     VerificationRunner,
 )
@@ -248,3 +249,162 @@ class TestGenerateSummary:
 
         assert summary["core_checks_total"] == 1
         assert summary["core_checks_passed"] == 1
+
+
+class TestRuntimeChecks:
+    """Regression tests for release verification runtime paths."""
+
+    @pytest.mark.asyncio
+    async def test_database_health_uses_configured_async_engine(self, runner, monkeypatch):
+        """Database health should use the session module engine, not a missing helper."""
+        from common.db import session as db_session
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def execute(self, statement):
+                self.statement = statement
+
+        class FakeEngine:
+            def __init__(self):
+                self.connection = FakeConnection()
+
+            def connect(self):
+                return self.connection
+
+        fake_engine = FakeEngine()
+        monkeypatch.setattr(db_session, "engine", fake_engine)
+
+        check_type, result = await runner._check_database_health()
+
+        assert check_type == "database"
+        assert result.passed is True
+        assert result.details == {"query": "SELECT 1 successful"}
+
+    @pytest.mark.asyncio
+    async def test_health_checks_aggregate_inner_results(self, runner, mock_db):
+        """Health aggregation should consume the tuples returned by each subcheck."""
+        runner._check_database_health = AsyncMock(
+            return_value=(
+                "database",
+                HealthCheckResult("database", True, duration_ms=1),
+            )
+        )
+        runner._check_api_health = AsyncMock(
+            return_value=("api", HealthCheckResult("api", True, duration_ms=2))
+        )
+        runner._check_websocket_health = AsyncMock(
+            return_value=(
+                "websocket",
+                HealthCheckResult("websocket", True, duration_ms=3),
+            )
+        )
+        runner._check_external_dependencies = AsyncMock(
+            return_value=(
+                "external_deps",
+                HealthCheckResult(
+                    "external_deps",
+                    False,
+                    duration_ms=4,
+                    error_message="Missing required env vars: DATABASE_URL",
+                ),
+            )
+        )
+        runner._update_verification_record = AsyncMock()
+
+        result = await runner._run_health_checks(mock_db, "rc-1")
+
+        assert result.passed is False
+        assert result.error_message == "One or more health checks failed"
+        assert result.details["checks"][-1]["check_type"] == "external_deps"
+        runner._update_verification_record.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_security_checks_aggregate_inner_results(self, runner, mock_db):
+        """Security aggregation should consume the tuples returned by scan helpers."""
+        runner._run_bandit_scan = AsyncMock(
+            return_value=(
+                "bandit",
+                SecurityCheckResult(
+                    "bandit",
+                    True,
+                    issues_found=0,
+                    high_severity=0,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=1,
+                ),
+            )
+        )
+        runner._run_safety_scan = AsyncMock(
+            return_value=(
+                "safety",
+                SecurityCheckResult(
+                    "safety",
+                    True,
+                    issues_found=0,
+                    high_severity=0,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=2,
+                ),
+            )
+        )
+        runner._run_secrets_scan = AsyncMock(
+            return_value=(
+                "secrets",
+                SecurityCheckResult(
+                    "secrets",
+                    False,
+                    issues_found=1,
+                    high_severity=1,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=3,
+                ),
+            )
+        )
+        runner._update_verification_record = AsyncMock()
+
+        result = await runner._run_security_checks(mock_db, "rc-1")
+
+        assert result.passed is False
+        assert result.issues_found == 1
+        assert result.high_severity == 1
+        assert result.details["severity_breakdown"]["high"] == 1
+        runner._update_verification_record.assert_awaited_once()
+
+
+class TestDocumentationChecks:
+    """Regression tests for documentation-check result construction."""
+
+    def test_documentation_subchecks_include_required_duration(self, runner):
+        """Every DocumentationCheckResult constructor should match dataclass fields."""
+        results = [
+            runner._check_api_contracts(),
+            runner._check_readme(),
+            runner._check_deployment_docs(),
+        ]
+
+        assert all(isinstance(result, DocumentationCheckResult) for result in results)
+        assert all(isinstance(result.duration_ms, int) for result in results)
+
+    @pytest.mark.asyncio
+    async def test_documentation_check_exception_returns_structured_result(
+        self, runner, mock_db
+    ):
+        """Documentation runner exceptions should not pass unknown dataclass fields."""
+        runner._check_api_contracts = lambda: (_ for _ in ()).throw(
+            RuntimeError("docs boom")
+        )
+
+        result = await runner._run_documentation_checks(mock_db, "rc-1")
+
+        assert result.passed is False
+        assert result.up_to_date is False
+        assert result.missing_sections == ["documentation_check_error"]
+        assert "docs boom" in result.details["error"]

@@ -1024,20 +1024,16 @@ class VerificationRunner:
 
         try:
             # Check 1: Database connectivity
-            db_check = await self._check_database_health()
-            health_results.append(("database", db_check))
+            health_results.append(await self._check_database_health())
 
             # Check 2: API endpoints health
-            api_check = await self._check_api_health()
-            health_results.append(("api", api_check))
+            health_results.append(await self._check_api_health())
 
             # Check 3: WebSocket capability
-            ws_check = await self._check_websocket_health()
-            health_results.append(("websocket", ws_check))
+            health_results.append(await self._check_websocket_health())
 
             # Check 4: External dependencies
-            deps_check = await self._check_external_dependencies()
-            health_results.append(("external_deps", deps_check))
+            health_results.append(await self._check_external_dependencies())
 
             end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
@@ -1100,12 +1096,10 @@ class VerificationRunner:
         try:
             from sqlalchemy import text
 
-            from common.db.session import get_engine
+            from common.db.session import engine
 
-            engine = get_engine()
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
-                await conn.commit()
 
             return (
                 "database",
@@ -1231,16 +1225,13 @@ class VerificationRunner:
 
         try:
             # Check 1: Bandit (Python security scanner)
-            bandit_check = await self._run_bandit_scan()
-            security_results.append(("bandit", bandit_check))
+            security_results.append(await self._run_bandit_scan())
 
             # Check 2: Safety (dependency vulnerability scanner)
-            safety_check = await self._run_safety_scan()
-            security_results.append(("safety", safety_check))
+            security_results.append(await self._run_safety_scan())
 
             # Check 3: Secrets scan (sensitive data leakage)
-            secrets_check = await self._run_secrets_scan()
-            security_results.append(("secrets", secrets_check))
+            security_results.append(await self._run_secrets_scan())
 
             end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
@@ -1604,13 +1595,14 @@ class VerificationRunner:
         except Exception as e:
             error_msg = f"Documentation checks failed: {str(e)}"
             logger.error(error_msg, exc_info=True)
+            end_time = datetime.now(UTC)
             return DocumentationCheckResult(
                 check_type="documentation",
                 passed=False,
                 up_to_date=False,
-                missing_sections=[],
-                duration_ms=0,
-                error_message=error_msg,
+                missing_sections=["documentation_check_error"],
+                duration_ms=int((end_time - start_time).total_seconds() * 1000),
+                details={"error": error_msg},
             )
 
     def _check_api_contracts(self) -> DocumentationCheckResult:
@@ -1642,14 +1634,16 @@ class VerificationRunner:
                 passed=True,
                 up_to_date=len(missing) == 0,
                 missing_sections=missing,
+                duration_ms=0,
             )
         except Exception as e:
             return DocumentationCheckResult(
                 check_type="api_contract",
                 passed=False,
                 up_to_date=False,
-                missing_sections=[],
-                error_message=str(e)[:200],
+                missing_sections=["api_contract_check_error"],
+                duration_ms=0,
+                details={"error": str(e)[:200]},
             )
 
     def _check_readme(self) -> DocumentationCheckResult:
@@ -1665,6 +1659,7 @@ class VerificationRunner:
                     passed=True,  # Non-blocking
                     up_to_date=False,
                     missing_sections=["README.md"],
+                    duration_ms=0,
                 )
 
             return DocumentationCheckResult(
@@ -1672,14 +1667,16 @@ class VerificationRunner:
                 passed=True,
                 up_to_date=True,
                 missing_sections=[],
+                duration_ms=0,
             )
         except Exception as e:
             return DocumentationCheckResult(
                 check_type="readme",
                 passed=True,  # Non-blocking
                 up_to_date=False,
-                missing_sections=[],
-                error_message=str(e)[:200],
+                missing_sections=["readme_check_error"],
+                duration_ms=0,
+                details={"error": str(e)[:200]},
             )
 
     def _check_deployment_docs(self) -> DocumentationCheckResult:
@@ -1710,14 +1707,16 @@ class VerificationRunner:
                 passed=True,  # Non-blocking
                 up_to_date=len(missing) == 0,
                 missing_sections=missing,
+                duration_ms=0,
             )
         except Exception as e:
             return DocumentationCheckResult(
                 check_type="deployment",
                 passed=True,  # Non-blocking
                 up_to_date=False,
-                missing_sections=[],
-                error_message=str(e)[:200],
+                missing_sections=["deployment_check_error"],
+                duration_ms=0,
+                details={"error": str(e)[:200]},
             )
 
     def _parse_performance_metrics(self, output: str) -> dict[str, float]:
