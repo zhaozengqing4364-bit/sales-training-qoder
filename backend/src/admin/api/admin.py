@@ -37,26 +37,39 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 ALLOWED_PRESENTATION_EXTENSIONS = {".ppt", ".pptx"}
+ALLOWED_PRESENTATION_CONTENT_TYPES = {
+    "application/octet-stream",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
 
 
-def _safe_presentation_upload_path(filename: str | None, upload_root: str) -> tuple[Path, str]:
+def _safe_presentation_upload_path(
+    filename: str | None, upload_root: str
+) -> tuple[Path, str]:
     """Return a server-owned upload path for a validated PPT filename."""
     raw_filename = (filename or "").strip()
     if not raw_filename:
         raise HTTPException(status_code=400, detail="Filename is required")
     if "/" in raw_filename or "\\" in raw_filename or ".." in raw_filename.split("/"):
-        raise HTTPException(status_code=400, detail="Nested or traversal paths are not allowed")
+        raise HTTPException(
+            status_code=400, detail="Nested or traversal paths are not allowed"
+        )
 
     original_name = Path(raw_filename).name
     extension = Path(original_name).suffix.lower()
     if extension not in ALLOWED_PRESENTATION_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Only .ppt and .pptx files are allowed")
+        raise HTTPException(
+            status_code=400, detail="Only .ppt and .pptx files are allowed"
+        )
 
     root = Path(upload_root).resolve()
     root.mkdir(parents=True, exist_ok=True)
     target = (root / f"{uuid.uuid4().hex}{extension}").resolve()
     if root != target.parent:
-        raise HTTPException(status_code=400, detail="Resolved upload path is outside upload root")
+        raise HTTPException(
+            status_code=400, detail="Resolved upload path is outside upload root"
+        )
     return target, original_name
 
 
@@ -93,7 +106,7 @@ async def create_presentation(
     """Create a new presentation (without file upload)"""
     try:
         presentation = Presentation(
-            presentation_id=uuid.uuid4(),
+            presentation_id=str(uuid.uuid4()),
             user_id=current_user.user_id,
             title=data.title,
             description=data.description,
@@ -133,6 +146,12 @@ async def upload_presentation(
         # Save uploaded file under a server-generated name. The original filename
         # is display metadata only and never controls the storage path.
         upload_dir = os.getenv("PPT_UPLOAD_DIR", "/data/uploads")
+        content_type = (file.content_type or "application/octet-stream").lower()
+        if content_type not in ALLOWED_PRESENTATION_CONTENT_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported upload MIME type: {content_type}",
+            )
         upload_path, original_filename = _safe_presentation_upload_path(
             file.filename, upload_dir
         )
@@ -143,7 +162,7 @@ async def upload_presentation(
 
         # Create presentation record
         presentation = Presentation(
-            presentation_id=uuid.uuid4(),
+            presentation_id=str(uuid.uuid4()),
             title=title or original_filename,
             file_url=str(upload_path),
             file_size_bytes=len(content),

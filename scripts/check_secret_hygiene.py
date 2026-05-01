@@ -28,7 +28,10 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("linear-api-key", re.compile(r"\blin_api_[A-Za-z0-9]{16,}\b")),
     ("aws-access-key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("alibaba-access-key", re.compile(r"\bLTAI[0-9A-Za-z]{16,}\b")),
-    ("jwt-secret-assignment", re.compile(r"(?i)\b(jwt_secret|secret_key)\s*=\s*[^\s<#][^\s]{20,}")),
+    (
+        "jwt-secret-assignment",
+        re.compile(r"(?i)\b(jwt_secret|secret_key)\s*=\s*[^\s<#][^\s]{20,}"),
+    ),
 )
 
 PLACEHOLDER_MARKERS = (
@@ -116,7 +119,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 1
 
-    print(f"Secret hygiene scan passed ({len(iter_files(root, tuple(args.paths)))} files scanned)")
+    print(
+        f"Secret hygiene scan passed ({len(iter_files(root, tuple(args.paths)))} files scanned)"
+    )
     return 0
 
 

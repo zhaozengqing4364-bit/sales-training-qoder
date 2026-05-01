@@ -33,7 +33,9 @@ def test_provider_base_url_rejects_unsafe_static_inputs(url):
 
 
 def test_provider_base_url_rejects_private_dns_resolution(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("10.0.0.8"))
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("10.0.0.8")
+    )
 
     with pytest.raises(EndpointPolicyError, match="non-public"):
         validate_provider_base_url(
@@ -44,7 +46,9 @@ def test_provider_base_url_rejects_private_dns_resolution(monkeypatch):
 
 
 def test_provider_base_url_allows_known_public_provider(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34"))
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34")
+    )
 
     endpoint = validate_provider_base_url(
         ModelProvider.OPENAI,
@@ -53,7 +57,10 @@ def test_provider_base_url_allows_known_public_provider(monkeypatch):
     )
 
     assert endpoint.base_url == "https://api.openai.com/v1"
-    assert endpoint.child_url("chat/completions") == "https://api.openai.com/v1/chat/completions"
+    assert (
+        endpoint.child_url("chat/completions")
+        == "https://api.openai.com/v1/chat/completions"
+    )
 
 
 def test_redirect_location_reuses_provider_policy():

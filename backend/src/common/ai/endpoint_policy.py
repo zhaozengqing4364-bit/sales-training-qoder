@@ -89,13 +89,17 @@ def validate_provider_base_url(
     parts = urlsplit(raw_url)
     scheme = parts.scheme.lower()
     if scheme not in policy.allowed_schemes:
-        raise EndpointPolicyError("Provider endpoint must use an allowed secure scheme.")
+        raise EndpointPolicyError(
+            "Provider endpoint must use an allowed secure scheme."
+        )
 
     if parts.username or parts.password:
         raise EndpointPolicyError("Provider endpoint must not contain credentials.")
 
     if parts.query or parts.fragment:
-        raise EndpointPolicyError("Provider endpoint must not contain query or fragment.")
+        raise EndpointPolicyError(
+            "Provider endpoint must not contain query or fragment."
+        )
 
     host = (parts.hostname or "").rstrip(".").lower()
     if not host:
@@ -165,7 +169,9 @@ def _assert_public_dns_resolution(host: str, port: int) -> None:
         raise EndpointPolicyError("Provider endpoint DNS resolution failed.") from exc
 
     if not records:
-        raise EndpointPolicyError("Provider endpoint DNS resolution returned no records.")
+        raise EndpointPolicyError(
+            "Provider endpoint DNS resolution returned no records."
+        )
 
     for record in records:
         sockaddr = record[4]

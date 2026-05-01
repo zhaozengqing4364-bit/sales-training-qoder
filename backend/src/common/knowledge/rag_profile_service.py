@@ -164,9 +164,7 @@ async def _decrypt_or_migrate_cross_encoder_api_key(
     return stored
 
 
-async def _profile_to_resolved(
-    db: AsyncSession, profile: Any
-) -> ResolvedRagProfile:
+async def _profile_to_resolved(db: AsyncSession, profile: Any) -> ResolvedRagProfile:
     """Convert an ORM RagProfile to a ResolvedRagProfile dataclass."""
     cross_encoder_api_key = await _decrypt_or_migrate_cross_encoder_api_key(db, profile)
     return ResolvedRagProfile(

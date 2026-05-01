@@ -131,7 +131,7 @@ def _validate_config_fields(
             trace_id=get_trace_id(),
         )
 
-    if base_url.strip() and _requires_base_url(model_type, provider):
+    if base_url.strip():
         try:
             validate_provider_base_url(provider, base_url, resolve_dns=False)
         except EndpointPolicyError as exc:
@@ -149,7 +149,7 @@ def _normalized_provider_base_url(
     provider: ModelProvider,
     base_url: str,
 ) -> str:
-    if not base_url.strip() or not _requires_base_url(model_type, provider):
+    if not base_url.strip():
         return base_url
     return validate_provider_base_url(
         provider,
@@ -484,15 +484,11 @@ async def update_model_config(
         provider = ModelProvider(config.provider)
         model_type = ModelType(config.model_type)
 
-        if request.base_url is not None and _requires_base_url(model_type, provider):
-            if not request.base_url.strip():
-                return ModelConfigErrorResponse(
-                    error="Base URL is required for this provider",
-                    error_code="[MODEL_CONFIG_BASE_URL_REQUIRED]",
-                    trace_id=get_trace_id(),
-                )
+        if request.base_url is not None:
             try:
-                validate_provider_base_url(provider, request.base_url, resolve_dns=False)
+                config.base_url = _normalized_provider_base_url(
+                    model_type, provider, request.base_url
+                )
             except EndpointPolicyError as exc:
                 return ModelConfigErrorResponse(
                     error=str(exc),
@@ -503,10 +499,6 @@ async def update_model_config(
         # Update fields
         if request.name is not None:
             config.name = request.name
-        if request.base_url is not None:
-            config.base_url = _normalized_provider_base_url(
-                model_type, provider, request.base_url
-            )
         if request.model_name is not None:
             config.model_name = request.model_name
         if request.extra_config is not None:
@@ -840,7 +832,9 @@ async def test_model_config_inline(
 def _safe_test_error_message(exc: Exception) -> str:
     if isinstance(exc, EndpointPolicyError):
         return str(exc)
-    return "Model configuration test failed before a safe provider response was received."
+    return (
+        "Model configuration test failed before a safe provider response was received."
+    )
 
 
 async def _run_model_test(
@@ -920,7 +914,10 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
             return TestConfigResponse(
                 success=False,
                 message=f"LLM API error: {response.status_code}",
-                details={"status_code": response.status_code, "response_redacted": True},
+                details={
+                    "status_code": response.status_code,
+                    "response_redacted": True,
+                },
             )
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:
@@ -986,7 +983,10 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
             return TestConfigResponse(
                 success=False,
                 message=f"Embedding API error: {response.status_code}",
-                details={"status_code": response.status_code, "response_redacted": True},
+                details={
+                    "status_code": response.status_code,
+                    "response_redacted": True,
+                },
             )
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:
