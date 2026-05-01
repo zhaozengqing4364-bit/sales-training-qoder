@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "./client";
+import type { AdminKnowledgeChunkingPreset } from "./types";
 
 const fetchMock = vi.fn();
 
@@ -215,6 +216,115 @@ describe("knowledge answer admin api client", () => {
             1,
             expect.stringContaining("/knowledge-debug/runs?limit=10&page=2&query=%E7%9F%B3%E7%8A%80&answerability=sufficient&final_status=completed"),
             expect.any(Object),
+        );
+    });
+
+    it("unwraps chunking preset envelopes across list and mutation calls", async () => {
+        const preset: AdminKnowledgeChunkingPreset = {
+            id: "preset-1",
+            config_version_id: "cfg-1",
+            profile_key: "default",
+            description: "默认分块预设",
+            chunking_strategy: "element_boundary",
+            chunk_size: 500,
+            chunk_overlap: 50,
+            is_default: true,
+            enabled: true,
+            created_at: "2026-04-01T00:00:00Z",
+            updated_at: "2026-04-01T00:00:00Z",
+        };
+
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: {
+                        items: [preset],
+                        total: 1,
+                    },
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: preset,
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: preset,
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: preset,
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: preset,
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: preset,
+                }),
+            });
+
+        const list = await api.admin.getKnowledgeChunkingPresets("cfg-1");
+        const created = await api.admin.createKnowledgeChunkingPreset("cfg-1", {
+            profile_key: "default",
+            description: "默认分块预设",
+            chunking_strategy: "element_boundary",
+            chunk_size: 500,
+            chunk_overlap: 50,
+            is_default: true,
+            enabled: true,
+        });
+        const updated = await api.admin.updateKnowledgeChunkingPreset("cfg-1", "preset-1", {
+            profile_key: "default-v2",
+            enabled: false,
+        });
+        const deleted = await api.admin.deleteKnowledgeChunkingPreset("cfg-1", "preset-1");
+        const setDefault = await api.admin.setDefaultChunkingPreset("cfg-1", "preset-1");
+        const toggled = await api.admin.updateKnowledgeChunkingPreset("cfg-1", "preset-1", { enabled: false });
+
+        expect(list).toEqual([preset]);
+        expect(created).toEqual(preset);
+        expect(updated).toEqual(preset);
+        expect(deleted).toEqual(preset);
+        expect(setDefault).toEqual(preset);
+        expect(toggled).toEqual(preset);
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            1,
+            expect.stringContaining("/admin/knowledge-answer/versions/cfg-1/chunking-presets"),
+            expect.any(Object),
+        );
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            expect.stringContaining("/admin/knowledge-answer/versions/cfg-1/chunking-presets"),
+            expect.objectContaining({
+                method: "POST",
+                body: JSON.stringify({
+                    profile_key: "default",
+                    description: "默认分块预设",
+                    chunking_strategy: "element_boundary",
+                    chunk_size: 500,
+                    chunk_overlap: 50,
+                    is_default: true,
+                    enabled: true,
+                }),
+            }),
         );
     });
 });

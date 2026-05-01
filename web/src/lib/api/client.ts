@@ -2576,29 +2576,25 @@ export const api = {
 
         // ── RAG Profile Management ──
         listRagProfiles: async () => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile[] }>("/admin/rag-profiles");
-            return result.data;
+            return apiFetch<RagProfile[]>("/admin/rag-profiles");
         },
 
         getRagProfile: async (id: string) => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile }>(`/admin/rag-profiles/${id}`);
-            return result.data;
+            return apiFetch<RagProfile>(`/admin/rag-profiles/${id}`);
         },
 
         createRagProfile: async (data: CreateRagProfileRequest) => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile }>("/admin/rag-profiles", {
+            return apiFetch<RagProfile>("/admin/rag-profiles", {
                 method: "POST",
                 body: JSON.stringify(data),
             });
-            return result.data;
         },
 
         updateRagProfile: async (id: string, data: UpdateRagProfileRequest) => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile }>(`/admin/rag-profiles/${id}`, {
+            return apiFetch<RagProfile>(`/admin/rag-profiles/${id}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
-            return result.data;
         },
 
         deleteRagProfile: async (id: string) => {
@@ -2608,18 +2604,16 @@ export const api = {
         },
 
         setRagProfileDefault: async (id: string) => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile }>(
+            return apiFetch<RagProfile>(
                 `/admin/rag-profiles/${id}/set-default`,
                 { method: "POST" },
             );
-            return result.data;
         },
 
         getRagProfileKnowledgeBases: async (id: string) => {
-            const result = await apiFetch<{ success: boolean; data: { id: string; name: string; category: string; document_count: number; status: string }[] }>(
+            return apiFetch<{ id: string; name: string; category: string; document_count: number; status: string }[]>(
                 `/admin/rag-profiles/${id}/knowledge-bases`,
             );
-            return result.data;
         },
 
         assignRagProfileToKb: async (kbId: string, ragProfileId: string | null) => {
@@ -2793,24 +2787,22 @@ export const api = {
         // ─── Knowledge Chunking Presets CRUD ───
 
         getKnowledgeChunkingPresets: async (versionId: string) => {
-            const result = await apiFetch<{ success: boolean; data: { items: AdminKnowledgeChunkingPreset[]; total: number } }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`);
-            return result.data?.items || [];
+            const result = await apiFetch<{ items: AdminKnowledgeChunkingPreset[]; total: number }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`);
+            return result.items || [];
         },
 
         createKnowledgeChunkingPreset: async (versionId: string, data: CreateKnowledgeChunkingPresetRequest) => {
-            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`, {
+            return apiFetch<AdminKnowledgeChunkingPreset>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`, {
                 method: "POST",
                 body: JSON.stringify(data),
             });
-            return result.data;
         },
 
         updateKnowledgeChunkingPreset: async (versionId: string, presetId: string, data: UpdateKnowledgeChunkingPresetRequest) => {
-            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}`, {
+            return apiFetch<AdminKnowledgeChunkingPreset>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
-            return result.data;
         },
 
         deleteKnowledgeChunkingPreset: async (versionId: string, presetId: string) => {
@@ -2820,10 +2812,9 @@ export const api = {
         },
 
         setDefaultChunkingPreset: async (versionId: string, presetId: string) => {
-            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}/set-default`, {
+            return apiFetch<AdminKnowledgeChunkingPreset>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}/set-default`, {
                 method: "POST",
             });
-            return result.data;
         },
 
         // ─── Knowledge Answerability Profiles CRUD ───
