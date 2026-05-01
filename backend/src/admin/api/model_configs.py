@@ -853,10 +853,6 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
             ModelProvider(config.provider), config.base_url, resolve_dns=True
         )
 
-        endpoint = validate_provider_base_url(
-            ModelProvider(config.provider), config.base_url, resolve_dns=True
-        )
-
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -918,6 +914,10 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
     """Test Embedding configuration"""
     try:
         import httpx
+
+        endpoint = validate_provider_base_url(
+            ModelProvider(config.provider), config.base_url, resolve_dns=True
+        )
 
         headers = {
             "Authorization": f"Bearer {api_key}",

@@ -9,6 +9,7 @@ Implements Constitution Principles:
 import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -34,6 +35,29 @@ from presentation_coach.services.point_extraction import point_extraction_servic
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+ALLOWED_PRESENTATION_EXTENSIONS = {".ppt", ".pptx"}
+
+
+def _safe_presentation_upload_path(filename: str | None, upload_root: str) -> tuple[Path, str]:
+    """Return a server-owned upload path for a validated PPT filename."""
+    raw_filename = (filename or "").strip()
+    if not raw_filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    if "/" in raw_filename or "\\" in raw_filename or ".." in raw_filename.split("/"):
+        raise HTTPException(status_code=400, detail="Nested or traversal paths are not allowed")
+
+    original_name = Path(raw_filename).name
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_PRESENTATION_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only .ppt and .pptx files are allowed")
+
+    root = Path(upload_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    target = (root / f"{uuid.uuid4().hex}{extension}").resolve()
+    if root != target.parent:
+        raise HTTPException(status_code=400, detail="Resolved upload path is outside upload root")
+    return target, original_name
 
 
 # Request/Response Schemas
@@ -106,26 +130,26 @@ async def upload_presentation(
     If extract_points=True, uses AI to automatically extract talking points
     """
     try:
-        # Save uploaded file
-        upload_dir = "/data/uploads"
-        os.makedirs(upload_dir, exist_ok=True)
+        # Save uploaded file under a server-generated name. The original filename
+        # is display metadata only and never controls the storage path.
+        upload_dir = os.getenv("PPT_UPLOAD_DIR", "/data/uploads")
+        upload_path, original_filename = _safe_presentation_upload_path(
+            file.filename, upload_dir
+        )
 
-        file_path = os.path.join(upload_dir, file.filename)
-
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
+        content = await file.read()
+        with open(upload_path, "wb") as buffer:
             buffer.write(content)
 
         # Create presentation record
         presentation = Presentation(
             presentation_id=uuid.uuid4(),
-            user_id=current_user.user_id,
-            title=title or file.filename,
-            description=description,
-            file_url=file_path,
+            title=title or original_filename,
+            file_url=str(upload_path),
+            file_size_bytes=len(content),
+            uploaded_by_admin_id=current_user.user_id,
             total_pages=0,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            upload_date=datetime.now(),
         )
 
         db.add(presentation)
@@ -134,9 +158,9 @@ async def upload_presentation(
 
         # Extract text from PPT
         extraction_result = await ocr_processor.extract_text(
-            file_path=file_path,
+            file_path=str(upload_path),
             presentation_id=presentation.presentation_id,
-            filename=file.filename,
+            filename=original_filename,
         )
 
         if not extraction_result.is_success:
@@ -189,6 +213,8 @@ async def upload_presentation(
 
         return presentation
 
+    except HTTPException:
+        raise
     except (SQLAlchemyError, OSError, ValueError) as e:
         logger.error(f"Failed to upload presentation: {str(e)}")
         return build_server_error(
