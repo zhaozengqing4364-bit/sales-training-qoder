@@ -544,8 +544,38 @@ describe("ReportPage", () => {
         expect(await screen.findByText("较上次 +10.0 分")).toBeTruthy();
         expect(await screen.findByText("推荐下次练什么")).toBeTruthy();
         expect(await screen.findByText("补强产品知识与证据表达")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "练产品知识专项" }).getAttribute("href")).toBe(
+            "/training/sales?focus=product_knowledge",
+        );
         expect(getReportTrendsMock).toHaveBeenCalledWith("session-1", 5);
         expect(getNextRecommendationMock).toHaveBeenCalledWith("session-1");
+    });
+
+    it("downgrades unsafe report recommendation targets to the training route", async () => {
+        getReportMock.mockResolvedValue(baseReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+        getNextRecommendationMock.mockResolvedValue({
+            title: "补强产品知识与证据表达",
+            reason: "后端推荐返回了不安全目标时，报告页仍只能打开站内训练入口。",
+            action_label: "练产品知识专项",
+            target_path: "javascript:alert(1)",
+            recommendation_kind: "next_practice_ruleset",
+            scenario_type: "sales",
+            source_session_id: "session-1",
+            rule_version: "growth_recommendation_rules_v1",
+            explanation: null,
+            evidence_summary: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("补强产品知识与证据表达")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "练产品知识专项" }).getAttribute("href")).toBe("/training");
     });
 
     it("renders learner-facing degraded audio wording when partial audio is reported", async () => {

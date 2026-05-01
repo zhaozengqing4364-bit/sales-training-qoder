@@ -391,6 +391,7 @@ describe("HistoryPage", () => {
 
         const reportButton = await screen.findByRole("button", { name: "报告" }) as HTMLButtonElement;
         expect(reportButton.disabled).toBe(true);
+        expect(reportButton.closest("a")).toBeNull();
         expect(screen.getByText("进行中")).toBeTruthy();
     });
 

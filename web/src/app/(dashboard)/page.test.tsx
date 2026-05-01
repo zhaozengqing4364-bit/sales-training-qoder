@@ -230,6 +230,21 @@ describe("HomePage dashboard header", () => {
         expect(taskLinks.some((link) => link.getAttribute("href") === "/practice/session-ppt-1/report?focus=presentation_page&page=5")).toBe(true);
     });
 
+    it("downgrades unsafe dashboard recommendation targets to the training route", async () => {
+        getRecommendationMock.mockResolvedValue({
+            title: "继续训练",
+            reason: "后端推荐返回了不安全目标时，首页仍只能打开站内训练入口。",
+            action_label: "打开推荐",
+            target_path: "https://evil.example/phish",
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        const recommendationLinks = screen.getAllByRole("link", { name: "打开推荐" });
+        expect(recommendationLinks.some((link) => link.getAttribute("href") === "/training")).toBe(true);
+    });
+
     it("omits dashboard guidance, help, and growth operation cards", async () => {
         getGrowthMock.mockResolvedValue({
             achievements: {
