@@ -344,6 +344,7 @@ class PresentationReviewDimensionScore(BaseModel):
     score: float = Field(..., ge=0, le=100)
     weight: float = Field(..., ge=0, le=1)
     description: str = ""
+    dimension_id: str | None = None
 
 
 class PresentationReviewPageIssueCluster(BaseModel):
@@ -414,6 +415,7 @@ class PresentationReview(BaseModel):
     has_page_metadata: bool
     coverage_status: Literal["complete", "degraded"]
     diagnostics: PresentationReviewDiagnostics
+    scoring_ruleset: dict[str, Any] | None = None
 
 
 # ========== Voice Policy Snapshot Schemas ==========
