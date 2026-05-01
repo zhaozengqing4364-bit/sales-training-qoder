@@ -53,7 +53,9 @@ def reset_fake_client(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_llm_test_rejects_private_dns_before_authorization_call(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("127.0.0.1"))
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("127.0.0.1")
+    )
     config = SimpleNamespace(
         provider=ModelProvider.OPENAI.value,
         base_url="https://api.openai.com/v1",
@@ -69,7 +71,9 @@ async def test_llm_test_rejects_private_dns_before_authorization_call(monkeypatc
 
 @pytest.mark.asyncio
 async def test_llm_test_allows_public_provider_with_no_redirect_follow(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34"))
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34")
+    )
     config = SimpleNamespace(
         provider=ModelProvider.OPENAI.value,
         base_url="https://api.openai.com/v1/",
@@ -80,14 +84,23 @@ async def test_llm_test_allows_public_provider_with_no_redirect_follow(monkeypat
 
     assert result.success is True
     assert FakeAsyncClient.init_kwargs == [{"timeout": 10.0, "follow_redirects": False}]
-    assert FakeAsyncClient.calls[0]["url"] == "https://api.openai.com/v1/chat/completions"
-    assert FakeAsyncClient.calls[0]["headers"]["Authorization"] == "Bearer sk-realistic-secret-value"
+    assert (
+        FakeAsyncClient.calls[0]["url"] == "https://api.openai.com/v1/chat/completions"
+    )
+    assert (
+        FakeAsyncClient.calls[0]["headers"]["Authorization"]
+        == "Bearer sk-realistic-secret-value"
+    )
 
 
 @pytest.mark.asyncio
 async def test_llm_test_redacts_upstream_error_body(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34"))
-    FakeAsyncClient.response = FakeResponse(status_code=401, text="secret body sk-leaked")
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34")
+    )
+    FakeAsyncClient.response = FakeResponse(
+        status_code=401, text="secret body sk-leaked"
+    )
     config = SimpleNamespace(
         provider=ModelProvider.OPENAI.value,
         base_url="https://api.openai.com/v1",
