@@ -81,6 +81,10 @@ jobs:
           cd web
           npx playwright install --with-deps chromium
 
+      - name: Secret hygiene scan
+        run: |
+          python scripts/check_secret_hygiene.py
+
       - name: Critical full-stack quality gate
         run: |
           bash scripts/critical-quality-gate.sh
