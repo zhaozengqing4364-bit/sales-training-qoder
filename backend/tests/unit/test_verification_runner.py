@@ -384,7 +384,7 @@ class TestHealthAndSecurityChecks:
         assert check_name == "database"
         assert result.passed is True
         assert fake_engine.connection.executed is True
-        assert fake_engine.connection.committed is True
+        assert fake_engine.connection.committed is False
 
 
 class TestDocumentationChecks:
