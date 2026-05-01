@@ -139,7 +139,12 @@ class VerificationRunner:
             backend_root: Path to backend root directory
         """
         self.backend_root = backend_root or Path(__file__).parent.parent.parent.parent
+        self.repo_root = self.backend_root.parent
         self.test_results: list[TestExecutionResult] = []
+
+    def _elapsed_ms_since(self, start_time: datetime) -> int:
+        """Return elapsed milliseconds from a UTC start timestamp."""
+        return int((datetime.now(UTC) - start_time).total_seconds() * 1000)
 
     async def run_all_checks(
         self,
@@ -1096,9 +1101,9 @@ class VerificationRunner:
         try:
             from sqlalchemy import text
 
-            from common.db.session import engine
+            from common.db.session import engine as db_engine
 
-            async with engine.connect() as conn:
+            async with db_engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
 
             return (
@@ -1601,18 +1606,15 @@ class VerificationRunner:
                 passed=False,
                 up_to_date=False,
                 missing_sections=[],
-                duration_ms=0,
+                duration_ms=self._elapsed_ms_since(start_time),
                 details={"error": error_msg},
             )
 
     def _check_api_contracts(self) -> DocumentationCheckResult:
         """Check if API contract documentation exists"""
+        start_time = datetime.now(UTC)
         try:
-            api_contract_dir = (
-                Path(__file__).parent.parent.parent.parent.parent
-                / "docs"
-                / "api-contract"
-            )
+            api_contract_dir = self.repo_root / "docs" / "api-contract"
 
             # Required contract files per NFR19
             required_files = [
@@ -1634,7 +1636,7 @@ class VerificationRunner:
                 passed=True,
                 up_to_date=len(missing) == 0,
                 missing_sections=missing,
-                duration_ms=0,
+                duration_ms=self._elapsed_ms_since(start_time),
             )
         except Exception as e:
             return DocumentationCheckResult(
@@ -1642,16 +1644,15 @@ class VerificationRunner:
                 passed=False,
                 up_to_date=False,
                 missing_sections=[],
-                duration_ms=0,
+                duration_ms=self._elapsed_ms_since(start_time),
                 details={"error": str(e)[:200]},
             )
 
     def _check_readme(self) -> DocumentationCheckResult:
         """Check if README exists and is updated"""
+        start_time = datetime.now(UTC)
         try:
-            readme_file = (
-                Path(__file__).parent.parent.parent.parent.parent / "README.md"
-            )
+            readme_file = self.repo_root / "README.md"
 
             if not readme_file.exists():
                 return DocumentationCheckResult(
@@ -1659,7 +1660,7 @@ class VerificationRunner:
                     passed=True,  # Non-blocking
                     up_to_date=False,
                     missing_sections=["README.md"],
-                    duration_ms=0,
+                    duration_ms=self._elapsed_ms_since(start_time),
                 )
 
             return DocumentationCheckResult(
@@ -1667,7 +1668,7 @@ class VerificationRunner:
                 passed=True,
                 up_to_date=True,
                 missing_sections=[],
-                duration_ms=0,
+                duration_ms=self._elapsed_ms_since(start_time),
             )
         except Exception as e:
             return DocumentationCheckResult(
@@ -1675,14 +1676,15 @@ class VerificationRunner:
                 passed=True,  # Non-blocking
                 up_to_date=False,
                 missing_sections=[],
-                duration_ms=0,
+                duration_ms=self._elapsed_ms_since(start_time),
                 details={"error": str(e)[:200]},
             )
 
     def _check_deployment_docs(self) -> DocumentationCheckResult:
         """Check if deployment documentation exists"""
+        start_time = datetime.now(UTC)
         try:
-            docs_dir = Path(__file__).parent.parent.parent.parent.parent / "docs"
+            docs_dir = self.repo_root / "docs"
 
             # Check for deployment-related documentation
             deployment_files = [
@@ -1707,7 +1709,7 @@ class VerificationRunner:
                 passed=True,  # Non-blocking
                 up_to_date=len(missing) == 0,
                 missing_sections=missing,
-                duration_ms=0,
+                duration_ms=self._elapsed_ms_since(start_time),
             )
         except Exception as e:
             return DocumentationCheckResult(
@@ -1715,7 +1717,7 @@ class VerificationRunner:
                 passed=True,  # Non-blocking
                 up_to_date=False,
                 missing_sections=[],
-                duration_ms=0,
+                duration_ms=self._elapsed_ms_since(start_time),
                 details={"error": str(e)[:200]},
             )
 
