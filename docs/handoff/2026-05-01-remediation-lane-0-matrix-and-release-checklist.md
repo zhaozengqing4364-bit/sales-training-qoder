@@ -121,3 +121,8 @@ Use this shape when the leader consolidates the release gate:
 - This doc is coordination-only and does not modify runtime behavior.
 - The matrix covers every supplied review finding exactly once.
 - The file intentionally stays inside the allowed handoff/release-checklist scope.
+
+## Verification anchor
+
+- `git status --short` was clean in the worker-6 worktree when this handoff was finalized.
+- `.omx/preteam-untracked-20260501T033414Z` was not read or modified.
