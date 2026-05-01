@@ -574,7 +574,10 @@ describe("ReportPage", () => {
 
         render(<ReportPage />);
 
-        expect(await screen.findByText("补强产品知识与证据表达")).toBeTruthy();
+        await waitFor(() => {
+            expect(getNextRecommendationMock).toHaveBeenCalledWith("session-1");
+        }, { timeout: 10000 });
+        expect(await screen.findByText("补强产品知识与证据表达", {}, { timeout: 10000 })).toBeTruthy();
         expect(screen.getByRole("link", { name: "练产品知识专项" }).getAttribute("href")).toBe("/training");
     });
 
