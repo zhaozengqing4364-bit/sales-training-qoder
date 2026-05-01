@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import re
+from copy import deepcopy
 from typing import Any
 
 from common.business_rules.defaults import (
@@ -203,8 +203,11 @@ def _should_open_new_ledger(
     ruleset: dict[str, Any],
 ) -> bool:
     stage_name = _normalize_text(
-        (stage_context or {}).get("current_stage")
-        or (stage_context or {}).get("stage_name")
+        str(
+            (stage_context or {}).get("current_stage")
+            or (stage_context or {}).get("stage_name")
+            or ""
+        )
     )
     weakest_dimension = _resolve_weakest_sales_dimension(score_context)
     family_config = _family_config(detected_family, ruleset)
@@ -287,7 +290,7 @@ def _resolve_weakest_sales_dimension(
 
     if not canonical_scores:
         return None
-    return min(canonical_scores, key=canonical_scores.get)
+    return min(canonical_scores, key=lambda key: canonical_scores[key])
 
 
 def _looks_like_gap_acknowledgement(

@@ -326,8 +326,13 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
             )
         seen_pairs.add(pair_key)
 
+        raw_priority = item.get("priority")
+        if raw_priority is None:
+            raise BusinessRuleValidationError(
+                f"combinations[{index}].priority must be a positive number"
+            )
         try:
-            priority = int(item.get("priority"))
+            priority = int(raw_priority)
         except (TypeError, ValueError) as exc:
             raise BusinessRuleValidationError(
                 f"combinations[{index}].priority must be a positive number"

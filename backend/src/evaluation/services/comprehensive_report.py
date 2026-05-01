@@ -162,22 +162,21 @@ class ComprehensiveReportService:
             if not stage_results:
                 return Result.fail("[NO_STAGE_RESULTS]")
 
-            if stage_results:
-                # Calculate from existing stage evaluations
-                ruleset_view = await self._resolve_scoring_ruleset_view(
-                    resolved_scenario_type
-                )
-                scoring_metadata = ScoringRulesetService.report_metadata_for_view(
-                    ruleset_view
-                )
-                dimension_scores = self._calculate_dimension_scores(
-                    stage_results,
-                    ruleset_view=ruleset_view,
-                )
-                overall_score = self._calculate_overall_score(dimension_scores)
-                key_strengths = self._aggregate_strengths(stage_results)
-                key_improvements = self._aggregate_improvements(stage_results)
-                stage_summaries = self._generate_stage_summaries(stage_results)
+            # Calculate from existing stage evaluations
+            ruleset_view = await self._resolve_scoring_ruleset_view(
+                resolved_scenario_type
+            )
+            scoring_metadata = ScoringRulesetService.report_metadata_for_view(
+                ruleset_view
+            )
+            dimension_scores = self._calculate_dimension_scores(
+                stage_results,
+                ruleset_view=ruleset_view,
+            )
+            overall_score = self._calculate_overall_score(dimension_scores)
+            key_strengths = self._aggregate_strengths(stage_results)
+            key_improvements = self._aggregate_improvements(stage_results)
+            stage_summaries = self._generate_stage_summaries(stage_results)
 
             # Generate detailed feedback using LLM
             feedback_result = await self._generate_detailed_feedback(
@@ -186,7 +185,10 @@ class ComprehensiveReportService:
                 resolved_scenario_type,
             )
             detailed_feedback = (
-                feedback_result.value if feedback_result.is_success else ""
+                feedback_result.value
+                if feedback_result.is_success
+                and isinstance(feedback_result.value, str)
+                else ""
             )
 
             # Generate recommendations
