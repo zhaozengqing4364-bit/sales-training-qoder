@@ -6,9 +6,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api.response import error_response
 from common.db.schemas import LinkedAssetChangeReference
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
@@ -130,12 +133,24 @@ async def get_runtime_overview(
         payload = await RuntimeStatusService(db).get_overview(window_hours=window_hours)
     except Exception as exc:
         logger.warning(f"runtime overview computation failed: {exc}")
-        payload = SupportRuntimeOverviewData(
-            generated_at=datetime.now(UTC),
-            window_hours=window_hours,
-            session_health=SupportRuntimeSessionHealth(),
-            release_health=SupportRuntimeReleaseHealth(status="unknown"),
-            anomaly_summary=SupportRuntimeAnomalySummary(),
+        return JSONResponse(
+            status_code=503,
+            content=error_response(
+                "[RUNTIME_STATUS_UNAVAILABLE]",
+                message="runtime status is degraded",
+            )
+            | {
+                "degraded": True,
+                "data": jsonable_encoder(
+                    SupportRuntimeOverviewData(
+                    generated_at=datetime.now(UTC),
+                    window_hours=window_hours,
+                    session_health=SupportRuntimeSessionHealth(),
+                    release_health=SupportRuntimeReleaseHealth(status="degraded"),
+                    anomaly_summary=SupportRuntimeAnomalySummary(),
+                )
+                ),
+            },
         )
     return success_response(payload)
 
@@ -160,11 +175,23 @@ async def get_fault_summaries(
         )
     except Exception as exc:
         logger.warning(f"runtime faults computation failed: {exc}")
-        payload = SupportRuntimeFaultsData(
-            generated_at=datetime.now(UTC),
-            items=[],
-            count=0,
-            limit=limit,
-            severity=severity,
+        return JSONResponse(
+            status_code=503,
+            content=error_response(
+                "[RUNTIME_STATUS_UNAVAILABLE]",
+                message="runtime status is degraded",
+            )
+            | {
+                "degraded": True,
+                "data": jsonable_encoder(
+                    SupportRuntimeFaultsData(
+                    generated_at=datetime.now(UTC),
+                    items=[],
+                    count=0,
+                    limit=limit,
+                    severity=severity,
+                )
+                ),
+            },
         )
     return success_response(payload)

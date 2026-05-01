@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, inspect, text
 from common.db.session import (
     STARTUP_DB_AUTHORITY,
     _ensure_knowledge_document_schema_compatibility,
+    _startup_schema_repairs_allowed,
 )
 
 
@@ -139,3 +140,14 @@ def test_sqlite_legacy_knowledge_documents_schema_is_upgraded_for_spreadsheets(
             text("SELECT COUNT(*) FROM knowledge_documents")
         ).scalar_one()
         assert row_count == 2
+
+
+def test_startup_schema_repairs_are_limited_to_dev_test_local(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    assert _startup_schema_repairs_allowed() is True
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    assert _startup_schema_repairs_allowed() is True
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    assert _startup_schema_repairs_allowed() is True
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    assert _startup_schema_repairs_allowed() is False

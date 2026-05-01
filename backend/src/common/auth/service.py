@@ -263,6 +263,16 @@ def _env_truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _websocket_query_token_enabled() -> bool:
+    env = _current_environment()
+    configured = os.getenv("WEBSOCKET_QUERY_TOKEN_ENABLED", "").strip().lower()
+    if configured in {"1", "true", "yes", "on"}:
+        return True
+    if configured in {"0", "false", "no", "off"}:
+        return False
+    return env in {"development", "dev", "local", "test", "testing"}
+
+
 def get_session_cookie_name() -> str:
     return AUTH_SESSION_COOKIE_NAME
 
@@ -424,7 +434,7 @@ def resolve_websocket_auth(
         }
 
     normalized_query_token = (query_token or "").strip()
-    if normalized_query_token:
+    if normalized_query_token and _websocket_query_token_enabled():
         return {
             "token": normalized_query_token,
             "transport": "query_token",

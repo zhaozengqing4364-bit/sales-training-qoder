@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 from types import SimpleNamespace
 
+import common.auth.service as auth_service
 from common.auth.service import (
     AUTH_TRANSPORT_MATRIX,
     get_session_cookie_name,
@@ -93,3 +95,58 @@ def test_websocket_auth_prefers_header_then_cookie_then_query_compat() -> None:
         )
         == "query-token"
     )
+
+
+def test_websocket_query_token_is_disabled_by_default_in_production(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("WEBSOCKET_QUERY_TOKEN_ENABLED", raising=False)
+    importlib.reload(auth_service)
+
+    try:
+        assert (
+            auth_service.resolve_websocket_token(
+                query_token="query-token",
+                authorization_header="",
+                cookie_header="",
+            )
+            == ""
+        )
+        assert (
+            auth_service.resolve_websocket_auth(
+                query_token="query-token",
+                authorization_header="",
+                cookie_header="",
+            )["compatibility_mode"]
+            is False
+        )
+    finally:
+        monkeypatch.setenv("ENVIRONMENT", "development")
+        importlib.reload(auth_service)
+
+
+def test_websocket_query_token_can_be_explicitly_enabled_outside_dev(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("WEBSOCKET_QUERY_TOKEN_ENABLED", "true")
+    importlib.reload(auth_service)
+
+    try:
+        assert (
+            auth_service.resolve_websocket_token(
+                query_token="query-token",
+                authorization_header="",
+                cookie_header="",
+            )
+            == "query-token"
+        )
+        assert (
+            auth_service.resolve_websocket_auth(
+                query_token="query-token",
+                authorization_header="",
+                cookie_header="",
+            )["compatibility_mode"]
+            is True
+        )
+    finally:
+        monkeypatch.setenv("ENVIRONMENT", "development")
+        monkeypatch.delenv("WEBSOCKET_QUERY_TOKEN_ENABLED", raising=False)
+        importlib.reload(auth_service)
