@@ -24,7 +24,7 @@ import subprocess
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from common.analytics.release_verification_service import (
     CheckType,
@@ -971,7 +971,7 @@ class VerificationRunner:
         check_result: Any,
     ) -> None:
         """Persist check result even when check method is mocked in tests."""
-        check_type_map = {
+        check_type_map: dict[str, CheckType] = {
             "unit_tests": "unit_tests",
             "coverage": "coverage",
             "integration_tests": "integration_tests",
@@ -1003,7 +1003,7 @@ class VerificationRunner:
 
         details = None
         if is_dataclass(check_result):
-            details = asdict(check_result)
+            details = asdict(cast(Any, check_result))
         elif isinstance(check_result, dict):
             details = check_result
 
