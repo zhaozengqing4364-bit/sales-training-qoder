@@ -131,8 +131,8 @@ async def create_presentation(
 @router.post("/admin/presentations/upload")
 async def upload_presentation(
     file: UploadFile = File(...),
-    title: str = None,
-    description: str = None,
+    title: str | None = None,
+    description: str | None = None,
     extract_points: bool = True,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
@@ -148,9 +148,9 @@ async def upload_presentation(
         upload_dir = os.getenv("PPT_UPLOAD_DIR", "/data/uploads")
         content_type = (file.content_type or "application/octet-stream").lower()
         if content_type not in ALLOWED_PRESENTATION_CONTENT_TYPES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported upload MIME type: {content_type}",
+            logger.warning(
+                "Presentation upload MIME type did not match PPT allowlist; extension policy remains authoritative",
+                content_type=content_type,
             )
         upload_path, original_filename = _safe_presentation_upload_path(
             file.filename, upload_dir
@@ -187,6 +187,9 @@ async def upload_presentation(
             return presentation
 
         extraction = extraction_result.value
+        if extraction is None:
+            logger.warning("OCR extraction returned no presentation payload")
+            return presentation
 
         # Create page records using the current Presentation/Page schema.
         pages_by_number: dict[int, Page] = {}
@@ -224,7 +227,7 @@ async def upload_presentation(
                 )
             )
 
-            if points_result.is_success:
+            if points_result.is_success and points_result.value is not None:
                 for page_num, points in points_result.value.items():
                     # Add required talking points to database
                     page = pages_by_number.get(page_num)

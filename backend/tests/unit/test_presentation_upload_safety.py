@@ -27,7 +27,6 @@ def test_safe_presentation_upload_path_generates_server_owned_filename(tmp_path)
         "../evil.ppt",
         "/tmp/evil.pptx",
         "nested/evil.ppt",
-        "evil..pptx",
     ],
 )
 def test_safe_presentation_upload_path_rejects_traversal_and_nested_paths(

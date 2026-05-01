@@ -15,6 +15,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy import and_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,6 +103,16 @@ def _requires_base_url(model_type: ModelType, provider: ModelProvider) -> bool:
     }:
         return False
     return True
+
+
+def _error_response(
+    response: ModelConfigErrorResponse,
+    status_code: int = 400,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=response.model_dump(mode="json", exclude_none=True),
+    )
 
 
 def _validate_config_fields(
@@ -265,7 +276,7 @@ async def create_model_config(
             api_key=request.api_key,
         )
         if validation_error:
-            return validation_error
+            return _error_response(validation_error)
 
         # Check for duplicate
         stmt = select(ModelConfig).where(
@@ -485,15 +496,28 @@ async def update_model_config(
         model_type = ModelType(config.model_type)
 
         if request.base_url is not None:
+            if (
+                _requires_base_url(model_type, provider)
+                and not request.base_url.strip()
+            ):
+                return _error_response(
+                    ModelConfigErrorResponse(
+                        error="Base URL is required for this provider",
+                        error_code="[MODEL_CONFIG_BASE_URL_REQUIRED]",
+                        trace_id=get_trace_id(),
+                    )
+                )
             try:
                 config.base_url = _normalized_provider_base_url(
                     model_type, provider, request.base_url
                 )
             except EndpointPolicyError as exc:
-                return ModelConfigErrorResponse(
-                    error=str(exc),
-                    error_code="[MODEL_CONFIG_ENDPOINT_POLICY_VIOLATION]",
-                    trace_id=get_trace_id(),
+                return _error_response(
+                    ModelConfigErrorResponse(
+                        error=str(exc),
+                        error_code="[MODEL_CONFIG_ENDPOINT_POLICY_VIOLATION]",
+                        trace_id=get_trace_id(),
+                    )
                 )
 
         # Update fields
@@ -698,7 +722,7 @@ async def test_model_config(
                         latency_ms=0,
                     )
                 )
-            api_key = key_result.value
+            api_key = key_result.value or ""
 
         model_type = ModelType(config.model_type)
 

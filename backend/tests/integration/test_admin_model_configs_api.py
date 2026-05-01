@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from unittest.mock import AsyncMock
 
 import pytest
@@ -57,7 +56,7 @@ async def test_create_model_config_rejects_private_endpoint_and_keeps_db_empty(
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 400
     body = response.json()
     assert body["success"] is False
     assert body["error_code"] == "[MODEL_CONFIG_ENDPOINT_POLICY_VIOLATION]"
@@ -99,7 +98,7 @@ async def test_create_model_config_normalizes_endpoint_and_encrypts_key(
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     body = response.json()
     assert body["success"] is True
     created_id = body["data"]["id"]
@@ -110,4 +109,7 @@ async def test_create_model_config_normalizes_endpoint_and_encrypts_key(
     config = result.scalar_one()
     assert config.base_url == "https://api.openai.com/v1"
     assert config.api_key_encrypted != plaintext_key
-    assert encryption_module.decrypt_api_key(config.api_key_encrypted).value == plaintext_key
+    assert (
+        encryption_module.decrypt_api_key(config.api_key_encrypted).value
+        == plaintext_key
+    )

@@ -1,10 +1,11 @@
 import socket
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
 from admin.api import model_configs
-from common.ai.models import ModelProvider, ModelType
+from common.ai.models import ModelConfig, ModelProvider, ModelType
 
 
 def _addrinfo(ip: str):
@@ -53,11 +54,16 @@ def reset_fake_client(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_llm_test_rejects_private_dns_before_authorization_call(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("127.0.0.1"))
-    config = SimpleNamespace(
-        provider=ModelProvider.OPENAI.value,
-        base_url="https://api.openai.com/v1",
-        model_name="gpt-test",
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("127.0.0.1")
+    )
+    config = cast(
+        ModelConfig,
+        SimpleNamespace(
+            provider=ModelProvider.OPENAI.value,
+            base_url="https://api.openai.com/v1",
+            model_name="gpt-test",
+        ),
     )
 
     result = await model_configs._test_llm(config, "sk-realistic-secret-value")
@@ -69,11 +75,16 @@ async def test_llm_test_rejects_private_dns_before_authorization_call(monkeypatc
 
 @pytest.mark.asyncio
 async def test_llm_test_allows_public_provider_with_no_redirect_follow(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34"))
-    config = SimpleNamespace(
-        provider=ModelProvider.OPENAI.value,
-        base_url="https://api.openai.com/v1/",
-        model_name="gpt-test",
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34")
+    )
+    config = cast(
+        ModelConfig,
+        SimpleNamespace(
+            provider=ModelProvider.OPENAI.value,
+            base_url="https://api.openai.com/v1/",
+            model_name="gpt-test",
+        ),
     )
 
     result = await model_configs._test_llm(config, "sk-realistic-secret-value")
@@ -86,12 +97,19 @@ async def test_llm_test_allows_public_provider_with_no_redirect_follow(monkeypat
 
 @pytest.mark.asyncio
 async def test_llm_test_redacts_upstream_error_body(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34"))
-    FakeAsyncClient.response = FakeResponse(status_code=401, text="secret body sk-leaked")
-    config = SimpleNamespace(
-        provider=ModelProvider.OPENAI.value,
-        base_url="https://api.openai.com/v1",
-        model_name="gpt-test",
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34")
+    )
+    FakeAsyncClient.response = FakeResponse(
+        status_code=401, text="secret body sk-leaked"
+    )
+    config = cast(
+        ModelConfig,
+        SimpleNamespace(
+            provider=ModelProvider.OPENAI.value,
+            base_url="https://api.openai.com/v1",
+            model_name="gpt-test",
+        ),
     )
 
     result = await model_configs._test_llm(config, "sk-realistic-secret-value")
