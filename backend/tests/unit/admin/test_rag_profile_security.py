@@ -13,7 +13,6 @@ from admin.api.rag_profiles import (
     get_rag_profile,
     update_rag_profile,
 )
-from common.knowledge.models import KnowledgeBase  # noqa: F401
 from common.knowledge.rag_profile_models import RagProfile
 from common.knowledge.rag_profile_service import resolve_rag_profile
 
@@ -44,9 +43,7 @@ async def test_rag_profile_create_encrypts_key_and_response_redacts_plaintext(te
     )
 
     profile = (
-        await test_db.execute(
-            select(RagProfile).where(RagProfile.name == "secure-profile")
-        )
+        await test_db.execute(select(RagProfile).where(RagProfile.name == "secure-profile"))
     ).scalar_one()
 
     assert profile.cross_encoder_api_key != plaintext
@@ -58,17 +55,13 @@ async def test_rag_profile_create_encrypts_key_and_response_redacts_plaintext(te
     }
     assert plaintext not in str(response)
 
-    resolved = await resolve_rag_profile(
-        test_db, SimpleNamespace(rag_profile_id=profile.id)
-    )
+    resolved = await resolve_rag_profile(test_db, SimpleNamespace(rag_profile_id=profile.id))
     assert resolved is not None
     assert resolved.cross_encoder_api_key == plaintext
 
 
 @pytest.mark.asyncio
-async def test_rag_profile_update_omitted_key_keeps_existing_and_empty_key_clears(
-    test_db,
-):
+async def test_rag_profile_update_omitted_key_keeps_existing_and_empty_key_clears(test_db):
     plaintext = "cohere-secret-value"
     await create_rag_profile(
         CreateRagProfileRequest(
@@ -78,9 +71,7 @@ async def test_rag_profile_update_omitted_key_keeps_existing_and_empty_key_clear
         test_db,
     )
     profile = (
-        await test_db.execute(
-            select(RagProfile).where(RagProfile.name == "update-profile")
-        )
+        await test_db.execute(select(RagProfile).where(RagProfile.name == "update-profile"))
     ).scalar_one()
     original_encrypted = profile.cross_encoder_api_key
 
@@ -114,9 +105,7 @@ async def test_rag_profile_get_response_never_returns_plaintext_key(test_db):
         test_db,
     )
     profile = (
-        await test_db.execute(
-            select(RagProfile).where(RagProfile.name == "read-profile")
-        )
+        await test_db.execute(select(RagProfile).where(RagProfile.name == "read-profile"))
     ).scalar_one()
 
     response = await get_rag_profile(profile.id, test_db)
@@ -137,9 +126,7 @@ async def test_rag_profile_runtime_lazily_reencrypts_legacy_plaintext(test_db):
     await test_db.commit()
     await test_db.refresh(profile)
 
-    resolved = await resolve_rag_profile(
-        test_db, SimpleNamespace(rag_profile_id=profile.id)
-    )
+    resolved = await resolve_rag_profile(test_db, SimpleNamespace(rag_profile_id=profile.id))
     await test_db.refresh(profile)
 
     assert resolved is not None
