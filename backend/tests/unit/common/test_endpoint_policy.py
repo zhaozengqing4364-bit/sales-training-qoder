@@ -19,7 +19,7 @@ def _public_getaddrinfo(*args, **kwargs):
             socket.SOCK_STREAM,
             6,
             "",
-            ("203.0.113.10", 443),
+            ("8.8.8.8", 443),
         )
     ]
 
