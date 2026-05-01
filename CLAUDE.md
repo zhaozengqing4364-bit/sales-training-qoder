@@ -205,8 +205,8 @@ cp web/.env.example web/.env.local
 # ============================================
 # 阿里云配置 (TTS/ASR)
 # ============================================
-DASHSCOPE_API_KEY=sk-your-api-key-here
-MODEL_CONFIG_ENCRYPTION_KEY=your-fernet-key
+DASHSCOPE_API_KEY=replace-with-dashscope-api-key
+MODEL_CONFIG_ENCRYPTION_KEY=replace-with-fernet-key
 
 # TTS 提供商选择: aliyun | edge | browser
 TTS_PROVIDER=aliyun
@@ -223,7 +223,7 @@ TTS_ENABLE_WARMUP=true
 # ============================================
 # StepFun Realtime（双轨语音模式）
 # ============================================
-STEPFUN_API_KEY=sk-your-stepfun-api-key
+STEPFUN_API_KEY=replace-with-stepfun-api-key
 STEPFUN_REALTIME_URL=wss://api.stepfun.com/v1/realtime
 STEPFUN_REALTIME_MODEL=step-audio-2  # step-audio-2 | step-audio-2-mini
 DEFAULT_VOICE_MODE=stepfun_realtime  # legacy | stepfun_realtime
