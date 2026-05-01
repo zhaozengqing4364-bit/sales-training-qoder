@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.ai.encryption import encrypt_api_key
 from common.auth.service import get_current_admin_user
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
@@ -110,6 +111,25 @@ class AssignRagProfileRequest(BaseModel):
 # ── Helpers ──
 
 
+def _encrypt_cross_encoder_api_key(api_key: str | None) -> str | None:
+    """Encrypt a cross-encoder API key for persistence.
+
+    ``None`` means no write was requested by the caller. A blank string is an
+    explicit clear operation for APIs that already expose the field.
+    """
+    if api_key is None:
+        return None
+    if not api_key.strip():
+        return ""
+    result = encrypt_api_key(api_key)
+    if not result.is_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Cross-encoder API key encryption is unavailable",
+        )
+    return result.value
+
+
 def _row_to_response(row: Any, applied_kb_count: int = 0) -> dict[str, Any]:
     """Convert a RagProfile DB row to API response dict."""
     has_api_key = bool(row.cross_encoder_api_key and row.cross_encoder_api_key.strip())
@@ -160,8 +180,9 @@ def _apply_update_to_row(row: Any, data: UpdateRagProfileRequest) -> None:
         row.cross_encoder_backend = data.cross_encoder.backend
         row.cross_encoder_model = data.cross_encoder.model
         row.cross_encoder_device = data.cross_encoder.device
-        if data.cross_encoder.api_key is not None:
-            row.cross_encoder_api_key = data.cross_encoder.api_key
+        encrypted_api_key = _encrypt_cross_encoder_api_key(data.cross_encoder.api_key)
+        if encrypted_api_key is not None:
+            row.cross_encoder_api_key = encrypted_api_key or None
 
 
 async def _get_applied_kb_counts(db: AsyncSession) -> dict[str, int]:
@@ -214,7 +235,9 @@ async def create_rag_profile(
         cross_encoder_backend=request.cross_encoder.backend,
         cross_encoder_model=request.cross_encoder.model,
         cross_encoder_device=request.cross_encoder.device,
-        cross_encoder_api_key=request.cross_encoder.api_key,
+        cross_encoder_api_key=(
+            _encrypt_cross_encoder_api_key(request.cross_encoder.api_key) or None
+        ),
     )
 
     db.add(profile)
