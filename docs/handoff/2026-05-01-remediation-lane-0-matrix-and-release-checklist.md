@@ -119,6 +119,7 @@ Use this shape when the leader consolidates the release gate:
 ## Notes
 
 - This doc is coordination-only and does not modify runtime behavior.
+- Matrix artifact: `docs/audit-remediation/20260501-review-remediation-issue-lane-matrix.md`.
 - The matrix covers every supplied review finding exactly once.
 - The file intentionally stays inside the allowed handoff/release-checklist scope.
 
