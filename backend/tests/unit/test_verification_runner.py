@@ -7,7 +7,6 @@ Tests the automated verification check execution logic.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -316,18 +315,20 @@ class TestHealthAndSecurityChecks:
     @pytest.mark.asyncio
     async def test_run_security_checks_aggregates_child_results(self, runner, mock_db):
         """Security check aggregation consumes direct child result tuples."""
-        passed_scan = lambda name: (
-            name,
-            runner.SecurityCheckResult(
-                check_type=name,
-                passed=True,
-                issues_found=0,
-                high_severity=0,
-                medium_severity=0,
-                low_severity=0,
-                duration_ms=1,
-            ),
-        )
+        def passed_scan(name):
+            return (
+                name,
+                runner.SecurityCheckResult(
+                    check_type=name,
+                    passed=True,
+                    issues_found=0,
+                    high_severity=0,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=1,
+                ),
+            )
+
         runner._run_bandit_scan = AsyncMock(return_value=passed_scan("bandit"))
         runner._run_safety_scan = AsyncMock(return_value=passed_scan("safety"))
         runner._run_secrets_scan = AsyncMock(return_value=passed_scan("secrets"))
