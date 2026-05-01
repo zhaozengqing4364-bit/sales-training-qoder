@@ -1,18 +1,12 @@
 # Review Remediation Issue-to-Lane Matrix
 
-Source of truth: `.omx/specs/deep-interview-review-remediation-team-plan.md`
-created `20260501T032714Z`.
+Source of truth: `.omx/specs/deep-interview-review-remediation-team-plan.md` created `20260501T032714Z`.
 
-## Boundary decisions preserved
+Boundary decisions preserved:
 
-- External/destructive actions are approval-gated: real credential rotation,
-  remote history rewrite, repository purge, and production setting changes are
-  release gates, not local worker actions.
-- No product UI redesign: frontend work stays limited to functional repair,
-  safe fallbacks, contract alignment, disabled states, and layout-preserving
-  behavior.
-- Workers must not touch
-  `.omx/preteam-untracked-20260501T033414Z`; it is a preteam untracked backup.
+- External/destructive actions are approval-gated: real credential rotation, remote history rewrite, repository purge, and production setting changes are release gates, not local worker actions.
+- No product UI redesign: frontend work is limited to functional repair, safe fallbacks, contract alignment, disabled states, and layout-preserving behavior.
+- Workers must not touch `.omx/preteam-untracked-20260501T033414Z`; it is a preteam untracked backup.
 
 ## Release-blocker order
 
@@ -21,16 +15,6 @@ created `20260501T032714Z`.
 3. User-facing governance bypasses and unsafe links.
 4. Verification runner and API contract/runtime gates.
 5. Lower-risk governance, migration, and management hardening.
-
-## Lane 0 obligations for worker-6
-
-- Record the current `git status --short` before any write.
-- Keep the issue-to-lane matrix complete and one-to-one with the spec finding
-  set.
-- Preserve the approval-gated boundary for real rotations, history cleanup, and
-  production changes.
-- Use the matrix as the handoff artifact for later lane execution; do not mix in
-  runtime code changes here.
 
 ## Matrix
 
@@ -44,7 +28,7 @@ created `20260501T032714Z`.
 | HIGH | Unsafe recommendation `Link` targets | 6 | frontend security | `web/src/lib/routing` or `web/src/lib/recommendations`, dashboard/report pages/tests | Internal route normalization and unsafe fallback tests | pending |
 | HIGH | Verification runner deterministic runtime errors | 7 | backend reliability | `backend/src/common/analytics/verification_runner.py`, `backend/tests/unit/test_verification_runner.py` | Missing-doc/docs-error/API-contract/README/deployment/exception paths include `duration_ms`; DB health uses real engine access | in progress by worker-2 |
 | HIGH | Scoring ruleset governance bypass in real report paths | 8 | backend evaluation | `backend/src/evaluation/services/comprehensive_report.py`, `backend/src/presentation_coach/services/presentation_report_service.py`, scoring metadata/tests | Active/default/invalid/legacy fallback, metadata/version tests | pending |
-| MEDIUM | Frontend API envelope drift / double unwrap | 9 | frontend API | `web/src/lib/api/client.ts`, `web/src/lib/api/types.ts`, client contract tests | Backend envelope fixtures for RAG profiles/chunking presets and fixed callsites | pending |
+| MEDIUM | Frontend API envelope drift/double unwrap | 9 | frontend API | `web/src/lib/api/client.ts`, `web/src/lib/api/types.ts`, client contract tests | Backend envelope fixtures for RAG profiles/chunking presets and fixed callsites | pending |
 | MEDIUM | Objection-ledger hardcoded rules | 10 | backend business-rule/config | `backend/src/sales_bot/websocket/components/objection_ledger_helpers.py`, config adapter/seed/tests | Default/missing/invalid/override tests | pending |
 | MEDIUM | Production CORS dev origins | 11 | backend architecture/reliability | `backend/src/app_factory.py`, settings/tests | Dev/test append, prod fail-closed, explicit prod origins tests | pending |
 | MEDIUM | `main.py` app authority drift / route inventory | 11 | backend architecture/reliability | `backend/src/main.py`, `backend/src/router_registry.py`, route inventory tests | Critical admin/business/scoring route inventory evidence | pending |
@@ -62,33 +46,6 @@ created `20260501T032714Z`.
 | Real credential rotation | Authorized operator rotates exposed OpenRouter, StepFun, model encryption, Alibaba OSS, and any newly discovered secrets | Keep placeholders only; document owner/status; do not rotate real keys locally |
 | Remote git history cleanup | Authorized maintainer performs repository purge/history rewrite and force-push if approved | Document as approval-gated; do not rewrite remote history locally |
 | Production configuration changes | Ops/admin updates production CORS, WebSocket compatibility, provider policies, DNS/network toggles if needed | Implement fail-closed/read adapters/tests; do not change live settings |
-
-## Existing regression coverage to preserve
-
-- `backend/tests/integration/test_release_gate.py` covers release candidate
-  execution, blocking unit-test failures, and non-blocking documentation
-  warnings.
-- `backend/tests/unit/test_verification_runner.py` covers summary generation,
-  documentation helper duration fields, and structured exception handling.
-- `backend/tests/unit/common/test_route_integrity.py` covers route uniqueness
-  and critical mounted routes.
-- `backend/tests/unit/common/test_alembic_migration_graph.py` covers single
-  Alembic head invariants.
-- `backend/tests/integration/test_startup_or_bootstrap_authority.py` covers
-  production startup refusing schema patching and explicit repair behavior.
-- `backend/tests/integration/test_sales_combination_rules_api.py` covers active
-  sales-combination rules, fallback behavior, validation, and publish/rollback.
-- `backend/tests/integration/test_scoring_rulesets_api.py` covers scoring
-  ruleset publish/dry-run/report metadata and rollback.
-
-## Likely missing regression checks
-
-- Add a matrix assertion that every CRITICAL/HIGH/MEDIUM/LOW finding appears
-  exactly once and that external gates are explicitly listed.
-- Add route inventory coverage for the canonical
-  `/api/v1/evaluation/admin/scoring-rulesets` path mentioned by the remediation
-  spec.
-- Add a repo-level secret-scan test/gate for tracked env/docs patterns.
 
 ## Verification consolidation checklist
 
