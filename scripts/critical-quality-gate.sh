@@ -135,7 +135,6 @@ export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:${BACKEND_PO
 export NEXT_PUBLIC_WS_URL="${NEXT_PUBLIC_WS_URL:-ws://localhost:${BACKEND_PORT}}"
 export SMOKE_EVIDENCE_PREFIX="task-9"
 
-log "Backend tests: auth + history/report/replay + admin analytics + support runtime"
 log "Secret hygiene scan"
 "${ROOT_DIR}/scripts/secret-scan.sh"
 
