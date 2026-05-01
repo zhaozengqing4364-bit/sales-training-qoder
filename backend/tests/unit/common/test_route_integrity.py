@@ -46,6 +46,7 @@ def test_key_business_routers_are_mounted() -> None:
         ("GET", "/api/v1/admin/presentations"),
         ("GET", "/api/v1/admin/business-rules/definitions"),
         ("GET", "/api/v1/business-rules/sales-combinations/active"),
+        ("GET", "/api/v1/evaluation/admin/scoring-rulesets"),
     }
 
     missing = expected_routes - actual
