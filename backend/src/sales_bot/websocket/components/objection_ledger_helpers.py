@@ -2,129 +2,49 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import re
 from typing import Any
 
-from common.conversation.storage import normalize_objection_ledger
-
-_ACK_PATTERNS = (
-    "没有",
-    "暂无",
-    "还没",
-    "暂时没有",
-    "无法",
-    "不能",
-    "做不到",
-    "不确定",
-    "回去确认",
-    "后面再给",
-    "之后再给",
-    "稍后再给",
+from common.business_rules.defaults import (
+    OBJECTION_LEDGER_RULES_KEY,
+    get_default_business_rule_value,
 )
+from common.business_rules.validators import (
+    BusinessRuleValidationError,
+    validate_business_rule_value,
+)
+from common.conversation.storage import normalize_objection_ledger
+from common.monitoring.logger import get_logger
+
+logger = get_logger(__name__)
+
 _NUMERIC_SIGNAL_RE = re.compile(r"\d")
 
-_LEDGER_FAMILY_CONFIG: dict[str, dict[str, Any]] = {
-    "roi_proof": {
-        "focus_dimension": "证据使用",
-        "promised_proof": "补充同类客户 ROI 案例",
-        "next_expected_evidence": "给出 6 个月回本测算",
-        "detect_any": (
-            "roi",
-            "回本",
-            "收益",
-            "回报",
-            "案例",
-            "数据",
-            "benchmark",
-            "证据",
-        ),
-        "evidence_any": (
-            "roi",
-            "回本",
-            "收益",
-            "案例",
-            "客户",
-            "数据",
-            "benchmark",
-            "证据",
-            "%",
-            "提升",
-            "下降",
-        ),
-    },
-    "price_pressure": {
-        "focus_dimension": "异议处理",
-        "promised_proof": "补充报价依据和版本差异",
-        "next_expected_evidence": "说明报价逻辑、预算回收或折扣边界",
-        "detect_any": ("价格", "报价", "预算", "折扣", "成本", "price", "budget"),
-        "evidence_any": (
-            "价格",
-            "报价",
-            "预算",
-            "折扣",
-            "席位",
-            "版本",
-            "回收",
-            "回本",
-            "%",
-            "元",
-        ),
-    },
-    "competitor_alternative": {
-        "focus_dimension": "异议处理",
-        "promised_proof": "补充竞品差异和替代依据",
-        "next_expected_evidence": "说明为什么比现有方案更稳妥",
-        "detect_any": ("竞品", "竞对", "对比", "替代", "差异", "competitor"),
-        "evidence_any": (
-            "竞品",
-            "对比",
-            "替代",
-            "差异",
-            "迁移",
-            "案例",
-            "SLA",
-            "成本",
-            "收益",
-        ),
-    },
-    "implementation_risk": {
-        "focus_dimension": "异议处理",
-        "promised_proof": "补充实施排期和服务边界",
-        "next_expected_evidence": "确认试点范围、负责人和风险兜底",
-        "detect_any": ("实施", "落地", "上线", "风险", "排期", "交付", "服务", "试点"),
-        "evidence_any": (
-            "实施",
-            "落地",
-            "上线",
-            "排期",
-            "试点",
-            "负责人",
-            "服务",
-            "SLA",
-            "里程碑",
-            "周",
-            "天",
-            "月",
-        ),
-    },
-}
 
-_SYNTHETIC_DIMENSIONS_BY_FOCUS: dict[str, dict[str, float]] = {
-    "证据使用": {
-        "价值表达": 78.0,
-        "客户收益连接": 76.0,
-        "证据使用": 48.0,
-        "异议处理": 68.0,
-        "推进下一步": 62.0,
-    },
-    "异议处理": {
-        "价值表达": 78.0,
-        "客户收益连接": 76.0,
-        "证据使用": 66.0,
-        "异议处理": 48.0,
-        "推进下一步": 62.0,
-    },
-}
+def resolve_objection_ledger_ruleset(
+    ruleset: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate the governed objection-ledger ruleset with safe fallback.
+
+    Runtime callers can pass an already-resolved admin/business-rule value.
+    Until the WebSocket runtime has a DB-backed injection point, the bundled
+    default is the central seed and the admin backlog is captured in metadata.
+    """
+    raw_ruleset = (
+        deepcopy(ruleset)
+        if isinstance(ruleset, dict)
+        else get_default_business_rule_value(OBJECTION_LEDGER_RULES_KEY)
+    )
+    try:
+        return validate_business_rule_value(OBJECTION_LEDGER_RULES_KEY, raw_ruleset)
+    except BusinessRuleValidationError as exc:
+        logger.warning(
+            "objection_ledger_ruleset_invalid_using_default",
+            error=str(exc),
+        )
+        fallback = get_default_business_rule_value(OBJECTION_LEDGER_RULES_KEY)
+        return validate_business_rule_value(OBJECTION_LEDGER_RULES_KEY, fallback)
 
 
 def resolve_turn_objection_ledger(

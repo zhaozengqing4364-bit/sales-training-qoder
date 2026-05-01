@@ -11,6 +11,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.business_rules.defaults import (
+    OBJECTION_LEDGER_RULES_KEY,
     SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
     get_default_business_rule_value,
@@ -753,6 +754,17 @@ class BusinessRuleConfigService:
                 "combination_count": len(combinations),
                 "enabled_combination_count": enabled_count,
                 "fallback_policy": value.get("fallback_policy"),
+            }
+        if key == OBJECTION_LEDGER_RULES_KEY:
+            families = value.get("families")
+            family_count = len(families) if isinstance(families, dict) else 0
+            return {
+                "enabled": value.get("enabled") is not False,
+                "ruleset_version": value.get("version"),
+                "family_count": family_count,
+                "ack_pattern_count": len(value.get("ack_patterns") or []),
+                "admin_entry": get_business_rule_definition(key).admin_entry,
+                "fallback_policy": get_business_rule_definition(key).fallback_policy,
             }
         raw_recommendation_dimensions = value.get("dimensions")
         recommendation_dimensions: dict[str, Any] = (

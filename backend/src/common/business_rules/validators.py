@@ -9,6 +9,7 @@ from common.business_rules.defaults import (
     ACHIEVEMENT_RULES_KEY,
     AI_COACH_RULES_KEY,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
+    OBJECTION_LEDGER_RULES_KEY,
     SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
 )
@@ -35,6 +36,8 @@ def validate_business_rule_value(key: str, value: dict[str, Any]) -> dict[str, A
         return _validate_recommendation_ruleset(value)
     if key == SALES_COMBINATION_RULES_KEY:
         return _validate_sales_combination_ruleset(value)
+    if key == OBJECTION_LEDGER_RULES_KEY:
+        return _validate_objection_ledger_ruleset(value)
     raise BusinessRuleValidationError(f"unsupported business rule key: {key}")
 
 
@@ -365,6 +368,131 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
         normalized_combinations,
         key=lambda item: (item["priority"], item["id"]),
     )
+    return normalized
+
+
+def _validate_objection_ledger_ruleset(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["rule_set_id"] = _required_string(
+        normalized,
+        "rule_set_id",
+        max_length=120,
+    )
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    normalized["ack_patterns"] = _string_list(
+        normalized.get("ack_patterns"),
+        field="ack_patterns",
+    )
+    if not normalized["ack_patterns"]:
+        raise BusinessRuleValidationError("ack_patterns must be non-empty")
+    normalized["open_stage_names"] = _string_list(
+        normalized.get("open_stage_names"),
+        field="open_stage_names",
+    )
+    if not normalized["open_stage_names"]:
+        raise BusinessRuleValidationError("open_stage_names must be non-empty")
+    normalized["numeric_evidence_tokens"] = _string_list(
+        normalized.get("numeric_evidence_tokens"),
+        field="numeric_evidence_tokens",
+    )
+
+    families = normalized.get("families")
+    if not isinstance(families, dict) or not families:
+        raise BusinessRuleValidationError("families must be a non-empty object")
+    normalized_families: dict[str, dict[str, Any]] = {}
+    focus_dimensions: set[str] = set()
+    for raw_family, raw_config in families.items():
+        family = str(raw_family).strip()
+        if not family:
+            raise BusinessRuleValidationError("family key cannot be empty")
+        if not isinstance(raw_config, dict):
+            raise BusinessRuleValidationError(f"families.{family} must be an object")
+        focus_dimension = _required_string(
+            raw_config,
+            "focus_dimension",
+            max_length=120,
+        )
+        focus_dimensions.add(focus_dimension)
+        normalized_families[family] = {
+            "focus_dimension": focus_dimension,
+            "promised_proof": _required_string(
+                raw_config,
+                "promised_proof",
+                max_length=500,
+            ),
+            "next_expected_evidence": _required_string(
+                raw_config,
+                "next_expected_evidence",
+                max_length=500,
+            ),
+            "detect_any": _non_empty_string_list(
+                raw_config.get("detect_any"),
+                field=f"families.{family}.detect_any",
+            ),
+            "evidence_any": _non_empty_string_list(
+                raw_config.get("evidence_any"),
+                field=f"families.{family}.evidence_any",
+            ),
+            "open_pressure_any": _non_empty_string_list(
+                raw_config.get("open_pressure_any"),
+                field=f"families.{family}.open_pressure_any",
+            ),
+            "open_pressure_requires_any": _string_list(
+                raw_config.get("open_pressure_requires_any"),
+                field=f"families.{family}.open_pressure_requires_any",
+            ),
+        }
+    normalized["families"] = normalized_families
+
+    synthetic = normalized.get("synthetic_dimensions_by_focus")
+    if not isinstance(synthetic, dict) or not synthetic:
+        raise BusinessRuleValidationError(
+            "synthetic_dimensions_by_focus must be a non-empty object"
+        )
+    normalized_synthetic: dict[str, dict[str, float]] = {}
+    for focus_dimension in focus_dimensions:
+        raw_scores = synthetic.get(focus_dimension)
+        if not isinstance(raw_scores, dict) or not raw_scores:
+            raise BusinessRuleValidationError(
+                f"synthetic_dimensions_by_focus.{focus_dimension} is required"
+            )
+        normalized_scores: dict[str, float] = {}
+        for raw_name, raw_score in raw_scores.items():
+            dimension_name = str(raw_name).strip()
+            if not dimension_name:
+                raise BusinessRuleValidationError(
+                    f"synthetic_dimensions_by_focus.{focus_dimension} key cannot be empty"
+                )
+            normalized_scores[dimension_name] = _score(
+                raw_score,
+                field=f"synthetic_dimensions_by_focus.{focus_dimension}.{dimension_name}",
+            )
+        normalized_synthetic[focus_dimension] = normalized_scores
+    normalized["synthetic_dimensions_by_focus"] = normalized_synthetic
+    normalized["management_backlog"] = _optional_string(
+        normalized,
+        "management_backlog",
+        default=None,
+        max_length=1000,
+    )
+    return normalized
+
+
+def _score(value: Any, *, field: str) -> float:
+    try:
+        score = float(value)
+    except (TypeError, ValueError) as exc:
+        raise BusinessRuleValidationError(f"{field} must be numeric") from exc
+    if score < 0 or score > 100:
+        raise BusinessRuleValidationError(f"{field} must be within [0, 100]")
+    return round(score, 2)
+
+
+def _non_empty_string_list(value: Any, *, field: str) -> list[str]:
+    normalized = _string_list(value, field=field)
+    if not normalized:
+        raise BusinessRuleValidationError(f"{field} must be non-empty")
     return normalized
 
 
