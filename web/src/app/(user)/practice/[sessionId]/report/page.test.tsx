@@ -854,6 +854,42 @@ describe("ReportPage", () => {
             recommendations: [],
             voice_policy_snapshot_ref: null,
         });
+        getReplayMock.mockResolvedValue({
+            ...baseReplayData,
+            main_issue: {
+                ...baseReplayData.main_issue,
+                issue_type: "evidence_gap",
+                issue_text: "价值主张缺少案例、数据或数字。",
+                recovery_rule: "下一轮先给出一条可检验证据。",
+                replay_anchor: {
+                    status: "resolved",
+                    message_id: "msg-highlight",
+                    turn_number: 4,
+                    marker: {
+                        type: "highlight",
+                        timestamp_ms: 24000,
+                        label: "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+                    },
+                    degraded_reason: null,
+                },
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再推进一个明确的下一步。",
+                rule: "至少补一条证据并确认下一步。",
+                replay_anchor: {
+                    status: "resolved",
+                    message_id: "msg-highlight",
+                    turn_number: 4,
+                    marker: {
+                        type: "highlight",
+                        timestamp_ms: 24000,
+                        label: "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+                    },
+                    degraded_reason: null,
+                },
+            },
+        });
 
         render(<ReportPage />);
 
@@ -1611,21 +1647,6 @@ describe("ReportPage", () => {
     });
 
     it("renders answer-level retrieval diagnostics from knowledge-check when available", async () => {
-        getReportMock.mockResolvedValue({
-            ...baseReport,
-            evaluable: true,
-            not_evaluable_reason: null,
-            effectiveness_snapshot: {
-                claim_truth: {
-                    status: "weak_evidence",
-                    label: "证据偏弱",
-                    source: "score_snapshot",
-                    reason: "low_evidence_score",
-                    evidence_score: 63,
-                },
-                retrieval_facts: baseRetrievalFacts,
-            },
-        });
         getKnowledgeCheckMock.mockResolvedValue({
             session_id: "session-1",
             status: "hit",
@@ -1646,7 +1667,7 @@ describe("ReportPage", () => {
                 answerability: "sufficient",
                 source_status: "hit",
                 rewritten_queries: ["实习 产品介绍", "实习 核心能力"],
-                citations: [
+            citations: [
                     {
                         claim: "实习专家是一款企业内部智能演练平台。",
                         knowledge_base_name: "产品知识库",
@@ -1657,6 +1678,21 @@ describe("ReportPage", () => {
                 ],
             },
         } as never);
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                    evidence_score: 63,
+                },
+            },
+            retrieval_facts: baseRetrievalFacts,
+        });
         getComprehensiveReportMock.mockResolvedValue({
             session_id: "session-1",
             generated_at: "2026-03-23T00:00:00Z",
