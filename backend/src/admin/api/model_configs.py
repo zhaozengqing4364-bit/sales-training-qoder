@@ -144,6 +144,20 @@ def _validate_config_fields(
     return None
 
 
+def _normalized_provider_base_url(
+    model_type: ModelType,
+    provider: ModelProvider,
+    base_url: str,
+) -> str:
+    if not base_url.strip() or not _requires_base_url(model_type, provider):
+        return base_url
+    return validate_provider_base_url(
+        provider,
+        base_url,
+        resolve_dns=False,
+    ).base_url
+
+
 async def _find_replacement_default(
     db: AsyncSession,
     model_type: str,
@@ -292,7 +306,9 @@ async def create_model_config(
             name=request.name,
             model_type=request.model_type.value,
             provider=request.provider.value,
-            base_url=request.base_url,
+            base_url=_normalized_provider_base_url(
+                request.model_type, request.provider, request.base_url
+            ),
             api_key_encrypted=api_key_encrypted,
             model_name=request.model_name,
             extra_config=request.extra_config,
@@ -488,7 +504,9 @@ async def update_model_config(
         if request.name is not None:
             config.name = request.name
         if request.base_url is not None:
-            config.base_url = request.base_url
+            config.base_url = _normalized_provider_base_url(
+                model_type, provider, request.base_url
+            )
         if request.model_name is not None:
             config.model_name = request.model_name
         if request.extra_config is not None:
@@ -773,7 +791,9 @@ async def test_model_config_inline(
             name="temp",
             model_type=request.model_type.value,
             provider=request.provider.value,
-            base_url=request.base_url,
+            base_url=_normalized_provider_base_url(
+                request.model_type, request.provider, request.base_url
+            ),
             api_key_encrypted="",  # Not used
             model_name=request.model_name,
             extra_config=request.extra_config,
