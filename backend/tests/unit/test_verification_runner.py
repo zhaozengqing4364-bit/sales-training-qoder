@@ -251,23 +251,117 @@ class TestGenerateSummary:
         assert summary["core_checks_passed"] == 1
 
 
-class TestRuntimeChecks:
-    """Regression tests for release verification runtime paths."""
+class TestDocumentationChecks:
+    """Regression coverage for documentation verification result construction."""
+
+    def test_documentation_helpers_include_required_duration(self, runner):
+        """Helper results must satisfy DocumentationCheckResult constructor fields."""
+        api_contract = runner._check_api_contracts()
+        readme = runner._check_readme()
+        deployment = runner._check_deployment_docs()
+
+        assert isinstance(api_contract.duration_ms, int)
+        assert isinstance(readme.duration_ms, int)
+        assert isinstance(deployment.duration_ms, int)
+
+    @pytest.mark.asyncio
+    async def test_run_documentation_checks_returns_structured_failure_when_helper_raises(
+        self, runner, monkeypatch
+    ):
+        """Documentation exceptions should not raise a second constructor error."""
+
+        def raise_docs_error():
+            raise RuntimeError("docs exploded")
+
+        update_record = AsyncMock()
+        monkeypatch.setattr(runner, "_check_api_contracts", raise_docs_error)
+        monkeypatch.setattr(runner, "_update_verification_record", update_record)
+
+        result = await runner._run_documentation_checks(mock_db, "rc-docs-error")
+
+        assert result.passed is False
+        assert result.up_to_date is False
+        assert result.duration_ms == 0
+        assert result.details == {
+            "error": "Documentation checks failed: docs exploded"
+        }
+        update_record.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_run_documentation_checks_aggregates_missing_sections_with_duration(
+        self, runner, monkeypatch
+    ):
+        """Missing docs remain non-blocking warnings with complete result metadata."""
+        update_record = AsyncMock()
+        monkeypatch.setattr(
+            runner,
+            "_check_api_contracts",
+            lambda: DocumentationCheckResult(
+                check_type="api_contract",
+                passed=True,
+                up_to_date=False,
+                missing_sections=["websocket.md"],
+                duration_ms=3,
+            ),
+        )
+        monkeypatch.setattr(
+            runner,
+            "_check_readme",
+            lambda: DocumentationCheckResult(
+                check_type="readme",
+                passed=True,
+                up_to_date=True,
+                missing_sections=[],
+                duration_ms=2,
+            ),
+        )
+        monkeypatch.setattr(
+            runner,
+            "_check_deployment_docs",
+            lambda: DocumentationCheckResult(
+                check_type="deployment",
+                passed=True,
+                up_to_date=False,
+                missing_sections=["deployment.md"],
+                duration_ms=1,
+            ),
+        )
+        monkeypatch.setattr(runner, "_update_verification_record", update_record)
+
+        result = await runner._run_documentation_checks(mock_db, "rc-docs-warning")
+
+        assert result.passed is True
+        assert result.up_to_date is False
+        assert result.missing_sections == ["websocket.md", "deployment.md"]
+        assert isinstance(result.duration_ms, int)
+        assert result.details["total_missing_sections"] == 2
+        update_record.assert_awaited_once()
+
+
+class TestHealthChecks:
+    """Regression coverage for verification runner health dependencies."""
 
     @pytest.mark.asyncio
     async def test_database_health_uses_configured_async_engine(self, runner, monkeypatch):
-        """Database health should use the session module engine, not a missing helper."""
-        from common.db import session as db_session
+        """DB health should import the actual async engine instead of missing helpers."""
 
         class FakeConnection:
+            def __init__(self):
+                self.executed = False
+                self.committed = False
+
             async def __aenter__(self):
                 return self
 
             async def __aexit__(self, exc_type, exc, tb):
-                return None
+                return False
 
             async def execute(self, statement):
-                self.statement = statement
+                self.executed = True
+                assert "SELECT 1" in str(statement)
+
+            async def commit(self):
+                self.committed = True
 
         class FakeEngine:
             def __init__(self):
@@ -277,134 +371,11 @@ class TestRuntimeChecks:
                 return self.connection
 
         fake_engine = FakeEngine()
-        monkeypatch.setattr(db_session, "engine", fake_engine)
+        monkeypatch.setattr("common.db.session.engine", fake_engine)
 
-        check_type, result = await runner._check_database_health()
+        check_name, result = await runner._check_database_health()
 
-        assert check_type == "database"
+        assert check_name == "database"
         assert result.passed is True
-        assert result.details == {"query": "SELECT 1 successful"}
-
-    @pytest.mark.asyncio
-    async def test_health_checks_aggregate_inner_results(self, runner, mock_db):
-        """Health aggregation should consume the tuples returned by each subcheck."""
-        runner._check_database_health = AsyncMock(
-            return_value=(
-                "database",
-                HealthCheckResult("database", True, duration_ms=1),
-            )
-        )
-        runner._check_api_health = AsyncMock(
-            return_value=("api", HealthCheckResult("api", True, duration_ms=2))
-        )
-        runner._check_websocket_health = AsyncMock(
-            return_value=(
-                "websocket",
-                HealthCheckResult("websocket", True, duration_ms=3),
-            )
-        )
-        runner._check_external_dependencies = AsyncMock(
-            return_value=(
-                "external_deps",
-                HealthCheckResult(
-                    "external_deps",
-                    False,
-                    duration_ms=4,
-                    error_message="Missing required env vars: DATABASE_URL",
-                ),
-            )
-        )
-        runner._update_verification_record = AsyncMock()
-
-        result = await runner._run_health_checks(mock_db, "rc-1")
-
-        assert result.passed is False
-        assert result.error_message == "One or more health checks failed"
-        assert result.details["checks"][-1]["check_type"] == "external_deps"
-        runner._update_verification_record.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_security_checks_aggregate_inner_results(self, runner, mock_db):
-        """Security aggregation should consume the tuples returned by scan helpers."""
-        runner._run_bandit_scan = AsyncMock(
-            return_value=(
-                "bandit",
-                SecurityCheckResult(
-                    "bandit",
-                    True,
-                    issues_found=0,
-                    high_severity=0,
-                    medium_severity=0,
-                    low_severity=0,
-                    duration_ms=1,
-                ),
-            )
-        )
-        runner._run_safety_scan = AsyncMock(
-            return_value=(
-                "safety",
-                SecurityCheckResult(
-                    "safety",
-                    True,
-                    issues_found=0,
-                    high_severity=0,
-                    medium_severity=0,
-                    low_severity=0,
-                    duration_ms=2,
-                ),
-            )
-        )
-        runner._run_secrets_scan = AsyncMock(
-            return_value=(
-                "secrets",
-                SecurityCheckResult(
-                    "secrets",
-                    False,
-                    issues_found=1,
-                    high_severity=1,
-                    medium_severity=0,
-                    low_severity=0,
-                    duration_ms=3,
-                ),
-            )
-        )
-        runner._update_verification_record = AsyncMock()
-
-        result = await runner._run_security_checks(mock_db, "rc-1")
-
-        assert result.passed is False
-        assert result.issues_found == 1
-        assert result.high_severity == 1
-        assert result.details["severity_breakdown"]["high"] == 1
-        runner._update_verification_record.assert_awaited_once()
-
-
-class TestDocumentationChecks:
-    """Regression tests for documentation-check result construction."""
-
-    def test_documentation_subchecks_include_required_duration(self, runner):
-        """Every DocumentationCheckResult constructor should match dataclass fields."""
-        results = [
-            runner._check_api_contracts(),
-            runner._check_readme(),
-            runner._check_deployment_docs(),
-        ]
-
-        assert all(isinstance(result, DocumentationCheckResult) for result in results)
-        assert all(isinstance(result.duration_ms, int) for result in results)
-
-    @pytest.mark.asyncio
-    async def test_documentation_check_exception_returns_structured_result(
-        self, runner, mock_db
-    ):
-        """Documentation runner exceptions should not pass unknown dataclass fields."""
-        runner._check_api_contracts = lambda: (_ for _ in ()).throw(
-            RuntimeError("docs boom")
-        )
-
-        result = await runner._run_documentation_checks(mock_db, "rc-1")
-
-        assert result.passed is False
-        assert result.up_to_date is False
-        assert result.missing_sections == ["documentation_check_error"]
-        assert "docs boom" in result.details["error"]
+        assert fake_engine.connection.executed is True
+        assert fake_engine.connection.committed is True

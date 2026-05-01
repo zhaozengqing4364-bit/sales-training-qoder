@@ -1600,8 +1600,8 @@ class VerificationRunner:
                 check_type="documentation",
                 passed=False,
                 up_to_date=False,
-                missing_sections=["documentation_check_error"],
-                duration_ms=int((end_time - start_time).total_seconds() * 1000),
+                missing_sections=[],
+                duration_ms=0,
                 details={"error": error_msg},
             )
 
@@ -1641,7 +1641,7 @@ class VerificationRunner:
                 check_type="api_contract",
                 passed=False,
                 up_to_date=False,
-                missing_sections=["api_contract_check_error"],
+                missing_sections=[],
                 duration_ms=0,
                 details={"error": str(e)[:200]},
             )
@@ -1674,7 +1674,7 @@ class VerificationRunner:
                 check_type="readme",
                 passed=True,  # Non-blocking
                 up_to_date=False,
-                missing_sections=["readme_check_error"],
+                missing_sections=[],
                 duration_ms=0,
                 details={"error": str(e)[:200]},
             )
@@ -1714,7 +1714,7 @@ class VerificationRunner:
                 check_type="deployment",
                 passed=True,  # Non-blocking
                 up_to_date=False,
-                missing_sections=["deployment_check_error"],
+                missing_sections=[],
                 duration_ms=0,
                 details={"error": str(e)[:200]},
             )
