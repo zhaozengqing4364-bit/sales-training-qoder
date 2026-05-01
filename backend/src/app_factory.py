@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -79,14 +80,20 @@ def _resolve_cors_origins() -> list[str]:
     configured_origins = [
         origin.strip() for origin in configured.split(",") if origin.strip()
     ]
+    env = _current_environment()
 
-    resolved_origins = (
-        configured_origins[:] if configured_origins else DEV_CORS_ORIGINS[:]
-    )
+    if configured_origins:
+        _validate_cors_origins(configured_origins)
+        resolved_origins = configured_origins[:]
+    elif _is_dev_or_test_environment(env):
+        resolved_origins = DEV_CORS_ORIGINS[:]
+    else:
+        return []
 
-    for origin in DEV_CORS_ORIGINS:
-        if origin not in resolved_origins:
-            resolved_origins.append(origin)
+    if _is_dev_or_test_environment(env):
+        for origin in DEV_CORS_ORIGINS:
+            if origin not in resolved_origins:
+                resolved_origins.append(origin)
 
     return resolved_origins
 
@@ -96,11 +103,32 @@ def _resolve_cors_origin_regex() -> str | None:
     if configured_regex:
         return configured_regex
 
-    env = os.getenv("ENVIRONMENT", "development").strip().lower()
-    if env == "development":
+    if _is_dev_or_test_environment(_current_environment()):
         return DEV_CORS_ALLOW_ORIGIN_REGEX
 
     return None
+
+
+def _current_environment() -> str:
+    return os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
+
+
+def _is_dev_or_test_environment(env: str) -> bool:
+    return env in {"development", "dev", "local", "test", "testing"}
+
+
+def _validate_cors_origins(origins: list[str]) -> None:
+    for origin in origins:
+        if origin == "*":
+            raise RuntimeError(
+                "CORS_ORIGINS cannot include '*' while credentials are enabled"
+            )
+
+        parsed = urlparse(origin)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise RuntimeError(
+                "CORS_ORIGINS entries must be explicit HTTP(S) origins"
+            )
 
 
 def _configure_middleware(app: FastAPI) -> None:
