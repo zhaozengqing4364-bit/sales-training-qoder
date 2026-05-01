@@ -438,11 +438,17 @@ export default function HistoryPage() {
                                             <ArrowRight className="w-4 h-4" />
                                         </Button>
                                     </Link>
-                                    <Link href={`/practice/${item.session_id}/report`}>
-                                        <Button className="gap-1" disabled={!canOpenReport}>
+                                    {canOpenReport ? (
+                                        <Link href={`/practice/${item.session_id}/report`}>
+                                            <Button className="gap-1">
+                                                报告
+                                            </Button>
+                                        </Link>
+                                    ) : (
+                                        <Button className="gap-1" disabled>
                                             报告
                                         </Button>
-                                    </Link>
+                                    )}
                                 </div>
                             </GlassCard>
                         );

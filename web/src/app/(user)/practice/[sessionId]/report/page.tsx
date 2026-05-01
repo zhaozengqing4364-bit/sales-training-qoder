@@ -36,6 +36,7 @@ import {
     ReportTrendsResponse,
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
+import { normalizeInternalRecommendationPath } from "@/lib/recommendation-routing";
 import {
     extractSessionLearningCue,
     formatClaimTruthEvidenceNote,
@@ -752,7 +753,15 @@ export default function ComprehensiveReportPage() {
             }
 
             if (recommendationResult.status === "fulfilled") {
-                setNextRecommendation(recommendationResult.value);
+                const normalizedPath = normalizeInternalRecommendationPath(recommendationResult.value.target_path);
+                if (normalizedPath.downgraded) {
+                    debug.warn("[Report] Unsafe next-practice recommendation target_path downgraded", {
+                        sessionId,
+                        reason: normalizedPath.reason,
+                        recommendationKind: recommendationResult.value.recommendation_kind ?? null,
+                    });
+                }
+                setNextRecommendation({ ...recommendationResult.value, target_path: normalizedPath.href });
                 setNextRecommendationHint(recommendationResult.value.explanation ?? null);
             } else {
                 setNextRecommendationHint("下一轮推荐暂不可用，请先按报告建议继续训练。");

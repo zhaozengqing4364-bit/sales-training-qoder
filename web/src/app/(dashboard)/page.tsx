@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api/client";
+import { dashboardConfig } from "@/lib/dashboard-config";
+import { debug } from "@/lib/debug";
+import { normalizeInternalRecommendationPath } from "@/lib/recommendation-routing";
 import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
@@ -103,8 +106,6 @@ type LearnerMomentum = {
     weeklyGoal: number;
 };
 
-const WEEKLY_GOAL_SESSIONS = 3;
-
 function getLocalDateKey(value: Date): string {
     const year = value.getFullYear();
     const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -166,7 +167,7 @@ function buildLearnerMomentum(
     return {
         streakDays,
         weeklyEligibleSessions,
-        weeklyGoal: WEEKLY_GOAL_SESSIONS,
+        weeklyGoal: dashboardConfig.weeklyGoal.weeklyGoalSessions,
     };
 }
 
@@ -347,7 +348,14 @@ export default function HomePage() {
             void api.dashboard.getRecommendation()
                 .then((value) => {
                     if (cancelled) return;
-                    setRecommendation(value);
+                    const normalizedPath = normalizeInternalRecommendationPath(value.target_path);
+                    if (normalizedPath.downgraded) {
+                        debug.warn("[Dashboard] Unsafe recommendation target_path downgraded", {
+                            reason: normalizedPath.reason,
+                            recommendationKind: value.recommendation_kind ?? null,
+                        });
+                    }
+                    setRecommendation({ ...value, target_path: normalizedPath.href });
                     markSection("推荐入口", false);
                 })
                 .catch(() => {
@@ -432,7 +440,7 @@ export default function HomePage() {
         ? "本周轻成就已点亮"
         : learnerMomentum.streakDays >= 3
             ? "连续练习节奏稳定"
-            : "完成 3 次可评估训练点亮本周轻成就";
+            : `完成 ${learnerMomentum.weeklyGoal} 次可评估训练点亮本周轻成就`;
     const displayRecommendation: Recommendation = isRecommendationUnavailable
         ? {
             title: isRecommendationLoading ? "今日复练任务加载中" : "今日复练任务暂不可用",
