@@ -266,7 +266,7 @@ class TestDocumentationChecks:
 
     @pytest.mark.asyncio
     async def test_run_documentation_checks_returns_structured_failure_when_helper_raises(
-        self, runner, monkeypatch
+        self, runner, mock_db, monkeypatch
     ):
         """Documentation exceptions should not raise a second constructor error."""
 
@@ -289,7 +289,7 @@ class TestDocumentationChecks:
 
     @pytest.mark.asyncio
     async def test_run_documentation_checks_aggregates_missing_sections_with_duration(
-        self, runner, monkeypatch
+        self, runner, mock_db, monkeypatch
     ):
         """Missing docs remain non-blocking warnings with complete result metadata."""
         update_record = AsyncMock()
