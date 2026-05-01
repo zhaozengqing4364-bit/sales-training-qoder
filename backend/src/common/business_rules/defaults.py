@@ -10,6 +10,7 @@ ACHIEVEMENT_RULES_KEY = "growth.achievement.rules"
 AI_COACH_RULES_KEY = "growth.ai_coach.rules"
 NEXT_PRACTICE_RECOMMENDATION_KEY = "recommendation.next_practice.ruleset"
 SALES_COMBINATION_RULES_KEY = "sales.training.combinations.ruleset"
+OBJECTION_LEDGER_RULES_KEY = "sales.objection_ledger.ruleset"
 
 BUSINESS_RULE_SCHEMA_VERSION = "business_rule_config_v1"
 
@@ -199,6 +200,178 @@ DEFAULT_SALES_COMBINATION_RULESET: dict[str, Any] = {
     ],
 }
 
+DEFAULT_OBJECTION_LEDGER_RULESET: dict[str, Any] = {
+    "rule_set_id": "sales-objection-ledger-default-v1",
+    "version": "sales_objection_ledger_v1",
+    "enabled": True,
+    "ack_patterns": [
+        "没有",
+        "暂无",
+        "还没",
+        "暂时没有",
+        "无法",
+        "不能",
+        "做不到",
+        "不确定",
+        "回去确认",
+        "后面再给",
+        "之后再给",
+        "稍后再给",
+    ],
+    "open_stage_names": ["objection", "异议处理", "价格博弈"],
+    "numeric_evidence_tokens": [
+        "benchmark",
+        "%",
+        "提升",
+        "下降",
+        "回本周期",
+        "回收周期",
+        "月内",
+        "周内",
+    ],
+    "families": {
+        "roi_proof": {
+            "focus_dimension": "证据使用",
+            "promised_proof": "补充同类客户 ROI 案例",
+            "next_expected_evidence": "给出 6 个月回本测算",
+            "detect_any": [
+                "roi",
+                "回本",
+                "收益",
+                "回报",
+                "案例",
+                "数据",
+                "benchmark",
+                "证据",
+            ],
+            "evidence_any": [
+                "roi",
+                "回本",
+                "收益",
+                "案例",
+                "客户",
+                "数据",
+                "benchmark",
+                "证据",
+                "%",
+                "提升",
+                "下降",
+            ],
+            "open_pressure_any": [
+                "证明",
+                "凭什么",
+                "没有",
+                "缺",
+                "不足",
+                "担心",
+                "顾虑",
+                "怎么",
+                "为何",
+            ],
+            "open_pressure_requires_any": ["roi", "回本", "案例", "数据", "证据", "收益"],
+        },
+        "price_pressure": {
+            "focus_dimension": "异议处理",
+            "promised_proof": "补充报价依据和版本差异",
+            "next_expected_evidence": "说明报价逻辑、预算回收或折扣边界",
+            "detect_any": ["价格", "报价", "预算", "折扣", "成本", "price", "budget"],
+            "evidence_any": [
+                "价格",
+                "报价",
+                "预算",
+                "折扣",
+                "席位",
+                "版本",
+                "回收",
+                "回本",
+                "%",
+                "元",
+            ],
+            "open_pressure_any": [
+                "价格",
+                "报价",
+                "预算",
+                "折扣",
+                "贵",
+                "成本",
+                "担心",
+                "顾虑",
+            ],
+            "open_pressure_requires_any": [],
+        },
+        "competitor_alternative": {
+            "focus_dimension": "异议处理",
+            "promised_proof": "补充竞品差异和替代依据",
+            "next_expected_evidence": "说明为什么比现有方案更稳妥",
+            "detect_any": ["竞品", "竞对", "对比", "替代", "差异", "competitor"],
+            "evidence_any": [
+                "竞品",
+                "对比",
+                "替代",
+                "差异",
+                "迁移",
+                "案例",
+                "SLA",
+                "成本",
+                "收益",
+            ],
+            "open_pressure_any": ["竞品", "竞对", "替代", "对比", "差异", "担心", "顾虑"],
+            "open_pressure_requires_any": [],
+        },
+        "implementation_risk": {
+            "focus_dimension": "异议处理",
+            "promised_proof": "补充实施排期和服务边界",
+            "next_expected_evidence": "确认试点范围、负责人和风险兜底",
+            "detect_any": ["实施", "落地", "上线", "风险", "排期", "交付", "服务", "试点"],
+            "evidence_any": [
+                "实施",
+                "落地",
+                "上线",
+                "排期",
+                "试点",
+                "负责人",
+                "服务",
+                "SLA",
+                "里程碑",
+                "周",
+                "天",
+                "月",
+            ],
+            "open_pressure_any": [
+                "实施",
+                "落地",
+                "上线",
+                "排期",
+                "试点",
+                "风险",
+                "担心",
+                "顾虑",
+            ],
+            "open_pressure_requires_any": ["实施", "落地", "上线", "排期", "试点", "风险"],
+        },
+    },
+    "synthetic_dimensions_by_focus": {
+        "证据使用": {
+            "价值表达": 78.0,
+            "客户收益连接": 76.0,
+            "证据使用": 48.0,
+            "异议处理": 68.0,
+            "推进下一步": 62.0,
+        },
+        "异议处理": {
+            "价值表达": 78.0,
+            "客户收益连接": 76.0,
+            "证据使用": 66.0,
+            "异议处理": 48.0,
+            "推进下一步": 62.0,
+        },
+    },
+    "management_backlog": (
+        "基于当前提供的代码，暂无法确认现有配置体系，需要补充配置模块、"
+        "后台管理模块、字典表、权限模块或系统设置相关代码。"
+    ),
+}
+
 
 @dataclass(frozen=True)
 class BusinessRuleDefinition:
@@ -307,6 +480,31 @@ _BUSINESS_RULE_DEFINITIONS = {
         audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
         fallback_policy="use bundled default sales combinations when database config is missing or invalid; hide_all may intentionally expose no combinations",
         rollback_policy="restore a prior archived/published sales-combination ruleset",
+    ),
+    OBJECTION_LEDGER_RULES_KEY: BusinessRuleDefinition(
+        key=OBJECTION_LEDGER_RULES_KEY,
+        domain="sales_objection_ledger",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_OBJECTION_LEDGER_RULESET,
+        type="rule_json",
+        range_or_allowlist={
+            "family_fields": [
+                "focus_dimension",
+                "promised_proof",
+                "next_expected_evidence",
+                "detect_any",
+                "evidence_any",
+                "open_pressure_any",
+                "open_pressure_requires_any",
+            ],
+            "score_range": {"min_inclusive": 0, "max_inclusive": 100},
+        },
+        read_path="sales_bot.websocket.components.objection_ledger_helpers",
+        admin_entry="/admin/business-rules/objection-ledger",
+        permission="admin_publish_only",
+        audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled default objection-ledger ruleset when database config is missing, invalid, or disabled",
+        rollback_policy="restore a prior archived/published objection-ledger ruleset",
     ),
 }
 

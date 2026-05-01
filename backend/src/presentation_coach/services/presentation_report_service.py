@@ -18,7 +18,14 @@ from common.db.models import (
     PracticeSession,
     RequiredTalkingPoint,
 )
+from common.effectiveness.scoring_rulesets import (
+    ScoringRulesetService,
+    ScoringRulesetView,
+)
 from common.error_handling.result import Result
+from common.monitoring.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _clamp_score(value: float) -> float:
@@ -125,12 +132,16 @@ class PresentationReportService:
 
             review = review_result.value
             session: PracticeSession = context_result.value["session"]
+            scoring_metadata = review.get("scoring_ruleset")
+            if not isinstance(scoring_metadata, dict):
+                scoring_metadata = None
             dimension_scores = [
                 DimensionScore(
                     name=item["name"],
                     score=item["score"],
                     weight=item["weight"],
                     description=item["description"],
+                    dimension_id=item.get("dimension_id"),
                 )
                 for item in review["dimension_scores"]
             ]
@@ -162,6 +173,19 @@ class PresentationReportService:
                 key_improvements=review["improvements"],
                 detailed_feedback=review["detailed_feedback"],
                 recommendations=review["recommendations"],
+                ruleset_id=(
+                    scoring_metadata.get("ruleset_id") if scoring_metadata else None
+                ),
+                ruleset_version=(
+                    scoring_metadata.get("version") if scoring_metadata else None
+                ),
+                score_basis=(
+                    scoring_metadata.get("score_basis") if scoring_metadata else None
+                ),
+                ruleset_source=(
+                    scoring_metadata.get("source") if scoring_metadata else None
+                ),
+                scoring_metadata=scoring_metadata,
             )
             return Result.ok(report)
         except Exception as exc:  # noqa: BLE001
@@ -177,11 +201,27 @@ class PresentationReportService:
                 return Result.fail(
                     context_result.fallback or "[PRESENTATION_SESSION_NOT_FOUND]"
                 )
+            scoring_ruleset = await self._resolve_scoring_ruleset_view()
             return Result.ok(
-                self._build_presentation_review_payload(**context_result.value)
+                self._build_presentation_review_payload(
+                    **context_result.value,
+                    scoring_ruleset=scoring_ruleset,
+                )
             )
         except Exception as exc:  # noqa: BLE001
             return Result.fail(f"[PRESENTATION_REVIEW_BUILD_FAILED:{exc}]")
+
+    async def _resolve_scoring_ruleset_view(self) -> ScoringRulesetView:
+        try:
+            return await ScoringRulesetService(self.db).get_active_or_default(
+                "presentation"
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "presentation_report_scoring_ruleset_fallback_default",
+                error=str(exc),
+            )
+            return ScoringRulesetService.build_default_view("presentation")
 
     async def _load_report_context(self, session_id: str) -> Result[dict[str, Any]]:
         session_result = await self.db.execute(
@@ -278,6 +318,7 @@ class PresentationReportService:
         required_points_by_page: dict[int, list[str]],
         forbidden_words_by_page: dict[int, list[str]],
         global_forbidden_words: list[str],
+        scoring_ruleset: ScoringRulesetView | None = None,
     ) -> dict[str, Any]:
         normalized_texts = [
             _normalize_text(message.content) for message in user_messages
@@ -357,14 +398,16 @@ class PresentationReportService:
             vague_count=issue_counts["vague_response"],
         )
 
+        dimension_weight_pairs = self._dimension_weight_pairs(scoring_ruleset)
         dimension_scores = [
             {
                 "name": name,
+                "dimension_id": dimension_id,
                 "score": metrics["dimension_values"][name],
                 "weight": weight,
                 "description": self._dimension_description(name),
             }
-            for name, weight in self.DIMENSION_WEIGHTS
+            for dimension_id, name, weight in dimension_weight_pairs
         ]
         overall_score = round(
             sum(item["score"] * item["weight"] for item in dimension_scores)
@@ -451,7 +494,34 @@ class PresentationReportService:
                 ],
                 "page_issue_types": page_issue_diagnostics["page_issue_types"],
             },
+            "scoring_ruleset": (
+                ScoringRulesetService.report_metadata_for_view(scoring_ruleset)
+                if scoring_ruleset is not None
+                else None
+            ),
         }
+
+    @classmethod
+    def _dimension_weight_pairs(
+        cls,
+        scoring_ruleset: ScoringRulesetView | None,
+    ) -> tuple[tuple[str | None, str, float], ...]:
+        if scoring_ruleset is None:
+            return tuple((None, name, weight) for name, weight in cls.DIMENSION_WEIGHTS)
+        total_weight = sum(
+            max(0.0, float(dimension.weight))
+            for dimension in scoring_ruleset.definition.dimensions
+        )
+        if total_weight <= 0:
+            return tuple((None, name, weight) for name, weight in cls.DIMENSION_WEIGHTS)
+        return tuple(
+            (
+                dimension.dimension_id,
+                dimension.label,
+                round(float(dimension.weight) / total_weight, 4),
+            )
+            for dimension in scoring_ruleset.definition.dimensions
+        )
 
     def _build_metrics(
         self,
