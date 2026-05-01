@@ -377,7 +377,7 @@ class TestHealthAndSecurityChecks:
 
         fake_engine = FakeEngine()
         fake_session_module = ModuleType("common.db.session")
-        fake_session_module.engine = fake_engine
+        setattr(fake_session_module, "engine", fake_engine)
         monkeypatch.setitem(sys.modules, "common.db.session", fake_session_module)
 
         check_name, result = await runner._check_database_health()

@@ -1003,14 +1003,14 @@ class VerificationRunner:
 
         details = None
         if is_dataclass(check_result):
-            details = asdict(cast(Any, check_result))
+            details = asdict(check_result)  # pyright: ignore[reportArgumentType]
         elif isinstance(check_result, dict):
             details = check_result
 
         await self._update_verification_record(
             db=db,
             release_candidate_id=release_candidate_id,
-            check_type=check_type,
+            check_type=cast(CheckType, check_type),
             check_name=check_name_map.get(check_key, check_key),
             passed=passed,
             duration_ms=int(getattr(check_result, "duration_ms", 0) or 0),
