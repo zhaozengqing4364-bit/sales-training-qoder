@@ -21,6 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.config_manager import get_config_manager
 from common.ai.encryption import decrypt_api_key, encrypt_api_key, mask_api_key
+from common.ai.endpoint_policy import (
+    EndpointPolicyError,
+    validate_provider_base_url,
+    validate_redirect_location,
+)
 from common.ai.models import ModelConfig, ModelProvider, ModelType
 from common.ai.schemas import (
     CreateModelConfigRequest,
@@ -125,6 +130,16 @@ def _validate_config_fields(
             error_code="[MODEL_CONFIG_API_KEY_REQUIRED]",
             trace_id=get_trace_id(),
         )
+
+    if base_url.strip() and _requires_base_url(model_type, provider):
+        try:
+            validate_provider_base_url(provider, base_url, resolve_dns=False)
+        except EndpointPolicyError as exc:
+            return ModelConfigErrorResponse(
+                error=str(exc),
+                error_code="[MODEL_CONFIG_ENDPOINT_POLICY_VIOLATION]",
+                trace_id=get_trace_id(),
+            )
 
     return None
 
@@ -453,16 +468,21 @@ async def update_model_config(
         provider = ModelProvider(config.provider)
         model_type = ModelType(config.model_type)
 
-        if (
-            request.base_url is not None
-            and _requires_base_url(model_type, provider)
-            and not request.base_url.strip()
-        ):
-            return ModelConfigErrorResponse(
-                error="Base URL is required for this provider",
-                error_code="[MODEL_CONFIG_BASE_URL_REQUIRED]",
-                trace_id=get_trace_id(),
-            )
+        if request.base_url is not None and _requires_base_url(model_type, provider):
+            if not request.base_url.strip():
+                return ModelConfigErrorResponse(
+                    error="Base URL is required for this provider",
+                    error_code="[MODEL_CONFIG_BASE_URL_REQUIRED]",
+                    trace_id=get_trace_id(),
+                )
+            try:
+                validate_provider_base_url(provider, request.base_url, resolve_dns=False)
+            except EndpointPolicyError as exc:
+                return ModelConfigErrorResponse(
+                    error=str(exc),
+                    error_code="[MODEL_CONFIG_ENDPOINT_POLICY_VIOLATION]",
+                    trace_id=get_trace_id(),
+                )
 
         # Update fields
         if request.name is not None:
@@ -711,11 +731,11 @@ async def test_model_config(
         OSError,
         SQLAlchemyError,
     ) as e:
-        logger.error(f"Failed to test model config: {e}")
+        logger.error("Failed to test model config", error_type=type(e).__name__)
         return TestConfigSuccessResponse(
             data=TestConfigResponse(
                 success=False,
-                message=str(e),
+                message=_safe_test_error_message(e),
                 latency_ms=0,
             )
         )
@@ -787,14 +807,20 @@ async def test_model_config_inline(
         return TestConfigSuccessResponse(data=test_result)
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:
-        logger.error(f"Failed to test model config inline: {e}")
+        logger.error("Failed to test model config inline", error_type=type(e).__name__)
         return TestConfigSuccessResponse(
             data=TestConfigResponse(
                 success=False,
-                message=str(e),
+                message=_safe_test_error_message(e),
                 latency_ms=0,
             )
         )
+
+
+def _safe_test_error_message(exc: Exception) -> str:
+    if isinstance(exc, EndpointPolicyError):
+        return str(exc)
+    return "Model configuration test failed before a safe provider response was received."
 
 
 async def _run_model_test(
@@ -823,6 +849,14 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
     try:
         import httpx
 
+        endpoint = validate_provider_base_url(
+            ModelProvider(config.provider), config.base_url, resolve_dns=True
+        )
+
+        endpoint = validate_provider_base_url(
+            ModelProvider(config.provider), config.base_url, resolve_dns=True
+        )
+
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -835,11 +869,29 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
             "max_tokens": 5,
         }
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(
+            timeout=endpoint.timeout_seconds, follow_redirects=False
+        ) as client:
             response = await client.post(
-                f"{config.base_url}/chat/completions",
+                endpoint.child_url("chat/completions"),
                 headers=headers,
                 json=payload,
+            )
+
+        if response.is_redirect:
+            try:
+                validate_redirect_location(
+                    ModelProvider(config.provider),
+                    endpoint.base_url,
+                    response.headers.get("location", ""),
+                    resolve_dns=True,
+                )
+            except EndpointPolicyError:
+                pass
+            return TestConfigResponse(
+                success=False,
+                message="LLM API redirect blocked by endpoint policy",
+                details={"status_code": response.status_code, "redirect_blocked": True},
             )
 
         if response.status_code == 200:
@@ -852,13 +904,13 @@ async def _test_llm(config: ModelConfig, api_key: str) -> TestConfigResponse:
             return TestConfigResponse(
                 success=False,
                 message=f"LLM API error: {response.status_code}",
-                details={"response": response.text[:200]},
+                details={"status_code": response.status_code, "response_redacted": True},
             )
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:
         return TestConfigResponse(
             success=False,
-            message=f"LLM test failed: {str(e)}",
+            message=f"LLM test failed: {_safe_test_error_message(e)}",
         )
 
 
@@ -877,11 +929,29 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
             "input": "test",
         }
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(
+            timeout=endpoint.timeout_seconds, follow_redirects=False
+        ) as client:
             response = await client.post(
-                f"{config.base_url}/embeddings",
+                endpoint.child_url("embeddings"),
                 headers=headers,
                 json=payload,
+            )
+
+        if response.is_redirect:
+            try:
+                validate_redirect_location(
+                    ModelProvider(config.provider),
+                    endpoint.base_url,
+                    response.headers.get("location", ""),
+                    resolve_dns=True,
+                )
+            except EndpointPolicyError:
+                pass
+            return TestConfigResponse(
+                success=False,
+                message="Embedding API redirect blocked by endpoint policy",
+                details={"status_code": response.status_code, "redirect_blocked": True},
             )
 
         if response.status_code == 200:
@@ -896,13 +966,13 @@ async def _test_embedding(config: ModelConfig, api_key: str) -> TestConfigRespon
             return TestConfigResponse(
                 success=False,
                 message=f"Embedding API error: {response.status_code}",
-                details={"response": response.text[:200]},
+                details={"status_code": response.status_code, "response_redacted": True},
             )
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:
         return TestConfigResponse(
             success=False,
-            message=f"Embedding test failed: {str(e)}",
+            message=f"Embedding test failed: {_safe_test_error_message(e)}",
         )
 
 
