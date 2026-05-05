@@ -20,7 +20,7 @@ class InterruptionDetector:
     Stage 2: Semantic analysis via LLM (<500ms)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.llm_service = get_llm_service()
 
     async def should_interrupt(
