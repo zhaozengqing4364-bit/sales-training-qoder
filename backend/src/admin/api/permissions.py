@@ -7,6 +7,7 @@ high-risk admin operations a named permission boundary for future role rollout.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Final
 
 from fastapi import Depends
@@ -47,7 +48,7 @@ def user_has_admin_permission(user: User, permission: str) -> bool:
     return permission in ADMIN_ROLE_PERMISSIONS.get(role, frozenset())
 
 
-def require_admin_permission(permission: str):
+def require_admin_permission(permission: str) -> Callable[..., Awaitable[User]]:
     async def checker(current_user: User = Depends(get_current_admin_user)) -> User:
         if not user_has_admin_permission(current_user, permission):
             # get_current_admin_user already preserves the published [ROLE_REQUIRED]
