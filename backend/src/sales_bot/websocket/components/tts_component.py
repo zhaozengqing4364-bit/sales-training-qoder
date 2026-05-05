@@ -203,7 +203,9 @@ class TTSComponent:
         if trace_id:
             latency_tracker.record(trace_id, LatencyTracker.STAGE_TTS_START)
 
-        async def on_chunk(audio_data: bytes, chunk_index: int, is_final: bool):
+        async def on_chunk(
+            audio_data: bytes, chunk_index: int, is_final: bool
+        ) -> None:
             """Callback to send each TTS chunk to the client."""
             nonlocal first_chunk_sent
 
