@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
@@ -69,7 +70,7 @@ class GrowthSafetyPolicyService:
         explicit_policy: dict[str, Any] | None,
         env_name: str,
         default_policy: dict[str, Any],
-        validator,
+        validator: Callable[[dict[str, Any]], dict[str, Any]],
     ) -> tuple[dict[str, Any], str]:
         if explicit_policy is not None:
             return validator(explicit_policy), "injected"
