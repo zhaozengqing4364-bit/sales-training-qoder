@@ -9,6 +9,7 @@ Implements Constitution Principles:
 import logging
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 # For PPT text extraction (python-pptx doesn't require OCR for text-based PPTs)
 # For image-based slides, would use Tesseract OCR
@@ -48,7 +49,7 @@ class OCRProcessor:
     3. On failure: Return empty extraction (graceful degradation)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.temp_dir = "/tmp/ppt_processing"
 
     async def extract_text(
@@ -61,12 +62,12 @@ class OCRProcessor:
         """
         try:
             # Import here to avoid dependency if not used
-            from pptx import Presentation
+            from pptx import Presentation  # type: ignore[import-not-found]
 
             # Load PPT
             prs = Presentation(file_path)
 
-            pages = []
+            pages: list[PPTPage] = []
             has_images = False
 
             for slide_number, slide in enumerate(prs.slides, start=1):
@@ -115,14 +116,14 @@ class OCRProcessor:
             )
             return Result.fail(fallback="[OCR_FAILED]")
 
-    def _extract_slide_content(self, slide) -> tuple[str, str, int]:
+    def _extract_slide_content(self, slide: Any) -> tuple[str, str, int]:
         """
         Extract title, content, and image count from a slide
 
         Returns: (title, content, image_count)
         """
         title = ""
-        content_lines = []
+        content_lines: list[str] = []
         image_count = 0
 
         # Extract text from shapes
@@ -162,8 +163,8 @@ class OCRProcessor:
         Returns: Extracted text or Result.fail
         """
         try:
-            import pytesseract
-            from PIL import Image
+            import pytesseract  # type: ignore[import-not-found]
+            from PIL import Image  # type: ignore[import-not-found]
 
             # Open image
             image = Image.open(image_path)

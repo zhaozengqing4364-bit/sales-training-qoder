@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 legacy schema repair typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2209 errors in 81 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 PPT OCR processor typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2204 errors in 80 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -138,6 +138,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: lifecycle action set, terminal status mapping, race scenarios, optimistic status guard, invalid transition errors, start/pause/resume/end status transitions, duration calculation formula, report-generation trigger condition, fire-and-forget behavior, and scoring-context save behavior were not added or changed.
 - Latest typed boundary: legacy schema repair sync-connection and inspector helper contracts in `common.db.legacy_schema_repair` are typed as SQLAlchemy runtime infrastructure boundaries, not business configuration.
 - Latest unchanged business logic: personas `persona_policy` repair detection/payload, knowledge document content-hash repair, spreadsheet file-type constraint repair, SQLite table rebuild SQL, index names, startup repair authority, production refusal semantics, and repair log fields were not added or changed.
+- Latest typed boundary: PPT OCR processor lazy optional imports, page list, and slide-shape contracts in `common.ppt.ocr_processor` are typed as document-processing infrastructure boundaries, not business configuration.
+- Latest unchanged business logic: `python-pptx`, Tesseract, and PIL lazy import behavior, missing-dependency fallback markers, OCR failure fallback markers, slide title heuristic, image-count detection, page numbering, result payload shape, and singleton processor behavior were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -272,6 +274,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | API rate limiter typing | `./.venv-test/bin/mypy src/common/rate_limit/api_limiter.py`; `./.venv-test/bin/mypy src` now fails with 2220 errors in 83 files; `ruff check src/common/rate_limit/api_limiter.py tests/integration/test_auth_login_api.py tests/integration/test_password_reset_api.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_auth_login_api.py::test_forgot_password_success_includes_rate_limit_headers tests/integration/test_auth_login_api.py::test_forgot_password_rate_limit_rejects_second_request_for_same_ip tests/integration/test_password_reset_api.py::test_forgot_password_rate_limited_per_ip -q --no-cov` | Phase 1.3 API rate limiter typing commit |
 | 2026-05-06 | Phase 1.3 | Session lifecycle ORM typing | `./.venv-test/bin/mypy src/common/db/session_lifecycle.py` now has no direct `src/common/db/session_lifecycle.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2215 errors in 82 files; `ruff check src/common/db/session_lifecycle.py tests/unit/test_session_lifecycle_service.py tests/integration/test_session_lifecycle_api.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_session_lifecycle_service.py tests/integration/test_session_lifecycle_api.py -q --no-cov` | Phase 1.3 session lifecycle ORM typing commit |
 | 2026-05-06 | Phase 1.3 | Legacy schema repair typing | `./.venv-test/bin/mypy src/common/db/legacy_schema_repair.py`; `./.venv-test/bin/mypy src` now fails with 2209 errors in 81 files; `ruff check src/common/db/legacy_schema_repair.py tests/unit/common/test_db_session_compatibility.py tests/integration/test_startup_or_bootstrap_authority.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_db_session_compatibility.py tests/integration/test_startup_or_bootstrap_authority.py -q --no-cov` | Phase 1.3 legacy schema repair typing commit |
+| 2026-05-06 | Phase 1.3 | PPT OCR processor typing | `./.venv-test/bin/mypy src/common/ppt/ocr_processor.py`; `./.venv-test/bin/mypy src` now fails with 2204 errors in 80 files; `ruff check src/common/ppt/ocr_processor.py src/admin/api/admin.py src/common/knowledge/ingestion_service.py tests/unit/admin/test_presentation_upload_safety.py tests/unit/common/test_document_storage_artifacts.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/admin/test_presentation_upload_safety.py tests/unit/common/test_document_storage_artifacts.py tests/integration/test_knowledge_api.py::TestKnowledgeBaseAPI::test_create_knowledge_base tests/integration/test_knowledge_api.py::TestKnowledgeBaseAPI::test_list_knowledge_bases -q --no-cov` | Phase 1.3 PPT OCR processor typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -285,6 +288,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2204 errors in 80 files after typing the PPT OCR processor boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2209 errors in 81 files after typing the legacy schema repair boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2215 errors in 82 files after typing the session lifecycle ORM boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2220 errors in 83 files after typing the API rate limiter boundary. Phase 1.4 was not advanced.
