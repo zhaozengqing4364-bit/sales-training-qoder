@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from common.ai.llm_service import LLMService
 from common.error_handling.result import Result
@@ -267,7 +267,7 @@ class RealtimeScoringService:
                 return Result.fail(scoring_result.fallback or "[SCORING_FAILED]")
 
             # Extract scores from result
-            scoring_data = scoring_result.value
+            scoring_data = cast(dict[str, Any], scoring_result.value)
             dimension_scores = {
                 d["name"]: d["score"] for d in scoring_data.get("dimensions", [])
             }
