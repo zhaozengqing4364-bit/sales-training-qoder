@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
+from typing import Any
 
 from common.config import settings
 from common.error_handling.result import Result
@@ -89,7 +90,7 @@ class SalesBotService:
     def _now() -> datetime:
         return datetime.now(UTC)
 
-    def _build_conversation_chain(self):
+    def _build_conversation_chain(self) -> Any:
         """Build the legacy LangChain chain lazily to avoid import/startup cost."""
         from langchain_classic.chains import ConversationChain
         from langchain_classic.memory import ConversationBufferMemory
