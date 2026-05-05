@@ -396,6 +396,7 @@ start_backend() {
     nohup env \
       DATABASE_URL="${EFFECTIVE_DATABASE_URL}" \
       REDIS_URL="${EFFECTIVE_REDIS_URL}" \
+      PYTHONPATH="${ROOT_DIR}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
       "${python_bin}" -m uvicorn src.main:app --reload --port "${BACKEND_PORT}" \
       >"${LOG_DIR}/backend.log" 2>&1 &
     echo $! > "${PID_DIR}/backend.pid"

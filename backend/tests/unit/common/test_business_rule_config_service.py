@@ -9,6 +9,7 @@ from common.business_rules.defaults import (
     DEFAULT_AI_COACH_RULESET,
     DEFAULT_RECOMMENDATION_RULESET,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
+    list_business_rule_definitions,
 )
 from common.business_rules.service import BusinessRuleConfigService
 from common.db.models import User
@@ -147,9 +148,11 @@ async def test_business_rule_seed_defaults_is_idempotent(test_db):
     second = await service.seed_defaults(actor_id=str(admin.user_id))
     await test_db.commit()
     rows = await service.list_configs()
+    definitions = list_business_rule_definitions()
 
-    assert len(first) == 4
+    assert len(first) == len(definitions)
     assert second == []
-    assert len(rows) == 4
+    assert len(rows) == len(definitions)
+    assert {row.key for row in rows} == {definition.key for definition in definitions}
     assert all(row.status == "published" for row in rows)
     assert {row.version for row in rows} == {1}

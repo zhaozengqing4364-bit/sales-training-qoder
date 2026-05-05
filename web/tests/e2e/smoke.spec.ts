@@ -154,13 +154,12 @@ async function loginFromUi(page: Page): Promise<void> {
 
   await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
   await page.getByLabel("邮箱地址").fill(adminEmail);
-  await page.getByLabel("密码").fill(adminPassword);
+  await page.getByRole("textbox", { name: "密码" }).fill(adminPassword);
   await page.getByRole("button", { name: /^登录$/ }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(
-    page.getByText(/第一次来，先这样开始|继续按这 3 步推进训练/),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: /管理员/ })).toBeVisible();
+  await expect(page.getByText("查看您的训练概览与最新进展。")).toBeVisible();
 }
 
 async function loginForBearerToken(apiContext: APIRequestContext): Promise<string> {
@@ -291,12 +290,10 @@ test.describe("full-stack smoke baseline", () => {
 
     await loginFromUi(page);
 
-    const reportEntry = page.getByRole("link", { name: "报告入口" });
+    const reportEntry = page.getByRole("link", { name: "查看报告" }).first();
     await expect(reportEntry).toBeVisible();
     await expect(reportEntry).toHaveAttribute("href", smokeReportPath);
-    await expect(
-      page.getByText(/第一次来，先这样开始|继续按这 3 步推进训练/),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "最近记录" })).toBeVisible();
 
     await expectNoBlockingSignals(signals, "dashboard smoke");
   });
@@ -331,10 +328,10 @@ test.describe("full-stack smoke baseline", () => {
       await expect(
         page.getByRole("button", { name: /结束练习/ }),
       ).toBeVisible();
-      await expect(page.getByText("已连接")).toBeVisible({ timeout: 20_000 });
       await expect(
-        page.getByText(/开始前先看本次练习重点|本次练习聚焦上次复盘问题/),
-      ).toBeVisible();
+        page.getByLabel("训练实时状态").getByText("已连接"),
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole("heading", { name: "销售对练" })).toBeVisible();
 
       await expectNoBlockingSignals(signals, "practice session smoke");
     } finally {

@@ -49,7 +49,7 @@ describe("AdminDashboardPage", () => {
         });
     });
 
-    it("keeps only the top effectiveness card as live data and downgrades the rest of the admin home to truth-surface inventory", async () => {
+    it("keeps only the top effectiveness card as live data and marks the rest of the admin home as pending data-source wiring", async () => {
         render(<AdminDashboardPage />);
 
         await waitFor(() => {
@@ -57,13 +57,13 @@ describe("AdminDashboardPage", () => {
             expect(getDashboardMock).toHaveBeenCalledWith({ days: 7 });
         });
 
-        expect(await screen.findByText("管理首页真实度说明")).toBeTruthy();
+        expect(await screen.findByText("管理首页数据来源说明")).toBeTruthy();
         expect(screen.getByText("66.7%")).toBeTruthy();
         expect(screen.getByText("58.3%")).toBeTruthy();
         expect(screen.getAllByText("待接真实统计").length).toBeGreaterThanOrEqual(3);
-        expect(screen.getByText(/以下卡片当前只作为 manager\/admin truth surface inventory/)).toBeTruthy();
+        expect(screen.getByText(/以下卡片当前只保留为待接入清单/)).toBeTruthy();
         expect(screen.getByText("当前真实管理入口")).toBeTruthy();
-        expect(screen.getByText("直接进入当前已接真实 authority 的管理面，不再在首页伪装表单、日志控制台或自动告警。"))
+        expect(screen.getByText("直接进入当前已接正式数据源的管理面；首页不提供未接通的表单、日志控制台或自动告警。"))
             .toBeTruthy();
         expect(screen.getAllByRole("link", { name: "进入用户管理" }).some((link) => link.getAttribute("href") === "/admin/users"))
             .toBe(true);

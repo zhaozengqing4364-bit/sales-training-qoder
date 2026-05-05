@@ -18,4 +18,4 @@ def test_alembic_upgrade_head_has_single_unique_head() -> None:
     revisions = [revision.revision for revision in script.walk_revisions()]
 
     assert len(revisions) == len(set(revisions))
-    assert script.get_heads() == ["20260430_0810_035"]
+    assert script.get_heads() == ["20260501_0400_036"]

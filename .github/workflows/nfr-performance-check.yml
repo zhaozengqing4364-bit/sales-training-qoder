@@ -89,46 +89,67 @@ jobs:
       - name: Run NFR performance tests
         working-directory: ./backend
         run: |
+          mkdir -p test-results
           venv/bin/python -m pytest tests/performance/test_nfr_metrics.py \
             -v \
             --tb=short \
-            --cov=src \
-            --cov-report=xml \
-            --cov-report=html \
+            --no-cov \
             --junitxml=test-results/nfr-performance.xml
         env:
           DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
 
       - name: Generate NFR performance report
+        if: always()
         working-directory: ./backend
         run: |
           venv/bin/python -c "
-          import json
+          import xml.etree.ElementTree as ET
           from pathlib import Path
+          from common.monitoring.nfr_reporter import NFRReporter
 
-          # Create summary report
-          report = {
-            'nfr_validation': {
-              'timestamp': '${{ github.event.head_commit.timestamp }}',
-              'commit_sha': '${{ github.sha }}',
-              'branch': '${{ github.ref_name }}',
-              'targets': {
-                'end_to_end_latency_ms': {'p95_target': 300, 'description': 'User speech to AI response'},
-                'websocket_connection_ms': {'p95_target': 100, 'description': 'WS connection establishment'},
-                'asr_streaming_latency_ms': {'p95_target': 200, 'description': 'ASR transcription'},
-                'tts_first_byte_latency_ms': {'p95_target': 300, 'description': 'TTS first audio byte'},
-                'interrupt_detection_ms': {'p95_target': 100, 'description': 'Interrupt detection response'}
-              }
-            }
+          result_xml = Path('test-results/nfr-performance.xml')
+          reporter = NFRReporter(output_dir='test-results')
+          reporter.set_metadata(
+            commit_sha='${{ github.sha }}',
+            branch='${{ github.ref_name }}',
+            environment='ci',
+          )
+
+          provider_skips = []
+          infra_warnings = []
+          external_warnings = []
+          if result_xml.exists():
+            root = ET.parse(result_xml).getroot()
+            for testcase in root.iter('testcase'):
+              skipped = testcase.find('skipped')
+              if skipped is None:
+                continue
+              message = skipped.attrib.get('message', '')
+              name = testcase.attrib.get('name', 'unknown')
+              entry = {'test': name, 'message': message}
+              if 'NFR_PROVIDER_UNAVAILABLE' in message:
+                provider_skips.append(entry)
+              elif 'NFR_INFRA_MISSING' in message:
+                infra_warnings.append(entry)
+              elif 'NFR_EXTERNAL_UNAVAILABLE' in message:
+                external_warnings.append(entry)
+
+          json_path = reporter.generate_json()
+          report = json_path.read_text(encoding='utf-8')
+          import json
+          data = json.loads(report)
+          data['skip_classification'] = {
+            'provider_unavailable': provider_skips,
+            'infra_missing': infra_warnings,
+            'external_unavailable': external_warnings,
           }
+          json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
 
-          report_path = Path('test-results/nfr-report.json')
-          report_path.parent.mkdir(parents=True, exist_ok=True)
-          with open(report_path, 'w') as f:
-            json.dump(report, f, indent=2)
-
-          print('NFR Report generated successfully')
-          print(f'Report saved to: {report_path}')
+          print('NFR report generated from pytest results')
+          print(f'Report saved to: {json_path}')
+          print(f'Provider unavailable skips: {len(provider_skips)}')
+          print(f'Infrastructure warnings: {len(infra_warnings)}')
+          print(f'External warnings: {len(external_warnings)}')
           "
 
       - name: Upload NFR test results
@@ -158,20 +179,18 @@ jobs:
 
             if (fs.existsSync(reportPath)) {
               const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-              const body = `## NFR Performance Test Results 🚀
+              const summary = report.summary || {};
+              const skips = report.skip_classification || {};
+              const body = `## NFR Performance Test Results
 
               ### Performance Targets (Constitution Principle II: <300ms)
 
-              | Metric | P95 Target | Status |
-              |---------|--------------|--------|
-              | End-to-end Latency | 300ms | ${report.nfr_validation.targets.end_to_end_latency_ms ? '✅ Passed' : '⚠️ Pending'} |
-              | WebSocket Connection | 100ms | ${report.nfr_validation.targets.websocket_connection_ms ? '✅ Passed' : '⚠️ Pending'} |
-              | ASR Streaming Latency | 200ms | ${report.nfr_validation.targets.asr_streaming_latency_ms ? '✅ Passed' : '⚠️ Pending'} |
-              | TTS First-Byte | 300ms | ${report.nfr_validation.targets.tts_first_byte_latency_ms ? '✅ Passed' : '⚠️ Pending'} |
-              | Interrupt Detection | 100ms | ${report.nfr_validation.targets.interrupt_detection_ms ? '✅ Passed' : '⚠️ Pending'} |
+              | Status | Tested Metrics | Failed Metrics | Provider Skips | Infra Warnings |
+              |---------|--------------|--------|--------|--------|
+              | ${summary.overall_status || 'UNKNOWN'} | ${summary.total_metrics || 0} | ${summary.failed_metrics || 0} | ${(skips.provider_unavailable || []).length} | ${(skips.infra_missing || []).length} |
 
-              **Commit:** ${report.nfr_validation.commit_sha}
-              **Branch:** ${report.nfr_validation.branch}
+              **Commit:** ${(report.metadata || {}).commit_sha || 'unknown'}
+              **Branch:** ${(report.metadata || {}).branch || 'unknown'}
 
               View detailed results in the artifacts.
               `;
@@ -192,22 +211,20 @@ jobs:
           import json
           from pathlib import Path
 
-          # Thresholds from NFR requirements
-          THRESHOLDS = {
-            'end_to_end_p95': 300,
-            'websocket_connection_p95': 100,
-            'asr_streaming_p95': 200,
-            'tts_first_byte_p95': 300,
-            'interrupt_detection_p95': 100
-          }
-
-          # Parse test results
           result_file = Path('test-results/nfr-report.json')
-          if result_file.exists():
-            print('✅ NFR tests completed successfully')
-            print('All performance thresholds validated')
-          else:
-            print('⚠️ NFR report not found')
+          if not result_file.exists():
+            print('NFR report not found')
+            sys.exit(1)
+
+          report = json.loads(result_file.read_text())
+          summary = report.get('summary', {})
+          failed_metrics = int(summary.get('failed_metrics') or 0)
+          skips = report.get('skip_classification', {})
+          print(f'NFR tested metrics: {summary.get(\"total_metrics\", 0)}')
+          print(f'NFR failed metrics: {failed_metrics}')
+          print(f'NFR provider unavailable skips: {len(skips.get(\"provider_unavailable\", []))}')
+          print(f'NFR infrastructure warnings: {len(skips.get(\"infra_missing\", []))}')
+          if failed_metrics:
             sys.exit(1)
           "
 

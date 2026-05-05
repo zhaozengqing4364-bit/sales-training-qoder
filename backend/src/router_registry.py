@@ -8,11 +8,14 @@ from fastapi.routing import APIRoute
 from admin.api.admin import router as admin_presentations_router
 from admin.api.analytics import router as admin_analytics_router
 from admin.api.business_rules import router as business_rules_router
+from admin.api.governance import router as admin_governance_router
 from admin.api.interventions import router as admin_interventions_router
 from admin.api.knowledge_answer_config import router as knowledge_answer_config_router
 from admin.api.model_configs import router as model_configs_router
 from admin.api.presentation_ai import router as presentation_ai_router
 from admin.api.rag_profiles import router as rag_profiles_router
+from admin.api.release_verification import router as release_verification_router
+from admin.api.settings import router as admin_settings_router
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
 from admin.api.users import router as admin_users_router
@@ -171,6 +174,17 @@ def register_routers(app: FastAPI) -> None:
         dependencies=[Depends(get_current_admin_user_for_app_routes)],
     )
     app.include_router(
+        admin_governance_router,
+        prefix="/api/v1/admin",
+        tags=["admin-governance"],
+        dependencies=[Depends(get_current_admin_user)],
+    )
+    app.include_router(
+        admin_settings_router,
+        prefix="/api/v1/admin",
+        tags=["admin-settings"],
+    )
+    app.include_router(
         admin_interventions_router,
         prefix="/api/v1",
         tags=["admin-interventions"],
@@ -214,6 +228,11 @@ def register_routers(app: FastAPI) -> None:
     )
     app.include_router(
         presentation_ai_router, prefix="/api/v1/admin", tags=["admin-presentation-ai"]
+    )
+    app.include_router(
+        release_verification_router,
+        prefix="/api/v1",
+        tags=["release-verification"],
     )
 
     app.include_router(prompt_templates_router, tags=["prompt-templates"])

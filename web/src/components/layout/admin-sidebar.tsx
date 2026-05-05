@@ -123,6 +123,12 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         items: [
             { label: "提示词管理", icon: MessageSquareText, href: "/admin/prompts" },
             { label: "业务规则", icon: Settings, href: "/admin/business-rules/sales-combinations" },
+            { label: "成就徽章规则", icon: Sparkles, href: "/admin/business-rules/growth-achievements" },
+            { label: "AI 教练规则", icon: MessageSquareText, href: "/admin/business-rules/ai-coach" },
+            { label: "练后推荐规则", icon: Activity, href: "/admin/business-rules/next-practice-recommendations" },
+            { label: "异议台账规则", icon: ScrollText, href: "/admin/business-rules/objection-ledger" },
+            { label: "评分规则集", icon: BarChart3, href: "/admin/scoring-rulesets" },
+            { label: "治理矩阵", icon: Shield, href: "/admin/governance" },
             { label: "语音策略", icon: Activity, href: "/admin/voice-runtime" },
             { label: "PPT AI 策略", icon: Sparkles, href: "/admin/presentation-ai" },
         ],

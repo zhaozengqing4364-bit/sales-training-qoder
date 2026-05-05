@@ -40,13 +40,18 @@ resolve_python_bin() {
   )
 
   local candidate
+  local resolved
   for candidate in "${candidates[@]}"; do
     if [[ -x "${candidate}" ]]; then
-      printf '%s\n' "${candidate}"
-      return 0
+      resolved="${candidate}"
+    elif command -v "${candidate}" >/dev/null 2>&1; then
+      resolved="$(command -v "${candidate}")"
+    else
+      continue
     fi
-    if command -v "${candidate}" >/dev/null 2>&1; then
-      command -v "${candidate}"
+
+    if "${resolved}" -c "import pytest" >/dev/null 2>&1; then
+      printf '%s\n' "${resolved}"
       return 0
     fi
   done
@@ -117,6 +122,11 @@ VITEST_GATE_TARGETS=(
   "src/app/(dashboard)/page.test.tsx"
   "src/app/(dashboard)/support/runtime/page.test.tsx"
   "src/app/admin/analytics/page.test.tsx"
+  "src/app/admin/business-rules/_components/governed-business-rule-page.test.tsx"
+  "src/app/admin/business-rules/sales-combinations/page.test.tsx"
+  "src/app/admin/governance/page.test.tsx"
+  "src/app/admin/scoring-rulesets/page.test.tsx"
+  "src/app/admin/settings/page.test.tsx"
   "src/app/(user)/practice/[sessionId]/page.test.tsx"
   "src/app/(user)/practice/[sessionId]/report/page.test.tsx"
   "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
@@ -124,6 +134,21 @@ VITEST_GATE_TARGETS=(
   "src/components/ui/chat-bubble.test.tsx"
   "src/lib/admin/linked-assets.test.ts"
   "src/lib/auth-handler.test.ts"
+)
+
+BACKEND_GATE_TARGETS=(
+  "tests/integration/test_auth_login_api.py"
+  "tests/integration/test_history_evidence_flow.py"
+  "tests/integration/test_replay_api.py"
+  "tests/integration/test_support_runtime_api.py"
+  "tests/contract/test_analytics.py"
+  "tests/contract/test_release_verification_contract.py"
+  "tests/contract/test_admin_governance_contract.py"
+  "tests/integration/test_admin_business_rules_api.py"
+  "tests/integration/test_admin_model_configs_api.py"
+  "tests/integration/test_scoring_rulesets_api.py"
+  "tests/unit/admin/test_model_config_security.py"
+  "tests/unit/common/test_business_rule_config_service.py"
 )
 
 export DATABASE_URL="${DATABASE_URL:-$(dotenv_get "${BACKEND_ENV_FILE}" "DATABASE_URL")}" 
@@ -138,16 +163,39 @@ export SMOKE_EVIDENCE_PREFIX="task-9"
 log "Secret hygiene scan"
 "${ROOT_DIR}/scripts/secret-scan.sh"
 
-log "Backend tests: auth + history/report/replay + admin analytics + support runtime"
+assert_non_empty_vitest_coverage_summary() {
+  local summary_file="${ROOT_DIR}/web/coverage/coverage-summary.json"
+  if [[ ! -s "${summary_file}" ]]; then
+    die "Vitest coverage summary is missing or empty: ${summary_file}"
+  fi
+
+  node -e '
+    const fs = require("fs");
+    const path = process.argv[1];
+    const summary = JSON.parse(fs.readFileSync(path, "utf8"));
+    const total = summary.total;
+    if (!total) {
+      throw new Error("coverage summary missing total");
+    }
+    const coveredUnits = ["lines", "functions", "branches", "statements"]
+      .map((key) => Number(total[key]?.total || 0))
+      .reduce((sum, value) => sum + value, 0);
+    if (coveredUnits <= 0) {
+      throw new Error("coverage summary total is empty");
+    }
+  ' "${summary_file}" || die "Vitest coverage summary is not a valid non-empty summary"
+}
+
+log "Backend tests: auth + history/report/replay + admin analytics + support runtime + business rules + model config + release verification"
 (
   cd "${ROOT_DIR}/backend"
-  "${PYTHON_BIN}" -m pytest -c pyproject.toml \
-    tests/integration/test_auth_login_api.py \
-    tests/integration/test_history_evidence_flow.py \
-    tests/integration/test_replay_api.py \
-    tests/integration/test_support_runtime_api.py \
-    tests/contract/test_analytics.py \
-    -q
+  "${PYTHON_BIN}" -m pytest -c pyproject.toml "${BACKEND_GATE_TARGETS[@]}" --no-cov -q
+)
+
+log "Backend coverage threshold"
+(
+  cd "${ROOT_DIR}/backend"
+  "${PYTHON_BIN}" -m pytest -c pyproject.toml tests/unit tests/integration tests/contract -q
 )
 
 log "Bootstrapping smoke stack for Alembic + Playwright"
@@ -169,8 +217,10 @@ log "Web typecheck"
 log "Vitest"
 (
   cd "${ROOT_DIR}/web"
-  npx vitest run "${VITEST_GATE_TARGETS[@]}"
+  rm -rf coverage
+  npx vitest run --coverage "${VITEST_GATE_TARGETS[@]}"
 )
+assert_non_empty_vitest_coverage_summary
 
 log "Playwright smoke matrix"
 (

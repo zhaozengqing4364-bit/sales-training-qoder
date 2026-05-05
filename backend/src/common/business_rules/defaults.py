@@ -11,8 +11,42 @@ AI_COACH_RULES_KEY = "growth.ai_coach.rules"
 NEXT_PRACTICE_RECOMMENDATION_KEY = "recommendation.next_practice.ruleset"
 SALES_COMBINATION_RULES_KEY = "sales.training.combinations.ruleset"
 OBJECTION_LEDGER_RULES_KEY = "sales.objection_ledger.ruleset"
+ADMIN_SETTINGS_GENERAL_KEY = "admin.settings.general"
+ADMIN_SETTINGS_SECURITY_KEY = "admin.settings.security"
+ADMIN_SETTINGS_NOTIFICATIONS_KEY = "admin.settings.notifications"
 
 BUSINESS_RULE_SCHEMA_VERSION = "business_rule_config_v1"
+
+DEFAULT_ADMIN_GENERAL_SETTINGS: dict[str, Any] = {
+    "version": "admin_general_settings_v1",
+    "enabled": True,
+    "platform_name": "Intelligent Coach AI",
+    "support_email": "support@company.com",
+    "welcome_message": "欢迎使用高级训练平台，开启您的学习之旅！",
+    "default_language": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "date_format": "YYYY-MM-DD",
+}
+
+DEFAULT_ADMIN_SECURITY_SETTINGS: dict[str, Any] = {
+    "version": "admin_security_settings_v1",
+    "enabled": True,
+    "enforce_admin_2fa": True,
+    "new_device_login_alert": True,
+    "password_min_length": 8,
+    "password_expiry_days": 90,
+}
+
+DEFAULT_ADMIN_NOTIFICATION_SETTINGS: dict[str, Any] = {
+    "version": "admin_notification_settings_v1",
+    "enabled": True,
+    "email_notifications": {
+        "user_registration_admin": True,
+        "system_exception_alert": True,
+        "weekly_report": False,
+        "knowledge_base_update": False,
+    },
+}
 
 DEFAULT_ACHIEVEMENT_RULESET: dict[str, Any] = {
     "version": "growth_achievement_rules_v1",
@@ -505,6 +539,62 @@ _BUSINESS_RULE_DEFINITIONS = {
         audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
         fallback_policy="use bundled default objection-ledger ruleset when database config is missing, invalid, or disabled",
         rollback_policy="restore a prior archived/published objection-ledger ruleset",
+    ),
+    ADMIN_SETTINGS_GENERAL_KEY: BusinessRuleDefinition(
+        key=ADMIN_SETTINGS_GENERAL_KEY,
+        domain="admin_settings",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_ADMIN_GENERAL_SETTINGS,
+        type="settings_json",
+        range_or_allowlist={
+            "default_language": ["zh-CN", "en-US"],
+            "timezone": ["Asia/Shanghai", "UTC"],
+            "date_format": ["YYYY-MM-DD", "MM/DD/YYYY"],
+        },
+        read_path="admin.api.settings.get_admin_settings_surface:general",
+        admin_entry="/admin/settings?tab=general",
+        permission="admin_settings_manage",
+        audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled safe defaults when database settings are missing or invalid",
+        rollback_policy="restore a prior archived/published general settings version",
+    ),
+    ADMIN_SETTINGS_SECURITY_KEY: BusinessRuleDefinition(
+        key=ADMIN_SETTINGS_SECURITY_KEY,
+        domain="admin_settings",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_ADMIN_SECURITY_SETTINGS,
+        type="settings_json",
+        range_or_allowlist={
+            "password_min_length": {"min_inclusive": 8, "max_inclusive": 128},
+            "password_expiry_days": {"min_inclusive": 0, "max_inclusive": 365},
+        },
+        read_path="admin.api.settings.get_admin_settings_surface:security",
+        admin_entry="/admin/settings?tab=security",
+        permission="admin_settings_manage",
+        audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled safe defaults; security runtime baselines stay code-owned until explicitly wired",
+        rollback_policy="restore a prior archived/published security settings version",
+    ),
+    ADMIN_SETTINGS_NOTIFICATIONS_KEY: BusinessRuleDefinition(
+        key=ADMIN_SETTINGS_NOTIFICATIONS_KEY,
+        domain="admin_settings",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_ADMIN_NOTIFICATION_SETTINGS,
+        type="settings_json",
+        range_or_allowlist={
+            "email_notifications": [
+                "user_registration_admin",
+                "system_exception_alert",
+                "weekly_report",
+                "knowledge_base_update",
+            ],
+        },
+        read_path="admin.api.settings.get_admin_settings_surface:notifications",
+        admin_entry="/admin/settings?tab=notifications",
+        permission="admin_settings_manage",
+        audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled defaults; disabled active config prevents notification automation from enabling new sends",
+        rollback_policy="restore a prior archived/published notification settings version",
     ),
 }
 

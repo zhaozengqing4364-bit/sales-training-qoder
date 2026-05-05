@@ -7,6 +7,9 @@ from typing import Any
 
 from common.business_rules.defaults import (
     ACHIEVEMENT_RULES_KEY,
+    ADMIN_SETTINGS_GENERAL_KEY,
+    ADMIN_SETTINGS_NOTIFICATIONS_KEY,
+    ADMIN_SETTINGS_SECURITY_KEY,
     AI_COACH_RULES_KEY,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
     OBJECTION_LEDGER_RULES_KEY,
@@ -38,6 +41,12 @@ def validate_business_rule_value(key: str, value: dict[str, Any]) -> dict[str, A
         return _validate_sales_combination_ruleset(value)
     if key == OBJECTION_LEDGER_RULES_KEY:
         return _validate_objection_ledger_ruleset(value)
+    if key == ADMIN_SETTINGS_GENERAL_KEY:
+        return _validate_admin_general_settings(value)
+    if key == ADMIN_SETTINGS_SECURITY_KEY:
+        return _validate_admin_security_settings(value)
+    if key == ADMIN_SETTINGS_NOTIFICATIONS_KEY:
+        return _validate_admin_notification_settings(value)
     raise BusinessRuleValidationError(f"unsupported business rule key: {key}")
 
 
@@ -484,6 +493,92 @@ def _validate_objection_ledger_ruleset(value: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _validate_admin_general_settings(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    normalized["platform_name"] = _required_string(
+        normalized,
+        "platform_name",
+        max_length=120,
+    )
+    normalized["support_email"] = _required_string(
+        normalized,
+        "support_email",
+        max_length=255,
+    )
+    if "@" not in normalized["support_email"]:
+        raise BusinessRuleValidationError("support_email must be a valid email")
+    normalized["welcome_message"] = _required_string(
+        normalized,
+        "welcome_message",
+        max_length=500,
+    )
+    normalized["default_language"] = _one_of(
+        normalized.get("default_language", "zh-CN"),
+        field="default_language",
+        allowed={"zh-CN", "en-US"},
+    )
+    normalized["timezone"] = _one_of(
+        normalized.get("timezone", "Asia/Shanghai"),
+        field="timezone",
+        allowed={"Asia/Shanghai", "UTC"},
+    )
+    normalized["date_format"] = _one_of(
+        normalized.get("date_format", "YYYY-MM-DD"),
+        field="date_format",
+        allowed={"YYYY-MM-DD", "MM/DD/YYYY"},
+    )
+    return normalized
+
+
+def _validate_admin_security_settings(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    normalized["enforce_admin_2fa"] = bool(normalized.get("enforce_admin_2fa", True))
+    normalized["new_device_login_alert"] = bool(
+        normalized.get("new_device_login_alert", True)
+    )
+    normalized["password_min_length"] = _integer_range(
+        normalized.get("password_min_length", 8),
+        field="password_min_length",
+        minimum=8,
+        maximum=128,
+    )
+    normalized["password_expiry_days"] = _integer_range(
+        normalized.get("password_expiry_days", 90),
+        field="password_expiry_days",
+        minimum=0,
+        maximum=365,
+    )
+    return normalized
+
+
+def _validate_admin_notification_settings(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    email_notifications = normalized.get("email_notifications")
+    if not isinstance(email_notifications, dict):
+        raise BusinessRuleValidationError("email_notifications must be an object")
+    allowed = {
+        "user_registration_admin",
+        "system_exception_alert",
+        "weekly_report",
+        "knowledge_base_update",
+    }
+    normalized["email_notifications"] = {
+        key: bool(email_notifications.get(key, False)) for key in sorted(allowed)
+    }
+    unknown = set(email_notifications) - allowed
+    if unknown:
+        raise BusinessRuleValidationError(
+            f"unsupported email notification keys: {', '.join(sorted(unknown))}"
+        )
+    return normalized
+
+
 def _score(value: Any, *, field: str) -> float:
     try:
         score = float(value)
@@ -492,6 +587,35 @@ def _score(value: Any, *, field: str) -> float:
     if score < 0 or score > 100:
         raise BusinessRuleValidationError(f"{field} must be within [0, 100]")
     return round(score, 2)
+
+
+def _integer_range(
+    value: Any,
+    *,
+    field: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError) as exc:
+        raise BusinessRuleValidationError(f"{field} must be an integer") from exc
+    if normalized < minimum or normalized > maximum:
+        raise BusinessRuleValidationError(
+            f"{field} must be within [{minimum}, {maximum}]"
+        )
+    return normalized
+
+
+def _one_of(value: Any, *, field: str, allowed: set[str]) -> str:
+    if not isinstance(value, str):
+        raise BusinessRuleValidationError(f"{field} must be a string")
+    normalized = value.strip()
+    if normalized not in allowed:
+        raise BusinessRuleValidationError(
+            f"{field} must be one of {', '.join(sorted(allowed))}"
+        )
+    return normalized
 
 
 def _non_empty_string_list(value: Any, *, field: str) -> list[str]:

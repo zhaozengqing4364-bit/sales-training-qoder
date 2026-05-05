@@ -54,7 +54,7 @@ pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=src --cov-report=html --cov-report=term-missing --import-mode=importlib"
+addopts = "-v --cov=src --cov-report=html --cov-report=term-missing --cov-fail-under=48 --import-mode=importlib"
 markers = [
     "contract: API contract tests",
     "integration: Integration tests",

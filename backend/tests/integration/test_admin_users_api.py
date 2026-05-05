@@ -21,6 +21,7 @@ from sqlalchemy.orm import sessionmaker
 
 from admin.api.admin import router as admin_presentations_router
 from admin.api.analytics import router as admin_analytics_router
+from admin.api.governance import router as admin_governance_router
 from admin.api.release_verification import router as release_verification_router
 from admin.api.security_inventory import (
     ADMIN_PERMISSION_POSITIVE_CONTROL,
@@ -55,6 +56,7 @@ ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS = (
     ("admin.api.analytics", admin_analytics_router, "/api/v1/admin/analytics/overview"),
     ("admin.api.system_logs", admin_system_logs_router, "/api/v1/admin/system-logs"),
     ("admin.api.training_records", admin_training_records_router, "/api/v1/admin/training-records"),
+    ("admin.api.governance", admin_governance_router, "/api/v1/governance/permissions-matrix"),
     (
         "admin.api.release_verification",
         release_verification_router,

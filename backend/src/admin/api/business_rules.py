@@ -30,6 +30,11 @@ from common.db.models import BusinessRuleConfig, BusinessRuleConfigAuditLog, Use
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 
+from admin.api.permissions import (
+    BUSINESS_RULE_PUBLISH_PERMISSION,
+    require_admin_permission,
+)
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/business-rules", tags=["admin-business-rules"])
@@ -450,7 +455,9 @@ async def preview_sales_combination_ruleset(
 async def publish_sales_combination_ruleset(
     ruleset_id: str,
     payload: BusinessRulePublishRequest,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
@@ -489,7 +496,9 @@ async def publish_sales_combination_ruleset(
 async def rollback_sales_combination_ruleset(
     ruleset_id: str,
     payload: BusinessRuleRollbackRequest,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
@@ -643,7 +652,9 @@ async def preview_business_rule(
 async def publish_business_rule(
     config_key: str,
     payload: BusinessRulePublishRequest,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
@@ -674,7 +685,9 @@ async def publish_business_rule(
 async def rollback_business_rule(
     config_key: str,
     payload: BusinessRuleRollbackRequest,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
@@ -706,7 +719,9 @@ async def rollback_business_rule(
 async def disable_business_rule(
     config_key: str,
     payload: BusinessRuleDisableRequest,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)
@@ -728,7 +743,9 @@ async def disable_business_rule(
 async def delete_business_rule_draft(
     config_id: str,
     payload: BusinessRuleDeleteDraftRequest | None = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(BUSINESS_RULE_PUBLISH_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = BusinessRuleConfigService(db)

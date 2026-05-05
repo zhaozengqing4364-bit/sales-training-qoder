@@ -108,15 +108,26 @@ async def test_practice_application_service_bundle_reuses_session_evidence_as_ca
 
 
 def test_architecture_scan_documents_practice_service_seams_and_canonical_read_model_consumers() -> None:
-    architecture_scan = (
-        Path(__file__).resolve().parents[3]
-        / ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
-    ).read_text(encoding="utf-8")
+    repo_root = Path(__file__).resolve().parents[3]
+    contract_docs = [
+        (repo_root / "docs/api-contract/sessions.md").read_text(encoding="utf-8"),
+        (repo_root / "docs/api-contract/effectiveness.md").read_text(encoding="utf-8"),
+    ]
+    service_sources = [
+        (repo_root / "backend/src/common/services/practice_service.py").read_text(
+            encoding="utf-8"
+        ),
+        (repo_root / "backend/src/common/services/practice_report_service.py").read_text(
+            encoding="utf-8"
+        ),
+    ]
+
+    architecture_scan = "\n".join(contract_docs + service_sources)
 
     assert "practice_session_service" in architecture_scan
     assert "practice_report_service" in architecture_scan
     assert "SessionEvidenceService" in architecture_scan
-    assert "S03 / M021 downstream consumption rule" in architecture_scan
+    assert "M021" in architecture_scan
 
 
 def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:

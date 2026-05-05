@@ -17,6 +17,10 @@ import pytest
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+NFR_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "nfr-performance-check.yml"
+
 
 class TestNFRCIWorkflow:
     """Test NFR CI/CD workflow integration."""
@@ -28,7 +32,7 @@ class TestNFRCIWorkflow:
         Verify that the GitHub Actions workflow file for NFR
         validation exists and contains required jobs.
         """
-        workflow_path = Path(__file__).parent.parent.parent / ".github" / "workflows" / "nfr-performance-check.yml"
+        workflow_path = NFR_WORKFLOW_PATH
 
         assert workflow_path.exists(), f"CI workflow file not found: {workflow_path}"
 
@@ -37,12 +41,28 @@ class TestNFRCIWorkflow:
         # Check for required sections
         assert "nfr-performance-validation" in workflow_content
         assert "load-testing" in workflow_content
-        assert "nfr-performance-tests" in workflow_content
+        assert "Run NFR performance tests" in workflow_content
 
-        # Check for performance thresholds
-        assert "300ms" in workflow_content  # E2E latency
-        assert "100ms" in workflow_content  # WebSocket
-        assert "200ms" in workflow_content  # ASR
+        # Threshold values are centralized in NFRReporter instead of duplicated
+        # as workflow literals.
+        assert "NFRReporter" in workflow_content
+        assert "failed_metrics" in workflow_content
+
+    def test_ci_workflow_uses_real_nfr_results_instead_of_report_existence(self) -> None:
+        """NFR gate must fail on failed metrics, not on synthetic report presence."""
+        workflow_path = (
+            NFR_WORKFLOW_PATH
+        )
+        workflow_content = workflow_path.read_text()
+
+        assert "failed_metrics = int(summary.get('failed_metrics') or 0)" in workflow_content
+        assert "if failed_metrics:" in workflow_content
+        assert "sys.exit(1)" in workflow_content
+        assert "All performance thresholds validated" not in workflow_content
+        assert "'targets': {" not in workflow_content
+        assert "skip_classification" in workflow_content
+        assert "provider_unavailable" in workflow_content
+        assert "infra_missing" in workflow_content
 
     def test_nfr_reporter_module_exists(self) -> None:
         """
@@ -74,7 +94,7 @@ class TestNFRCIWorkflow:
         Verify that the bash script for running NFR tests
         exists and is executable.
         """
-        runner_path = Path(__file__).parent.parent / "scripts" / "run_nfr_tests.sh"
+        runner_path = BACKEND_ROOT / "tests" / "scripts" / "run_nfr_tests.sh"
 
         assert runner_path.exists(), f"NFR runner script not found: {runner_path}"
 
@@ -83,6 +103,14 @@ class TestNFRCIWorkflow:
         import os
         if os.name != "nt":
             assert os.access(runner_path, os.X_OK), "NFR runner script is not executable"
+
+    def test_nfr_runner_does_not_swallow_pytest_failures(self) -> None:
+        """Runner modes must propagate pytest nonzero exits."""
+        runner_path = BACKEND_ROOT / "tests" / "scripts" / "run_nfr_tests.sh"
+        content = runner_path.read_text()
+
+        assert "|| true" not in content
+        assert "--no-cov -q" in content
 
     def test_nfr_threshold_definitions(self) -> None:
         """

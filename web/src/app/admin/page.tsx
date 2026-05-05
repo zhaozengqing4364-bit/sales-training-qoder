@@ -122,13 +122,13 @@ export default function AdminDashboardPage() {
             <GlassCard className="p-5 border border-amber-100/70 bg-amber-50/60">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">管理首页真实度说明</h2>
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">管理首页数据来源说明</h2>
                         <p className="mt-2 text-sm text-slate-700 text-pretty">
                             当前只有上方“训练效果核心看板（近7天）”直接读取 <code>api.internal.health()</code> 与 <code>api.analyticsOpen.getDashboard()</code>。
-                            以下卡片当前只作为 manager/admin truth surface inventory，用来标记还未接上真实 authority 的组织、资源与运维面。
+                            以下卡片当前只保留为待接入清单，用来标记还未接上正式数据来源的组织、资源与运维面。
                         </p>
                     </div>
-                    <Badge variant="secondary">其余卡片已降级为 inventory</Badge>
+                    <Badge variant="secondary">其余卡片待接数据源</Badge>
                 </div>
             </GlassCard>
 
@@ -139,7 +139,7 @@ export default function AdminDashboardPage() {
                             <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">总用户数</div>
                             <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
                             <p className="text-sm text-slate-500 text-pretty">
-                                首页当前没有统一的总用户 authority；如果恢复该卡片，应先明确是复用用户集合还是 admin analytics 的 cohort 统计。
+                                首页当前没有统一的总用户数据源；如果恢复该卡片，应先明确是复用用户集合还是管理分析的 cohort 统计。
                             </p>
                         </div>
                         <Users className="w-10 h-10 text-slate-300" />
@@ -177,7 +177,7 @@ export default function AdminDashboardPage() {
                                 {liveMetrics.backendStatus === "online" ? "仅后端状态已接通" : liveMetrics.backendStatus === "offline" ? "后端离线" : "状态未知"}
                             </div>
                             <p className="mt-4 text-sm text-slate-500 text-pretty">
-                                首页目前只保留后端在线 / 离线这一条真实信号；CPU、内存、数据库延迟与主机资源仍未接入统一 authority。
+                                首页目前只保留后端在线 / 离线这一条真实信号；CPU、内存、数据库延迟与主机资源仍未接入统一数据源。
                             </p>
                         </div>
                         <Server className="w-10 h-10 text-slate-300" />
@@ -195,10 +195,10 @@ export default function AdminDashboardPage() {
                     <div>
                         <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">当前真实管理入口</h2>
                         <p className="mt-2 text-sm text-slate-700 text-pretty">
-                            直接进入当前已接真实 authority 的管理面，不再在首页伪装表单、日志控制台或自动告警。
+                            直接进入当前已接正式数据源的管理面；首页不提供未接通的表单、日志控制台或自动告警。
                         </p>
                     </div>
-                    <Badge variant="green">live authority only</Badge>
+                    <Badge variant="green">已接数据源</Badge>
                 </div>
                 <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <GlassCard className="p-5 border border-white/80 bg-white/80">
@@ -251,12 +251,12 @@ export default function AdminDashboardPage() {
             <GlassCard className="p-6 border border-slate-200/70 bg-slate-50/70">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">仍为 inventory 的管理面</h2>
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">待接入的管理面</h2>
                         <p className="mt-2 text-sm text-slate-600 text-pretty">
-                            这些区域当前仍然没有统一 authority；首页只保留缺口说明，避免误导主管把草拟 UI 当成已经接通的系统能力。
+                            这些区域当前仍然没有统一数据源；首页只保留缺口说明，避免误导主管把草拟 UI 当成已经接通的系统能力。
                         </p>
                     </div>
-                    <Badge variant="secondary">inventory only</Badge>
+                    <Badge variant="secondary">待接入</Badge>
                 </div>
                 <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <GlassCard className="p-5 border border-dashed border-slate-200 bg-white/80">
@@ -264,7 +264,7 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">首页动作编排</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    公告发布、批量动作、配置快捷入口等还没有一条首页级 authority；当前只保留到真实管理面的跳转，不再假装本页已经具备这些操作流。
+                                    公告发布、批量动作、配置快捷入口等还没有一条首页级数据源；当前只保留到真实管理面的跳转。
                                 </p>
                             </div>
                             <Activity className="w-5 h-5 text-slate-400" />
@@ -276,7 +276,7 @@ export default function AdminDashboardPage() {
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">统一告警与动态</h3>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    当前仓库还没有一条可直接复用到首页的统一告警 / 动态 authority；如果未来恢复，应先明确事件来源、过滤口径和 operator 响应动作。
+                                    当前仓库还没有一条可直接复用到首页的统一告警 / 动态数据源；如果未来恢复，应先明确事件来源、过滤口径和 operator 响应动作。
                                 </p>
                             </div>
                             <Server className="w-5 h-5 text-slate-400" />
@@ -289,7 +289,7 @@ export default function AdminDashboardPage() {
                                 <h3 className="text-base font-bold text-slate-900">存储与资源遥测</h3>
                                 <div className="mt-2 text-2xl font-black text-slate-900">待接真实统计</div>
                                 <p className="mt-2 text-sm text-slate-600 text-pretty">
-                                    首页当前没有统一的磁盘、对象存储或备份容量 authority；在真实 telemetry 接通之前，这块继续保留为 inventory，不再展示容量、百分比或扩容建议。
+                                    首页当前没有统一的磁盘、对象存储或备份容量数据源；在真实遥测接通之前，这块只保留待接说明，不展示容量、百分比或扩容建议。
                                 </p>
                             </div>
                             <HardDrive className="w-5 h-5 text-slate-400" />
@@ -300,9 +300,9 @@ export default function AdminDashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <GlassCard className="p-6 border border-slate-200/70">
-                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">首页后续 truth surface</h2>
+                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">首页后续数据面</h2>
                     <p className="mt-3 text-sm text-slate-600 text-pretty">
-                        若后续要恢复首页级组织运营卡片，必须先明确复用哪条 backend authority，并让 admin home 只做 read-side 展示，不能再在本地维护第二套统计口径。
+                        若后续要恢复首页级组织运营卡片，必须先明确复用哪条后端数据源，并让管理首页只做读侧展示，不能再在本地维护第二套统计口径。
                     </p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 list-disc pl-5">
                         <li>组织侧统计优先复用 <code>/admin/users</code> 或 <code>/admin/analytics</code> 的真实集合。</li>
@@ -314,7 +314,7 @@ export default function AdminDashboardPage() {
                 <GlassCard className="p-6 border border-slate-200/70">
                     <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">首页不再承担的职责</h2>
                     <p className="mt-3 text-sm text-slate-600 text-pretty">
-                        首页只负责显示当前已接通的极少数 live authority 与尚未 truthify 的缺口，不再伪装实时运营、配置控制台、动态流或告警面已经建成。
+                        首页只负责显示当前已接通的极少数实时数据与尚未接通的缺口，不展示尚未建成的实时运营、配置控制台、动态流或告警面。
                     </p>
                     <div className="mt-5 flex flex-wrap gap-3">
                         <Badge variant="secondary">不再展示示意日志</Badge>

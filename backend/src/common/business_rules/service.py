@@ -11,6 +11,9 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.business_rules.defaults import (
+    ADMIN_SETTINGS_GENERAL_KEY,
+    ADMIN_SETTINGS_NOTIFICATIONS_KEY,
+    ADMIN_SETTINGS_SECURITY_KEY,
     OBJECTION_LEDGER_RULES_KEY,
     SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
@@ -765,6 +768,38 @@ class BusinessRuleConfigService:
                 "ack_pattern_count": len(value.get("ack_patterns") or []),
                 "admin_entry": get_business_rule_definition(key).admin_entry,
                 "fallback_policy": get_business_rule_definition(key).fallback_policy,
+            }
+        if key == ADMIN_SETTINGS_GENERAL_KEY:
+            return {
+                "enabled": value.get("enabled") is not False,
+                "settings_version": value.get("version"),
+                "platform_name": value.get("platform_name"),
+                "support_email": value.get("support_email"),
+                "timezone": value.get("timezone"),
+                "date_format": value.get("date_format"),
+            }
+        if key == ADMIN_SETTINGS_SECURITY_KEY:
+            return {
+                "enabled": value.get("enabled") is not False,
+                "settings_version": value.get("version"),
+                "enforce_admin_2fa": bool(value.get("enforce_admin_2fa")),
+                "new_device_login_alert": bool(value.get("new_device_login_alert")),
+                "password_min_length": value.get("password_min_length"),
+                "password_expiry_days": value.get("password_expiry_days"),
+            }
+        if key == ADMIN_SETTINGS_NOTIFICATIONS_KEY:
+            notifications = value.get("email_notifications")
+            notification_count = len(notifications) if isinstance(notifications, dict) else 0
+            enabled_count = (
+                sum(1 for enabled in notifications.values() if enabled)
+                if isinstance(notifications, dict)
+                else 0
+            )
+            return {
+                "enabled": value.get("enabled") is not False,
+                "settings_version": value.get("version"),
+                "email_notification_count": notification_count,
+                "enabled_email_notification_count": enabled_count,
             }
         raw_recommendation_dimensions = value.get("dimensions")
         recommendation_dimensions: dict[str, Any] = (
