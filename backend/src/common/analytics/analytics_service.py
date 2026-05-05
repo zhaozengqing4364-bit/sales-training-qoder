@@ -9,6 +9,7 @@ Implements Constitution Principles:
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -139,7 +140,7 @@ class AnalyticsService:
 
             effective_rows = (await db.execute(effective_sessions_query)).all()
 
-            evaluable_rows: list[tuple] = []
+            evaluable_rows: list[Any] = []
             pass_3_count = 0
             pass_5_count = 0
             pass_4_count = 0

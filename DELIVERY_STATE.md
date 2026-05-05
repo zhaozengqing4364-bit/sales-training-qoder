@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 DB session startup guard typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2298 errors in 99 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 analytics service row typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2294 errors in 98 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -102,6 +102,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: PPT progress source marker, user/presentation isolation query, minimum page rule, presentation existence check, total-page upper bound, saved fields, commit/refresh flow, rollback behavior, error codes, and user-facing fallback messages were not added or changed.
 - Latest typed boundary: DB session startup guard signatures in `common.db.session` are typed as startup/schema compatibility function contracts, not business configuration.
 - Latest unchanged business logic: database URL default, SQLite engine branching, pool options, startup repair environment allowlist, guarded report/evaluation table names, required/legacy column/index sets, Alembic/repair entrypoint copy, schema-drift RuntimeError messages, persona policy compatibility behavior, knowledge document compatibility behavior, and session rollback/close semantics were not added or changed.
+- Latest typed boundary: analytics service SQLAlchemy row collection contracts in `common.analytics.analytics_service` are typed as runtime row attribute boundaries, not business configuration.
+- Latest unchanged business logic: analytics time window default, completed-session filters, scenario filters, scoring weights, effectiveness pass-flag names, evaluability filter, 24-to-48-hour retry window, percentage rounding, default zero values, dashboard stat fields, and failure fallback codes were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -218,6 +220,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Presentation AI policy API return typing | `./.venv-test/bin/mypy src/admin/api/presentation_ai.py` now has no direct `src/admin/api/presentation_ai.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2306 errors in 101 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_presentation_ai_policy_service.py tests/unit/common/test_route_integrity.py -q --no-cov` | Phase 1.3 presentation AI policy API return typing commit |
 | 2026-05-06 | Phase 1.3 | User presentation progress update typing | `./.venv-test/bin/mypy src/presentation_coach/services/user_presentation_progress.py` now has no direct `src/presentation_coach/services/user_presentation_progress.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2302 errors in 100 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/presentation_coach/test_user_presentation_progress.py -q --no-cov` | Phase 1.3 user presentation progress update typing commit |
 | 2026-05-06 | Phase 1.3 | DB session startup guard typing | `./.venv-test/bin/mypy src/common/db/session.py` now has no direct `src/common/db/session.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2298 errors in 99 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_db_session_compatibility.py tests/integration/test_startup_or_bootstrap_authority.py -q --no-cov` | Phase 1.3 DB session startup guard typing commit |
+| 2026-05-06 | Phase 1.3 | Analytics service row typing | `./.venv-test/bin/mypy src/common/analytics/analytics_service.py` now has no direct `src/common/analytics/analytics_service.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2294 errors in 98 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_analytics_api_normalization.py tests/unit/common/test_admin_analytics_service.py -q --no-cov` | Phase 1.3 analytics service row typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -228,6 +231,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2294 errors in 98 files after typing the analytics service row boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2298 errors in 99 files after typing the DB session startup guard signatures. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2302 errors in 100 files after typing the user presentation progress update boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2306 errors in 101 files after typing the presentation AI policy API return boundary. Phase 1.4 was not advanced.
