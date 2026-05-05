@@ -6,7 +6,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,7 +67,7 @@ class RuntimeStatusService:
 
     async def get_overview(self, *, window_hours: int = 24) -> dict[str, Any]:
         snapshot = await self._build_release_health_snapshot(window_hours=window_hours)
-        return snapshot["overview"]
+        return cast(dict[str, Any], snapshot["overview"])
 
     async def get_faults(
         self,
@@ -288,13 +288,15 @@ class RuntimeStatusService:
                 latest_document = max(
                     documents,
                     key=lambda document: (
-                        self._coerce_datetime(document.created_at)
+                        self._coerce_datetime(getattr(document, "created_at", None))
                         or datetime.min.replace(tzinfo=UTC)
                     ),
                     default=None,
                 )
                 latest_document_created_at = (
-                    self._coerce_datetime(latest_document.created_at)
+                    self._coerce_datetime(
+                        getattr(latest_document, "created_at", None)
+                    )
                     if latest_document is not None
                     else None
                 )
@@ -313,15 +315,14 @@ class RuntimeStatusService:
                     latest_change_type = "document_uploaded"
                     latest_change_label = f"最近文档：{latest_document.title}"
 
-                change_count_7d = sum(
-                    1
-                    for document in documents
-                    if (
-                        self._coerce_datetime(document.created_at)
+                change_count_7d = 0
+                for document in documents:
+                    document_created_at = (
+                        self._coerce_datetime(getattr(document, "created_at", None))
                         or datetime.min.replace(tzinfo=UTC)
                     )
-                    >= seven_days_ago
-                )
+                    if document_created_at >= seven_days_ago:
+                        change_count_7d += 1
                 if kb_updated_at is not None and kb_updated_at >= seven_days_ago:
                     change_count_7d += 1
 
