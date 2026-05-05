@@ -19,6 +19,7 @@ References:
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 import time
 from typing import Any
@@ -120,9 +121,8 @@ class CrossEncoderReranker:
         if self._model_failed:
             return False
         try:
-            from sentence_transformers import (
-                CrossEncoder,  # type: ignore[import-untyped]
-            )
+            sentence_transformers = importlib.import_module("sentence_transformers")
+            CrossEncoder = getattr(sentence_transformers, "CrossEncoder")
 
             self._model = CrossEncoder(
                 self.model_name,
