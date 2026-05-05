@@ -4,19 +4,25 @@ Regex-based forbidden phrase detection
 """
 
 import re
+from typing import Any, TypedDict
 
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 
 
+class _ForbiddenPatternConfig(TypedDict):
+    pattern: re.Pattern[str]
+    suggested: str
+
+
 class ForbiddenWordMatcher:
     """Matches forbidden words/phrases in speech transcript"""
 
-    def __init__(self):
-        self.patterns = {}
+    def __init__(self) -> None:
+        self.patterns: dict[str, _ForbiddenPatternConfig] = {}
 
-    def add_patterns(self, words: list[dict]) -> None:
+    def add_patterns(self, words: list[dict[str, Any]]) -> None:
         """
         Add forbidden word patterns
 
