@@ -102,7 +102,7 @@ class LogSanitizer:
         if not isinstance(data, dict):
             return data
 
-        result = {}
+        result: dict[str, Any] = {}
         for key, value in data.items():
             key_lower = key.lower()
 
@@ -121,9 +121,9 @@ class LogSanitizer:
         return result
 
     @classmethod
-    def _sanitize_list(cls, items: list) -> list:
+    def _sanitize_list(cls, items: list[Any]) -> list[Any]:
         """Sanitize a list of items"""
-        result = []
+        result: list[Any] = []
         for item in items:
             if isinstance(item, dict):
                 result.append(cls.sanitize_dict(item))
@@ -175,7 +175,11 @@ class LogSanitizer:
 
 
 # Convenience function for structlog integration
-def sanitize_processor(logger, method_name, event_dict):
+def sanitize_processor(
+    logger: Any,
+    method_name: str,
+    event_dict: dict[str, Any],
+) -> dict[str, Any]:
     """
     Structlog processor for log sanitization
 
