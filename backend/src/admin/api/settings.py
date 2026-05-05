@@ -29,7 +29,6 @@ from common.business_rules.defaults import (
 from common.business_rules.service import BusinessRuleConfigService
 from common.business_rules.validators import (
     BusinessRuleValidationError,
-    validate_business_rule_value,
 )
 from common.db.models import BusinessRuleConfig, BusinessRuleConfigAuditLog, User
 from common.db.session import get_db

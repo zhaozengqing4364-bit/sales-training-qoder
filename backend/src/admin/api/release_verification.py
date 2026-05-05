@@ -18,17 +18,16 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from admin.api.permissions import (
+    RELEASE_VERIFICATION_MANAGE_PERMISSION,
+    require_admin_permission,
+)
 from common.analytics.release_verification_service import (
     release_verification_service,
 )
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
-
-from admin.api.permissions import (
-    RELEASE_VERIFICATION_MANAGE_PERMISSION,
-    require_admin_permission,
-)
 
 logger = get_logger(__name__)
 

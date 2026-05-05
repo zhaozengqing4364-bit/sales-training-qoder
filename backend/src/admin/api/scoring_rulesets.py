@@ -11,6 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from admin.api.permissions import (
+    SCORING_RULESET_MANAGE_PERMISSION,
+    require_admin_permission,
+)
 from common.api.response import error_response
 from common.api.server_error import build_server_error
 from common.db.models import SystemLog, User
@@ -20,11 +24,6 @@ from common.effectiveness.scoring_rulesets import (
     ScoringRulesetService,
 )
 from common.monitoring.logger import get_trace_id
-
-from admin.api.permissions import (
-    SCORING_RULESET_MANAGE_PERMISSION,
-    require_admin_permission,
-)
 
 router = APIRouter(
     prefix="/admin/scoring-rulesets",

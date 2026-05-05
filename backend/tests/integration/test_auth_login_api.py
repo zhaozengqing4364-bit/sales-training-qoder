@@ -10,11 +10,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import httpx
 import pytest
 from sqlalchemy import func, select, text
-from urllib.parse import parse_qs, urlparse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests

@@ -4,6 +4,7 @@ from collections import Counter
 from pathlib import Path
 
 import yaml
+
 from main import app
 
 IGNORED_METHODS = {"HEAD", "OPTIONS"}

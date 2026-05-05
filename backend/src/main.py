@@ -9,11 +9,10 @@ import sys
 
 from dotenv import load_dotenv
 
-from app_factory import APP_TITLE, APP_VERSION, create_app
-from app_lifespan import lifespan as _factory_lifespan
-
 # Backward compatibility shim: main is imported directly by tooling/tests.
 import websocket_routes as _presentation_websocket_routes
+from app_factory import create_app
+from app_lifespan import lifespan as _factory_lifespan
 
 load_dotenv()
 sys.path.insert(0, os.path.dirname(__file__))

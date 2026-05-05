@@ -261,6 +261,12 @@ const baseReport = {
     evidence_degradation: baseEvidenceDegradation,
 };
 
+const baseMainIssue = {
+    issue_type: "insufficient_turns",
+    issue_text: "有效回合不足，无法判断完整销售闭环。",
+    recovery_rule: "至少完成 3 轮有效问答。",
+};
+
 const baseReplayData = {
     session_id: "session-1",
     agent_name: "销售教练",
@@ -857,7 +863,7 @@ describe("ReportPage", () => {
         getReplayMock.mockResolvedValue({
             ...baseReplayData,
             main_issue: {
-                ...baseReplayData.main_issue,
+                ...(baseReplayData.main_issue ?? baseMainIssue),
                 issue_type: "evidence_gap",
                 issue_text: "价值主张缺少案例、数据或数字。",
                 recovery_rule: "下一轮先给出一条可检验证据。",
@@ -1690,8 +1696,8 @@ describe("ReportPage", () => {
                     reason: "low_evidence_score",
                     evidence_score: 63,
                 },
+                retrieval_facts: baseRetrievalFacts,
             },
-            retrieval_facts: baseRetrievalFacts,
         });
         getComprehensiveReportMock.mockResolvedValue({
             session_id: "session-1",

@@ -13,8 +13,9 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [x] Generate `api_routing_audit.md` with OpenAPI paths, router sources, permission dependencies, and frontend call mapping.
 - [x] Fix unmounted or wrongly mounted backend routes.
 - [x] Fix frontend/backend API contract mismatches.
-- [ ] Fix frontend/backend lint errors.
-- [ ] Fix TypeScript type errors.
+- [x] Fix frontend/backend lint errors.
+- [x] Fix TypeScript type errors.
+- [ ] Resolve backend mypy baseline blocker.
 - [ ] Configure Vitest to isolate `node_modules`.
 - [ ] Raise overall coverage to at least 60%.
 - [ ] Raise `scoring`, `auth`, and `practice` coverage to at least 70%.
@@ -58,4 +59,4 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 
 ## Review
 
-- Pending.
+- 2026-05-06 Phase 1.3: backend `ruff check src tests`, frontend `npx eslint . --quiet`, frontend `npx tsc --noEmit`, and targeted touched-file tests passed. Backend mypy is paused as a blocker: direct `mypy src` fails package discovery, while `MYPYPATH=src mypy --explicit-package-bases src` reports 2430 errors in 164 files.

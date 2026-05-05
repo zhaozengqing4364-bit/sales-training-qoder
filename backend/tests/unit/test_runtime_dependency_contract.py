@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parents[3]
 BACKEND_REQUIREMENTS = ROOT_DIR / "backend" / "requirements.txt"
 

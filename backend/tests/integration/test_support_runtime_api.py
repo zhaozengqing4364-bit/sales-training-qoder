@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import support.api.runtime_status as runtime_status_api
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import (
@@ -20,7 +21,6 @@ from common.db.models import (
     Scenario,
     User,
 )
-import support.api.runtime_status as runtime_status_api
 
 
 async def _create_user(

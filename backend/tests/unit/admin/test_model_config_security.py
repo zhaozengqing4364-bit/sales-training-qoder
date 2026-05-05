@@ -1,11 +1,10 @@
 import socket
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 
 from admin.api import model_configs
-from common.ai.models import ModelConfig, ModelProvider, ModelType
+from common.ai.models import ModelProvider, ModelType
 
 
 def _addrinfo(ip: str):

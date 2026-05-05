@@ -2,11 +2,9 @@
 Integration tests for Prompt Templates API role permissions.
 """
 
-import json
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
