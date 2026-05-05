@@ -82,7 +82,8 @@ class SilentUndefined(Undefined):
     def __getattr__(self, name: str) -> SilentUndefined:
         return SilentUndefined(name=f"{self._undefined_name}.{name}")
 
-    def __getitem__(self, key: str) -> SilentUndefined:
+    def __getitem__(self, *args: Any, **kwargs: Any) -> Any:
+        key = args[0] if args else ""
         return SilentUndefined(name=f"{self._undefined_name}[{key}]")
 
 
@@ -96,7 +97,7 @@ class PromptRenderer:
     - Security sandboxing
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize renderer with sandboxed Jinja2 environment."""
         # Use sandboxed environment for security
         self.env = SandboxedEnvironment(
