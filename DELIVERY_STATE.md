@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 AI scoring dict boundary typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2326 errors in 106 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 Aho matcher annotation typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2322 errors in 105 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -88,6 +88,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: realtime feedback primary-source selection, severity priority, score priority, action-card generation inputs, duplicate suppression, action signature construction, and preserved context payloads were not added or changed.
 - Latest typed boundary: AIScoringService dict and Result value contracts in `evaluation.services.ai_scoring` are typed as code-level JSON/runtime result boundaries, not business configuration.
 - Latest unchanged business logic: scoring dimensions, dimension weights, scoring prompt text, system message, JSON code-block extraction, default score values, feedback fallback copy, strengths/improvements defaults, and scoring error codes were not added or changed.
+- Latest typed boundary: Aho-Corasick matcher node, queue, and constructor contracts in `presentation_coach.services.aho_matcher` are typed as code-level algorithm internals, not business configuration.
+- Latest unchanged business logic: forbidden-word data sources, exact/regex matching strategy, failure-link traversal, match ordering, unique-match deduplication, default suggestion copy, severity values, and emitted match fields were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -197,6 +199,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Capability processor TypedDict boundary typing | `./.venv-test/bin/mypy src/sales_bot/websocket/components/capability_processor.py` now has no direct `src/sales_bot/websocket/components/capability_processor.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2333 errors in 108 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_capability_processor.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_effectiveness_sales_coaching_focus.py -q --no-cov` | Phase 1.3 capability processor TypedDict boundary commit |
 | 2026-05-06 | Phase 1.3 | Realtime feedback arbiter context typing | `./.venv-test/bin/mypy src/sales_bot/websocket/realtime_feedback_arbiter.py` now has no direct `src/sales_bot/websocket/realtime_feedback_arbiter.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2329 errors in 107 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py::test_run_realtime_feedback_keeps_single_action_card_and_prioritizes_score_over_low_severity_fuzzy_detection tests/unit/test_stepfun_realtime_handler.py::test_run_realtime_feedback_suppresses_duplicate_action_card_for_same_turn -q --no-cov` | Phase 1.3 realtime feedback arbiter context typing commit |
 | 2026-05-06 | Phase 1.3 | AI scoring dict boundary typing | `./.venv-test/bin/mypy src/evaluation/services/ai_scoring.py` now has no direct `src/evaluation/services/ai_scoring.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2326 errors in 106 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/evaluation/test_realtime_scoring.py -q --no-cov` | Phase 1.3 AI scoring dict boundary typing commit |
+| 2026-05-06 | Phase 1.3 | Aho matcher annotation typing | `./.venv-test/bin/mypy src/presentation_coach/services/aho_matcher.py`; `./.venv-test/bin/mypy src` now fails with 2322 errors in 105 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_presentation_feedback_service_policy.py tests/unit/test_presentation_handler_persistence.py::test_send_realtime_feedback_forbidden_word_emits_two_events -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... exact, regex, and unique matcher checks ... PY` | Phase 1.3 Aho matcher annotation typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -207,6 +210,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2322 errors in 105 files after typing the Aho matcher annotation boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2326 errors in 106 files after typing the AIScoringService dict boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2329 errors in 107 files after typing the RealtimeFeedbackArbiter context boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2333 errors in 108 files after typing the CapabilityProcessor TypedDict boundary. Phase 1.4 was not advanced.

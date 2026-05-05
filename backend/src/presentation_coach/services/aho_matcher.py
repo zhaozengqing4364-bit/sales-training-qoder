@@ -27,7 +27,7 @@ class ForbiddenWordMatch:
 class AhoCorasickNode:
     """Node in the Aho-Corasick trie"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.children: dict[str, AhoCorasickNode] = {}
         self.fail_link: AhoCorasickNode | None = None
         self.output: list[str] = []  # Patterns ending at this node
@@ -40,7 +40,7 @@ class AhoCorasickMatcher:
     Efficiently finds all occurrences of multiple patterns in text
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.root = AhoCorasickNode()
         self.patterns: dict[str, dict[str, Any]] = {}
         self._built = False
@@ -100,7 +100,7 @@ class AhoCorasickMatcher:
             return
 
         # Build failure links using BFS
-        queue = deque()
+        queue: deque[AhoCorasickNode] = deque()
 
         # Initialize depth 1 nodes' fail links to root
         for char, node in self.root.children.items():
@@ -148,7 +148,7 @@ class AhoCorasickMatcher:
         matches = []
         text_lower = text.lower()
 
-        node = self.root
+        node: AhoCorasickNode | None = self.root
         for i, char in enumerate(text_lower):
             # Follow fail links until we find a match or reach root
             while node and char not in node.children:
@@ -209,7 +209,7 @@ class HybridForbiddenMatcher:
     and regex for pattern-based matches
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.aho_matcher = AhoCorasickMatcher()
         self.regex_patterns: list[dict[str, Any]] = []
         self._fuzzy_enabled = False
