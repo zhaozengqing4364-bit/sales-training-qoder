@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 session state service typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2226 errors in 84 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 API rate limiter typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2220 errors in 83 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -132,6 +132,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: claim truth status/source/evidence-score normalization, main-issue and next-goal required fields, coach-health status/message fallback copy, KB lock timeout/pass-score defaults, retrieval ledger bounds, retrieval status derivation, runtime event merge behavior, and diagnostics response payload fields were not added or changed.
 - Latest typed boundary: session state service Redis client, lifecycle, and startup/shutdown helper contracts in `common.websocket.session_state_service` are typed as runtime infrastructure boundaries, not business configuration.
 - Latest unchanged business logic: session-state TTL default, cleanup interval default, Redis URL/key-prefix environment names, Redis key prefix default, snapshot fields, reconnect-state summary fields, operation metric names, save/get/delete behavior, healthcheck loop behavior, and lifecycle log/error semantics were not added or changed.
+- Latest typed boundary: API rate limiter cleanup and decorator contracts in `common.rate_limit.api_limiter` are typed as FastAPI infrastructure boundaries, not business configuration.
+- Latest unchanged business logic: default call limit, default period, cleanup interval, storage key format, IP/user identifier resolution, blocked-window behavior, rate-limit response code, retry-after message copy, response headers, and global limiter singleton behavior were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -263,6 +265,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | PPT version manager typing | `./.venv-test/bin/mypy src/common/ppt/version_manager.py` now has no direct `src/common/ppt/version_manager.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2239 errors in 86 files; `ruff check src/common/ppt/version_manager.py`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... PPT version history sorting/current marker/cleanup checks with current-version resolver stub ... PY` | Phase 1.3 PPT version manager typing commit |
 | 2026-05-06 | Phase 1.3 | Runtime diagnostics payload typing | `./.venv-test/bin/mypy src/common/conversation/runtime_diagnostics.py` now has no direct `src/common/conversation/runtime_diagnostics.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2232 errors in 85 files; `ruff check src/common/conversation/runtime_diagnostics.py tests/unit/test_enhanced_handler_coach_health.py tests/integration/test_voice_runtime_session_snapshot.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_enhanced_handler_coach_health.py tests/integration/test_voice_runtime_session_snapshot.py::test_knowledge_check_reports_live_coach_health_from_registered_session_handler tests/integration/test_voice_runtime_session_snapshot.py::test_retrieval_facts_hit_with_weak_evidence_claim_truth_proves_independence -q --no-cov` | Phase 1.3 runtime diagnostics payload typing commit |
 | 2026-05-06 | Phase 1.3 | Session state service typing | `./.venv-test/bin/mypy src/common/websocket/session_state_service.py` now has no direct `src/common/websocket/session_state_service.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2226 errors in 84 files; `ruff check src/common/websocket/session_state_service.py tests/unit/test_enhanced_handler_coach_health.py tests/integration/test_voice_runtime_session_snapshot.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_session_runtime_authority.py tests/integration/test_websocket_status_contract.py::test_session_state_service_stats_surface_snapshot_reconnect_signals tests/integration/test_sales_realtime_reconnect_flow.py::test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_terminal_snapshot -q --no-cov` | Phase 1.3 session state service typing commit |
+| 2026-05-06 | Phase 1.3 | API rate limiter typing | `./.venv-test/bin/mypy src/common/rate_limit/api_limiter.py`; `./.venv-test/bin/mypy src` now fails with 2220 errors in 83 files; `ruff check src/common/rate_limit/api_limiter.py tests/integration/test_auth_login_api.py tests/integration/test_password_reset_api.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_auth_login_api.py::test_forgot_password_success_includes_rate_limit_headers tests/integration/test_auth_login_api.py::test_forgot_password_rate_limit_rejects_second_request_for_same_ip tests/integration/test_password_reset_api.py::test_forgot_password_rate_limited_per_ip -q --no-cov` | Phase 1.3 API rate limiter typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -275,6 +278,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2220 errors in 83 files after typing the API rate limiter boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2226 errors in 84 files after typing the session state service boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2232 errors in 85 files after typing the runtime diagnostics payload boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2239 errors in 86 files after typing the PPT version manager boundary. Phase 1.4 was not advanced.

@@ -13,6 +13,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import wraps
+from typing import Any
 
 from fastapi import HTTPException, Request
 
@@ -60,7 +61,7 @@ class APIRateLimiter:
         """Generate storage key"""
         return f"ratelimit:{scope}:{identifier}"
 
-    def _cleanup_expired(self):
+    def _cleanup_expired(self) -> None:
         """Remove expired rate limit entries"""
         now = time.time()
         if now - self._last_cleanup < self._cleanup_interval:
@@ -158,7 +159,7 @@ class APIRateLimiter:
         calls: int | None = None,
         period: int | None = None,
         scope: str = "ip",
-    ):
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """
         Decorator to apply rate limiting to an endpoint
 
@@ -170,9 +171,9 @@ class APIRateLimiter:
         calls = calls or self.default_calls
         period = period or self.default_period
 
-        def decorator(func: Callable):
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @wraps(func)
-            async def wrapper(request: Request, *args, **kwargs):
+            async def wrapper(request: Request, *args: Any, **kwargs: Any) -> Any:
                 # Get identifier based on scope
                 if scope == "user":
                     identifier = _get_user_id(request)
@@ -260,7 +261,9 @@ def get_rate_limiter() -> APIRateLimiter:
 
 
 # Convenience decorator
-def rate_limit(calls: int = 100, period: int = 60, scope: str = "ip"):
+def rate_limit(
+    calls: int = 100, period: int = 60, scope: str = "ip"
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Rate limiting decorator
 
