@@ -20,6 +20,7 @@ from common.effectiveness import (
     build_sales_effectiveness_metrics,
     evaluate_pass_flags,
 )
+from common.effectiveness.schemas import ActionCard, PassFlags
 from common.monitoring.logger import get_logger
 from common.websocket.base_handler import ConnectionManager
 from sales_bot.websocket.components.objection_ledger_helpers import (
@@ -80,7 +81,7 @@ class CapabilityProcessor:
         knowledge_context: str = ""
         detections_for_card: list[dict[str, Any]] = []
         suggestions_for_card: list[str] = []
-        pass_flags_for_card: dict[str, bool] | None = None
+        pass_flags_for_card: PassFlags | None = None
         stage_context_for_arbiter: dict[str, Any] | None = None
         score_context_for_arbiter: dict[str, Any] | None = None
         score_update_payload: dict[str, Any] | None = None
@@ -449,7 +450,7 @@ class CapabilityProcessor:
 
     async def _send_action_card(
         self,
-        action_card: dict[str, str],
+        action_card: ActionCard,
         websocket: WebSocket,
         manager: ConnectionManager,
         trace_id: str | None,
