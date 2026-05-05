@@ -5,10 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from common.effectiveness import build_action_card
-from common.effectiveness.schemas import ActionCard, PassFlags
+from common.effectiveness.schemas import (
+    ActionCard,
+    PassFlags,
+    SalesScoreContext,
+    SalesStageContext,
+)
 
 PrimarySource = Literal["fuzzy_detection", "score"]
 
@@ -92,20 +97,22 @@ class RealtimeFeedbackArbiter:
 
         primary_source = self._pick_primary_source(detections, suggestions)
         action_card: ActionCard | None = None
+        stage_context_for_card = cast(SalesStageContext | None, stage_context)
+        score_context_for_card = cast(SalesScoreContext | None, score_context)
 
         if primary_source == "fuzzy_detection":
             action_card = build_action_card(
                 fuzzy_detections=[self._pick_primary_detection(detections)],
                 pass_flags=pass_flags,
-                stage_context=stage_context,
-                score_context=score_context,
+                stage_context=stage_context_for_card,
+                score_context=score_context_for_card,
             )
         elif primary_source == "score":
             action_card = build_action_card(
                 suggestions=[suggestions[0]],
                 pass_flags=pass_flags,
-                stage_context=stage_context,
-                score_context=score_context,
+                stage_context=stage_context_for_card,
+                score_context=score_context_for_card,
             )
 
         action_signature = self._build_action_signature(primary_source, action_card)
