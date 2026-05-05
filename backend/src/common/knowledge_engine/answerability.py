@@ -158,7 +158,8 @@ def _collect_slot_hits(rows: list[dict[str, Any]]) -> set[str]:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        raw_metadata = row.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         slot_values = (
             row.get("slot_hits"),
             row.get("coverage_slots"),
