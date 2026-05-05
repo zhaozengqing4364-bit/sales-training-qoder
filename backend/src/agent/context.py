@@ -12,7 +12,7 @@ References:
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from common.monitoring.logger import get_logger
 
@@ -67,7 +67,7 @@ class AgentContext:
     start_time: datetime | None = None
     trace_id: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize default values after dataclass creation."""
         if self.start_time is None:
             self.start_time = datetime.now(UTC)
@@ -85,12 +85,14 @@ class AgentContext:
         # Persona scoring_weights takes priority
         persona_weights = self.persona_config.get("scoring_weights")
         if persona_weights:
-            return persona_weights
+            return cast(list[dict[str, Any]], persona_weights)
 
         # Fall back to Agent capabilities_config
-        capabilities_config = self.agent_config.get("capabilities_config", {})
-        scoring_config = capabilities_config.get("scoring", {})
-        return scoring_config.get("dimensions")
+        capabilities_config = cast(
+            dict[str, Any], self.agent_config.get("capabilities_config", {})
+        )
+        scoring_config = cast(dict[str, Any], capabilities_config.get("scoring", {}))
+        return cast(list[dict[str, Any]] | None, scoring_config.get("dimensions"))
 
     def get_capability_config(self, capability_id: str) -> dict[str, Any]:
         """
@@ -105,11 +107,15 @@ class AgentContext:
             Merged configuration dictionary for the capability.
         """
         # Get base config from Agent
-        capabilities_config = self.agent_config.get("capabilities_config", {})
-        base_config = capabilities_config.get(capability_id, {}).copy()
+        capabilities_config = cast(
+            dict[str, Any], self.agent_config.get("capabilities_config", {})
+        )
+        base_config = cast(
+            dict[str, Any], capabilities_config.get(capability_id, {})
+        ).copy()
 
         # Merge Persona overrides if present
-        persona_overrides = self.persona_config.get(capability_id, {})
+        persona_overrides = cast(dict[str, Any], self.persona_config.get(capability_id, {}))
         base_config.update(persona_overrides)
 
         return base_config
