@@ -46,7 +46,14 @@ mypy_path = "src"
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
-module = ["funasr.*", "edge_tts.*", "chromadb.*"]
+module = [
+    "chromadb.*",
+    "edge_tts.*",
+    "funasr.*",
+    "oss2.*",
+    "passlib.*",
+    "rank_bm25.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
