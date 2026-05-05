@@ -129,7 +129,8 @@ class OssSigningService:
         -------
         The signed URL string.
         """
-        return self._bucket.sign_url("GET", object_key, expires=expires)
+        url: str = self._bucket.sign_url("GET", object_key, expires=expires)
+        return url
 
     @staticmethod
     def build_object_key(session_id: str, segment_sequence: int) -> str:
