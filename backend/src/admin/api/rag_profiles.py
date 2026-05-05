@@ -10,7 +10,7 @@ References:
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -160,6 +160,11 @@ def _row_to_response(row: Any, applied_kb_count: int = 0) -> dict[str, Any]:
     }
 
 
+def _profile_id(row: Any) -> str:
+    """Return the runtime string id from an ORM profile row."""
+    return cast(str, row.id)
+
+
 def _apply_update_to_row(row: Any, data: UpdateRagProfileRequest) -> None:
     """Apply update request fields to a DB row."""
     if data.name is not None:
@@ -265,7 +270,9 @@ async def list_rag_profiles(
 
     return {
         "success": True,
-        "data": [_row_to_response(p, kb_counts.get(p.id, 0)) for p in profiles],
+        "data": [
+            _row_to_response(p, kb_counts.get(_profile_id(p), 0)) for p in profiles
+        ],
     }
 
 
@@ -285,7 +292,7 @@ async def get_rag_profile(
     kb_counts = await _get_applied_kb_counts(db)
     return {
         "success": True,
-        "data": _row_to_response(profile, kb_counts.get(profile.id, 0)),
+        "data": _row_to_response(profile, kb_counts.get(_profile_id(profile), 0)),
     }
 
 
@@ -318,7 +325,7 @@ async def update_rag_profile(
     kb_counts = await _get_applied_kb_counts(db)
     return {
         "success": True,
-        "data": _row_to_response(profile, kb_counts.get(profile.id, 0)),
+        "data": _row_to_response(profile, kb_counts.get(_profile_id(profile), 0)),
     }
 
 
@@ -380,14 +387,14 @@ async def set_default_rag_profile(
         .where(RagProfile.is_system_default == 1)
         .values(is_system_default=0)
     )
-    profile.is_system_default = 1
+    setattr(profile, "is_system_default", 1)
     await db.commit()
     await db.refresh(profile)
 
     kb_counts = await _get_applied_kb_counts(db)
     return {
         "success": True,
-        "data": _row_to_response(profile, kb_counts.get(profile.id, 0)),
+        "data": _row_to_response(profile, kb_counts.get(_profile_id(profile), 0)),
     }
 
 
