@@ -10,7 +10,7 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 
 ## Phase 1: Baseline Falsification and Routing Audit
 
-- [ ] Generate `api_routing_audit.md` with OpenAPI paths, router sources, permission dependencies, and frontend call mapping.
+- [x] Generate `api_routing_audit.md` with OpenAPI paths, router sources, permission dependencies, and frontend call mapping.
 - [ ] Fix unmounted or wrongly mounted backend routes.
 - [ ] Fix frontend/backend API contract mismatches.
 - [ ] Fix frontend/backend lint errors.

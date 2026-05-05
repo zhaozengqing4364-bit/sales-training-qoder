@@ -11,8 +11,8 @@
 
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
-- Current atomic task: Phase 1.1 - API routing audit
-- Last commit: Phase 1.0 delivery state bootstrap commit
+- Current atomic task: Phase 1.2 - API contract alignment
+- Last commit: Phase 1.1 API routing audit commit
 - Blocker: none
 
 ## Implementation-Before-Coding Judgment
@@ -34,10 +34,23 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Phase Checklist
 
+### Phase 1.1 - API Routing Audit
+
+- Stable code logic: route registration, audit evidence collection, and contract comparison are stable engineering controls.
+- Configurable business rules: none introduced.
+- New configuration items: none.
+- Reused configuration items: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, existing backend auth/CORS environment settings.
+- Configuration source: existing frontend environment variables and backend environment reads only observed.
+- Configuration manager: unchanged.
+- Configuration validation: unchanged.
+- Missing configuration fallback: current defaults remain `http://localhost:3444/api/v1` and `ws://localhost:3444`.
+- Illegal configuration handling: unchanged.
+- Logic that must not be hardcoded: future scoring ruleset route aliases, admin permission mappings, business thresholds, and operational copy.
+
 ### Phase 1: Baseline Falsification and Routing Audit
 
 - [x] Phase 1.0: Create and maintain `DELIVERY_STATE.md`.
-- [ ] Phase 1.1: Generate `api_routing_audit.md` with OpenAPI paths, router sources, permission dependencies, and frontend call mapping.
+- [x] Phase 1.1: Generate `api_routing_audit.md` with OpenAPI paths, router sources, permission dependencies, and frontend call mapping.
 - [ ] Phase 1.2: Fix all unmounted or wrongly mounted routes and reach 100% frontend/backend API contract consistency.
 - [ ] Phase 1.3: Fix all frontend/backend lint errors and TypeScript type errors.
 - [ ] Phase 1.4: Adjust Vitest to isolate `node_modules`.
@@ -83,6 +96,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | Time | Phase | Task | Verification | Commit |
 | --- | --- | --- | --- | --- |
 | 2026-05-06 | Phase 1.0 | Delivery state bootstrap | `test -f DELIVERY_STATE.md && test -f tasks/todo.md && rg -n "Phase 1|Phase 2|Phase 3|Phase 4|Phase 5|api_routing_audit.md|Release_Checklist.md|Current atomic task|Atomic Task Log" DELIVERY_STATE.md tasks/todo.md` | Phase 1.0 delivery state bootstrap commit |
+| 2026-05-06 | Phase 1.1 | API routing audit generated | `test -f api_routing_audit.md && rg -n "OpenAPI|Router Sources|Permission Dependencies|Frontend Call Mapping|/api/v1/admin/scoring-rulesets|/api/v1/evaluation/admin/scoring-rulesets|POST /api/v1/auth/wechat|BACKEND_MISSING_SPEC_COUNT|HAS_NEW_SCORING_ROUTE False" api_routing_audit.md` | Phase 1.1 API routing audit commit |
 
 ## Pause Log
 
