@@ -10,7 +10,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
@@ -110,7 +110,7 @@ def calculate_overall_score(session: PracticeSession) -> float | None:
 def calculate_duration(session: PracticeSession) -> int | None:
     """Calculate session duration in seconds"""
     if session.total_duration_seconds:
-        return session.total_duration_seconds
+        return cast(int, session.total_duration_seconds)
     if session.end_time and session.start_time:
         return int((session.end_time - session.start_time).total_seconds())
     return None
