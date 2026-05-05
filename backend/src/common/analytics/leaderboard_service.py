@@ -10,7 +10,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -706,7 +706,7 @@ class LeaderboardService:
                 )
 
                 if result.is_success:
-                    stats = result.value
+                    stats = cast(LeaderboardStats, result.value)
 
                     # Insert entries into database
                     for entry in stats.entries:
