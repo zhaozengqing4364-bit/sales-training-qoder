@@ -6,7 +6,7 @@ import os
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -148,7 +148,10 @@ def _configure_middleware(app: FastAPI) -> None:
     app.exception_handler(Exception)(global_exception_handler)
 
 
-async def _request_validation_exception_handler(request, exc: RequestValidationError):
+async def _request_validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
     """Map prompt-template save validation to the governance-required 400 contract."""
     if request.url.path.startswith("/api/v1/prompt-templates"):
         return JSONResponse(

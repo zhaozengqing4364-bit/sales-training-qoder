@@ -17,6 +17,7 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [x] Fix TypeScript type errors.
 - [x] Normalize backend mypy invocation configuration.
 - [x] Limit installed untyped third-party mypy noise.
+- [x] Type backend entrypoint helpers.
 - [ ] Resolve backend mypy baseline blocker.
 - [ ] Configure Vitest to isolate `node_modules`.
 - [ ] Raise overall coverage to at least 60%.
@@ -61,4 +62,4 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 
 ## Review
 
-- 2026-05-06 Phase 1.3: backend `ruff check src tests`, frontend `npx eslint . --quiet`, frontend `npx tsc --noEmit`, and targeted touched-file tests passed. Backend mypy invocation is now normalized in `pyproject.toml`; direct `./.venv-test/bin/mypy src` reaches real checking and reports 2427 errors in 163 files after limiting installed untyped third-party library noise.
+- 2026-05-06 Phase 1.3: backend `ruff check src tests`, frontend `npx eslint . --quiet`, frontend `npx tsc --noEmit`, and targeted touched-file tests passed. Backend mypy invocation is now normalized in `pyproject.toml`; direct `./.venv-test/bin/mypy src` reaches real checking and reports 2423 errors in 160 files after limiting installed untyped third-party library noise and typing backend entrypoint helpers.

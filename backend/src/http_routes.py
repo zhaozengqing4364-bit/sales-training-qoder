@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -41,7 +42,7 @@ def _is_csrf_exempt_path(path: str) -> bool:
 
 
 def _csrf_validation_failed_response(exc: HTTPException) -> JSONResponse:
-    detail = exc.detail if isinstance(exc.detail, dict) else {}
+    detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
     error = str(detail.get("error") or "[CSRF_VALIDATION_FAILED]")
     message = str(detail.get("message") or "当前请求缺少有效 CSRF 凭证。")
     return JSONResponse(

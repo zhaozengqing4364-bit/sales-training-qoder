@@ -8,6 +8,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
+from fastapi import WebSocket
 
 # Backward compatibility shim: main is imported directly by tooling/tests.
 import websocket_routes as _presentation_websocket_routes
@@ -45,7 +46,7 @@ _is_admin_user_id = _presentation_websocket_routes._is_admin_user_id
 
 # Keep explicit helper used by unit tests for presentation WebSocket behavior.
 async def _handle_presentation_websocket(
-    websocket,
+    websocket: WebSocket,
     session_id: str | None,
     token: str,
     voice_mode: str | None = None,
