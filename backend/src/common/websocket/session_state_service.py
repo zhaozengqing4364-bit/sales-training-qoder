@@ -73,14 +73,12 @@ class SessionStateService:
     ):
         self.state_ttl = state_ttl
         self.cleanup_interval = cleanup_interval
-        self.redis_url = (
-            redis_url
-            or os.getenv("SESSION_STATE_REDIS_URL")
-            or os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        env_redis_url = os.getenv("SESSION_STATE_REDIS_URL") or os.getenv(
+            "REDIS_URL"
         )
-        self.key_prefix = key_prefix or os.getenv(
-            "SESSION_STATE_KEY_PREFIX", "ws:session_state:"
-        )
+        self.redis_url: str = redis_url or env_redis_url or "redis://localhost:6379/0"
+        env_key_prefix = os.getenv("SESSION_STATE_KEY_PREFIX")
+        self.key_prefix: str = key_prefix or env_key_prefix or "ws:session_state:"
 
         self._lock = asyncio.Lock()
         self._cleanup_task: asyncio.Task | None = None
@@ -145,7 +143,7 @@ class SessionStateService:
     def _state_key(self, session_id: str) -> str:
         return f"{self.key_prefix}{session_id}"
 
-    def _require_redis(self):
+    def _require_redis(self) -> Any:
         if self._redis is None:
             raise RuntimeError("Session state Redis client is not initialized")
         return self._redis
@@ -169,7 +167,7 @@ class SessionStateService:
             },
         }
 
-    async def start(self):
+    async def start(self) -> None:
         """Start Redis-backed session state service"""
         if self._running:
             return
@@ -185,7 +183,7 @@ class SessionStateService:
             if self._running:
                 return
 
-            client = redis.from_url(
+            client: Any = redis.from_url(
                 self.redis_url,
                 encoding="utf-8",
                 decode_responses=True,
@@ -212,7 +210,7 @@ class SessionStateService:
             state_ttl=self.state_ttl,
         )
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop background task and close Redis connection"""
         self._running = False
 
@@ -386,7 +384,7 @@ class SessionStateService:
             logger.error(f"Failed to get recent messages: {str(e)}")
             return Result.fail(f"[MESSAGES_GET_FAILED] {str(e)}")
 
-    async def _cleanup_loop(self):
+    async def _cleanup_loop(self) -> None:
         """Background task used as Redis health checker."""
         while self._running:
             try:
@@ -454,14 +452,14 @@ def get_session_state_service() -> SessionStateService:
     return _session_state_service
 
 
-async def init_session_state_service():
+async def init_session_state_service() -> None:
     """Initialize session state service on application startup"""
     service = get_session_state_service()
     await service.start()
     logger.info("Session state service initialized")
 
 
-async def shutdown_session_state_service():
+async def shutdown_session_state_service() -> None:
     """Shutdown session state service on application shutdown"""
     global _session_state_service
     if _session_state_service:
