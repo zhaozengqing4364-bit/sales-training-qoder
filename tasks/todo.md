@@ -30,6 +30,7 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [x] Type Result generic helper contracts.
 - [x] Type embedding service property contracts.
 - [x] Type runtime event literal contracts.
+- [x] Type assembler metadata contracts.
 - [ ] Resolve backend mypy baseline blocker.
 - [ ] Configure Vitest to isolate `node_modules`.
 - [ ] Raise overall coverage to at least 60%.
@@ -74,4 +75,4 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 
 ## Review
 
-- 2026-05-06 Phase 1.3: backend `ruff check src tests`, frontend `npx eslint . --quiet`, frontend `npx tsc --noEmit`, and targeted touched-file tests passed. Backend mypy invocation is now normalized in `pyproject.toml`; direct `./.venv-test/bin/mypy src` reaches real checking and reports 2405 errors in 147 files after limiting installed untyped third-party library noise, typing backend entrypoint helpers, cleaning the shared backoff helper, typing retry focus page-number sanitation, typing the scoring ruleset schema literal constant, typing the document parse artifact loading contract, typing the OSS signing GET URL return contract, typing the admin permission dependency factory contract, typing the latency tracker constructor contract, typing the KB lock metric callback contract, typing the semantic cache hit payload contract, typing the Result generic helper contracts, typing the embedding service property contracts, and typing the runtime event literal contracts.
+- 2026-05-06 Phase 1.3: backend `ruff check src tests`, frontend `npx eslint . --quiet`, frontend `npx tsc --noEmit`, and targeted touched-file tests passed. Backend mypy invocation is now normalized in `pyproject.toml`; direct `./.venv-test/bin/mypy src` reaches real checking and reports 2404 errors in 146 files after limiting installed untyped third-party library noise, typing backend entrypoint helpers, cleaning the shared backoff helper, typing retry focus page-number sanitation, typing the scoring ruleset schema literal constant, typing the document parse artifact loading contract, typing the OSS signing GET URL return contract, typing the admin permission dependency factory contract, typing the latency tracker constructor contract, typing the KB lock metric callback contract, typing the semantic cache hit payload contract, typing the Result generic helper contracts, typing the embedding service property contracts, typing the runtime event literal contracts, and typing the assembler metadata contracts.

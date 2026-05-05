@@ -145,8 +145,8 @@ def _normalize_score(value: Any) -> float | None:
 
 
 def _normalize_metadata(row: dict[str, Any]) -> dict[str, Any]:
-    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
-    normalized = dict(metadata)
+    raw_metadata = row.get("metadata")
+    normalized = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
     for key in (
         "knowledge_base_id",
         "knowledge_base_name",
