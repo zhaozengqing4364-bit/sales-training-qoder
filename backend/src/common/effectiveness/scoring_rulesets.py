@@ -24,7 +24,9 @@ from .canonical import (
 
 logger = get_logger(__name__)
 
-SCORING_RULESET_SCHEMA_VERSION = "scoring_ruleset_schema_v1"
+SCORING_RULESET_SCHEMA_VERSION: Literal["scoring_ruleset_schema_v1"] = (
+    "scoring_ruleset_schema_v1"
+)
 SCORING_RULESET_SCORE_BASIS = "configured_scoring_ruleset_weighted_canonical_dimensions"
 LEGACY_COMPAT_RULESET_VERSION = "session_evidence_projection_v1"
 LEGACY_COMPAT_SCORE_BASIS = "session_evidence_projection_evaluable_only"
