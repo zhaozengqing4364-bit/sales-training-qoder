@@ -70,9 +70,10 @@ class KnowledgeAnswerEvalCase:
             raise ValueError(
                 f"Knowledge answer eval case {case_id} requires expected dict"
             )
+        raw_runtime_options = payload.get("runtime_options")
         runtime_options = (
-            dict(payload.get("runtime_options"))
-            if isinstance(payload.get("runtime_options"), dict)
+            dict(raw_runtime_options)
+            if isinstance(raw_runtime_options, dict)
             else {}
         )
         return cls(
@@ -265,11 +266,10 @@ def _append_mismatch(
 
 def _extract_executed_queries(result: KnowledgeAnswerResult) -> list[str]:
     execution_trace = result.retrieval_summary.get("execution_trace")
-    executed_steps = (
-        execution_trace.get("executed_steps")
-        if isinstance(execution_trace, dict)
-        else []
+    raw_executed_steps = (
+        execution_trace.get("executed_steps") if isinstance(execution_trace, dict) else []
     )
+    executed_steps = raw_executed_steps if isinstance(raw_executed_steps, list) else []
     queries: list[str] = []
     for step in executed_steps:
         if not isinstance(step, dict):
