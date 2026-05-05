@@ -180,6 +180,23 @@ ADMIN_ROUTE_PERMISSION_MATRIX: tuple[AdminRoutePermissionEntry, ...] = (
         rationale="RBAC is explicit here, but reminder logging still deserves follow-up redaction review because payload.note is freeform.",
     ),
     AdminRoutePermissionEntry(
+        route_family="admin.api.governance",
+        auth_surface="Depends(get_current_admin_user)",
+        routes=(
+            "GET /admin/governance/permissions-matrix",
+            "GET /admin/governance/settings-backlog",
+        ),
+        allowed_roles=("admin",),
+        non_admin_deny_path="common.auth.service.get_current_admin_user -> 403 [ROLE_REQUIRED]",
+        current_evidence=(
+            "backend/src/admin/api/governance.py",
+            "backend/tests/integration/test_admin_users_api.py::test_admin_router_modules_require_admin_even_without_main_router_guard",
+        ),
+        risk="baseline",
+        priority="watch",
+        rationale="Governance inventory endpoints are admin-only read surfaces that expose the code-owned RBAC matrix and settings backlog.",
+    ),
+    AdminRoutePermissionEntry(
         route_family="admin.api.knowledge_answer_config",
         auth_surface="router dependencies=[Depends(get_current_admin_user)] + endpoint admin writes",
         routes=(

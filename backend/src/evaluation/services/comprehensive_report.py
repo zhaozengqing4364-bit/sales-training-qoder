@@ -23,7 +23,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.llm_service import LLMService
+from common.effectiveness.scoring_rulesets import (
+    ScoringRulesetService,
+    ScoringRulesetView,
+)
 from common.error_handling.result import Result
+from common.monitoring.logger import get_logger
 from evaluation.schemas import (
     ComprehensiveReportResponse,
     parse_llm_response,
@@ -36,6 +41,8 @@ from presentation_coach.services.presentation_report_service import (
     PresentationReportService,
 )
 from prompt_templates.service import PromptTemplateService
+
+logger = get_logger(__name__)
 
 
 def _is_test_mock_object(value: Any) -> bool:
@@ -50,6 +57,7 @@ class DimensionScore:
     score: float  # 0-100
     weight: float
     description: str = ""
+    dimension_id: str | None = None
 
 
 @dataclass
@@ -66,6 +74,11 @@ class ComprehensiveReport:
     detailed_feedback: str = ""
     recommendations: list[str] = field(default_factory=list)
     comparison_to_baseline: dict | None = None
+    ruleset_id: str | None = None
+    ruleset_version: str | None = None
+    score_basis: str | None = None
+    ruleset_source: str | None = None
+    scoring_metadata: dict[str, Any] | None = None
 
 
 class ComprehensiveReportService:
@@ -128,8 +141,13 @@ class ComprehensiveReportService:
             )
             if resolved_scenario_type == "presentation":
                 presentation_service = PresentationReportService(self.db)
-                presentation_result = await presentation_service.build_report(session_id)
-                if not presentation_result.is_success or presentation_result.value is None:
+                presentation_result = await presentation_service.build_report(
+                    session_id
+                )
+                if (
+                    not presentation_result.is_success
+                    or presentation_result.value is None
+                ):
                     return Result.fail(
                         presentation_result.fallback or "[PRESENTATION_REPORT_FAILED]"
                     )
@@ -144,13 +162,21 @@ class ComprehensiveReportService:
             if not stage_results:
                 return Result.fail("[NO_STAGE_RESULTS]")
 
-            if stage_results:
-                # Calculate from existing stage evaluations
-                dimension_scores = self._calculate_dimension_scores(stage_results)
-                overall_score = self._calculate_overall_score(dimension_scores)
-                key_strengths = self._aggregate_strengths(stage_results)
-                key_improvements = self._aggregate_improvements(stage_results)
-                stage_summaries = self._generate_stage_summaries(stage_results)
+            # Calculate from existing stage evaluations
+            ruleset_view = await self._resolve_scoring_ruleset_view(
+                resolved_scenario_type
+            )
+            scoring_metadata = ScoringRulesetService.report_metadata_for_view(
+                ruleset_view
+            )
+            dimension_scores = self._calculate_dimension_scores(
+                stage_results,
+                ruleset_view=ruleset_view,
+            )
+            overall_score = self._calculate_overall_score(dimension_scores)
+            key_strengths = self._aggregate_strengths(stage_results)
+            key_improvements = self._aggregate_improvements(stage_results)
+            stage_summaries = self._generate_stage_summaries(stage_results)
 
             # Generate detailed feedback using LLM
             feedback_result = await self._generate_detailed_feedback(
@@ -158,7 +184,12 @@ class ComprehensiveReportService:
                 stage_results if stage_results else [],
                 resolved_scenario_type,
             )
-            detailed_feedback = feedback_result.value if feedback_result.is_success else ""
+            detailed_feedback = (
+                feedback_result.value
+                if feedback_result.is_success
+                and isinstance(feedback_result.value, str)
+                else ""
+            )
 
             # Generate recommendations
             recommendations = await self._generate_recommendations(
@@ -177,6 +208,11 @@ class ComprehensiveReportService:
                 key_improvements=key_improvements,
                 detailed_feedback=detailed_feedback,
                 recommendations=recommendations,
+                ruleset_id=scoring_metadata["ruleset_id"],
+                ruleset_version=scoring_metadata["version"],
+                score_basis=scoring_metadata["score_basis"],
+                ruleset_source=scoring_metadata["source"],
+                scoring_metadata=scoring_metadata,
             )
 
             # Store report in database
@@ -227,6 +263,27 @@ class ComprehensiveReportService:
             return "presentation"
         return normalized_requested or "sales"
 
+    async def _resolve_scoring_ruleset_view(
+        self,
+        scenario_type: str,
+    ) -> ScoringRulesetView:
+        """Resolve governed report scoring rules; fallback is explicit metadata."""
+        if _is_test_mock_object(self.db):
+            normalized = "presentation" if scenario_type == "presentation" else "sales"
+            return ScoringRulesetService.build_default_view(normalized)
+        try:
+            return await ScoringRulesetService(self.db).get_active_or_default(
+                scenario_type
+            )
+        except Exception as exc:  # noqa: BLE001
+            normalized = "presentation" if scenario_type == "presentation" else "sales"
+            logger.warning(
+                "comprehensive_report_scoring_ruleset_fallback_default",
+                scenario_type=normalized,
+                error=str(exc),
+            )
+            return ScoringRulesetService.build_default_view(normalized)
+
     async def _get_conversation_data(self, session_id: str) -> str:
         """Get conversation transcript for a session.
 
@@ -243,10 +300,13 @@ class ComprehensiveReportService:
         # 1. Try database conversation_messages first (EnhancedSalesHandler path)
         try:
             from common.conversation.models import ConversationMessage
+
             result = await self.db.execute(
                 select(ConversationMessage)
                 .where(ConversationMessage.session_id == session_id)
-                .order_by(ConversationMessage.turn_number, ConversationMessage.timestamp)
+                .order_by(
+                    ConversationMessage.turn_number, ConversationMessage.timestamp
+                )
             )
             messages = list(result.scalars().all())
 
@@ -260,6 +320,7 @@ class ComprehensiveReportService:
                     return lines_str
         except (RuntimeError, ValueError, OSError, ImportError) as e:
             from common.monitoring.logger import get_logger
+
             get_logger(__name__).debug(f"DB conversation query failed: {e}")
 
         # 2. Fallback to in-memory context_manager (SimpleSalesHandler path)
@@ -268,7 +329,9 @@ class ComprehensiveReportService:
 
             from sales_bot.services.context_manager import context_manager
 
-            context_result = await context_manager.get_context(uuid_mod.UUID(session_id))
+            context_result = await context_manager.get_context(
+                uuid_mod.UUID(session_id)
+            )
             if not context_result.is_success:
                 return ""
 
@@ -317,7 +380,17 @@ class ComprehensiveReportService:
                 key_improvements=db_report.key_improvements or [],
                 detailed_feedback=db_report.detailed_feedback or "",
                 recommendations=db_report.recommendations or [],
+                scoring_metadata=(
+                    db_report.scoring_metadata
+                    if isinstance(getattr(db_report, "scoring_metadata", None), dict)
+                    else None
+                ),
             )
+            if report.scoring_metadata:
+                report.ruleset_id = report.scoring_metadata.get("ruleset_id")
+                report.ruleset_version = report.scoring_metadata.get("version")
+                report.score_basis = report.scoring_metadata.get("score_basis")
+                report.ruleset_source = report.scoring_metadata.get("source")
 
             return Result.ok(report)
         except SQLAlchemyError as e:
@@ -328,6 +401,8 @@ class ComprehensiveReportService:
     def _calculate_dimension_scores(
         self,
         stage_results: list[StageEvaluationResult],
+        *,
+        ruleset_view: ScoringRulesetView | None = None,
     ) -> list[DimensionScore]:
         """Calculate aggregated scores for each dimension.
 
@@ -346,20 +421,93 @@ class ComprehensiveReportService:
                     dimension_values[dim_name] = []
                 dimension_values[dim_name].append(score)
 
+        if ruleset_view is not None:
+            return self._calculate_ruleset_dimension_scores(
+                stage_results=stage_results,
+                ruleset_view=ruleset_view,
+            )
+
         # Calculate weighted averages
         dimension_scores = []
         for dim_name, weight in self.DEFAULT_DIMENSIONS.items():
             values = dimension_values.get(dim_name, [])
             avg_score = sum(values) / len(values) if values else 50.0
 
-            dimension_scores.append(DimensionScore(
-                name=dim_name,
-                score=avg_score,
-                weight=weight,
-                description=self._get_dimension_description(dim_name),
-            ))
+            dimension_scores.append(
+                DimensionScore(
+                    name=dim_name,
+                    score=avg_score,
+                    weight=weight,
+                    description=self._get_dimension_description(dim_name),
+                )
+            )
 
         return dimension_scores
+
+    def _calculate_ruleset_dimension_scores(
+        self,
+        *,
+        stage_results: list[StageEvaluationResult],
+        ruleset_view: ScoringRulesetView,
+    ) -> list[DimensionScore]:
+        total_weight = sum(
+            max(0.0, float(dimension.weight))
+            for dimension in ruleset_view.definition.dimensions
+        )
+        dimension_scores: list[DimensionScore] = []
+        for dimension in ruleset_view.definition.dimensions:
+            candidates = (
+                dimension.dimension_id,
+                dimension.label,
+                *self._dimension_source_aliases(
+                    dimension_id=dimension.dimension_id,
+                    label=dimension.label,
+                    ruleset_view=ruleset_view,
+                ),
+            )
+            values = [
+                float(score)
+                for stage in stage_results
+                for key, score in stage.scores.items()
+                if key in candidates and isinstance(score, (int, float))
+            ]
+            avg_score = sum(values) / len(values) if values else 50.0
+            normalized_weight = (
+                float(dimension.weight) / total_weight if total_weight > 0 else 0.0
+            )
+            dimension_scores.append(
+                DimensionScore(
+                    name=dimension.label,
+                    score=round(max(0.0, min(100.0, avg_score)), 2),
+                    weight=round(normalized_weight, 4),
+                    description=dimension.description or "",
+                    dimension_id=dimension.dimension_id,
+                )
+            )
+        return dimension_scores
+
+    @staticmethod
+    def _dimension_source_aliases(
+        *,
+        dimension_id: str,
+        label: str,
+        ruleset_view: ScoringRulesetView,
+    ) -> tuple[str, ...]:
+        for definition in ruleset_view.definition.dimensions:
+            if definition.dimension_id == dimension_id and definition.label == label:
+                # Admin rulesets validate canonical dimension IDs; source aliases live
+                # in the canonical-definition registry. Import lazily to avoid making
+                # the legacy comprehensive report path depend on canonical startup.
+                from common.effectiveness.canonical import (
+                    get_canonical_dimension_definitions,
+                )
+
+                for canonical in get_canonical_dimension_definitions(
+                    ruleset_view.scenario_type
+                ):
+                    if canonical.dimension_id == dimension_id:
+                        return tuple(canonical.source_aliases)
+        return ()
 
     def _calculate_overall_score(
         self,
@@ -450,16 +598,20 @@ class ComprehensiveReportService:
         summaries = []
 
         for stage in stage_results:
-            avg_score = sum(stage.scores.values()) / len(stage.scores) if stage.scores else 0
+            avg_score = (
+                sum(stage.scores.values()) / len(stage.scores) if stage.scores else 0
+            )
 
-            summaries.append({
-                "stage_number": stage.stage_number,
-                "start_turn": stage.start_turn,
-                "end_turn": stage.end_turn,
-                "average_score": round(avg_score, 1),
-                "key_points": stage.strengths[:3],
-                "summary": stage.summary,
-            })
+            summaries.append(
+                {
+                    "stage_number": stage.stage_number,
+                    "start_turn": stage.start_turn,
+                    "end_turn": stage.end_turn,
+                    "average_score": round(avg_score, 1),
+                    "key_points": stage.strengths[:3],
+                    "summary": stage.summary,
+                }
+            )
 
         return summaries
 
@@ -524,7 +676,9 @@ class ComprehensiveReportService:
             elif isinstance(raw_value, dict):
                 raw_payload = raw_value
 
-            parse_result = await parse_llm_response(llm_result.value, ComprehensiveReportResponse)
+            parse_result = await parse_llm_response(
+                llm_result.value, ComprehensiveReportResponse
+            )
             if not parse_result.is_success:
                 if isinstance(raw_payload, dict):
                     detailed_feedback = str(raw_payload.get("detailed_feedback", ""))
@@ -652,6 +806,8 @@ class ComprehensiveReportService:
             db_report.key_improvements = report.key_improvements
             db_report.detailed_feedback = report.detailed_feedback
             db_report.recommendations = report.recommendations
+            if hasattr(db_report, "scoring_metadata"):
+                db_report.scoring_metadata = report.scoring_metadata
             db_report.created_at = report.generated_at
             await self.db.commit()
             return Result.ok(None)

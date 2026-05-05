@@ -172,6 +172,7 @@ describe("AgentPersonaSelectPage", () => {
 
         await screen.findByText("销售陪练");
 
+        expect(screen.queryByText(/知识库绑定已迁移到角色中心/)).toBeNull();
         expect(screen.getByText("本轮训练重点已带入")).toBeTruthy();
         expect(screen.getByText(`问题焦点：${focusIntent.main_issue.issue_text}`)).toBeTruthy();
         expect(screen.getByText(`训练目标：${focusIntent.next_goal.goal_text}`)).toBeTruthy();

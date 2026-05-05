@@ -13,9 +13,10 @@ vi.mock("@/components/ui/glass-card", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-    Button: ({ children, asChild: _asChild, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => (
-        <button type="button" {...props}>{children}</button>
-    ),
+    Button: ({ children, asChild, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => {
+        void asChild;
+        return <button type="button" {...props}>{children}</button>;
+    },
 }));
 
 describe("LearnerHelpCard", () => {

@@ -8,6 +8,7 @@ References:
 - Design: Section 5 (Persona Service)
 - API Contract: docs/api-contract/personas.md
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -43,9 +44,7 @@ class PersonaService:
         self.db = db
 
     async def create(
-        self,
-        data: CreatePersonaRequest,
-        user_id: str | None = None
+        self, data: CreatePersonaRequest, user_id: str | None = None
     ) -> Result[Persona]:
         """Create a new Persona - R3.1"""
         try:
@@ -98,7 +97,7 @@ class PersonaService:
         page_size: int = 20,
         category: str | None = None,
         difficulty: str | None = None,
-        status: str | None = None
+        status: str | None = None,
     ) -> tuple[list[PersonaListItem], int]:
         """Get paginated Persona list with optional filters - R3.2"""
         stmt = select(Persona)
@@ -200,9 +199,7 @@ class PersonaService:
         return Result.ok(persona)
 
     async def update(
-        self,
-        persona_id: str,
-        data: UpdatePersonaRequest
+        self, persona_id: str, data: UpdatePersonaRequest
     ) -> Result[Persona]:
         """Update Persona with partial data - R3.4"""
         stmt = select(Persona).where(Persona.id == persona_id)
@@ -239,8 +236,7 @@ class PersonaService:
         )
         next_kb_ids = next_kb_ids if isinstance(next_kb_ids, list) else legacy_kb_ids
         touched_legacy_policy_fields = (
-            "system_prompt" in update_data
-            or "knowledge_base_ids" in update_data
+            "system_prompt" in update_data or "knowledge_base_ids" in update_data
         )
         if incoming_persona_policy is not None or touched_legacy_policy_fields:
             existing_policy = (
@@ -300,9 +296,7 @@ class PersonaService:
         return Result.ok(True)
 
     async def duplicate(
-        self,
-        persona_id: str,
-        user_id: str | None = None
+        self, persona_id: str, user_id: str | None = None
     ) -> Result[Persona]:
         """Duplicate an existing Persona - R3.6"""
         stmt = select(Persona).where(Persona.id == persona_id)
@@ -365,15 +359,20 @@ class PersonaService:
         healthy_count = 0
 
         for persona in personas:
-            raw_policy = persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
+            raw_policy = (
+                persona.persona_policy
+                if isinstance(persona.persona_policy, dict)
+                else {}
+            )
             normalized_policy = self._build_normalized_policy(persona)
             persona_issues = self._collect_policy_issue_types(persona)
 
-            raw_version = raw_policy.get("version") if isinstance(raw_policy, dict) else None
+            raw_version = (
+                raw_policy.get("version") if isinstance(raw_policy, dict) else None
+            )
             normalized_tool_policy = normalized_policy.get("tool_policy")
-            require_kb_grounding = (
-                isinstance(normalized_tool_policy, dict)
-                and bool(normalized_tool_policy.get("require_kb_grounding"))
+            require_kb_grounding = isinstance(normalized_tool_policy, dict) and bool(
+                normalized_tool_policy.get("require_kb_grounding")
             )
             normalized_customer_pressure = normalized_policy.get("customer_pressure")
             pressure_source = (
@@ -415,14 +414,18 @@ class PersonaService:
 
     @classmethod
     def _collect_policy_issue_types(cls, persona: Persona) -> list[str]:
-        raw_policy = persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
+        raw_policy = (
+            persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
+        )
         normalized_policy = cls._build_normalized_policy(persona)
         persona_issues: list[str] = []
 
         if not isinstance(persona.persona_policy, dict) or not persona.persona_policy:
             persona_issues.append("missing_policy")
 
-        raw_version = raw_policy.get("version") if isinstance(raw_policy, dict) else None
+        raw_version = (
+            raw_policy.get("version") if isinstance(raw_policy, dict) else None
+        )
         if raw_version != PERSONA_POLICY_VERSION:
             persona_issues.append("version_mismatch")
 
@@ -441,9 +444,8 @@ class PersonaService:
             persona_issues.append("legacy_kb_drift")
 
         normalized_tool_policy = normalized_policy.get("tool_policy")
-        require_kb_grounding = (
-            isinstance(normalized_tool_policy, dict)
-            and bool(normalized_tool_policy.get("require_kb_grounding"))
+        require_kb_grounding = isinstance(normalized_tool_policy, dict) and bool(
+            normalized_tool_policy.get("require_kb_grounding")
         )
         if require_kb_grounding and not normalized_kb_ids:
             persona_issues.append("kb_lock_unbound")
@@ -460,10 +462,13 @@ class PersonaService:
         return persona_issues
 
     @staticmethod
-    def _policy_issue_to_anomaly(issue_type: str, *, detected_at: datetime | None) -> dict[str, Any]:
+    def _policy_issue_to_anomaly(
+        issue_type: str, *, detected_at: datetime | None
+    ) -> dict[str, Any]:
         severity = (
             "blocking"
-            if issue_type in {"missing_policy", "empty_system_prompt", "kb_lock_unbound"}
+            if issue_type
+            in {"missing_policy", "empty_system_prompt", "kb_lock_unbound"}
             else "warning"
         )
         summary_map = {

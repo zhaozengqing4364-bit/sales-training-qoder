@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PPTPage:
     """Represents a single PPT page with extracted content"""
+
     page_number: int
     title: str
     content: str
@@ -29,6 +30,7 @@ class PPTPage:
 @dataclass
 class PPTExtraction:
     """Result of PPT text extraction"""
+
     presentation_id: uuid.UUID
     filename: str
     total_pages: int
@@ -50,10 +52,7 @@ class OCRProcessor:
         self.temp_dir = "/tmp/ppt_processing"
 
     async def extract_text(
-        self,
-        file_path: str,
-        presentation_id: uuid.UUID,
-        filename: str
+        self, file_path: str, presentation_id: uuid.UUID, filename: str
     ) -> Result[PPTExtraction]:
         """
         Extract text from PPT file
@@ -81,7 +80,7 @@ class OCRProcessor:
                     page_number=slide_number,
                     title=title,
                     content=content,
-                    image_count=image_count
+                    image_count=image_count,
                 )
 
                 pages.append(page)
@@ -91,7 +90,7 @@ class OCRProcessor:
                 filename=filename,
                 total_pages=len(prs.slides),
                 pages=pages,
-                has_images=has_images
+                has_images=has_images,
             )
 
             logger.info(
@@ -100,7 +99,7 @@ class OCRProcessor:
                     "presentation_id": str(presentation_id),
                     "pages": extraction.total_pages,
                     "has_images": has_images,
-                }
+                },
             )
 
             return Result(value=extraction)
@@ -112,7 +111,7 @@ class OCRProcessor:
             logger.error(
                 "Failed to extract text from PPT",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[OCR_FAILED]")
 
@@ -154,10 +153,7 @@ class OCRProcessor:
 
         return title, content, image_count
 
-    async def extract_with_ocr(
-        self,
-        image_path: str
-    ) -> Result[str]:
+    async def extract_with_ocr(self, image_path: str) -> Result[str]:
         """
         Extract text from image using OCR (fallback for image-based slides)
 
@@ -173,12 +169,9 @@ class OCRProcessor:
             image = Image.open(image_path)
 
             # Extract text
-            text = pytesseract.image_to_string(image, lang='chi_sim+eng')
+            text = pytesseract.image_to_string(image, lang="chi_sim+eng")
 
-            logger.info(
-                "OCR extraction complete",
-                extra={"text_length": len(text)}
-            )
+            logger.info("OCR extraction complete", extra={"text_length": len(text)})
 
             return Result(value=text.strip())
 
@@ -187,9 +180,7 @@ class OCRProcessor:
             return Result.fail(fallback="[OCR_NOT_INSTALLED]")
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(
-                "OCR extraction failed",
-                extra={"error": str(e)},
-                exc_info=True
+                "OCR extraction failed", extra={"error": str(e)}, exc_info=True
             )
             return Result.fail(fallback="[OCR_FAILED]")
 

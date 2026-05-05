@@ -6,6 +6,7 @@ Constitution Principle V: Cost Control - ¥0.00033/second
 Documentation:
 - https://help.aliyun.com/zh/model-studio/qwen-real-time-speech-recognition
 """
+
 import asyncio
 import base64
 import contextlib
@@ -56,7 +57,9 @@ class AlibabaASRProvider(ASRProvider):
         """
         # 不再 fallback 到 settings，由 ConfigManager 统一管理
         self.api_key = api_key if api_key else ""
-        base_url = api_url if api_url else "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+        base_url = (
+            api_url if api_url else "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+        )
         model = app_key if app_key else "qwen3-asr-flash-realtime"
 
         # WebSocket endpoint for real-time ASR
@@ -68,9 +71,7 @@ class AlibabaASRProvider(ASRProvider):
         self._extra_config = extra_config or {}
 
     async def stream_transcribe(
-        self,
-        audio_stream: AsyncIterator[bytes],
-        sample_rate: int = 16000
+        self, audio_stream: AsyncIterator[bytes], sample_rate: int = 16000
     ) -> AsyncIterator[Result[str]]:
         """
         Stream transcribe using Alibaba Cloud WebSocket API
@@ -96,13 +97,12 @@ class AlibabaASRProvider(ASRProvider):
             # Connect to WebSocket
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "OpenAI-Beta": "realtime=v1"
+                "OpenAI-Beta": "realtime=v1",
             }
 
             logger.info(f"Connecting to ASR WebSocket: {self.url}")
             ws_connection = await asyncio.wait_for(
-                websockets.connect(self.url, additional_headers=headers),
-                timeout=10.0
+                websockets.connect(self.url, additional_headers=headers), timeout=10.0
             )
 
             logger.info("Connected to Alibaba Cloud ASR WebSocket")
@@ -119,8 +119,8 @@ class AlibabaASRProvider(ASRProvider):
                         "language": "zh"  # 中文
                     },
                     # Manual 模式：turn_detection 设为 null
-                    "turn_detection": None
-                }
+                    "turn_detection": None,
+                },
             }
 
             await ws_connection.send(json.dumps(session_config))
@@ -131,8 +131,8 @@ class AlibabaASRProvider(ASRProvider):
                 response = await asyncio.wait_for(ws_connection.recv(), timeout=5.0)
                 data = json.loads(response)
                 logger.info(f"Session response: {data.get('type')}")
-                if data.get('type') == 'error':
-                    error_msg = data.get('error', {}).get('message', 'Unknown')
+                if data.get("type") == "error":
+                    error_msg = data.get("error", {}).get("message", "Unknown")
                     logger.error(f"Session config error: {error_msg}")
                     yield Result.fail("[USE_BROWSER_ASR]")
                     return
@@ -145,7 +145,9 @@ class AlibabaASRProvider(ASRProvider):
             accumulated_text = []
 
             receive_task = asyncio.create_task(
-                self._receive_transcriptions(ws_connection, transcript_queue, final_event, accumulated_text)
+                self._receive_transcriptions(
+                    ws_connection, transcript_queue, final_event, accumulated_text
+                )
             )
 
             # Send audio chunks
@@ -157,13 +159,13 @@ class AlibabaASRProvider(ASRProvider):
                     total_bytes += len(chunk)
 
                     # Encode to base64
-                    audio_b64 = base64.b64encode(chunk).decode('utf-8')
+                    audio_b64 = base64.b64encode(chunk).decode("utf-8")
 
                     # Send audio buffer append event
                     event = {
                         "event_id": f"event_{int(asyncio.get_event_loop().time() * 1000)}",
                         "type": "input_audio_buffer.append",
-                        "audio": audio_b64
+                        "audio": audio_b64,
                     }
 
                     await ws_connection.send(json.dumps(event))
@@ -177,12 +179,14 @@ class AlibabaASRProvider(ASRProvider):
                             break
 
             audio_duration = total_bytes / (sample_rate * 2)
-            logger.info(f"Sent {chunk_count} audio chunks, total {total_bytes} bytes ({audio_duration:.2f}s)")
+            logger.info(
+                f"Sent {chunk_count} audio chunks, total {total_bytes} bytes ({audio_duration:.2f}s)"
+            )
 
             # Manual 模式：发送 commit 事件触发识别
             commit_event = {
                 "event_id": f"commit_{int(asyncio.get_event_loop().time() * 1000)}",
-                "type": "input_audio_buffer.commit"
+                "type": "input_audio_buffer.commit",
             }
             await ws_connection.send(json.dumps(commit_event))
             logger.info("Sent input_audio_buffer.commit (Manual mode)")
@@ -237,9 +241,10 @@ class AlibabaASRProvider(ASRProvider):
         ws_connection,
         transcript_queue: asyncio.Queue,
         final_event: asyncio.Event,
-        accumulated_text: list
+        accumulated_text: list,
     ):
         """Receive transcription events from WebSocket"""
+
         def _offer_transcript(transcript: str) -> None:
             if not transcript:
                 return
@@ -259,9 +264,14 @@ class AlibabaASRProvider(ASRProvider):
                 data = json.loads(message)
                 event_type = data.get("type")
 
-                logger.debug(f"ASR event: {event_type}, data: {json.dumps(data, ensure_ascii=False)[:200]}")
+                logger.debug(
+                    f"ASR event: {event_type}, data: {json.dumps(data, ensure_ascii=False)[:200]}"
+                )
 
-                if event_type == "conversation.item.input_audio_transcription.completed":
+                if (
+                    event_type
+                    == "conversation.item.input_audio_transcription.completed"
+                ):
                     # 最终完整的转录结果
                     transcript = data.get("transcript", "")
                     if transcript:
@@ -309,11 +319,11 @@ class AlibabaASRProvider(ASRProvider):
         """Send silence to trigger VAD finalization"""
         silence_chunks = duration_ms // 20  # 20ms chunks
         for _ in range(silence_chunks):
-            silence_b64 = base64.b64encode(bytes(320)).decode('ascii')  # 20ms at 16kHz
+            silence_b64 = base64.b64encode(bytes(320)).decode("ascii")  # 20ms at 16kHz
             event = {
                 "event_id": f"silence_{asyncio.get_event_loop().time()}",
                 "type": "input_audio_buffer.append",
-                "audio": silence_b64
+                "audio": silence_b64,
             }
             await ws_connection.send(json.dumps(event))
             await asyncio.sleep(0.02)
@@ -328,8 +338,9 @@ class AlibabaASRProvider(ASRProvider):
         Returns:
             Result with transcribed text or fallback
         """
+
         async def audio_stream():
-            with open(audio_file, 'rb') as f:
+            with open(audio_file, "rb") as f:
                 while chunk := f.read(3200):  # 100ms chunks
                     yield chunk
 
@@ -354,7 +365,7 @@ class AlibabaASRProvider(ASRProvider):
             # Try to establish WebSocket connection
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "OpenAI-Beta": "realtime=v1"
+                "OpenAI-Beta": "realtime=v1",
             }
 
             async with asyncio.timeout(3.0):

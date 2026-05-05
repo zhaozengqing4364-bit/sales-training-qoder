@@ -544,8 +544,41 @@ describe("ReportPage", () => {
         expect(await screen.findByText("较上次 +10.0 分")).toBeTruthy();
         expect(await screen.findByText("推荐下次练什么")).toBeTruthy();
         expect(await screen.findByText("补强产品知识与证据表达")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "练产品知识专项" }).getAttribute("href")).toBe(
+            "/training/sales?focus=product_knowledge",
+        );
         expect(getReportTrendsMock).toHaveBeenCalledWith("session-1", 5);
         expect(getNextRecommendationMock).toHaveBeenCalledWith("session-1");
+    });
+
+    it("downgrades unsafe report recommendation targets to the training route", async () => {
+        getReportMock.mockResolvedValue(baseReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+        getNextRecommendationMock.mockResolvedValue({
+            title: "补强产品知识与证据表达",
+            reason: "后端推荐返回了不安全目标时，报告页仍只能打开站内训练入口。",
+            action_label: "练产品知识专项",
+            target_path: "javascript:alert(1)",
+            recommendation_kind: "next_practice_ruleset",
+            scenario_type: "sales",
+            source_session_id: "session-1",
+            rule_version: "growth_recommendation_rules_v1",
+            explanation: null,
+            evidence_summary: null,
+        });
+
+        render(<ReportPage />);
+
+        await waitFor(() => {
+            expect(getNextRecommendationMock).toHaveBeenCalledWith("session-1");
+        }, { timeout: 10000 });
+        expect(await screen.findByText("补强产品知识与证据表达", {}, { timeout: 10000 })).toBeTruthy();
+        expect(screen.getByRole("link", { name: "练产品知识专项" }).getAttribute("href")).toBe("/training");
     });
 
     it("renders learner-facing degraded audio wording when partial audio is reported", async () => {
@@ -634,8 +667,8 @@ describe("ReportPage", () => {
         render(<ReportPage />);
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("76");
-        expect(screen.getByText("报告看不懂或证据不足时怎么办？")).toBeTruthy();
-        expect(screen.getByText(/先看主问题、下一轮目标和高光复习清单/)).toBeTruthy();
+        expect(screen.queryByText("报告看不懂或证据不足时怎么办？")).toBeNull();
+        expect(screen.queryByText(/先看主问题、下一轮目标和高光复习清单/)).toBeNull();
         expect(screen.getByText("销售能力总览")).toBeTruthy();
         expect(screen.getByText("价值表达")).toBeTruthy();
         expect(screen.getByText("证据与收益")).toBeTruthy();
@@ -820,6 +853,42 @@ describe("ReportPage", () => {
             detailed_feedback: "",
             recommendations: [],
             voice_policy_snapshot_ref: null,
+        });
+        getReplayMock.mockResolvedValue({
+            ...baseReplayData,
+            main_issue: {
+                ...baseReplayData.main_issue,
+                issue_type: "evidence_gap",
+                issue_text: "价值主张缺少案例、数据或数字。",
+                recovery_rule: "下一轮先给出一条可检验证据。",
+                replay_anchor: {
+                    status: "resolved",
+                    message_id: "msg-highlight",
+                    turn_number: 4,
+                    marker: {
+                        type: "highlight",
+                        timestamp_ms: 24000,
+                        label: "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+                    },
+                    degraded_reason: null,
+                },
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再推进一个明确的下一步。",
+                rule: "至少补一条证据并确认下一步。",
+                replay_anchor: {
+                    status: "resolved",
+                    message_id: "msg-highlight",
+                    turn_number: 4,
+                    marker: {
+                        type: "highlight",
+                        timestamp_ms: 24000,
+                        label: "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+                    },
+                    degraded_reason: null,
+                },
+            },
         });
 
         render(<ReportPage />);
@@ -1578,21 +1647,6 @@ describe("ReportPage", () => {
     });
 
     it("renders answer-level retrieval diagnostics from knowledge-check when available", async () => {
-        getReportMock.mockResolvedValue({
-            ...baseReport,
-            evaluable: true,
-            not_evaluable_reason: null,
-            effectiveness_snapshot: {
-                claim_truth: {
-                    status: "weak_evidence",
-                    label: "证据偏弱",
-                    source: "score_snapshot",
-                    reason: "low_evidence_score",
-                    evidence_score: 63,
-                },
-                retrieval_facts: baseRetrievalFacts,
-            },
-        });
         getKnowledgeCheckMock.mockResolvedValue({
             session_id: "session-1",
             status: "hit",
@@ -1613,7 +1667,7 @@ describe("ReportPage", () => {
                 answerability: "sufficient",
                 source_status: "hit",
                 rewritten_queries: ["实习 产品介绍", "实习 核心能力"],
-                citations: [
+            citations: [
                     {
                         claim: "实习专家是一款企业内部智能演练平台。",
                         knowledge_base_name: "产品知识库",
@@ -1624,6 +1678,21 @@ describe("ReportPage", () => {
                 ],
             },
         } as never);
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                    evidence_score: 63,
+                },
+            },
+            retrieval_facts: baseRetrievalFacts,
+        });
         getComprehensiveReportMock.mockResolvedValue({
             session_id: "session-1",
             generated_at: "2026-03-23T00:00:00Z",

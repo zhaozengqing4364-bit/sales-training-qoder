@@ -121,7 +121,9 @@ class MockAudioContext {
         this.state = "running";
     });
 
-    constructor(_options?: AudioContextOptions) { }
+    constructor(options?: AudioContextOptions) {
+        void options;
+    }
 
     createBuffer(_channels: number, length: number, sampleRate: number) {
         return {

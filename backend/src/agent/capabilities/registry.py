@@ -27,6 +27,7 @@ Usage:
     # Get capability metadata
     metadata = CapabilityRegistry.get_metadata("fuzzy_detection")
 """
+
 from __future__ import annotations
 
 import threading

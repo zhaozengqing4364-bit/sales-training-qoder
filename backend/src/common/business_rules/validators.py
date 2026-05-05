@@ -7,8 +7,12 @@ from typing import Any
 
 from common.business_rules.defaults import (
     ACHIEVEMENT_RULES_KEY,
+    ADMIN_SETTINGS_GENERAL_KEY,
+    ADMIN_SETTINGS_NOTIFICATIONS_KEY,
+    ADMIN_SETTINGS_SECURITY_KEY,
     AI_COACH_RULES_KEY,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
+    OBJECTION_LEDGER_RULES_KEY,
     SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
 )
@@ -35,6 +39,14 @@ def validate_business_rule_value(key: str, value: dict[str, Any]) -> dict[str, A
         return _validate_recommendation_ruleset(value)
     if key == SALES_COMBINATION_RULES_KEY:
         return _validate_sales_combination_ruleset(value)
+    if key == OBJECTION_LEDGER_RULES_KEY:
+        return _validate_objection_ledger_ruleset(value)
+    if key == ADMIN_SETTINGS_GENERAL_KEY:
+        return _validate_admin_general_settings(value)
+    if key == ADMIN_SETTINGS_SECURITY_KEY:
+        return _validate_admin_security_settings(value)
+    if key == ADMIN_SETTINGS_NOTIFICATIONS_KEY:
+        return _validate_admin_notification_settings(value)
     raise BusinessRuleValidationError(f"unsupported business rule key: {key}")
 
 
@@ -303,11 +315,15 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
     enabled_count = 0
     for index, item in enumerate(combinations):
         if not isinstance(item, dict):
-            raise BusinessRuleValidationError(f"combinations[{index}] must be an object")
+            raise BusinessRuleValidationError(
+                f"combinations[{index}] must be an object"
+            )
 
         combination_id = _required_string(item, "id", max_length=80)
         if combination_id in seen_ids:
-            raise BusinessRuleValidationError(f"duplicate combination id: {combination_id}")
+            raise BusinessRuleValidationError(
+                f"duplicate combination id: {combination_id}"
+            )
         seen_ids.add(combination_id)
 
         capability = _required_string(item, "capability", max_length=120)
@@ -319,8 +335,13 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
             )
         seen_pairs.add(pair_key)
 
+        raw_priority = item.get("priority")
+        if raw_priority is None:
+            raise BusinessRuleValidationError(
+                f"combinations[{index}].priority must be a positive number"
+            )
         try:
-            priority = int(item.get("priority"))
+            priority = int(raw_priority)
         except (TypeError, ValueError) as exc:
             raise BusinessRuleValidationError(
                 f"combinations[{index}].priority must be a positive number"
@@ -361,6 +382,246 @@ def _validate_sales_combination_ruleset(value: dict[str, Any]) -> dict[str, Any]
         normalized_combinations,
         key=lambda item: (item["priority"], item["id"]),
     )
+    return normalized
+
+
+def _validate_objection_ledger_ruleset(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["rule_set_id"] = _required_string(
+        normalized,
+        "rule_set_id",
+        max_length=120,
+    )
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    normalized["ack_patterns"] = _string_list(
+        normalized.get("ack_patterns"),
+        field="ack_patterns",
+    )
+    if not normalized["ack_patterns"]:
+        raise BusinessRuleValidationError("ack_patterns must be non-empty")
+    normalized["open_stage_names"] = _string_list(
+        normalized.get("open_stage_names"),
+        field="open_stage_names",
+    )
+    if not normalized["open_stage_names"]:
+        raise BusinessRuleValidationError("open_stage_names must be non-empty")
+    normalized["numeric_evidence_tokens"] = _string_list(
+        normalized.get("numeric_evidence_tokens"),
+        field="numeric_evidence_tokens",
+    )
+
+    families = normalized.get("families")
+    if not isinstance(families, dict) or not families:
+        raise BusinessRuleValidationError("families must be a non-empty object")
+    normalized_families: dict[str, dict[str, Any]] = {}
+    focus_dimensions: set[str] = set()
+    for raw_family, raw_config in families.items():
+        family = str(raw_family).strip()
+        if not family:
+            raise BusinessRuleValidationError("family key cannot be empty")
+        if not isinstance(raw_config, dict):
+            raise BusinessRuleValidationError(f"families.{family} must be an object")
+        focus_dimension = _required_string(
+            raw_config,
+            "focus_dimension",
+            max_length=120,
+        )
+        focus_dimensions.add(focus_dimension)
+        normalized_families[family] = {
+            "focus_dimension": focus_dimension,
+            "promised_proof": _required_string(
+                raw_config,
+                "promised_proof",
+                max_length=500,
+            ),
+            "next_expected_evidence": _required_string(
+                raw_config,
+                "next_expected_evidence",
+                max_length=500,
+            ),
+            "detect_any": _non_empty_string_list(
+                raw_config.get("detect_any"),
+                field=f"families.{family}.detect_any",
+            ),
+            "evidence_any": _non_empty_string_list(
+                raw_config.get("evidence_any"),
+                field=f"families.{family}.evidence_any",
+            ),
+            "open_pressure_any": _non_empty_string_list(
+                raw_config.get("open_pressure_any"),
+                field=f"families.{family}.open_pressure_any",
+            ),
+            "open_pressure_requires_any": _string_list(
+                raw_config.get("open_pressure_requires_any"),
+                field=f"families.{family}.open_pressure_requires_any",
+            ),
+        }
+    normalized["families"] = normalized_families
+
+    synthetic = normalized.get("synthetic_dimensions_by_focus")
+    if not isinstance(synthetic, dict) or not synthetic:
+        raise BusinessRuleValidationError(
+            "synthetic_dimensions_by_focus must be a non-empty object"
+        )
+    normalized_synthetic: dict[str, dict[str, float]] = {}
+    for focus_dimension in focus_dimensions:
+        raw_scores = synthetic.get(focus_dimension)
+        if not isinstance(raw_scores, dict) or not raw_scores:
+            raise BusinessRuleValidationError(
+                f"synthetic_dimensions_by_focus.{focus_dimension} is required"
+            )
+        normalized_scores: dict[str, float] = {}
+        for raw_name, raw_score in raw_scores.items():
+            dimension_name = str(raw_name).strip()
+            if not dimension_name:
+                raise BusinessRuleValidationError(
+                    f"synthetic_dimensions_by_focus.{focus_dimension} key cannot be empty"
+                )
+            normalized_scores[dimension_name] = _score(
+                raw_score,
+                field=f"synthetic_dimensions_by_focus.{focus_dimension}.{dimension_name}",
+            )
+        normalized_synthetic[focus_dimension] = normalized_scores
+    normalized["synthetic_dimensions_by_focus"] = normalized_synthetic
+    normalized["management_backlog"] = _optional_string(
+        normalized,
+        "management_backlog",
+        default=None,
+        max_length=1000,
+    )
+    return normalized
+
+
+def _validate_admin_general_settings(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    normalized["platform_name"] = _required_string(
+        normalized,
+        "platform_name",
+        max_length=120,
+    )
+    normalized["support_email"] = _required_string(
+        normalized,
+        "support_email",
+        max_length=255,
+    )
+    if "@" not in normalized["support_email"]:
+        raise BusinessRuleValidationError("support_email must be a valid email")
+    normalized["welcome_message"] = _required_string(
+        normalized,
+        "welcome_message",
+        max_length=500,
+    )
+    normalized["default_language"] = _one_of(
+        normalized.get("default_language", "zh-CN"),
+        field="default_language",
+        allowed={"zh-CN", "en-US"},
+    )
+    normalized["timezone"] = _one_of(
+        normalized.get("timezone", "Asia/Shanghai"),
+        field="timezone",
+        allowed={"Asia/Shanghai", "UTC"},
+    )
+    normalized["date_format"] = _one_of(
+        normalized.get("date_format", "YYYY-MM-DD"),
+        field="date_format",
+        allowed={"YYYY-MM-DD", "MM/DD/YYYY"},
+    )
+    return normalized
+
+
+def _validate_admin_security_settings(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    normalized["enforce_admin_2fa"] = bool(normalized.get("enforce_admin_2fa", True))
+    normalized["new_device_login_alert"] = bool(
+        normalized.get("new_device_login_alert", True)
+    )
+    normalized["password_min_length"] = _integer_range(
+        normalized.get("password_min_length", 8),
+        field="password_min_length",
+        minimum=8,
+        maximum=128,
+    )
+    normalized["password_expiry_days"] = _integer_range(
+        normalized.get("password_expiry_days", 90),
+        field="password_expiry_days",
+        minimum=0,
+        maximum=365,
+    )
+    return normalized
+
+
+def _validate_admin_notification_settings(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    email_notifications = normalized.get("email_notifications")
+    if not isinstance(email_notifications, dict):
+        raise BusinessRuleValidationError("email_notifications must be an object")
+    allowed = {
+        "user_registration_admin",
+        "system_exception_alert",
+        "weekly_report",
+        "knowledge_base_update",
+    }
+    normalized["email_notifications"] = {
+        key: bool(email_notifications.get(key, False)) for key in sorted(allowed)
+    }
+    unknown = set(email_notifications) - allowed
+    if unknown:
+        raise BusinessRuleValidationError(
+            f"unsupported email notification keys: {', '.join(sorted(unknown))}"
+        )
+    return normalized
+
+
+def _score(value: Any, *, field: str) -> float:
+    try:
+        score = float(value)
+    except (TypeError, ValueError) as exc:
+        raise BusinessRuleValidationError(f"{field} must be numeric") from exc
+    if score < 0 or score > 100:
+        raise BusinessRuleValidationError(f"{field} must be within [0, 100]")
+    return round(score, 2)
+
+
+def _integer_range(
+    value: Any,
+    *,
+    field: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError) as exc:
+        raise BusinessRuleValidationError(f"{field} must be an integer") from exc
+    if normalized < minimum or normalized > maximum:
+        raise BusinessRuleValidationError(
+            f"{field} must be within [{minimum}, {maximum}]"
+        )
+    return normalized
+
+
+def _one_of(value: Any, *, field: str, allowed: set[str]) -> str:
+    if not isinstance(value, str):
+        raise BusinessRuleValidationError(f"{field} must be a string")
+    normalized = value.strip()
+    if normalized not in allowed:
+        raise BusinessRuleValidationError(
+            f"{field} must be one of {', '.join(sorted(allowed))}"
+        )
+    return normalized
+
+
+def _non_empty_string_list(value: Any, *, field: str) -> list[str]:
+    normalized = _string_list(value, field=field)
+    if not normalized:
+        raise BusinessRuleValidationError(f"{field} must be non-empty")
     return normalized
 
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "./client";
+import type { RagProfile } from "./types";
 
 const fetchMock = vi.fn();
 
@@ -260,5 +261,147 @@ describe("api governance contract normalization", () => {
             ],
             extra_note: "keep me",
         });
+    });
+
+    it("unwraps RAG profile envelopes for list/read/write calls", async () => {
+        const ragProfile: RagProfile = {
+            id: "rag-1",
+            name: "标准检索配置",
+            description: "默认配置",
+            is_system_default: true,
+            chunking: {
+                strategy: "element_boundary",
+                chunk_size: 500,
+                chunk_overlap: 50,
+            },
+            semantic_cache: {
+                enabled: true,
+                similarity_threshold: 0.95,
+                ttl_seconds: 300,
+            },
+            cross_encoder: {
+                backend: null,
+                model: null,
+                device: null,
+                has_api_key: false,
+            },
+            applied_kb_count: 2,
+            created_at: "2026-04-01T00:00:00Z",
+            updated_at: "2026-04-01T00:00:00Z",
+        };
+
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: [ragProfile],
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: ragProfile,
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: ragProfile,
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: ragProfile,
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    message: "deleted",
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: ragProfile,
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: [
+                        {
+                            id: "kb-1",
+                            name: "石犀产品知识库",
+                            category: "product",
+                            document_count: 4,
+                            status: "active",
+                        },
+                    ],
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    success: true,
+                    data: { rag_profile_id: "rag-1" },
+                }),
+            });
+
+        const list = await api.admin.listRagProfiles();
+        const detail = await api.admin.getRagProfile("rag-1");
+        const created = await api.admin.createRagProfile({
+            name: "标准检索配置",
+            description: "默认配置",
+            chunking: ragProfile.chunking,
+            semantic_cache: ragProfile.semantic_cache,
+            cross_encoder: ragProfile.cross_encoder,
+        });
+        const updated = await api.admin.updateRagProfile("rag-1", {
+            name: "标准检索配置 v2",
+            is_system_default: true,
+        });
+        const deleted = await api.admin.deleteRagProfile("rag-1");
+        const setDefault = await api.admin.setRagProfileDefault("rag-1");
+        const kbList = await api.admin.getRagProfileKnowledgeBases("rag-1");
+        const assign = await api.admin.assignRagProfileToKb("kb-1", "rag-1");
+
+        expect(list).toEqual([ragProfile]);
+        expect(detail).toEqual(ragProfile);
+        expect(created).toEqual(ragProfile);
+        expect(updated).toEqual(ragProfile);
+        expect(deleted).toMatchObject({ success: true, message: "deleted" });
+        expect(setDefault).toEqual(ragProfile);
+        expect(kbList).toEqual([
+            {
+                id: "kb-1",
+                name: "石犀产品知识库",
+                category: "product",
+                document_count: 4,
+                status: "active",
+            },
+        ]);
+        expect(assign).toEqual({ rag_profile_id: "rag-1" });
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            1,
+            expect.stringContaining("/admin/rag-profiles"),
+            expect.any(Object),
+        );
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            8,
+            expect.stringContaining("/admin/knowledge/kb-1/rag-profile"),
+            expect.objectContaining({
+                method: "PATCH",
+                body: JSON.stringify({ rag_profile_id: "rag-1" }),
+            }),
+        );
     });
 });

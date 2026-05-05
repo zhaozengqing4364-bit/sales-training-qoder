@@ -2,6 +2,7 @@
 Structured JSON logging with trace_id
 Constitution Principle VII: Observability
 """
+
 import ipaddress
 import json
 import logging
@@ -172,8 +173,7 @@ def sanitize_log_value(value: Any, *, field_name: str | None = None) -> Any:
 def sanitize_log_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Sanitize structured log kwargs before they reach the shared sink."""
     return {
-        key: sanitize_log_value(value, field_name=key)
-        for key, value in kwargs.items()
+        key: sanitize_log_value(value, field_name=key) for key, value in kwargs.items()
     }
 
 
@@ -273,9 +273,13 @@ def configure_logging(log_level: str = "INFO") -> None:
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
-            structlog.dev.ConsoleRenderer() if log_level == "DEBUG" else structlog.processors.JSONRenderer(),
+            structlog.dev.ConsoleRenderer()
+            if log_level == "DEBUG"
+            else structlog.processors.JSONRenderer(),
         ],
-        wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, log_level)),
+        wrapper_class=structlog.make_filtering_bound_logger(
+            getattr(logging, log_level)
+        ),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,

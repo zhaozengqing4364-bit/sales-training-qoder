@@ -31,10 +31,37 @@ port_pids() {
   lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
 }
 
+port_cleanup_pids() {
+  local port="$1"
+  {
+    lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
+    # uvicorn --reload can leave a parent process with a CLOSED fd on the
+    # dev port. It is not LISTENing, but a new uvicorn bind can still fail.
+    lsof -tiTCP:"${port}" -sTCP:CLOSED 2>/dev/null || true
+  } | sort -u
+}
+
+wait_for_port_release() {
+  local port="$1"
+  local timeout_seconds="${2:-5}"
+  local max_ticks=$((timeout_seconds * 5))
+  local tick=0
+
+  while (( tick < max_ticks )); do
+    if [[ -z "$(port_cleanup_pids "${port}")" ]]; then
+      return 0
+    fi
+    sleep 0.2
+    tick=$((tick + 1))
+  done
+
+  return 1
+}
+
 kill_port() {
   local port="$1"
   local pids
-  pids="$(port_pids "${port}")"
+  pids="$(port_cleanup_pids "${port}")"
 
   if [[ -z "${pids}" ]]; then
     return
@@ -42,13 +69,14 @@ kill_port() {
 
   log "停止端口 ${port} 占用进程: ${pids//$'\n'/, }"
   kill ${pids} >/dev/null 2>&1 || true
-  sleep 1
+  wait_for_port_release "${port}" 2 || true
 
   local remaining
-  remaining="$(port_pids "${port}")"
+  remaining="$(port_cleanup_pids "${port}")"
   if [[ -n "${remaining}" ]]; then
     warn "强制停止端口 ${port} 占用进程: ${remaining//$'\n'/, }"
     kill -9 ${remaining} >/dev/null 2>&1 || true
+    wait_for_port_release "${port}" 2 || true
   fi
 }
 

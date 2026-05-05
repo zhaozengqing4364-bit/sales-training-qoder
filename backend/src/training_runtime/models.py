@@ -17,9 +17,7 @@ class TrainingRuntimeSubject(StrEnum):
 class TrainingRuntimeDescriptor(BaseModel):
     """Canonical runtime descriptor for one training session."""
 
-    subject: TrainingRuntimeSubject = (
-        TrainingRuntimeSubject.TRAINING_SCENARIO_RUNTIME
-    )
+    subject: TrainingRuntimeSubject = TrainingRuntimeSubject.TRAINING_SCENARIO_RUNTIME
     session_id: str
     scenario_type: str
     agent_id: str | None = None

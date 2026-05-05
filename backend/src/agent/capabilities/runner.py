@@ -24,6 +24,7 @@ Usage:
     # End session and collect stats
     stats = await runner.on_session_end(context)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -208,8 +209,7 @@ class CapabilityRunner:
             """Execute a single capability with timeout protection."""
             try:
                 return await asyncio.wait_for(
-                    cap.execute(context, input_data),
-                    timeout=CAPABILITY_TIMEOUT_SECONDS
+                    cap.execute(context, input_data), timeout=CAPABILITY_TIMEOUT_SECONDS
                 )
             except asyncio.CancelledError:
                 logger.info(
@@ -291,7 +291,7 @@ class CapabilityRunner:
                 try:
                     return await asyncio.wait_for(
                         cap.execute(context, input_data),
-                        timeout=CAPABILITY_TIMEOUT_SECONDS
+                        timeout=CAPABILITY_TIMEOUT_SECONDS,
                     )
                 except asyncio.CancelledError:
                     logger.info(

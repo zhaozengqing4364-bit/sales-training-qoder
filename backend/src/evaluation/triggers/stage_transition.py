@@ -3,6 +3,7 @@ Stage Transition Trigger
 
 Triggers evaluation when conversation stage changes.
 """
+
 from evaluation.triggers.base_trigger import BaseTrigger, TriggerContext
 
 
@@ -17,7 +18,7 @@ class StageTransitionTrigger(BaseTrigger):
         self,
         from_stages: list[str] | None = None,
         to_stages: list[str] | None = None,
-        cooldown_turns: int = 1
+        cooldown_turns: int = 1,
     ):
         """
         Initialize stage transition trigger.

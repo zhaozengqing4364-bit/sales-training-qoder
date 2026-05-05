@@ -104,9 +104,8 @@ class ASRServiceWithFallback:
         base_retry_delay: float = 2.0,
         request_timeout: float = 5.0,
         circuit_name: str = "asr_service",
-        fallback_provider_factories: Sequence[
-            tuple[str, ASRProviderFactory]
-        ] | None = None,
+        fallback_provider_factories: Sequence[tuple[str, ASRProviderFactory]]
+        | None = None,
         browser_fallback_provider: str | None = None,
         browser_handoff_message: str | None = None,
         browser_handoff_action: str | None = None,
@@ -247,7 +246,9 @@ class ASRServiceWithFallback:
         )
 
         primary_code = (
-            str(last_error) if last_error is not None else "[ASR_TEMPORARILY_UNAVAILABLE]"
+            str(last_error)
+            if last_error is not None
+            else "[ASR_TEMPORARILY_UNAVAILABLE]"
         )
         self._provider_attempts.append(
             ASRProviderAttempt(

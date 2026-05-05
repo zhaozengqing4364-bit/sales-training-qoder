@@ -8,6 +8,7 @@ References:
 - Requirements: R1-R4 (Agent/Persona management)
 - Design: Section 13-15 (Data Models)
 """
+
 import enum
 import uuid
 from datetime import UTC, datetime
@@ -33,6 +34,7 @@ from common.db.models import Base
 
 class AgentStatus(str, enum.Enum):
     """Agent lifecycle status"""
+
     DRAFT = "draft"
     PUBLISHED = "published"
     ARCHIVED = "archived"
@@ -40,6 +42,7 @@ class AgentStatus(str, enum.Enum):
 
 class AgentCategory(str, enum.Enum):
     """Agent training scenario categories"""
+
     SALES = "sales"
     PRESENTATION = "presentation"
     INTERVIEW = "interview"
@@ -48,6 +51,7 @@ class AgentCategory(str, enum.Enum):
 
 class PersonaCategory(str, enum.Enum):
     """Persona role categories"""
+
     CUSTOMER = "customer"
     INTERVIEWER = "interviewer"
     COACH = "coach"
@@ -56,6 +60,7 @@ class PersonaCategory(str, enum.Enum):
 
 class PersonaDifficulty(str, enum.Enum):
     """Persona difficulty levels"""
+
     EASY = "easy"
     MEDIUM = "medium"
     HARD = "hard"
@@ -63,6 +68,7 @@ class PersonaDifficulty(str, enum.Enum):
 
 class PersonaStatus(str, enum.Enum):
     """Persona status"""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
 
@@ -77,13 +83,16 @@ class Agent(Base):
     Requirements: R1, R2
     Design: Section 13
     """
+
     __tablename__ = "agents"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(100), nullable=False)
     description = Column(String(500))
     icon = Column(String(50))
-    category = Column(String(50), nullable=False)  # sales|presentation|interview|customer_service
+    category = Column(
+        String(50), nullable=False
+    )  # sales|presentation|interview|customer_service
 
     # AI Configuration
     system_prompt = Column(Text)
@@ -98,17 +107,20 @@ class Agent(Base):
     # Audit
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
     published_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('draft', 'published', 'archived')",
-            name="ck_agent_status"
+            "status IN ('draft', 'published', 'archived')", name="ck_agent_status"
         ),
         CheckConstraint(
             "category IN ('sales', 'presentation', 'interview', 'customer_service')",
-            name="ck_agent_category"
+            name="ck_agent_category",
         ),
         Index("idx_agents_status", "status"),
         Index("idx_agents_category", "category"),
@@ -117,15 +129,13 @@ class Agent(Base):
 
     # Relationships
     personas = relationship(
-        "AgentPersona",
-        back_populates="agent",
-        cascade="all, delete-orphan"
+        "AgentPersona", back_populates="agent", cascade="all, delete-orphan"
     )
     # Sessions using this Agent (R12: Session Management Enhancement)
     sessions = relationship(
         "PracticeSession",
         back_populates="agent",
-        foreign_keys="PracticeSession.agent_id"
+        foreign_keys="PracticeSession.agent_id",
     )
     voice_policy = relationship(
         "AgentVoicePolicy",
@@ -145,6 +155,7 @@ class Persona(Base):
     Requirements: R3
     Design: Section 14
     """
+
     __tablename__ = "personas"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -173,20 +184,20 @@ class Persona(Base):
     # Audit
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
     __table_args__ = (
-        CheckConstraint(
-            "status IN ('active', 'inactive')",
-            name="ck_persona_status"
-        ),
+        CheckConstraint("status IN ('active', 'inactive')", name="ck_persona_status"),
         CheckConstraint(
             "category IN ('customer', 'interviewer', 'coach', 'examiner')",
-            name="ck_persona_category"
+            name="ck_persona_category",
         ),
         CheckConstraint(
-            "difficulty IN ('easy', 'medium', 'hard')",
-            name="ck_persona_difficulty"
+            "difficulty IN ('easy', 'medium', 'hard')", name="ck_persona_difficulty"
         ),
         Index("idx_personas_category", "category"),
         Index("idx_personas_difficulty", "difficulty"),
@@ -194,15 +205,12 @@ class Persona(Base):
     )
 
     # Relationships
-    agent_personas = relationship(
-        "AgentPersona",
-        back_populates="persona"
-    )
+    agent_personas = relationship("AgentPersona", back_populates="persona")
     # Sessions using this Persona (R12: Session Management Enhancement)
     sessions = relationship(
         "PracticeSession",
         back_populates="persona",
-        foreign_keys="PracticeSession.persona_id"
+        foreign_keys="PracticeSession.persona_id",
     )
 
 
@@ -216,18 +224,15 @@ class AgentPersona(Base):
     Requirements: R4
     Design: Section 15
     """
+
     __tablename__ = "agent_personas"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     agent_id = Column(
-        String(36),
-        ForeignKey("agents.id", ondelete="CASCADE"),
-        nullable=False
+        String(36), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
     )
     persona_id = Column(
-        String(36),
-        ForeignKey("personas.id", ondelete="RESTRICT"),
-        nullable=False
+        String(36), ForeignKey("personas.id", ondelete="RESTRICT"), nullable=False
     )
 
     # Display configuration
@@ -256,6 +261,7 @@ class VoiceRuntimeProfile(Base):
     Stores reusable runtime presets for voice mode routing, StepFun model
     parameters, and tool policies (web search / internal retrieval).
     """
+
     __tablename__ = "voice_runtime_profiles"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -274,14 +280,20 @@ class VoiceRuntimeProfile(Base):
     input_audio_format = Column(String(20), nullable=False, default="pcm16")
     output_audio_format = Column(String(20), nullable=False, default="pcm16")
     output_sample_rate = Column(Integer, nullable=False, default=24000)
-    turn_detection = Column(String(32), nullable=True, default=None)  # null | server_vad
+    turn_detection = Column(
+        String(32), nullable=True, default=None
+    )  # null | server_vad
 
     # Prompt/tool policies
     system_instruction_template = Column(Text, nullable=True)
     tool_policy = Column(JSON, default=dict)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -314,6 +326,7 @@ class AgentVoicePolicy(Base):
     Defines which runtime profile the Agent uses by default and optional
     per-agent overrides for voice mode, model params, and tool policies.
     """
+
     __tablename__ = "agent_voice_policies"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -338,7 +351,11 @@ class AgentVoicePolicy(Base):
     tool_policy_override = Column(JSON, default=dict)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -354,7 +371,9 @@ class AgentVoicePolicy(Base):
     )
 
     agent = relationship("Agent", back_populates="voice_policy")
-    runtime_profile = relationship("VoiceRuntimeProfile", back_populates="agent_policies")
+    runtime_profile = relationship(
+        "VoiceRuntimeProfile", back_populates="agent_policies"
+    )
 
 
 class PresentationAIPolicy(Base):
@@ -379,9 +398,7 @@ class PresentationAIPolicy(Base):
     # Hard guardrail fallback toggles
     fallback_config = Column(JSON, nullable=False, default=dict)
 
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

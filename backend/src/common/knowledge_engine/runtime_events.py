@@ -99,8 +99,12 @@ def coerce_runtime_events(value: Any) -> list[dict[str, Any]]:
                     status=str(item.get("status") or "unknown"),
                     source=str(item.get("source") or "runtime"),
                     summary=str(item.get("summary") or "Runtime event recorded."),
-                    details=item.get("details") if isinstance(item.get("details"), dict) else {},
-                    metrics=item.get("metrics") if isinstance(item.get("metrics"), dict) else {},
+                    details=item.get("details")
+                    if isinstance(item.get("details"), dict)
+                    else {},
+                    metrics=item.get("metrics")
+                    if isinstance(item.get("metrics"), dict)
+                    else {},
                     occurred_at=item.get("occurred_at"),
                 )
             )
@@ -139,7 +143,9 @@ def resolve_knowledge_path_mode(
     return "live" if normalized_rollout == "enabled" else "compat"
 
 
-def _knowledge_quality_severity(answerability: str, source_status: str) -> RuntimeEventSeverity:
+def _knowledge_quality_severity(
+    answerability: str, source_status: str
+) -> RuntimeEventSeverity:
     if source_status in {"search_failed", "kb_not_ready", "blocked", "missing_query"}:
         return "failure"
     if answerability in {"blocked", "insufficient"}:
@@ -164,11 +170,17 @@ def build_knowledge_answer_runtime_events(
         rollout_mode,
         path_mode=str(diagnostics.get("path_mode") or "").strip() or None,
     )
-    answerability = str(diagnostics.get("answerability") or "unanswered").strip() or "unanswered"
-    source_status = str(diagnostics.get("source_status") or "not_run").strip() or "not_run"
+    answerability = (
+        str(diagnostics.get("answerability") or "unanswered").strip() or "unanswered"
+    )
+    source_status = (
+        str(diagnostics.get("source_status") or "not_run").strip() or "not_run"
+    )
     query = str(diagnostics.get("query") or "").strip()
     live_audit_run_id = str(diagnostics.get("live_audit_run_id") or "").strip() or None
-    shadow_audit_run_id = str(diagnostics.get("shadow_audit_run_id") or "").strip() or None
+    shadow_audit_run_id = (
+        str(diagnostics.get("shadow_audit_run_id") or "").strip() or None
+    )
 
     quality_severity = _knowledge_quality_severity(answerability, source_status)
     quality_summary = {
@@ -232,9 +244,10 @@ def enrich_knowledge_answer_diagnostics(
     occurred_at: Any = None,
 ) -> dict[str, Any]:
     normalized = _safe_mapping(diagnostics or {})
-    normalized_rollout_mode = str(
-        rollout_mode or normalized.get("rollout_mode") or "legacy"
-    ).strip() or "legacy"
+    normalized_rollout_mode = (
+        str(rollout_mode or normalized.get("rollout_mode") or "legacy").strip()
+        or "legacy"
+    )
     normalized_path_mode = resolve_knowledge_path_mode(
         normalized_rollout_mode,
         path_mode=path_mode or str(normalized.get("path_mode") or "").strip() or None,
@@ -243,7 +256,8 @@ def enrich_knowledge_answer_diagnostics(
     normalized["path_mode"] = normalized_path_mode
 
     resolved_live_audit_run_id = (
-        str(live_audit_run_id or normalized.get("live_audit_run_id") or "").strip() or None
+        str(live_audit_run_id or normalized.get("live_audit_run_id") or "").strip()
+        or None
     )
     resolved_shadow_audit_run_id = (
         str(shadow_audit_run_id or normalized.get("shadow_audit_run_id") or "").strip()

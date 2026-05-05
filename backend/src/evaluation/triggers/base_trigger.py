@@ -3,6 +3,7 @@ Base Trigger Interface for Staged Evaluation
 
 All triggers must inherit from BaseTrigger and implement should_trigger method.
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 @dataclass
 class TriggerContext:
     """Context passed to triggers for evaluation"""
+
     session_id: str
     turn_count: int
     messages: list[dict[str, Any]]

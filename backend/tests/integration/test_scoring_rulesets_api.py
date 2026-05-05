@@ -324,3 +324,17 @@ async def test_admin_scoring_ruleset_dry_run_publish_report_and_rollback_flow(
     ).scalars().all()
     assert audit_actions.count("scoring_ruleset.publish") == 2
     assert audit_actions.count("scoring_ruleset.rollback") == 1
+
+    audit_logs = await async_client.get(
+        "/api/v1/evaluation/admin/scoring-rulesets/audit-logs",
+        headers=admin_headers,
+    )
+    assert audit_logs.status_code == 200
+    audit_payload = audit_logs.json()["data"]
+    assert audit_payload["total"] >= 3
+    assert audit_payload["items"][0]["action"] in {
+        "scoring_ruleset.publish",
+        "scoring_ruleset.rollback",
+    }
+    assert audit_payload["items"][0]["reason"]
+    assert "trace_id" in audit_payload["items"][0]

@@ -67,6 +67,7 @@ GateLevel = Literal["blocking", "warning"]
 @dataclass
 class VerificationCheckInput:
     """Input for creating/updating a verification check"""
+
     check_type: CheckType
     check_name: str
     check_description: str | None = None
@@ -80,6 +81,7 @@ class VerificationCheckInput:
 @dataclass
 class CheckThreshold:
     """Threshold definitions for verification checks"""
+
     min_value: float | None = None
     max_value: float | None = None
     required_value: Any = None
@@ -89,6 +91,7 @@ class CheckThreshold:
 @dataclass
 class VerificationRecordView:
     """View of a verification record"""
+
     record_id: str
     release_version: str
     release_candidate_id: str
@@ -109,6 +112,7 @@ class VerificationRecordView:
 @dataclass
 class VerificationSummaryView:
     """View of a verification summary"""
+
     summary_id: str
     release_version: str
     release_candidate_id: str
@@ -129,6 +133,7 @@ class VerificationSummaryView:
 @dataclass
 class ReleaseVerificationReport:
     """Complete verification report for a release"""
+
     summary: VerificationSummaryView
     checks: list[VerificationRecordView]
     gate_status: dict[str, dict[str, Any]]  # Per-gate status summary
@@ -151,27 +156,27 @@ class ReleaseVerificationService:
         VerificationCheckInput(
             check_type="unit_tests",
             check_name="Unit Tests",
-            check_description="Verify unit test suite passes"
+            check_description="Verify unit test suite passes",
         ),
         VerificationCheckInput(
             check_type="coverage",
             check_name="Code Coverage",
-            check_description="Verify code coverage meets threshold (>=70%)"
+            check_description="Verify code coverage meets threshold (>=70%)",
         ),
         VerificationCheckInput(
             check_type="integration_tests",
             check_name="Integration Tests",
-            check_description="Verify integration test suite passes"
+            check_description="Verify integration test suite passes",
         ),
         VerificationCheckInput(
             check_type="contract",
             check_name="API Contract Tests",
-            check_description="Verify all API contracts pass (NFR19: 100% required)"
+            check_description="Verify all API contracts pass (NFR19: 100% required)",
         ),
         VerificationCheckInput(
             check_type="performance",
             check_name="Performance Benchmarks",
-            check_description="Verify latency and throughput meet NFR thresholds"
+            check_description="Verify latency and throughput meet NFR thresholds",
         ),
     ]
 
@@ -215,7 +220,8 @@ class ReleaseVerificationService:
             # Check if RC already exists
             existing = await db.execute(
                 select(ReleaseVerificationSummary).where(
-                    ReleaseVerificationSummary.release_candidate_id == release_candidate_id
+                    ReleaseVerificationSummary.release_candidate_id
+                    == release_candidate_id
                 )
             )
             if await self._resolve_scalar_one_or_none(existing):
@@ -258,7 +264,7 @@ class ReleaseVerificationService:
                     "release_candidate_id": release_candidate_id,
                     "total_checks": len(check_list),
                     "created_by": created_by,
-                }
+                },
             )
 
             return Result(value=self._summary_to_view(summary))
@@ -267,7 +273,7 @@ class ReleaseVerificationService:
             logger.error(
                 "Failed to create release candidate",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             await db.rollback()
             return Result.fail(fallback="[CREATE_RC_FAILED]")
@@ -322,7 +328,9 @@ class ReleaseVerificationService:
             record.updated_at = datetime.now(UTC)
 
             # Update summary counts
-            await self._update_summary_counts(db, record.release_candidate_id, old_status, status)
+            await self._update_summary_counts(
+                db, record.release_candidate_id, old_status, status
+            )
 
             await db.commit()
             await db.refresh(record)
@@ -334,7 +342,7 @@ class ReleaseVerificationService:
                     "status": status,
                     "passed": passed,
                     "executed_by": executed_by,
-                }
+                },
             )
 
             return Result(value=self._record_to_view(record))
@@ -343,7 +351,7 @@ class ReleaseVerificationService:
             logger.error(
                 "Failed to update check result",
                 extra={"record_id": record_id, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             await db.rollback()
             return Result.fail(fallback="[UPDATE_CHECK_FAILED]")
@@ -372,7 +380,8 @@ class ReleaseVerificationService:
         try:
             result = await db.execute(
                 select(ReleaseVerificationSummary).where(
-                    ReleaseVerificationSummary.release_candidate_id == release_candidate_id
+                    ReleaseVerificationSummary.release_candidate_id
+                    == release_candidate_id
                 )
             )
             summary = await self._resolve_scalar_one_or_none(result)
@@ -407,7 +416,7 @@ class ReleaseVerificationService:
                     "release_candidate_id": release_candidate_id,
                     "decision": decision,
                     "finalized_by": finalized_by,
-                }
+                },
             )
 
             return Result(value=self._summary_to_view(summary))
@@ -416,7 +425,7 @@ class ReleaseVerificationService:
             logger.error(
                 "Failed to make go/no-go decision",
                 extra={"release_candidate_id": release_candidate_id, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             await db.rollback()
             return Result.fail(fallback="[DECISION_FAILED]")
@@ -440,7 +449,8 @@ class ReleaseVerificationService:
             # Get summary
             summary_result = await db.execute(
                 select(ReleaseVerificationSummary).where(
-                    ReleaseVerificationSummary.release_candidate_id == release_candidate_id
+                    ReleaseVerificationSummary.release_candidate_id
+                    == release_candidate_id
                 )
             )
             summary = await self._resolve_scalar_one_or_none(summary_result)
@@ -450,9 +460,12 @@ class ReleaseVerificationService:
 
             # Get all checks
             checks_result = await db.execute(
-                select(ReleaseVerificationRecord).where(
-                    ReleaseVerificationRecord.release_candidate_id == release_candidate_id
-                ).order_by(ReleaseVerificationRecord.created_at)
+                select(ReleaseVerificationRecord)
+                .where(
+                    ReleaseVerificationRecord.release_candidate_id
+                    == release_candidate_id
+                )
+                .order_by(ReleaseVerificationRecord.created_at)
             )
             checks = checks_result.scalars().all()
 
@@ -490,7 +503,7 @@ class ReleaseVerificationService:
             logger.error(
                 "Failed to get verification report",
                 extra={"release_candidate_id": release_candidate_id, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[REPORT_FAILED]")
 
@@ -532,7 +545,7 @@ class ReleaseVerificationService:
             logger.error(
                 "Failed to list release candidates",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[LIST_FAILED]")
 
@@ -562,7 +575,7 @@ class ReleaseVerificationService:
             logger.error(
                 "Failed to get latest release candidate",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[GET_LATEST_FAILED]")
 
@@ -653,7 +666,9 @@ class ReleaseVerificationService:
 
         return recommendations
 
-    def _record_to_view(self, record: ReleaseVerificationRecord) -> VerificationRecordView:
+    def _record_to_view(
+        self, record: ReleaseVerificationRecord
+    ) -> VerificationRecordView:
         """Convert model to view"""
         return VerificationRecordView(
             record_id=record.record_id,
@@ -673,7 +688,9 @@ class ReleaseVerificationService:
             updated_at=record.updated_at.isoformat() if record.updated_at else "",
         )
 
-    def _summary_to_view(self, summary: ReleaseVerificationSummary) -> VerificationSummaryView:
+    def _summary_to_view(
+        self, summary: ReleaseVerificationSummary
+    ) -> VerificationSummaryView:
         """Convert model to view"""
         return VerificationSummaryView(
             summary_id=summary.summary_id,
@@ -689,7 +706,9 @@ class ReleaseVerificationService:
             decision_reason=summary.decision_reason,
             created_at=summary.created_at.isoformat() if summary.created_at else "",
             updated_at=summary.updated_at.isoformat() if summary.updated_at else "",
-            finalized_at=summary.finalized_at.isoformat() if summary.finalized_at else None,
+            finalized_at=summary.finalized_at.isoformat()
+            if summary.finalized_at
+            else None,
             finalized_by=summary.finalized_by,
         )
 
@@ -712,7 +731,8 @@ class ReleaseVerificationService:
             # Get summary
             summary_result = await db.execute(
                 select(ReleaseVerificationSummary).where(
-                    ReleaseVerificationSummary.release_candidate_id == release_candidate_id
+                    ReleaseVerificationSummary.release_candidate_id
+                    == release_candidate_id
                 )
             )
             summary = await self._resolve_scalar_one_or_none(summary_result)
@@ -722,9 +742,12 @@ class ReleaseVerificationService:
 
             # Get all checks
             checks_result = await db.execute(
-                select(ReleaseVerificationRecord).where(
-                    ReleaseVerificationRecord.release_candidate_id == release_candidate_id
-                ).order_by(ReleaseVerificationRecord.created_at)
+                select(ReleaseVerificationRecord)
+                .where(
+                    ReleaseVerificationRecord.release_candidate_id
+                    == release_candidate_id
+                )
+                .order_by(ReleaseVerificationRecord.created_at)
             )
             checks = checks_result.scalars().all()
 
@@ -793,7 +816,9 @@ class ReleaseVerificationService:
                         elif check.check_type == "performance":
                             # Check latency metrics
                             if "thresholds" in check.details:
-                                quality_gates[gate_key]["thresholds"] = check.details["thresholds"]
+                                quality_gates[gate_key]["thresholds"] = check.details[
+                                    "thresholds"
+                                ]
 
                 elif check.status == "failed":
                     quality_gates[gate_key]["status"] = "fail"
@@ -819,9 +844,7 @@ class ReleaseVerificationService:
                     quality_gates[gate_key]["status"] = "pending"
 
             # Determine overall gate status
-            any_pending = any(
-                g["status"] == "pending" for g in quality_gates.values()
-            )
+            any_pending = any(g["status"] == "pending" for g in quality_gates.values())
             any_blocking_fail = any(
                 g["status"] == "fail" and g.get("critical", False)
                 for g in quality_gates.values()
@@ -851,20 +874,22 @@ class ReleaseVerificationService:
             elif overall_status == "pending":
                 recommendations.append("Complete all pending verification checks")
 
-            return Result(value={
-                "overall_status": overall_status,
-                "gates": quality_gates,
-                "blocking_failures": blocking_failures,
-                "warnings": warnings,
-                "can_release": overall_status == "pass",
-                "recommendations": recommendations,
-            })
+            return Result(
+                value={
+                    "overall_status": overall_status,
+                    "gates": quality_gates,
+                    "blocking_failures": blocking_failures,
+                    "warnings": warnings,
+                    "can_release": overall_status == "pass",
+                    "recommendations": recommendations,
+                }
+            )
 
         except SQLAlchemyError as e:
             logger.error(
                 "Failed to check quality gate",
                 extra={"release_candidate_id": release_candidate_id, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[GATE_CHECK_FAILED]")
 
@@ -889,7 +914,8 @@ class ReleaseVerificationService:
             # Get summary
             summary_result = await db.execute(
                 select(ReleaseVerificationSummary).where(
-                    ReleaseVerificationSummary.release_candidate_id == release_candidate_id
+                    ReleaseVerificationSummary.release_candidate_id
+                    == release_candidate_id
                 )
             )
             summary = await self._resolve_scalar_one_or_none(summary_result)
@@ -914,8 +940,7 @@ class ReleaseVerificationService:
             if gate_status["can_release"]:
                 decision = "go"
                 reason = "All quality gates passed: " + ", ".join(
-                    f"{g['name']}={g['status']}"
-                    for g in gate_status["gates"].values()
+                    f"{g['name']}={g['status']}" for g in gate_status["gates"].values()
                 )
             elif gate_status["blocking_failures"]:
                 decision = "no_go"
@@ -924,9 +949,7 @@ class ReleaseVerificationService:
                 )
             else:
                 decision = "conditional"
-                reason = "Non-critical warnings: " + "; ".join(
-                    gate_status["warnings"]
-                )
+                reason = "Non-critical warnings: " + "; ".join(gate_status["warnings"])
 
             # Update summary with decision
             summary.go_no_go_decision = decision
@@ -952,7 +975,7 @@ class ReleaseVerificationService:
                     "decision": decision,
                     "reason": reason,
                     "finalized_by": finalized_by,
-                }
+                },
             )
 
             return Result(value=self._summary_to_view(summary))
@@ -961,7 +984,7 @@ class ReleaseVerificationService:
             logger.error(
                 "Failed to make automated decision",
                 extra={"release_candidate_id": release_candidate_id, "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             await db.rollback()
             return Result.fail(fallback="[AUTO_DECISION_FAILED]")

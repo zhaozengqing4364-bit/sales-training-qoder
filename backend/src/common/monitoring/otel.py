@@ -34,9 +34,7 @@ def initialize_otel(app: FastAPI | None = None) -> bool:
         trace_api = importlib.import_module("opentelemetry.trace")
         resources_module = importlib.import_module("opentelemetry.sdk.resources")
         trace_sdk_module = importlib.import_module("opentelemetry.sdk.trace")
-        trace_export_module = importlib.import_module(
-            "opentelemetry.sdk.trace.export"
-        )
+        trace_export_module = importlib.import_module("opentelemetry.sdk.trace.export")
         otlp_module = importlib.import_module(
             "opentelemetry.exporter.otlp.proto.http.trace_exporter"
         )
@@ -59,9 +57,7 @@ def initialize_otel(app: FastAPI | None = None) -> bool:
     try:
         resource = resources_module.Resource.create(
             {
-                "service.name": os.getenv(
-                    "OTEL_SERVICE_NAME", "ai-practice-backend"
-                ),
+                "service.name": os.getenv("OTEL_SERVICE_NAME", "ai-practice-backend"),
                 "service.version": os.getenv("APP_VERSION", "unknown"),
                 "deployment.environment": os.getenv("ENVIRONMENT", "development"),
             }

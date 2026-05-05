@@ -1,6 +1,6 @@
 """add governed business rule config tables
 
-Revision ID: 20260424_1100_033
+Revision ID: 20260424_1101_033_business_rules
 Revises: 20260421_0645_032
 Create Date: 2026-04-24 11:00:00.000000
 """
@@ -12,8 +12,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-
-revision: str = "20260424_1100_033"
+revision: str = "20260424_1101_033_business_rules"
 down_revision: str | None = "20260421_0645_032"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -61,21 +60,46 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["created_by"], ["users.user_id"]),
         sa.ForeignKeyConstraint(["updated_by"], ["users.user_id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("key", "version", name="uq_business_rule_config_key_version"),
+        sa.UniqueConstraint(
+            "key", "version", name="uq_business_rule_config_key_version"
+        ),
+        if_not_exists=True,
     )
-    op.create_index("ix_business_rule_configs_domain", "business_rule_configs", ["domain"])
-    op.create_index("ix_business_rule_configs_key", "business_rule_configs", ["key"])
-    op.create_index("ix_business_rule_configs_status", "business_rule_configs", ["status"])
-    op.create_index("ix_business_rule_configs_enabled", "business_rule_configs", ["enabled"])
+    op.create_index(
+        "ix_business_rule_configs_domain",
+        "business_rule_configs",
+        ["domain"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_business_rule_configs_key",
+        "business_rule_configs",
+        ["key"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_business_rule_configs_status",
+        "business_rule_configs",
+        ["status"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_business_rule_configs_enabled",
+        "business_rule_configs",
+        ["enabled"],
+        if_not_exists=True,
+    )
     op.create_index(
         "idx_business_rule_configs_key_status_version",
         "business_rule_configs",
         ["key", "status", "version"],
+        if_not_exists=True,
     )
     op.create_index(
         "idx_business_rule_configs_domain_status",
         "business_rule_configs",
         ["domain", "status"],
+        if_not_exists=True,
     )
 
     op.create_table(
@@ -110,64 +134,129 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["actor_id"], ["users.user_id"]),
         sa.PrimaryKeyConstraint("id"),
+        if_not_exists=True,
     )
     op.create_index(
         "ix_business_rule_config_audit_logs_config_id",
         "business_rule_config_audit_logs",
         ["config_id"],
+        if_not_exists=True,
     )
     op.create_index(
         "ix_business_rule_config_audit_logs_domain",
         "business_rule_config_audit_logs",
         ["domain"],
+        if_not_exists=True,
     )
     op.create_index(
         "ix_business_rule_config_audit_logs_config_key",
         "business_rule_config_audit_logs",
         ["config_key"],
+        if_not_exists=True,
     )
     op.create_index(
         "ix_business_rule_config_audit_logs_action",
         "business_rule_config_audit_logs",
         ["action"],
+        if_not_exists=True,
     )
     op.create_index(
         "ix_business_rule_config_audit_logs_actor_id",
         "business_rule_config_audit_logs",
         ["actor_id"],
+        if_not_exists=True,
     )
     op.create_index(
         "ix_business_rule_config_audit_logs_trace_id",
         "business_rule_config_audit_logs",
         ["trace_id"],
+        if_not_exists=True,
     )
     op.create_index(
         "ix_business_rule_config_audit_logs_created_at",
         "business_rule_config_audit_logs",
         ["created_at"],
+        if_not_exists=True,
     )
     op.create_index(
         "idx_business_rule_audit_key_created",
         "business_rule_config_audit_logs",
         ["config_key", "created_at"],
+        if_not_exists=True,
     )
 
 
 def downgrade() -> None:
-    op.drop_index("idx_business_rule_audit_key_created", table_name="business_rule_config_audit_logs")
-    op.drop_index("ix_business_rule_config_audit_logs_created_at", table_name="business_rule_config_audit_logs")
-    op.drop_index("ix_business_rule_config_audit_logs_trace_id", table_name="business_rule_config_audit_logs")
-    op.drop_index("ix_business_rule_config_audit_logs_actor_id", table_name="business_rule_config_audit_logs")
-    op.drop_index("ix_business_rule_config_audit_logs_action", table_name="business_rule_config_audit_logs")
-    op.drop_index("ix_business_rule_config_audit_logs_config_key", table_name="business_rule_config_audit_logs")
-    op.drop_index("ix_business_rule_config_audit_logs_domain", table_name="business_rule_config_audit_logs")
-    op.drop_index("ix_business_rule_config_audit_logs_config_id", table_name="business_rule_config_audit_logs")
-    op.drop_table("business_rule_config_audit_logs")
+    op.drop_index(
+        "idx_business_rule_audit_key_created",
+        table_name="business_rule_config_audit_logs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_config_audit_logs_created_at",
+        table_name="business_rule_config_audit_logs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_config_audit_logs_trace_id",
+        table_name="business_rule_config_audit_logs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_config_audit_logs_actor_id",
+        table_name="business_rule_config_audit_logs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_config_audit_logs_action",
+        table_name="business_rule_config_audit_logs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_config_audit_logs_config_key",
+        table_name="business_rule_config_audit_logs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_config_audit_logs_domain",
+        table_name="business_rule_config_audit_logs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_config_audit_logs_config_id",
+        table_name="business_rule_config_audit_logs",
+        if_exists=True,
+    )
+    op.drop_table("business_rule_config_audit_logs", if_exists=True)
 
-    op.drop_index("idx_business_rule_configs_domain_status", table_name="business_rule_configs")
-    op.drop_index("idx_business_rule_configs_key_status_version", table_name="business_rule_configs")
-    op.drop_index("ix_business_rule_configs_enabled", table_name="business_rule_configs")
-    op.drop_index("ix_business_rule_configs_status", table_name="business_rule_configs")
-    op.drop_index("ix_business_rule_configs_key", table_name="business_rule_configs")
-    op.drop_index("ix_business_rule_configs_domain", table_name="business_rule_configs")
-    op.drop_table("business_rule_configs")
+    op.drop_index(
+        "idx_business_rule_configs_domain_status",
+        table_name="business_rule_configs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "idx_business_rule_configs_key_status_version",
+        table_name="business_rule_configs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_configs_enabled",
+        table_name="business_rule_configs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_configs_status",
+        table_name="business_rule_configs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_configs_key",
+        table_name="business_rule_configs",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_business_rule_configs_domain",
+        table_name="business_rule_configs",
+        if_exists=True,
+    )
+    op.drop_table("business_rule_configs", if_exists=True)

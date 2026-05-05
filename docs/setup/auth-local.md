@@ -17,9 +17,9 @@
 最小必填变量：
 
 ```env
-WECHAT_CORP_ID=your_corp_id
-WECHAT_SECRET=your_secret
-WECHAT_AGENT_ID=your_agent_id
+WECHAT_CORP_ID=replace-with-corp-id
+WECHAT_SECRET=replace-with-wechat-secret
+WECHAT_AGENT_ID=replace-with-agent-id
 AUTH_FRONTEND_BASE_URL=http://localhost:3445
 ```
 
@@ -76,6 +76,16 @@ AUTH_USER_PASSWORDS_JSON={"admin@qoder.ai":"admin123","support@qoder.ai":"suppor
 2. `web/src/hooks/use-practice-websocket.ts` 不再生成 `token=`，且 focused tests 保持通过；
 3. backend websocket contract proof 明确证明 query token 已降为兼容或已完全移除；
 4. `docs/api-contract/websocket.md` 与 `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 同步更新，不保留双重 authority。
+
+## 9) Secret hygiene gate
+
+Run this local/CI check before publishing release evidence:
+
+```bash
+bash scripts/secret-scan.sh
+```
+
+It scans tracked example/docs surfaces for obvious credential-shaped values and fails closed when a real-looking secret pattern is still present.
 
 ## 6) 初始化管理员账号
 

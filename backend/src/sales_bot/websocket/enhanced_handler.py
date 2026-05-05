@@ -212,10 +212,14 @@ class EnhancedSalesHandler(BaseSalesHandler):
         capabilities_config = self.agent_config.setdefault("capabilities_config", {})
         merged_kb_ids = self._snapshot_knowledge_base_ids()
         if not merged_kb_ids:
-            merged_kb_ids = list(dict.fromkeys([
-                *self.agent_config.get("default_knowledge_base_ids", []),
-                *self.persona_config.get("knowledge_base_ids", []),
-            ]))
+            merged_kb_ids = list(
+                dict.fromkeys(
+                    [
+                        *self.agent_config.get("default_knowledge_base_ids", []),
+                        *self.persona_config.get("knowledge_base_ids", []),
+                    ]
+                )
+            )
         if merged_kb_ids:
             knowledge_cfg = capabilities_config.get("knowledge_retrieval", {})
             if not isinstance(knowledge_cfg, dict):
@@ -285,7 +289,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
         legacy_prompt = str(self.persona_config.get("system_prompt") or "").strip()
         if legacy_prompt:
             return legacy_prompt
-        return str(self.agent_config.get("system_prompt") or "你是一个销售教练。").strip()
+        return str(
+            self.agent_config.get("system_prompt") or "你是一个销售教练。"
+        ).strip()
 
     @staticmethod
     def _coach_health_message(status: str) -> str:
@@ -361,7 +367,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
         self.turn_count = state.turn_count
         self.session_status = state.session_status or self.session_status
         self.ai_state = state.ai_state or self.ai_state
-        runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        runtime_state = (
+            state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        )
         restored_coach_health = runtime_state.get("coach_health")
         restored_live_session_summary = coerce_live_session_conclusion_summary(
             runtime_state.get("live_session_summary")
@@ -384,7 +392,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
         if self.capability_processor is not None:
             self.capability_processor.coach_health = self._coach_health
             self.capability_processor._coach_health_reason = self._coach_health_reason
-            self.capability_processor.live_session_summary = restored_live_session_summary
+            self.capability_processor.live_session_summary = (
+                restored_live_session_summary
+            )
         await self._send_reconnection_success(self._create_state_snapshot())
 
     # ========== Connection lifecycle hooks ==========
@@ -439,7 +449,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
                 llm_service = LLMService()
                 prompt_service = PromptTemplateService(db)
                 staged_eval_service = StagedEvaluationService(
-                    db_session=db, prompt_service=prompt_service, llm_service=llm_service
+                    db_session=db,
+                    prompt_service=prompt_service,
+                    llm_service=llm_service,
                 )
                 report_service = ComprehensiveReportService(
                     db_session=db,
@@ -447,9 +459,13 @@ class EnhancedSalesHandler(BaseSalesHandler):
                     prompt_service=prompt_service,
                     llm_service=llm_service,
                 )
-                result = await report_service.generate_report(self.session_id, scenario_type="sales")
+                result = await report_service.generate_report(
+                    self.session_id, scenario_type="sales"
+                )
                 if result.is_success:
-                    logger.info(f"Comprehensive report generated for session {self.session_id}")
+                    logger.info(
+                        f"Comprehensive report generated for session {self.session_id}"
+                    )
                 else:
                     logger.warning(f"Report generation failed: {result.fallback}")
         except (RuntimeError, ValueError, OSError, ImportError) as e:
@@ -563,7 +579,11 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
                 async with self._state_lock:
                     should_start = self.asr_queue is None
-                if should_start and self._greeting_task and not self._greeting_task.done():
+                if (
+                    should_start
+                    and self._greeting_task
+                    and not self._greeting_task.done()
+                ):
                     self._greeting_task.cancel()
 
                 await self._enqueue_audio_bytes(audio_bytes)
@@ -611,13 +631,20 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
             if self.asr_task and not self.asr_task.done():
                 try:
-                    final_transcript = await asyncio.wait_for(self.asr_task, timeout=15.0)
+                    final_transcript = await asyncio.wait_for(
+                        self.asr_task, timeout=15.0
+                    )
                 except TimeoutError:
                     logger.warning("ASR task timeout, cancelling")
                     self.asr_task.cancel()
-                    if self.current_transcript and len(self.current_transcript.strip()) > 0:
+                    if (
+                        self.current_transcript
+                        and len(self.current_transcript.strip()) > 0
+                    ):
                         final_transcript = self.current_transcript
-                        logger.info(f"[ASR] Using current transcript after timeout: {final_transcript[:50]}...")
+                        logger.info(
+                            f"[ASR] Using current transcript after timeout: {final_transcript[:50]}..."
+                        )
                 except (RuntimeError, OSError) as e:
                     logger.error(f"Error waiting for ASR task: {e}")
 
@@ -631,7 +658,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
             await self._send_backpressure("resume", 0)
 
         if final_transcript and len(final_transcript.strip()) > 0:
-            logger.info(f"[ASR] Processing final transcript (non-blocking): {final_transcript[:50]}...")
+            logger.info(
+                f"[ASR] Processing final transcript (non-blocking): {final_transcript[:50]}..."
+            )
             # Fire-and-forget: run LLM+TTS pipeline in background so the message
             # processing loop stays responsive for the next recording session.
             await self._launch_response_task(final_transcript, source="asr_final")
@@ -714,7 +743,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
             logger.info("[RESPONSE] Background response task cancelled")
             raise
         except (RuntimeError, ValueError, OSError) as e:
-            logger.error(f"[RESPONSE] Background response task error: {e}", exc_info=True)
+            logger.error(
+                f"[RESPONSE] Background response task error: {e}", exc_info=True
+            )
             await self._send_status("listening")
         finally:
             current_task = asyncio.current_task()
@@ -734,7 +765,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
             self.context.turn_count = self.turn_count
             self.context.trace_id = new_trace_id
         self._current_turn_initialized = True
-        logger.info(f"[TURN {self.turn_count}] Started new {interaction_type} interaction, trace_id={new_trace_id}")
+        logger.info(
+            f"[TURN {self.turn_count}] Started new {interaction_type} interaction, trace_id={new_trace_id}"
+        )
         return new_trace_id
 
     # ========== Text processing (enhanced with capabilities + DB) ==========
@@ -753,7 +786,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
         # P1-10: Sliding window
         self.conversation_history.append({"role": "user", "content": text})
         if len(self.conversation_history) > self.MAX_CONVERSATION_HISTORY:
-            self.conversation_history = self.conversation_history[-self.MAX_CONVERSATION_HISTORY:]
+            self.conversation_history = self.conversation_history[
+                -self.MAX_CONVERSATION_HISTORY :
+            ]
 
         # 1. Save user message (via component)
         user_message_id = None
@@ -771,7 +806,10 @@ class EnhancedSalesHandler(BaseSalesHandler):
         analysis_data: dict[str, Any] = {}
         knowledge_context: str = ""
         if self.capability_processor and self.context:
-            analysis_data, knowledge_context = await self.capability_processor.run_and_send_feedback(
+            (
+                analysis_data,
+                knowledge_context,
+            ) = await self.capability_processor.run_and_send_feedback(
                 text=text,
                 context=self.context,
                 websocket=self.websocket,
@@ -825,13 +863,19 @@ class EnhancedSalesHandler(BaseSalesHandler):
             finally:
                 self._llm_task = None
 
-        logger.info(f"[PROCESS] Response: {response_text[:50] if response_text else 'None'}...")
+        logger.info(
+            f"[PROCESS] Response: {response_text[:50] if response_text else 'None'}..."
+        )
 
         if response_text:
             # P1-10: Sliding window
-            self.conversation_history.append({"role": "assistant", "content": response_text})
+            self.conversation_history.append(
+                {"role": "assistant", "content": response_text}
+            )
             if len(self.conversation_history) > self.MAX_CONVERSATION_HISTORY:
-                self.conversation_history = self.conversation_history[-self.MAX_CONVERSATION_HISTORY:]
+                self.conversation_history = self.conversation_history[
+                    -self.MAX_CONVERSATION_HISTORY :
+                ]
             if self.context:
                 self.context.add_message("assistant", response_text)
 
@@ -885,15 +929,24 @@ class EnhancedSalesHandler(BaseSalesHandler):
     def _resolve_llm_service(self):
         """Resolve LLM service from agent-level override, falling back to global default."""
         capabilities_config = self.agent_config.get("capabilities_config", {})
-        llm_config = capabilities_config.get("llm", {}) if isinstance(capabilities_config, dict) else {}
-        config_id = llm_config.get("model_config_id") if isinstance(llm_config, dict) else None
+        llm_config = (
+            capabilities_config.get("llm", {})
+            if isinstance(capabilities_config, dict)
+            else {}
+        )
+        config_id = (
+            llm_config.get("model_config_id") if isinstance(llm_config, dict) else None
+        )
 
         if not isinstance(config_id, str) or not config_id:
             self._llm_override_service = None
             self._llm_override_config_id = None
             return get_llm_service()
 
-        if self._llm_override_service is not None and self._llm_override_config_id == config_id:
+        if (
+            self._llm_override_service is not None
+            and self._llm_override_config_id == config_id
+        ):
             return self._llm_override_service
 
         config_manager = get_config_manager()
@@ -928,7 +981,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
             llm_service = self._resolve_llm_service()
 
-            base_instructions = self._base_instructions or self._resolve_base_instructions()
+            base_instructions = (
+                self._base_instructions or self._resolve_base_instructions()
+            )
             if not base_instructions:
                 base_instructions = "你是一个销售教练。"
             system_prompt = VoiceInstructionCompiler.compose_turn_instructions(
@@ -981,7 +1036,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
         if not greeting:
             greeting = "你好！准备好练习了吗？"
 
-        logger.info(f"Sending greeting: {greeting[:30] if len(greeting) > 30 else greeting}...")
+        logger.info(
+            f"Sending greeting: {greeting[:30] if len(greeting) > 30 else greeting}..."
+        )
 
         self.conversation_history.append({"role": "assistant", "content": greeting})
         if self.context:
@@ -1024,12 +1081,15 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
     async def _send_transcript(self, text: str, is_final: bool):
         """Send ASR transcript with trace_id."""
-        await self.manager.send_json(self.websocket, {
-            "type": "asr_transcript",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "trace_id": self._get_trace_id(),
-            "data": {"text": text, "is_final": is_final, "confidence": 0.95},
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "asr_transcript",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": self._get_trace_id(),
+                "data": {"text": text, "is_final": is_final, "confidence": 0.95},
+            },
+        )
 
     async def _send_tts_response(self, text: str, request_id: int):
         """Send TTS response via component with trace_id."""
@@ -1049,16 +1109,19 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
     async def _send_status(self, ai_state: str):
         """Send status update with trace_id."""
-        await self.manager.send_json(self.websocket, {
-            "type": "status",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "trace_id": self._get_trace_id(),
-            "data": {
-                "session_status": self.session_status,
-                "ai_state": ai_state,
-                "turn_count": self.turn_count,
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "status",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": self._get_trace_id(),
+                "data": {
+                    "session_status": self.session_status,
+                    "ai_state": ai_state,
+                    "turn_count": self.turn_count,
+                },
             },
-        })
+        )
 
     async def _send_backpressure(self, action: str, queue_size: int):
         """Send backpressure signal to client."""
@@ -1072,24 +1135,33 @@ class EnhancedSalesHandler(BaseSalesHandler):
                 "low_watermark": self.ASR_LOW_WATERMARK,
             },
         }
-        await self.manager.send_json(self.websocket, {
-            "type": "backpressure",
-            **payload,
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "backpressure",
+                **payload,
+            },
+        )
         # Legacy alias for old clients during transition window.
-        await self.manager.send_json(self.websocket, {
-            "type": "system_backpressure",
-            **payload,
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "system_backpressure",
+                **payload,
+            },
+        )
 
     async def _send_error(self, code: str, message: str):
         """Send error with trace_id."""
-        await self.manager.send_json(self.websocket, {
-            "type": "error",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "trace_id": self._get_trace_id(),
-            "data": {"code": code, "message": message, "user_action": "请重试"},
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "error",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": self._get_trace_id(),
+                "data": {"code": code, "message": message, "user_action": "请重试"},
+            },
+        )
 
 
 def create_enhanced_sales_handler() -> EnhancedSalesHandler:

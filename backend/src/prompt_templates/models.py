@@ -160,14 +160,19 @@ class PromptTemplateBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Template name")
     prompt_type: PromptType = Field(..., description="Type of prompt")
     category: str = Field(
-        default="common", min_length=1, max_length=100, description="Category for grouping"
+        default="common",
+        min_length=1,
+        max_length=100,
+        description="Category for grouping",
     )
     template: str = Field(..., min_length=1, description="Jinja2 template string")
     variables: list[str] = Field(
         default_factory=list, description="Variable names used in template"
     )
     is_active: bool = Field(default=True, description="Whether template is active")
-    is_default: bool = Field(default=False, description="Whether this is the default for its type")
+    is_default: bool = Field(
+        default=False, description="Whether this is the default for its type"
+    )
 
     @field_validator("template")
     @classmethod
@@ -279,7 +284,9 @@ class PromptTemplateUpdate(BaseModel):
     def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
         """Re-extract variables if template is updated without explicit variables."""
         if self.template is not None and self.variables is None:
-            self.variables = PromptTemplateCreate._extract_variables_from_template(self.template)
+            self.variables = PromptTemplateCreate._extract_variables_from_template(
+                self.template
+            )
         return self
 
 
@@ -289,7 +296,9 @@ class PromptTemplate(PromptTemplateBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID = Field(..., description="Unique identifier")
-    is_system: bool = Field(default=False, description="Whether this is a system template")
+    is_system: bool = Field(
+        default=False, description="Whether this is a system template"
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     governance_status: str = Field(
@@ -334,16 +343,24 @@ class ScenarioPromptBase(BaseModel):
     """Base model for scenario prompt assignments."""
 
     scenario_type: str = Field(
-        ..., min_length=1, max_length=50, description="Type of scenario (sales, presentation)"
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Type of scenario (sales, presentation)",
     )
     scenario_id: str | None = Field(
         default=None, max_length=255, description="Optional specific scenario ID"
     )
     prompt_type: str = Field(
-        ..., min_length=1, max_length=50, description="Type of prompt for this assignment"
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Type of prompt for this assignment",
     )
     template_id: UUID = Field(..., description="Reference to prompt template")
-    is_active: bool = Field(default=True, description="Whether this assignment is active")
+    is_active: bool = Field(
+        default=True, description="Whether this assignment is active"
+    )
 
 
 class ScenarioPromptCreate(ScenarioPromptBase):

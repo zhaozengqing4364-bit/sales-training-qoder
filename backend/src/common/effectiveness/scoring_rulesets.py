@@ -25,9 +25,7 @@ from .canonical import (
 logger = get_logger(__name__)
 
 SCORING_RULESET_SCHEMA_VERSION = "scoring_ruleset_schema_v1"
-SCORING_RULESET_SCORE_BASIS = (
-    "configured_scoring_ruleset_weighted_canonical_dimensions"
-)
+SCORING_RULESET_SCORE_BASIS = "configured_scoring_ruleset_weighted_canonical_dimensions"
 LEGACY_COMPAT_RULESET_VERSION = "session_evidence_projection_v1"
 LEGACY_COMPAT_SCORE_BASIS = "session_evidence_projection_evaluable_only"
 
@@ -105,9 +103,7 @@ class ScoringRulesetDefinition(BaseModel):
         max_length=160,
     )
     dimensions: list[ScoringDimensionRule] = Field(min_length=1)
-    min_evidence: ScoringMinimumEvidence = Field(
-        default_factory=ScoringMinimumEvidence
-    )
+    min_evidence: ScoringMinimumEvidence = Field(default_factory=ScoringMinimumEvidence)
     not_evaluable_reasons: dict[str, str] = Field(
         default_factory=_default_not_evaluable_reasons
     )
@@ -551,7 +547,9 @@ class ScoringRulesetService:
 
         dimension_scores = cls._dimension_score_map(projection)
         weighted_dimensions: list[dict[str, Any]] = []
-        total_weight = sum(dimension.weight for dimension in ruleset.definition.dimensions)
+        total_weight = sum(
+            dimension.weight for dimension in ruleset.definition.dimensions
+        )
         weighted_total = 0.0
         rollup_weighted_totals = {rollup_id: 0.0 for rollup_id in CANONICAL_ROLLUP_IDS}
         rollup_weight_totals = {rollup_id: 0.0 for rollup_id in CANONICAL_ROLLUP_IDS}
@@ -580,10 +578,7 @@ class ScoringRulesetService:
 
         rollups = {
             rollup_id: _coerce_score(
-                (
-                    rollup_weighted_totals[rollup_id]
-                    / rollup_weight_totals[rollup_id]
-                )
+                (rollup_weighted_totals[rollup_id] / rollup_weight_totals[rollup_id])
                 if rollup_weight_totals[rollup_id] > 0
                 else getattr(projection, f"{rollup_id}_score", 0.0)
             )
@@ -631,7 +626,9 @@ class ScoringRulesetService:
             old_score = old.get("score")
             new_score = item.get("score")
             score_delta: float | None = None
-            if isinstance(old_score, (int, float)) and isinstance(new_score, (int, float)):
+            if isinstance(old_score, (int, float)) and isinstance(
+                new_score, (int, float)
+            ):
                 score_delta = round(float(new_score) - float(old_score), 2)
             dimension_deltas.append(
                 {
@@ -768,9 +765,10 @@ class ScoringRulesetService:
             has_message_scores = int(completeness.get("message_scores") or 0) > 0
             if not has_session_scores and not has_message_scores:
                 return reasons.get("missing_score_evidence", "missing_score_evidence")
-        if min_evidence.require_stage_evidence and int(
-            completeness.get("stage_evidence") or 0
-        ) <= 0:
+        if (
+            min_evidence.require_stage_evidence
+            and int(completeness.get("stage_evidence") or 0) <= 0
+        ):
             return reasons.get("missing_stage_evidence", "missing_stage_evidence")
         return None
 

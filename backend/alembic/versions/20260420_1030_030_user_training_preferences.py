@@ -35,8 +35,9 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["user_id"], ["users.user_id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("user_id"),
+        if_not_exists=True,
     )
 
 
 def downgrade() -> None:
-    op.drop_table("user_training_preferences")
+    op.drop_table("user_training_preferences", if_exists=True)

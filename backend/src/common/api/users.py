@@ -8,6 +8,7 @@ Implements Constitution Principles:
 Response Format:
 - All endpoints return {"success": true/false, "data": ..., "trace_id": ...}
 """
+
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
@@ -32,6 +33,7 @@ router = APIRouter()
 
 
 # ========== Schemas ==========
+
 
 class UserSettings(BaseModel):
     """User settings schema"""
@@ -64,6 +66,7 @@ class UserMeUpdateRequest(BaseModel):
 
 
 # ========== Helper Functions ==========
+
 
 def success_response(data, trace_id: str = None):
     """Create unified success response"""
@@ -153,6 +156,7 @@ def _build_user_me_response(current_user: User) -> UserMeResponse:
 
 
 # ========== Endpoints ==========
+
 
 @router.get("/users/me")
 async def get_current_user_info(
@@ -251,7 +255,9 @@ async def get_my_training_preferences(
             )
         )
         preferences = result.scalar_one_or_none()
-        return success_response(_serialize_training_preferences(preferences).model_dump())
+        return success_response(
+            _serialize_training_preferences(preferences).model_dump()
+        )
     except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get training preferences: {str(e)}")
         return error_response("[TRAINING_PREFERENCES_FAILED]", "获取训练偏好失败")
@@ -282,17 +288,23 @@ async def update_my_training_preferences(
         preferences.voice_mode = request.voice_mode
         preferences.agent_id = _normalize_training_preference_id(request.agent_id)
         preferences.persona_id = _normalize_training_preference_id(request.persona_id)
-        preferences.presentation_id = _normalize_training_preference_id(request.presentation_id)
+        preferences.presentation_id = _normalize_training_preference_id(
+            request.presentation_id
+        )
         preferences.updated_at = now
 
         await db.commit()
         await db.refresh(preferences)
 
-        return success_response(_serialize_training_preferences(preferences).model_dump())
+        return success_response(
+            _serialize_training_preferences(preferences).model_dump()
+        )
     except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to update training preferences: {str(e)}")
         await db.rollback()
-        return error_response("[TRAINING_PREFERENCES_UPDATE_FAILED]", "更新训练偏好失败")
+        return error_response(
+            "[TRAINING_PREFERENCES_UPDATE_FAILED]", "更新训练偏好失败"
+        )
 
 
 @router.get("/users/me/interventions/open")
@@ -327,7 +339,9 @@ async def get_my_open_intervention(
 async def get_my_history(
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    scenario_type: str | None = Query(None, description="Filter by scenario type (sales/presentation)"),
+    scenario_type: str | None = Query(
+        None, description="Filter by scenario type (sales/presentation)"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -348,7 +362,9 @@ async def get_my_history(
     Permission: Current user only (enforced by JWT)
     """
     try:
-        normalized_scenario_type = history_service.normalize_scenario_type(scenario_type)
+        normalized_scenario_type = history_service.normalize_scenario_type(
+            scenario_type
+        )
         result = await history_service.get_user_history_with_report_summary(
             db=db,
             user_id=current_user.user_id,
@@ -365,41 +381,51 @@ async def get_my_history(
         # Convert dataclasses to dicts for JSON serialization
         sessions = []
         for session in data["sessions"]:
-            sessions.append({
-                "session_id": session.session_id,
-                "scenario_id": session.scenario_id,
-                "scenario_name": session.scenario_name,
-                "scenario_type": session.scenario_type,
-                "persona_name": session.persona_name,
-                "agent_name": session.agent_name,
-                "title": session.title,
-                "start_time": session.start_time.isoformat() if session.start_time else None,
-                "end_time": session.end_time.isoformat() if session.end_time else None,
-                "duration_seconds": session.duration_seconds,
-                "overall_score": session.overall_score,
-                "logic_score": session.logic_score,
-                "accuracy_score": session.accuracy_score,
-                "completeness_score": session.completeness_score,
-                "report_status": session.report_status,
-                "report_generated_at": session.report_generated_at.isoformat() if session.report_generated_at else None,
-                "status": session.status,
-                "evaluable": session.evaluable,
-                "not_evaluable_reason": session.not_evaluable_reason,
-                "evidence_completeness": session.evidence_completeness,
-                "effectiveness_snapshot": session.effectiveness_snapshot,
-                "feedback_summary": session.feedback_summary,
-                "stage_summary": session.stage_summary,
-                "main_issue": session.main_issue,
-                "next_goal": session.next_goal,
-            })
+            sessions.append(
+                {
+                    "session_id": session.session_id,
+                    "scenario_id": session.scenario_id,
+                    "scenario_name": session.scenario_name,
+                    "scenario_type": session.scenario_type,
+                    "persona_name": session.persona_name,
+                    "agent_name": session.agent_name,
+                    "title": session.title,
+                    "start_time": session.start_time.isoformat()
+                    if session.start_time
+                    else None,
+                    "end_time": session.end_time.isoformat()
+                    if session.end_time
+                    else None,
+                    "duration_seconds": session.duration_seconds,
+                    "overall_score": session.overall_score,
+                    "logic_score": session.logic_score,
+                    "accuracy_score": session.accuracy_score,
+                    "completeness_score": session.completeness_score,
+                    "report_status": session.report_status,
+                    "report_generated_at": session.report_generated_at.isoformat()
+                    if session.report_generated_at
+                    else None,
+                    "status": session.status,
+                    "evaluable": session.evaluable,
+                    "not_evaluable_reason": session.not_evaluable_reason,
+                    "evidence_completeness": session.evidence_completeness,
+                    "effectiveness_snapshot": session.effectiveness_snapshot,
+                    "feedback_summary": session.feedback_summary,
+                    "stage_summary": session.stage_summary,
+                    "main_issue": session.main_issue,
+                    "next_goal": session.next_goal,
+                }
+            )
 
-        return success_response({
-            "sessions": sessions,
-            "total": data["total"],
-            "page": data["page"],
-            "page_size": data["page_size"],
-            "total_pages": data["total_pages"],
-        })
+        return success_response(
+            {
+                "sessions": sessions,
+                "total": data["total"],
+                "page": data["page"],
+                "page_size": data["page_size"],
+                "total_pages": data["total_pages"],
+            }
+        )
 
     except Exception as e:
         logger.error(f"Failed to get user history: {str(e)}")

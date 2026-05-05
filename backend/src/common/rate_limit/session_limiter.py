@@ -295,7 +295,9 @@ class SessionRateLimiter:
             return
 
         self.user_session_creations[user_id] = [
-            created_at for created_at in creations if now - created_at < self.session_window
+            created_at
+            for created_at in creations
+            if now - created_at < self.session_window
         ]
         if not self.user_session_creations[user_id]:
             del self.user_session_creations[user_id]

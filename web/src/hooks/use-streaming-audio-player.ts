@@ -548,9 +548,7 @@ export function useStreamingAudioPlayer(
             if (audioRef.current) {
                 audioRef.current.playbackRate = normalizedChunkPlaybackRate;
             }
-            for (const source of pcmActiveSourcesRef.current) {
-                source.playbackRate.value = normalizedChunkPlaybackRate;
-            }
+            applyPCMPlaybackRate(normalizedChunkPlaybackRate);
         }
 
         // Update total duration if provided

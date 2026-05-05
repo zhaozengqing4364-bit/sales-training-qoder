@@ -286,7 +286,10 @@ async def search_internal_knowledge(
                 if rollout_mode == "enabled":
                     payload = engine_outcome.payload
                     compat_status = str(payload.get("status") or "hit").strip() or "hit"
-                    compat_retrieval_mode = str(payload.get("retrieval_mode") or "vector").strip() or "vector"
+                    compat_retrieval_mode = (
+                        str(payload.get("retrieval_mode") or "vector").strip()
+                        or "vector"
+                    )
                     await record_metric(
                         query=str(payload.get("query") or query),
                         result_count=int(payload.get("count") or 0),
@@ -301,7 +304,9 @@ async def search_internal_knowledge(
                             result_count=int(payload.get("count") or 0),
                             retrieval_mode=compat_retrieval_mode,
                             knowledge_base_ids=kb_ids,
-                            results=payload.get("results") if isinstance(payload.get("results"), list) else [],
+                            results=payload.get("results")
+                            if isinstance(payload.get("results"), list)
+                            else [],
                         ),
                     )
                     payload["_diagnostics"] = _build_diagnostics(
@@ -309,8 +314,12 @@ async def search_internal_knowledge(
                             "status": compat_status,
                             "retrieval_mode": compat_retrieval_mode,
                             "result_count": int(payload.get("count") or 0),
-                            "rewritten_queries": list(payload.get("rewritten_queries") or []),
-                            "execution_trace": dict(payload.get("execution_trace") or {}),
+                            "rewritten_queries": list(
+                                payload.get("rewritten_queries") or []
+                            ),
+                            "execution_trace": dict(
+                                payload.get("execution_trace") or {}
+                            ),
                         }
                     )
                     return _finalize_payload(
@@ -321,10 +330,18 @@ async def search_internal_knowledge(
 
                 shadow_audit_run_id = engine_outcome.result.audit_run_id
 
-            if config_snapshot is not None and config_snapshot.query_profiles and rollout_mode == "legacy":
+            if (
+                config_snapshot is not None
+                and config_snapshot.query_profiles
+                and rollout_mode == "legacy"
+            ):
                 pass
 
-            aggregated_rows, search_failures, rewritten_queries = await _execute_legacy_retrieval(
+            (
+                aggregated_rows,
+                search_failures,
+                rewritten_queries,
+            ) = await _execute_legacy_retrieval(
                 knowledge_service=knowledge_service,
                 kb_ids=kb_ids,
                 rewritten_queries=rewritten_queries,
@@ -397,9 +414,7 @@ async def search_internal_knowledge(
                     except (TypeError, ValueError):
                         phase_vector_ms = 0.0
                     try:
-                        phase_keyword_ms = float(
-                            timing.get("phase_keyword_ms") or 0.0
-                        )
+                        phase_keyword_ms = float(timing.get("phase_keyword_ms") or 0.0)
                     except (TypeError, ValueError):
                         phase_keyword_ms = 0.0
                     cache_hit_ready_docs = bool(
@@ -426,7 +441,9 @@ async def search_internal_knowledge(
             ),
         )
         payload = build_search_failed_payload(response_query, error_detail)
-        payload["_diagnostics"] = _build_diagnostics({"status": "search_failed", "rewritten_queries": rewritten_queries})
+        payload["_diagnostics"] = _build_diagnostics(
+            {"status": "search_failed", "rewritten_queries": rewritten_queries}
+        )
         payload["_answerability"] = build_answerability_assessment(
             query=response_query,
             results=[],
@@ -520,7 +537,9 @@ async def _load_active_config_snapshot(
         run_sync = getattr(db, "run_sync", None)
         if callable(run_sync):
             maybe_config = run_sync(
-                lambda sync_session: KnowledgeAnswerConfigRepository(sync_session).get_active_config()
+                lambda sync_session: KnowledgeAnswerConfigRepository(
+                    sync_session
+                ).get_active_config()
             )
             if asyncio.iscoroutine(maybe_config):
                 return await cast(

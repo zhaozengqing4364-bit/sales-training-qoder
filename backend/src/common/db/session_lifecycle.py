@@ -46,7 +46,9 @@ class InvalidSessionTransitionError(ValueError):
 
     @property
     def message(self) -> str:
-        scenario_text = f", scenario_type={self.scenario_type}" if self.scenario_type else ""
+        scenario_text = (
+            f", scenario_type={self.scenario_type}" if self.scenario_type else ""
+        )
         return (
             "[INVALID_SESSION_TRANSITION] "
             f"action={self.action}, from_status={self.from_status}, expected={self.expected}{scenario_text}"
@@ -132,7 +134,11 @@ class SessionLifecycleService:
     ) -> tuple[PracticeSession | None, str | None]:
         stmt = (
             select(PracticeSession, Scenario.scenario_type)
-            .join(Scenario, Scenario.scenario_id == PracticeSession.scenario_id, isouter=True)
+            .join(
+                Scenario,
+                Scenario.scenario_id == PracticeSession.scenario_id,
+                isouter=True,
+            )
             .where(PracticeSession.session_id == session_id)
         )
         row = (await self.db.execute(stmt)).first()
@@ -144,7 +150,11 @@ class SessionLifecycleService:
 
     @staticmethod
     def terminal_status_for_scenario(scenario_type: str | None) -> str:
-        return "completed" if (scenario_type or "").lower() == "presentation" else "scoring"
+        return (
+            "completed"
+            if (scenario_type or "").lower() == "presentation"
+            else "scoring"
+        )
 
     @staticmethod
     def is_input_allowed(status: str) -> bool:
@@ -185,7 +195,11 @@ class SessionLifecycleService:
                 PracticeSession.total_duration_seconds,
                 Scenario.scenario_type,
             )
-            .join(Scenario, Scenario.scenario_id == PracticeSession.scenario_id, isouter=True)
+            .join(
+                Scenario,
+                Scenario.scenario_id == PracticeSession.scenario_id,
+                isouter=True,
+            )
             .where(PracticeSession.session_id == session_id)
         )
 
@@ -203,13 +217,21 @@ class SessionLifecycleService:
         if row is None:
             return None
 
-        status, start_time, end_time, total_duration_seconds, persisted_scenario_type = row
+        (
+            status,
+            start_time,
+            end_time,
+            total_duration_seconds,
+            persisted_scenario_type,
+        ) = row
         return SessionLifecyclePersistedState(
             status=str(status or "preparing"),
             start_time=start_time,
             end_time=end_time,
             total_duration_seconds=total_duration_seconds,
-            scenario_type=str(persisted_scenario_type) if persisted_scenario_type else None,
+            scenario_type=str(persisted_scenario_type)
+            if persisted_scenario_type
+            else None,
         )
 
     def _sync_session_to_persisted_state(
@@ -263,8 +285,12 @@ class SessionLifecycleService:
             return None
 
         self._sync_session_to_persisted_state(session, persisted_state)
-        resolved_scenario_type = (persisted_state.scenario_type or scenario_type or "sales").lower()
-        converged_to_terminal = persisted_state.status in _TERMINAL_STATUSES and action != "end"
+        resolved_scenario_type = (
+            persisted_state.scenario_type or scenario_type or "sales"
+        ).lower()
+        converged_to_terminal = (
+            persisted_state.status in _TERMINAL_STATUSES and action != "end"
+        )
         logger.warning(
             "practice_session_lifecycle_concurrency_conflict",
             session_id=str(session_id),
@@ -432,14 +458,16 @@ class SessionLifecycleService:
             raise ValueError(f"Unsupported lifecycle action: {action}")
 
         if changed:
-            conflict_transition = await self._persist_transition_with_optimistic_status_guard(
-                session=session,
-                scenario_type=resolved_scenario_type,
-                action=action,
-                from_status=from_status,
-                update_values=update_values,
-                timestamp=timestamp,
-                retry_on_conflict=_retry_on_conflict,
+            conflict_transition = (
+                await self._persist_transition_with_optimistic_status_guard(
+                    session=session,
+                    scenario_type=resolved_scenario_type,
+                    action=action,
+                    from_status=from_status,
+                    update_values=update_values,
+                    timestamp=timestamp,
+                    retry_on_conflict=_retry_on_conflict,
+                )
             )
             if conflict_transition is not None:
                 return conflict_transition
@@ -503,9 +531,7 @@ class SessionLifecycleService:
                 )
 
             # Fire-and-forget report generation
-            asyncio.create_task(
-                trigger_report_generation(session_id, scenario_type)
-            )
+            asyncio.create_task(trigger_report_generation(session_id, scenario_type))
             logger.info(
                 "report_generation_triggered",
                 session_id=session_id,
@@ -532,11 +558,16 @@ class SessionLifecycleService:
         expected_terminal = self.terminal_status_for_scenario(scenario_type)
 
         if normalized_target == "in_progress":
-            action: SessionLifecycleAction = "resume" if current_status == "paused" else "start"
+            action: SessionLifecycleAction = (
+                "resume" if current_status == "paused" else "start"
+            )
         elif normalized_target == "paused":
             action = "pause"
         elif normalized_target in _TERMINAL_STATUSES:
-            if normalized_target != expected_terminal and current_status not in _TERMINAL_STATUSES:
+            if (
+                normalized_target != expected_terminal
+                and current_status not in _TERMINAL_STATUSES
+            ):
                 raise InvalidSessionTransitionError(
                     action="end",
                     from_status=current_status,

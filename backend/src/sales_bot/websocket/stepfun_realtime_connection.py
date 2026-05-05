@@ -176,6 +176,7 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
     module = sys.modules.get("sales_bot.websocket.stepfun_realtime_handler")
     return getattr(module, name, fallback) if module is not None else fallback
 
+
 class StepFunRealtimeConnectionMixin:
     @staticmethod
     def _normalize_connection_epoch(value: Any) -> int:

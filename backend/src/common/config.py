@@ -52,15 +52,11 @@ class Settings:
 
     # Redis (for production)
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    SESSION_STATE_REDIS_URL: str = os.getenv(
-        "SESSION_STATE_REDIS_URL", REDIS_URL
-    )
+    SESSION_STATE_REDIS_URL: str = os.getenv("SESSION_STATE_REDIS_URL", REDIS_URL)
     SESSION_STATE_KEY_PREFIX: str = os.getenv(
         "SESSION_STATE_KEY_PREFIX", "ws:session_state:"
     )
-    SESSION_STATE_TTL_SECONDS: int = int(
-        os.getenv("SESSION_STATE_TTL_SECONDS", "1800")
-    )
+    SESSION_STATE_TTL_SECONDS: int = int(os.getenv("SESSION_STATE_TTL_SECONDS", "1800"))
     SESSION_STATE_CLEANUP_INTERVAL_SECONDS: int = int(
         os.getenv("SESSION_STATE_CLEANUP_INTERVAL_SECONDS", "300")
     )

@@ -3,107 +3,48 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from typing import Any
 
-from common.conversation.storage import normalize_objection_ledger
-
-_ACK_PATTERNS = (
-    "没有",
-    "暂无",
-    "还没",
-    "暂时没有",
-    "无法",
-    "不能",
-    "做不到",
-    "不确定",
-    "回去确认",
-    "后面再给",
-    "之后再给",
-    "稍后再给",
+from common.business_rules.defaults import (
+    OBJECTION_LEDGER_RULES_KEY,
+    get_default_business_rule_value,
 )
+from common.business_rules.validators import (
+    BusinessRuleValidationError,
+    validate_business_rule_value,
+)
+from common.conversation.storage import normalize_objection_ledger
+from common.monitoring.logger import get_logger
+
+logger = get_logger(__name__)
+
 _NUMERIC_SIGNAL_RE = re.compile(r"\d")
 
-_LEDGER_FAMILY_CONFIG: dict[str, dict[str, Any]] = {
-    "roi_proof": {
-        "focus_dimension": "证据使用",
-        "promised_proof": "补充同类客户 ROI 案例",
-        "next_expected_evidence": "给出 6 个月回本测算",
-        "detect_any": (
-            "roi",
-            "回本",
-            "收益",
-            "回报",
-            "案例",
-            "数据",
-            "benchmark",
-            "证据",
-        ),
-        "evidence_any": (
-            "roi",
-            "回本",
-            "收益",
-            "案例",
-            "客户",
-            "数据",
-            "benchmark",
-            "证据",
-            "%",
-            "提升",
-            "下降",
-        ),
-    },
-    "price_pressure": {
-        "focus_dimension": "异议处理",
-        "promised_proof": "补充报价依据和版本差异",
-        "next_expected_evidence": "说明报价逻辑、预算回收或折扣边界",
-        "detect_any": ("价格", "报价", "预算", "折扣", "成本", "price", "budget"),
-        "evidence_any": ("价格", "报价", "预算", "折扣", "席位", "版本", "回收", "回本", "%", "元"),
-    },
-    "competitor_alternative": {
-        "focus_dimension": "异议处理",
-        "promised_proof": "补充竞品差异和替代依据",
-        "next_expected_evidence": "说明为什么比现有方案更稳妥",
-        "detect_any": ("竞品", "竞对", "对比", "替代", "差异", "competitor"),
-        "evidence_any": ("竞品", "对比", "替代", "差异", "迁移", "案例", "SLA", "成本", "收益"),
-    },
-    "implementation_risk": {
-        "focus_dimension": "异议处理",
-        "promised_proof": "补充实施排期和服务边界",
-        "next_expected_evidence": "确认试点范围、负责人和风险兜底",
-        "detect_any": ("实施", "落地", "上线", "风险", "排期", "交付", "服务", "试点"),
-        "evidence_any": (
-            "实施",
-            "落地",
-            "上线",
-            "排期",
-            "试点",
-            "负责人",
-            "服务",
-            "SLA",
-            "里程碑",
-            "周",
-            "天",
-            "月",
-        ),
-    },
-}
 
-_SYNTHETIC_DIMENSIONS_BY_FOCUS: dict[str, dict[str, float]] = {
-    "证据使用": {
-        "价值表达": 78.0,
-        "客户收益连接": 76.0,
-        "证据使用": 48.0,
-        "异议处理": 68.0,
-        "推进下一步": 62.0,
-    },
-    "异议处理": {
-        "价值表达": 78.0,
-        "客户收益连接": 76.0,
-        "证据使用": 66.0,
-        "异议处理": 48.0,
-        "推进下一步": 62.0,
-    },
-}
+def resolve_objection_ledger_ruleset(
+    ruleset: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate the governed objection-ledger ruleset with safe fallback.
+
+    Runtime callers can pass an already-resolved admin/business-rule value.
+    Until the WebSocket runtime has a DB-backed injection point, the bundled
+    default is the central seed and the admin backlog is captured in metadata.
+    """
+    raw_ruleset = (
+        deepcopy(ruleset)
+        if isinstance(ruleset, dict)
+        else get_default_business_rule_value(OBJECTION_LEDGER_RULES_KEY)
+    )
+    try:
+        return validate_business_rule_value(OBJECTION_LEDGER_RULES_KEY, raw_ruleset)
+    except BusinessRuleValidationError as exc:
+        logger.warning(
+            "objection_ledger_ruleset_invalid_using_default",
+            error=str(exc),
+        )
+        fallback = get_default_business_rule_value(OBJECTION_LEDGER_RULES_KEY)
+        return validate_business_rule_value(OBJECTION_LEDGER_RULES_KEY, fallback)
 
 
 def resolve_turn_objection_ledger(
@@ -112,29 +53,35 @@ def resolve_turn_objection_ledger(
     user_text: str,
     stage_context: dict[str, Any] | None,
     score_context: dict[str, Any] | None,
+    ruleset: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Return the ledger state that should be persisted for the current turn."""
+    resolved_ruleset = resolve_objection_ledger_ruleset(ruleset)
     existing = normalize_objection_ledger(existing_ledger)
+    if resolved_ruleset.get("enabled") is False:
+        return existing
+
     normalized_text = _normalize_text(user_text)
 
     if existing is not None and existing.get("closure_state") == "open":
         family = str(existing["objection_family"])
-        if _looks_like_gap_acknowledgement(normalized_text, family):
+        if _looks_like_gap_acknowledgement(normalized_text, family, resolved_ruleset):
             updated = dict(existing)
             updated["closure_state"] = "gap_acknowledged"
             return normalize_objection_ledger(updated)
-        if _looks_like_evidence_provided(normalized_text, family):
+        if _looks_like_evidence_provided(normalized_text, family, resolved_ruleset):
             updated = dict(existing)
             updated["closure_state"] = "evidence_provided"
             return normalize_objection_ledger(updated)
 
-    detected_family = _detect_objection_family(normalized_text)
+    detected_family = _detect_objection_family(normalized_text, resolved_ruleset)
     if detected_family and _should_open_new_ledger(
         detected_family=detected_family,
         stage_context=stage_context,
         score_context=score_context,
+        ruleset=resolved_ruleset,
     ):
-        return _build_open_ledger(detected_family)
+        return _build_open_ledger(detected_family, resolved_ruleset)
 
     return existing
 
@@ -142,19 +89,29 @@ def resolve_turn_objection_ledger(
 def build_arbiter_override_context(
     *,
     objection_ledger: dict[str, Any] | None,
+    ruleset: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Return synthetic stage/score context that keeps pressure on one open objection."""
+    resolved_ruleset = resolve_objection_ledger_ruleset(ruleset)
+    if resolved_ruleset.get("enabled") is False:
+        return None, None
     normalized = normalize_objection_ledger(objection_ledger)
     if normalized is None or normalized.get("closure_state") != "open":
         return None, None
 
     family = str(normalized["objection_family"])
-    config = _LEDGER_FAMILY_CONFIG.get(family)
+    config = _family_config(family, resolved_ruleset)
     if not isinstance(config, dict):
         return None, None
 
     focus_dimension = str(config["focus_dimension"])
-    dimension_scores = dict(_SYNTHETIC_DIMENSIONS_BY_FOCUS[focus_dimension])
+    synthetic_by_focus = resolved_ruleset.get("synthetic_dimensions_by_focus")
+    if not isinstance(synthetic_by_focus, dict):
+        return None, None
+    raw_dimension_scores = synthetic_by_focus.get(focus_dimension)
+    if not isinstance(raw_dimension_scores, dict):
+        return None, None
+    dimension_scores = dict(raw_dimension_scores)
     evidence_prompt = str(
         normalized.get("next_expected_evidence")
         or normalized.get("promised_proof")
@@ -179,10 +136,12 @@ def merge_arbiter_context_with_objection_ledger(
     objection_ledger: dict[str, Any] | None,
     stage_context: dict[str, Any] | None,
     score_context: dict[str, Any] | None,
+    ruleset: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Prefer open-ledger arbiter context; otherwise keep the live runtime context."""
     override_stage, override_score = build_arbiter_override_context(
         objection_ledger=objection_ledger,
+        ruleset=ruleset,
     )
     return (
         override_stage if override_stage is not None else stage_context,
@@ -190,8 +149,11 @@ def merge_arbiter_context_with_objection_ledger(
     )
 
 
-def _build_open_ledger(family: str) -> dict[str, Any] | None:
-    config = _LEDGER_FAMILY_CONFIG.get(family)
+def _build_open_ledger(
+    family: str,
+    ruleset: dict[str, Any],
+) -> dict[str, Any] | None:
+    config = _family_config(family, ruleset)
     if not isinstance(config, dict):
         return None
     return normalize_objection_ledger(
@@ -208,18 +170,28 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", "", str(text or "").lower())
 
 
-def _detect_objection_family(normalized_text: str) -> str | None:
+def _family_config(family: str, ruleset: dict[str, Any]) -> dict[str, Any] | None:
+    families = ruleset.get("families")
+    if not isinstance(families, dict):
+        return None
+    config = families.get(family)
+    return config if isinstance(config, dict) else None
+
+
+def _detect_objection_family(
+    normalized_text: str,
+    ruleset: dict[str, Any],
+) -> str | None:
     if not normalized_text:
         return None
-    for family in (
-        "price_pressure",
-        "competitor_alternative",
-        "implementation_risk",
-        "roi_proof",
-    ):
-        config = _LEDGER_FAMILY_CONFIG[family]
+    families = ruleset.get("families")
+    if not isinstance(families, dict):
+        return None
+    for family, config in families.items():
+        if not isinstance(config, dict):
+            continue
         if any(token in normalized_text for token in config["detect_any"]):
-            return family
+            return str(family)
     return None
 
 
@@ -228,53 +200,66 @@ def _should_open_new_ledger(
     detected_family: str,
     stage_context: dict[str, Any] | None,
     score_context: dict[str, Any] | None,
+    ruleset: dict[str, Any],
 ) -> bool:
     stage_name = _normalize_text(
-        (stage_context or {}).get("current_stage") or (stage_context or {}).get("stage_name")
+        str(
+            (stage_context or {}).get("current_stage")
+            or (stage_context or {}).get("stage_name")
+            or ""
+        )
     )
     weakest_dimension = _resolve_weakest_sales_dimension(score_context)
-    family_focus = _LEDGER_FAMILY_CONFIG[detected_family]["focus_dimension"]
+    family_config = _family_config(detected_family, ruleset)
+    if not isinstance(family_config, dict):
+        return False
+    family_focus = family_config["focus_dimension"]
+    open_stage_names = set(ruleset.get("open_stage_names") or [])
 
     if detected_family == "roi_proof":
-        if not _looks_like_unresolved_roi_pressure(stage_name, score_context):
+        if not _looks_like_unresolved_roi_pressure(
+            stage_name,
+            score_context,
+            ruleset,
+        ):
             return False
-    elif stage_name not in {"objection", "异议处理", "价格博弈"} and weakest_dimension not in {
-        "证据使用",
-        "异议处理",
-    }:
+    elif stage_name not in open_stage_names and weakest_dimension != family_focus:
         return False
 
-    if stage_name in {"objection", "异议处理", "价格博弈"}:
+    if stage_name in open_stage_names:
         return True
     if weakest_dimension == family_focus:
         return True
     return weakest_dimension in {"证据使用", "异议处理"}
 
 
-def _looks_like_new_pressure(normalized_text: str, family: str) -> bool:
+def _looks_like_new_pressure(
+    normalized_text: str,
+    family: str,
+    ruleset: dict[str, Any],
+) -> bool:
     if not normalized_text:
         return False
-
-    if family == "roi_proof":
-        return any(token in normalized_text for token in ("证明", "凭什么", "没有", "缺", "不足", "担心", "顾虑", "怎么", "为何")) and any(
-            token in normalized_text for token in ("roi", "回本", "案例", "数据", "证据", "收益")
-        )
-    if family == "price_pressure":
-        return any(token in normalized_text for token in ("价格", "报价", "预算", "折扣", "贵", "成本", "担心", "顾虑"))
-    if family == "competitor_alternative":
-        return any(token in normalized_text for token in ("竞品", "竞对", "替代", "对比", "差异", "担心", "顾虑"))
-    if family == "implementation_risk":
-        return any(token in normalized_text for token in ("实施", "落地", "上线", "排期", "试点", "风险", "担心", "顾虑")) and any(
-            token in normalized_text for token in ("实施", "落地", "上线", "排期", "试点", "风险")
-        )
-    return False
+    config = _family_config(family, ruleset)
+    if not isinstance(config, dict):
+        return False
+    pressure_any = config.get("open_pressure_any")
+    if not isinstance(pressure_any, list) or not any(
+        token in normalized_text for token in pressure_any
+    ):
+        return False
+    requires_any = config.get("open_pressure_requires_any")
+    if not isinstance(requires_any, list) or not requires_any:
+        return True
+    return any(token in normalized_text for token in requires_any)
 
 
 def _looks_like_unresolved_roi_pressure(
     stage_name: str,
     score_context: dict[str, Any] | None,
+    ruleset: dict[str, Any],
 ) -> bool:
-    if stage_name in {"objection", "异议处理", "价格博弈"}:
+    if stage_name in set(ruleset.get("open_stage_names") or []):
         return True
     weakest_dimension = _resolve_weakest_sales_dimension(score_context)
     return weakest_dimension == "证据使用"
@@ -305,34 +290,52 @@ def _resolve_weakest_sales_dimension(
 
     if not canonical_scores:
         return None
-    return min(canonical_scores, key=canonical_scores.get)
+    return min(canonical_scores, key=lambda key: canonical_scores[key])
 
 
-def _looks_like_gap_acknowledgement(normalized_text: str, family: str) -> bool:
-    config = _LEDGER_FAMILY_CONFIG.get(family)
+def _looks_like_gap_acknowledgement(
+    normalized_text: str,
+    family: str,
+    ruleset: dict[str, Any],
+) -> bool:
+    config = _family_config(family, ruleset)
     if not isinstance(config, dict):
         return False
-    if not any(pattern in normalized_text for pattern in _ACK_PATTERNS):
+    ack_patterns = ruleset.get("ack_patterns")
+    if not isinstance(ack_patterns, list):
+        return False
+    if not any(pattern in normalized_text for pattern in ack_patterns):
         return False
     return any(token in normalized_text for token in config["evidence_any"])
 
 
-def _looks_like_evidence_provided(normalized_text: str, family: str) -> bool:
-    config = _LEDGER_FAMILY_CONFIG.get(family)
+def _looks_like_evidence_provided(
+    normalized_text: str,
+    family: str,
+    ruleset: dict[str, Any],
+) -> bool:
+    config = _family_config(family, ruleset)
     if not isinstance(config, dict):
         return False
 
-    has_family_signal = any(token in normalized_text for token in config["evidence_any"])
+    has_family_signal = any(
+        token in normalized_text for token in config["evidence_any"]
+    )
     if not has_family_signal:
         return False
 
     if family == "implementation_risk":
         return True
 
-    if any(pattern in normalized_text for pattern in _ACK_PATTERNS):
+    ack_patterns = ruleset.get("ack_patterns")
+    if isinstance(ack_patterns, list) and any(
+        pattern in normalized_text for pattern in ack_patterns
+    ):
         return False
 
+    numeric_tokens = ruleset.get("numeric_evidence_tokens")
+    if not isinstance(numeric_tokens, list):
+        numeric_tokens = []
     return bool(_NUMERIC_SIGNAL_RE.search(normalized_text)) or any(
-        token in normalized_text
-        for token in ("benchmark", "%", "提升", "下降", "回本周期", "回收周期", "月内", "周内")
+        token in normalized_text for token in numeric_tokens
     )

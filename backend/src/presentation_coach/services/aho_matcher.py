@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 @dataclass
 class ForbiddenWordMatch:
     """Result of a forbidden word match"""
+
     word: str
     position: int
     matched_text: str
@@ -232,12 +233,14 @@ class HybridForbiddenMatcher:
                 # Store regex patterns separately
                 try:
                     compiled = re.compile(phrase, re.IGNORECASE)
-                    self.regex_patterns.append({
-                        "pattern": compiled,
-                        "phrase": phrase,
-                        "suggestion": word_data.get("suggested_alternative", ""),
-                        "severity": word_data.get("severity", "warning"),
-                    })
+                    self.regex_patterns.append(
+                        {
+                            "pattern": compiled,
+                            "phrase": phrase,
+                            "suggestion": word_data.get("suggested_alternative", ""),
+                            "severity": word_data.get("severity", "warning"),
+                        }
+                    )
                 except re.error as e:
                     logger.error(f"Invalid regex pattern '{phrase}': {e}")
             else:
@@ -260,13 +263,15 @@ class HybridForbiddenMatcher:
         for regex_data in self.regex_patterns:
             pattern = regex_data["pattern"]
             for match in pattern.finditer(text):
-                matches.append(ForbiddenWordMatch(
-                    word=regex_data["phrase"],
-                    position=match.start(),
-                    matched_text=match.group(),
-                    suggestion=regex_data["suggestion"],
-                    severity=regex_data["severity"],
-                ))
+                matches.append(
+                    ForbiddenWordMatch(
+                        word=regex_data["phrase"],
+                        position=match.start(),
+                        matched_text=match.group(),
+                        suggestion=regex_data["suggestion"],
+                        severity=regex_data["severity"],
+                    )
+                )
 
         # Sort by position
         matches.sort(key=lambda m: m.position)

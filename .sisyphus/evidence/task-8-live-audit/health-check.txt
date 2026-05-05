@@ -1,7 +1,0 @@
-# task-8 health check 2026-04-27T03:19:00Z
-## processes on ports
-## backend health
-
-## backend docs/status candidates
-
-## frontend root

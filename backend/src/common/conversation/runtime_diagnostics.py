@@ -46,7 +46,6 @@ def _normalize_claim_truth_payload(value: Any) -> dict[str, Any] | None:
     return payload
 
 
-
 def _normalize_main_issue_payload(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
@@ -65,7 +64,6 @@ def _normalize_main_issue_payload(value: Any) -> dict[str, Any] | None:
     }
 
 
-
 def _normalize_next_goal_payload(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
@@ -73,8 +71,7 @@ def _normalize_next_goal_payload(value: Any) -> dict[str, Any] | None:
     goal_text = value.get("goal_text")
     rule = value.get("rule")
     if not all(
-        isinstance(item, str) and item.strip()
-        for item in (goal_type, goal_text, rule)
+        isinstance(item, str) and item.strip() for item in (goal_type, goal_text, rule)
     ):
         return None
     return {
@@ -82,7 +79,6 @@ def _normalize_next_goal_payload(value: Any) -> dict[str, Any] | None:
         "goal_text": goal_text.strip(),
         "rule": rule.strip(),
     }
-
 
 
 def _normalize_coach_health_payload(value: Any) -> dict[str, Any]:
@@ -100,14 +96,20 @@ def _normalize_coach_health_payload(value: Any) -> dict[str, Any]:
     reason = value.get("reason")
     message = value.get("message")
     if not isinstance(message, str) or not message.strip():
-        message = default_payload["message"] if status == "healthy" else (
-            "实时辅导暂不可用，训练仍可继续。"
-            if status == "degraded"
-            else "实时辅导已恢复，后续建议会继续更新。"
+        message = (
+            default_payload["message"]
+            if status == "healthy"
+            else (
+                "实时辅导暂不可用，训练仍可继续。"
+                if status == "degraded"
+                else "实时辅导已恢复，后续建议会继续更新。"
+            )
         )
     return {
         "status": status,
-        "reason": reason.strip() if isinstance(reason, str) and reason.strip() else None,
+        "reason": reason.strip()
+        if isinstance(reason, str) and reason.strip()
+        else None,
         "message": message.strip(),
     }
 
@@ -123,9 +125,10 @@ def _normalize_knowledge_retrieval_attempt(value: Any) -> dict[str, Any] | None:
     query = str(value.get("query") or "").strip()
     attempted_at = str(value.get("attempted_at") or "").strip() or None
     retrieval_mode = str(value.get("retrieval_mode") or "").strip() or None
-    error_summary = str(
-        value.get("error_summary") or value.get("error_message") or ""
-    ).strip() or None
+    error_summary = (
+        str(value.get("error_summary") or value.get("error_message") or "").strip()
+        or None
+    )
     try:
         result_count = max(0, int(value.get("result_count") or 0))
     except (TypeError, ValueError):
@@ -187,9 +190,10 @@ def _normalize_retrieval_attempt_full(value: Any) -> dict[str, Any] | None:
     query = str(value.get("query") or "").strip()
     attempted_at = str(value.get("attempted_at") or "").strip() or None
     retrieval_mode = str(value.get("retrieval_mode") or "").strip() or None
-    error_summary = str(
-        value.get("error_summary") or value.get("error_message") or ""
-    ).strip() or None
+    error_summary = (
+        str(value.get("error_summary") or value.get("error_message") or "").strip()
+        or None
+    )
     try:
         result_count = max(0, int(value.get("result_count") or 0))
     except (TypeError, ValueError):
@@ -218,8 +222,12 @@ def _normalize_retrieval_attempt_full(value: Any) -> dict[str, Any] | None:
                 continue
             summary_entry: dict[str, Any] = {
                 "knowledge_base_id": kb_id,
-                "knowledge_base_name": str(item.get("knowledge_base_name") or "").strip(),
-                "snippet": str(item.get("snippet") or item.get("content") or "")[:_RETRIEVAL_FACTS_SNIPPET_CHARS],
+                "knowledge_base_name": str(
+                    item.get("knowledge_base_name") or ""
+                ).strip(),
+                "snippet": str(item.get("snippet") or item.get("content") or "")[
+                    :_RETRIEVAL_FACTS_SNIPPET_CHARS
+                ],
                 "retrieval_mode": str(item.get("retrieval_mode") or "vector").strip(),
             }
             score = item.get("score")
@@ -330,7 +338,9 @@ def build_retrieval_facts(
     recent_attempts.reverse()  # restore chronological order
 
     # Fill missing flat status from the latest valid ledger entry
-    latest_attempt: dict[str, Any] | None = recent_attempts[-1] if recent_attempts else None
+    latest_attempt: dict[str, Any] | None = (
+        recent_attempts[-1] if recent_attempts else None
+    )
     if latest_attempt is not None:
         ledger_status = str(latest_attempt.get("status") or "").strip()
         if not last_status or (attempt_count > 0 and last_status == "not_triggered"):
@@ -358,7 +368,9 @@ def build_retrieval_facts(
         if latest_attempt:
             last_query = str(latest_attempt.get("query") or "").strip()
         if last_query:
-            miss_explanation = f"查询「{last_query}」未命中知识库内容，可能需要补充相关文档"
+            miss_explanation = (
+                f"查询「{last_query}」未命中知识库内容，可能需要补充相关文档"
+            )
         else:
             miss_explanation = "知识检索已触发但未命中，可能需要补充知识库文档覆盖范围"
     if status == "search_failed":
@@ -492,9 +504,9 @@ def build_session_runtime_diagnostics(
         last_decision_phase_breakdown = None
     timeout_rate_5m = _coerce_float(knowledge_metrics.get("timeout_rate_5m") or 0.0)
     kb_lock_decision_timestamps = knowledge_metrics.get("kb_lock_decision_timestamps")
-    has_recent_kb_lock_decisions = isinstance(kb_lock_decision_timestamps, list) and bool(
-        kb_lock_decision_timestamps
-    )
+    has_recent_kb_lock_decisions = isinstance(
+        kb_lock_decision_timestamps, list
+    ) and bool(kb_lock_decision_timestamps)
     upstream_disconnect_count_5m = int(
         knowledge_metrics.get("upstream_disconnect_count_5m") or 0
     )
@@ -515,7 +527,9 @@ def build_session_runtime_diagnostics(
     if isinstance(live_knowledge_answer_diagnostics, dict):
         knowledge_answer_diagnostics = dict(live_knowledge_answer_diagnostics)
     elif isinstance(live_session_summary, dict):
-        raw_answer_diagnostics = live_session_summary.get("knowledge_answer_diagnostics")
+        raw_answer_diagnostics = live_session_summary.get(
+            "knowledge_answer_diagnostics"
+        )
         if isinstance(raw_answer_diagnostics, dict):
             knowledge_answer_diagnostics = dict(raw_answer_diagnostics)
     elif isinstance(snapshot_knowledge_answer_diagnostics, dict):
@@ -533,13 +547,10 @@ def build_session_runtime_diagnostics(
             else None
         )
         claim_truth = (
-            (
-                normalized_live_session_summary.get("claim_truth")
-                if isinstance(normalized_live_session_summary, dict)
-                else None
-            )
-            or _normalize_claim_truth_payload(live_claim_truth)
-        )
+            normalized_live_session_summary.get("claim_truth")
+            if isinstance(normalized_live_session_summary, dict)
+            else None
+        ) or _normalize_claim_truth_payload(live_claim_truth)
     else:
         main_issue = (
             (
@@ -563,7 +574,9 @@ def build_session_runtime_diagnostics(
             or _normalize_next_goal_payload(
                 projection_effectiveness_snapshot.get("next_goal")
             )
-            or _normalize_next_goal_payload(session_effectiveness_snapshot.get("next_goal"))
+            or _normalize_next_goal_payload(
+                session_effectiveness_snapshot.get("next_goal")
+            )
         )
         claim_truth = (
             (
@@ -575,7 +588,9 @@ def build_session_runtime_diagnostics(
             or _normalize_claim_truth_payload(
                 projection_effectiveness_snapshot.get("claim_truth")
             )
-            or _normalize_claim_truth_payload(session_effectiveness_snapshot.get("claim_truth"))
+            or _normalize_claim_truth_payload(
+                session_effectiveness_snapshot.get("claim_truth")
+            )
         )
     # --- retrieval_facts: reuse projection truth for completed sessions ---
     retrieval_facts = None
@@ -634,12 +649,17 @@ def build_session_runtime_diagnostics(
             if isinstance(knowledge_answer_diagnostics, dict)
             else []
         ),
-        [build_kb_lock_runtime_event({
-            "kb_lock_required": kb_lock_required,
-            "kb_lock_status": kb_lock_status,
-            "last_status": last_status,
-            "status": status,
-        }, occurred_at=updated_at)]
+        [
+            build_kb_lock_runtime_event(
+                {
+                    "kb_lock_required": kb_lock_required,
+                    "kb_lock_status": kb_lock_status,
+                    "last_status": last_status,
+                    "status": status,
+                },
+                occurred_at=updated_at,
+            )
+        ]
         if (kb_lock_required or kb_lock_status.startswith("blocked_"))
         else [],
         [build_claim_truth_runtime_event(claim_truth, occurred_at=updated_at)]

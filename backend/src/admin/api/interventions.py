@@ -36,7 +36,9 @@ def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
 
 
 def _serialize_intervention(intervention: ManagerIntervention) -> dict[str, Any]:
-    return ManagerInterventionResponse.model_validate(intervention).model_dump(mode="json")
+    return ManagerInterventionResponse.model_validate(intervention).model_dump(
+        mode="json"
+    )
 
 
 def _raise_service_http_error(error: ManagerInterventionServiceError) -> NoReturn:

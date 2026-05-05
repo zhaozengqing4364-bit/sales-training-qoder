@@ -13,6 +13,7 @@ References:
 - Requirements: R13 (Database Migration)
 - Design: Section 22 (Hardcoded Persona Migration)
 """
+
 import asyncio
 import os
 import sys
@@ -43,8 +44,8 @@ PERSONA_CONFIG_MAPPING = {
             "response_length": "short",
             "challenge_frequency": 0.9,
             "interruption_triggers": ["啰嗦", "长篇大论"],
-            "typical_questions": ["说重点！", "这能给我带来什么？"]
-        }
+            "typical_questions": ["说重点！", "这能给我带来什么？"],
+        },
     },
     "skeptical_buyer": {
         "name": "怀疑的采购",
@@ -57,8 +58,8 @@ PERSONA_CONFIG_MAPPING = {
             "response_length": "medium",
             "challenge_frequency": 0.8,
             "interruption_triggers": ["竞品", "证据", "案例"],
-            "typical_questions": ["有什么证据？", "能证明吗？"]
-        }
+            "typical_questions": ["有什么证据？", "能证明吗？"],
+        },
     },
     "price_focused": {
         "name": "价格敏感型",
@@ -71,8 +72,8 @@ PERSONA_CONFIG_MAPPING = {
             "response_length": "short",
             "challenge_frequency": 0.7,
             "interruption_triggers": ["价格", "费用", "成本"],
-            "typical_questions": ["太贵了", "能便宜点吗？"]
-        }
+            "typical_questions": ["太贵了", "能便宜点吗？"],
+        },
     },
     "technical_cto": {
         "name": "技术型CTO",
@@ -85,9 +86,9 @@ PERSONA_CONFIG_MAPPING = {
             "response_length": "medium",
             "challenge_frequency": 0.8,
             "interruption_triggers": ["技术", "架构", "安全"],
-            "typical_questions": ["技术栈是什么？", "怎么实现的？"]
-        }
-    }
+            "typical_questions": ["技术栈是什么？", "怎么实现的？"],
+        },
+    },
 }
 
 
@@ -105,8 +106,8 @@ DEFAULT_AGENT_CONFIG = {
         "fuzzy_detection": {"enabled": True},
         "sales_stage": {"enabled": True},
         "realtime_scoring": {"enabled": True},
-        "knowledge_retrieval": {"enabled": True}
-    }
+        "knowledge_retrieval": {"enabled": True},
+    },
 }
 
 
@@ -133,7 +134,7 @@ async def migrate_personas(db: AsyncSession) -> dict:
         "personas_created": 0,
         "personas_skipped": 0,
         "links_created": 0,
-        "errors": []
+        "errors": [],
     }
 
     try:
@@ -152,7 +153,7 @@ async def migrate_personas(db: AsyncSession) -> dict:
                 welcome_message=DEFAULT_AGENT_CONFIG["welcome_message"],
                 capabilities_config=DEFAULT_AGENT_CONFIG["capabilities_config"],
                 status=AgentStatus.PUBLISHED.value,
-                created_by="system"
+                created_by="system",
             )
             db.add(agent)
             await db.flush()
@@ -200,7 +201,7 @@ async def migrate_personas(db: AsyncSession) -> dict:
                     behavior_config=config["behavior_config"],
                     is_public=True,
                     status=PersonaStatus.ACTIVE.value,
-                    created_by="system"
+                    created_by="system",
                 )
                 db.add(persona)
                 await db.flush()
@@ -210,8 +211,7 @@ async def migrate_personas(db: AsyncSession) -> dict:
 
             # Step 3: Link persona to agent if not already linked
             link_stmt = select(AgentPersona).where(
-                AgentPersona.agent_id == agent.id,
-                AgentPersona.persona_id == persona.id
+                AgentPersona.agent_id == agent.id, AgentPersona.persona_id == persona.id
             )
             link_result = await db.execute(link_stmt)
             existing_link = link_result.scalar_one_or_none()
@@ -221,7 +221,7 @@ async def migrate_personas(db: AsyncSession) -> dict:
                     agent_id=agent.id,
                     persona_id=persona.id,
                     display_order=display_order,
-                    is_default=is_first  # First persona is default
+                    is_default=is_first,  # First persona is default
                 )
                 db.add(link)
                 results["links_created"] += 1

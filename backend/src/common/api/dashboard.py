@@ -10,6 +10,7 @@ Response Format:
 
 Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
 """
+
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -37,8 +38,10 @@ router = APIRouter()
 
 # ========== Schemas ==========
 
+
 class WeeklyActivity(BaseModel):
     """Weekly activity statistics"""
+
     total_duration_minutes: int = 0
     session_count: int = 0
     trend_percentage: float = 0.0
@@ -47,6 +50,7 @@ class WeeklyActivity(BaseModel):
 
 class LastSession(BaseModel):
     """Last session score info"""
+
     score: float = 0.0
     percentile: int = 50
     trend: Literal["up", "down", "stable"] = "stable"
@@ -54,6 +58,7 @@ class LastSession(BaseModel):
 
 class DashboardStats(BaseModel):
     """Dashboard statistics response"""
+
     weekly_activity: WeeklyActivity
     last_session: LastSession
     effectiveness: dict[str, float] | None = None
@@ -64,6 +69,7 @@ class DashboardStats(BaseModel):
 
 class Recommendation(BaseModel):
     """Training recommendation"""
+
     title: str
     reason: str
     action_label: str
@@ -109,9 +115,21 @@ def _build_retry_target_path(retry_entry: dict) -> str:
 def _build_next_goal_recommendation(session: PracticeSession) -> Recommendation | None:
     scenario = getattr(session, "scenario", None)
     scenario_type = getattr(scenario, "scenario_type", None) or "sales"
-    snapshot = session.effectiveness_snapshot if isinstance(session.effectiveness_snapshot, dict) else {}
-    main_issue = snapshot.get("main_issue") if isinstance(snapshot.get("main_issue"), dict) else None
-    next_goal = snapshot.get("next_goal") if isinstance(snapshot.get("next_goal"), dict) else None
+    snapshot = (
+        session.effectiveness_snapshot
+        if isinstance(session.effectiveness_snapshot, dict)
+        else {}
+    )
+    main_issue = (
+        snapshot.get("main_issue")
+        if isinstance(snapshot.get("main_issue"), dict)
+        else None
+    )
+    next_goal = (
+        snapshot.get("next_goal")
+        if isinstance(snapshot.get("next_goal"), dict)
+        else None
+    )
 
     if not main_issue and not next_goal:
         return None
@@ -230,7 +248,9 @@ def _build_presentation_page_recommendation(
     )
 
 
-def calculate_trend_direction(current: float, previous: float) -> Literal["up", "down", "flat"]:
+def calculate_trend_direction(
+    current: float, previous: float
+) -> Literal["up", "down", "flat"]:
     """Calculate trend direction based on current and previous values"""
     if previous == 0:
         return "up" if current > 0 else "flat"
@@ -255,10 +275,10 @@ def calculate_trend_percentage(current: float, previous: float) -> float:
 
 # ========== Endpoints ==========
 
+
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     Get dashboard statistics for current user
@@ -287,10 +307,12 @@ async def get_dashboard_stats(
         # ========== This Week Stats ==========
         this_week_stmt = select(
             func.count(PracticeSession.session_id).label("session_count"),
-            func.coalesce(func.sum(PracticeSession.total_duration_seconds), 0).label("total_seconds")
+            func.coalesce(func.sum(PracticeSession.total_duration_seconds), 0).label(
+                "total_seconds"
+            ),
         ).where(
             PracticeSession.user_id == user_id,
-            PracticeSession.start_time >= this_week_start
+            PracticeSession.start_time >= this_week_start,
         )
 
         this_week_result = await db.execute(this_week_stmt)
@@ -303,11 +325,13 @@ async def get_dashboard_stats(
         # ========== Last Week Stats ==========
         last_week_stmt = select(
             func.count(PracticeSession.session_id).label("session_count"),
-            func.coalesce(func.sum(PracticeSession.total_duration_seconds), 0).label("total_seconds")
+            func.coalesce(func.sum(PracticeSession.total_duration_seconds), 0).label(
+                "total_seconds"
+            ),
         ).where(
             PracticeSession.user_id == user_id,
             PracticeSession.start_time >= last_week_start,
-            PracticeSession.start_time < last_week_end
+            PracticeSession.start_time < last_week_end,
         )
 
         last_week_result = await db.execute(last_week_stmt)
@@ -315,14 +339,18 @@ async def get_dashboard_stats(
 
         last_week_sessions = last_week_row.session_count or 0
         # Calculate trends
-        trend_direction = calculate_trend_direction(this_week_sessions, last_week_sessions)
-        trend_percentage = abs(calculate_trend_percentage(this_week_sessions, last_week_sessions))
+        trend_direction = calculate_trend_direction(
+            this_week_sessions, last_week_sessions
+        )
+        trend_percentage = abs(
+            calculate_trend_percentage(this_week_sessions, last_week_sessions)
+        )
 
         weekly_activity = WeeklyActivity(
             total_duration_minutes=this_week_minutes,
             session_count=this_week_sessions,
             trend_percentage=trend_percentage,
-            trend_direction=trend_direction
+            trend_direction=trend_direction,
         )
 
         # ========== Projection-backed score summary ==========
@@ -333,7 +361,9 @@ async def get_dashboard_stats(
             offset=0,
         )
         history_summaries = history_result.value if history_result.is_success else []
-        score_summary = history_service.build_projection_score_summary(history_summaries)
+        score_summary = history_service.build_projection_score_summary(
+            history_summaries
+        )
         evaluable_summaries = [
             summary
             for summary in history_summaries
@@ -362,10 +392,11 @@ async def get_dashboard_stats(
                 score_trend = "stable"
 
             all_projection_scores = [
-                float(summary.overall_score or 0.0)
-                for summary in evaluable_summaries
+                float(summary.overall_score or 0.0) for summary in evaluable_summaries
             ]
-            below_count = sum(1 for score in all_projection_scores if score < last_score)
+            below_count = sum(
+                1 for score in all_projection_scores if score < last_score
+            )
             percentile = (
                 int((below_count / len(all_projection_scores)) * 100)
                 if all_projection_scores
@@ -409,7 +440,9 @@ async def get_dashboard_stats(
         evaluable_times: list[datetime] = []
         for row_item in effect_rows:
             snapshot = row_item.effectiveness_snapshot
-            if not isinstance(snapshot, dict) or not bool(snapshot.get("evaluable", False)):
+            if not isinstance(snapshot, dict) or not bool(
+                snapshot.get("evaluable", False)
+            ):
                 continue
             pass_flags = snapshot.get("pass_flags")
             if not isinstance(pass_flags, dict):
@@ -438,7 +471,9 @@ async def get_dashboard_stats(
                 "pass_rate_3min_flow": round((pass_3 / evaluable_count) * 100, 2),
                 "pass_rate_5turn_defense": round((pass_5 / evaluable_count) * 100, 2),
                 "pass_rate_4step_structure": round((pass_4 / evaluable_count) * 100, 2),
-                "next_day_retry_rate": round((next_day_retry_hits / evaluable_count) * 100, 2),
+                "next_day_retry_rate": round(
+                    (next_day_retry_hits / evaluable_count) * 100, 2
+                ),
             }
         else:
             stats.effectiveness = {
@@ -457,8 +492,7 @@ async def get_dashboard_stats(
 
 @router.get("/recommendations/latest")
 async def get_recommendation(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     Get training recommendation for current user
@@ -479,21 +513,31 @@ async def get_recommendation(
         week_ago = now - timedelta(days=7)
 
         # Get recent sessions
-        recent_sessions_stmt = select(PracticeSession).where(
-            PracticeSession.user_id == user_id,
-            PracticeSession.start_time >= week_ago
-        ).order_by(PracticeSession.start_time.desc())
+        recent_sessions_stmt = (
+            select(PracticeSession)
+            .where(
+                PracticeSession.user_id == user_id,
+                PracticeSession.start_time >= week_ago,
+            )
+            .order_by(PracticeSession.start_time.desc())
+        )
 
         recent_result = await db.execute(recent_sessions_stmt)
         recent_sessions = recent_result.scalars().all()
 
         # Get last completed session with evidence for retry recommendation
-        last_completed_stmt = select(PracticeSession).where(
-            PracticeSession.user_id == user_id,
-            PracticeSession.status == "completed"
-        ).options(
-            selectinload(PracticeSession.scenario),
-        ).order_by(PracticeSession.end_time.desc()).limit(1)
+        last_completed_stmt = (
+            select(PracticeSession)
+            .where(
+                PracticeSession.user_id == user_id,
+                PracticeSession.status == "completed",
+            )
+            .options(
+                selectinload(PracticeSession.scenario),
+            )
+            .order_by(PracticeSession.end_time.desc())
+            .limit(1)
+        )
 
         last_completed_result = await db.execute(last_completed_stmt)
         last_completed = last_completed_result.scalar_one_or_none()
@@ -505,7 +549,7 @@ async def get_recommendation(
                 title="开始您的第一次练习",
                 reason="本周还没有练习记录，开始一次练习来提升您的技能吧！",
                 action_label="开始练习",
-                target_path="/training"
+                target_path="/training",
             )
         elif last_completed:
             last_scenario = getattr(last_completed, "scenario", None)
@@ -519,9 +563,11 @@ async def get_recommendation(
                     scenario_type="presentation",
                 )
                 if projection_result.is_success:
-                    presentation_recommendation = _build_presentation_page_recommendation(
-                        last_completed,
-                        projection_result.value.presentation_review,
+                    presentation_recommendation = (
+                        _build_presentation_page_recommendation(
+                            last_completed,
+                            projection_result.value.presentation_review,
+                        )
                     )
                     if presentation_recommendation is not None:
                         return success_response(
@@ -537,11 +583,7 @@ async def get_recommendation(
             accuracy = last_completed.accuracy_score or 0
             completeness = last_completed.completeness_score or 0
 
-            scores = {
-                "逻辑性": logic,
-                "准确性": accuracy,
-                "完整性": completeness
-            }
+            scores = {"逻辑性": logic, "准确性": accuracy, "完整性": completeness}
 
             weakest = min(scores, key=scores.get)
             weakest_score = scores[weakest]
@@ -552,7 +594,7 @@ async def get_recommendation(
                     title=f"提升{weakest}能力",
                     reason=f"您上次练习的{weakest}得分为 {weakest_score:.0f} 分，建议针对性练习来提升。",
                     action_label="针对练习",
-                    target_path="/training"
+                    target_path="/training",
                 )
             elif len(recent_sessions) < 3:
                 # Few sessions - encourage more practice
@@ -560,7 +602,7 @@ async def get_recommendation(
                     title="保持练习频率",
                     reason=f"本周您完成了 {len(recent_sessions)} 次练习，建议每周至少练习 3 次以保持进步。",
                     action_label="继续练习",
-                    target_path="/training"
+                    target_path="/training",
                 )
             else:
                 # Good progress - suggest trying new scenarios
@@ -568,7 +610,7 @@ async def get_recommendation(
                     title="尝试新的练习场景",
                     reason="您的练习表现很好！尝试不同的场景来全面提升技能。",
                     action_label="探索场景",
-                    target_path="/training"
+                    target_path="/training",
                 )
         else:
             # Has sessions but none completed
@@ -576,7 +618,7 @@ async def get_recommendation(
                 title="完成一次完整练习",
                 reason="您有未完成的练习，完成练习可以获得详细的反馈报告。",
                 action_label="继续练习",
-                target_path="/history"
+                target_path="/history",
             )
 
         return success_response(recommendation.model_dump())

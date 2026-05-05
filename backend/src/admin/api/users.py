@@ -7,6 +7,7 @@ References:
 - Requirements: 4.1, 4.2, 4.3, 4.4
 - Design: Section "Admin Users API"
 """
+
 from __future__ import annotations
 
 import csv
@@ -36,6 +37,7 @@ router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 # Request schemas
 class CreateUserRequest(BaseModel):
     """Request to create a new user"""
+
     username: str
     email: EmailStr
     password: str
@@ -75,6 +77,7 @@ class CreateUserRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     """Request to update user"""
+
     name: str | None = None
     email: EmailStr | None = None
     department: str | None = None
@@ -102,6 +105,7 @@ class UpdateUserRequest(BaseModel):
 
 class UpdateUserRoleRequest(BaseModel):
     """Request to update user role only."""
+
     role: str
     audit_reason: str | None = None
 
@@ -126,6 +130,7 @@ class UpdateUserRoleRequest(BaseModel):
 
 class UserAuditReasonRequest(BaseModel):
     """Optional audit reason payload for account status actions."""
+
     audit_reason: str | None = None
 
     @field_validator("audit_reason")
@@ -142,6 +147,7 @@ class UserAuditReasonRequest(BaseModel):
 # Response schemas
 class AdminUserResponse(BaseModel):
     """User response for admin API"""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -157,6 +163,7 @@ class AdminUserResponse(BaseModel):
 
 class UserListResponse(BaseModel):
     """Paginated user list response"""
+
     items: list[AdminUserResponse]
     total: int
     page: int
@@ -166,20 +173,18 @@ class UserListResponse(BaseModel):
 
 def success_response(data: Any, trace_id: str | None = None) -> dict:
     """Create unified success response"""
-    return {
-        "success": True,
-        "data": data,
-        "trace_id": trace_id or get_trace_id()
-    }
+    return {"success": True, "data": data, "trace_id": trace_id or get_trace_id()}
 
 
-def error_response(error_code: str, message: str | None = None, trace_id: str | None = None) -> dict:
+def error_response(
+    error_code: str, message: str | None = None, trace_id: str | None = None
+) -> dict:
     """Create unified error response"""
     return {
         "success": False,
         "error": error_code,
         "message": message or error_code,
-        "trace_id": trace_id or get_trace_id()
+        "trace_id": trace_id or get_trace_id(),
     }
 
 
@@ -202,11 +207,11 @@ def user_to_response(user: User) -> AdminUserResponse:
         username=user.name or "",
         display_name=user.name or user.email or "",
         email=user.email,
-        role=getattr(user, 'role', 'user'),  # Use actual role field
+        role=getattr(user, "role", "user"),  # Use actual role field
         status="active" if user.is_active else "inactive",
         last_active_at=user.last_login.isoformat() if user.last_login else None,
         department=user.department,
-        created_at=user.created_at.isoformat() if user.created_at else None
+        created_at=user.created_at.isoformat() if user.created_at else None,
     )
 
 
@@ -368,7 +373,7 @@ async def list_users(
     status: str | None = Query(None, description="Filter by status (active/inactive)"),
     role: str | None = Query(None, description="Filter by role"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get paginated user list with filtering
@@ -382,8 +387,7 @@ async def list_users(
     # Apply search filter
     if search:
         search_filter = or_(
-            User.name.ilike(f"%{search}%"),
-            User.email.ilike(f"%{search}%")
+            User.name.ilike(f"%{search}%"), User.email.ilike(f"%{search}%")
         )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
@@ -419,7 +423,7 @@ async def list_users(
         total=total,
         page=page,
         page_size=page_size,
-        has_more=(page * page_size) < total
+        has_more=(page * page_size) < total,
     )
 
     return success_response(response.model_dump())
@@ -429,12 +433,10 @@ async def list_users(
 async def get_user(
     user_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get user details by ID"""
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -446,9 +448,11 @@ async def get_user(
 @router.get("/{user_id}/stats", response_model=dict)
 async def get_user_stats(
     user_id: str,
-    time_range: str = Query("all_time", description="Time range: 7d, 30d, 90d, all_time"),
+    time_range: str = Query(
+        "all_time", description="Time range: 7d, 30d, 90d, all_time"
+    ),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get detailed statistics for a specific user
@@ -486,14 +490,15 @@ async def get_user_stats(
     # Session statistics that are still truthful from raw session rows.
     stats_query = select(
         func.count(PracticeSession.session_id).label("total_sessions"),
-        func.sum(case((PracticeSession.status == "completed", 1), else_=0)).label("completed_sessions"),
+        func.sum(case((PracticeSession.status == "completed", 1), else_=0)).label(
+            "completed_sessions"
+        ),
         func.sum(PracticeSession.total_duration_seconds).label("total_duration"),
         func.max(PracticeSession.start_time).label("last_practice"),
         func.count(distinct(PracticeSession.agent_id)).label("unique_agents"),
-        func.count(distinct(PracticeSession.persona_id)).label("unique_personas")
+        func.count(distinct(PracticeSession.persona_id)).label("unique_personas"),
     ).where(
-        PracticeSession.user_id == user_id,
-        PracticeSession.start_time >= start_date
+        PracticeSession.user_id == user_id, PracticeSession.start_time >= start_date
     )
 
     result = await db.execute(stats_query)
@@ -501,37 +506,51 @@ async def get_user_stats(
 
     total_sessions = row.total_sessions or 0
     completed_sessions = row.completed_sessions or 0
-    completion_rate = round((completed_sessions / total_sessions * 100) if total_sessions > 0 else 0, 1)
+    completion_rate = round(
+        (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0, 1
+    )
 
     # Agent usage breakdown
-    agent_usage_query = select(
-        Agent.id,
-        Agent.name,
-        func.count(PracticeSession.session_id).label("count")
-    ).join(
-        PracticeSession, Agent.id == PracticeSession.agent_id
-    ).where(
-        PracticeSession.user_id == user_id,
-        PracticeSession.start_time >= start_date
-    ).group_by(Agent.id, Agent.name).order_by(func.count(PracticeSession.session_id).desc()).limit(5)
+    agent_usage_query = (
+        select(
+            Agent.id, Agent.name, func.count(PracticeSession.session_id).label("count")
+        )
+        .join(PracticeSession, Agent.id == PracticeSession.agent_id)
+        .where(
+            PracticeSession.user_id == user_id, PracticeSession.start_time >= start_date
+        )
+        .group_by(Agent.id, Agent.name)
+        .order_by(func.count(PracticeSession.session_id).desc())
+        .limit(5)
+    )
 
     agent_result = await db.execute(agent_usage_query)
-    agent_usage = [{"agent_id": str(r.id), "name": r.name, "count": r.count} for r in agent_result.all()]
+    agent_usage = [
+        {"agent_id": str(r.id), "name": r.name, "count": r.count}
+        for r in agent_result.all()
+    ]
 
     # Persona usage breakdown
-    persona_usage_query = select(
-        Persona.id,
-        Persona.name,
-        func.count(PracticeSession.session_id).label("count")
-    ).join(
-        PracticeSession, Persona.id == PracticeSession.persona_id
-    ).where(
-        PracticeSession.user_id == user_id,
-        PracticeSession.start_time >= start_date
-    ).group_by(Persona.id, Persona.name).order_by(func.count(PracticeSession.session_id).desc()).limit(5)
+    persona_usage_query = (
+        select(
+            Persona.id,
+            Persona.name,
+            func.count(PracticeSession.session_id).label("count"),
+        )
+        .join(PracticeSession, Persona.id == PracticeSession.persona_id)
+        .where(
+            PracticeSession.user_id == user_id, PracticeSession.start_time >= start_date
+        )
+        .group_by(Persona.id, Persona.name)
+        .order_by(func.count(PracticeSession.session_id).desc())
+        .limit(5)
+    )
 
     persona_result = await db.execute(persona_usage_query)
-    persona_usage = [{"persona_id": str(r.id), "name": r.name, "count": r.count} for r in persona_result.all()]
+    persona_usage = [
+        {"persona_id": str(r.id), "name": r.name, "count": r.count}
+        for r in persona_result.all()
+    ]
 
     stats_data = {
         "user": user_to_response(user).model_dump(),
@@ -547,10 +566,13 @@ async def get_user_stats(
                 projection_scores.get("not_evaluable_sessions") or 0
             ),
             "score_basis": str(
-                projection_scores.get("score_basis") or "session_evidence_projection_evaluable_only"
+                projection_scores.get("score_basis")
+                or "session_evidence_projection_evaluable_only"
             ),
             "total_duration_minutes": round((row.total_duration or 0) / 60, 1),
-            "last_practice": row.last_practice.isoformat() if row.last_practice else None,
+            "last_practice": row.last_practice.isoformat()
+            if row.last_practice
+            else None,
             "unique_agents_used": row.unique_agents or 0,
             "unique_personas_used": row.unique_personas or 0,
         },
@@ -568,7 +590,7 @@ async def get_user_sessions(
     page_size: int = Query(10, ge=1, le=50),
     status: str | None = Query(None, description="Filter by status"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get paginated practice sessions for a specific user
@@ -593,21 +615,25 @@ async def get_user_sessions(
         raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
 
     # Build query
-    query = select(
-        PracticeSession,
-        Agent.name.label("agent_name"),
-        Persona.name.label("persona_name"),
-        Scenario.name.label("scenario_name"),
-        Scenario.scenario_type,
-    ).outerjoin(
-        Agent, PracticeSession.agent_id == Agent.id
-    ).outerjoin(
-        Persona, PracticeSession.persona_id == Persona.id
-    ).outerjoin(
-        Scenario, PracticeSession.scenario_id == Scenario.scenario_id
-    ).where(PracticeSession.user_id == user_id)
+    query = (
+        select(
+            PracticeSession,
+            Agent.name.label("agent_name"),
+            Persona.name.label("persona_name"),
+            Scenario.name.label("scenario_name"),
+            Scenario.scenario_type,
+        )
+        .outerjoin(Agent, PracticeSession.agent_id == Agent.id)
+        .outerjoin(Persona, PracticeSession.persona_id == Persona.id)
+        .outerjoin(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+        .where(PracticeSession.user_id == user_id)
+    )
 
-    count_query = select(func.count()).select_from(PracticeSession).where(PracticeSession.user_id == user_id)
+    count_query = (
+        select(func.count())
+        .select_from(PracticeSession)
+        .where(PracticeSession.user_id == user_id)
+    )
 
     if status:
         query = query.where(PracticeSession.status == status)
@@ -655,9 +681,11 @@ async def get_user_sessions(
     }
 
     manager_intervention_results: list[dict[str, Any]] = []
-    intervention_results_result = await history_service.get_manager_intervention_results(
-        db=db,
-        user_id=uuid.UUID(user_id),
+    intervention_results_result = (
+        await history_service.get_manager_intervention_results(
+            db=db,
+            user_id=uuid.UUID(user_id),
+        )
     )
     if intervention_results_result.is_success:
         manager_intervention_results = intervention_results_result.value
@@ -675,8 +703,12 @@ async def get_user_sessions(
         projection = projections_by_session.get(session_id)
 
         logic_score = projection.logic_score if projection else session.logic_score
-        accuracy_score = projection.accuracy_score if projection else session.accuracy_score
-        completeness_score = projection.completeness_score if projection else session.completeness_score
+        accuracy_score = (
+            projection.accuracy_score if projection else session.accuracy_score
+        )
+        completeness_score = (
+            projection.completeness_score if projection else session.completeness_score
+        )
         overall_score = projection.overall_score if projection else None
         main_issue = projection.main_issue if projection else None
         next_goal = projection.next_goal if projection else None
@@ -692,41 +724,53 @@ async def get_user_sessions(
         if isinstance(next_goal, dict) and next_goal.get("goal_text"):
             suggestions.append(f"下一轮：{next_goal['goal_text']}")
 
-        sessions.append({
-            "session_id": session_id,
-            "start_time": session.start_time.isoformat() if session.start_time else None,
-            "end_time": session.end_time.isoformat() if session.end_time else None,
-            "status": session.status,
-            "duration_minutes": round((session.total_duration_seconds or 0) / 60, 1),
-            "scenario_name": row.scenario_name,
-            "scenario_type": row.scenario_type,
-            "agent_name": row.agent_name,
-            "persona_name": row.persona_name,
-            "scores": {
-                "logic": logic_score,
-                "accuracy": accuracy_score,
-                "completeness": completeness_score,
-                "overall": overall_score,
-            },
-            "interruption_count": session.interruption_count or 0,
-            "overall_result": projection.overall_result if projection else None,
-            "evaluable": projection.evaluable if projection else None,
-            "not_evaluable_reason": projection.not_evaluable_reason if projection else None,
-            "evidence_completeness": projection.evidence_completeness if projection else None,
-            "main_issue": main_issue,
-            "next_goal": next_goal,
-            "feedback_summary": feedback_summary,
-            "suggestions": suggestions,
-        })
+        sessions.append(
+            {
+                "session_id": session_id,
+                "start_time": session.start_time.isoformat()
+                if session.start_time
+                else None,
+                "end_time": session.end_time.isoformat() if session.end_time else None,
+                "status": session.status,
+                "duration_minutes": round(
+                    (session.total_duration_seconds or 0) / 60, 1
+                ),
+                "scenario_name": row.scenario_name,
+                "scenario_type": row.scenario_type,
+                "agent_name": row.agent_name,
+                "persona_name": row.persona_name,
+                "scores": {
+                    "logic": logic_score,
+                    "accuracy": accuracy_score,
+                    "completeness": completeness_score,
+                    "overall": overall_score,
+                },
+                "interruption_count": session.interruption_count or 0,
+                "overall_result": projection.overall_result if projection else None,
+                "evaluable": projection.evaluable if projection else None,
+                "not_evaluable_reason": projection.not_evaluable_reason
+                if projection
+                else None,
+                "evidence_completeness": projection.evidence_completeness
+                if projection
+                else None,
+                "main_issue": main_issue,
+                "next_goal": next_goal,
+                "feedback_summary": feedback_summary,
+                "suggestions": suggestions,
+            }
+        )
 
-    return success_response({
-        "items": sessions,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "has_more": (page * page_size) < total,
-        "manager_intervention_results": manager_intervention_results,
-    })
+    return success_response(
+        {
+            "items": sessions,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": (page * page_size) < total,
+            "manager_intervention_results": manager_intervention_results,
+        }
+    )
 
 
 @router.get("/{user_id}/progress", response_model=dict)
@@ -735,7 +779,7 @@ async def get_user_progress(
     time_range: str = Query("30d", description="Time range: 7d, 30d, 90d, all_time"),
     granularity: str = Query("day", description="Granularity: day, week"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get user progress/improvement trend over time.
@@ -773,7 +817,7 @@ async def delete_user(
     request_context: Request,
     payload: UserAuditReasonRequest | None = None,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Delete a user (soft delete by setting is_active=False)
@@ -784,9 +828,7 @@ async def delete_user(
     if str(current_user.user_id) == user_id:
         raise HTTPException(status_code=400, detail="[CANNOT_DELETE_SELF]")
 
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -816,7 +858,7 @@ async def create_user(
     payload: CreateUserRequest,
     request_context: Request,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Create a new user
@@ -824,9 +866,7 @@ async def create_user(
     Requirements: 4.1
     """
     # Check if email already exists
-    existing = await db.execute(
-        select(User).where(User.email == payload.email)
-    )
+    existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="[EMAIL_ALREADY_EXISTS]")
 
@@ -839,7 +879,7 @@ async def create_user(
         department=payload.department,
         role=payload.role,
         is_active=True,
-        created_at=datetime.now(UTC)
+        created_at=datetime.now(UTC),
     )
 
     db.add(new_user)
@@ -868,16 +908,14 @@ async def update_user(
     payload: UpdateUserRequest,
     request_context: Request,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Update user information
 
     Requirements: 4.2
     """
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -898,9 +936,7 @@ async def update_user(
 
     # Check email uniqueness if changing
     if payload.email and payload.email != user.email:
-        existing = await db.execute(
-            select(User).where(User.email == payload.email)
-        )
+        existing = await db.execute(select(User).where(User.email == payload.email))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="[EMAIL_ALREADY_EXISTS]")
         user.email = payload.email
@@ -939,14 +975,12 @@ async def update_user_role(
     payload: UpdateUserRoleRequest,
     request_context: Request,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Update user role with dedicated RBAC and audit safeguards.
     """
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -994,7 +1028,7 @@ async def suspend_user(
     request_context: Request,
     payload: UserAuditReasonRequest | None = None,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Suspend a user account
@@ -1005,9 +1039,7 @@ async def suspend_user(
     if str(current_user.user_id) == user_id:
         raise HTTPException(status_code=400, detail="[CANNOT_SUSPEND_SELF]")
 
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -1039,14 +1071,12 @@ async def activate_user(
     request_context: Request,
     payload: UserAuditReasonRequest | None = None,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Activate a suspended user account
     """
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -1078,7 +1108,7 @@ async def export_users(
     search: str | None = Query(None, description="Search filter"),
     status: str | None = Query(None, description="Status filter"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Export users to CSV or JSON
@@ -1090,8 +1120,7 @@ async def export_users(
 
     if search:
         search_filter = or_(
-            User.name.ilike(f"%{search}%"),
-            User.email.ilike(f"%{search}%")
+            User.name.ilike(f"%{search}%"), User.email.ilike(f"%{search}%")
         )
         query = query.where(search_filter)
 
@@ -1111,7 +1140,7 @@ async def export_users(
         return StreamingResponse(
             iter([content]),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=users_export.json"}
+            headers={"Content-Disposition": "attachment; filename=users_export.json"},
         )
     else:
         # CSV export
@@ -1125,5 +1154,5 @@ async def export_users(
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=users_export.csv"}
+            headers={"Content-Disposition": "attachment; filename=users_export.csv"},
         )

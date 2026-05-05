@@ -267,7 +267,11 @@ def build_sales_methodology_summary(
     """Build a cross-surface methodology summary from canonical evidence."""
 
     contract = get_sales_methodology_contract()
-    dimensions = canonical_kernel.get("dimensions") if isinstance(canonical_kernel, dict) else None
+    dimensions = (
+        canonical_kernel.get("dimensions")
+        if isinstance(canonical_kernel, dict)
+        else None
+    )
     if not isinstance(dimensions, list):
         dimensions = []
 
@@ -314,7 +318,8 @@ def build_sales_methodology_summary(
             )
 
         rubric_score = round(
-            sum(item["score"] for item in scored_dimensions) / max(1, len(scored_dimensions)),
+            sum(item["score"] for item in scored_dimensions)
+            / max(1, len(scored_dimensions)),
             2,
         )
         calibration = dict(rubric.get("calibration") or {})
@@ -345,11 +350,17 @@ def build_sales_methodology_summary(
                 "focus_type": rubric.get("focus_type"),
                 "main_issue_type": rubric.get("main_issue_type"),
                 "next_goal_type": rubric.get("next_goal_type"),
-                "canonical_dimension_ids": list(rubric.get("canonical_dimension_ids") or []),
+                "canonical_dimension_ids": list(
+                    rubric.get("canonical_dimension_ids") or []
+                ),
                 "dimension_scores": scored_dimensions,
                 "calibration": {
-                    "healthy_min": _coerce_methodology_score(calibration.get("healthy_min")),
-                    "watch_min": _coerce_methodology_score(calibration.get("watch_min")),
+                    "healthy_min": _coerce_methodology_score(
+                        calibration.get("healthy_min")
+                    ),
+                    "watch_min": _coerce_methodology_score(
+                        calibration.get("watch_min")
+                    ),
                     "coach_for": calibration.get("coach_for"),
                 },
             }
@@ -358,13 +369,19 @@ def build_sales_methodology_summary(
     if active_rubric_id is None and rubric_assessments:
         active_rubric_id = min(
             rubric_assessments,
-            key=lambda item: (float(item.get("score") or 0.0), str(item.get("rubric_id") or "")),
+            key=lambda item: (
+                float(item.get("score") or 0.0),
+                str(item.get("rubric_id") or ""),
+            ),
         )["rubric_id"]
 
     weakest_rubric_id = (
         min(
             rubric_assessments,
-            key=lambda item: (float(item.get("score") or 0.0), str(item.get("rubric_id") or "")),
+            key=lambda item: (
+                float(item.get("score") or 0.0),
+                str(item.get("rubric_id") or ""),
+            ),
         )["rubric_id"]
         if rubric_assessments
         else None
@@ -390,9 +407,15 @@ def build_sales_methodology_summary(
         "active_rubric_id": active_rubric_id,
         "weakest_rubric_id": weakest_rubric_id,
         "summary": {
-            "healthy_count": sum(1 for item in rubric_assessments if item["status"] == "healthy"),
-            "watch_count": sum(1 for item in rubric_assessments if item["status"] == "watch"),
-            "gap_count": sum(1 for item in rubric_assessments if item["status"] == "gap"),
+            "healthy_count": sum(
+                1 for item in rubric_assessments if item["status"] == "healthy"
+            ),
+            "watch_count": sum(
+                1 for item in rubric_assessments if item["status"] == "watch"
+            ),
+            "gap_count": sum(
+                1 for item in rubric_assessments if item["status"] == "gap"
+            ),
         },
         "evidence_paths": list(surface_contract.get("evidence_paths") or []),
         "rubric_assessments": rubric_assessments,

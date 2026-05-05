@@ -19,7 +19,9 @@ def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, parsed))
 
 
-def resolve_pcm_audio_format(config: dict[str, Any] | None = None) -> tuple[int, int, int]:
+def resolve_pcm_audio_format(
+    config: dict[str, Any] | None = None,
+) -> tuple[int, int, int]:
     """Resolve sample rate, bytes per sample, and channels from config/defaults."""
     raw = config if isinstance(config, dict) else {}
     sample_rate_hz = _bounded_int(

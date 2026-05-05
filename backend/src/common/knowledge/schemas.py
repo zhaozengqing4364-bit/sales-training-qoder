@@ -55,18 +55,29 @@ class ChunkingSettings(BaseModel):
         default="element_boundary",
         description="Chunking strategy: element_boundary (default) | fixed_size | parent_child (small chunks for retrieval, large for context)",
     )
-    chunk_size: int = Field(default=500, ge=100, le=2000, description="Max chunk size in characters")
-    chunk_overlap: int = Field(default=50, ge=0, le=500, description="Overlap between chunks in characters")
+    chunk_size: int = Field(
+        default=500, ge=100, le=2000, description="Max chunk size in characters"
+    )
+    chunk_overlap: int = Field(
+        default=50, ge=0, le=500, description="Overlap between chunks in characters"
+    )
 
 
 class SemanticCacheSettings(BaseModel):
     """Semantic cache configuration per knowledge base."""
 
-    enabled: bool = Field(default=True, description="Enable semantic caching for this KB")
-    similarity_threshold: float = Field(
-        default=0.95, ge=0.90, le=0.99, description="Min cosine similarity for cache hit"
+    enabled: bool = Field(
+        default=True, description="Enable semantic caching for this KB"
     )
-    ttl_seconds: int = Field(default=300, ge=60, le=3600, description="Cache TTL in seconds")
+    similarity_threshold: float = Field(
+        default=0.95,
+        ge=0.90,
+        le=0.99,
+        description="Min cosine similarity for cache hit",
+    )
+    ttl_seconds: int = Field(
+        default=300, ge=60, le=3600, description="Cache TTL in seconds"
+    )
 
 
 class KnowledgeBaseSettings(BaseModel):
@@ -76,13 +87,16 @@ class KnowledgeBaseSettings(BaseModel):
     semantic_cache: SemanticCacheSettings = Field(default_factory=SemanticCacheSettings)
 
     @classmethod
-    def _parse_if_str(cls, v: "KnowledgeBaseSettings | str | dict | None") -> "KnowledgeBaseSettings | None":
+    def _parse_if_str(
+        cls, v: "KnowledgeBaseSettings | str | dict | None"
+    ) -> "KnowledgeBaseSettings | None":
         if v is None:
             return None
         if isinstance(v, cls):
             return v
         if isinstance(v, str):
             import json
+
             return cls.model_validate(json.loads(v))
         if isinstance(v, dict):
             return cls.model_validate(v)
@@ -246,7 +260,9 @@ class ChunkMetadata(BaseModel):
     """Metadata for a document chunk"""
 
     page: int | None = Field(None, description="Page number (for PDF)")
-    page_end: int | None = Field(None, description="Last page number covered by the chunk")
+    page_end: int | None = Field(
+        None, description="Last page number covered by the chunk"
+    )
     section: str | None = Field(None, description="Section name")
     start_char: int | None = Field(None, description="Start character position")
     end_char: int | None = Field(None, description="End character position")
@@ -254,7 +270,9 @@ class ChunkMetadata(BaseModel):
     element_types: list[str] | None = Field(
         None, description="Structured element types included in the chunk"
     )
-    parser_version: str | None = Field(None, description="Parser version used to build the chunk")
+    parser_version: str | None = Field(
+        None, description="Parser version used to build the chunk"
+    )
     warning_codes: list[str] | None = Field(
         None, description="Warnings observed while parsing the source document"
     )

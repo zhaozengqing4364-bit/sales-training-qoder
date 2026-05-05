@@ -7,19 +7,24 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response
 from common.api.server_error import build_server_error
-from common.auth.service import get_current_admin_user
-from common.db.models import User
+from common.db.models import SystemLog, User
 from common.db.session import get_db
 from common.effectiveness.scoring_rulesets import (
     ScoringRulesetDefinition,
     ScoringRulesetService,
 )
 from common.monitoring.logger import get_trace_id
+
+from admin.api.permissions import (
+    SCORING_RULESET_MANAGE_PERMISSION,
+    require_admin_permission,
+)
 
 router = APIRouter(
     prefix="/admin/scoring-rulesets",
@@ -95,10 +100,36 @@ def _error_code(exc: Exception) -> str:
     return "[SCORING_RULESET_INVALID]"
 
 
+def _audit_log_payload(row: SystemLog) -> dict[str, Any]:
+    import json
+
+    details: dict[str, Any] = {}
+    if row.details:
+        try:
+            parsed = json.loads(row.details)
+            if isinstance(parsed, dict):
+                details = parsed
+        except json.JSONDecodeError:
+            details = {"raw": row.details}
+    return {
+        "id": str(row.log_id),
+        "action": row.action,
+        "actor_id": details.get("actor_id") or row.user_id,
+        "actor_role": details.get("actor_role"),
+        "reason": details.get("reason"),
+        "trace_id": details.get("trace_id"),
+        "before": details.get("before"),
+        "after": details.get("after"),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
 @router.get("")
 async def list_scoring_rulesets(
     scenario_type: str | None = Query(default=None, pattern="^(sales|presentation)$"),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     service = ScoringRulesetService(db)
@@ -115,7 +146,9 @@ async def list_scoring_rulesets(
 @router.get("/active")
 async def get_active_scoring_ruleset(
     scenario_type: str = Query(..., pattern="^(sales|presentation)$"),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     service = ScoringRulesetService(db)
@@ -128,7 +161,9 @@ async def get_active_scoring_ruleset(
 @router.post("")
 async def create_scoring_ruleset(
     payload: ScoringRulesetCreateRequest,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = ScoringRulesetService(db)
@@ -159,7 +194,9 @@ async def create_scoring_ruleset(
 async def update_scoring_ruleset(
     ruleset_id: str,
     payload: ScoringRulesetUpdateRequest,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = ScoringRulesetService(db)
@@ -193,7 +230,9 @@ async def update_scoring_ruleset(
 async def publish_scoring_ruleset(
     ruleset_id: str,
     payload: ScoringRulesetReasonRequest | None = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = ScoringRulesetService(db)
@@ -225,7 +264,9 @@ async def publish_scoring_ruleset(
 async def rollback_scoring_ruleset(
     ruleset_id: str,
     payload: ScoringRulesetReasonRequest | None = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = ScoringRulesetService(db)
@@ -256,7 +297,9 @@ async def rollback_scoring_ruleset(
 @router.post("/dry-run")
 async def dry_run_scoring_ruleset(
     payload: ScoringRulesetDryRunRequest,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(
+        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     service = ScoringRulesetService(db)
@@ -282,3 +325,21 @@ async def dry_run_scoring_ruleset(
             message="Failed to dry-run scoring ruleset",
             exc=exc,
         )
+
+
+@router.get("/audit-logs")
+async def list_scoring_ruleset_audit_logs(
+    current_user: User = Depends(
+        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    _ = current_user
+    result = await db.execute(
+        select(SystemLog)
+        .where(SystemLog.action.in_(["scoring_ruleset.publish", "scoring_ruleset.rollback"]))
+        .order_by(SystemLog.created_at.desc())
+        .limit(50)
+    )
+    items = [_audit_log_payload(row) for row in result.scalars().all()]
+    return _success({"items": items, "total": len(items)})

@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.ai.encryption import decrypt_api_key, encrypt_api_key
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -58,12 +59,10 @@ async def resolve_rag_profile(
 
     # Try explicit profile first
     if profile_id:
-        result = await db.execute(
-            select(RagProfile).where(RagProfile.id == profile_id)
-        )
+        result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
         profile = result.scalar_one_or_none()
         if profile:
-            return _profile_to_resolved(profile)
+            return await _profile_to_resolved(db, profile)
 
     # Fall back to system default
     result = await db.execute(
@@ -71,7 +70,7 @@ async def resolve_rag_profile(
     )
     profile = result.scalar_one_or_none()
     if profile:
-        return _profile_to_resolved(profile)
+        return await _profile_to_resolved(db, profile)
 
     return None
 
@@ -99,7 +98,11 @@ async def resolve_rag_profile_for_search(
 
     # Collect distinct profile IDs
     for kb_id, ctx in kb_contexts.items():
-        pid = getattr(ctx, "rag_profile_id", None) if hasattr(ctx, "rag_profile_id") else None
+        pid = (
+            getattr(ctx, "rag_profile_id", None)
+            if hasattr(ctx, "rag_profile_id")
+            else None
+        )
         if pid and pid not in seen_profile_ids:
             seen_profile_ids.add(pid)
 
@@ -110,7 +113,7 @@ async def resolve_rag_profile_for_search(
         )
         default_profile = result.scalar_one_or_none()
         if default_profile:
-            return _profile_to_resolved(default_profile)
+            return await _profile_to_resolved(db, default_profile)
         return None
 
     # Batch fetch all referenced profiles
@@ -123,11 +126,47 @@ async def resolve_rag_profile_for_search(
         return None
 
     # Use first profile (could merge later)
-    return _profile_to_resolved(profiles[0])
+    return await _profile_to_resolved(db, profiles[0])
 
 
-def _profile_to_resolved(profile: Any) -> ResolvedRagProfile:
+async def _decrypt_or_migrate_cross_encoder_api_key(
+    db: AsyncSession, profile: Any
+) -> str | None:
+    """Return decrypted cross-encoder key and migrate legacy plaintext when safe.
+
+    Legacy plaintext is never returned as-is unless it is first re-encrypted in
+    the same local database. If encryption is unavailable, the key is treated as
+    absent and operators must run an approved migration after configuring the
+    model encryption key.
+    """
+    stored = (getattr(profile, "cross_encoder_api_key", None) or "").strip()
+    if not stored:
+        return None
+
+    decrypt_result = decrypt_api_key(stored)
+    if decrypt_result.is_success:
+        return decrypt_result.value
+
+    encrypt_result = encrypt_api_key(stored)
+    if not encrypt_result.is_success:
+        logger.warning(
+            "Legacy plaintext RAG cross-encoder key detected; migration is approval-gated and encryption is unavailable",
+            profile_id=getattr(profile, "id", None),
+        )
+        return None
+
+    profile.cross_encoder_api_key = encrypt_result.value
+    await db.commit()
+    logger.warning(
+        "Legacy plaintext RAG cross-encoder key was lazily re-encrypted",
+        profile_id=getattr(profile, "id", None),
+    )
+    return stored
+
+
+async def _profile_to_resolved(db: AsyncSession, profile: Any) -> ResolvedRagProfile:
     """Convert an ORM RagProfile to a ResolvedRagProfile dataclass."""
+    cross_encoder_api_key = await _decrypt_or_migrate_cross_encoder_api_key(db, profile)
     return ResolvedRagProfile(
         chunking_strategy=profile.chunking_strategy,
         chunk_size=profile.chunk_size,
@@ -140,5 +179,5 @@ def _profile_to_resolved(profile: Any) -> ResolvedRagProfile:
         cross_encoder_backend=profile.cross_encoder_backend,
         cross_encoder_model=profile.cross_encoder_model,
         cross_encoder_device=profile.cross_encoder_device,
-        cross_encoder_api_key=profile.cross_encoder_api_key,
+        cross_encoder_api_key=cross_encoder_api_key,
     )

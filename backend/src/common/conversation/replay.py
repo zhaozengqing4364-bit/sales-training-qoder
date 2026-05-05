@@ -9,6 +9,7 @@ References:
 - Design: Section 12 (Replay Service)
 - API Contract: docs/api-contract/replay.md
 """
+
 from typing import Any
 
 from sqlalchemy import func, select
@@ -31,8 +32,9 @@ STAGE_NAMES = {
     "discovery": "需求挖掘",
     "presentation": "方案呈现",
     "objection": "异议处理",
-    "closing": "促成成交"
+    "closing": "促成成交",
 }
+
 
 class ReplayService:
     """
@@ -58,7 +60,9 @@ class ReplayService:
         self.db = db
 
     @staticmethod
-    def _normalize_turn_number(raw_turn_number: int | None, fallback_turn_number: int = 1) -> int:
+    def _normalize_turn_number(
+        raw_turn_number: int | None, fallback_turn_number: int = 1
+    ) -> int:
         """Normalize legacy turn numbers to keep API contract compatible (>=1)."""
         if isinstance(raw_turn_number, int) and raw_turn_number >= 1:
             return raw_turn_number
@@ -82,7 +86,9 @@ class ReplayService:
             session = result.scalar_one_or_none()
 
             if not session:
-                return Result.fail(f"[SESSION_NOT_FOUND] Session with id '{session_id}' not found")
+                return Result.fail(
+                    f"[SESSION_NOT_FOUND] Session with id '{session_id}' not found"
+                )
 
             return Result.ok(session)
 
@@ -90,7 +96,9 @@ class ReplayService:
             logger.error(f"Failed to get session: {str(e)}")
             return Result.fail(f"[SESSION_GET_FAILED] {str(e)}")
 
-    async def _check_session_completed(self, session_id: str) -> Result[PracticeSession]:
+    async def _check_session_completed(
+        self, session_id: str
+    ) -> Result[PracticeSession]:
         """
         Check if a session is completed (required for replay).
 
@@ -114,10 +122,7 @@ class ReplayService:
         return Result.ok(session)
 
     async def get_messages(
-        self,
-        session_id: str,
-        page: int = 1,
-        page_size: int = 50
+        self, session_id: str, page: int = 1, page_size: int = 50
     ) -> Result[tuple[list[ConversationMessage], int]]:
         """
         Get paginated messages for a completed session.
@@ -139,8 +144,10 @@ class ReplayService:
                 return session_result
 
             # Count total messages
-            count_stmt = select(func.count()).select_from(ConversationMessage).where(
-                ConversationMessage.session_id == session_id
+            count_stmt = (
+                select(func.count())
+                .select_from(ConversationMessage)
+                .where(ConversationMessage.session_id == session_id)
             )
             total_result = await self.db.execute(count_stmt)
             total = total_result.scalar() or 0
@@ -236,6 +243,7 @@ class ReplayService:
             persona_name = None
             if session.agent_id:
                 from agent.models import Agent
+
                 agent_stmt = select(Agent).where(Agent.id == session.agent_id)
                 agent_result = await self.db.execute(agent_stmt)
                 agent = agent_result.scalar_one_or_none()
@@ -244,6 +252,7 @@ class ReplayService:
 
             if session.persona_id:
                 from agent.models import Persona
+
                 persona_stmt = select(Persona).where(Persona.id == session.persona_id)
                 persona_result = await self.db.execute(persona_stmt)
                 persona = persona_result.scalar_one_or_none()
@@ -256,25 +265,39 @@ class ReplayService:
                 "presentation_id": getattr(session, "presentation_id", None),
                 "agent_name": agent_name,
                 "persona_name": persona_name,
-                "voice_policy_snapshot_ref": build_voice_policy_snapshot_ref_payload(session.voice_policy_snapshot),
+                "voice_policy_snapshot_ref": build_voice_policy_snapshot_ref_payload(
+                    session.voice_policy_snapshot
+                ),
                 "total_duration_ms": projection.total_duration_ms,
                 "messages": enriched_messages,
                 "timeline_markers": timeline_markers,
-                "stage_summary": [] if is_presentation_scenario else projection.stage_summary,
+                "stage_summary": []
+                if is_presentation_scenario
+                else projection.stage_summary,
                 "overall_score": projection.overall_score,
                 "effectiveness_snapshot": (
-                    None if is_presentation_scenario else projection.effectiveness_snapshot
+                    None
+                    if is_presentation_scenario
+                    else projection.effectiveness_snapshot
                 ),
-                "pass_flags": None if is_presentation_scenario else projection.pass_flags,
+                "pass_flags": None
+                if is_presentation_scenario
+                else projection.pass_flags,
                 "main_capability_passed": (
-                    None if is_presentation_scenario else projection.main_capability_passed
+                    None
+                    if is_presentation_scenario
+                    else projection.main_capability_passed
                 ),
-                "overall_result": None if is_presentation_scenario else projection.overall_result,
+                "overall_result": None
+                if is_presentation_scenario
+                else projection.overall_result,
                 "main_issue": main_issue_payload,
                 "next_goal": next_goal_payload,
                 "evaluable": None if is_presentation_scenario else projection.evaluable,
                 "not_evaluable_reason": (
-                    None if is_presentation_scenario else projection.not_evaluable_reason
+                    None
+                    if is_presentation_scenario
+                    else projection.not_evaluable_reason
                 ),
                 "evidence_completeness": projection.evidence_completeness,
                 "canonical_evaluation_kernel": projection.canonical_evaluation_kernel,
@@ -285,8 +308,11 @@ class ReplayService:
             # Attach audio-audit read model (graceful — never breaks replay/report)
             try:
                 from common.api.practice import build_session_audio_audit
+
                 replay_data["audio_audit"] = await build_session_audio_audit(
-                    self.db, session_id, session,
+                    self.db,
+                    session_id,
+                    session,
                 )
             except Exception:
                 replay_data["audio_audit"] = None
@@ -304,7 +330,9 @@ class ReplayService:
                 scenario_type=scenario_type,
                 presentation_review_available=bool(presentation_review),
                 highlight_learning_count=sum(
-                    1 for message in enriched_messages if message.get("learning_evidence")
+                    1
+                    for message in enriched_messages
+                    if message.get("learning_evidence")
                 ),
                 issue_family=(
                     main_issue_payload.get("issue_type")
@@ -430,11 +458,13 @@ class ReplayService:
                 issue_family=self._resolve_issue_family(projection),
             )
 
-            return Result.ok({
-                "highlights": highlights,
-                "total_good": total_good,
-                "total_bad": total_bad
-            })
+            return Result.ok(
+                {
+                    "highlights": highlights,
+                    "total_good": total_good,
+                    "total_bad": total_bad,
+                }
+            )
 
         except (SQLAlchemyError, ValueError, OSError) as e:
             logger.error(f"Failed to get highlights: {str(e)}")
@@ -522,8 +552,12 @@ class ReplayService:
             "objection_family": self._extract_objection_family(message),
             "stage": self._stage_payload(message.get("sales_stage")),
             "nearby_context": context,
-            "suggested_response": self._generate_suggested_response_from_payload(message),
-            "linked_issue": dict(linked_issue) if isinstance(linked_issue, dict) else None,
+            "suggested_response": self._generate_suggested_response_from_payload(
+                message
+            ),
+            "linked_issue": dict(linked_issue)
+            if isinstance(linked_issue, dict)
+            else None,
             "linked_goal": dict(linked_goal) if isinstance(linked_goal, dict) else None,
         }
 
@@ -565,7 +599,9 @@ class ReplayService:
     ) -> bool:
         if preferred_stage_key is None:
             return True
-        return cls._normalize_stage_key(message.get("sales_stage")) == preferred_stage_key
+        return (
+            cls._normalize_stage_key(message.get("sales_stage")) == preferred_stage_key
+        )
 
     @classmethod
     def _resolve_anchor_stage_key(
@@ -592,17 +628,25 @@ class ReplayService:
         preferred_stage_key: str | None,
     ) -> dict[str, Any] | None:
         matchers = (
-            lambda message: bool(message.get("id"))
-            and bool(message.get("is_highlight"))
-            and message.get("highlight_type") == "bad"
-            and cls._message_matches_stage(message, preferred_stage_key),
-            lambda message: bool(message.get("id"))
-            and bool(message.get("is_highlight"))
-            and cls._message_matches_stage(message, preferred_stage_key),
-            lambda message: bool(message.get("id"))
-            and bool(message.get("is_highlight"))
-            and message.get("highlight_type") == "bad",
-            lambda message: bool(message.get("id")) and bool(message.get("is_highlight")),
+            lambda message: (
+                bool(message.get("id"))
+                and bool(message.get("is_highlight"))
+                and message.get("highlight_type") == "bad"
+                and cls._message_matches_stage(message, preferred_stage_key)
+            ),
+            lambda message: (
+                bool(message.get("id"))
+                and bool(message.get("is_highlight"))
+                and cls._message_matches_stage(message, preferred_stage_key)
+            ),
+            lambda message: (
+                bool(message.get("id"))
+                and bool(message.get("is_highlight"))
+                and message.get("highlight_type") == "bad"
+            ),
+            lambda message: (
+                bool(message.get("id")) and bool(message.get("is_highlight"))
+            ),
         )
 
         for matcher in matchers:
@@ -756,8 +800,7 @@ class ReplayService:
         }
 
     def _generate_timeline_markers(
-        self,
-        messages: list[ConversationMessage]
+        self, messages: list[ConversationMessage]
     ) -> list[dict[str, Any]]:
         """
         Generate timeline markers from messages.
@@ -780,13 +823,15 @@ class ReplayService:
         for msg in messages:
             # Stage change marker
             if msg.sales_stage and msg.sales_stage != current_stage:
-                markers.append({
-                    "timestamp_ms": cumulative_ms,
-                    "type": "stage_change",
-                    "label": STAGE_NAMES.get(msg.sales_stage, msg.sales_stage),
-                    "message_id": msg.id,
-                    "highlight_type": None
-                })
+                markers.append(
+                    {
+                        "timestamp_ms": cumulative_ms,
+                        "type": "stage_change",
+                        "label": STAGE_NAMES.get(msg.sales_stage, msg.sales_stage),
+                        "message_id": msg.id,
+                        "highlight_type": None,
+                    }
+                )
                 current_stage = msg.sales_stage
 
             # Fuzzy word markers (high severity only)
@@ -794,23 +839,27 @@ class ReplayService:
                 for fw in msg.fuzzy_words:
                     if fw.get("severity") == "high":
                         matched_words = fw.get("matched", [])
-                        markers.append({
-                            "timestamp_ms": cumulative_ms,
-                            "type": "fuzzy_word",
-                            "label": f"模糊词: {', '.join(matched_words)}",
-                            "message_id": msg.id,
-                            "highlight_type": "bad"
-                        })
+                        markers.append(
+                            {
+                                "timestamp_ms": cumulative_ms,
+                                "type": "fuzzy_word",
+                                "label": f"模糊词: {', '.join(matched_words)}",
+                                "message_id": msg.id,
+                                "highlight_type": "bad",
+                            }
+                        )
 
             # Highlight markers
             if msg.is_highlight:
-                markers.append({
-                    "timestamp_ms": cumulative_ms,
-                    "type": "highlight",
-                    "label": msg.highlight_reason or "关键时刻",
-                    "message_id": msg.id,
-                    "highlight_type": msg.highlight_type
-                })
+                markers.append(
+                    {
+                        "timestamp_ms": cumulative_ms,
+                        "type": "highlight",
+                        "label": msg.highlight_reason or "关键时刻",
+                        "message_id": msg.id,
+                        "highlight_type": msg.highlight_type,
+                    }
+                )
 
             # Accumulate duration
             cumulative_ms += msg.duration_ms or 0
@@ -818,8 +867,7 @@ class ReplayService:
         return markers
 
     def _generate_stage_summary(
-        self,
-        messages: list[ConversationMessage]
+        self, messages: list[ConversationMessage]
     ) -> list[dict[str, Any]]:
         """
         Generate summary statistics for each sales stage.
@@ -917,9 +965,7 @@ class ReplayService:
         )
 
     async def _get_message_context(
-        self,
-        message: ConversationMessage,
-        context_range: int = 1
+        self, message: ConversationMessage, context_range: int = 1
     ) -> dict[str, Any]:
         """Get context messages around a highlight.
 
@@ -935,12 +981,9 @@ class ReplayService:
         try:
             # Get previous message
             if message.turn_number > 1:
-                prev_stmt = (
-                    select(ConversationMessage)
-                    .where(
-                        ConversationMessage.session_id == message.session_id,
-                        ConversationMessage.turn_number == message.turn_number - 1
-                    )
+                prev_stmt = select(ConversationMessage).where(
+                    ConversationMessage.session_id == message.session_id,
+                    ConversationMessage.turn_number == message.turn_number - 1,
                 )
                 prev_result = await self.db.execute(prev_stmt)
                 prev_msg = prev_result.scalar_one_or_none()
@@ -949,16 +992,15 @@ class ReplayService:
                         "id": prev_msg.id,
                         "role": prev_msg.role,
                         "content": prev_msg.content,
-                        "timestamp": prev_msg.timestamp.isoformat() if prev_msg.timestamp else None,
+                        "timestamp": prev_msg.timestamp.isoformat()
+                        if prev_msg.timestamp
+                        else None,
                     }
 
             # Get next message
-            next_stmt = (
-                select(ConversationMessage)
-                .where(
-                    ConversationMessage.session_id == message.session_id,
-                    ConversationMessage.turn_number == message.turn_number + 1
-                )
+            next_stmt = select(ConversationMessage).where(
+                ConversationMessage.session_id == message.session_id,
+                ConversationMessage.turn_number == message.turn_number + 1,
             )
             next_result = await self.db.execute(next_stmt)
             next_msg = next_result.scalar_one_or_none()
@@ -967,7 +1009,9 @@ class ReplayService:
                     "id": next_msg.id,
                     "role": next_msg.role,
                     "content": next_msg.content,
-                    "timestamp": next_msg.timestamp.isoformat() if next_msg.timestamp else None,
+                    "timestamp": next_msg.timestamp.isoformat()
+                    if next_msg.timestamp
+                    else None,
                 }
 
         except (SQLAlchemyError, ValueError) as e:

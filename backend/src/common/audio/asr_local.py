@@ -7,6 +7,7 @@ Use for:
 - Offline scenarios
 - API outages (automatic fallback)
 """
+
 import asyncio
 from collections.abc import AsyncIterator
 
@@ -56,9 +57,7 @@ class LocalASRProvider(ASRProvider):
                 self._ensure_loaded()
 
     async def stream_transcribe(
-        self,
-        audio_stream: AsyncIterator[bytes],
-        sample_rate: int = 16000
+        self, audio_stream: AsyncIterator[bytes], sample_rate: int = 16000
     ) -> AsyncIterator[Result[str]]:
         """
         Stream transcribe using local model
@@ -99,7 +98,9 @@ class LocalASRProvider(ASRProvider):
         """Process a single audio chunk with local model"""
         try:
             # Convert bytes to numpy array
-            audio_np = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+            audio_np = (
+                np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+            )
 
             # Run ASR (blocking, so run in thread pool)
             loop = asyncio.get_event_loop()
@@ -110,7 +111,7 @@ class LocalASRProvider(ASRProvider):
                     cache={},
                     language="auto",
                     use_itn=True,
-                )
+                ),
             )
 
             if result and "text" in result:
@@ -137,8 +138,7 @@ class LocalASRProvider(ASRProvider):
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                lambda: self.model.generate(input=audio_file)
+                None, lambda: self.model.generate(input=audio_file)
             )
 
             if result and "text" in result:

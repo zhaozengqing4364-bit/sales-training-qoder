@@ -29,6 +29,7 @@ logger = get_logger(__name__)
 @dataclass
 class FeedbackMessage:
     """Evaluation feedback message structure."""
+
     type: str  # "stage_feedback", "comprehensive_report", "milestone"
     session_id: str
     timestamp: str
@@ -93,8 +94,10 @@ class EvaluationBroadcaster:
                 "scores": result.scores,
                 "strengths": result.strengths[:3],  # Limit to top 3
                 "suggestions": result.suggestions[:2],  # Limit to top 2
-                "summary": result.summary[:200] if len(result.summary) > 200 else result.summary,
-            }
+                "summary": result.summary[:200]
+                if len(result.summary) > 200
+                else result.summary,
+            },
         )
 
         await self._broadcast(session_id, scenario, message)
@@ -126,7 +129,7 @@ class EvaluationBroadcaster:
                 "milestone_type": milestone_type,
                 "message": message,
                 "extra": data or {},
-            }
+            },
         )
 
         await self._broadcast(session_id, scenario, feedback_msg)
@@ -162,8 +165,10 @@ class EvaluationBroadcaster:
                 "key_strengths": report.key_strengths[:5],
                 "key_improvements": report.key_improvements[:5],
                 "recommendations": report.recommendations[:5],
-                "detailed_feedback": report.detailed_feedback[:500] if len(report.detailed_feedback) > 500 else report.detailed_feedback,
-            }
+                "detailed_feedback": report.detailed_feedback[:500]
+                if len(report.detailed_feedback) > 500
+                else report.detailed_feedback,
+            },
         )
 
         await self._broadcast(session_id, scenario, message)
@@ -194,16 +199,21 @@ class EvaluationBroadcaster:
     ) -> None:
         """Send message to WebSocket connection."""
         try:
-            websocket = self.manager.active_connections.get(scenario, {}).get(session_id)
+            websocket = self.manager.active_connections.get(scenario, {}).get(
+                session_id
+            )
             if websocket:
-                await self.manager.send_json(websocket, {
-                    "type": "evaluation_feedback",
-                    "timestamp": message.timestamp,
-                    "data": {
-                        "feedback_type": message.type,
-                        **message.data,
-                    }
-                })
+                await self.manager.send_json(
+                    websocket,
+                    {
+                        "type": "evaluation_feedback",
+                        "timestamp": message.timestamp,
+                        "data": {
+                            "feedback_type": message.type,
+                            **message.data,
+                        },
+                    },
+                )
                 logger.debug(f"Evaluation feedback sent to {session_id}")
             else:
                 logger.debug(f"No WebSocket connection for session {session_id}")

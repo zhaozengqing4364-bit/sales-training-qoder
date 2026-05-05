@@ -25,7 +25,8 @@ class KnowledgeAnswerabilityEvaluator:
     def __init__(
         self,
         *,
-        answerability_profiles: dict[str, KnowledgeAnswerabilityProfileConfig] | None = None,
+        answerability_profiles: dict[str, KnowledgeAnswerabilityProfileConfig]
+        | None = None,
     ) -> None:
         self._answerability_profiles = dict(answerability_profiles or {})
 
@@ -39,7 +40,11 @@ class KnowledgeAnswerabilityEvaluator:
         hit_count = sum(1 for row in rows if isinstance(row, dict))
         executed_query_count = len(execution_result.executed_steps)
         blocked = bool(execution_result.search_failures) and hit_count == 0
-        source_status = "blocked" if blocked else ("ready" if executed_query_count > 0 else "not_run")
+        source_status = (
+            "blocked"
+            if blocked
+            else ("ready" if executed_query_count > 0 else "not_run")
+        )
 
         profile = self._answerability_profiles.get(profile_key)
         if profile is None:
@@ -50,15 +55,25 @@ class KnowledgeAnswerabilityEvaluator:
             )
 
         covered_slots = _collect_slot_hits(rows)
-        covered_required_slots = [slot for slot in profile.required_slots if slot in covered_slots]
-        covered_optional_slots = [slot for slot in profile.optional_slots if slot in covered_slots]
-        missing_required_slots = [slot for slot in profile.required_slots if slot not in covered_slots]
-        missing_optional_slots = [slot for slot in profile.optional_slots if slot not in covered_slots]
+        covered_required_slots = [
+            slot for slot in profile.required_slots if slot in covered_slots
+        ]
+        covered_optional_slots = [
+            slot for slot in profile.optional_slots if slot in covered_slots
+        ]
+        missing_required_slots = [
+            slot for slot in profile.required_slots if slot not in covered_slots
+        ]
+        missing_optional_slots = [
+            slot for slot in profile.optional_slots if slot not in covered_slots
+        ]
 
         required_ratio = _coverage_ratio(covered_required_slots, profile.required_slots)
         optional_ratio = _coverage_ratio(covered_optional_slots, profile.optional_slots)
         all_slots = [*profile.required_slots, *profile.optional_slots]
-        overall_ratio = _coverage_ratio([slot for slot in all_slots if slot in covered_slots], all_slots)
+        overall_ratio = _coverage_ratio(
+            [slot for slot in all_slots if slot in covered_slots], all_slots
+        )
 
         if blocked:
             answerability = "blocked"
@@ -66,7 +81,10 @@ class KnowledgeAnswerabilityEvaluator:
         elif overall_ratio >= float(profile.sufficient_threshold):
             answerability = "sufficient"
             blocked_reason = None
-        elif required_ratio >= float(profile.partial_threshold) and len(covered_required_slots) > 0:
+        elif (
+            required_ratio >= float(profile.partial_threshold)
+            and len(covered_required_slots) > 0
+        ):
             answerability = "partial"
             blocked_reason = None
         else:
@@ -128,7 +146,9 @@ class KnowledgeAnswerabilityEvaluator:
                 "hit_count": hit_count,
                 "executed_query_count": len(execution_result.executed_steps),
                 "search_failures": list(execution_result.search_failures),
-                "blocked_reason": "retrieval_failed" if source_status == "blocked" else None,
+                "blocked_reason": "retrieval_failed"
+                if source_status == "blocked"
+                else None,
             },
         )
 

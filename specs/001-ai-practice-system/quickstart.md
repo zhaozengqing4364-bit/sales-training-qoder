@@ -43,22 +43,22 @@ DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/ai_practice
 REDIS_URL=redis://localhost:6379/0
 
 # AI Services
-OPENAI_API_KEY=sk-...your-key
+OPENAI_API_KEY=replace-with-openai-api-key
 OPENAI_BASE_URL=https://api.openai.com/v1  # or your proxy
 
 # Vector Database
 CHROMADB_PERSIST_DIR=./data/chromadb
 
 # Enterprise WeChat
-WECHAT_CORP_ID=your_corp_id
-WECHAT_SECRET=your_secret
+WECHAT_CORP_ID=replace-with-corp-id
+WECHAT_SECRET=replace-with-wechat-secret
 
 # Storage
 AUDIO_STORAGE_PATH=./data/audio
 PPT_STORAGE_PATH=./data/ppts
 
 # JWT
-JWT_SECRET=your-super-secret-key-change-in-production
+JWT_SECRET=replace-with-long-random-jwt-secret
 JWT_ALGORITHM=HS256
 
 # Monitoring

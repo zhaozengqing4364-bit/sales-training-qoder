@@ -9,8 +9,6 @@ import {
     ManagerInterventionResultItem,
     SupportRuntimeFaultItem,
     UserDetailStats,
-    UserSessionItem,
-    UserSessionsResponse,
     UserProgressResponse,
 } from "@/lib/api/types";
 import {
@@ -35,7 +33,6 @@ import {
 import {
     formatLinkedAssetLabel,
     formatLinkedAssetLink,
-    type LinkedAssetChange,
 } from "@/lib/admin/linked-assets";
 import { buildRuntimeFaultBySessionId } from "@/lib/admin/runtime-faults";
 import { GlassCard } from "@/components/ui/glass-card";

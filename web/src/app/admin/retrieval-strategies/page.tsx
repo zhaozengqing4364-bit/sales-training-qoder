@@ -1,7 +1,6 @@
 "use client";
 
-import { RefreshCw, Settings2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Settings2 } from "lucide-react";
 import { KnowledgeAnswerConsole } from "@/components/admin/knowledge-answer/knowledge-answer-console";
 
 export default function RetrievalStrategiesPage() {

@@ -86,7 +86,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 def _startup_schema_repairs_allowed() -> bool:
     env = os.getenv("ENVIRONMENT", "development").strip().lower()
-    return env in {"development", "test", "testing"}
+    return env in {"development", "dev", "local", "test", "testing"}
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

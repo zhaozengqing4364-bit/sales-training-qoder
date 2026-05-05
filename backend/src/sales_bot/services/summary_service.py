@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 
 class ConversationSummary(BaseModel):
     """Structured conversation summary from LLM"""
-    overall_performance: str = Field(description="Overall performance assessment (excellent/good/fair/poor)")
+
+    overall_performance: str = Field(
+        description="Overall performance assessment (excellent/good/fair/poor)"
+    )
     strengths: list[str] = Field(description="What the user did well")
     weaknesses: list[str] = Field(description="Areas for improvement")
     key_moments: list[str] = Field(description="Key moments in the conversation")
@@ -63,13 +66,21 @@ class SummaryService:
 {format_instructions}
 
 Provide an objective assessment of the salesperson's performance.""",
-            input_variables=["persona", "turn_count", "transcript", "bot_interruptions", "vagueness_count", "avg_challenge"],
-            partial_variables={"format_instructions": self.parser.get_format_instructions()}
+            input_variables=[
+                "persona",
+                "turn_count",
+                "transcript",
+                "bot_interruptions",
+                "vagueness_count",
+                "avg_challenge",
+            ],
+            partial_variables={
+                "format_instructions": self.parser.get_format_instructions()
+            },
         )
 
     async def generate_summary(
-        self,
-        session_id: uuid.UUID
+        self, session_id: uuid.UUID
     ) -> Result[ConversationSummary]:
         """
         Generate conversation summary using LLM
@@ -99,7 +110,7 @@ Provide an objective assessment of the salesperson's performance.""",
                 transcript=transcript,
                 bot_interruptions=bot_interruptions,
                 vagueness_count=vagueness_count,
-                avg_challenge=avg_challenge
+                avg_challenge=avg_challenge,
             )
 
             # Call LLM
@@ -114,15 +125,14 @@ Provide an objective assessment of the salesperson's performance.""",
                     "session_id": str(session_id),
                     "performance": summary.overall_performance,
                     "confidence_score": summary.score_confidence,
-                }
+                },
             )
 
             return Result(value=summary)
 
         except TimeoutError:
             logger.warning(
-                "LLM timeout generating summary",
-                extra={"session_id": str(session_id)}
+                "LLM timeout generating summary", extra={"session_id": str(session_id)}
             )
             # Fallback to rule-based summary
             return Result(value=self._generate_fallback_summary(context_result.value))
@@ -130,7 +140,7 @@ Provide an objective assessment of the salesperson's performance.""",
             logger.error(
                 "Failed to generate summary",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[SUMMARY_FAILED]")
 
@@ -199,7 +209,9 @@ Provide an objective assessment of the salesperson's performance.""",
         if context.total_bot_interruptions == 0:
             strengths.append("Maintained composure under pressure")
         else:
-            weaknesses.append(f"Was interrupted {context.total_bot_interruptions} times")
+            weaknesses.append(
+                f"Was interrupted {context.total_bot_interruptions} times"
+            )
 
         if turn_count >= 8:
             strengths.append("Engaged in extended dialogue")
@@ -220,7 +232,7 @@ Provide an objective assessment of the salesperson's performance.""",
             score_confidence=confidence_score,
             score_persuasion=persuasion_score,
             score_clarity=clarity_score,
-            actionable_feedback=actionable
+            actionable_feedback=actionable,
         )
 
 

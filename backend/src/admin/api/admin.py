@@ -9,6 +9,7 @@ Implements Constitution Principles:
 import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -34,6 +35,42 @@ from presentation_coach.services.point_extraction import point_extraction_servic
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+ALLOWED_PRESENTATION_EXTENSIONS = {".ppt", ".pptx"}
+ALLOWED_PRESENTATION_CONTENT_TYPES = {
+    "application/octet-stream",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+
+def _safe_presentation_upload_path(
+    filename: str | None, upload_root: str
+) -> tuple[Path, str]:
+    """Return a server-owned upload path for a validated PPT filename."""
+    raw_filename = (filename or "").strip()
+    if not raw_filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    if "/" in raw_filename or "\\" in raw_filename or ".." in raw_filename.split("/"):
+        raise HTTPException(
+            status_code=400, detail="Nested or traversal paths are not allowed"
+        )
+
+    original_name = Path(raw_filename).name
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_PRESENTATION_EXTENSIONS:
+        raise HTTPException(
+            status_code=400, detail="Only .ppt and .pptx files are allowed"
+        )
+
+    root = Path(upload_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    target = (root / f"{uuid.uuid4().hex}{extension}").resolve()
+    if root != target.parent:
+        raise HTTPException(
+            status_code=400, detail="Resolved upload path is outside upload root"
+        )
+    return target, original_name
 
 
 # Request/Response Schemas
@@ -64,12 +101,12 @@ class ForbiddenWordCreate(BaseModel):
 async def create_presentation(
     data: PresentationCreate,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a new presentation (without file upload)"""
     try:
         presentation = Presentation(
-            presentation_id=uuid.uuid4(),
+            presentation_id=str(uuid.uuid4()),
             user_id=current_user.user_id,
             title=data.title,
             description=data.description,
@@ -94,11 +131,11 @@ async def create_presentation(
 @router.post("/admin/presentations/upload")
 async def upload_presentation(
     file: UploadFile = File(...),
-    title: str = None,
-    description: str = None,
+    title: str | None = None,
+    description: str | None = None,
     extract_points: bool = True,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Upload a PPT file and extract content
@@ -106,26 +143,32 @@ async def upload_presentation(
     If extract_points=True, uses AI to automatically extract talking points
     """
     try:
-        # Save uploaded file
-        upload_dir = "/data/uploads"
-        os.makedirs(upload_dir, exist_ok=True)
+        # Save uploaded file under a server-generated name. The original filename
+        # is display metadata only and never controls the storage path.
+        upload_dir = os.getenv("PPT_UPLOAD_DIR", "/data/uploads")
+        content_type = (file.content_type or "application/octet-stream").lower()
+        if content_type not in ALLOWED_PRESENTATION_CONTENT_TYPES:
+            logger.warning(
+                "Presentation upload MIME type did not match PPT allowlist; extension policy remains authoritative",
+                content_type=content_type,
+            )
+        upload_path, original_filename = _safe_presentation_upload_path(
+            file.filename, upload_dir
+        )
 
-        file_path = os.path.join(upload_dir, file.filename)
-
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
+        content = await file.read()
+        with open(upload_path, "wb") as buffer:
             buffer.write(content)
 
         # Create presentation record
         presentation = Presentation(
-            presentation_id=uuid.uuid4(),
-            user_id=current_user.user_id,
-            title=title or file.filename,
-            description=description,
-            file_url=file_path,
+            presentation_id=str(uuid.uuid4()),
+            title=title or original_filename,
+            file_url=str(upload_path),
+            file_size_bytes=len(content),
+            uploaded_by_admin_id=current_user.user_id,
             total_pages=0,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            upload_date=datetime.now(),
         )
 
         db.add(presentation)
@@ -134,9 +177,9 @@ async def upload_presentation(
 
         # Extract text from PPT
         extraction_result = await ocr_processor.extract_text(
-            file_path=file_path,
+            file_path=str(upload_path),
             presentation_id=presentation.presentation_id,
-            filename=file.filename
+            filename=original_filename,
         )
 
         if not extraction_result.is_success:
@@ -144,17 +187,30 @@ async def upload_presentation(
             return presentation
 
         extraction = extraction_result.value
+        if extraction is None:
+            logger.warning("OCR extraction returned no presentation payload")
+            return presentation
 
-        # Create page records
+        # Create page records using the current Presentation/Page schema.
+        pages_by_number: dict[int, Page] = {}
         for page_data in extraction.pages:
+            text_parts = [
+                part
+                for part in (
+                    getattr(page_data, "title", None),
+                    getattr(page_data, "content", None),
+                )
+                if part
+            ]
             page = Page(
-                page_id=uuid.uuid4(),
-                presentation_id=presentation.presentation_id,
+                page_id=str(uuid.uuid4()),
+                presentation_id=str(presentation.presentation_id),
                 page_number=page_data.page_number,
-                title=page_data.title,
-                content=page_data.content,
-                image_count=page_data.image_count,
+                ocr_extracted_text="\n\n".join(text_parts),
+                extraction_confidence=None,
+                needs_manual_review=False,
             )
+            pages_by_number[page_data.page_number] = page
             db.add(page)
 
         presentation.total_pages = extraction.total_pages
@@ -165,20 +221,26 @@ async def upload_presentation(
 
         # Auto-extract talking points if requested
         if extract_points:
-            points_result = await point_extraction_service.extract_points_for_presentation(
-                extraction.pages
+            points_result = (
+                await point_extraction_service.extract_points_for_presentation(
+                    extraction.pages
+                )
             )
 
-            if points_result.is_success:
+            if points_result.is_success and points_result.value is not None:
                 for page_num, points in points_result.value.items():
                     # Add required talking points to database
-                    for i, point_text in enumerate(points.required_points):
+                    page = pages_by_number.get(page_num)
+                    if page is None:
+                        continue
+                    for point_text in points.required_points:
                         talking_point = RequiredTalkingPoint(
-                            point_id=uuid.uuid4(),
-                            presentation_id=presentation.presentation_id,
-                            page_number=page_num,
-                            point_text=point_text,
-                            point_order=i,
+                            point_id=str(uuid.uuid4()),
+                            page_id=page.page_id,
+                            description=point_text,
+                            created_by="ai",
+                            is_ai_generated=True,
+                            confirmed_by_admin=False,
                             created_at=datetime.now(),
                         )
                         db.add(talking_point)
@@ -187,6 +249,8 @@ async def upload_presentation(
 
         return presentation
 
+    except HTTPException:
+        raise
     except (SQLAlchemyError, OSError, ValueError) as e:
         logger.error(f"Failed to upload presentation: {str(e)}")
         return build_server_error(
@@ -200,14 +264,12 @@ async def upload_presentation(
 async def list_presentations(
     limit: int = 50,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """List all presentations"""
     try:
         result = await db.execute(
-            select(Presentation)
-            .order_by(Presentation.upload_date.desc())
-            .limit(limit)
+            select(Presentation).order_by(Presentation.upload_date.desc()).limit(limit)
         )
         presentations = result.scalars().all()
 
@@ -225,12 +287,14 @@ async def list_presentations(
 async def get_presentation(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get presentation details"""
     try:
         result = await db.execute(
-            select(Presentation).where(Presentation.presentation_id == uuid.UUID(presentation_id))
+            select(Presentation).where(
+                Presentation.presentation_id == uuid.UUID(presentation_id)
+            )
         )
         presentation = result.scalar_one_or_none()
 
@@ -254,13 +318,15 @@ async def get_presentation(
 async def delete_presentation(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete a presentation"""
     try:
         # Get presentation
         result = await db.execute(
-            select(Presentation).where(Presentation.presentation_id == uuid.UUID(presentation_id))
+            select(Presentation).where(
+                Presentation.presentation_id == uuid.UUID(presentation_id)
+            )
         )
         presentation = result.scalar_one_or_none()
 
@@ -292,7 +358,7 @@ async def delete_presentation(
 async def list_pages(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """List all pages in a presentation"""
     try:
@@ -320,14 +386,14 @@ async def update_page(
     page_number: int,
     data: PageUpdate,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Update page content"""
     try:
         result = await db.execute(
             select(Page).where(
                 Page.presentation_id == uuid.UUID(presentation_id),
-                Page.page_number == page_number
+                Page.page_number == page_number,
             )
         )
         page = result.scalar_one_or_none()
@@ -348,7 +414,7 @@ async def update_page(
             page_number=page_number,
             title=data.title,
             content=data.content or "",
-            filename=""
+            filename="",
         )
 
         return page
@@ -366,13 +432,15 @@ async def update_page(
 
 
 # Talking Points CRUD
-@router.post("/admin/presentations/{presentation_id}/pages/{page_number}/talking-points")
+@router.post(
+    "/admin/presentations/{presentation_id}/pages/{page_number}/talking-points"
+)
 async def create_talking_point(
     presentation_id: str,
     page_number: int,
     data: TalkingPointCreate,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a required talking point for a page"""
     try:
@@ -406,15 +474,17 @@ async def list_talking_points(
     presentation_id: str,
     page_number: int,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """List talking points for a page"""
     try:
         result = await db.execute(
-            select(RequiredTalkingPoint).where(
+            select(RequiredTalkingPoint)
+            .where(
                 RequiredTalkingPoint.presentation_id == uuid.UUID(presentation_id),
-                RequiredTalkingPoint.page_number == page_number
-            ).order_by(RequiredTalkingPoint.point_order)
+                RequiredTalkingPoint.page_number == page_number,
+            )
+            .order_by(RequiredTalkingPoint.point_order)
         )
         points = result.scalars().all()
 
@@ -434,7 +504,7 @@ async def list_talking_points(
 async def delete_talking_point(
     point_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete a talking point"""
     try:
@@ -470,7 +540,7 @@ async def create_forbidden_word(
     presentation_id: str,
     data: ForbiddenWordCreate,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a forbidden word for a presentation"""
     try:
@@ -508,7 +578,7 @@ async def create_forbidden_word(
 async def list_forbidden_words(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """List forbidden words for a presentation"""
     try:
@@ -534,14 +604,12 @@ async def list_forbidden_words(
 async def delete_forbidden_word(
     word_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete a forbidden word"""
     try:
         result = await db.execute(
-            select(ForbiddenWord).where(
-                ForbiddenWord.word_id == uuid.UUID(word_id)
-            )
+            select(ForbiddenWord).where(ForbiddenWord.word_id == uuid.UUID(word_id))
         )
         word = result.scalar_one_or_none()
 

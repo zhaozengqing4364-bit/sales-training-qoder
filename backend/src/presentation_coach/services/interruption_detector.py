@@ -2,6 +2,7 @@
 Interruption Detector - Two-stage detection (keyword + semantic)
 Constitution Principle II: <100ms for keyword detection
 """
+
 import re
 from typing import Any
 
@@ -23,9 +24,7 @@ class InterruptionDetector:
         self.llm_service = get_llm_service()
 
     async def should_interrupt(
-        self,
-        transcript: str,
-        context: dict[str, Any]
+        self, transcript: str, context: dict[str, Any]
     ) -> Result[dict[str, Any] | None]:
         """
         Check if interruption is needed
@@ -66,9 +65,7 @@ class InterruptionDetector:
             return Result.ok(None)
 
     def _check_keywords(
-        self,
-        transcript: str,
-        context: dict[str, Any]
+        self, transcript: str, context: dict[str, Any]
     ) -> dict[str, Any] | None:
         """
         Stage 1: Fast keyword detection
@@ -83,7 +80,7 @@ class InterruptionDetector:
                 return {
                     "type": "forbidden_word",
                     "trigger": phrase,
-                    "reason": f"You used a forbidden phrase: '{phrase}'"
+                    "reason": f"You used a forbidden phrase: '{phrase}'",
                 }
 
         # Check for completion indicators (user stopped speaking)
@@ -91,7 +88,7 @@ class InterruptionDetector:
             r"that's all",
             r"thank you",
             r"any questions",
-            r"in conclusion"
+            r"in conclusion",
         ]
 
         for pattern in completion_patterns:
@@ -104,7 +101,7 @@ class InterruptionDetector:
                     return {
                         "type": "missing_point",
                         "trigger": transcript,
-                        "reason": "You finished the page without mentioning all required points"
+                        "reason": "You finished the page without mentioning all required points",
                     }
 
         return None
@@ -130,9 +127,7 @@ class InterruptionDetector:
                 return None
 
             if covered_points is None:
-                covered_points = self._check_points_covered(
-                    transcript, required_points
-                )
+                covered_points = self._check_points_covered(transcript, required_points)
             if covered_points >= len(required_points):
                 return None
 
@@ -154,7 +149,7 @@ Answer with YES if you should interrupt, NO otherwise. Keep it brief."""
             result = await self.llm_service.generate(
                 prompt=prompt,
                 session_id=context.get("session_id", ""),
-                system_message="You are a presentation coach. Be concise."
+                system_message="You are a presentation coach. Be concise.",
             )
 
             if result.is_success and result.value:
@@ -165,7 +160,7 @@ Answer with YES if you should interrupt, NO otherwise. Keep it brief."""
                     return {
                         "type": "vague_response",
                         "trigger": transcript,
-                        "reason": "Your response was too vague. Please provide specific details."
+                        "reason": "Your response was too vague. Please provide specific details.",
                     }
 
             return None

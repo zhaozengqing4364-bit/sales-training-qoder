@@ -3,6 +3,7 @@ Time Interval Trigger
 
 Triggers evaluation every N minutes.
 """
+
 import time
 
 from evaluation.triggers.base_trigger import BaseTrigger, TriggerContext

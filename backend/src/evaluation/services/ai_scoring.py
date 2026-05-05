@@ -2,6 +2,7 @@
 AI-based Real-time Scoring Service
 使用 LLM 异步评估对话质量
 """
+
 from __future__ import annotations
 
 import json
@@ -17,11 +18,31 @@ class AIScoringService:
     """AI-based scoring service for real-time evaluation."""
 
     DEFAULT_DIMENSIONS = [
-        {"name": "专业度", "weight": 0.25, "description": "产品知识、行业理解、专业术语使用"},
-        {"name": "沟通技巧", "weight": 0.25, "description": "倾听能力、表达清晰、情绪管理"},
-        {"name": "销售流程", "weight": 0.20, "description": "需求挖掘、方案呈现、推进节奏"},
-        {"name": "异议处理", "weight": 0.15, "description": "应对质疑、化解顾虑、引导思路"},
-        {"name": "成交能力", "weight": 0.15, "description": "促成决策、把握时机、推动行动"}
+        {
+            "name": "专业度",
+            "weight": 0.25,
+            "description": "产品知识、行业理解、专业术语使用",
+        },
+        {
+            "name": "沟通技巧",
+            "weight": 0.25,
+            "description": "倾听能力、表达清晰、情绪管理",
+        },
+        {
+            "name": "销售流程",
+            "weight": 0.20,
+            "description": "需求挖掘、方案呈现、推进节奏",
+        },
+        {
+            "name": "异议处理",
+            "weight": 0.15,
+            "description": "应对质疑、化解顾虑、引导思路",
+        },
+        {
+            "name": "成交能力",
+            "weight": 0.15,
+            "description": "促成决策、把握时机、推动行动",
+        },
     ]
 
     SCORING_PROMPT_TEMPLATE = """你是一位资深的销售培训专家，正在评估销售人员的对话表现。
@@ -68,7 +89,7 @@ class AIScoringService:
         self,
         conversation_history: list[dict],
         stage_name: str = "开场破冰",
-        dimensions: list[dict] | None = None
+        dimensions: list[dict] | None = None,
     ) -> Result[dict]:
         """
         使用 AI 异步评估对话质量。
@@ -85,19 +106,19 @@ class AIScoringService:
             dims = dimensions or self.DEFAULT_DIMENSIONS
 
             # 格式化维度描述
-            dim_text = "\n".join([
-                f"- {d['name']} (权重{d['weight']*100:.0f}%): {d.get('description', '')}"
-                for d in dims
-            ])
+            dim_text = "\n".join(
+                [
+                    f"- {d['name']} (权重{d['weight'] * 100:.0f}%): {d.get('description', '')}"
+                    for d in dims
+                ]
+            )
 
             # 格式化对话
             conv_text = self._format_conversation(conversation_history)
 
             # 构建提示词
             prompt = self.SCORING_PROMPT_TEMPLATE.format(
-                dimensions=dim_text,
-                conversation=conv_text,
-                stage_name=stage_name
+                dimensions=dim_text, conversation=conv_text, stage_name=stage_name
             )
 
             # 调用 LLM
@@ -116,9 +137,13 @@ class AIScoringService:
                 response_text = result.value.strip()
                 # 提取 JSON 部分（如果 LLM 返回了 markdown 代码块）
                 if "```json" in response_text:
-                    response_text = response_text.split("```json")[1].split("```")[0].strip()
+                    response_text = (
+                        response_text.split("```json")[1].split("```")[0].strip()
+                    )
                 elif "```" in response_text:
-                    response_text = response_text.split("```")[1].split("```")[0].strip()
+                    response_text = (
+                        response_text.split("```")[1].split("```")[0].strip()
+                    )
 
                 scoring_result = json.loads(response_text)
 
@@ -160,31 +185,26 @@ class AIScoringService:
         for dim in dimensions:
             dim_name = dim["name"]
             score = scores.get(dim_name, 70)
-            dimension_scores.append({
-                "name": dim_name,
-                "score": round(score),
-                "weight": dim["weight"]
-            })
+            dimension_scores.append(
+                {"name": dim_name, "score": round(score), "weight": dim["weight"]}
+            )
 
         # 计算加权总分
-        overall = sum(
-            d["score"] * d["weight"]
-            for d in dimension_scores
-        )
+        overall = sum(d["score"] * d["weight"] for d in dimension_scores)
 
         return {
             "overall": round(overall),
             "dimensions": dimension_scores,
             "feedback": raw_result.get("feedback", ""),
             "strengths": raw_result.get("strengths", []),
-            "improvements": raw_result.get("improvements", [])
+            "improvements": raw_result.get("improvements", []),
         }
 
     async def evaluate_with_fallback(
         self,
         conversation_history: list[dict],
         stage_name: str = "开场破冰",
-        dimensions: list[dict] | None = None
+        dimensions: list[dict] | None = None,
     ) -> dict:
         """
         评估对话，失败时返回默认评分。
@@ -205,10 +225,9 @@ class AIScoringService:
         return {
             "overall": 70,
             "dimensions": [
-                {"name": d["name"], "score": 70, "weight": d["weight"]}
-                for d in dims
+                {"name": d["name"], "score": 70, "weight": d["weight"]} for d in dims
             ],
             "feedback": "评分服务暂时不可用",
             "strengths": [],
-            "improvements": []
+            "improvements": [],
         }

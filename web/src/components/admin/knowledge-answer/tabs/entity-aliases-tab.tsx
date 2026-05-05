@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { AdminKnowledgeEntityAlias } from "@/lib/api/types";
-import { ProfileListDetail, type ProfileItem } from "../shared/profile-list-detail";
+import { ProfileListDetail } from "../shared/profile-list-detail";
 import { NumberField } from "../shared/number-field";
 
 const ENTITY_TYPE_OPTIONS = [

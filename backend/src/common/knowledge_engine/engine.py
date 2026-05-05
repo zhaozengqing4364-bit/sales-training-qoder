@@ -35,11 +35,17 @@ class KnowledgeAnswerEngine:
         haystack_pipeline_factory: HaystackPipelineFactory | None = None,
         config_repository: KnowledgeAnswerConfigRepository | None = None,
         entity_resolver: KnowledgeEntityResolver | None = None,
-        intent_classifier_factory: type[KnowledgeIntentClassifier] = KnowledgeIntentClassifier,
-        retrieval_planner_factory: type[KnowledgeRetrievalPlanner] = KnowledgeRetrievalPlanner,
+        intent_classifier_factory: type[
+            KnowledgeIntentClassifier
+        ] = KnowledgeIntentClassifier,
+        retrieval_planner_factory: type[
+            KnowledgeRetrievalPlanner
+        ] = KnowledgeRetrievalPlanner,
         haystack_adapter: KnowledgeHaystackAdapter | None = None,
         reranker: KnowledgeReranker | None = None,
-        answerability_evaluator_factory: type[KnowledgeAnswerabilityEvaluator] = KnowledgeAnswerabilityEvaluator,
+        answerability_evaluator_factory: type[
+            KnowledgeAnswerabilityEvaluator
+        ] = KnowledgeAnswerabilityEvaluator,
         assembler: KnowledgeAnswerAssembler | None = None,
         audit_repository: KnowledgeAnswerAuditRepository | None = None,
     ) -> None:
@@ -61,8 +67,16 @@ class KnowledgeAnswerEngine:
         return self._haystack_pipeline_factory
 
     def answer(self, request: KnowledgeAnswerRequest) -> KnowledgeAnswerResult:
-        config_snapshot = self._config_repository.get_active_config() if self._config_repository else None
-        if config_snapshot is None or not config_snapshot.query_profiles or self._haystack_adapter is None:
+        config_snapshot = (
+            self._config_repository.get_active_config()
+            if self._config_repository
+            else None
+        )
+        if (
+            config_snapshot is None
+            or not config_snapshot.query_profiles
+            or self._haystack_adapter is None
+        ):
             return KnowledgeAnswerResult()
 
         audit_steps: list[KnowledgeAuditStep] = []
@@ -179,7 +193,9 @@ class KnowledgeAnswerEngine:
                 "retrieval_plan": _retrieval_plan_payload(retrieval_plan),
                 "execution_trace": _execution_trace_payload(execution_result),
                 "search_failures": list(execution_result.search_failures),
-                "compat_source_status": _compat_source_status(answerability_result, execution_result),
+                "compat_source_status": _compat_source_status(
+                    answerability_result, execution_result
+                ),
                 "retrieval_mode": _retrieval_mode_from_rows(reranked_rows),
             }
         )
@@ -198,7 +214,9 @@ class KnowledgeAnswerEngine:
         return result
 
     def _resolve_query(self, query: str, *, config_snapshot=None):
-        if config_snapshot is not None and getattr(config_snapshot, "entity_aliases", None):
+        if config_snapshot is not None and getattr(
+            config_snapshot, "entity_aliases", None
+        ):
             resolver = KnowledgeEntityResolver(
                 entity_aliases=config_snapshot.entity_aliases
             )
@@ -212,15 +230,21 @@ class KnowledgeAnswerEngine:
                 plan=retrieval_plan,
                 knowledge_base_ids=list(request.knowledge_base_ids),
                 top_k=max(1, int(runtime_options.get("top_k") or 5)),
-                similarity_threshold=float(runtime_options.get("similarity_threshold") or 0.58),
+                similarity_threshold=float(
+                    runtime_options.get("similarity_threshold") or 0.58
+                ),
                 metadata_filter=(
                     dict(runtime_options.get("metadata_filter"))
                     if isinstance(runtime_options.get("metadata_filter"), dict)
                     else None
                 ),
                 enable_hybrid=bool(runtime_options.get("enable_hybrid", True)),
-                keyword_candidate_limit=max(1, int(runtime_options.get("keyword_candidate_limit") or 32)),
-                embedding_timeout_ms=max(0, int(runtime_options.get("embedding_timeout_ms") or 0)),
+                keyword_candidate_limit=max(
+                    1, int(runtime_options.get("keyword_candidate_limit") or 32)
+                ),
+                embedding_timeout_ms=max(
+                    0, int(runtime_options.get("embedding_timeout_ms") or 0)
+                ),
                 enable_rerank=bool(runtime_options.get("enable_rerank", True)),
                 rerank_top_k=max(1, int(runtime_options.get("rerank_top_k") or 8)),
             )
@@ -243,10 +267,14 @@ class KnowledgeAnswerEngine:
             session_id=request.session_id,
             config_version_id=config_version_id,
             entrypoint=str(request.entrypoint or "unknown"),
-            query_text=str(result.retrieval_summary.get("resolved_query") or request.query),
+            query_text=str(
+                result.retrieval_summary.get("resolved_query") or request.query
+            ),
             answerability=answerability,
             final_status=final_status,
-            blocked_reason=str(blocked_reason).strip() or None if blocked_reason is not None else None,
+            blocked_reason=str(blocked_reason).strip() or None
+            if blocked_reason is not None
+            else None,
             citations=[citation.model_dump() for citation in result.citations],
             retrieval_summary=dict(result.retrieval_summary),
             steps=audit_steps,
@@ -289,7 +317,9 @@ def _run_async(awaitable):
     except RuntimeError:
         loop = None
     if loop and loop.is_running():
-        raise RuntimeError("KnowledgeAnswerEngine.answer cannot be called from a running event loop")
+        raise RuntimeError(
+            "KnowledgeAnswerEngine.answer cannot be called from a running event loop"
+        )
     return asyncio.run(awaitable)
 
 
@@ -375,7 +405,9 @@ def _retrieval_plan_payload(retrieval_plan) -> dict[str, Any]:
     }
 
 
-def _execution_trace_payload(execution_result: KnowledgeHaystackExecutionResult) -> dict[str, Any]:
+def _execution_trace_payload(
+    execution_result: KnowledgeHaystackExecutionResult,
+) -> dict[str, Any]:
     return {
         "stopped_early": execution_result.stopped_early,
         "search_failures": list(execution_result.search_failures),
@@ -395,7 +427,9 @@ def _execution_trace_payload(execution_result: KnowledgeHaystackExecutionResult)
     }
 
 
-def _compat_source_status(answerability_result, execution_result: KnowledgeHaystackExecutionResult) -> str:
+def _compat_source_status(
+    answerability_result, execution_result: KnowledgeHaystackExecutionResult
+) -> str:
     if answerability_result.answerability == "blocked":
         if execution_result.search_failures:
             return "search_failed"

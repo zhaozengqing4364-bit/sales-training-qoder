@@ -42,6 +42,9 @@ import {
 } from "@/components/ui/glass-modal";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
+    AdminSettingsConfigRecord,
+    AdminSettingsSurface,
+    AdminSettingsSurfaceResponse,
     AdminModelConfigCreateRequest as CreateModelConfigRequest,
     AdminModelConfigDetail as ModelConfigDetail,
     AdminModelConfigGrouped as ModelConfigListResponse,
@@ -84,20 +87,12 @@ const MODEL_TYPE_CONFIG = {
     },
 };
 
-const SETTINGS_READ_ONLY_TABS = new Set(["general", "security", "notifications"]);
+const GOVERNED_SETTINGS_TABS = new Set(["general", "security", "notifications"]);
 
-const READ_ONLY_SETTINGS_NOTICE = "这些配置项当前为只读治理视图；模型配置已接入持久化，其他项需完成 API、权限、审计和回滚后开放编辑。";
-
-const readOnlyInputClassName = "bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed";
-
-const readOnlySelectClassName = "w-full p-3 rounded-xl border border-slate-200 bg-slate-100 outline-none font-medium text-slate-500 cursor-not-allowed";
-
-const readOnlyTextareaClassName = "w-full p-3 rounded-xl border border-slate-200 bg-slate-100 outline-none transition-all font-medium text-slate-500 h-24 resize-none cursor-not-allowed";
-
-function ReadOnlySettingsNotice() {
+function GovernedSettingsNotice() {
     return (
-        <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {READ_ONLY_SETTINGS_NOTICE}
+        <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            常规、安全和通知设置已接入后端配置 API；保存草稿、预览、发布和回滚都会记录审计日志。
         </div>
     );
 }
@@ -148,9 +143,41 @@ function getTestStatusBadge(status: string | null) {
     return <Badge variant="gray" className="gap-1">未测试</Badge>;
 }
 
+function asText(value: unknown, fallback = "") {
+    return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback: number) {
+    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asBoolean(value: unknown, fallback: boolean) {
+    return typeof value === "boolean" ? value : fallback;
+}
+
+function notificationValue(value: Record<string, unknown>, key: string, fallback: boolean) {
+    const emailNotifications = value.email_notifications;
+    if (!emailNotifications || typeof emailNotifications !== "object" || Array.isArray(emailNotifications)) {
+        return fallback;
+    }
+    return asBoolean((emailNotifications as Record<string, unknown>)[key], fallback);
+}
+
 export default function SettingsPage() {
     const toast = useToast();
     const [activeTab, setActiveTab] = useState("general");
+    const [settingsSurfaces, setSettingsSurfaces] = useState<Partial<Record<AdminSettingsSurface, AdminSettingsSurfaceResponse>>>({});
+    const [settingsDrafts, setSettingsDrafts] = useState<Record<AdminSettingsSurface, Record<string, unknown>>>({
+        general: {},
+        security: {},
+        notifications: {},
+    });
+    const [settingsReason, setSettingsReason] = useState("");
+    const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+    const [settingsAction, setSettingsAction] = useState<"preview" | "save" | "publish" | "rollback" | null>(null);
+    const [settingsNotice, setSettingsNotice] = useState<string | null>(null);
+    const [settingsError, setSettingsError] = useState<string | null>(null);
+    const [settingsPreview, setSettingsPreview] = useState<Record<string, unknown> | null>(null);
 
     // Model config states
     const [configs, setConfigs] = useState<ModelConfigListResponse | null>(null);
@@ -230,6 +257,7 @@ export default function SettingsPage() {
         { id: "security", label: "安全与访问", icon: Shield },
         { id: "notifications", label: "通知设置", icon: Bell },
         { id: "models", label: "模型配置", icon: Cpu },
+        { id: "governance", label: "治理矩阵", icon: Settings },
     ];
 
     const loadConfigs = async () => {
@@ -252,6 +280,131 @@ export default function SettingsPage() {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);
+
+    const loadSettingsSurface = async (surface: AdminSettingsSurface) => {
+        setIsLoadingSettings(true);
+        setSettingsError(null);
+        try {
+            const data = await api.admin.getAdminSettingsSurface(surface);
+            setSettingsSurfaces((prev) => ({ ...prev, [surface]: data }));
+            setSettingsDrafts((prev) => ({
+                ...prev,
+                [surface]: { ...data.active.value },
+            }));
+            setSettingsPreview(null);
+        } catch (err) {
+            debug.error("Failed to load admin settings:", err);
+            setSettingsError(getApiErrorMessage(err));
+        } finally {
+            setIsLoadingSettings(false);
+        }
+    };
+
+    useEffect(() => {
+        if (GOVERNED_SETTINGS_TABS.has(activeTab)) {
+            const surface = activeTab as AdminSettingsSurface;
+            if (!settingsSurfaces[surface]) {
+                void Promise.resolve().then(() => loadSettingsSurface(surface));
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
+    const updateSettingsDraft = (surface: AdminSettingsSurface, patch: Record<string, unknown>) => {
+        setSettingsDrafts((prev) => ({
+            ...prev,
+            [surface]: {
+                ...(prev[surface] || {}),
+                ...patch,
+            },
+        }));
+        setSettingsPreview(null);
+    };
+
+    const requireSettingsReason = () => {
+        const trimmed = settingsReason.trim();
+        if (!trimmed) {
+            setSettingsError("保存、发布、回滚或预览前必须填写原因，原因会进入配置审计。");
+            return null;
+        }
+        return trimmed;
+    };
+
+    const handlePreviewSettings = async () => {
+        if (!GOVERNED_SETTINGS_TABS.has(activeTab)) return;
+        const surface = activeTab as AdminSettingsSurface;
+        const reason = requireSettingsReason();
+        if (!reason) return;
+        setSettingsAction("preview");
+        setSettingsError(null);
+        try {
+            const preview = await api.admin.previewAdminSettings(surface, settingsDrafts[surface], reason);
+            setSettingsPreview(preview.summary);
+            setSettingsNotice("预览完成，未改变当前生效配置。");
+        } catch (err) {
+            setSettingsError(getApiErrorMessage(err));
+        } finally {
+            setSettingsAction(null);
+        }
+    };
+
+    const handleSaveSettingsDraft = async () => {
+        if (!GOVERNED_SETTINGS_TABS.has(activeTab)) return;
+        const surface = activeTab as AdminSettingsSurface;
+        const reason = requireSettingsReason();
+        if (!reason) return;
+        setSettingsAction("save");
+        setSettingsError(null);
+        try {
+            await api.admin.saveAdminSettingsDraft(surface, settingsDrafts[surface], reason);
+            setSettingsNotice("草稿已保存。");
+            await loadSettingsSurface(surface);
+        } catch (err) {
+            setSettingsError(getApiErrorMessage(err));
+        } finally {
+            setSettingsAction(null);
+        }
+    };
+
+    const handlePublishSettings = async () => {
+        if (!GOVERNED_SETTINGS_TABS.has(activeTab)) return;
+        const surface = activeTab as AdminSettingsSurface;
+        const reason = requireSettingsReason();
+        const draft = settingsSurfaces[surface]?.drafts[0];
+        if (!reason || !draft) {
+            setSettingsError("需要先保存草稿，再发布配置。");
+            return;
+        }
+        setSettingsAction("publish");
+        setSettingsError(null);
+        try {
+            await api.admin.publishAdminSettings(surface, draft.id, reason);
+            setSettingsNotice("配置已发布并写入审计日志。");
+            await loadSettingsSurface(surface);
+        } catch (err) {
+            setSettingsError(getApiErrorMessage(err));
+        } finally {
+            setSettingsAction(null);
+        }
+    };
+
+    const handleRollbackSettings = async (target: AdminSettingsConfigRecord) => {
+        if (!GOVERNED_SETTINGS_TABS.has(activeTab)) return;
+        const surface = activeTab as AdminSettingsSurface;
+        const reason = requireSettingsReason();
+        if (!reason) return;
+        setSettingsAction("rollback");
+        setSettingsError(null);
+        try {
+            await api.admin.rollbackAdminSettings(surface, target.id, reason);
+            setSettingsNotice(`已回滚到版本 ${target.version}。`);
+            await loadSettingsSurface(surface);
+        } catch (err) {
+            setSettingsError(getApiErrorMessage(err));
+        } finally {
+            setSettingsAction(null);
+        }
+    };
 
     const resetForm = () => {
         const defaultProvider = MODEL_PROVIDER_MAP[activeModelType][0];
@@ -428,13 +581,69 @@ export default function SettingsPage() {
 
     const currentConfigs = configs ? configs[activeModelType] : [];
 
+    const renderSettingsFooter = (surface: AdminSettingsSurface) => {
+        const history = settingsSurfaces[surface]?.history || [];
+        const auditLogs = settingsSurfaces[surface]?.audit_logs || [];
+        return (
+            <div className="space-y-4">
+                {settingsPreview && (
+                    <GlassCard className="p-4">
+                        <h3 className="text-sm font-bold text-slate-900">预览结果</h3>
+                        <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100">
+                            {JSON.stringify(settingsPreview, null, 2)}
+                        </pre>
+                    </GlassCard>
+                )}
+                <GlassCard className="p-5">
+                    <h3 className="text-sm font-bold text-slate-900">发布历史与回滚</h3>
+                    <div className="mt-3 space-y-2">
+                        {history.map((item) => (
+                            <div key={item.id} className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-white/80 p-3 md:flex-row md:items-center md:justify-between">
+                                <div className="text-sm text-slate-700">
+                                    v{item.version} · {item.status} · {item.updated_at || "未记录"}
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={item.status !== "archived" || settingsAction !== null}
+                                    onClick={() => {
+                                        void handleRollbackSettings(item);
+                                    }}
+                                >
+                                    回滚到此版本
+                                </Button>
+                            </div>
+                        ))}
+                        {history.length === 0 && <p className="text-sm text-slate-500">暂无发布历史，当前使用默认配置兜底。</p>}
+                    </div>
+                </GlassCard>
+                <GlassCard className="p-5">
+                    <h3 className="text-sm font-bold text-slate-900">配置审计</h3>
+                    <div className="mt-3 space-y-2">
+                        {auditLogs.map((item) => (
+                            <div key={item.id} className="rounded-xl border border-slate-100 bg-white/80 p-3 text-xs text-slate-600">
+                                <div className="font-bold text-slate-900">{item.action} · {item.created_at || "未记录"}</div>
+                                <div className="mt-1">reason: {item.reason || "未记录"}</div>
+                                <div className="mt-1">trace: {item.trace_id || "未记录"}</div>
+                            </div>
+                        ))}
+                        {auditLogs.length === 0 && <p className="text-sm text-slate-500">暂无配置审计日志。</p>}
+                    </div>
+                </GlassCard>
+            </div>
+        );
+    };
+
 
     const renderContent = () => {
         switch (activeTab) {
             case "general":
+                {
+                    const surface: AdminSettingsSurface = "general";
+                    const draft = settingsDrafts[surface];
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                        <ReadOnlySettingsNotice />
+                        <GovernedSettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Globe className="w-5 h-5 text-blue-500" /> 平台信息
@@ -442,15 +651,15 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">平台名称</label>
-                                    <Input value="Intelligent Coach AI" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
+                                    <Input value={asText(draft.platform_name, "Intelligent Coach AI")} onChange={(event) => updateSettingsDraft(surface, { platform_name: event.target.value })} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">支持邮箱</label>
-                                    <Input value="support@company.com" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
+                                    <Input value={asText(draft.support_email, "support@company.com")} onChange={(event) => updateSettingsDraft(surface, { support_email: event.target.value })} />
                                 </div>
                                 <div className="col-span-2 space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">欢迎语</label>
-                                    <textarea value="欢迎使用高级训练平台，开启您的学习之旅！" readOnly aria-describedby="settings-readonly-notice" className={readOnlyTextareaClassName} />
+                                    <textarea value={asText(draft.welcome_message, "欢迎使用高级训练平台，开启您的学习之旅！")} onChange={(event) => updateSettingsDraft(surface, { welcome_message: event.target.value })} className="w-full p-3 rounded-xl border border-slate-200 bg-white outline-none transition-all font-medium text-slate-700 h-24 resize-none" />
                                 </div>
                             </div>
                         </GlassCard>
@@ -462,33 +671,38 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">默认语言</label>
-                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
-                                        <option>简体中文</option>
-                                        <option>English (US)</option>
+                                    <select value={asText(draft.default_language, "zh-CN")} onChange={(event) => updateSettingsDraft(surface, { default_language: event.target.value })} className="w-full p-3 rounded-xl border border-slate-200 bg-white outline-none font-medium text-slate-700">
+                                        <option value="zh-CN">简体中文</option>
+                                        <option value="en-US">English (US)</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">时区</label>
-                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
-                                        <option>Asia/Shanghai (GMT+8)</option>
-                                        <option>UTC</option>
+                                    <select value={asText(draft.timezone, "Asia/Shanghai")} onChange={(event) => updateSettingsDraft(surface, { timezone: event.target.value })} className="w-full p-3 rounded-xl border border-slate-200 bg-white outline-none font-medium text-slate-700">
+                                        <option value="Asia/Shanghai">Asia/Shanghai (GMT+8)</option>
+                                        <option value="UTC">UTC</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">日期格式</label>
-                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
-                                        <option>YYYY-MM-DD</option>
-                                        <option>MM/DD/YYYY</option>
+                                    <select value={asText(draft.date_format, "YYYY-MM-DD")} onChange={(event) => updateSettingsDraft(surface, { date_format: event.target.value })} className="w-full p-3 rounded-xl border border-slate-200 bg-white outline-none font-medium text-slate-700">
+                                        <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                                        <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                                     </select>
                                 </div>
                             </div>
                         </GlassCard>
+                        {renderSettingsFooter(surface)}
                     </div>
                 );
+                }
             case "security":
+                {
+                    const surface: AdminSettingsSurface = "security";
+                    const draft = settingsDrafts[surface];
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                        <ReadOnlySettingsNotice />
+                        <GovernedSettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Lock className="w-5 h-5 text-emerald-500" /> 安全策略
@@ -499,14 +713,14 @@ export default function SettingsPage() {
                                         <div className="text-sm font-bold text-slate-900">强制双重认证 (2FA)</div>
                                         <div className="text-xs text-slate-500">所有管理员必须启用两步验证才能登录</div>
                                     </div>
-                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" checked readOnly aria-describedby="settings-readonly-notice" />
+                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" checked={asBoolean(draft.enforce_admin_2fa, true)} onChange={(event) => updateSettingsDraft(surface, { enforce_admin_2fa: event.target.checked })} />
                                 </div>
                                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                     <div className="space-y-1">
                                         <div className="text-sm font-bold text-slate-900">新设备登录提醒</div>
                                         <div className="text-xs text-slate-500">检测到未知设备时发送邮件通知</div>
                                     </div>
-                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" checked readOnly aria-describedby="settings-readonly-notice" />
+                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" checked={asBoolean(draft.new_device_login_alert, true)} onChange={(event) => updateSettingsDraft(surface, { new_device_login_alert: event.target.checked })} />
                                 </div>
                             </div>
                         </GlassCard>
@@ -518,40 +732,65 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">最小长度</label>
-                                    <Input type="number" value="8" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
+                                    <Input type="number" value={String(asNumber(draft.password_min_length, 8))} onChange={(event) => updateSettingsDraft(surface, { password_min_length: Number(event.target.value) })} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">有效期 (天)</label>
-                                    <Input type="number" value="90" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
+                                    <Input type="number" value={String(asNumber(draft.password_expiry_days, 90))} onChange={(event) => updateSettingsDraft(surface, { password_expiry_days: Number(event.target.value) })} />
                                 </div>
                             </div>
                         </GlassCard>
+                        {renderSettingsFooter(surface)}
                     </div>
                 );
+                }
             case "notifications":
+                {
+                    const surface: AdminSettingsSurface = "notifications";
+                    const draft = settingsDrafts[surface];
+                    const notificationItems = [
+                        ["user_registration_admin", "用户注册时通知管理员", true],
+                        ["system_exception_alert", "系统异常报警", true],
+                        ["weekly_report", "每周数据报表自动发送", false],
+                        ["knowledge_base_update", "知识库更新提醒", false],
+                    ] as const;
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                        <ReadOnlySettingsNotice />
+                        <GovernedSettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Mail className="w-5 h-5 text-indigo-500" /> 邮件通知
                             </h3>
                             <div className="space-y-4">
-                                {[
-                                    "用户注册时通知管理员",
-                                    "系统异常报警",
-                                    "每周数据报表自动发送",
-                                    "知识库更新提醒"
-                                ].map((item, i) => (
-                                    <div key={i} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
-                                        <span className="text-sm font-medium text-slate-700">{item}</span>
-                                        <input type="checkbox" className="w-5 h-5 accent-slate-900 rounded" checked={i % 2 === 0} readOnly aria-describedby="settings-readonly-notice" />
+                                {notificationItems.map(([key, label, fallback]) => (
+                                    <div key={key} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
+                                        <span className="text-sm font-medium text-slate-700">{label}</span>
+                                        <input
+                                            type="checkbox"
+                                            className="w-5 h-5 accent-slate-900 rounded"
+                                            checked={notificationValue(draft, key, fallback)}
+                                            onChange={(event) => {
+                                                const current = draft.email_notifications;
+                                                updateSettingsDraft(surface, {
+                                                    email_notifications: {
+                                                        ...(
+                                                            current && typeof current === "object" && !Array.isArray(current)
+                                                                ? current as Record<string, unknown>
+                                                                : {}
+                                                        ),
+                                                        [key]: event.target.checked,
+                                                    },
+                                                });
+                                            }}
+                                        />
                                     </div>
                                 ))}
                             </div>
                         </GlassCard>
+                        {renderSettingsFooter(surface)}
                     </div>
                 );
+                }
             case "models":
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
@@ -681,6 +920,28 @@ export default function SettingsPage() {
                         </GlassCard>
                     </div>
                 );
+            case "governance":
+                return (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <GovernedSettingsNotice />
+                        <GlassCard className="p-8">
+                            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <Settings className="w-5 h-5 text-slate-500" /> 治理矩阵入口
+                            </h3>
+                            <p className="text-sm text-slate-600">
+                                常规、安全和通知设置已接入配置 API；权限矩阵和 support redaction boundary 在专用治理页持续展示。
+                            </p>
+                            <div className="mt-4">
+                                <a
+                                    href="/admin/governance"
+                                    className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white"
+                                >
+                                    打开治理矩阵
+                                </a>
+                            </div>
+                        </GlassCard>
+                    </div>
+                );
             default:
                 return null;
         }
@@ -708,14 +969,22 @@ export default function SettingsPage() {
                     <p className="text-slate-500 mt-1">管理全局配置与参数</p>
                 </div>
                 <div className="flex gap-3">
-                    {SETTINGS_READ_ONLY_TABS.has(activeTab) ? (
+                    {GOVERNED_SETTINGS_TABS.has(activeTab) ? (
                         <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
-                            <span id="settings-readonly-notice" className="text-sm text-amber-700">{READ_ONLY_SETTINGS_NOTICE}</span>
-                            <Button variant="outline" className="rounded-full border-slate-200 text-slate-400" disabled title="未接入持久化接口">
-                                <RefreshCw className="w-4 h-4 mr-2" /> 放弃更改
+                            <input
+                                value={settingsReason}
+                                onChange={(event) => setSettingsReason(event.target.value)}
+                                placeholder="变更原因（必填）"
+                                className="h-10 rounded-full border border-slate-200 px-4 text-sm"
+                            />
+                            <Button variant="outline" className="rounded-full border-slate-200" onClick={() => void handlePreviewSettings()} disabled={settingsAction !== null || isLoadingSettings}>
+                                <RefreshCw className="w-4 h-4 mr-2" /> 预览
                             </Button>
-                            <Button className="rounded-full bg-slate-300 text-white shadow-none px-6" disabled title="未接入持久化接口">
-                                <Save className="w-4 h-4 mr-2" /> 保存配置
+                            <Button variant="outline" className="rounded-full border-slate-200" onClick={() => void handleSaveSettingsDraft()} disabled={settingsAction !== null || isLoadingSettings}>
+                                <Save className="w-4 h-4 mr-2" /> 保存草稿
+                            </Button>
+                            <Button className="rounded-full bg-slate-900 text-white shadow-none px-6" onClick={() => void handlePublishSettings()} disabled={settingsAction !== null || isLoadingSettings}>
+                                <Save className="w-4 h-4 mr-2" /> 发布配置
                             </Button>
                         </div>
                     ) : activeTab === "models" ? (
@@ -733,6 +1002,13 @@ export default function SettingsPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                {(settingsNotice || settingsError || isLoadingSettings) && GOVERNED_SETTINGS_TABS.has(activeTab) && (
+                    <div className="col-span-1 md:col-span-12 space-y-2">
+                        {isLoadingSettings && <div className="rounded-xl border border-slate-100 bg-white p-3 text-sm text-slate-500">正在加载设置...</div>}
+                        {settingsNotice && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{settingsNotice}</div>}
+                        {settingsError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{settingsError}</div>}
+                    </div>
+                )}
                 {/* Sidebar Navigation */}
                 <div className="col-span-1 md:col-span-3 space-y-2">
                     <GlassCard className="p-2 space-y-1">

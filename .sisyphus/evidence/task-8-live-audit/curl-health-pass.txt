@@ -1,7 +1,0 @@
-# task-8 curl health 2026-04-27T03:35:42Z
-## ports
-## backend /health
-
-## backend /api/v1/auth/dev-login
-
-## frontend /login

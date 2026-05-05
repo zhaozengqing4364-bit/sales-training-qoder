@@ -20,6 +20,7 @@ from common.db.models import (
     Scenario,
     User,
 )
+import support.api.runtime_status as runtime_status_api
 
 
 async def _create_user(
@@ -460,3 +461,75 @@ async def test_non_support_user_is_rejected_from_support_runtime(
     assert response.status_code == 403
     body = response.json()
     assert "trace_id" in body
+
+
+@pytest.mark.asyncio
+async def test_support_runtime_overview_surfaces_degraded_503_on_service_failure(
+    async_client,
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+) -> None:
+    support_user = await _create_user(
+        test_db,
+        email="support-overview-failure@example.com",
+        role="support",
+    )
+    token = create_access_token(data={"sub": str(support_user.user_id)})
+
+    class BrokenRuntimeStatusService:
+        def __init__(self, _db):
+            pass
+
+        async def get_overview(self, *, window_hours: int):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(runtime_status_api, "RuntimeStatusService", BrokenRuntimeStatusService)
+
+    response = await async_client.get(
+        "/api/v1/support/runtime/overview",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"] == "[RUNTIME_STATUS_UNAVAILABLE]"
+    assert body["degraded"] is True
+    assert body["data"]["release_health"]["status"] == "degraded"
+    assert body["trace_id"]
+
+
+@pytest.mark.asyncio
+async def test_support_runtime_faults_surfaces_degraded_503_on_service_failure(
+    async_client,
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+) -> None:
+    support_user = await _create_user(
+        test_db,
+        email="support-fault-failure@example.com",
+        role="support",
+    )
+    token = create_access_token(data={"sub": str(support_user.user_id)})
+
+    class BrokenRuntimeStatusService:
+        def __init__(self, _db):
+            pass
+
+        async def get_faults(self, *, limit: int, severity: str | None):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(runtime_status_api, "RuntimeStatusService", BrokenRuntimeStatusService)
+
+    response = await async_client.get(
+        "/api/v1/support/runtime/faults?limit=20",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"] == "[RUNTIME_STATUS_UNAVAILABLE]"
+    assert body["degraded"] is True
+    assert body["data"]["count"] == 0
+    assert body["trace_id"]

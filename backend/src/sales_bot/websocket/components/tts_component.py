@@ -73,8 +73,8 @@ class TTSComponent:
         # Prefer service-level streaming path
         if hasattr(self.tts_service, "synthesize_streaming"):
             effective_is_interrupted_fn = is_interrupted_fn or (lambda: False)
-            effective_current_stream_id_fn = (
-                current_stream_id_fn or (lambda: effective_stream_id)
+            effective_current_stream_id_fn = current_stream_id_fn or (
+                lambda: effective_stream_id
             )
             await self.send_response_streaming(
                 text=text,

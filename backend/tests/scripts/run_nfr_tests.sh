@@ -22,14 +22,14 @@ EOF
     pytest \
       tests/integration/test_nfr_ci_integration.py::TestNFRCIWorkflow::test_ci_workflow_file_exists \
       tests/integration/test_nfr_ci_integration.py::TestNFRCIWorkflow::test_nfr_reporter_module_exists \
-      -q || true
+      --no-cov -q
     ;;
   --full)
     echo "Running NFR integration and performance checks..."
     pytest \
       tests/integration/test_nfr_ci_integration.py \
       tests/performance/test_nfr_metrics.py \
-      -q || true
+      --no-cov -q
     ;;
   *)
     echo "Unknown mode: ${MODE}"

@@ -93,6 +93,16 @@ port_pids() {
   lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
 }
 
+port_cleanup_pids() {
+  local port="$1"
+  {
+    lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
+    # uvicorn --reload can leave a parent process with a CLOSED fd on the
+    # dev port. It is not LISTENing, but a new uvicorn bind can still fail.
+    lsof -tiTCP:"${port}" -sTCP:CLOSED 2>/dev/null || true
+  } | sort -u
+}
+
 is_port_busy() {
   local port="$1"
   [[ -n "$(port_pids "${port}")" ]]
@@ -115,10 +125,49 @@ wait_for_port() {
   return 1
 }
 
+wait_for_port_release() {
+  local port="$1"
+  local timeout_seconds="${2:-5}"
+  local max_ticks=$((timeout_seconds * 5))
+  local tick=0
+
+  while (( tick < max_ticks )); do
+    if [[ -z "$(port_cleanup_pids "${port}")" ]]; then
+      return 0
+    fi
+    sleep 0.2
+    tick=$((tick + 1))
+  done
+
+  return 1
+}
+
+wait_for_http_ok() {
+  local url="$1"
+  local timeout_seconds="${2:-30}"
+  local max_ticks=$((timeout_seconds * 2))
+  local tick=0
+
+  if ! command -v curl >/dev/null 2>&1; then
+    warn "未检测到 curl，跳过 HTTP 健康检查：${url}"
+    return 0
+  fi
+
+  while (( tick < max_ticks )); do
+    if curl -fsS --max-time 2 "${url}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+    tick=$((tick + 1))
+  done
+
+  return 1
+}
+
 kill_port() {
   local port="$1"
   local pids
-  pids="$(port_pids "${port}")"
+  pids="$(port_cleanup_pids "${port}")"
 
   if [[ -z "${pids}" ]]; then
     return
@@ -126,13 +175,14 @@ kill_port() {
 
   log "端口 ${port} 被占用，准备释放 PID: ${pids//$'\n'/, }"
   kill ${pids} >/dev/null 2>&1 || true
-  sleep 1
+  wait_for_port_release "${port}" 2 || true
 
   local remaining
-  remaining="$(port_pids "${port}")"
+  remaining="$(port_cleanup_pids "${port}")"
   if [[ -n "${remaining}" ]]; then
     warn "端口 ${port} 仍被占用，强制结束 PID: ${remaining//$'\n'/, }"
     kill -9 ${remaining} >/dev/null 2>&1 || true
+    wait_for_port_release "${port}" 2 || true
   fi
 }
 
@@ -188,17 +238,23 @@ resolve_infra_management_targets() {
 
 resolve_ports_to_clean() {
   if [[ -n "${PORTS_TO_CLEAN_RAW}" ]]; then
-    PORTS_TO_CLEAN="${PORTS_TO_CLEAN_RAW}"
+    local configured_ports=()
+    IFS=',' read -r -a configured_ports <<< "${PORTS_TO_CLEAN_RAW}"
+    local port
+    local resolved_ports=()
+    for port in "${configured_ports[@]}"; do
+      port="${port// /}"
+      [[ -n "${port}" ]] || continue
+      if ! [[ "${port}" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+        die "PORTS_TO_CLEAN 包含非法端口：${port}"
+      fi
+      resolved_ports+=("${port}")
+    done
+    PORTS_TO_CLEAN="$(IFS=','; printf '%s' "${resolved_ports[*]}")"
     return
   fi
 
   local ports=("${BACKEND_PORT}" "${FRONTEND_PORT}")
-  if [[ "${MANAGE_POSTGRES}" == "1" ]]; then
-    ports+=("${POSTGRES_PORT}")
-  fi
-  if [[ "${MANAGE_REDIS}" == "1" ]]; then
-    ports+=("${REDIS_PORT}")
-  fi
 
   PORTS_TO_CLEAN="$(IFS=','; printf '%s' "${ports[*]}")"
 }
@@ -288,23 +344,43 @@ ensure_env_files() {
 }
 
 resolve_python_bin() {
+  local override_python="${BACKEND_PYTHON:-}"
   local candidates=(
-    "${ROOT_DIR}/backend/venv/bin/python"
     "${ROOT_DIR}/backend/.venv/bin/python"
-    "python3"
-    "python"
+    "${ROOT_DIR}/backend/venv/bin/python"
   )
+
+  if [[ -n "${override_python}" ]]; then
+    candidates=("${override_python}" "${candidates[@]}")
+  fi
+
+  candidates+=("python3" "python")
 
   local candidate
   for candidate in "${candidates[@]}"; do
+    local resolved_python=""
     if [[ -x "${candidate}" ]]; then
-      printf '%s\n' "${candidate}"
+      resolved_python="${candidate}"
+    elif command -v "${candidate}" >/dev/null 2>&1; then
+      resolved_python="$(command -v "${candidate}")"
+    else
+      continue
+    fi
+
+    if "${resolved_python}" - <<'PY' >/dev/null 2>&1; then
+import dotenv
+import fastapi
+import uvicorn
+PY
+      printf '%s\n' "${resolved_python}"
       return 0
     fi
-    if command -v "${candidate}" >/dev/null 2>&1; then
-      command -v "${candidate}"
-      return 0
+
+    if [[ -n "${override_python}" && "${candidate}" == "${override_python}" ]]; then
+      die "BACKEND_PYTHON=${override_python} 缺少后端运行依赖（至少需要 python-dotenv、fastapi、uvicorn）"
     fi
+
+    warn "跳过 Python 解释器 ${resolved_python}：缺少后端运行依赖" >&2
   done
 
   return 1
@@ -314,18 +390,19 @@ start_backend() {
   local python_bin
   python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，请先配置后端环境"
 
-  log "启动 Backend (端口 ${BACKEND_PORT})..."
+  log "启动 Backend (端口 ${BACKEND_PORT})，Python: ${python_bin}"
   (
     cd "${ROOT_DIR}/backend"
     nohup env \
       DATABASE_URL="${EFFECTIVE_DATABASE_URL}" \
       REDIS_URL="${EFFECTIVE_REDIS_URL}" \
+      PYTHONPATH="${ROOT_DIR}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
       "${python_bin}" -m uvicorn src.main:app --reload --port "${BACKEND_PORT}" \
       >"${LOG_DIR}/backend.log" 2>&1 &
     echo $! > "${PID_DIR}/backend.pid"
   )
 
-  wait_for_port "${BACKEND_PORT}" 45 || {
+  wait_for_port "${BACKEND_PORT}" 45 && wait_for_http_ok "http://127.0.0.1:${BACKEND_PORT}/health" 45 || {
     tail -n 80 "${LOG_DIR}/backend.log" >&2 || true
     die "Backend 启动失败，请查看日志 ${LOG_DIR}/backend.log"
   }

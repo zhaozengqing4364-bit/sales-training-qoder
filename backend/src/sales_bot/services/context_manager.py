@@ -47,6 +47,7 @@ class ObjectionLedger:
 @dataclass
 class DialogueTurn:
     """Represents a single turn in the conversation"""
+
     turn_number: int
     user_text: str
     bot_response: str
@@ -59,10 +60,13 @@ class DialogueTurn:
 @dataclass
 class ConversationContext:
     """Full context of an active sales conversation"""
+
     session_id: uuid.UUID
     persona: str
     turns: list[DialogueTurn] = field(default_factory=list)
-    user_objectives: list[str] = field(default_factory=list)  # What user wants to achieve
+    user_objectives: list[str] = field(
+        default_factory=list
+    )  # What user wants to achieve
     bot_tactics: list[str] = field(default_factory=list)  # What bot is testing
     current_phase: str = "opening"  # opening, discovery, objection, closing
     objection_ledger: ObjectionLedger | None = None
@@ -86,12 +90,12 @@ class ContextManager:
 
     def __init__(self):
         self.active_contexts: dict[uuid.UUID, ConversationContext] = {}
-        self.max_turns_before_summarization = 6  # Summarize after 6 turns to save tokens
+        self.max_turns_before_summarization = (
+            6  # Summarize after 6 turns to save tokens
+        )
 
     async def create_context(
-        self,
-        session_id: uuid.UUID,
-        persona: str
+        self, session_id: uuid.UUID, persona: str
     ) -> Result[ConversationContext]:
         """
         Create new conversation context
@@ -108,7 +112,7 @@ class ContextManager:
 
             logger.info(
                 "Conversation context created",
-                extra={"session_id": str(session_id), "persona": persona}
+                extra={"session_id": str(session_id), "persona": persona},
             )
 
             return Result(value=context)
@@ -117,7 +121,7 @@ class ContextManager:
             logger.error(
                 "Failed to create context",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[CONTEXT_CREATE_FAILED]")
 
@@ -128,7 +132,7 @@ class ContextManager:
         bot_response: str,
         user_was_interrupted: bool = False,
         vagueness_detected: bool = False,
-        challenge_level: int = 1
+        challenge_level: int = 1,
     ) -> Result[DialogueTurn]:
         """
         Add a dialogue turn to the conversation
@@ -149,7 +153,7 @@ class ContextManager:
                 timestamp=datetime.now(),
                 user_was_interrupted=user_was_interrupted,
                 vagueness_detected=vagueness_detected,
-                challenge_level=challenge_level
+                challenge_level=challenge_level,
             )
 
             context.turns.append(turn)
@@ -180,7 +184,7 @@ class ContextManager:
                     "session_id": str(session_id),
                     "turn": turn_number,
                     "phase": context.current_phase,
-                }
+                },
             )
 
             return Result(value=turn)
@@ -189,7 +193,7 @@ class ContextManager:
             logger.error(
                 "Failed to add turn",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[TURN_ADD_FAILED]")
 
@@ -205,7 +209,7 @@ class ContextManager:
             logger.error(
                 "Failed to get context",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[CONTEXT_GET_FAILED]")
 
@@ -261,10 +265,7 @@ class ContextManager:
             )
             return Result.fail(fallback="[OBJECTION_LEDGER_UPDATE_FAILED]")
 
-    async def get_conversation_summary(
-        self,
-        session_id: uuid.UUID
-    ) -> Result[dict]:
+    async def get_conversation_summary(self, session_id: uuid.UUID) -> Result[dict]:
         """
         Get summary of conversation for final report
 
@@ -295,7 +296,7 @@ class ContextManager:
 
             logger.info(
                 "Conversation summary generated",
-                extra={"session_id": str(session_id), "turns": summary["total_turns"]}
+                extra={"session_id": str(session_id), "turns": summary["total_turns"]},
             )
 
             return Result(value=summary)
@@ -304,7 +305,7 @@ class ContextManager:
             logger.error(
                 "Failed to generate summary",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[SUMMARY_FAILED]")
 
@@ -320,7 +321,7 @@ class ContextManager:
             logger.error(
                 "Failed to cleanup context",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[CLEANUP_FAILED]")
 
@@ -341,7 +342,7 @@ class ContextManager:
         # For now, just keep first and last turns
         logger.info(
             "Context summarization needed",
-            extra={"session_id": str(session_id), "turns": len(context.turns)}
+            extra={"session_id": str(session_id), "turns": len(context.turns)},
         )
 
     def _get_phases_completed(self, context: ConversationContext) -> list[str]:

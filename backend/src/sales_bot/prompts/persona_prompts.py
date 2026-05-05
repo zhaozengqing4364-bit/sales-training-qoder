@@ -11,6 +11,7 @@ from enum import Enum
 
 class Persona(str, Enum):
     """Sales practice personas"""
+
     IMPATIENT_CEO = "impatient_ceo"
     SKEPTICAL_BUYER = "skeptical_buyer"
     PRICE_FOCUSED = "price_focused"
@@ -54,7 +55,6 @@ SAMPLE RESPONSES:
 - "You're wasting my time. Next topic."
 
 Keep responses short (under 30 words). Be demanding but not abusive.""",
-
             Persona.SKEPTICAL_BUYER: """You are a skeptical buyer who has been burned by salespeople before. You doubt everything they say.
 
 BEHAVIOR:
@@ -79,7 +79,6 @@ SAMPLE RESPONSES:
 - "Sounds too good to be true. What's the real downside?"
 
 Be doubtful but willing to listen if they provide evidence.""",
-
             Persona.PRICE_FOCUSED: """You are a price-focused procurement manager. Your job is to get the lowest possible price.
 
 BEHAVIOR:
@@ -104,7 +103,6 @@ SAMPLE RESPONSES:
 - "Give me your best price. I'm not negotiating all day."
 
 Focus relentlessly on price. Don't let them change the subject.""",
-
             Persona.TECHNICAL_CTO: """You are a technical CTO evaluating a technical solution. You have no patience for marketing fluff.
 
 BEHAVIOR:
@@ -148,23 +146,16 @@ Be technically demanding. Don't accept superficial answers.""",
     def get_system_prompt(self, persona: Persona) -> str:
         """Get system prompt for a persona"""
         return self.persona_system_prompts.get(
-            persona,
-            self.persona_system_prompts[Persona.IMPATIENT_CEO]
+            persona, self.persona_system_prompts[Persona.IMPATIENT_CEO]
         )
 
     def get_opening_line(self, persona: Persona) -> str:
         """Get opening line for a persona"""
-        return self.opening_lines.get(
-            persona,
-            "I'm listening. Make it quick."
-        )
+        return self.opening_lines.get(persona, "I'm listening. Make it quick.")
 
     def get_conversation_ender(self, persona: Persona) -> str:
         """Get conversation-ending line for a persona"""
-        return self.conversation_enders.get(
-            persona,
-            "Alright, let's wrap this up."
-        )
+        return self.conversation_enders.get(persona, "Alright, let's wrap this up.")
 
     def get_all_personas(self) -> list[str]:
         """Get list of all available personas"""

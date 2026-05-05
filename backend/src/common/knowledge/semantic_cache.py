@@ -136,9 +136,7 @@ class SemanticSearchCache:
         prefix = _kb_cache_key_prefix(kb_ids)
 
         # Store results
-        result_hash = str(hash(tuple(
-            round(x, 6) for x in query_embedding[:8]
-        )))
+        result_hash = str(hash(tuple(round(x, 6) for x in query_embedding[:8])))
         result_key = f"{prefix}:result:{result_hash}"
         await cache_manager.set(result_key, results, ttl=effective_ttl)
 
@@ -151,12 +149,14 @@ class SemanticSearchCache:
         entries: list[dict[str, Any]] = index_data.get("entries", [])
 
         # Add new entry
-        entries.append({
-            "embedding": query_embedding,
-            "top_k": top_k,
-            "result_key": result_key,
-            "created_at": time.time(),
-        })
+        entries.append(
+            {
+                "embedding": query_embedding,
+                "top_k": top_k,
+                "result_key": result_key,
+                "created_at": time.time(),
+            }
+        )
 
         # Keep only last 50 entries per KB set to avoid unbounded growth
         if len(entries) > 50:

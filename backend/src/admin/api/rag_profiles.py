@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.ai.encryption import encrypt_api_key
 from common.auth.service import get_current_admin_user
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
@@ -63,6 +64,7 @@ class CrossEncoderSettings(BaseModel):
 
 class CrossEncoderSettingsSafe(BaseModel):
     """Cross-encoder settings without API key for responses."""
+
     backend: str | None = None
     model: str | None = None
     device: str | None = None
@@ -74,12 +76,8 @@ class CreateRagProfileRequest(BaseModel):
     description: str | None = Field(None, max_length=500)
     is_system_default: bool = False
     chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
-    semantic_cache: SemanticCacheSettings = Field(
-        default_factory=SemanticCacheSettings
-    )
-    cross_encoder: CrossEncoderSettings = Field(
-        default_factory=CrossEncoderSettings
-    )
+    semantic_cache: SemanticCacheSettings = Field(default_factory=SemanticCacheSettings)
+    cross_encoder: CrossEncoderSettings = Field(default_factory=CrossEncoderSettings)
 
 
 class UpdateRagProfileRequest(BaseModel):
@@ -113,12 +111,28 @@ class AssignRagProfileRequest(BaseModel):
 # ── Helpers ──
 
 
+def _encrypt_cross_encoder_api_key(api_key: str | None) -> str | None:
+    """Encrypt a cross-encoder API key for persistence.
+
+    ``None`` means no write was requested by the caller. A blank string is an
+    explicit clear operation for APIs that already expose the field.
+    """
+    if api_key is None:
+        return None
+    if not api_key.strip():
+        return ""
+    result = encrypt_api_key(api_key)
+    if not result.is_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Cross-encoder API key encryption is unavailable",
+        )
+    return result.value
+
+
 def _row_to_response(row: Any, applied_kb_count: int = 0) -> dict[str, Any]:
     """Convert a RagProfile DB row to API response dict."""
-    has_api_key = bool(
-        row.cross_encoder_api_key
-        and row.cross_encoder_api_key.strip()
-    )
+    has_api_key = bool(row.cross_encoder_api_key and row.cross_encoder_api_key.strip())
     return {
         "id": row.id,
         "name": row.name,
@@ -166,8 +180,9 @@ def _apply_update_to_row(row: Any, data: UpdateRagProfileRequest) -> None:
         row.cross_encoder_backend = data.cross_encoder.backend
         row.cross_encoder_model = data.cross_encoder.model
         row.cross_encoder_device = data.cross_encoder.device
-        if data.cross_encoder.api_key is not None:
-            row.cross_encoder_api_key = data.cross_encoder.api_key
+        encrypted_api_key = _encrypt_cross_encoder_api_key(data.cross_encoder.api_key)
+        if encrypted_api_key is not None:
+            row.cross_encoder_api_key = encrypted_api_key or None
 
 
 async def _get_applied_kb_counts(db: AsyncSession) -> dict[str, int]:
@@ -220,7 +235,9 @@ async def create_rag_profile(
         cross_encoder_backend=request.cross_encoder.backend,
         cross_encoder_model=request.cross_encoder.model,
         cross_encoder_device=request.cross_encoder.device,
-        cross_encoder_api_key=request.cross_encoder.api_key,
+        cross_encoder_api_key=(
+            _encrypt_cross_encoder_api_key(request.cross_encoder.api_key) or None
+        ),
     )
 
     db.add(profile)
@@ -248,9 +265,7 @@ async def list_rag_profiles(
 
     return {
         "success": True,
-        "data": [
-            _row_to_response(p, kb_counts.get(p.id, 0)) for p in profiles
-        ],
+        "data": [_row_to_response(p, kb_counts.get(p.id, 0)) for p in profiles],
     }
 
 
@@ -262,9 +277,7 @@ async def get_rag_profile(
     """Get a single RAG configuration profile."""
     from common.knowledge.rag_profile_models import RagProfile
 
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="RAG profile not found")
@@ -285,9 +298,7 @@ async def update_rag_profile(
     """Update a RAG configuration profile."""
     from common.knowledge.rag_profile_models import RagProfile
 
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="RAG profile not found")
@@ -320,9 +331,7 @@ async def delete_rag_profile(
     from common.knowledge.models import KnowledgeBase
     from common.knowledge.rag_profile_models import RagProfile
 
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="RAG profile not found")
@@ -360,9 +369,7 @@ async def set_default_rag_profile(
     """Set a profile as the system default."""
     from common.knowledge.rag_profile_models import RagProfile
 
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="RAG profile not found")
@@ -394,9 +401,7 @@ async def get_profile_knowledge_bases(
     from common.knowledge.rag_profile_models import RagProfile
 
     # Verify profile exists
-    result = await db.execute(
-        select(RagProfile).where(RagProfile.id == profile_id)
-    )
+    result = await db.execute(select(RagProfile).where(RagProfile.id == profile_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="RAG profile not found")
 

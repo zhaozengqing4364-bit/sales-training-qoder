@@ -42,7 +42,9 @@ class RealtimeFeedbackPacingState:
         signature = payload.get("last_action_signature")
         turn = payload.get("last_action_turn")
         return cls(
-            last_action_signature=signature if isinstance(signature, str) and signature else None,
+            last_action_signature=signature
+            if isinstance(signature, str) and signature
+            else None,
             last_action_turn=max(1, int(turn)) if isinstance(turn, int) else None,
         )
 
@@ -58,7 +60,9 @@ class RealtimeFeedbackDecision:
     score_context: dict[str, Any] | None = None
     duplicate_action_suppressed: bool = False
     action_signature: str | None = None
-    state: RealtimeFeedbackPacingState = field(default_factory=RealtimeFeedbackPacingState)
+    state: RealtimeFeedbackPacingState = field(
+        default_factory=RealtimeFeedbackPacingState
+    )
 
 
 class RealtimeFeedbackArbiter:
@@ -77,7 +81,9 @@ class RealtimeFeedbackArbiter:
     ) -> RealtimeFeedbackDecision:
         normalized_turn = self._normalize_turn_number(turn_number)
         prior = prior_state or RealtimeFeedbackPacingState()
-        detections = [item for item in (fuzzy_detections or []) if isinstance(item, dict)]
+        detections = [
+            item for item in (fuzzy_detections or []) if isinstance(item, dict)
+        ]
         suggestions = [
             tip.strip()
             for tip in (score_suggestions or [])

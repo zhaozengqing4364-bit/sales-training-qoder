@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import HistoryPage from "./page";
@@ -391,10 +391,11 @@ describe("HistoryPage", () => {
 
         const reportButton = await screen.findByRole("button", { name: "报告" }) as HTMLButtonElement;
         expect(reportButton.disabled).toBe(true);
+        expect(reportButton.closest("a")).toBeNull();
         expect(screen.getByText("进行中")).toBeTruthy();
     });
 
-    it("shows the shared learner help card with truthful role guidance", async () => {
+    it("omits the history help card while keeping the list available", async () => {
         getMyHistoryMock.mockResolvedValue({
             sessions: [
                 {
@@ -437,10 +438,10 @@ describe("HistoryPage", () => {
 
         render(<HistoryPage />);
 
-        expect(await screen.findByText("历史记录看不全时还能做什么？")).toBeTruthy();
-        expect(screen.getByText(/历史页只展示已同步的训练证据/)).toBeTruthy();
-        expect(screen.getByText(/如果历史列表为空，先完成一次可评估训练/)).toBeTruthy();
-        expect(screen.getByRole("link", { name: /开始训练/ }).getAttribute("href")).toBe("/training");
+        expect(await screen.findByText("销售演练")).toBeTruthy();
+        expect(screen.queryByText("历史记录看不全时还能做什么？")).toBeNull();
+        expect(screen.queryByText(/历史页只展示已同步的训练证据/)).toBeNull();
+        expect(screen.queryByText(/如果历史列表为空，先完成一次可评估训练/)).toBeNull();
         expect(screen.queryByText(/7 x 24/)).toBeNull();
     });
 
@@ -472,7 +473,7 @@ describe("HistoryPage", () => {
         expect(screen.getByRole("link", { name: /去训练大厅/ }).getAttribute("href")).toBe("/training");
     });
 
-    it("aggregates the top retry-eligible main issues and links to the latest report", async () => {
+    it("does not render the issue retry aggregation module even when sessions contain retry cues", async () => {
         getMyHistoryMock.mockResolvedValue({
             sessions: [
                 {
@@ -598,26 +599,15 @@ describe("HistoryPage", () => {
 
         render(<HistoryPage />);
 
-        const evidenceCard = await screen.findByTestId("history-issue-review-evidence_gap");
-        expect(within(evidenceCard).getByText("证据支撑复练")).toBeTruthy();
-        expect(within(evidenceCard).getByText("出现 2 次")).toBeTruthy();
-        expect(within(evidenceCard).getByText(/客户仍然没有听到量化证据。/)).toBeTruthy();
-        expect((within(evidenceCard).getByRole("link", { name: "最近报告" }) as HTMLAnchorElement).href).toContain(
-            "/practice/session-evidence-latest/report",
-        );
-
-        const retryHref = (within(evidenceCard).getByRole("link", { name: /按问题再练/ }) as HTMLAnchorElement)
-            .getAttribute("href") || "";
-        expect(retryHref).toContain("/training/sales?focus_intent=");
-        const focusIntent = JSON.parse(
-            decodeURIComponent(new URL(`http://localhost${retryHref}`).searchParams.get("focus_intent") || "{}"),
-        ) as { source_session_id?: string; main_issue?: { issue_type?: string } };
-        expect(focusIntent.source_session_id).toBe("session-evidence-latest");
-        expect(focusIntent.main_issue?.issue_type).toBe("evidence_gap");
-        expect(screen.queryByText("证据不足复练")).toBeNull();
+        expect(await screen.findByText(/客户仍然没有听到量化证据。/)).toBeTruthy();
+        expect(screen.queryByText("按问题复练")).toBeNull();
+        expect(screen.queryByText("最常卡住的 3 类问题")).toBeNull();
+        expect(screen.queryByTestId("history-issue-review-evidence_gap")).toBeNull();
+        expect(screen.queryByText("证据支撑复练")).toBeNull();
+        expect(screen.queryByText(/按问题再练/)).toBeNull();
     });
 
-    it("shows an issue aggregation fallback when history has no retry-eligible evidence", async () => {
+    it("does not show an issue aggregation fallback when history has no retry-eligible evidence", async () => {
         getMyHistoryMock.mockResolvedValue({
             sessions: [
                 {
@@ -660,10 +650,9 @@ describe("HistoryPage", () => {
 
         render(<HistoryPage />);
 
-        expect(await screen.findByText(/暂无可用于按问题复练的记录/)).toBeTruthy();
-        expect(screen.getByRole("link", { name: /去销售训练获取可复练证据/ }).getAttribute("href")).toBe(
-            "/training/sales",
-        );
+        expect(await screen.findByText("不可评估")).toBeTruthy();
+        expect(screen.queryByText(/暂无可用于按问题复练的记录/)).toBeNull();
+        expect(screen.queryByRole("link", { name: /去销售训练获取可复练证据/ })).toBeNull();
         expect(screen.queryByText(/按问题再练/)).toBeNull();
     });
 

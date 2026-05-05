@@ -53,7 +53,9 @@ def _resolve_tts_runtime_config() -> dict[str, object] | None:
         return None
 
 
-def _apply_edge_voice_config(service: object, runtime_config: dict[str, object] | None) -> None:
+def _apply_edge_voice_config(
+    service: object, runtime_config: dict[str, object] | None
+) -> None:
     """Apply runtime voice/rate/pitch to Edge TTS service if available."""
     if not runtime_config:
         return
@@ -166,8 +168,12 @@ class TTSServiceWithFallback:
             try:
                 from common.audio.aliyun_streaming_tts import AliyunStreamingTTS
 
-                api_key = self.runtime_config.get("api_key") if self.runtime_config else None
-                voice = self.runtime_config.get("voice") if self.runtime_config else None
+                api_key = (
+                    self.runtime_config.get("api_key") if self.runtime_config else None
+                )
+                voice = (
+                    self.runtime_config.get("voice") if self.runtime_config else None
+                )
                 self.primary_service = get_aliyun_tts_service(
                     api_key=api_key if isinstance(api_key, str) else None,
                     default_voice=voice if isinstance(voice, str) and voice else None,
@@ -316,7 +322,9 @@ class TTSServiceWithFallback:
                     self.metrics["primary_success"] += 1
                     self.metrics["last_provider"] = TTSProvider.ALIYUN.value
                     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-                    logger.debug(f"Aliyun TTS file synthesis succeeded in {elapsed_ms}ms")
+                    logger.debug(
+                        f"Aliyun TTS file synthesis succeeded in {elapsed_ms}ms"
+                    )
                     return result
                 self.metrics["primary_failures"] += 1
                 logger.warning(
@@ -336,7 +344,9 @@ class TTSServiceWithFallback:
                     self.metrics["fallback_success"] += 1
                     self.metrics["last_provider"] = TTSProvider.EDGE.value
                     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-                    logger.info(f"Fallback to Edge-TTS file synthesis succeeded in {elapsed_ms}ms")
+                    logger.info(
+                        f"Fallback to Edge-TTS file synthesis succeeded in {elapsed_ms}ms"
+                    )
                     return result
                 self.metrics["fallback_failures"] += 1
                 logger.warning(f"Edge-TTS file synthesis failed: {result.fallback}")

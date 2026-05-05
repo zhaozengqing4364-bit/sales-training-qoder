@@ -2,6 +2,7 @@
 Base WebSocket Handler with connection lifecycle management
 Constitution Principle I: No error popups, graceful degradation
 """
+
 import asyncio
 from collections.abc import Mapping
 from contextlib import suppress
@@ -51,7 +52,7 @@ class ConnectionManager:
         # Scenario -> Session ID -> WebSocket
         self.active_connections: dict[str, dict[str, WebSocket]] = {
             "presentation": {},
-            "sales": {}
+            "sales": {},
         }
         self._lock = asyncio.Lock()
 
@@ -65,18 +66,23 @@ class ConnectionManager:
         logger.info(f"WebSocket connected: scenario={scenario}, session={session_id}")
 
         # Send acknowledgment
-        await self.send_json(websocket, {
-            "type": "connected",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "data": {"session_id": session_id}
-        })
+        await self.send_json(
+            websocket,
+            {
+                "type": "connected",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {"session_id": session_id},
+            },
+        )
 
     async def disconnect(self, scenario: str, session_id: str):
         """Remove connection from tracking"""
         async with self._lock:
             if scenario in self.active_connections:
                 self.active_connections[scenario].pop(session_id, None)
-        logger.info(f"WebSocket disconnected: scenario={scenario}, session={session_id}")
+        logger.info(
+            f"WebSocket disconnected: scenario={scenario}, session={session_id}"
+        )
 
     async def send_json(self, websocket: WebSocket, message: dict):
         """Send JSON message safely"""
@@ -205,6 +211,7 @@ class BaseWebSocketHandler:
         try:
             # Verify token and extract trace_id
             from common.auth.service import verify_token
+
             payload = verify_token(resolved_token)
             set_trace_id(
                 normalize_trace_id(trace_id)
@@ -244,17 +251,20 @@ class BaseWebSocketHandler:
                     # Set timeout for receiving
                     data = await asyncio.wait_for(
                         websocket.receive_json(),
-                        timeout=30.0  # 30s timeout
+                        timeout=30.0,  # 30s timeout
                     )
                     await self._enqueue_message(data, websocket)
 
                 except TimeoutError:
                     # Send heartbeat
-                    await self.manager.send_json(websocket, {
-                        "type": "heartbeat",
-                        "timestamp": datetime.now(UTC).isoformat(),
-                        "data": {}
-                    })
+                    await self.manager.send_json(
+                        websocket,
+                        {
+                            "type": "heartbeat",
+                            "timestamp": datetime.now(UTC).isoformat(),
+                            "data": {},
+                        },
+                    )
 
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected normally: session={session_id}")
@@ -360,21 +370,30 @@ class BaseWebSocketHandler:
         # Base handler does nothing - subclasses implement specific logic
         pass
 
-    async def send_error(self, websocket: WebSocket, error_code: str, message: str, user_action: str | None = None):
+    async def send_error(
+        self,
+        websocket: WebSocket,
+        error_code: str,
+        message: str,
+        user_action: str | None = None,
+    ):
         """
         Send error message (not shown as popup to user)
         Constitution: All errors converted to graceful degradation
         """
-        await self.manager.send_json(websocket, {
-            "type": "error",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "data": {
-                "code": error_code,
-                "message": message,
-                "user_action": user_action,  # What client should do
-                "trace_id": get_trace_id()
-            }
-        })
+        await self.manager.send_json(
+            websocket,
+            {
+                "type": "error",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "code": error_code,
+                    "message": message,
+                    "user_action": user_action,  # What client should do
+                    "trace_id": get_trace_id(),
+                },
+            },
+        )
 
     def _create_state_snapshot(self) -> SessionStateSnapshot:
         """

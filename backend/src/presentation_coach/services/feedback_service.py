@@ -28,6 +28,7 @@ logger = get_logger(__name__)
 @dataclass
 class PresentationFeedback:
     """Complete feedback for a presentation check"""
+
     point_results: list[PointCoverageResult]
     forbidden_matches: list[ForbiddenWordMatch]
     should_interrupt: bool
@@ -50,7 +51,9 @@ class PresentationFeedbackRuleConfig:
     missing_points_preview_count: int = 2
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any] | None) -> "PresentationFeedbackRuleConfig":
+    def from_payload(
+        cls, payload: dict[str, Any] | None
+    ) -> "PresentationFeedbackRuleConfig":
         raw = payload if isinstance(payload, dict) else {}
         return cls(
             similarity_threshold=_to_float(
@@ -440,7 +443,9 @@ class PresentationFeedbackService:
         ):
             feedback_key = "missing_points"
             if dedup and dedup.should_send(feedback_key):
-                dedup.record_feedback("missing_point", f"Missing {len(missing_points)} points")
+                dedup.record_feedback(
+                    "missing_point", f"Missing {len(missing_points)} points"
+                )
                 missing_names = [
                     p.point_content[:20]
                     for p in missing_points[: rule_config.missing_points_preview_count]
@@ -474,11 +479,13 @@ class PresentationFeedbackService:
             point_id = f"point_{idx}"
             is_covered = point_id in tracker.covered_points
 
-            updates.append({
-                "point_id": f"{session_id}:{idx}",
-                "is_covered": is_covered,
-                "content": point,
-            })
+            updates.append(
+                {
+                    "point_id": f"{session_id}:{idx}",
+                    "is_covered": is_covered,
+                    "content": point,
+                }
+            )
 
         return updates
 

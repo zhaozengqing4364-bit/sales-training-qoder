@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VaguenessIssue:
     """Represents a vague phrase detected in user speech"""
+
     text: str  # The vague phrase
     suggestion: str  # How to be more specific
     severity: str  # "low", "medium", "high"
@@ -40,21 +41,48 @@ class VaguenessDetector:
     def __init__(self):
         # Patterns organized by severity
         self.high_severity_patterns = [
-            (r"\b(um+|uh+|er+)\b", "You're using filler words. Pause and think before speaking."),
-            (r"\bI (think|guess|suppose|believe)\b", "Be more confident. Use 'I know' or state facts directly."),
-            (r"\b(maybe|possibly|perhaps|might)\b", "Avoid uncertainty. Be definite in your response."),
+            (
+                r"\b(um+|uh+|er+)\b",
+                "You're using filler words. Pause and think before speaking.",
+            ),
+            (
+                r"\bI (think|guess|suppose|believe)\b",
+                "Be more confident. Use 'I know' or state facts directly.",
+            ),
+            (
+                r"\b(maybe|possibly|perhaps|might)\b",
+                "Avoid uncertainty. Be definite in your response.",
+            ),
         ]
 
         self.medium_severity_patterns = [
-            (r"\b(kind of|sort of|type of)\b", "Be specific. What exactly do you mean?"),
-            (r"\b(stuff|things|something|anything)\b", "Use concrete examples and specifics."),
-            (r"\b(a little bit|slightly|somewhat)\b", "Either it is or it isn't. Be clear."),
+            (
+                r"\b(kind of|sort of|type of)\b",
+                "Be specific. What exactly do you mean?",
+            ),
+            (
+                r"\b(stuff|things|something|anything)\b",
+                "Use concrete examples and specifics.",
+            ),
+            (
+                r"\b(a little bit|slightly|somewhat)\b",
+                "Either it is or it isn't. Be clear.",
+            ),
         ]
 
         self.low_severity_patterns = [
-            (r"\b(basically|actually|really|honestly)\b", "These add no value. Get straight to the point."),
-            (r"\b(just|only|simply)\b", "Don't minimize. State clearly what you're offering."),
-            (r"\b(basically|essentially)\b", "Skip the setup. Say what you mean directly."),
+            (
+                r"\b(basically|actually|really|honestly)\b",
+                "These add no value. Get straight to the point.",
+            ),
+            (
+                r"\b(just|only|simply)\b",
+                "Don't minimize. State clearly what you're offering.",
+            ),
+            (
+                r"\b(basically|essentially)\b",
+                "Skip the setup. Say what you mean directly.",
+            ),
         ]
 
         # Compile all patterns for performance
@@ -90,31 +118,31 @@ class VaguenessDetector:
             for pattern, suggestion in self.high_severity_compiled:
                 matches = pattern.finditer(text)
                 for match in matches:
-                    issues.append(VaguenessIssue(
-                        text=match.group(),
-                        suggestion=suggestion,
-                        severity="high"
-                    ))
+                    issues.append(
+                        VaguenessIssue(
+                            text=match.group(), suggestion=suggestion, severity="high"
+                        )
+                    )
 
             # Check medium severity
             for pattern, suggestion in self.medium_severity_compiled:
                 matches = pattern.finditer(text)
                 for match in matches:
-                    issues.append(VaguenessIssue(
-                        text=match.group(),
-                        suggestion=suggestion,
-                        severity="medium"
-                    ))
+                    issues.append(
+                        VaguenessIssue(
+                            text=match.group(), suggestion=suggestion, severity="medium"
+                        )
+                    )
 
             # Check low severity
             for pattern, suggestion in self.low_severity_compiled:
                 matches = pattern.finditer(text)
                 for match in matches:
-                    issues.append(VaguenessIssue(
-                        text=match.group(),
-                        suggestion=suggestion,
-                        severity="low"
-                    ))
+                    issues.append(
+                        VaguenessIssue(
+                            text=match.group(), suggestion=suggestion, severity="low"
+                        )
+                    )
 
             if issues:
                 logger.info(
@@ -122,16 +150,14 @@ class VaguenessDetector:
                     extra={
                         "issue_count": len(issues),
                         "high_severity": sum(1 for i in issues if i.severity == "high"),
-                    }
+                    },
                 )
 
             return Result(value=issues)
 
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(
-                "Failed to detect vagueness",
-                extra={"error": str(e)},
-                exc_info=True
+                "Failed to detect vagueness", extra={"error": str(e)}, exc_info=True
             )
             # On error, return empty list (graceful degradation)
             return Result(value=[])

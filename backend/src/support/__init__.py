@@ -1,4 +1,3 @@
 """
 Support domain package.
 """
-

@@ -310,15 +310,18 @@ class PresentationEventEmitter:
     ) -> bool:
         emitted = False
         if replace_existing:
-            emitted = await self._emit(
-                {
-                    "type": "points_reset",
-                    "timestamp": self._utc_now_iso(),
-                    "trace_id": get_trace_id(),
-                    "data": {"current_page": current_page},
-                },
-                websocket=websocket,
-            ) or emitted
+            emitted = (
+                await self._emit(
+                    {
+                        "type": "points_reset",
+                        "timestamp": self._utc_now_iso(),
+                        "trace_id": get_trace_id(),
+                        "data": {"current_page": current_page},
+                    },
+                    websocket=websocket,
+                )
+                or emitted
+            )
 
         for point in point_results:
             emitted = (

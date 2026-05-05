@@ -492,10 +492,6 @@ export default function AgentPersonaSelectPage() {
                 </div>
             )}
 
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
-                知识库绑定已迁移到角色中心。请在角色页选择并维护知识库，当前页不再编辑智能体级知识库。
-            </div>
-
             <div>
                 <h2 className="text-lg font-bold text-slate-800 mb-3">语音模式</h2>
                 <p className="text-sm text-slate-500 mb-4">

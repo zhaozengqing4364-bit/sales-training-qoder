@@ -235,7 +235,10 @@ def _normalize_realtime_playback_rate(value: Any, default: float = 1.0) -> float
     if parsed is None:
         parsed = default
 
-    bounded = max(min(REALTIME_PLAYBACK_RATE_OPTIONS), min(max(REALTIME_PLAYBACK_RATE_OPTIONS), parsed))
+    bounded = max(
+        min(REALTIME_PLAYBACK_RATE_OPTIONS),
+        min(max(REALTIME_PLAYBACK_RATE_OPTIONS), parsed),
+    )
     return _quantize_playback_rate(bounded)
 
 
@@ -609,7 +612,11 @@ class VoiceRuntimePolicyService:
         persona_policy = resolve_persona_policy(persona)
         customer_pressure = _as_dict(persona_policy.get("customer_pressure"))
         policy["playback_rate"] = _resolve_persona_playback_rate(persona)
-        if persona is not None and isinstance(persona.tts_config, dict) and persona.tts_config.get("rate"):
+        if (
+            persona is not None
+            and isinstance(persona.tts_config, dict)
+            and persona.tts_config.get("rate")
+        ):
             source["playback_rate_source"] = "persona_tts_config"
 
         if runtime_profile_override:
@@ -695,9 +702,7 @@ class VoiceRuntimePolicyService:
 
         if persona is not None:
             raw_persona_tool_policy = _as_dict(persona_policy.get("tool_policy"))
-            persona_tool_policy = self._normalize_tool_policy(
-                raw_persona_tool_policy
-            )
+            persona_tool_policy = self._normalize_tool_policy(raw_persona_tool_policy)
             policy["tool_policy"] = {
                 **policy["tool_policy"],
                 **persona_tool_policy,
@@ -951,9 +956,11 @@ class VoiceRuntimePolicyService:
         if network_access_mode == "off":
             enable_web_search = False
 
-        kb_lock_mode = str(
-            merged.get("kb_lock_mode", DEFAULT_TOOL_POLICY["kb_lock_mode"])
-        ).strip().lower()
+        kb_lock_mode = (
+            str(merged.get("kb_lock_mode", DEFAULT_TOOL_POLICY["kb_lock_mode"]))
+            .strip()
+            .lower()
+        )
         if kb_lock_mode not in ALLOWED_KB_LOCK_MODES:
             kb_lock_mode = str(DEFAULT_TOOL_POLICY["kb_lock_mode"])
 

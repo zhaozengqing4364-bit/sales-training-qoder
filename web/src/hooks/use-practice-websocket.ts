@@ -211,7 +211,8 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         };
         setState(prev => {
             const nextMessages = [...prev.messages, newMsg];
-            const { knowledgeAnswerDiagnostics: _ignoredKnowledgeDiagnostics, ...restExtraState } = extraState || {};
+            const restExtraState = { ...(extraState || {}) };
+            delete restExtraState.knowledgeAnswerDiagnostics;
             return {
                 ...prev,
                 ...restExtraState,

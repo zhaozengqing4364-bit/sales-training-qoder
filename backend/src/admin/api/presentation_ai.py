@@ -115,9 +115,7 @@ async def preview_scope_policy(
     service = PresentationAIPolicyService(db)
 
     scenario_id = payload.scope_id if payload.scope_type == "scenario" else None
-    presentation_id = (
-        payload.scope_id if payload.scope_type == "presentation" else None
-    )
+    presentation_id = payload.scope_id if payload.scope_type == "presentation" else None
 
     data = await service.preview_policy_decision(
         transcript=payload.transcript,

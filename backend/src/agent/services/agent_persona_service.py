@@ -8,6 +8,7 @@ References:
 - Design: Section 15 (AgentPersona)
 - API Contract: docs/api-contract/personas.md
 """
+
 from __future__ import annotations
 
 from sqlalchemy import func, select
@@ -36,9 +37,7 @@ class AgentPersonaService:
         self.db = db
 
     async def add_persona(
-        self,
-        agent_id: str,
-        data: CreateAgentPersonaRequest
+        self, agent_id: str, data: CreateAgentPersonaRequest
     ) -> Result[AgentPersona]:
         """Add a Persona to an Agent - R4.1"""
         # Check agent exists
@@ -64,7 +63,7 @@ class AgentPersonaService:
         # Check if already linked
         existing_stmt = select(AgentPersona).where(
             AgentPersona.agent_id == agent_id,
-            AgentPersona.persona_id == data.persona_id
+            AgentPersona.persona_id == data.persona_id,
         )
         existing_result = await self.db.execute(existing_stmt)
         if existing_result.scalar_one_or_none():
@@ -80,7 +79,7 @@ class AgentPersonaService:
                 persona_id=data.persona_id,
                 display_order=data.display_order,
                 is_default=data.is_default,
-                override_config=data.override_config
+                override_config=data.override_config,
             )
 
             self.db.add(link)
@@ -95,8 +94,7 @@ class AgentPersonaService:
             return Result.fail(f"[LINK_FAILED] {str(e)}")
 
     async def list_personas(
-        self,
-        agent_id: str
+        self, agent_id: str
     ) -> Result[list[AgentPersonaWithDetails]]:
         """Get all Personas linked to an Agent - R4.2"""
         # Check agent exists
@@ -176,10 +174,7 @@ class AgentPersonaService:
         return Result.ok(items)
 
     async def update_link(
-        self,
-        agent_id: str,
-        persona_id: str,
-        data: UpdateAgentPersonaRequest
+        self, agent_id: str, persona_id: str, data: UpdateAgentPersonaRequest
     ) -> Result[AgentPersona]:
         """Update Agent-Persona association - R4.3"""
         agent_stmt = select(Agent).where(Agent.id == agent_id)
@@ -192,8 +187,7 @@ class AgentPersonaService:
             return Result.fail("[AGENT_ARCHIVED]")
 
         stmt = select(AgentPersona).where(
-            AgentPersona.agent_id == agent_id,
-            AgentPersona.persona_id == persona_id
+            AgentPersona.agent_id == agent_id, AgentPersona.persona_id == persona_id
         )
         result = await self.db.execute(stmt)
         link = result.scalar_one_or_none()
@@ -224,15 +218,10 @@ class AgentPersonaService:
         logger.info(f"Updated link: Agent {agent_id} - Persona {persona_id}")
         return Result.ok(link)
 
-    async def remove_persona(
-        self,
-        agent_id: str,
-        persona_id: str
-    ) -> Result[bool]:
+    async def remove_persona(self, agent_id: str, persona_id: str) -> Result[bool]:
         """Remove Persona from Agent - R4.4"""
         stmt = select(AgentPersona).where(
-            AgentPersona.agent_id == agent_id,
-            AgentPersona.persona_id == persona_id
+            AgentPersona.agent_id == agent_id, AgentPersona.persona_id == persona_id
         )
         result = await self.db.execute(stmt)
         link = result.scalar_one_or_none()
@@ -247,14 +236,11 @@ class AgentPersonaService:
         return Result.ok(True)
 
     async def _clear_default(
-        self,
-        agent_id: str,
-        exclude_persona_id: str | None = None
+        self, agent_id: str, exclude_persona_id: str | None = None
     ):
         """Clear is_default flag for all personas of an agent"""
         stmt = select(AgentPersona).where(
-            AgentPersona.agent_id == agent_id,
-            AgentPersona.is_default.is_(True)
+            AgentPersona.agent_id == agent_id, AgentPersona.is_default.is_(True)
         )
         if exclude_persona_id:
             stmt = stmt.where(AgentPersona.persona_id != exclude_persona_id)

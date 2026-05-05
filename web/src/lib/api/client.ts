@@ -9,11 +9,9 @@ import {
     DashboardStats,
     GrowthDashboardResponse,
     SessionItem,
-    PracticeSessionRuntime,
     Recommendation,
     TrainingCategory,
     Agent,
-    Persona,
     AnalyticsOverview,
     AnalyticsTrends,
     AnalyticsAgents,
@@ -70,31 +68,36 @@ import {
     RealtimeEvaluationFeedback,
     ScenarioSummary,
     SalesPersonaOption,
-    ReplayData,
-    ReplayMessagesResponse,
-    HighlightsResponse,
-    HighlightReviewItemPayload,
-    HighlightReviewResponse,
-    HighlightReviewShareCreateResponse,
+    BusinessRuleConfigRecord,
+    BusinessRuleHistoryResponse,
+    BusinessRulePreviewResponse,
+    BusinessRuleValidationResponse,
+    AdminGovernancePermissionsResponse,
+    AdminGovernanceSettingsBacklogResponse,
+    AdminSettingsConfigRecord,
+    AdminSettingsPreviewResponse,
+    AdminSettingsSurface,
+    AdminSettingsSurfaceResponse,
+    ScoringRulesetCreateRequest,
+    ScoringRulesetDryRunResponse,
+    ScoringRulesetAuditLogResponse,
+    ScoringRulesetListResponse,
+    ScoringRulesetRecord,
+    ScoringRulesetScenarioType,
+    ScoringRulesetUpdateRequest,
     SalesCombinationPreviewResponse,
     SalesCombinationRuleMutationResponse,
     SalesCombinationRuleSet,
     SalesCombinationRuleSetListResponse,
     SalesCombinationRuleValidationResult,
-    SessionStats,
-    PracticeSessionReport,
     HistoryListResponse,
     HistoryStatistics,
     HistoryTrendPoint,
-    KnowledgeCheckDiagnostics,
     OpenAnalyticsDashboard,
     OpenScoreDistribution,
     SupportRuntimeFaultsResponse,
     SupportRuntimeOverview,
     SessionStatus,
-    SessionLifecycleAction,
-    SessionLifecycleRequest,
-    SessionLifecycleResponse,
     RetryFocusIntent,
     PresentationAIPolicyScopeResponse,
     PresentationAIPolicyPreviewResponse,
@@ -406,6 +409,8 @@ type HistoryApiItem = {
     total_duration_seconds?: number;
     start_time?: string;
     status?: string;
+    report_status?: string | null;
+    report_generated_at?: string | null;
     effectiveness_snapshot?: Record<string, unknown> | null;
     evaluable?: boolean | null;
     not_evaluable_reason?: string | null;
@@ -1229,13 +1234,6 @@ type ApiFetchOptions = RequestInit & {
     skipSessionExpiredHandling?: boolean;
 };
 
-type AdminTTSPreviewRequest = {
-    text: string;
-    voice?: string;
-    rate?: string;
-    volume?: string;
-    pitch?: string;
-};
 
 function createHeaders(
     existingHeaders: HeadersInit | undefined,
@@ -1785,6 +1783,8 @@ export const api = {
                 duration_seconds: Number(item.duration_seconds || item.total_duration_seconds || 0),
                 start_time: typeof item.start_time === "string" ? item.start_time : new Date(0).toISOString(),
                 status: normalizeSessionStatus(item.status),
+                report_status: typeof item.report_status === "string" ? item.report_status : null,
+                report_generated_at: typeof item.report_generated_at === "string" ? item.report_generated_at : null,
                 user_id: typeof item.user_id === "string" ? item.user_id : undefined,
                 username: typeof item.username === "string"
                     ? item.username
@@ -2251,6 +2251,211 @@ export const api = {
             );
         },
 
+        getBusinessRuleHistory: async (configKey: string) => {
+            return apiFetch<BusinessRuleHistoryResponse>(
+                `/admin/business-rules/${encodeURIComponent(configKey)}`,
+            );
+        },
+
+        saveBusinessRuleDraft: async (
+            configKey: string,
+            value: Record<string, unknown>,
+            reason?: string,
+        ) => {
+            return apiFetch<BusinessRuleConfigRecord>(
+                `/admin/business-rules/${encodeURIComponent(configKey)}/drafts`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ value, reason }),
+                },
+            );
+        },
+
+        validateBusinessRule: async (
+            configKey: string,
+            value: Record<string, unknown>,
+            reason?: string,
+        ) => {
+            return apiFetch<BusinessRuleValidationResponse>(
+                `/admin/business-rules/${encodeURIComponent(configKey)}/validate`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ value, reason }),
+                },
+            );
+        },
+
+        previewBusinessRule: async (
+            configKey: string,
+            value: Record<string, unknown>,
+            reason?: string,
+        ) => {
+            return apiFetch<BusinessRulePreviewResponse>(
+                `/admin/business-rules/${encodeURIComponent(configKey)}/preview`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ value, reason }),
+                },
+            );
+        },
+
+        publishBusinessRule: async (
+            configKey: string,
+            configId: string,
+            reason: string,
+        ) => {
+            return apiFetch<BusinessRuleConfigRecord>(
+                `/admin/business-rules/${encodeURIComponent(configKey)}/publish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ config_id: configId, reason }),
+                },
+            );
+        },
+
+        rollbackBusinessRule: async (
+            configKey: string,
+            targetConfigId: string,
+            reason: string,
+        ) => {
+            return apiFetch<BusinessRuleConfigRecord>(
+                `/admin/business-rules/${encodeURIComponent(configKey)}/rollback`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ target_config_id: targetConfigId, reason }),
+                },
+            );
+        },
+
+        listScoringRulesets: async (scenarioType?: ScoringRulesetScenarioType) => {
+            const searchParams = new URLSearchParams();
+            if (scenarioType) searchParams.set("scenario_type", scenarioType);
+            const query = searchParams.toString();
+            return apiFetch<ScoringRulesetListResponse>(
+                `/evaluation/admin/scoring-rulesets${query ? `?${query}` : ""}`,
+            );
+        },
+
+        getActiveScoringRuleset: async (scenarioType: ScoringRulesetScenarioType) => {
+            const searchParams = new URLSearchParams({ scenario_type: scenarioType });
+            return apiFetch<ScoringRulesetRecord>(
+                `/evaluation/admin/scoring-rulesets/active?${searchParams}`,
+            );
+        },
+
+        createScoringRuleset: async (data: ScoringRulesetCreateRequest) => {
+            return apiFetch<ScoringRulesetRecord>("/evaluation/admin/scoring-rulesets", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updateScoringRuleset: async (rulesetId: string, data: ScoringRulesetUpdateRequest) => {
+            return apiFetch<ScoringRulesetRecord>(
+                `/evaluation/admin/scoring-rulesets/${encodeURIComponent(rulesetId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(data),
+                },
+            );
+        },
+
+        publishScoringRuleset: async (rulesetId: string, reason: string) => {
+            return apiFetch<ScoringRulesetRecord>(
+                `/evaluation/admin/scoring-rulesets/${encodeURIComponent(rulesetId)}/publish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ reason }),
+                },
+            );
+        },
+
+        rollbackScoringRuleset: async (rulesetId: string, reason: string) => {
+            return apiFetch<ScoringRulesetRecord>(
+                `/evaluation/admin/scoring-rulesets/${encodeURIComponent(rulesetId)}/rollback`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ reason }),
+                },
+            );
+        },
+
+        dryRunScoringRuleset: async (payload: {
+            session_id: string;
+            candidate_ruleset_id?: string;
+            candidate_definition?: Record<string, unknown>;
+        }) => {
+            return apiFetch<ScoringRulesetDryRunResponse>(
+                "/evaluation/admin/scoring-rulesets/dry-run",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listScoringRulesetAuditLogs: async () => {
+            return apiFetch<ScoringRulesetAuditLogResponse>(
+                "/evaluation/admin/scoring-rulesets/audit-logs",
+            );
+        },
+
+        getGovernancePermissionsMatrix: async () => {
+            return apiFetch<AdminGovernancePermissionsResponse>("/admin/governance/permissions-matrix");
+        },
+
+        getGovernanceSettingsBacklog: async () => {
+            return apiFetch<AdminGovernanceSettingsBacklogResponse>("/admin/governance/settings-backlog");
+        },
+
+        getAdminSettingsSurface: async (surface: AdminSettingsSurface) => {
+            return apiFetch<AdminSettingsSurfaceResponse>(`/admin/settings/${surface}`);
+        },
+
+        saveAdminSettingsDraft: async (
+            surface: AdminSettingsSurface,
+            value: Record<string, unknown>,
+            reason?: string,
+        ) => {
+            return apiFetch<AdminSettingsConfigRecord>(`/admin/settings/${surface}/drafts`, {
+                method: "POST",
+                body: JSON.stringify({ value, reason }),
+            });
+        },
+
+        previewAdminSettings: async (
+            surface: AdminSettingsSurface,
+            value: Record<string, unknown>,
+            reason?: string,
+        ) => {
+            return apiFetch<AdminSettingsPreviewResponse>(`/admin/settings/${surface}/preview`, {
+                method: "POST",
+                body: JSON.stringify({ value, reason }),
+            });
+        },
+
+        publishAdminSettings: async (
+            surface: AdminSettingsSurface,
+            configId: string,
+            reason: string,
+        ) => {
+            return apiFetch<AdminSettingsConfigRecord>(`/admin/settings/${surface}/publish`, {
+                method: "POST",
+                body: JSON.stringify({ config_id: configId, reason }),
+            });
+        },
+
+        rollbackAdminSettings: async (
+            surface: AdminSettingsSurface,
+            targetConfigId: string,
+            reason: string,
+        ) => {
+            return apiFetch<AdminSettingsConfigRecord>(`/admin/settings/${surface}/rollback`, {
+                method: "POST",
+                body: JSON.stringify({ target_config_id: targetConfigId, reason }),
+            });
+        },
+
         // Training Records
         getTrainingRecords: async (params: {
             search?: string;
@@ -2593,29 +2798,25 @@ export const api = {
 
         // ── RAG Profile Management ──
         listRagProfiles: async () => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile[] }>("/admin/rag-profiles");
-            return result.data;
+            return apiFetch<RagProfile[]>("/admin/rag-profiles");
         },
 
         getRagProfile: async (id: string) => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile }>(`/admin/rag-profiles/${id}`);
-            return result.data;
+            return apiFetch<RagProfile>(`/admin/rag-profiles/${id}`);
         },
 
         createRagProfile: async (data: CreateRagProfileRequest) => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile }>("/admin/rag-profiles", {
+            return apiFetch<RagProfile>("/admin/rag-profiles", {
                 method: "POST",
                 body: JSON.stringify(data),
             });
-            return result.data;
         },
 
         updateRagProfile: async (id: string, data: UpdateRagProfileRequest) => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile }>(`/admin/rag-profiles/${id}`, {
+            return apiFetch<RagProfile>(`/admin/rag-profiles/${id}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
-            return result.data;
         },
 
         deleteRagProfile: async (id: string) => {
@@ -2625,18 +2826,16 @@ export const api = {
         },
 
         setRagProfileDefault: async (id: string) => {
-            const result = await apiFetch<{ success: boolean; data: RagProfile }>(
+            return apiFetch<RagProfile>(
                 `/admin/rag-profiles/${id}/set-default`,
                 { method: "POST" },
             );
-            return result.data;
         },
 
         getRagProfileKnowledgeBases: async (id: string) => {
-            const result = await apiFetch<{ success: boolean; data: { id: string; name: string; category: string; document_count: number; status: string }[] }>(
+            return apiFetch<{ id: string; name: string; category: string; document_count: number; status: string }[]>(
                 `/admin/rag-profiles/${id}/knowledge-bases`,
             );
-            return result.data;
         },
 
         assignRagProfileToKb: async (kbId: string, ragProfileId: string | null) => {
@@ -2810,24 +3009,22 @@ export const api = {
         // ─── Knowledge Chunking Presets CRUD ───
 
         getKnowledgeChunkingPresets: async (versionId: string) => {
-            const result = await apiFetch<{ success: boolean; data: { items: AdminKnowledgeChunkingPreset[]; total: number } }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`);
-            return result.data?.items || [];
+            const result = await apiFetch<{ items: AdminKnowledgeChunkingPreset[]; total: number }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`);
+            return result.items || [];
         },
 
         createKnowledgeChunkingPreset: async (versionId: string, data: CreateKnowledgeChunkingPresetRequest) => {
-            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`, {
+            return apiFetch<AdminKnowledgeChunkingPreset>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`, {
                 method: "POST",
                 body: JSON.stringify(data),
             });
-            return result.data;
         },
 
         updateKnowledgeChunkingPreset: async (versionId: string, presetId: string, data: UpdateKnowledgeChunkingPresetRequest) => {
-            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}`, {
+            return apiFetch<AdminKnowledgeChunkingPreset>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
-            return result.data;
         },
 
         deleteKnowledgeChunkingPreset: async (versionId: string, presetId: string) => {
@@ -2837,10 +3034,9 @@ export const api = {
         },
 
         setDefaultChunkingPreset: async (versionId: string, presetId: string) => {
-            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}/set-default`, {
+            return apiFetch<AdminKnowledgeChunkingPreset>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}/set-default`, {
                 method: "POST",
             });
-            return result.data;
         },
 
         // ─── Knowledge Answerability Profiles CRUD ───

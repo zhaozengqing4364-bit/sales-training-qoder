@@ -69,9 +69,7 @@ async def _handle_presentation_websocket(
     )
 
     resolve_runtime = resolve_runtime or _resolve_presentation_runtime
-    is_kb_lock_unbound = (
-        is_kb_lock_unbound or _is_presentation_kb_lock_unbound_session
-    )
+    is_kb_lock_unbound = is_kb_lock_unbound or _is_presentation_kb_lock_unbound_session
     resolve_owner_id = resolve_owner_id or _resolve_presentation_session_owner_id
     is_admin_user_id = is_admin_user_id or _is_admin_user_id
 

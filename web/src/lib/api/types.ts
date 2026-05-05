@@ -159,6 +159,8 @@ export interface SessionItem {
     duration_seconds: number;
     start_time: string;
     status: SessionStatus;
+    report_status?: "pending" | "processing" | "completed" | "failed" | string | null;
+    report_generated_at?: string | null;
     user_id?: string;
     username?: string;
     session_id?: string;
@@ -250,6 +252,233 @@ export interface BusinessRuleAuditEntry {
     reason?: string | null;
     trace_id?: string | null;
     created_at?: string | null;
+}
+
+export type BusinessRuleConfigStatus = "draft" | "published" | "archived" | "disabled" | string;
+
+export interface BusinessRuleDefinition {
+    key: string;
+    domain: string;
+    schema_version: string;
+    default_value: Record<string, unknown>;
+    type: string;
+    range_or_allowlist: Record<string, unknown>;
+    read_path: string;
+    admin_entry: string;
+    permission: string;
+    audit_policy: string;
+    fallback_policy: string;
+    rollback_policy: string;
+}
+
+export interface BusinessRuleConfigRecord {
+    id: string;
+    domain: string;
+    key: string;
+    schema_version: string;
+    status: BusinessRuleConfigStatus;
+    version: number;
+    value: Record<string, unknown>;
+    default_value: Record<string, unknown>;
+    type: string;
+    range_or_allowlist: Record<string, unknown>;
+    read_path: string;
+    admin_entry: string;
+    permission: string;
+    audit_policy: string;
+    fallback_policy: string;
+    rollback_policy: string;
+    enabled: boolean;
+    validation_errors?: Array<Record<string, unknown>> | null;
+    created_by?: string | null;
+    updated_by?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+}
+
+export interface BusinessRuleHistoryResponse {
+    definition: BusinessRuleDefinition;
+    items: BusinessRuleConfigRecord[];
+    total: number;
+    audit_logs?: BusinessRuleAuditEntry[];
+}
+
+export interface BusinessRuleValidationResponse {
+    valid: boolean;
+    normalized_value: Record<string, unknown>;
+}
+
+export interface BusinessRulePreviewResponse {
+    valid: boolean;
+    summary: Record<string, unknown>;
+    active_version?: number | null;
+    active_config_id?: string | null;
+}
+
+export type ScoringRulesetScenarioType = "sales" | "presentation";
+
+export type ScoringRulesetStatus = "draft" | "published" | "archived" | string;
+
+export interface ScoringRulesetRecord {
+    ruleset_id: string | null;
+    scenario_type: ScoringRulesetScenarioType;
+    version: string;
+    display_name: string;
+    description?: string | null;
+    status: ScoringRulesetStatus;
+    definition: Record<string, unknown>;
+    is_active: boolean;
+    source: "default" | "admin" | string;
+    created_at?: string | null;
+    updated_at?: string | null;
+    published_at?: string | null;
+    actor_id?: string | null;
+}
+
+export interface ScoringRulesetListResponse {
+    items: ScoringRulesetRecord[];
+    total: number;
+    actor_id?: string | null;
+}
+
+export interface ScoringRulesetCreateRequest {
+    scenario_type: ScoringRulesetScenarioType;
+    version: string;
+    display_name: string;
+    description?: string | null;
+    definition: Record<string, unknown>;
+}
+
+export interface ScoringRulesetUpdateRequest {
+    display_name?: string;
+    description?: string | null;
+    definition?: Record<string, unknown>;
+}
+
+export interface ScoringRulesetDryRunResponse {
+    session_id: string;
+    mode: "dry_run" | string;
+    mutates_history: boolean;
+    baseline: Record<string, unknown>;
+    candidate: Record<string, unknown>;
+    delta: Record<string, unknown>;
+    actor_id?: string | null;
+}
+
+export interface ScoringRulesetAuditEntry {
+    id: string;
+    action: string;
+    actor_id?: string | null;
+    actor_role?: string | null;
+    reason?: string | null;
+    trace_id?: string | null;
+    before?: Record<string, unknown> | null;
+    after?: Record<string, unknown> | null;
+    created_at?: string | null;
+}
+
+export interface ScoringRulesetAuditLogResponse {
+    items: ScoringRulesetAuditEntry[];
+    total: number;
+}
+
+export interface AdminPermissionMatrixEntry {
+    route_family: string;
+    auth_surface: string;
+    routes: string[];
+    allowed_roles: string[];
+    non_admin_deny_path: string;
+    current_evidence: string[];
+    risk: "high" | "medium" | "baseline" | string;
+    priority: "fix-first" | "watch" | "baseline" | string;
+    rationale: string;
+}
+
+export interface AdminGovernancePermissionsResponse {
+    items: AdminPermissionMatrixEntry[];
+    total: number;
+    fix_first_route_families: string[];
+    positive_control_route_families: string[];
+    support_log_redaction: {
+        visible_fields: string[];
+        diagnostic_allowlist: string[];
+        backend_only_fields: string[];
+        guidance: string;
+        quality_event_prerequisite: string;
+    };
+}
+
+export interface AdminGovernanceSettingsBacklogItem {
+    surface: string;
+    label: string;
+    status: string;
+    missing_capabilities: string[];
+    fallback_policy: string;
+}
+
+export interface AdminGovernanceSettingsBacklogResponse {
+    items: AdminGovernanceSettingsBacklogItem[];
+    total: number;
+    policy: string;
+}
+
+export type AdminSettingsSurface = "general" | "security" | "notifications";
+
+export interface AdminSettingsAuditEntry {
+    id: string;
+    config_id?: string | null;
+    action: string;
+    actor_id?: string | null;
+    before_version?: number | null;
+    after_version?: number | null;
+    reason?: string | null;
+    trace_id?: string | null;
+    created_at?: string | null;
+}
+
+export interface AdminSettingsConfigRecord {
+    id: string;
+    key: string;
+    status: string;
+    version: number;
+    value: Record<string, unknown>;
+    default_value: Record<string, unknown>;
+    enabled: boolean;
+    validation_errors: unknown[];
+    created_by?: string | null;
+    updated_by?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+}
+
+export interface AdminSettingsSurfaceResponse {
+    surface: AdminSettingsSurface;
+    key: string;
+    definition: BusinessRuleDefinition;
+    active: {
+        value: Record<string, unknown>;
+        source: string;
+        config_id?: string | null;
+        version?: number | null;
+        status?: string | null;
+        fallback_reason?: string | null;
+    };
+    drafts: AdminSettingsConfigRecord[];
+    history: AdminSettingsConfigRecord[];
+    audit_logs?: AdminSettingsAuditEntry[];
+    permissions: {
+        can_view: boolean;
+        can_mutate: boolean;
+        can_publish: boolean;
+        permission: string;
+    };
+}
+
+export interface AdminSettingsPreviewResponse {
+    valid: boolean;
+    summary: Record<string, unknown>;
+    active_version?: number | null;
+    active_config_id?: string | null;
 }
 
 export interface SalesCombinationRuleSetListResponse {

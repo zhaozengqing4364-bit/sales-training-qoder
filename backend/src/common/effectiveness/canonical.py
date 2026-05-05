@@ -316,7 +316,9 @@ _SURFACE_READER_PLANS: dict[tuple[str, CanonicalScenarioType], SurfaceReaderPlan
 }
 
 
-def _normalize_scenario_type(value: str | CanonicalScenarioType) -> CanonicalScenarioType:
+def _normalize_scenario_type(
+    value: str | CanonicalScenarioType,
+) -> CanonicalScenarioType:
     normalized = str(value or "sales").strip().lower()
     return "presentation" if normalized == "presentation" else "sales"
 
@@ -376,7 +378,6 @@ def get_canonical_dimension_definitions(
     return _PRESENTATION_DIMENSIONS
 
 
-
 def get_surface_reader_plan(
     *,
     surface_id: str,
@@ -391,11 +392,11 @@ def get_surface_reader_plan(
         ) from exc
 
 
-
 def _resolve_dimension_weight(definition: CanonicalDimensionDefinition) -> float:
-    total = sum(max(0.0, float(part.weight)) for part in definition.rollup_contributions)
+    total = sum(
+        max(0.0, float(part.weight)) for part in definition.rollup_contributions
+    )
     return round(total if total > 0 else 1.0, 4)
-
 
 
 def _resolve_legacy_rollup_map(
@@ -417,7 +418,6 @@ def _resolve_legacy_rollup_map(
     return rollups
 
 
-
 def _resolve_explicit_dimension_score(
     definition: CanonicalDimensionDefinition,
     explicit_dimension_scores: dict[str, Any] | None,
@@ -437,7 +437,6 @@ def _resolve_explicit_dimension_score(
     return None
 
 
-
 def _resolve_rollup_backfill_score(
     definition: CanonicalDimensionDefinition,
     legacy_rollups: dict[str, float],
@@ -451,7 +450,6 @@ def _resolve_rollup_backfill_score(
     if not collected:
         return None
     return round(sum(collected) / len(collected), 2)
-
 
 
 def _build_dimension_payloads(
@@ -516,12 +514,15 @@ def _build_dimension_payloads(
     return payloads
 
 
-
 def _derive_rollups_from_dimensions(
     dimension_payloads: list[dict[str, Any]],
 ) -> dict[str, float]:
-    weighted_totals: dict[str, float] = {rollup_id: 0.0 for rollup_id in CANONICAL_ROLLUP_IDS}
-    weight_totals: dict[str, float] = {rollup_id: 0.0 for rollup_id in CANONICAL_ROLLUP_IDS}
+    weighted_totals: dict[str, float] = {
+        rollup_id: 0.0 for rollup_id in CANONICAL_ROLLUP_IDS
+    }
+    weight_totals: dict[str, float] = {
+        rollup_id: 0.0 for rollup_id in CANONICAL_ROLLUP_IDS
+    }
 
     for payload in dimension_payloads:
         score = _coerce_score(payload.get("score"))
@@ -546,7 +547,6 @@ def _derive_rollups_from_dimensions(
             continue
         resolved[rollup_id] = round(weighted_totals[rollup_id] / total_weight, 2)
     return resolved
-
 
 
 def build_canonical_evaluation_kernel(
@@ -651,7 +651,6 @@ def build_canonical_evaluation_kernel(
     return kernel
 
 
-
 def _build_dimension_score_map_from_kernel(
     kernel: dict[str, Any],
 ) -> dict[str, float]:
@@ -664,7 +663,6 @@ def _build_dimension_score_map_from_kernel(
             continue
         dimension_scores[label] = _coerce_score(item.get("score"))
     return dimension_scores
-
 
 
 def _build_rollup_fields_payload(kernel: dict[str, Any]) -> dict[str, float]:
@@ -681,7 +679,6 @@ def _build_rollup_fields_payload(kernel: dict[str, Any]) -> dict[str, float]:
     }
 
 
-
 def build_compatibility_readers(
     *,
     canonical_kernel: dict[str, Any],
@@ -690,7 +687,9 @@ def build_compatibility_readers(
     if not isinstance(canonical_kernel, dict):
         return {}
 
-    scenario_type = _normalize_scenario_type(canonical_kernel.get("scenario_type", "sales"))
+    scenario_type = _normalize_scenario_type(
+        canonical_kernel.get("scenario_type", "sales")
+    )
     resolved_surface_id = _infer_surface_id(
         scenario_type=scenario_type,
         surface_id=surface_id,
@@ -702,7 +701,11 @@ def build_compatibility_readers(
     )
     rollup_fields = _build_rollup_fields_payload(canonical_kernel)
     dimension_score_map = _build_dimension_score_map_from_kernel(canonical_kernel)
-    dimensions = canonical_kernel.get("dimensions") if isinstance(canonical_kernel, dict) else None
+    dimensions = (
+        canonical_kernel.get("dimensions")
+        if isinstance(canonical_kernel, dict)
+        else None
+    )
     if not isinstance(dimensions, list):
         dimensions = []
 
@@ -715,7 +718,10 @@ def build_compatibility_readers(
     for reader_id in reader_ids:
         if reader_id == "practice_session_rollup_fields_v1":
             readers[reader_id] = dict(rollup_fields)
-        elif reader_id in {"sales_realtime_score_snapshot_v1", "legacy_score_update_v1"}:
+        elif reader_id in {
+            "sales_realtime_score_snapshot_v1",
+            "legacy_score_update_v1",
+        }:
             readers[reader_id] = {
                 "overall_score": rollup_fields["overall_score"],
                 "dimension_scores": dict(dimension_score_map),
@@ -759,12 +765,13 @@ def build_compatibility_readers(
             }
         elif reader_id == "sales_methodology_rubric_v1":
             methodology = canonical_kernel.get("methodology")
-            readers[reader_id] = deepcopy(methodology) if isinstance(methodology, dict) else {}
+            readers[reader_id] = (
+                deepcopy(methodology) if isinstance(methodology, dict) else {}
+            )
         else:
             readers[reader_id] = dict(rollup_fields)
 
     return readers
-
 
 
 def build_canonical_views(

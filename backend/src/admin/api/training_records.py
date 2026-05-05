@@ -7,6 +7,7 @@ References:
 - Requirements: 6.1, 6.2, 6.3
 - Design: Section "Admin Training Records API"
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -31,9 +32,7 @@ router = APIRouter(prefix="/admin/training-records", tags=["admin-training-recor
 TRAINING_RECORDS_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
     {
         "path": "list_training_records",
-        "callers": (
-            "list_training_records",
-        ),
+        "callers": ("list_training_records",),
         "query_shape": (
             "one paginated PracticeSession/Scenario/User join for the page",
             "one count query for the same filters",
@@ -53,9 +52,7 @@ TRAINING_RECORDS_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
     },
     {
         "path": "get_training_record",
-        "callers": (
-            "get_training_record",
-        ),
+        "callers": ("get_training_record",),
         "query_shape": (
             "one PracticeSession/Scenario/User join for the record",
             "then one bounded batched Agent/Persona metadata lookup for that single record",
@@ -70,6 +67,7 @@ TRAINING_RECORDS_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
 # Response schemas
 class TrainingRecordResponse(BaseModel):
     """Training record response for admin API"""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -87,6 +85,7 @@ class TrainingRecordResponse(BaseModel):
 
 class TrainingRecordListResponse(BaseModel):
     """Paginated training record list response"""
+
     items: list[TrainingRecordResponse]
     total: int
     page: int
@@ -96,20 +95,12 @@ class TrainingRecordListResponse(BaseModel):
 
 def success_response(data: Any, trace_id: str | None = None) -> dict:
     """Create unified success response"""
-    return {
-        "success": True,
-        "data": data,
-        "trace_id": trace_id or get_trace_id()
-    }
+    return {"success": True, "data": data, "trace_id": trace_id or get_trace_id()}
 
 
 def calculate_overall_score(session: PracticeSession) -> float | None:
     """Calculate overall score from dimension scores"""
-    scores = [
-        session.logic_score,
-        session.accuracy_score,
-        session.completeness_score
-    ]
+    scores = [session.logic_score, session.accuracy_score, session.completeness_score]
     valid_scores = [s for s in scores if s is not None]
     if not valid_scores:
         return None
@@ -159,7 +150,7 @@ async def session_to_response(
         user_name=user.name if user else None,
         status=session.status or "unknown",
         agent_name=agent_name,
-        persona_name=persona_name
+        persona_name=persona_name,
     )
 
 
@@ -182,7 +173,9 @@ async def load_agent_persona_name_maps(
 
     agent_names: dict[str, str] = {}
     if agent_ids:
-        agent_rows = await db.execute(select(Agent.id, Agent.name).where(Agent.id.in_(agent_ids)))
+        agent_rows = await db.execute(
+            select(Agent.id, Agent.name).where(Agent.id.in_(agent_ids))
+        )
         agent_names = {str(agent_id): name for agent_id, name in agent_rows.all()}
 
     persona_names: dict[str, str] = {}
@@ -205,7 +198,7 @@ async def list_training_records(
     status: str | None = Query(None, description="Filter by status"),
     scenario_type: str | None = Query(None, description="Filter by scenario type"),
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get all training records (admin view - not filtered by user)
@@ -224,8 +217,7 @@ async def list_training_records(
     # Apply search filter
     if search:
         search_filter = or_(
-            User.name.ilike(f"%{search}%"),
-            Scenario.name.ilike(f"%{search}%")
+            User.name.ilike(f"%{search}%"), Scenario.name.ilike(f"%{search}%")
         )
         query = query.where(search_filter)
         # For count, we need to join as well
@@ -252,7 +244,9 @@ async def list_training_records(
             count_query = (
                 select(func.count())
                 .select_from(PracticeSession)
-                .outerjoin(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+                .outerjoin(
+                    Scenario, PracticeSession.scenario_id == Scenario.scenario_id
+                )
                 .where(Scenario.scenario_type == scenario_type)
             )
             if status:
@@ -289,7 +283,7 @@ async def list_training_records(
         total=total,
         page=page,
         page_size=page_size,
-        has_more=(page * page_size) < total
+        has_more=(page * page_size) < total,
     )
 
     return success_response(response.model_dump())
@@ -299,7 +293,7 @@ async def list_training_records(
 async def get_training_record(
     record_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get training record details by ID"""
     result = await db.execute(
@@ -330,7 +324,7 @@ async def get_training_record(
 async def delete_training_record(
     record_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Delete a training record

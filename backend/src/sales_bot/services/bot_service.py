@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 class Persona(str, Enum):
     """Sales practice personas - each represents a difficult customer type"""
+
     IMPATIENT_CEO = "impatient_ceo"  # Time-pressed, wants concise answers
     SKEPTICAL_BUYER = "skeptical_buyer"  # Doubts everything, needs proof
     PRICE_FOCUSED = "price_focused"  # Obsessed with cost, wants discounts
@@ -30,6 +31,7 @@ class Persona(str, Enum):
 @dataclass
 class BotResponse:
     """Response from sales bot"""
+
     text: str
     should_interrupt: bool  # True if AI needs to interrupt user
     challenge_level: int  # 1-5, how challenging the response is
@@ -132,8 +134,8 @@ class SalesBotService:
             session_id
             for session_id, _ in sorted(
                 self.active_sessions.items(),
-                key=lambda item: item[1].get("last_activity_at") or datetime.min.replace(
-                    tzinfo=UTC
+                key=lambda item: (
+                    item[1].get("last_activity_at") or datetime.min.replace(tzinfo=UTC)
                 ),
             )[:overflow_count]
         ]
@@ -142,10 +144,7 @@ class SalesBotService:
         return evicted_session_ids
 
     async def create_session(
-        self,
-        user_id: uuid.UUID,
-        persona: Persona,
-        scenario_id: uuid.UUID
+        self, user_id: uuid.UUID, persona: Persona, scenario_id: uuid.UUID
     ) -> Result[uuid.UUID]:
         """
         Create a new sales practice session
@@ -177,7 +176,7 @@ class SalesBotService:
                     "session_id": str(session_id),
                     "user_id": str(user_id),
                     "persona": persona.value,
-                }
+                },
             )
 
             return Result(value=session_id)
@@ -186,7 +185,7 @@ class SalesBotService:
             logger.error(
                 "Failed to create sales bot session",
                 extra={"error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             # Fallback: create a lightweight session without LLM chain
             fallback_session_id = uuid.uuid4()
@@ -228,14 +227,11 @@ class SalesBotService:
                 Persona.TECHNICAL_CTO: "Alright, let's skip the fluff. What's your tech stack?",
             }
 
-            opening = opening_lines.get(
-                persona,
-                "I'm listening. Make it quick."
-            )
+            opening = opening_lines.get(persona, "I'm listening. Make it quick.")
 
             logger.info(
                 "Sales bot session started",
-                extra={"session_id": str(session_id), "opening": opening[:50]}
+                extra={"session_id": str(session_id), "opening": opening[:50]},
             )
 
             return Result(value=opening)
@@ -244,14 +240,12 @@ class SalesBotService:
             logger.error(
                 "Failed to start sales bot session",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result.fail(fallback="[USE_FALLBACK_RESPONSE]")
 
     async def process_user_input(
-        self,
-        session_id: uuid.UUID,
-        user_text: str
+        self, session_id: uuid.UUID, user_text: str
     ) -> Result[BotResponse]:
         """
         Process user's speech and generate persona response
@@ -287,8 +281,8 @@ class SalesBotService:
                     "Session approaching budget limit",
                     extra={
                         "session_id": str(session_id),
-                        "tokens": session["total_tokens"]
-                    }
+                        "tokens": session["total_tokens"],
+                    },
                 )
 
             # Determine if should interrupt based on persona
@@ -304,7 +298,7 @@ class SalesBotService:
                 text=response,
                 should_interrupt=should_interrupt,
                 challenge_level=challenge_level,
-                conversation_complete=conversation_complete
+                conversation_complete=conversation_complete,
             )
 
             logger.info(
@@ -313,15 +307,14 @@ class SalesBotService:
                     "session_id": str(session_id),
                     "turn": session["turn_count"],
                     "interrupt": should_interrupt,
-                }
+                },
             )
 
             return Result(value=bot_response)
 
         except TimeoutError:
             logger.warning(
-                "LLM timeout in sales bot",
-                extra={"session_id": str(session_id)}
+                "LLM timeout in sales bot", extra={"session_id": str(session_id)}
             )
             # Fallback response based on persona
             return Result(value=self._get_fallback_response(session_id))
@@ -329,7 +322,7 @@ class SalesBotService:
             logger.error(
                 "Failed to process user input in sales bot",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result(fallback="[USE_FALLBACK_RESPONSE]")
 
@@ -351,7 +344,12 @@ class SalesBotService:
 
         # Technical CTO interrupts on marketing speak
         if persona == Persona.TECHNICAL_CTO:
-            marketing_words = ["innovative", "cutting-edge", "revolutionary", "state-of-the-art"]
+            marketing_words = [
+                "innovative",
+                "cutting-edge",
+                "revolutionary",
+                "state-of-the-art",
+            ]
             return any(word in user_text.lower() for word in marketing_words)
 
         return False
@@ -370,7 +368,9 @@ class SalesBotService:
             level = min(level + exclamation_marks, 5)
         elif persona == Persona.SKEPTICAL_BUYER:
             skeptical_phrases = ["prove", "evidence", "show me", "guarantee"]
-            level = min(level + sum(1 for p in skeptical_phrases if p in response.lower()), 5)
+            level = min(
+                level + sum(1 for p in skeptical_phrases if p in response.lower()), 5
+            )
 
         return level
 
@@ -381,7 +381,7 @@ class SalesBotService:
                 text="I'm having trouble hearing you. Could you repeat that?",
                 should_interrupt=False,
                 challenge_level=1,
-                conversation_complete=False
+                conversation_complete=False,
             )
 
         persona = self.active_sessions[session_id]["persona"]
@@ -393,16 +393,13 @@ class SalesBotService:
             Persona.TECHNICAL_CTO: "That's vague. Be more specific.",
         }
 
-        text = fallback_responses.get(
-            persona,
-            "Could you elaborate on that?"
-        )
+        text = fallback_responses.get(persona, "Could you elaborate on that?")
 
         return BotResponse(
             text=text,
             should_interrupt=False,
             challenge_level=2,
-            conversation_complete=False
+            conversation_complete=False,
         )
 
     async def end_session(self, session_id: uuid.UUID) -> Result[dict]:
@@ -422,7 +419,9 @@ class SalesBotService:
                 "turn_count": session["turn_count"],
                 "total_tokens": session["total_tokens"],
                 "persona": session["persona"].value,
-                "estimated_cost_yuan": min(session["total_tokens"] * 0.00001, 1.0),  # Cap at ¥1
+                "estimated_cost_yuan": min(
+                    session["total_tokens"] * 0.00001, 1.0
+                ),  # Cap at ¥1
             }
 
             # Clean up session
@@ -434,7 +433,7 @@ class SalesBotService:
                     "session_id": str(session_id),
                     "turns": summary["turn_count"],
                     "cost": summary["estimated_cost_yuan"],
-                }
+                },
             )
 
             return Result(value=summary)
@@ -443,7 +442,7 @@ class SalesBotService:
             logger.error(
                 "Failed to end sales bot session",
                 extra={"session_id": str(session_id), "error": str(e)},
-                exc_info=True
+                exc_info=True,
             )
             return Result(fallback="[SESSION_END_FAILED]")
 

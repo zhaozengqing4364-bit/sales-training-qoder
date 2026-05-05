@@ -46,10 +46,27 @@ def test_key_business_routers_are_mounted() -> None:
         ("GET", "/api/v1/admin/presentations"),
         ("GET", "/api/v1/admin/business-rules/definitions"),
         ("GET", "/api/v1/business-rules/sales-combinations/active"),
+        ("GET", "/api/v1/evaluation/admin/scoring-rulesets"),
     }
 
     missing = expected_routes - actual
     assert missing == set()
+
+
+def test_lane_11_canonical_route_inventory_is_present() -> None:
+    actual = set(_collect_method_path_pairs())
+    expected_routes = {
+        ("GET", "/api/v1/support/runtime/overview"),
+        ("GET", "/api/v1/support/runtime/faults"),
+        ("GET", "/api/v1/evaluation/admin/scoring-rulesets"),
+        ("GET", "/api/v1/admin/business-rules/definitions"),
+        ("GET", "/api/v1/business-rules/sales-combinations/active"),
+        ("GET", "/api/v1/admin/presentations"),
+        ("GET", "/api/v1/admin/knowledge"),
+    }
+
+    missing = expected_routes - actual
+    assert missing == set(), missing
 
 
 def test_websocket_routes_support_legacy_and_path_modes() -> None:

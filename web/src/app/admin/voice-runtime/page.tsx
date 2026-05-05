@@ -131,6 +131,7 @@ function parseLexiconFromEditor(value: string) {
 
 function toEditableRuntimeProfile(profile: RuntimeProfileWithGovernance): Omit<RuntimeProfile, "id"> {
     const { id: _id, ...rest } = profile;
+    void _id;
     return {
         ...EMPTY_FORM,
         ...rest,

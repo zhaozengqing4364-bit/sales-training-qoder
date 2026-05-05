@@ -247,7 +247,10 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
         """Mirror REST lifecycle writes into the live presentation realtime handler."""
         await super().sync_lifecycle_transition(transition)
 
-        if transition.action in {"start", "resume"} and self.session_status == "in_progress":
+        if (
+            transition.action in {"start", "resume"}
+            and self.session_status == "in_progress"
+        ):
             await self._emit_current_page_context()
 
     async def _handle_client_text(self, raw_text: str):
@@ -410,9 +413,15 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
                     )
                     session_identity = session_result.first()
                     if session_identity:
-                        scenario_id = str(session_identity[0]) if session_identity[0] else None
-                        agent_id = str(session_identity[1]) if session_identity[1] else None
-                        persona_id = str(session_identity[2]) if session_identity[2] else None
+                        scenario_id = (
+                            str(session_identity[0]) if session_identity[0] else None
+                        )
+                        agent_id = (
+                            str(session_identity[1]) if session_identity[1] else None
+                        )
+                        persona_id = (
+                            str(session_identity[2]) if session_identity[2] else None
+                        )
                         session_snapshot = (
                             dict(session_identity[3])
                             if isinstance(session_identity[3], dict)
@@ -447,9 +456,15 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
                             if persona:
                                 context.persona_name = persona[0]
                                 resolved_persona_policy = normalize_persona_policy(
-                                    dict(persona[1]) if isinstance(persona[1], dict) else None,
-                                    fallback_system_prompt=str(persona[2]) if persona[2] else None,
-                                    fallback_kb_ids=list(persona[3]) if isinstance(persona[3], list) else None,
+                                    dict(persona[1])
+                                    if isinstance(persona[1], dict)
+                                    else None,
+                                    fallback_system_prompt=str(persona[2])
+                                    if persona[2]
+                                    else None,
+                                    fallback_kb_ids=list(persona[3])
+                                    if isinstance(persona[3], list)
+                                    else None,
                                 )
                                 context.persona_system_prompt = str(
                                     resolved_persona_policy.get("system_prompt") or ""

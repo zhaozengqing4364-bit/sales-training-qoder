@@ -477,7 +477,7 @@ class TestStagedEvaluationService:
         """Test get_stage_results returns existing results."""
         # Arrange
         session_id = str(uuid4())
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(UTC)
 
         # Mock database results
         mock_db_result = MagicMock()

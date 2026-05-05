@@ -62,20 +62,28 @@ wait_for_url() {
 
 resolve_python_bin() {
   local candidates=(
-    "${ROOT_DIR}/backend/venv/bin/python"
     "${ROOT_DIR}/backend/.venv/bin/python"
+    "${ROOT_DIR}/backend/venv/bin/python"
     "python3"
     "python"
   )
 
   local candidate
+  local resolved
   for candidate in "${candidates[@]}"; do
     if [[ -x "${candidate}" ]]; then
-      printf '%s\n' "${candidate}"
-      return 0
+      resolved="${candidate}"
+    elif command -v "${candidate}" >/dev/null 2>&1; then
+      resolved="$(command -v "${candidate}")"
+    else
+      continue
     fi
-    if command -v "${candidate}" >/dev/null 2>&1; then
-      command -v "${candidate}"
+
+    if "${resolved}" - <<'PY' >/dev/null 2>&1; then
+import sqlalchemy
+import dotenv
+PY
+      printf '%s\n' "${resolved}"
       return 0
     fi
   done

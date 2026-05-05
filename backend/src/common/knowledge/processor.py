@@ -211,7 +211,8 @@ class DocumentProcessor:
             if self.chunking_strategy == "parent_child":
                 # Only embed child chunks; parents get zero-vector placeholder
                 child_indices = [
-                    i for i, c in enumerate(chunks)
+                    i
+                    for i, c in enumerate(chunks)
                     if (c.get("metadata") or {}).get("chunk_type") != "parent"
                 ]
                 child_texts = [chunks[i]["content"] for i in child_indices]
@@ -255,7 +256,9 @@ class DocumentProcessor:
                     result = await embedding_service.embed_batch(batch)
                     if not result.is_success:
                         failure_message = result.fallback or "[EMBEDDING_FAILED]"
-                        logger.error(f"Embedding failed for batch {i}: {failure_message}")
+                        logger.error(
+                            f"Embedding failed for batch {i}: {failure_message}"
+                        )
                         phase_timings["embed_ms"] = round(
                             (time.monotonic() - embed_started_at) * 1000, 1
                         )
@@ -342,7 +345,9 @@ class DocumentProcessor:
             "artifact_path": artifact_path,
         }
 
-    async def _parse_document(self, file_path: str, file_type: str) -> ParseResult | None:
+    async def _parse_document(
+        self, file_path: str, file_type: str
+    ) -> ParseResult | None:
         """Parse document into structured elements based on file type."""
         try:
             abs_path = os.path.abspath(file_path)
@@ -441,7 +446,9 @@ class DocumentProcessor:
             text = self._normalize_text_block(block)
             if not text:
                 continue
-            element_type = "heading" if file_type == "md" and text.startswith("#") else "paragraph"
+            element_type = (
+                "heading" if file_type == "md" and text.startswith("#") else "paragraph"
+            )
             if element_type == "heading":
                 metrics["heading_count"] += 1
             else:
@@ -726,7 +733,9 @@ class DocumentProcessor:
         if not content:
             return "[PARSE_EMPTY_STRUCTURED_DOC] No structured content extracted"
         if non_whitespace_char_count < MIN_PARSE_TEXT_LENGTH:
-            return "[PARSE_EMPTY_STRUCTURED_DOC] Extracted content too short for indexing"
+            return (
+                "[PARSE_EMPTY_STRUCTURED_DOC] Extracted content too short for indexing"
+            )
         if not parse_result.elements:
             return "[PARSE_EMPTY_STRUCTURED_DOC] No structured elements extracted"
         return None
@@ -737,11 +746,17 @@ class DocumentProcessor:
         seen_rows: set[str] = set()
 
         try:
-            for table_index, table in enumerate(getattr(doc, "tables", []) or [], start=1):
-                for row_index, row in enumerate(getattr(table, "rows", []) or [], start=1):
+            for table_index, table in enumerate(
+                getattr(doc, "tables", []) or [], start=1
+            ):
+                for row_index, row in enumerate(
+                    getattr(table, "rows", []) or [], start=1
+                ):
                     row_parts: list[str] = []
                     for cell in getattr(row, "cells", []) or []:
-                        cell_text = self._normalize_docx_cell_text(getattr(cell, "text", ""))
+                        cell_text = self._normalize_docx_cell_text(
+                            getattr(cell, "text", "")
+                        )
                         if cell_text:
                             row_parts.append(cell_text)
 
@@ -789,7 +804,9 @@ class DocumentProcessor:
         except KeyError:
             return []
 
-        namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        namespace = {
+            "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+        }
         root = ET.fromstring(shared_strings_xml)
         shared_strings: list[str] = []
 
@@ -844,7 +861,9 @@ class DocumentProcessor:
         sheet_index: int,
     ) -> list[ParsedElement]:
         """Extract structured row elements from one XLSX worksheet."""
-        namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        namespace = {
+            "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+        }
         sheet_root = ET.fromstring(workbook_zip.read(sheet_path))
         elements: list[ParsedElement] = []
 
@@ -871,7 +890,9 @@ class DocumentProcessor:
         shared_strings: list[str],
     ) -> str:
         """Extract a normalized cell value from XLSX XML."""
-        namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        namespace = {
+            "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+        }
         cell_type = cell.attrib.get("t", "")
         raw_value = cell.findtext("main:v", default="", namespaces=namespace)
 
@@ -1212,12 +1233,17 @@ class DocumentProcessor:
                         )
                     )
                     current_elements = []
-                for overflow_chunk in self._split_long_element(element, len(chunks), parse_result.warnings):
+                for overflow_chunk in self._split_long_element(
+                    element, len(chunks), parse_result.warnings
+                ):
                     chunks.append(overflow_chunk)
                 continue
 
             prospective = current_elements + [element]
-            if current_elements and len(self._join_element_texts(prospective)) > self.chunk_size:
+            if (
+                current_elements
+                and len(self._join_element_texts(prospective)) > self.chunk_size
+            ):
                 chunks.append(
                     self._build_chunk_from_elements(
                         current_elements,
@@ -1228,7 +1254,8 @@ class DocumentProcessor:
                 current_elements = self._tail_overlap_elements(current_elements)
                 while (
                     current_elements
-                    and len(self._join_element_texts(current_elements + [element])) > self.chunk_size
+                    and len(self._join_element_texts(current_elements + [element]))
+                    > self.chunk_size
                 ):
                     current_elements = current_elements[1:]
             current_elements.append(element)
@@ -1387,7 +1414,18 @@ class DocumentProcessor:
         ``child_ids`` listing its children.
         """
         # ── Step 1: Group elements into "parent" sections by heading ──
-        heading_types = {"title", "heading", "header", "h1", "h2", "h3", "h4", "h5", "h6", "section_header"}
+        heading_types = {
+            "title",
+            "heading",
+            "header",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "section_header",
+        }
         parent_sections: list[tuple[list[ParsedElement], str | None]] = []
         current_elements: list[ParsedElement] = []
         current_heading: str | None = None
@@ -1397,9 +1435,13 @@ class DocumentProcessor:
             if is_heading and current_elements:
                 parent_sections.append((current_elements, current_heading))
                 current_elements = []
-                current_heading = element.text.strip()[:120] if element.text.strip() else None
+                current_heading = (
+                    element.text.strip()[:120] if element.text.strip() else None
+                )
             elif is_heading and not current_elements:
-                current_heading = element.text.strip()[:120] if element.text.strip() else None
+                current_heading = (
+                    element.text.strip()[:120] if element.text.strip() else None
+                )
             current_elements.append(element)
 
         if current_elements:
@@ -1485,11 +1527,13 @@ class DocumentProcessor:
                     child_meta["page"] = min(child_pages)
                     child_meta["page_end"] = max(child_pages)
 
-                all_chunks.append({
-                    "index": child_index,
-                    "content": child_content,
-                    "metadata": child_meta,
-                })
+                all_chunks.append(
+                    {
+                        "index": child_index,
+                        "content": child_content,
+                        "metadata": child_meta,
+                    }
+                )
                 child_buffer = []
 
             for elem in section_elements:
@@ -1498,7 +1542,10 @@ class DocumentProcessor:
                     continue
 
                 prospective = child_buffer + [elem]
-                if child_buffer and len(self._join_element_texts(prospective)) > self.chunk_size:
+                if (
+                    child_buffer
+                    and len(self._join_element_texts(prospective)) > self.chunk_size
+                ):
                     _flush_children()
                 child_buffer.append(elem)
 
@@ -1509,21 +1556,23 @@ class DocumentProcessor:
                 child_index = len(all_chunks)
                 child_id = str(child_index)
                 child_indices_for_parent.append(child_id)
-                all_chunks.append({
-                    "index": child_index,
-                    "content": parent_content,
-                    "metadata": {
-                        "chunk_type": "child",
-                        "parent_id": str(parent_index),
-                        "section_index": section_idx,
-                        "heading": heading_text,
-                        "start_char": parent_metadata["start_char"],
-                        "end_char": parent_metadata["end_char"],
-                        "element_types": parent_metadata["element_types"],
-                        "source_mode": "native_text",
-                        "parser_version": PARSE_ARTIFACT_VERSION,
-                    },
-                })
+                all_chunks.append(
+                    {
+                        "index": child_index,
+                        "content": parent_content,
+                        "metadata": {
+                            "chunk_type": "child",
+                            "parent_id": str(parent_index),
+                            "section_index": section_idx,
+                            "heading": heading_text,
+                            "start_char": parent_metadata["start_char"],
+                            "end_char": parent_metadata["end_char"],
+                            "element_types": parent_metadata["element_types"],
+                            "source_mode": "native_text",
+                            "parser_version": PARSE_ARTIFACT_VERSION,
+                        },
+                    }
+                )
 
             # Fill parent's child_ids and append parent AFTER children
             parent_chunk["metadata"]["child_ids"] = child_indices_for_parent
@@ -1538,7 +1587,9 @@ class DocumentProcessor:
     def _join_element_texts(self, elements: list[ParsedElement]) -> str:
         return "\n\n".join(element.text for element in elements if element.text).strip()
 
-    def _tail_overlap_elements(self, elements: list[ParsedElement]) -> list[ParsedElement]:
+    def _tail_overlap_elements(
+        self, elements: list[ParsedElement]
+    ) -> list[ParsedElement]:
         """Carry tail elements forward to preserve overlap across structured chunks."""
         if self.chunk_overlap <= 0:
             return []

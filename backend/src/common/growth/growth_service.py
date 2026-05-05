@@ -66,7 +66,9 @@ class GrowthCenterService:
             default=DEFAULT_AI_COACH_RULESET,
             required_key="dimensions",
         )
-        self.achievement_ruleset_source = "injected" if achievement_ruleset else "default"
+        self.achievement_ruleset_source = (
+            "injected" if achievement_ruleset else "default"
+        )
         self.ai_coach_ruleset_source = "injected" if ai_coach_ruleset else "default"
 
     async def _refresh_active_rulesets(self, *, db: AsyncSession) -> None:

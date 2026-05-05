@@ -3,6 +3,7 @@ Error handling middleware with graceful degradation
 Constitution Principle I: User Experience Never Interrupts
 All errors are caught and converted to fallback responses
 """
+
 import traceback
 
 from fastapi import HTTPException, Request, status
@@ -136,7 +137,7 @@ async def global_exception_handler(request: Request, exc: Exception):
             "success": False,
             "fallback": "[PLEASE_TRY_AGAIN]",
             "trace_id": trace_id,
-        }
+        },
     )
 
 

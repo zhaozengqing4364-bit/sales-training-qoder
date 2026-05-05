@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 import { HighlightList } from "@/components/highlights";
-import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { AudioAuditCardWithSession as AudioAuditCard } from "@/components/audio/AudioAuditCard";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -37,6 +36,7 @@ import {
     ReportTrendsResponse,
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
+import { normalizeInternalRecommendationPath } from "@/lib/recommendation-routing";
 import {
     extractSessionLearningCue,
     formatClaimTruthEvidenceNote,
@@ -753,7 +753,15 @@ export default function ComprehensiveReportPage() {
             }
 
             if (recommendationResult.status === "fulfilled") {
-                setNextRecommendation(recommendationResult.value);
+                const normalizedPath = normalizeInternalRecommendationPath(recommendationResult.value.target_path);
+                if (normalizedPath.downgraded) {
+                    debug.warn("[Report] Unsafe next-practice recommendation target_path downgraded", {
+                        sessionId,
+                        reason: normalizedPath.reason,
+                        recommendationKind: recommendationResult.value.recommendation_kind ?? null,
+                    });
+                }
+                setNextRecommendation({ ...recommendationResult.value, target_path: normalizedPath.href });
                 setNextRecommendationHint(recommendationResult.value.explanation ?? null);
             } else {
                 setNextRecommendationHint("下一轮推荐暂不可用，请先按报告建议继续训练。");
@@ -1421,8 +1429,6 @@ export default function ComprehensiveReportPage() {
                     </p>
                 </div>
             </GlassCard>
-
-            <LearnerHelpCard context="report" className="mb-6" />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <GlassCard className="p-6 border border-blue-100 bg-blue-50/40">

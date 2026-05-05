@@ -178,8 +178,12 @@ class CapabilityProcessor:
                                 continue
                             name = item.get("name")
                             score = item.get("score")
-                            if isinstance(name, str) and isinstance(score, (int, float)):
-                                dimension_scores[name] = max(0.0, min(100.0, float(score)))
+                            if isinstance(name, str) and isinstance(
+                                score, (int, float)
+                            ):
+                                dimension_scores[name] = max(
+                                    0.0, min(100.0, float(score))
+                                )
 
                 overall_raw = score_payload.get("overall_score")
                 if not isinstance(overall_raw, (int, float)):
@@ -229,9 +233,7 @@ class CapabilityProcessor:
                 )
 
             elif cap.capability_id == "knowledge_retrieval" and result.data:
-                knowledge_payload = (
-                    result.data if isinstance(result.data, dict) else {}
-                )
+                knowledge_payload = result.data if isinstance(result.data, dict) else {}
                 knowledge_context = str(knowledge_payload.get("context") or "")
                 if knowledge_context:
                     logger.info(
@@ -290,7 +292,10 @@ class CapabilityProcessor:
 
         live_session_summary: dict[str, Any] | None = None
         live_score_snapshot = analysis_data.get("score_snapshot")
-        if isinstance(live_score_snapshot, dict) or resolved_objection_ledger is not None:
+        if (
+            isinstance(live_score_snapshot, dict)
+            or resolved_objection_ledger is not None
+        ):
             live_session_summary = build_live_session_conclusion_summary(
                 sales_stage=(
                     str(stage_context_for_arbiter.get("current_stage")).strip()
@@ -300,7 +305,9 @@ class CapabilityProcessor:
                     else None
                 ),
                 score_snapshot=(
-                    live_score_snapshot if isinstance(live_score_snapshot, dict) else None
+                    live_score_snapshot
+                    if isinstance(live_score_snapshot, dict)
+                    else None
                 ),
                 objection_ledger=resolved_objection_ledger,
             )
@@ -360,8 +367,13 @@ class CapabilityProcessor:
         manager: ConnectionManager,
         trace_id: str | None,
     ) -> None:
-        normalized_reason = reason.strip() if isinstance(reason, str) and reason.strip() else None
-        if self.coach_health == status and self._coach_health_reason == normalized_reason:
+        normalized_reason = (
+            reason.strip() if isinstance(reason, str) and reason.strip() else None
+        )
+        if (
+            self.coach_health == status
+            and self._coach_health_reason == normalized_reason
+        ):
             return
         self.coach_health = status
         self._coach_health_reason = normalized_reason

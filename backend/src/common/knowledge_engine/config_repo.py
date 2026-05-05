@@ -69,6 +69,7 @@ class KnowledgeRankingProfileConfig:
 @dataclass(frozen=True)
 class KnowledgeChunkingPresetConfig:
     """Named chunking configuration within a config version."""
+
     profile_key: str
     description: str | None
     chunking_strategy: str
@@ -96,9 +97,15 @@ class KnowledgeAnswerConfigSnapshot:
     query_profiles: dict[str, KnowledgeQueryProfileConfig] = field(default_factory=dict)
     intent_rules: list[KnowledgeIntentRuleConfig] = field(default_factory=list)
     entity_aliases: list[KnowledgeEntityAliasConfig] = field(default_factory=list)
-    ranking_profiles: dict[str, KnowledgeRankingProfileConfig] = field(default_factory=dict)
-    answerability_profiles: dict[str, KnowledgeAnswerabilityProfileConfig] = field(default_factory=dict)
-    chunking_presets: dict[str, KnowledgeChunkingPresetConfig] = field(default_factory=dict)
+    ranking_profiles: dict[str, KnowledgeRankingProfileConfig] = field(
+        default_factory=dict
+    )
+    answerability_profiles: dict[str, KnowledgeAnswerabilityProfileConfig] = field(
+        default_factory=dict
+    )
+    chunking_presets: dict[str, KnowledgeChunkingPresetConfig] = field(
+        default_factory=dict
+    )
 
 
 class KnowledgeAnswerConfigRepository:
@@ -163,7 +170,9 @@ class KnowledgeAnswerConfigRepository:
             for profile in profiles
         }
 
-    def _load_intent_rules(self, config_version_id: str) -> list[KnowledgeIntentRuleConfig]:
+    def _load_intent_rules(
+        self, config_version_id: str
+    ) -> list[KnowledgeIntentRuleConfig]:
         statement = (
             select(KnowledgeIntentRule)
             .where(
@@ -304,7 +313,6 @@ def _json_object(value: Any) -> dict[str, float]:
     for key, raw in value.items():
         normalized[str(key)] = float(raw)
     return normalized
-
 
 
 def _json_string_list(value: Any) -> list[str]:

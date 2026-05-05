@@ -44,9 +44,12 @@ vi.mock("@/components/ui/glass-card", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-    Button: ({ children, asChild: _asChild, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => (
-        <button {...props}>{children}</button>
-    ),
+    Button: ({ children, asChild, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => {
+        if (asChild) {
+            return <>{children}</>;
+        }
+        return <button {...props}>{children}</button>;
+    },
 }));
 
 vi.mock("@/components/dashboard-skeleton", () => ({
@@ -227,7 +230,22 @@ describe("HomePage dashboard header", () => {
         expect(taskLinks.some((link) => link.getAttribute("href") === "/practice/session-ppt-1/report?focus=presentation_page&page=5")).toBe(true);
     });
 
-    it("renders badge wall, goal progress, and AI coach notifications from growth dashboard", async () => {
+    it("downgrades unsafe dashboard recommendation targets to the training route", async () => {
+        getRecommendationMock.mockResolvedValue({
+            title: "继续训练",
+            reason: "后端推荐返回了不安全目标时，首页仍只能打开站内训练入口。",
+            action_label: "打开推荐",
+            target_path: "https://evil.example/phish",
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        const recommendationLinks = screen.getAllByRole("link", { name: "打开推荐" });
+        expect(recommendationLinks.some((link) => link.getAttribute("href") === "/training")).toBe(true);
+    });
+
+    it("omits dashboard guidance, help, and growth operation cards", async () => {
         getGrowthMock.mockResolvedValue({
             achievements: {
                 unlocked: [
@@ -271,12 +289,16 @@ describe("HomePage dashboard header", () => {
         render(<HomePage />);
         await flushDashboardData();
 
-        expect(screen.getByText("徽章墙")).toBeTruthy();
-        expect(screen.getByText("首次有效训练")).toBeTruthy();
-        expect(screen.getByText("2/3")).toBeTruthy();
-        expect(screen.getByText("通知与 AI 教练")).toBeTruthy();
-        expect(screen.getByText("AI 教练建议：先练产品知识与证据")).toBeTruthy();
-        expect(getGrowthMock).toHaveBeenCalled();
+        expect(screen.queryByText("最小上手指引")).toBeNull();
+        expect(screen.queryByText("第一次来，先这样开始")).toBeNull();
+        expect(screen.queryByText("继续按这 3 步推进训练")).toBeNull();
+        expect(screen.queryByText("需要帮助或反馈？")).toBeNull();
+        expect(screen.queryByText("徽章墙")).toBeNull();
+        expect(screen.queryByText("首次有效训练")).toBeNull();
+        expect(screen.queryByText("练习目标")).toBeNull();
+        expect(screen.queryByText("自适应难度 dry-run")).toBeNull();
+        expect(screen.queryByText("通知与 AI 教练")).toBeNull();
+        expect(screen.queryByText("AI 教练建议：先练产品知识与证据")).toBeNull();
     });
 
     it("falls back to the email prefix and switches to an evening greeting when no name is present", async () => {
@@ -302,7 +324,7 @@ describe("HomePage dashboard header", () => {
         expect(screen.getByRole("heading", { name: /晚安, fallback.user/i })).toBeTruthy();
     });
 
-    it("shows a first-screen onboarding card that links learners into the real training and history flow", async () => {
+    it("keeps the main recommendation CTA without showing first-screen onboarding cards", async () => {
         getRecommendationMock.mockResolvedValue({
             title: "从异议处理开始",
             reason: "先完成一轮真实训练，再去历史页和统一报告复盘。",
@@ -313,15 +335,16 @@ describe("HomePage dashboard header", () => {
         render(<HomePage />);
         await flushDashboardData();
 
-        expect(screen.getByText("第一次来，先这样开始")).toBeTruthy();
+        expect(screen.queryByText("第一次来，先这样开始")).toBeNull();
+        expect(screen.queryByText("最小上手指引")).toBeNull();
         expect(screen.getAllByText("先完成一轮真实训练，再去历史页和统一报告复盘。").length).toBeGreaterThan(0);
         const trainingLinks = screen.getAllByRole("link", { name: "开始异议处理训练" });
         expect(trainingLinks.some((link) => link.getAttribute("href") === "/training/sales")).toBe(true);
-        expect(screen.getByRole("link", { name: "去历史页" }).getAttribute("href")).toBe("/history");
-        expect(screen.getByRole("link", { name: "报告入口" }).getAttribute("href")).toBe("/history");
+        expect(screen.queryByRole("link", { name: "去历史页" })).toBeNull();
+        expect(screen.queryByRole("link", { name: "报告入口" })).toBeNull();
     });
 
-    it("prefers the latest report shortcut in onboarding so returning learners stay on the real train-history-report loop", async () => {
+    it("keeps latest report shortcuts in recent records without restoring onboarding", async () => {
         getRecommendationMock.mockResolvedValue({
             title: "继续产品介绍训练",
             reason: "先完成今天的重点训练，再复盘最近一次报告。",
@@ -356,12 +379,14 @@ describe("HomePage dashboard header", () => {
         render(<HomePage />);
         await flushDashboardData();
 
-        expect(screen.getByText("继续按这 3 步推进训练")).toBeTruthy();
+        expect(screen.queryByText("继续按这 3 步推进训练")).toBeNull();
         const trainingLinks = screen.getAllByRole("link", { name: "继续训练" });
         expect(trainingLinks.some((link) => link.getAttribute("href") === "/training/sales")).toBe(true);
-        expect(screen.getByRole("link", { name: "去历史页" }).getAttribute("href")).toBe("/history");
-        expect(screen.getByRole("link", { name: "报告入口" }).getAttribute("href")).toBe("/practice/latest-session/report");
-        expect(screen.getByText("最近一次可用报告：最新销售复盘")).toBeTruthy();
+        expect(screen.getAllByRole("link", { name: "历史页" }).every((link) => link.getAttribute("href") === "/history")).toBe(true);
+        expect(screen.getAllByRole("link", { name: "查看报告" }).some((link) => (
+            link.getAttribute("href") === "/practice/latest-session/report"
+        ))).toBe(true);
+        expect(screen.queryByText("最近一次可用报告：最新销售复盘")).toBeNull();
     });
 
     it("truthifies the version dialog into a live entry summary instead of static release-note claims", async () => {
@@ -471,6 +496,19 @@ describe("HomePage dashboard header", () => {
                 duration_seconds: 75,
                 start_time: "2026-04-09T01:00:00Z",
                 status: "in_progress",
+                report_status: "processing",
+            },
+            {
+                id: "late-report-session",
+                session_id: "late-report-session",
+                title: "已生成报告记录",
+                scenario_type: "sales",
+                overall_score: 66,
+                duration_seconds: 120,
+                start_time: "2026-04-09T02:00:00Z",
+                status: "in_progress",
+                report_status: "completed",
+                report_generated_at: "2026-04-09T02:05:00Z",
             },
         ]);
 
@@ -482,6 +520,7 @@ describe("HomePage dashboard header", () => {
         expect((screen.getByRole("button", { name: "报告暂不可用" }) as HTMLButtonElement).disabled).toBe(true);
         expect((screen.getByRole("button", { name: "报告生成中" }) as HTMLButtonElement).disabled).toBe(true);
         expect(screen.queryByRole("link", { name: "报告暂不可用" })).toBeNull();
+        expect(screen.getByRole("link", { name: "查看报告" }).getAttribute("href")).toBe("/practice/late-report-session/report");
     });
 
     it("falls back to history and training actions when dashboard history fails", async () => {
@@ -559,14 +598,13 @@ describe("HomePage dashboard header", () => {
         expect(screen.getByText("最近记录暂不可用")).toBeTruthy();
     });
 
-    it("keeps the shared learner help guidance visible on dashboard home", async () => {
+    it("removes the dashboard inline help card while keeping mobile quick actions", async () => {
         render(<HomePage />);
         await flushDashboardData();
 
-        expect(screen.getByText("需要帮助或反馈？")).toBeTruthy();
-        expect(screen.getByText(/统一入口在侧边栏底部的“帮助与反馈”里；手机端先打开左上角菜单。/)).toBeTruthy();
-        expect(screen.getByText(/页面异常、入口缺失或结果不对时，请通过这个统一入口反馈当前页面路径或会话编号。/)).toBeTruthy();
-        expect(screen.getByText(/当前 learner 默认只看到训练、历史、个人中心；运行状态和管理后台只对管理员或支持角色开放。/)).toBeTruthy();
+        expect(screen.queryByText("需要帮助或反馈？")).toBeNull();
+        expect(screen.queryByText(/统一入口在侧边栏底部的“帮助与反馈”里；手机端先打开左上角菜单。/)).toBeNull();
+        expect(screen.queryByText(/页面异常、入口缺失或结果不对时/)).toBeNull();
         const mobileQuickActions = screen.getByRole("navigation", { name: "移动快捷入口" });
         expect(mobileQuickActions).toBeTruthy();
         expect(within(mobileQuickActions).getByRole("link", { name: /继续训练/ }).getAttribute("href")).toBe("/training");
@@ -611,7 +649,8 @@ describe("HomePage dashboard header", () => {
         await flushDashboardData();
 
         expect(screen.queryByText("主管给你的本周重点")).toBeNull();
-        expect(screen.getByText("第一次来，先这样开始")).toBeTruthy();
+        expect(screen.queryByText("第一次来，先这样开始")).toBeNull();
+        expect(screen.getAllByText("继续训练").length).toBeGreaterThan(0);
     });
 
     it("shows streak and weekly goal using only completed evaluable practice", async () => {

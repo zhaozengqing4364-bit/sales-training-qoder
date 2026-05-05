@@ -40,7 +40,7 @@ DEFAULT_PERSONA_CONFIG = {
 【禁止】
 - 不要长篇分析
 - 不要给建议
-- 不要解释你是AI"""
+- 不要解释你是AI""",
     },
     "skeptical_buyer": {
         "name": "怀疑的采购",
@@ -60,7 +60,7 @@ DEFAULT_PERSONA_CONFIG = {
 【禁止】
 - 不要轻易认可对方
 - 不要长篇大论
-- 不要跳出角色"""
+- 不要跳出角色""",
     },
     "price_focused": {
         "name": "价格敏感型",
@@ -80,7 +80,7 @@ DEFAULT_PERSONA_CONFIG = {
 【禁止】
 - 不要被价值说服
 - 不要长篇分析
-- 不要跳出角色"""
+- 不要跳出角色""",
     },
     "technical_cto": {
         "name": "技术型CTO",
@@ -100,7 +100,7 @@ DEFAULT_PERSONA_CONFIG = {
 【禁止】
 - 不要接受模糊回答
 - 不要长篇大论
-- 不要跳出角色"""
+- 不要跳出角色""",
     },
 }
 
@@ -120,7 +120,11 @@ async def get_persona_from_db(persona_id: str) -> dict | None:
                 # Build greeting from behavior_config or use default
                 behavior = persona.behavior_config or {}
                 typical_questions = behavior.get("typical_questions", [])
-                greeting = typical_questions[0] if typical_questions else f"你好，我是{persona.name}。"
+                greeting = (
+                    typical_questions[0]
+                    if typical_questions
+                    else f"你好，我是{persona.name}。"
+                )
 
                 return {
                     "name": persona.name,
@@ -189,7 +193,7 @@ class SimpleSalesHandler(BaseSalesHandler):
             # Build context
             context = {
                 "scenario": "sales",
-                "history": self.conversation_history[-10:]  # Last 10 messages
+                "history": self.conversation_history[-10:],  # Last 10 messages
             }
 
             # Generate response
@@ -197,11 +201,15 @@ class SimpleSalesHandler(BaseSalesHandler):
                 prompt=user_text,
                 session_id=self.session_id,
                 system_message=system_prompt,
-                context=context
+                context=context,
             )
 
             if result.is_success:
-                logger.info(f"LLM response: {result.value[:50]}..." if result.value else "LLM: empty response")
+                logger.info(
+                    f"LLM response: {result.value[:50]}..."
+                    if result.value
+                    else "LLM: empty response"
+                )
                 return result.value
             else:
                 logger.warning(f"LLM generation failed: {result.fallback}")
@@ -239,10 +247,7 @@ class SimpleSalesHandler(BaseSalesHandler):
         logger.info(f"Sending greeting for persona: {persona_name}")
 
         # Add to conversation history
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": greeting
-        })
+        self.conversation_history.append({"role": "assistant", "content": greeting})
 
         # Send as TTS
         # Critical Fix #2: greeting也需要stream_id和request_id

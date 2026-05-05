@@ -21,7 +21,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,6 @@ from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from prompt_templates.models import (
-    ALLOWED_PROMPT_TYPE_VALUES,
     PromptRenderRequest,
     PromptRenderResponse,
     PromptTemplate,
@@ -48,7 +47,6 @@ from prompt_templates.service import (
     SALES_PROMPT_SCOPE_ALLOWED_TYPES,
     PromptTemplateService,
 )
-
 
 
 def _is_admin(user: User) -> bool:
@@ -228,7 +226,7 @@ async def get_template_for_scenario(
 
 @router.post("", response_model=PromptTemplate, status_code=201)
 async def create_prompt_template(
-    data: PromptTemplateCreate,
+    data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -238,6 +236,7 @@ async def create_prompt_template(
         return admin_error
 
     try:
+        payload = PromptTemplateCreate.model_validate(data)
         return await service.create_template(payload, actor=current_user)
     except ValidationError as exc:
         return _prompt_error_response(
@@ -258,6 +257,187 @@ async def create_prompt_template(
             status_code=400,
             error_code="[PROMPT_DATA_INVALID]",
             message="提示词数据无效，请检查后重试。",
+            exc=exc,
+        )
+
+
+@router.get("/options", response_model=None)
+async def get_prompt_template_options(
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> dict[str, Any] | JSONResponse:
+    """Return prompt-template editor options and governance defaults."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        governance_status = await service.get_governance_status()
+        return {
+            "allowed_prompt_types": [
+                {"value": prompt_type.value, "label": prompt_type.value}
+                for prompt_type in PromptType
+            ],
+            "sales_allowed_prompt_types": sorted(SALES_PROMPT_SCOPE_ALLOWED_TYPES),
+            "variables_schema": "list[str]",
+            "invalid_active_count": governance_status.get("invalid_active_count", 0),
+            "rollback_policy": governance_status.get("rollback_policy", ""),
+        }
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.get("/governance/status", response_model=None)
+async def get_prompt_template_governance_status(
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> dict[str, Any] | JSONResponse:
+    """Return invalid historical prompt-template governance status."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        return await service.get_governance_status()
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.post("/governance/remediate-invalid", response_model=None)
+async def remediate_invalid_prompt_templates(
+    request: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> dict[str, Any] | JSONResponse:
+    """Disable invalid historical prompt-template rows before runtime use."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        return await service.remediate_invalid_templates(
+            actor_id=str(current_user.user_id),
+            reason=str(request.get("reason") or "prompt governance remediation"),
+        )
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.post(
+    "/governance/quarantine-invalid",
+    response_model=PromptTemplateQuarantineResult,
+)
+async def quarantine_invalid_prompt_templates(
+    reason: str = Query("prompt governance quarantine"),
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> PromptTemplateQuarantineResult | JSONResponse:
+    """Compatibility endpoint for disabling invalid historical prompt templates."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        return await service.quarantine_invalid_templates(
+            actor=current_user,
+            reason=reason,
+        )
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.post("/governance/migrate-invalid", response_model=None)
+async def migrate_invalid_prompt_templates(
+    request: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> dict[str, Any] | JSONResponse:
+    """Migrate invalid historical prompt rows and return an envelope for admin UI."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    try:
+        result = await service.migrate_invalid_templates(
+            actor=current_user,
+            reason=str(request.get("reason") or "PromptTemplate governance scan"),
+            dry_run=bool(request.get("dry_run", False)),
+        )
+        return {"success": True, "data": result}
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+
+
+@router.post(
+    "/governance/{template_id}/rollback",
+    response_model=PromptTemplateGovernanceRollbackResponse,
+)
+async def rollback_prompt_template_governance(
+    template_id: str,
+    request: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    service: PromptTemplateService = Depends(get_prompt_service),
+) -> PromptTemplateGovernanceRollbackResponse | JSONResponse:
+    """Rollback the last governance migration snapshot for a prompt template."""
+    admin_error = _require_prompt_admin_or_error(current_user)
+    if admin_error is not None:
+        return admin_error
+
+    template_uuid, parse_error = _parse_template_id_or_error(template_id)
+    if parse_error is not None:
+        return parse_error
+    assert template_uuid is not None
+
+    try:
+        result = await service.rollback_last_governance_migration(
+            template_id=template_uuid,
+            actor=current_user,
+            reason=str(request.get("reason") or "PromptTemplate governance rollback"),
+        )
+        if result is None:
+            return _prompt_error_response(
+                status_code=404,
+                error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
+                message="模板不存在",
+            )
+        return result
+    except SQLAlchemyError as exc:
+        return _prompt_error_response(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="[PROMPT_DB_UNAVAILABLE]",
+            message="提示词服务暂不可用，请稍后重试。",
+            exc=exc,
+        )
+    except ValueError as exc:
+        return _prompt_error_response(
+            status_code=400,
+            error_code="[PROMPT_GOVERNANCE_ROLLBACK_NOT_AVAILABLE]",
+            message="没有可回退的提示词治理迁移记录。",
             exc=exc,
         )
 
@@ -306,7 +486,7 @@ async def get_prompt_template(
 @router.put("/{template_id}", response_model=PromptTemplate)
 async def update_prompt_template(
     template_id: str,
-    data: PromptTemplateUpdate,
+    data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
@@ -321,7 +501,10 @@ async def update_prompt_template(
     assert template_uuid is not None
 
     try:
-        template = await service.update_template(template_uuid, payload, actor=current_user)
+        payload = PromptTemplateUpdate.model_validate(data)
+        template = await service.update_template(
+            template_uuid, payload, actor=current_user
+        )
         if not template:
             return _prompt_error_response(
                 status_code=404,

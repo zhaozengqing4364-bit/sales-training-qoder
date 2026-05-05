@@ -239,7 +239,8 @@ class AdminAnalyticsService:
         return [
             record
             for record in AdminAnalyticsService._completed_records(records)
-            if record.summary.evaluable is True and record.summary.overall_score is not None
+            if record.summary.evaluable is True
+            and record.summary.overall_score is not None
         ]
 
     @staticmethod
@@ -274,7 +275,9 @@ class AdminAnalyticsService:
                 continue
             counts[bucket_type] += 1
             latest_text_by_type[bucket_type] = (
-                str(payload.get(text_key)) if payload.get(text_key) is not None else None
+                str(payload.get(text_key))
+                if payload.get(text_key) is not None
+                else None
             )
             latest_seen_at_by_type[bucket_type] = summary.start_time
 
@@ -328,7 +331,11 @@ class AdminAnalyticsService:
         user = getattr(record.session, "user", None)
         if user is None:
             return str(record.session.user_id)
-        return str(getattr(user, "name", None) or getattr(user, "email", None) or record.session.user_id)
+        return str(
+            getattr(user, "name", None)
+            or getattr(user, "email", None)
+            or record.session.user_id
+        )
 
     @staticmethod
     def _resolve_department(record: ProjectionAnalyticsRecord) -> str:
@@ -340,7 +347,11 @@ class AdminAnalyticsService:
 
     @staticmethod
     def _extract_degraded_reasons(summary: HistorySessionSummary) -> list[str]:
-        evidence = summary.evidence_completeness if isinstance(summary.evidence_completeness, dict) else None
+        evidence = (
+            summary.evidence_completeness
+            if isinstance(summary.evidence_completeness, dict)
+            else None
+        )
         if evidence is None:
             return []
 
@@ -406,9 +417,21 @@ class AdminAnalyticsService:
             if not issue_family:
                 continue
 
-            payload = record.summary.main_issue if isinstance(record.summary.main_issue, dict) else {}
-            issue_type = payload.get("issue_type") if isinstance(payload.get("issue_type"), str) else issue_family
-            issue_text = payload.get("issue_text") if isinstance(payload.get("issue_text"), str) else None
+            payload = (
+                record.summary.main_issue
+                if isinstance(record.summary.main_issue, dict)
+                else {}
+            )
+            issue_type = (
+                payload.get("issue_type")
+                if isinstance(payload.get("issue_type"), str)
+                else issue_family
+            )
+            issue_text = (
+                payload.get("issue_text")
+                if isinstance(payload.get("issue_text"), str)
+                else None
+            )
             department = cls._resolve_department(record)
             session_start = cls._coerce_utc(record.summary.start_time)
 
@@ -463,7 +486,9 @@ class AdminAnalyticsService:
         *,
         scenario_type: str | None,
     ) -> list[dict[str, Any]]:
-        normalized_scenario_type = history_service.normalize_scenario_type(scenario_type)
+        normalized_scenario_type = history_service.normalize_scenario_type(
+            scenario_type
+        )
         query = (
             select(
                 PracticeSession.user_id,
@@ -521,7 +546,9 @@ class AdminAnalyticsService:
                     "department": cls._resolve_department(latest_record),
                     "overall_result": latest_record.summary.overall_result or "fail",
                     "session_id": str(latest_record.session.session_id),
-                    "session_start_time": cls._coerce_utc(latest_record.summary.start_time).isoformat(),
+                    "session_start_time": cls._coerce_utc(
+                        latest_record.summary.start_time
+                    ).isoformat(),
                     "issue_family": history_service.resolve_summary_issue_family(
                         latest_record.summary
                     ),
@@ -560,7 +587,9 @@ class AdminAnalyticsService:
         for user_id, user_records in grouped_by_user.items():
             if len(user_records) < 4:
                 continue
-            ordered_records = sorted(user_records, key=lambda item: item.summary.start_time)
+            ordered_records = sorted(
+                user_records, key=lambda item: item.summary.start_time
+            )
             middle = len(ordered_records) // 2
             baseline = ordered_records[:middle]
             current = ordered_records[middle:]
@@ -696,9 +725,9 @@ class AdminAnalyticsService:
             [record.summary for record in not_evaluable_records]
         )
         degraded_reasons = cls._build_degraded_reason_distribution(degraded_summaries)
-        at_risk_user_ids = {
-            item["user_id"] for item in manager_lists["not_passed"]
-        } | {item["user_id"] for item in manager_lists["inactive_streak"]}
+        at_risk_user_ids = {item["user_id"] for item in manager_lists["not_passed"]} | {
+            item["user_id"] for item in manager_lists["inactive_streak"]
+        }
 
         time_range_days = {
             "7d": 7,
@@ -723,7 +752,9 @@ class AdminAnalyticsService:
                 ),
                 "at_risk_users": len(at_risk_user_ids),
                 "improving_users": len(manager_lists["improving"]),
-                "top_issue_family": cohort_issue_buckets[0] if cohort_issue_buckets else None,
+                "top_issue_family": cohort_issue_buckets[0]
+                if cohort_issue_buckets
+                else None,
                 "top_blocker_family": (
                     repeated_blocker_families[0]
                     if repeated_blocker_families
@@ -732,7 +763,9 @@ class AdminAnalyticsService:
                 "top_not_evaluable_reason": (
                     not_evaluable_reasons[0] if not_evaluable_reasons else None
                 ),
-                "top_degraded_reason": degraded_reasons[0] if degraded_reasons else None,
+                "top_degraded_reason": degraded_reasons[0]
+                if degraded_reasons
+                else None,
             },
             "cohort_issue_buckets": cohort_issue_buckets,
             "department_issue_buckets": cls._build_department_issue_buckets(records),
@@ -778,7 +811,9 @@ class AdminAnalyticsService:
         end_date: datetime | None = None,
         scenario_type: str | None = None,
     ) -> list[ProjectionAnalyticsRecord]:
-        normalized_scenario_type = history_service.normalize_scenario_type(scenario_type)
+        normalized_scenario_type = history_service.normalize_scenario_type(
+            scenario_type
+        )
         query = (
             select(PracticeSession)
             .options(
@@ -834,8 +869,12 @@ class AdminAnalyticsService:
     ) -> dict[str, Any]:
         summaries = [record.summary for record in records]
         completed_records = cls._completed_records(records)
-        evaluable_summaries = [record.summary for record in cls._evaluable_records(records)]
-        not_evaluable_summaries = [record.summary for record in cls._not_evaluable_records(records)]
+        evaluable_summaries = [
+            record.summary for record in cls._evaluable_records(records)
+        ]
+        not_evaluable_summaries = [
+            record.summary for record in cls._not_evaluable_records(records)
+        ]
 
         snapshot = history_service.build_supervisor_progress_snapshot(
             summaries,
@@ -933,7 +972,9 @@ class AdminAnalyticsService:
             evaluable_records = self._evaluable_records(current_records)
             not_evaluable_records = self._not_evaluable_records(current_records)
             current_summaries = [record.summary for record in current_records]
-            score_summary = history_service.build_projection_score_summary(current_summaries)
+            score_summary = history_service.build_projection_score_summary(
+                current_summaries
+            )
 
             total_sessions = len(current_records)
             completed_sessions = len(completed_records)
@@ -1005,7 +1046,9 @@ class AdminAnalyticsService:
                 sessions_today=sessions_today,
                 completed_sessions=completed_sessions,
                 completion_rate=completion_rate,
-                average_score=self._round_score(score_summary["average_score"], digits=1),
+                average_score=self._round_score(
+                    score_summary["average_score"], digits=1
+                ),
                 average_duration_minutes=average_duration_minutes,
                 growth={
                     "users_rate": _growth(float(total_users), float(prev_users)),
@@ -1128,7 +1171,9 @@ class AdminAnalyticsService:
                         scenario_type
                     ),
                     "cohort_issue_bucket_count": len(payload["cohort_issue_buckets"]),
-                    "department_issue_bucket_count": len(payload["department_issue_buckets"]),
+                    "department_issue_bucket_count": len(
+                        payload["department_issue_buckets"]
+                    ),
                     "not_passed_count": len(manager_lists["not_passed"]),
                     "inactive_streak_count": len(manager_lists["inactive_streak"]),
                     "improving_count": len(manager_lists["improving"]),
@@ -1155,9 +1200,13 @@ class AdminAnalyticsService:
             start_date = _get_time_range_start(time_range)
             records = await self._load_projection_records(db, start_date=start_date)
 
-            grouped_agents: dict[str, list[ProjectionAnalyticsRecord]] = defaultdict(list)
+            grouped_agents: dict[str, list[ProjectionAnalyticsRecord]] = defaultdict(
+                list
+            )
             agent_meta: dict[str, tuple[str, str]] = {}
-            grouped_personas: dict[str, list[ProjectionAnalyticsRecord]] = defaultdict(list)
+            grouped_personas: dict[str, list[ProjectionAnalyticsRecord]] = defaultdict(
+                list
+            )
             persona_meta: dict[str, tuple[str, str]] = {}
             scenario_distribution: Counter[str] = Counter()
 
@@ -1188,7 +1237,9 @@ class AdminAnalyticsService:
             for agent_id, agent_records in grouped_agents.items():
                 summaries = [record.summary for record in agent_records]
                 completed_count = len(self._completed_records(agent_records))
-                score_summary = history_service.build_projection_score_summary(summaries)
+                score_summary = history_service.build_projection_score_summary(
+                    summaries
+                )
                 agent_name, category = agent_meta[agent_id]
                 agent_stats.append(
                     {
@@ -1216,7 +1267,9 @@ class AdminAnalyticsService:
             persona_stats: list[dict[str, Any]] = []
             for persona_id, persona_records in grouped_personas.items():
                 summaries = [record.summary for record in persona_records]
-                score_summary = history_service.build_projection_score_summary(summaries)
+                score_summary = history_service.build_projection_score_summary(
+                    summaries
+                )
                 persona_name, difficulty = persona_meta[persona_id]
                 persona_stats.append(
                     {
@@ -1285,7 +1338,9 @@ class AdminAnalyticsService:
             start_date = _get_time_range_start(time_range)
             records = await self._load_projection_records(db, start_date=start_date)
 
-            grouped_records: dict[str, list[ProjectionAnalyticsRecord]] = defaultdict(list)
+            grouped_records: dict[str, list[ProjectionAnalyticsRecord]] = defaultdict(
+                list
+            )
             for record in records:
                 grouped_records[str(record.session.user_id)].append(record)
 
@@ -1293,13 +1348,17 @@ class AdminAnalyticsService:
             for user_id, user_records in grouped_records.items():
                 summaries = [record.summary for record in user_records]
                 completed_records = self._completed_records(user_records)
-                score_summary = history_service.build_projection_score_summary(summaries)
+                score_summary = history_service.build_projection_score_summary(
+                    summaries
+                )
                 first_session = user_records[0].session
                 user = getattr(first_session, "user", None)
                 user_name = None
                 department = None
                 if user is not None:
-                    user_name = getattr(user, "name", None) or getattr(user, "email", None)
+                    user_name = getattr(user, "name", None) or getattr(
+                        user, "email", None
+                    )
                     department = getattr(user, "department", None)
                 if not user_name:
                     user_name = "Unknown"
@@ -1309,11 +1368,16 @@ class AdminAnalyticsService:
                     key=lambda item: item.summary.start_time,
                     default=None,
                 )
-                latest_issue = latest_completed.summary.main_issue if latest_completed else None
-                latest_goal = latest_completed.summary.next_goal if latest_completed else None
+                latest_issue = (
+                    latest_completed.summary.main_issue if latest_completed else None
+                )
+                latest_goal = (
+                    latest_completed.summary.next_goal if latest_completed else None
+                )
 
                 total_duration_minutes = self._round_score(
-                    sum(record.summary.duration_seconds for record in completed_records) / 60,
+                    sum(record.summary.duration_seconds for record in completed_records)
+                    / 60,
                     digits=1,
                 )
                 leaderboard_entries.append(

@@ -18,6 +18,14 @@ Accepted for the sales-training trust/governance roadmap.
 
 采用“版本化 ruleset + 报告生成时固化口径 + 发布前 dry-run”的治理模型。
 
+### API Mounting Contract
+
+评分 ruleset 的管理 API 由 `backend/src/admin/api/scoring_rulesets.py` 定义，但实际通过 `backend/src/evaluation/api.py` 挂载在 evaluation router 下。对外稳定前缀为：
+
+`/api/v1/evaluation/admin/scoring-rulesets`
+
+该路径是兼容性契约，不应迁移到 `/api/v1/admin/scoring-rulesets`，除非同时提供长期别名和迁移公告。
+
 1. **统一 ruleset schema**
    - 至少覆盖销售对练与 PPT 训练两类 subject。
    - 每个 ruleset 声明 `ruleset_id`、`version`、`subject`、`status`、`dimensions`、`weights`、`thresholds`、`non_evaluable_reasons`、`evidence_requirements`、`fallback_policy`。

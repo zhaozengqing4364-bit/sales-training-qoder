@@ -8,6 +8,7 @@ References:
 - Requirements: R6, R7, R8 (Capability modules)
 - Design: Section 1 (AgentContext)
 """
+
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -141,13 +142,12 @@ class AgentContext:
         # Limit history size
         if len(self.conversation_history) > MAX_CONVERSATION_HISTORY:
             # Keep most recent messages
-            self.conversation_history = (
-                self.conversation_history[-MAX_CONVERSATION_HISTORY:]
-            )
+            self.conversation_history = self.conversation_history[
+                -MAX_CONVERSATION_HISTORY:
+            ]
             logger.debug(
-                f"Conversation history trimmed to "
-                f"{MAX_CONVERSATION_HISTORY} messages",
-                session_id=self.session_id
+                f"Conversation history trimmed to {MAX_CONVERSATION_HISTORY} messages",
+                session_id=self.session_id,
             )
 
     def get_recent_messages(self, count: int = 5) -> list[dict[str, Any]]:

@@ -307,7 +307,9 @@ class PresentationAIPolicyService:
             "scope_type": record.scope_type,
             "scope_id": record.scope_id,
             "enabled": bool(record.enabled),
-            "prompt_config": self._normalize_prompt_config(_as_dict(record.prompt_config)),
+            "prompt_config": self._normalize_prompt_config(
+                _as_dict(record.prompt_config)
+            ),
             "rule_config": self._normalize_rule_config(_as_dict(record.rule_config)),
             "fallback_config": self._normalize_fallback_config(
                 _as_dict(record.fallback_config)
@@ -338,15 +340,21 @@ class PresentationAIPolicyService:
         scope_type: str,
         scope_id: str | None = None,
     ) -> dict[str, Any]:
-        normalized_scope, normalized_scope_id = self._normalize_scope(scope_type, scope_id)
+        normalized_scope, normalized_scope_id = self._normalize_scope(
+            scope_type, scope_id
+        )
         record = await self._load_record(normalized_scope, normalized_scope_id)
         payload = self._default_policy_payload()
 
         if record:
             payload = {
                 "enabled": bool(record.enabled),
-                "prompt_config": self._normalize_prompt_config(_as_dict(record.prompt_config)),
-                "rule_config": self._normalize_rule_config(_as_dict(record.rule_config)),
+                "prompt_config": self._normalize_prompt_config(
+                    _as_dict(record.prompt_config)
+                ),
+                "rule_config": self._normalize_rule_config(
+                    _as_dict(record.rule_config)
+                ),
                 "fallback_config": self._normalize_fallback_config(
                     _as_dict(record.fallback_config)
                 ),
@@ -392,7 +400,9 @@ class PresentationAIPolicyService:
         payload: dict[str, Any],
         updated_by: str | None = None,
     ) -> dict[str, Any]:
-        normalized_scope, normalized_scope_id = self._normalize_scope(scope_type, scope_id)
+        normalized_scope, normalized_scope_id = self._normalize_scope(
+            scope_type, scope_id
+        )
         policy_payload = _as_dict(payload)
 
         record = await self._load_record(normalized_scope, normalized_scope_id)
@@ -412,7 +422,9 @@ class PresentationAIPolicyService:
             self.db.add(record)
 
         if "enabled" in policy_payload:
-            record.enabled = _to_bool(policy_payload.get("enabled"), bool(record.enabled))
+            record.enabled = _to_bool(
+                policy_payload.get("enabled"), bool(record.enabled)
+            )
 
         if "prompt_config" in policy_payload:
             record.prompt_config = self._normalize_prompt_config(
@@ -627,7 +639,9 @@ class PresentationAIPolicyService:
                 }
 
             feedback = feedback_result.value
-            covered_count = sum(1 for point in feedback.point_results if point.is_covered)
+            covered_count = sum(
+                1 for point in feedback.point_results if point.is_covered
+            )
             total_count = len(feedback.point_results)
 
             return {

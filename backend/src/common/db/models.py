@@ -92,9 +92,7 @@ class User(Base):
     email = Column(String(255), unique=True)
     hashed_password = Column(String(255), nullable=True)
     role = Column(String(20), default="user", nullable=False)  # user, admin, support
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     last_login = Column(DateTime(timezone=True))
     is_active = Column(Boolean, default=True)
 
@@ -590,9 +588,7 @@ class Scenario(Base):
     description = Column(String)
     persona_prompt = Column(String)  # For sales bot
     is_active = Column(Boolean, default=True)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(
@@ -613,9 +609,7 @@ class Presentation(Base):
     title = Column(String(200), nullable=False)
     file_url = Column(String(500), nullable=False)
     file_size_bytes = Column(Integer)
-    upload_date = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    upload_date = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     version_number = Column(Integer, default=1)
     status = Column(String(20), default="processing", index=True)
     uploaded_by_admin_id = Column(String(36), ForeignKey("users.user_id"))
@@ -685,9 +679,7 @@ class RequiredTalkingPoint(Base):
     created_by = Column(String(10), nullable=False)
     is_ai_generated = Column(Boolean, default=False)
     confirmed_by_admin = Column(Boolean, default=True)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint("created_by IN ('admin', 'ai')", name="ck_point_created_by"),
@@ -1090,9 +1082,7 @@ class InterruptionEvent(Base):
         nullable=False,
         index=True,
     )
-    timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     interruption_type = Column(String(30), nullable=False)
     trigger_content = Column(String)
     ai_response = Column(String, nullable=False)
@@ -1179,9 +1169,7 @@ class LeaderboardEntry(Base):
     average_score = Column(Float, nullable=False)
     total_sessions = Column(Integer, default=1)
     rank = Column(Integer, index=True)
-    last_updated = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    last_updated = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(
@@ -1264,9 +1252,7 @@ class PromptTemplate(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     is_default = Column(Boolean, nullable=False, default=False)
     is_system = Column(Boolean, nullable=False, default=False)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -1290,9 +1276,7 @@ class ScenarioPrompt(Base):
     prompt_type = Column(String(50), nullable=False)
     template_id = Column(String(36), ForeignKey("prompt_templates.id"), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     template = relationship("PromptTemplate")
 
@@ -1391,6 +1375,10 @@ class ComprehensiveReport(Base):
         nullable=False,
         default=list,
         server_default=text("'[]'"),
+    )
+    scoring_metadata = Column(
+        _jsonb_compatible_type(),
+        nullable=True,
     )
     created_at = Column(
         DateTime(timezone=True),
@@ -1506,9 +1494,7 @@ class ReleaseVerificationRecord(Base):
     duration_ms = Column(Integer, nullable=True)
 
     # Traceability
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -1574,9 +1560,7 @@ class ReleaseVerificationSummary(Base):
     decision_reason = Column(Text, nullable=True)
 
     # Audit
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

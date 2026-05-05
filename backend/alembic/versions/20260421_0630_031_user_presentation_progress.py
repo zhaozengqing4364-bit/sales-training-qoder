@@ -12,7 +12,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-
 revision: str = "20260421_0630_031"
 down_revision: str | None = "20260420_1030_030"
 branch_labels: str | Sequence[str] | None = None
@@ -60,24 +59,28 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["user_id"], ["users.user_id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("user_id", "presentation_id"),
+        if_not_exists=True,
     )
     op.create_index(
         "idx_user_presentation_progress_user_updated",
         "user_presentation_progress",
         ["user_id", "updated_at"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "ix_user_presentation_progress_last_session_id",
         "user_presentation_progress",
         ["last_session_id"],
         unique=False,
+        if_not_exists=True,
     )
     op.create_index(
         "ix_user_presentation_progress_last_practice_at",
         "user_presentation_progress",
         ["last_practice_at"],
         unique=False,
+        if_not_exists=True,
     )
 
 
@@ -85,13 +88,16 @@ def downgrade() -> None:
     op.drop_index(
         "ix_user_presentation_progress_last_practice_at",
         table_name="user_presentation_progress",
+        if_exists=True,
     )
     op.drop_index(
         "ix_user_presentation_progress_last_session_id",
         table_name="user_presentation_progress",
+        if_exists=True,
     )
     op.drop_index(
         "idx_user_presentation_progress_user_updated",
         table_name="user_presentation_progress",
+        if_exists=True,
     )
-    op.drop_table("user_presentation_progress")
+    op.drop_table("user_presentation_progress", if_exists=True)

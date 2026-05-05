@@ -8,6 +8,7 @@ References:
 - Requirements: R6 (模糊词检测)
 - Design: Section 8 (Fuzzy Detection Capability)
 """
+
 from __future__ import annotations
 
 import re
@@ -25,10 +26,10 @@ logger = get_logger(__name__)
 MAX_PATTERN_LENGTH = 200  # Maximum regex pattern length
 MAX_PATTERNS_COUNT = 20  # Maximum number of custom patterns
 DANGEROUS_REGEX_PATTERNS = [
-    r'\(\?[^)]*\)',  # Lookahead/lookbehind assertions
-    r'\{[0-9]{3,}\}',  # Large repetition counts
-    r'(\.\*){2,}',  # Multiple greedy wildcards
-    r'(\.\+){2,}',  # Multiple greedy plus
+    r"\(\?[^)]*\)",  # Lookahead/lookbehind assertions
+    r"\{[0-9]{3,}\}",  # Large repetition counts
+    r"(\.\*){2,}",  # Multiple greedy wildcards
+    r"(\.\+){2,}",  # Multiple greedy plus
 ]
 
 
@@ -58,20 +59,20 @@ class FuzzyDetectionCapability(BaseCapability):
             "pattern": r"大概|可能|也许|应该|估计|好像",
             "category": "uncertain",
             "suggestion": "请给出具体数据或明确表态",
-            "severity": "high"
+            "severity": "high",
         },
         {
             "pattern": r"嗯+|那个|就是说|然后|这个",
             "category": "filler",
             "suggestion": "减少填充词，保持表达流畅",
-            "severity": "low"
+            "severity": "low",
         },
         {
             "pattern": r"差不多|左右|大约|大致|基本上",
             "category": "vague",
             "suggestion": "请给出精确数值或具体范围",
-            "severity": "medium"
-        }
+            "severity": "medium",
+        },
     ]
 
     config_schema: ClassVar[dict[str, Any]] = {
@@ -80,7 +81,7 @@ class FuzzyDetectionCapability(BaseCapability):
             "enabled": {
                 "type": "boolean",
                 "description": "是否启用模糊词检测",
-                "default": True
+                "default": True,
             },
             "fuzzy_patterns": {
                 "type": "array",
@@ -91,25 +92,28 @@ class FuzzyDetectionCapability(BaseCapability):
                         "pattern": {"type": "string"},
                         "category": {"type": "string"},
                         "suggestion": {"type": "string"},
-                        "severity": {"type": "string", "enum": ["low", "medium", "high"]}
+                        "severity": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high"],
+                        },
                     },
-                    "required": ["pattern", "category", "suggestion", "severity"]
-                }
+                    "required": ["pattern", "category", "suggestion", "severity"],
+                },
             },
             "detection_mode": {
                 "type": "string",
                 "enum": ["realtime", "batch"],
                 "default": "realtime",
-                "description": "检测模式：realtime=实时检测，batch=批量检测"
+                "description": "检测模式：realtime=实时检测，batch=批量检测",
             },
             "cooldown_seconds": {
                 "type": "number",
                 "minimum": 0,
                 "maximum": 60,
                 "default": 10,
-                "description": "同类型检测冷却时间（秒）"
-            }
-        }
+                "description": "同类型检测冷却时间（秒）",
+            },
+        },
     }
 
     def __init__(self, config: CapabilityConfig) -> None:
@@ -155,7 +159,7 @@ class FuzzyDetectionCapability(BaseCapability):
             if len(pattern_str) > MAX_PATTERN_LENGTH:
                 logger.warning(
                     f"Pattern too long ({len(pattern_str)} chars), skipping",
-                    pattern_preview=pattern_str[:50]
+                    pattern_preview=pattern_str[:50],
                 )
                 continue
 
@@ -165,7 +169,7 @@ class FuzzyDetectionCapability(BaseCapability):
                 if re.search(dangerous, pattern_str):
                     logger.warning(
                         "Dangerous regex pattern detected, skipping",
-                        pattern_preview=pattern_str[:50]
+                        pattern_preview=pattern_str[:50],
                     )
                     is_dangerous = True
                     break
@@ -196,10 +200,7 @@ class FuzzyDetectionCapability(BaseCapability):
             try:
                 self._compiled_patterns[pattern_str] = re.compile(pattern_str)
             except re.error as e:
-                logger.warning(
-                    f"Invalid regex pattern: {pattern_str}",
-                    error=str(e)
-                )
+                logger.warning(f"Invalid regex pattern: {pattern_str}", error=str(e))
 
     async def execute(
         self,
@@ -219,23 +220,14 @@ class FuzzyDetectionCapability(BaseCapability):
         try:
             # 验证输入 - 明确处理 None 和非字符串
             if input_data is None:
-                return CapabilityResult(
-                    success=True,
-                    data={"detections": []}
-                )
+                return CapabilityResult(success=True, data={"detections": []})
 
             if not isinstance(input_data, str):
-                return CapabilityResult(
-                    success=True,
-                    data={"detections": []}
-                )
+                return CapabilityResult(success=True, data={"detections": []})
 
             text = input_data.strip()
             if not text:
-                return CapabilityResult(
-                    success=True,
-                    data={"detections": []}
-                )
+                return CapabilityResult(success=True, data={"detections": []})
             detections = []
             now = time.time()
 
@@ -258,7 +250,7 @@ class FuzzyDetectionCapability(BaseCapability):
                 if now - last_detection < self._cooldown:
                     logger.debug(
                         f"Skipping {category} detection due to cooldown",
-                        session_id=context.session_id
+                        session_id=context.session_id,
                     )
                     continue
 
@@ -267,7 +259,7 @@ class FuzzyDetectionCapability(BaseCapability):
                     "category": category,
                     "matched": list(set(matches)),
                     "suggestion": pattern_config["suggestion"],
-                    "severity": pattern_config["severity"]
+                    "severity": pattern_config["severity"],
                 }
                 detections.append(detection)
 
@@ -276,15 +268,15 @@ class FuzzyDetectionCapability(BaseCapability):
 
                 # 更新统计
                 stats_key = f"fuzzy_detection_{category}_count"
-                context.state[stats_key] = context.state.get(stats_key, 0) + len(matches)
+                context.state[stats_key] = context.state.get(stats_key, 0) + len(
+                    matches
+                )
 
             # 更新使用计数
             self._update_usage_count(context)
 
             # 判断是否需要打断
-            should_interrupt = any(
-                d["severity"] == "high" for d in detections
-            )
+            should_interrupt = any(d["severity"] == "high" for d in detections)
 
             # 生成反馈
             feedback = self._generate_feedback(detections) if detections else None
@@ -292,25 +284,19 @@ class FuzzyDetectionCapability(BaseCapability):
             logger.debug(
                 "Fuzzy detection completed",
                 session_id=context.session_id,
-                detection_count=len(detections)
+                detection_count=len(detections),
             )
 
             return CapabilityResult(
                 success=True,
                 data={"detections": detections},
                 should_interrupt=should_interrupt,
-                feedback=feedback
+                feedback=feedback,
             )
 
         except (RuntimeError, ValueError, KeyError) as e:
-            logger.error(
-                f"Fuzzy detection failed: {e}",
-                session_id=context.session_id
-            )
-            return CapabilityResult(
-                success=False,
-                fallback="[FUZZY_DETECTION_FAILED]"
-            )
+            logger.error(f"Fuzzy detection failed: {e}", session_id=context.session_id)
+            return CapabilityResult(success=False, fallback="[FUZZY_DETECTION_FAILED]")
 
     def _generate_feedback(self, detections: list[dict[str, Any]]) -> str:
         """生成反馈消息"""
@@ -320,8 +306,7 @@ class FuzzyDetectionCapability(BaseCapability):
         # 按严重程度排序
         severity_order = {"high": 0, "medium": 1, "low": 2}
         sorted_detections = sorted(
-            detections,
-            key=lambda d: severity_order.get(d["severity"], 3)
+            detections, key=lambda d: severity_order.get(d["severity"], 3)
         )
 
         # 取最高严重程度的检测

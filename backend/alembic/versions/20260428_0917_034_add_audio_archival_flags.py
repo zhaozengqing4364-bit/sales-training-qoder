@@ -22,10 +22,12 @@ def upgrade() -> None:
     op.add_column(
         "practice_sessions",
         sa.Column("archived", sa.Boolean(), nullable=False, server_default=sa.false()),
+        if_not_exists=True,
     )
     op.add_column(
         "practice_sessions",
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
+        if_not_exists=True,
     )
 
 

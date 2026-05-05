@@ -12,6 +12,7 @@ NFR Metrics:
 """
 import asyncio
 import math
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -22,6 +23,22 @@ import websockets
 
 from common.audio.asr_alibaba import AlibabaASRProvider
 from common.audio.asr_with_fallback import get_asr_with_fallback
+
+NFR_PROVIDER_UNAVAILABLE = "NFR_PROVIDER_UNAVAILABLE"
+NFR_INFRA_MISSING = "NFR_INFRA_MISSING"
+NFR_EXTERNAL_UNAVAILABLE = "NFR_EXTERNAL_UNAVAILABLE"
+
+
+def skip_provider_unavailable(reason: str) -> None:
+    pytest.skip(f"{NFR_PROVIDER_UNAVAILABLE}: {reason}")
+
+
+def skip_infra_missing(reason: str) -> None:
+    pytest.skip(f"{NFR_INFRA_MISSING}: {reason}")
+
+
+def skip_external_unavailable(reason: str) -> None:
+    pytest.skip(f"{NFR_EXTERNAL_UNAVAILABLE}: {reason}")
 
 
 class NFRMetricsTracker:
@@ -114,34 +131,32 @@ class TestWebSocketConnectionLatency:
         # Test multiple connections to get P95
         connections: list[float] = []
 
-        for i in range(10):
+        for _ in range(10):
             start_time = time.perf_counter()
 
+            # Use localhost with test port. In CI/CD, this expects a test container.
+            ws_url = "ws://localhost:3444/api/v1/ws/sales"
             try:
-                # Use localhost with test port
-                ws_url = "ws://localhost:3444/api/v1/ws/sales"
+                async with websockets.connect(
+                    ws_url,
+                    close_timeout=1.0,
+                    ping_interval=None,
+                    ping_timeout=None,
+                ):
+                    pass
+            except ConnectionRefusedError:
+                skip_infra_missing(
+                    "WebSocket server refused connection on localhost:3444"
+                )
+            except OSError as exc:
+                skip_infra_missing(
+                    f"WebSocket server unavailable on localhost:3444: {exc}"
+                )
 
-                # Note: This test requires the backend to be running
-                # In CI/CD, this would use a test container
-                try:
-                    async with websockets.connect(
-                        ws_url,
-                        close_timeout=1.0,
-                        ping_interval=None,
-                        ping_timeout=None,
-                    ):
-                        pass
-                except (ConnectionRefusedError, OSError):
-                    # Backend not running, skip gracefully
-                    pytest.skip("WebSocket server not available for connection test")
-
-                end_time = time.perf_counter()
-                latency_ms = (end_time - start_time) * 1000
-                connections.append(latency_ms)
-                nfr_tracker.record("websocket_connection", latency_ms)
-
-            except Exception as e:
-                pytest.skip(f"WebSocket connection test skipped: {e}")
+            end_time = time.perf_counter()
+            latency_ms = (end_time - start_time) * 1000
+            connections.append(latency_ms)
+            nfr_tracker.record("websocket_connection", latency_ms)
 
         if connections:
             # Assert P95 < 100ms
@@ -160,31 +175,32 @@ class TestWebSocketConnectionLatency:
         Tests that sending a message and receiving acknowledgment
         completes quickly.
         """
-        for i in range(10):
+        for _ in range(10):
             start_time = time.perf_counter()
 
+            ws_url = "ws://localhost:3444/api/v1/ws/sales"
+            test_message = {"type": "ping", "data": "test"}
+
             try:
-                ws_url = "ws://localhost:3444/api/v1/ws/sales"
-                test_message = {"type": "ping", "data": "test"}
+                async with websockets.connect(
+                    ws_url,
+                    close_timeout=1.0,
+                    ping_interval=None,
+                ) as ws:
+                    await ws.send(test_message)
+                    await ws.recv()
+            except ConnectionRefusedError:
+                skip_infra_missing(
+                    "WebSocket server refused connection on localhost:3444"
+                )
+            except OSError as exc:
+                skip_infra_missing(
+                    f"WebSocket server unavailable on localhost:3444: {exc}"
+                )
 
-                try:
-                    async with websockets.connect(
-                        ws_url,
-                        close_timeout=1.0,
-                        ping_interval=None,
-                    ) as ws:
-                        await ws.send(test_message)
-                        await ws.recv()
-
-                except (ConnectionRefusedError, OSError):
-                    pytest.skip("WebSocket server not available")
-
-                end_time = time.perf_counter()
-                latency_ms = (end_time - start_time) * 1000
-                nfr_tracker.record("websocket_roundtrip", latency_ms)
-
-            except Exception as e:
-                pytest.skip(f"WebSocket roundtrip test skipped: {e}")
+            end_time = time.perf_counter()
+            latency_ms = (end_time - start_time) * 1000
+            nfr_tracker.record("websocket_roundtrip", latency_ms)
 
         if nfr_tracker.metrics.get("websocket_roundtrip"):
             p95 = nfr_tracker.percentile("websocket_roundtrip", 95)
@@ -227,22 +243,9 @@ class TestASRStreamingLatency:
         # Test with different ASR providers
         providers_to_test = []
 
-        # Try Aliyun provider if available
-        try:
-            import os
-
-            api_key = os.getenv("ALIYUN_ASR_API_KEY") or os.getenv(
-                "DASHSCOPE_API_KEY"
-            )
-            if api_key:
-                providers_to_test.append(
-                    (
-                        "aliyun",
-                        AlibabaASRProvider(api_key=api_key),
-                    )
-                )
-        except Exception:
-            pass
+        api_key = os.getenv("ALIYUN_ASR_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+        if api_key:
+            providers_to_test.append(("aliyun", AlibabaASRProvider(api_key=api_key)))
 
         # Also test with fallback service
         asr_fallback = get_asr_with_fallback()
@@ -278,11 +281,15 @@ class TestASRStreamingLatency:
                             f"asr_total_latency_{provider_name}", total_latency_ms
                         )
 
-                except Exception as e:
-                    pytest.skip(f"ASR streaming test skipped for {provider_name}: {e}")
+                except (TimeoutError, ConnectionError, OSError) as exc:
+                    skip_external_unavailable(
+                        f"ASR provider {provider_name} unavailable: {exc}"
+                    )
             else:
                 # Test with fallback (may use mock data)
-                pytest.skip(f"ASR streaming test skipped for {provider_name}")
+                skip_provider_unavailable(
+                    f"ASR provider {provider_name} has no real streaming backend configured"
+                )
 
     @pytest.mark.asyncio
     async def test_asr_chunk_processing_latency(
@@ -332,12 +339,10 @@ class TestTTSFirstByteLatency:
 
         Measures time from synthesis request to receiving first audio chunk.
         """
-        import os
-
         api_key = os.getenv("ALIYUN_DASHSCOPE_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
 
         if not api_key:
-            pytest.skip("DASHSCOPE_API_KEY not configured for Aliyun TTS test")
+            skip_provider_unavailable("DASHSCOPE_API_KEY not configured for Aliyun TTS test")
 
         try:
             from common.audio.aliyun_streaming_tts import AliyunStreamingTTS
@@ -384,11 +389,11 @@ class TestTTSFirstByteLatency:
                         latency_ms = (first_byte_times[0] - synthesis_start) * 1000
                         nfr_tracker.record("tts_first_byte_aliyun", latency_ms)
 
-                except Exception as e:
-                    pytest.skip(f"Aliyun TTS first-byte test skipped: {e}")
+                except (TimeoutError, ConnectionError, OSError) as exc:
+                    skip_external_unavailable(f"Aliyun TTS provider unavailable: {exc}")
 
         except ImportError:
-            pytest.skip("dashscope library not available")
+            skip_provider_unavailable("dashscope library not available")
 
     @pytest.mark.asyncio
     async def test_tts_first_byte_latency_edge(
@@ -426,8 +431,8 @@ class TestTTSFirstByteLatency:
                     latency_ms = (first_byte_time - synthesis_start) * 1000
                     nfr_tracker.record("tts_first_byte_edge", latency_ms)
 
-            except Exception as e:
-                pytest.skip(f"Edge-TTS first-byte test skipped: {e}")
+            except (TimeoutError, ConnectionError, OSError) as exc:
+                skip_external_unavailable(f"Edge-TTS provider unavailable: {exc}")
 
     @pytest.mark.asyncio
     async def test_tts_total_synthesis_latency(
@@ -464,8 +469,8 @@ class TestTTSFirstByteLatency:
                         f"tts_total_synthesis_{expected_chars}_chars", total_ms
                     )
 
-            except Exception as e:
-                pytest.skip(f"TTS total synthesis test skipped: {e}")
+            except (TimeoutError, ConnectionError, OSError) as exc:
+                skip_external_unavailable(f"TTS provider unavailable: {exc}")
 
 
 # ============================================================================
@@ -580,9 +585,7 @@ class TestEndToEndLatency:
         Note: This is an integration test that requires the full backend stack.
         In CI/CD, this would run against a test environment.
         """
-        pytest.skip(
-            "E2E full flow test requires running backend with all services"
-        )
+        skip_infra_missing("E2E full flow test requires running backend with all services")
 
         # This test would:
         # 1. Connect via WebSocket

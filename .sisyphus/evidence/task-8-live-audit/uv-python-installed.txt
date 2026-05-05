@@ -1,9 +1,0 @@
-cpython-3.14.3-macos-aarch64-none     /opt/homebrew/bin/python3.14 -> ../Cellar/python@3.14/3.14.3_1/bin/python3.14
-cpython-3.14.3-macos-aarch64-none     /opt/homebrew/bin/python3 -> ../Cellar/python@3.14/3.14.3_1/bin/python3
-cpython-3.13.12-macos-aarch64-none    /opt/homebrew/bin/python3.13 -> ../Cellar/python@3.13/3.13.12_1/bin/python3.13
-cpython-3.12.12-macos-aarch64-none    /opt/homebrew/bin/python3.12 -> ../Cellar/python@3.12/3.12.12/bin/python3.12
-cpython-3.12.12-macos-aarch64-none    /Users/zhaozengqing/.local/bin/python3.12 -> /Users/zhaozengqing/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/bin/python3.12
-cpython-3.12.12-macos-aarch64-none    /Users/zhaozengqing/.local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12
-cpython-3.11.15-macos-aarch64-none    /opt/homebrew/bin/python3.11 -> ../Cellar/python@3.11/3.11.15/bin/python3.11
-cpython-3.11.12-macos-aarch64-none    /Users/zhaozengqing/.local/share/uv/python/cpython-3.11-macos-aarch64-none/bin/python3.11
-cpython-3.9.6-macos-aarch64-none      /usr/bin/python3

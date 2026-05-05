@@ -358,7 +358,7 @@ class TestComprehensiveReportService:
         """Test retrieving existing report."""
         # Arrange
         session_id = str(uuid4())
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(UTC)
 
         mock_db_report = MagicMock()
         mock_db_report.session_id = session_id
@@ -429,7 +429,7 @@ class TestComprehensiveReportService:
         """Test retrieving report with validation error."""
         # Arrange
         session_id = str(uuid4())
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(UTC)
 
         mock_db_report = MagicMock()
         mock_db_report.session_id = session_id

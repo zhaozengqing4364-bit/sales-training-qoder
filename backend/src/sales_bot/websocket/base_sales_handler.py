@@ -23,6 +23,7 @@ Subclasses override:
 - _on_connection_closed() → None  (optional hook)
 - _process_user_text(text) → None  (if enhanced processing needed)
 """
+
 import asyncio
 import base64
 import json
@@ -146,7 +147,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
         await self._sync_session_state()
 
         # Send initial status from persisted session lifecycle state
-        initial_ai_state = "listening" if self.session_status == "in_progress" else "idle"
+        initial_ai_state = (
+            "listening" if self.session_status == "in_progress" else "idle"
+        )
         await self._send_status(initial_ai_state)
 
         # Only greet when session is actively running
@@ -225,7 +228,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
         try:
             async with AsyncSessionLocal() as db:
                 lifecycle_service = SessionLifecycleService(db)
-                session, scenario_type = await lifecycle_service.get_session_with_scenario(self.session_id)
+                (
+                    session,
+                    scenario_type,
+                ) = await lifecycle_service.get_session_with_scenario(self.session_id)
                 if session:
                     self.session_status = str(session.status or "preparing")
                     self.session_scenario_type = scenario_type or self.scenario
@@ -245,7 +251,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
         try:
             async with AsyncSessionLocal() as db:
                 lifecycle_service = SessionLifecycleService(db)
-                session, scenario_type = await lifecycle_service.get_session_with_scenario(self.session_id)
+                (
+                    session,
+                    scenario_type,
+                ) = await lifecycle_service.get_session_with_scenario(self.session_id)
                 if not session:
                     await self._send_error("[SESSION_NOT_FOUND]", "会话不存在")
                     return None
@@ -262,7 +271,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
                     await db.rollback()
                     self.session_status = str(session.status or self.session_status)
                     await self._send_error("[INVALID_SESSION_TRANSITION]", exc.message)
-                    await self._send_status("idle" if self.session_status != "in_progress" else "listening")
+                    await self._send_status(
+                        "idle" if self.session_status != "in_progress" else "listening"
+                    )
                     return None
 
                 await db.commit()
@@ -448,23 +459,28 @@ class BaseSalesHandler(BaseWebSocketHandler):
         await self._stop_streaming_asr()
 
         # Send session_ended confirmation so frontend knows it's safe to navigate
-        await self.manager.send_json(self.websocket, {
-            "type": "session_ended",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "trace_id": get_trace_id(),
-            "data": {
-                "session_id": self.session_id,
-                "turn_count": self.turn_count,
-                "session_status": self.session_status,
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "session_ended",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": get_trace_id(),
+                "data": {
+                    "session_id": self.session_id,
+                    "turn_count": self.turn_count,
+                    "session_status": self.session_status,
+                },
             },
-        })
+        )
 
         # Stop the message processing loop — this will trigger cleanup in handle_connection
         self.running = False
 
     async def _handle_interrupt(self, reason: str = "manual"):
         """Handle interrupt request and notify client with stable event envelope."""
-        logger.info(f"Interrupt received: session_id={self.session_id}, reason={reason}")
+        logger.info(
+            f"Interrupt received: session_id={self.session_id}, reason={reason}"
+        )
 
         interrupted_stream_id = self.current_stream_id
         await self._stop_streaming_asr()
@@ -479,14 +495,18 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 "data": {
                     "reason": reason,
                     "session_status": self.session_status,
-                    "ai_state": "listening" if self.session_status == "in_progress" else "idle",
+                    "ai_state": "listening"
+                    if self.session_status == "in_progress"
+                    else "idle",
                     "turn_count": self.turn_count,
                 },
             },
         )
 
         self.current_stream_id = None
-        await self._send_status("listening" if self.session_status == "in_progress" else "idle")
+        await self._send_status(
+            "listening" if self.session_status == "in_progress" else "idle"
+        )
 
     @staticmethod
     def _extract_text_payload(data: dict) -> str:
@@ -585,7 +605,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 backpressure_action = "resume"
 
         if dropped_for_overflow:
-            logger.warning(f"[BACKPRESSURE] Queue full ({queue_size}), dropping audio chunk")
+            logger.warning(
+                f"[BACKPRESSURE] Queue full ({queue_size}), dropping audio chunk"
+            )
             await self._send_audio_drop_notice(queue_size=queue_size, dropped_chunks=1)
 
         if backpressure_action is not None:
@@ -630,16 +652,24 @@ class BaseSalesHandler(BaseWebSocketHandler):
         should_send_resume = False
         async with self._state_lock:
             # 防止重复调用
-            if not self.is_user_speaking and self.asr_task is None and self.asr_queue is None:
+            if (
+                not self.is_user_speaking
+                and self.asr_task is None
+                and self.asr_queue is None
+            ):
                 logger.debug("Ignoring _stop_streaming_asr - already stopped")
                 return
 
-            logger.info(f"_stop_streaming_asr called: is_user_speaking={self.is_user_speaking}, has_task={self.asr_task is not None}")
+            logger.info(
+                f"_stop_streaming_asr called: is_user_speaking={self.is_user_speaking}, has_task={self.asr_task is not None}"
+            )
             self.is_user_speaking = False
 
             # 检查音频是否太短
             if self.audio_buffer_size < self.MIN_AUDIO_SIZE:
-                logger.warning(f"Audio too short: {self.audio_buffer_size} bytes, minimum: {self.MIN_AUDIO_SIZE}")
+                logger.warning(
+                    f"Audio too short: {self.audio_buffer_size} bytes, minimum: {self.MIN_AUDIO_SIZE}"
+                )
                 self.asr_task = None
                 self.asr_queue = None
                 self.audio_buffer_size = 0
@@ -690,7 +720,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
         # Previously, _process_user_text blocked the loop for 5-10s (LLM+TTS),
         # causing subsequent recording messages to pile up and ASR to only produce "嗯".
         if final_transcript and len(final_transcript.strip()) > 0:
-            logger.info(f"Processing transcript (non-blocking): {final_transcript[:30]}...")
+            logger.info(
+                f"Processing transcript (non-blocking): {final_transcript[:30]}..."
+            )
             await self._launch_response_task(final_transcript, source="asr_final")
         else:
             logger.info("No transcript to process")
@@ -763,7 +795,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
         # Add to conversation history with size limit
         self.conversation_history.append({"role": "user", "content": text})
         if len(self.conversation_history) > self.MAX_CONVERSATION_HISTORY:
-            self.conversation_history = self.conversation_history[-self.MAX_CONVERSATION_HISTORY:]
+            self.conversation_history = self.conversation_history[
+                -self.MAX_CONVERSATION_HISTORY :
+            ]
 
         await self._send_status("thinking")
 
@@ -785,15 +819,21 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 knowledge_context=knowledge_context,
             )
 
-        logger.info(f"LLM response generated: {response_text[:50] if response_text else 'None'}...")
+        logger.info(
+            f"LLM response generated: {response_text[:50] if response_text else 'None'}..."
+        )
 
         if response_text:
-            self.conversation_history.append({"role": "assistant", "content": response_text})
+            self.conversation_history.append(
+                {"role": "assistant", "content": response_text}
+            )
             self.turn_count += 1
 
             # Critical Fix #2: 为这个TTS流生成新的stream_id
             self.current_stream_id = str(self.uuid.uuid4())
-            logger.info(f"[REQUEST {current_req_id}] Starting TTS with stream_id={self.current_stream_id}")
+            logger.info(
+                f"[REQUEST {current_req_id}] Starting TTS with stream_id={self.current_stream_id}"
+            )
             await self._send_tts_response(response_text, current_req_id)
         else:
             fallback = self._get_fallback_response()
@@ -818,7 +858,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 )
                 return False
 
-            self._response_task = asyncio.create_task(self._process_user_text_safe(text))
+            self._response_task = asyncio.create_task(
+                self._process_user_text_safe(text)
+            )
             return True
 
     async def _process_user_text_safe(self, text: str):
@@ -842,13 +884,17 @@ class BaseSalesHandler(BaseWebSocketHandler):
         current_time = time.time()
         text_normalized = text.strip().lower()
 
-        if (text_normalized == self.last_user_text.strip().lower() and
-            current_time - self.last_user_text_time < self.DUPLICATE_THRESHOLD):
+        if (
+            text_normalized == self.last_user_text.strip().lower()
+            and current_time - self.last_user_text_time < self.DUPLICATE_THRESHOLD
+        ):
             logger.warning(f"Duplicate message detected, ignoring: {text[:30]}...")
             return True
 
         # 相似度检查
-        if self.last_user_text and self._is_similar_text(text_normalized, self.last_user_text.strip().lower()):
+        if self.last_user_text and self._is_similar_text(
+            text_normalized, self.last_user_text.strip().lower()
+        ):
             if current_time - self.last_user_text_time < self.DUPLICATE_THRESHOLD:
                 logger.warning(f"Similar message detected, ignoring: {text[:30]}...")
                 return True
@@ -901,15 +947,18 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     async def _send_transcript(self, text: str, is_final: bool):
         """Send ASR transcript to client."""
-        await self.manager.send_json(self.websocket, {
-            "type": "asr_transcript",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "data": {
-                "text": text,
-                "is_final": is_final,
-                "confidence": 0.95,
-            }
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "asr_transcript",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "text": text,
+                    "is_final": is_final,
+                    "confidence": 0.95,
+                },
+            },
+        )
 
     async def _send_tts_response(self, text: str, request_id: int):
         """
@@ -919,6 +968,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         Critical Fix #2: 添加stream_id和request_id防止消息乱序
         """
         from common.audio.tts_service import get_tts_service
+
         tts_service = get_tts_service()
 
         try:
@@ -945,19 +995,24 @@ class BaseSalesHandler(BaseWebSocketHandler):
                     else len(text) * 100
                 )
 
-                logger.info(f"TTS generated {len(audio_data)} bytes for: {text[:30]}...")
+                logger.info(
+                    f"TTS generated {len(audio_data)} bytes for: {text[:30]}..."
+                )
 
-                await self.manager.send_json(self.websocket, {
-                    "type": "tts_audio",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "stream_id": self.current_stream_id,
-                    "request_id": request_id,
-                    "data": {
-                        "text": text,
-                        "audio": audio_base64,
-                        "duration_ms": duration_ms,
-                    }
-                })
+                await self.manager.send_json(
+                    self.websocket,
+                    {
+                        "type": "tts_audio",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "stream_id": self.current_stream_id,
+                        "request_id": request_id,
+                        "data": {
+                            "text": text,
+                            "audio": audio_base64,
+                            "duration_ms": duration_ms,
+                        },
+                    },
+                )
             else:
                 logger.warning(f"TTS failed: {result.fallback}")
                 await self._send_tts_fallback(text, request_id)
@@ -970,56 +1025,68 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     async def _send_tts_fallback(self, text: str, request_id: int):
         """Send text-only TTS fallback for browser TTS."""
-        await self.manager.send_json(self.websocket, {
-            "type": "tts_audio",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "stream_id": self.current_stream_id,
-            "request_id": request_id,
-            "data": {
-                "text": text,
-                "audio": "",
-                "duration_ms": len(text) * 100,
-                "fallback": "browser_tts",
-            }
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "tts_audio",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "stream_id": self.current_stream_id,
+                "request_id": request_id,
+                "data": {
+                    "text": text,
+                    "audio": "",
+                    "duration_ms": len(text) * 100,
+                    "fallback": "browser_tts",
+                },
+            },
+        )
 
     async def _send_status(self, ai_state: str):
         """Send status update to client."""
         self.ai_state = ai_state
-        await self.manager.send_json(self.websocket, {
-            "type": "status",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "trace_id": get_trace_id(),
-            "data": {
-                "session_status": self.session_status,
-                "ai_state": ai_state,
-                "turn_count": self.turn_count,
-            }
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "status",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": get_trace_id(),
+                "data": {
+                    "session_status": self.session_status,
+                    "ai_state": ai_state,
+                    "turn_count": self.turn_count,
+                },
+            },
+        )
 
     async def _send_heartbeat(self):
         """Send heartbeat to client."""
-        await self.manager.send_json(self.websocket, {
-            "type": "heartbeat",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "data": {},
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "heartbeat",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {},
+            },
+        )
 
     async def _send_error(self, code: str, message: str):
         """Send error to client."""
-        await self.manager.send_json(self.websocket, {
-            "type": "error",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "trace_id": get_trace_id(),
-            "data": {
-                "code": code,
-                "message": message,
-                "user_action": "请重试",
-                "session_status": self.session_status,
-                "ai_state": self.ai_state,
-                "turn_count": self.turn_count,
-            }
-        })
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "error",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": get_trace_id(),
+                "data": {
+                    "code": code,
+                    "message": message,
+                    "user_action": "请重试",
+                    "session_status": self.session_status,
+                    "ai_state": self.ai_state,
+                    "turn_count": self.turn_count,
+                },
+            },
+        )
 
     async def _send_backpressure(self, action: str, queue_size: int):
         """Send backpressure signal to client."""

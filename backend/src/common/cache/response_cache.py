@@ -99,8 +99,7 @@ class ResponseCache:
         """Remove expired entries, returns count removed"""
         now = datetime.now(UTC)
         expired_keys = [
-            key for key, entry in self._cache.items()
-            if now > entry["expires"]
+            key for key, entry in self._cache.items() if now > entry["expires"]
         ]
 
         for key in expired_keys:
@@ -129,6 +128,7 @@ def cached(prefix: str, ttl: int | None = None):
         async def get_leaderboard(scenario_type: str):
             ...
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -146,4 +146,5 @@ def cached(prefix: str, ttl: int | None = None):
             return result
 
         return wrapper
+
     return decorator

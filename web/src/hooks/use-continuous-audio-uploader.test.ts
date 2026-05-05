@@ -46,7 +46,8 @@ class MockMediaRecorder {
         onerrorHandler = fn;
     }
 
-    start = mockMediaRecorderStart.mockImplementation((_timeslice?: number) => {
+    start = mockMediaRecorderStart.mockImplementation((timeslice?: number) => {
+        void timeslice;
         this.state = "recording";
     });
 

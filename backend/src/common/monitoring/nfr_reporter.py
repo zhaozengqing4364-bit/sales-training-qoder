@@ -14,6 +14,7 @@ Requirements:
 - NFR-P4: Key API response < 100ms (P95), < 200ms (P99)
 - NFR-C1: Support >= 50 concurrent sessions
 """
+
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,6 +29,7 @@ logger = get_logger(__name__)
 @dataclass
 class NFRThreshold:
     """Single NFR performance threshold definition."""
+
     metric_name: str
     p95_target_ms: float
     p99_target_ms: float | None = None
@@ -37,6 +39,7 @@ class NFRThreshold:
 @dataclass
 class NFRTestResult:
     """Result of a single NFR metric test."""
+
     metric_name: str
     p95_actual_ms: float
     p99_actual_ms: float | None = None
@@ -199,9 +202,7 @@ class NFRReporter:
             "total_metrics": total_metrics,
             "passed_metrics": passed_metrics,
             "failed_metrics": failed_metrics,
-            "pass_rate": (
-                passed_metrics / total_metrics if total_metrics > 0 else 0.0
-            ),
+            "pass_rate": (passed_metrics / total_metrics if total_metrics > 0 else 0.0),
             "overall_status": "PASS" if failed_metrics == 0 else "FAIL",
         }
 
@@ -223,7 +224,9 @@ class NFRReporter:
                 {
                     "metric_name": r.metric_name,
                     "p95_actual_ms": round(r.p95_actual_ms, 2),
-                    "p99_actual_ms": round(r.p99_actual_ms, 2) if r.p99_actual_ms else None,
+                    "p99_actual_ms": round(r.p99_actual_ms, 2)
+                    if r.p99_actual_ms
+                    else None,
                     "passed": r.passed,
                     "samples": r.samples,
                     "min_ms": round(r.min_ms, 2),
@@ -260,7 +263,7 @@ class NFRReporter:
             f"| Total Metrics Tested | {self.get_summary()['total_metrics']} |",
             f"| Passed | {self.get_summary()['passed_metrics']} |",
             f"| Failed | {self.get_summary()['failed_metrics']} |",
-            f"| Pass Rate | {self.get_summary()['pass_rate']*100:.1f}% |",
+            f"| Pass Rate | {self.get_summary()['pass_rate'] * 100:.1f}% |",
             f"| Overall Status | **{'✅ PASS' if self.get_summary()['overall_status'] == 'PASS' else '❌ FAIL'}** |",
             "",
             "---",
@@ -282,7 +285,9 @@ class NFRReporter:
 
             if threshold:
                 p99_target = threshold.p99_target_ms or "N/A"
-                p99_actual = f"{result.p99_actual_ms:.2f}" if result.p99_actual_ms else "N/A"
+                p99_actual = (
+                    f"{result.p99_actual_ms:.2f}" if result.p99_actual_ms else "N/A"
+                )
                 status = "✅ PASS" if result.passed else "❌ FAIL"
 
                 lines.append(
@@ -290,28 +295,34 @@ class NFRReporter:
                     f"{result.p95_actual_ms:.2f}ms | {p99_target}ms | {p99_actual}ms | {status} |"
                 )
 
-        lines.extend([
-            "",
-            "---",
-            "",
-            "## Detailed Results",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "---",
+                "",
+                "## Detailed Results",
+                "",
+            ]
+        )
 
         # Add detailed per-metric breakdown
         for result in self.results:
-            lines.extend([
-                f"### {result.metric_name.replace('_', ' ').title()}",
-                "",
-                f"- **Status:** {'✅ PASS' if result.passed else '❌ FAIL'}",
-                f"- **Samples:** {result.samples}",
-                f"- **P95:** {result.p95_actual_ms:.2f}ms",
-                f"- **P99:** {result.p99_actual_ms:.2f}ms" if result.p99_actual_ms else "",
-                f"- **Min:** {result.min_ms:.2f}ms",
-                f"- **Max:** {result.max_ms:.2f}ms",
-                f"- **Avg:** {result.avg_ms:.2f}ms",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {result.metric_name.replace('_', ' ').title()}",
+                    "",
+                    f"- **Status:** {'✅ PASS' if result.passed else '❌ FAIL'}",
+                    f"- **Samples:** {result.samples}",
+                    f"- **P95:** {result.p95_actual_ms:.2f}ms",
+                    f"- **P99:** {result.p99_actual_ms:.2f}ms"
+                    if result.p99_actual_ms
+                    else "",
+                    f"- **Min:** {result.min_ms:.2f}ms",
+                    f"- **Max:** {result.max_ms:.2f}ms",
+                    f"- **Avg:** {result.avg_ms:.2f}ms",
+                    "",
+                ]
+            )
 
         lines.append("---")
         lines.append("")
@@ -327,11 +338,17 @@ class NFRReporter:
             for result in self.results:
                 if not result.passed:
                     threshold = next(
-                        (t for t in self.THRESHOLDS if t.metric_name == result.metric_name),
+                        (
+                            t
+                            for t in self.THRESHOLDS
+                            if t.metric_name == result.metric_name
+                        ),
                         None,
                     )
                     if threshold:
-                        lines.append(f"- **{threshold.description}**: P95={result.p95_actual_ms:.2f}ms (target: {threshold.p95_target_ms}ms)")
+                        lines.append(
+                            f"- **{threshold.description}**: P95={result.p95_actual_ms:.2f}ms (target: {threshold.p95_target_ms}ms)"
+                        )
 
         output_path = self.output_dir / filename
         with open(output_path, "w", encoding="utf-8") as f:
@@ -440,30 +457,30 @@ class NFRReporter:
     <div class="container">
         <h1>NFR Performance Report</h1>
 
-        <p><strong>Generated:</strong> {self.test_metadata.get('timestamp', 'N/A')}</p>
-        <p><strong>Commit:</strong> <code>{self.test_metadata.get('commit_sha', 'N/A')}</code></p>
-        <p><strong>Branch:</strong> <code>{self.test_metadata.get('branch', 'N/A')}</code></p>
-        <p><strong>Environment:</strong> <code>{self.test_metadata.get('environment', 'ci')}</code></p>
+        <p><strong>Generated:</strong> {self.test_metadata.get("timestamp", "N/A")}</p>
+        <p><strong>Commit:</strong> <code>{self.test_metadata.get("commit_sha", "N/A")}</code></p>
+        <p><strong>Branch:</strong> <code>{self.test_metadata.get("branch", "N/A")}</code></p>
+        <p><strong>Environment:</strong> <code>{self.test_metadata.get("environment", "ci")}</code></p>
 
         <h2>Summary</h2>
         <div class="summary">
             <div class="metric-card">
                 <div>Total Metrics Tested</div>
-                <div class="metric-value">{summary['total_metrics']}</div>
+                <div class="metric-value">{summary["total_metrics"]}</div>
             </div>
             <div class="metric-card pass">
                 <div>Passed</div>
-                <div class="metric-value">{summary['passed_metrics']}</div>
+                <div class="metric-value">{summary["passed_metrics"]}</div>
             </div>
             <div class="metric-card fail">
                 <div>Failed</div>
-                <div class="metric-value">{summary['failed_metrics']}</div>
+                <div class="metric-value">{summary["failed_metrics"]}</div>
             </div>
-            <div class="metric-card {'pass' if summary['overall_status'] == 'PASS' else 'fail'}">
+            <div class="metric-card {"pass" if summary["overall_status"] == "PASS" else "fail"}">
                 <div>Overall Status</div>
                 <div class="metric-value">
-                    <span class="status-{'pass' if summary['overall_status'] == 'PASS' else 'fail'}">
-                        {summary['overall_status']}
+                    <span class="status-{"pass" if summary["overall_status"] == "PASS" else "fail"}">
+                        {summary["overall_status"]}
                     </span>
                 </div>
             </div>
@@ -489,7 +506,11 @@ class NFRReporter:
                 None,
             )
             if threshold:
-                status_badge = '<span class="badge badge-pass">PASS</span>' if result.passed else '<span class="badge badge-fail">FAIL</span>'
+                status_badge = (
+                    '<span class="badge badge-pass">PASS</span>'
+                    if result.passed
+                    else '<span class="badge badge-fail">FAIL</span>'
+                )
                 html_template += f"""
                 <tr>
                     <td>{threshold.description}</td>
@@ -522,13 +543,15 @@ class NFRReporter:
 
         # Add detailed rows
         for result in self.results:
-            status_class = 'status-pass' if result.passed else 'status-fail'
-            status_text = 'PASS' if result.passed else 'FAIL'
-            p99_text = f"{result.p99_actual_ms:.2f}ms" if result.p99_actual_ms else "N/A"
+            status_class = "status-pass" if result.passed else "status-fail"
+            status_text = "PASS" if result.passed else "FAIL"
+            p99_text = (
+                f"{result.p99_actual_ms:.2f}ms" if result.p99_actual_ms else "N/A"
+            )
 
             html_template += f"""
             <tr>
-                <td>{result.metric_name.replace('_', ' ').title()}</td>
+                <td>{result.metric_name.replace("_", " ").title()}</td>
                 <td class="{status_class}">{status_text}</td>
                 <td>{result.samples}</td>
                 <td>{result.p95_actual_ms:.2f}ms</td>
@@ -582,6 +605,7 @@ def create_nfr_report(
 
     # Set metadata
     import os
+
     reporter.set_metadata(
         commit_sha=os.getenv("GITHUB_SHA"),
         branch=os.getenv("GITHUB_REF_NAME"),
