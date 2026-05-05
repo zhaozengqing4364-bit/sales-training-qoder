@@ -10,9 +10,9 @@ Requirements: P0-FIXES.md Issue #11
 """
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from common.audio.asr_base import ASRProvider
 from common.audio.asr_service import ASRService, get_asr_service
@@ -283,15 +283,15 @@ class ASRServiceWithFallback:
         service = self._get_asr_service()
 
         # Create async generator for stream_transcribe
-        async def audio_stream():
+        async def audio_stream() -> AsyncIterator[bytes]:
             yield audio
 
         # Try streaming transcribe first
         try:
-            results = []
+            results: list[str] = []
             async for result in service.stream_transcribe(audio_stream(), sample_rate):
                 if result.is_success:
-                    results.append(result.value)
+                    results.append(cast(str, result.value))
 
             if results:
                 return Result.ok(" ".join(results))
@@ -361,13 +361,13 @@ class ASRServiceWithFallback:
     ) -> Result[str]:
         """Transcribe one audio buffer through a concrete ASR provider."""
 
-        async def audio_stream():
+        async def audio_stream() -> AsyncIterator[bytes]:
             yield audio
 
-        results = []
+        results: list[str] = []
         async for result in provider.stream_transcribe(audio_stream(), sample_rate):
             if result.is_success:
-                results.append(result.value)
+                results.append(cast(str, result.value))
 
         if results:
             return Result.ok(" ".join(results))

@@ -21,7 +21,7 @@ class ASRProvider(ABC):
     """
 
     @abstractmethod
-    async def stream_transcribe(
+    def stream_transcribe(
         self, audio_stream: AsyncIterator[bytes], sample_rate: int = 16000
     ) -> AsyncIterator[Result[str]]:
         """
