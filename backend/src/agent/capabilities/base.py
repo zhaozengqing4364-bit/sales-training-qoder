@@ -27,7 +27,7 @@ Usage:
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from agent.context import AgentContext
 from common.monitoring.logger import get_logger
@@ -94,7 +94,7 @@ class CapabilityResult:
         Returns:
             Dictionary representation of the result.
         """
-        result = {"success": self.success}
+        result: dict[str, Any] = {"success": self.success}
         if self.data is not None:
             result["data"] = self.data
         if self.should_interrupt:
@@ -222,7 +222,7 @@ class BaseCapability(ABC):
         Returns:
             True if enabled, False otherwise.
         """
-        return self.config.get("enabled", True)
+        return cast(bool, self.config.get("enabled", True))
 
     def get_config_value(self, key: str, default: Any = None) -> Any:
         """
