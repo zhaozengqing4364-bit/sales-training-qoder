@@ -11,6 +11,7 @@ from collections.abc import AsyncGenerator
 
 from dotenv import load_dotenv
 from sqlalchemy import inspect
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -106,7 +107,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def init_db():
+async def init_db() -> None:
     """Initialize mapped tables and run startup-time compatibility guards.
 
     This function is the startup bootstrap surface only. Alembic remains the
@@ -149,7 +150,7 @@ async def init_db():
     logger.info("Startup database bootstrap finished")
 
 
-def _ensure_report_evaluation_schema_authority(sync_conn) -> None:
+def _ensure_report_evaluation_schema_authority(sync_conn: Connection) -> None:
     if _startup_schema_repairs_allowed():
         return
 
@@ -278,7 +279,7 @@ def _ensure_report_evaluation_schema_authority(sync_conn) -> None:
         )
 
 
-def _ensure_persona_policy_column_compatibility(sync_conn) -> None:
+def _ensure_persona_policy_column_compatibility(sync_conn: Connection) -> None:
     """
     Ensure `personas.persona_policy` exists for persona-centered policy runtime.
 
@@ -308,7 +309,7 @@ def _ensure_persona_policy_column_compatibility(sync_conn) -> None:
         )
 
 
-def _ensure_knowledge_document_schema_compatibility(sync_conn) -> None:
+def _ensure_knowledge_document_schema_compatibility(sync_conn: Connection) -> None:
     """
     Ensure knowledge_documents accepts spreadsheet uploads on legacy databases.
 
