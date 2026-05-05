@@ -9,10 +9,20 @@ Implements Constitution Principles:
 import hashlib
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import wraps
+from typing import ParamSpec, TypedDict, TypeVar, cast
 
 logger = logging.getLogger(__name__)
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+class CacheEntry(TypedDict):
+    value: object
+    expires: datetime
 
 
 class ResponseCache:
@@ -22,22 +32,22 @@ class ResponseCache:
     For production, use Redis or Memcached
     """
 
-    def __init__(self, default_ttl: int = 300):
+    def __init__(self, default_ttl: int = 300) -> None:
         """
         Initialize cache
 
         Args:
             default_ttl: Default time-to-live in seconds (5 minutes)
         """
-        self._cache: dict[str, dict] = {}
+        self._cache: dict[str, CacheEntry] = {}
         self.default_ttl = default_ttl
 
-    def _generate_key(self, prefix: str, **kwargs) -> str:
+    def _generate_key(self, prefix: str, **kwargs: object) -> str:
         """Generate cache key from arguments"""
         key_data = f"{prefix}:{json.dumps(kwargs, sort_keys=True)}"
         return hashlib.md5(key_data.encode()).hexdigest()
 
-    def get(self, prefix: str, **kwargs) -> object | None:
+    def get(self, prefix: str, **kwargs: object) -> object | None:
         """
         Get cached value
 
@@ -56,14 +66,17 @@ class ResponseCache:
         entry = self._cache[key]
 
         # Check if expired
-        if datetime.now(UTC) > entry["expires"]:
+        expires = cast(datetime, entry["expires"])
+        if datetime.now(UTC) > expires:
             del self._cache[key]
             return None
 
         logger.debug(f"Cache hit: {key}")
         return entry["value"]
 
-    def set(self, prefix: str, value: object, ttl: int | None = None, **kwargs) -> None:
+    def set(
+        self, prefix: str, value: object, ttl: int | None = None, **kwargs: object
+    ) -> None:
         """
         Set cached value
 
@@ -83,7 +96,7 @@ class ResponseCache:
 
         logger.debug(f"Cache set: {key} (expires: {expires})")
 
-    def invalidate(self, prefix: str, **kwargs) -> None:
+    def invalidate(self, prefix: str, **kwargs: object) -> None:
         """Invalidate cache entry"""
         key = self._generate_key(prefix, **kwargs)
         if key in self._cache:
@@ -115,7 +128,9 @@ class ResponseCache:
 response_cache = ResponseCache()
 
 
-def cached(prefix: str, ttl: int | None = None):
+def cached(
+    prefix: str, ttl: int | None = None
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """
     Decorator for caching async function results
 
@@ -129,13 +144,13 @@ def cached(prefix: str, ttl: int | None = None):
             ...
     """
 
-    def decorator(func):
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             # Try cache first
             cached_value = response_cache.get(prefix, **kwargs)
             if cached_value is not None:
-                return cached_value
+                return cast(T, cached_value)
 
             # Call function
             result = await func(*args, **kwargs)

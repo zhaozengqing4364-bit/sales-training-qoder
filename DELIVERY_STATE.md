@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 PPT OCR processor typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2204 errors in 80 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 response cache typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2196 errors in 79 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -140,6 +140,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: personas `persona_policy` repair detection/payload, knowledge document content-hash repair, spreadsheet file-type constraint repair, SQLite table rebuild SQL, index names, startup repair authority, production refusal semantics, and repair log fields were not added or changed.
 - Latest typed boundary: PPT OCR processor lazy optional imports, page list, and slide-shape contracts in `common.ppt.ocr_processor` are typed as document-processing infrastructure boundaries, not business configuration.
 - Latest unchanged business logic: `python-pptx`, Tesseract, and PIL lazy import behavior, missing-dependency fallback markers, OCR failure fallback markers, slide title heuristic, image-count detection, page numbering, result payload shape, and singleton processor behavior were not added or changed.
+- Latest typed boundary: response cache entry payload and async decorator contracts in `common.cache.response_cache` are typed as shared cache infrastructure boundaries, not business configuration.
+- Latest unchanged business logic: response cache default TTL, MD5 key shape, prefix/kwargs JSON key material, `ttl or default_ttl` expiration fallback, expired-entry deletion, `None` cache-miss sentinel, invalidation/cleanup semantics, global singleton, and cached async decorator behavior were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -275,6 +277,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Session lifecycle ORM typing | `./.venv-test/bin/mypy src/common/db/session_lifecycle.py` now has no direct `src/common/db/session_lifecycle.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2215 errors in 82 files; `ruff check src/common/db/session_lifecycle.py tests/unit/test_session_lifecycle_service.py tests/integration/test_session_lifecycle_api.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_session_lifecycle_service.py tests/integration/test_session_lifecycle_api.py -q --no-cov` | Phase 1.3 session lifecycle ORM typing commit |
 | 2026-05-06 | Phase 1.3 | Legacy schema repair typing | `./.venv-test/bin/mypy src/common/db/legacy_schema_repair.py`; `./.venv-test/bin/mypy src` now fails with 2209 errors in 81 files; `ruff check src/common/db/legacy_schema_repair.py tests/unit/common/test_db_session_compatibility.py tests/integration/test_startup_or_bootstrap_authority.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_db_session_compatibility.py tests/integration/test_startup_or_bootstrap_authority.py -q --no-cov` | Phase 1.3 legacy schema repair typing commit |
 | 2026-05-06 | Phase 1.3 | PPT OCR processor typing | `./.venv-test/bin/mypy src/common/ppt/ocr_processor.py`; `./.venv-test/bin/mypy src` now fails with 2204 errors in 80 files; `ruff check src/common/ppt/ocr_processor.py src/admin/api/admin.py src/common/knowledge/ingestion_service.py tests/unit/admin/test_presentation_upload_safety.py tests/unit/common/test_document_storage_artifacts.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/admin/test_presentation_upload_safety.py tests/unit/common/test_document_storage_artifacts.py tests/integration/test_knowledge_api.py::TestKnowledgeBaseAPI::test_create_knowledge_base tests/integration/test_knowledge_api.py::TestKnowledgeBaseAPI::test_list_knowledge_bases -q --no-cov` | Phase 1.3 PPT OCR processor typing commit |
+| 2026-05-06 | Phase 1.3 | Response cache typing | `./.venv-test/bin/mypy src/common/cache/response_cache.py`; `./.venv-test/bin/mypy src` now fails with 2196 errors in 79 files; `ruff check src/common/cache/response_cache.py`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... response cache hit/expire/invalidate/decorator check ... PY`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/cache/test_redis_cache.py tests/unit/test_stepfun_internal_knowledge_searcher.py -q --no-cov` | Phase 1.3 response cache typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -285,9 +288,11 @@ Based on the currently inspected code, the existing configuration system cannot 
 - `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_asr.py tests/unit/test_asr_provider_chain.py tests/unit/test_p0_fixes.py::TestASRWithFallback -q --no-cov` passed 11 ASR assertions and failed `tests/unit/test_asr.py::TestASRService::test_get_asr_service_singleton` because the local fallback imports optional `funasr`, which is not installed in `.venv-test`. The ASR stream typing atom was then verified with the no-local-model-loading subset listed in the implementation log.
 - The first ad hoc PPT version manager check called the existing `_get_current_version()` from inside an async flow and exposed its pre-existing `asyncio.run()` nested-loop warning/fallback behavior. That behavior was not changed in the PPT version manager typing atom; the version history and cleanup check was rerun with the current-version resolver stubbed and passed.
 - `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_session_lifecycle_service.py tests/integration/test_session_lifecycle_api.py -q --no-cov` passed 27 lifecycle assertions and emitted a post-run asyncpg pending-task warning from connection cleanup. The warning was not introduced by the session lifecycle ORM typing atom.
+- The first response cache verification attempt exposed an invalid `TypedDict` constructor syntax and was not counted as passing verification. The syntax was corrected, import ordering was fixed after ruff flagged it, and the final mypy, ruff, runtime cache check, and pytest commands passed.
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2196 errors in 79 files after typing the response cache boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2204 errors in 80 files after typing the PPT OCR processor boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2209 errors in 81 files after typing the legacy schema repair boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2215 errors in 82 files after typing the session lifecycle ORM boundary. Phase 1.4 was not advanced.
