@@ -94,8 +94,6 @@ async def resolve_rag_profile_for_search(
     from common.knowledge.rag_profile_models import RagProfile
 
     seen_profile_ids: set[str] = set()
-    profiles: list[Any] = []
-
     # Collect distinct profile IDs
     for kb_id, ctx in kb_contexts.items():
         pid = (
