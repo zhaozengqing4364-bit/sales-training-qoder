@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from common.db.models import ManagerIntervention, SessionStatus
 
@@ -110,7 +110,7 @@ class ManagerInterventionResultResolver:
             intervention_id=str(intervention.intervention_id),
             issue_family=str(intervention.issue_family),
             note=getattr(intervention, "note", None),
-            created_at=intervention.created_at,
+            created_at=cast(datetime, intervention.created_at),
             session_id=None,
             session_start_time=None,
             status="pending",
@@ -163,7 +163,7 @@ class ManagerInterventionResultResolver:
             intervention_id=str(intervention.intervention_id),
             issue_family=str(intervention.issue_family),
             note=getattr(intervention, "note", None),
-            created_at=intervention.created_at,
+            created_at=cast(datetime, intervention.created_at),
             session_id=summary.session_id,
             session_start_time=summary.start_time,
             status=status,
@@ -203,7 +203,9 @@ class ManagerInterventionResultResolver:
             key=lambda item: (item.created_at, item.intervention_id),
             reverse=True,
         ):
-            intervention_created_at = cls._normalize_timestamp(intervention.created_at)
+            intervention_created_at = cls._normalize_timestamp(
+                cast(datetime, intervention.created_at)
+            )
             later_completed = [
                 summary
                 for summary in completed_summaries
