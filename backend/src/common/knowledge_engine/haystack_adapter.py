@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -30,7 +31,11 @@ class KnowledgeHaystackExecutionResult:
 class KnowledgeHaystackAdapter:
     """Execute project-owned retrieval plans against the existing search service."""
 
-    def __init__(self, *, search_multiple) -> None:
+    def __init__(
+        self,
+        *,
+        search_multiple: Callable[..., Awaitable[Result[list[dict[str, Any]]]]],
+    ) -> None:
         self._search_multiple = search_multiple
 
     async def execute_plan(
