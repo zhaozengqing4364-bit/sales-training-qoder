@@ -128,7 +128,7 @@ async def get_runtime_overview(
         24, ge=1, le=168, description="Rolling time window in hours"
     ),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     try:
         payload = await RuntimeStatusService(db).get_overview(window_hours=window_hours)
     except Exception as exc:
@@ -163,7 +163,7 @@ async def get_fault_summaries(
         description="Optional severity filter: blocking|warning",
     ),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     allowed_severities = {"blocking", "warning"}
     if severity is not None and severity not in allowed_severities:
         raise HTTPException(status_code=400, detail="[INVALID_SEVERITY_FILTER]")
