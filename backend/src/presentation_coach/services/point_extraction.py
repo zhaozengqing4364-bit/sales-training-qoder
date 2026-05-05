@@ -7,6 +7,7 @@ Implements Constitution Principles:
 """
 
 import logging
+from typing import cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
@@ -40,8 +41,10 @@ class PointExtractionService:
     - Helps admins configure coaching
     """
 
-    def __init__(self):
-        self.parser = PydanticOutputParser(pydantic_object=ExtractedPoints)
+    def __init__(self) -> None:
+        self.parser: PydanticOutputParser[ExtractedPoints] = PydanticOutputParser(
+            pydantic_object=ExtractedPoints
+        )
 
         self.extraction_prompt = PromptTemplate(
             template="""Analyze this PPT slide and identify the required talking points.
@@ -122,13 +125,13 @@ Provide actionable, specific talking points.""",
         Returns: Dict mapping page_number -> ExtractedPoints or Result.fail
         """
         try:
-            results = {}
+            results: dict[int, ExtractedPoints] = {}
 
             for page in pages:
                 result = await self.extract_points_for_page(page)
 
                 if result.is_success:
-                    results[page.page_number] = result.value
+                    results[page.page_number] = cast(ExtractedPoints, result.value)
                 else:
                     # Use fallback for this page
                     results[page.page_number] = self._extract_points_fallback(page)
