@@ -237,7 +237,7 @@ class AgentPersonaService:
 
     async def _clear_default(
         self, agent_id: str, exclude_persona_id: str | None = None
-    ):
+    ) -> None:
         """Clear is_default flag for all personas of an agent"""
         stmt = select(AgentPersona).where(
             AgentPersona.agent_id == agent_id, AgentPersona.is_default.is_(True)
@@ -249,6 +249,6 @@ class AgentPersonaService:
         links = result.scalars().all()
 
         for link in links:
-            link.is_default = False
+            setattr(link, "is_default", False)
 
         await self.db.flush()
