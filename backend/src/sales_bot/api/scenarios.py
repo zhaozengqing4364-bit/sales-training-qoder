@@ -3,6 +3,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,14 +42,14 @@ def _extract_persona_characteristics(traits: Any) -> list[str]:
     return []
 
 
-@router.get("/scenarios")
+@router.get("/scenarios", response_model=None)
 async def list_scenarios(
     scenario_type: str = Query(
         None, description="Filter by scenario type: 'presentation' or 'sales'"
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> list[dict[str, Any]] | JSONResponse:
     """
     List available practice scenarios
 
@@ -67,9 +68,9 @@ async def list_scenarios(
         scenarios = result.scalars().all()
 
         # Format response
-        response_data = []
+        response_data: list[dict[str, Any]] = []
         for scenario in scenarios:
-            scenario_data = {
+            scenario_data: dict[str, Any] = {
                 "scenario_id": scenario.scenario_id,
                 "scenario_type": scenario.scenario_type,
                 "name": scenario.name,
@@ -94,22 +95,22 @@ async def list_scenarios(
         )
 
 
-@router.get("/scenarios/sales/runtime-contract")
+@router.get("/scenarios/sales/runtime-contract", response_model=None)
 async def get_sales_runtime_contract(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Expose how sales scenarios compose persona/customer-pressure/knowledge runtime truth."""
     del current_user, db
     return build_sales_scenario_runtime_contract()
 
 
-@router.get("/scenarios/sales/personas")
+@router.get("/scenarios/sales/personas", response_model=None)
 async def list_sales_personas(
     agent_id: str | None = Query(None, description="Optional agent ID filter"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> list[dict[str, Any]] | JSONResponse:
     """
     List available sales personas for practice
 
@@ -161,12 +162,12 @@ async def list_sales_personas(
         )
 
 
-@router.get("/scenarios/{scenario_id}")
+@router.get("/scenarios/{scenario_id}", response_model=None)
 async def get_scenario(
     scenario_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any] | JSONResponse:
     """Get detailed information about a specific scenario"""
     try:
         result = await db.execute(
