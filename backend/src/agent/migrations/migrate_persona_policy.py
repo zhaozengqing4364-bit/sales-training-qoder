@@ -142,7 +142,7 @@ async def migrate_persona_policy(
             continue
 
         if apply_changes:
-            persona.persona_policy = next_policy
+            setattr(persona, "persona_policy", next_policy)
             sync_legacy_persona_fields(persona, next_policy)
         updated_count += 1
 
