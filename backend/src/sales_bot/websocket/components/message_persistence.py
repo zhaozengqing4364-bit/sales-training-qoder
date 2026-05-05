@@ -7,6 +7,7 @@ Handles all database operations for conversation message storage:
 """
 
 import asyncio
+from typing import cast
 
 from common.conversation.storage import MessageStorageService
 from common.db.session import AsyncSessionLocal
@@ -58,8 +59,8 @@ class MessagePersistence:
                         role=role,
                         content=content,
                     )
-                    if save_result.is_success:
-                        return save_result.value.id
+                    if save_result.is_success and save_result.value is not None:
+                        return cast(str, save_result.value.id)
                     logger.warning(
                         "Failed to persist message",
                         extra={
