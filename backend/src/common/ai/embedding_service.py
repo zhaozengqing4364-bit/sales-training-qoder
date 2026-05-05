@@ -97,21 +97,25 @@ class EmbeddingService:
     def provider(self) -> str:
         """Get current provider name"""
         if self._effective_config:
-            return self._effective_config.get("provider", "unknown")
+            return str(self._effective_config.get("provider", "unknown"))
         return "unknown"
 
     @property
     def model_name(self) -> str:
         """Get current model name"""
         if self._effective_config:
-            return self._effective_config.get("model_name", "unknown")
+            return str(self._effective_config.get("model_name", "unknown"))
         return "unknown"
 
     @property
     def dimensions(self) -> int | None:
         """Get embedding dimensions if configured"""
         if self._effective_config:
-            return self._effective_config.get("extra_config", {}).get("dimensions")
+            extra_config = self._effective_config.get("extra_config", {})
+            if not isinstance(extra_config, dict):
+                return None
+            dimensions = extra_config.get("dimensions")
+            return dimensions if isinstance(dimensions, int) else None
         return None
 
     def reload_config(self, config: ModelConfig | None = None) -> None:
