@@ -38,7 +38,7 @@ class VaguenessDetector:
     Performance: <100ms using regex patterns (no LLM calls)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Patterns organized by severity
         self.high_severity_patterns = [
             (
@@ -88,7 +88,7 @@ class VaguenessDetector:
         # Compile all patterns for performance
         self._compile_patterns()
 
-    def _compile_patterns(self):
+    def _compile_patterns(self) -> None:
         """Pre-compile regex patterns for faster matching"""
         self.high_severity_compiled = [
             (re.compile(pattern, re.IGNORECASE), suggestion)
