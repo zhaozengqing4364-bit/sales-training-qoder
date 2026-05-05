@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,23 +62,23 @@ router = APIRouter(
 )
 
 
-@router.get("/policy")
+@router.get("/policy", response_model=None)
 async def get_scope_policy(
     scope_type: ScopeType = Query(default="global"),
     scope_id: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     service = PresentationAIPolicyService(db)
     data = await service.get_scope_policy(scope_type=scope_type, scope_id=scope_id)
     return success_response(data)
 
 
-@router.put("/policy")
+@router.put("/policy", response_model=None)
 async def upsert_scope_policy(
     payload: PolicyUpsertPayload,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any] | JSONResponse:
     service = PresentationAIPolicyService(db)
     updates = payload.model_dump(
         exclude={"scope_type", "scope_id"},
@@ -107,11 +108,11 @@ async def upsert_scope_policy(
         )
 
 
-@router.post("/policy/preview")
+@router.post("/policy/preview", response_model=None)
 async def preview_scope_policy(
     payload: PolicyPreviewPayload,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     service = PresentationAIPolicyService(db)
 
     scenario_id = payload.scope_id if payload.scope_type == "scenario" else None
@@ -127,13 +128,13 @@ async def preview_scope_policy(
     return success_response(data)
 
 
-@router.get("/policy/effective")
+@router.get("/policy/effective", response_model=None)
 async def get_effective_policy(
     session_id: str | None = Query(default=None),
     scenario_id: str | None = Query(default=None),
     presentation_id: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     service = PresentationAIPolicyService(db)
 
     if session_id:
