@@ -12,6 +12,7 @@ Features:
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from common.error_handling.result import Result
@@ -52,7 +53,7 @@ class ScoreProcessor:
         turn_number: int,
         conversation_history: list[dict],
         stage_name: str,
-        websocket_send: callable,
+        websocket_send: Callable[[dict[str, Any]], Awaitable[None]],
         trace_id: str = "",
     ) -> Result[dict[str, Any] | None]:
         """Process a conversation turn for scoring.
