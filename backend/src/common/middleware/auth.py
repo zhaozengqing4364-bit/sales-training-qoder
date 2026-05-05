@@ -7,8 +7,8 @@ Implements Constitution Principles:
 """
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import JSONResponse, Response
 
 from common.monitoring.logger import get_logger
 
@@ -41,7 +41,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/favicon",
     }
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """
         Process request through auth middleware
 
