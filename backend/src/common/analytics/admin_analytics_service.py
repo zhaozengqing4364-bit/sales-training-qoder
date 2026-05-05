@@ -210,7 +210,7 @@ class AdminAnalyticsService:
     """Projection-backed analytics service for administrators."""
 
     @staticmethod
-    def _round_score(value: float | int | None, digits: int = 1) -> float:
+    def _round_score(value: float | int | str | None, digits: int = 1) -> float:
         try:
             return round(float(value or 0.0), digits)
         except (TypeError, ValueError):
