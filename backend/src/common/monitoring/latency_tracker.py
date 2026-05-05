@@ -124,7 +124,7 @@ class LatencyTracker:
     TARGET_ASR_LATENCY_MS = 200  # ASR processing target
     TARGET_INTERRUPT_LATENCY_MS = 100  # Interrupt response target
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._traces: dict[str, LatencyTrace] = {}
         self._completed_traces: list[LatencyTrace] = []
         self._max_completed_traces = 1000  # Keep last 1000 traces for stats
