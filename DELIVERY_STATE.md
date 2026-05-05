@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 lint and frontend type baseline blocker snapshot commit
-- Blocker: Backend mypy baseline is not production-clean. `mypy` was absent from the project test environment and project dependency files; after installing it into local `.venv-test` only for verification, `PYTHONPATH=src ./.venv-test/bin/mypy src` fails package discovery with duplicate `api` modules, while `MYPYPATH=src ./.venv-test/bin/mypy --explicit-package-bases src` reaches real checking but reports 2430 errors in 164 files.
+- Last commit: Phase 1.3 mypy invocation normalization commit
+- Blocker: Backend mypy baseline is not production-clean. `mypy` is now recorded in backend code-quality dependencies and `pyproject.toml` defines `mypy_path = "src"` plus `explicit_package_bases = true`, so `./.venv-test/bin/mypy src` reaches real checking. It still reports 2430 errors in 164 files, led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -64,11 +64,11 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 - Stable code logic: import ordering, unused import cleanup, TypeScript fixture shape consistency, and verification-tool execution are stable engineering controls.
 - Configurable business rules: none introduced.
-- New configuration items: none.
+- New configuration items: backend mypy invocation configuration in `pyproject.toml`: `mypy_path = "src"` and `explicit_package_bases = true`.
 - Reused configuration items: existing `pyproject.toml` ruff/mypy settings and frontend TypeScript/ESLint configuration.
 - Configuration source: existing repo tool configuration only.
 - Configuration manager: unchanged.
-- Configuration validation: `ruff check src tests`, `npx eslint . --quiet`, and `npx tsc --noEmit` now pass; backend mypy remains blocked by existing type debt.
+- Configuration validation: `ruff check src tests`, `npx eslint . --quiet`, and `npx tsc --noEmit` now pass. `./.venv-test/bin/mypy src` now uses the repo configuration and reaches real checking, but backend mypy remains blocked by existing type debt.
 - Missing configuration fallback: not applicable.
 - Illegal configuration handling: not applicable.
 - Logic that must not be hardcoded: no business thresholds, copy, permission mappings, scoring rules, or operational switches were introduced.
@@ -125,6 +125,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.1 | API routing audit generated | `test -f api_routing_audit.md && rg -n "OpenAPI|Router Sources|Permission Dependencies|Frontend Call Mapping|/api/v1/admin/scoring-rulesets|/api/v1/evaluation/admin/scoring-rulesets|POST /api/v1/auth/wechat|BACKEND_MISSING_SPEC_COUNT|HAS_NEW_SCORING_ROUTE False" api_routing_audit.md` | Phase 1.1 API routing audit commit |
 | 2026-05-06 | Phase 1.2 | Runtime OpenAPI contract alignment | `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_route_integrity.py -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/python -W error::UserWarning - <<'PY' ... assert runtime/committed path parity, no /auth/wechat, WeCom routes present, unique operation IDs ... PY` | Phase 1.2 API contract alignment commit |
 | 2026-05-06 | Phase 1.3 | Lint and frontend TypeScript baseline fixed; backend mypy blocker recorded | `ruff check src tests`; `npx eslint . --quiet`; `npx tsc --noEmit`; `npx vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_app_factory.py tests/unit/common/test_route_integrity.py -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_auth_login_api.py tests/integration/test_prompt_templates_api_rbac.py tests/integration/test_staged_evaluation_db.py tests/integration/test_support_runtime_api.py tests/unit/admin/test_model_config_security.py tests/unit/admin/test_presentation_upload_safety.py tests/unit/test_runtime_dependency_contract.py tests/unit/test_secret_hygiene_scan.py -q --no-cov`; blocker evidence: `MYPYPATH=src ./.venv-test/bin/mypy --explicit-package-bases src` fails with 2430 errors in 164 files | Phase 1.3 lint and frontend type baseline blocker snapshot commit |
+| 2026-05-06 | Phase 1.3 | Backend mypy invocation normalized to repo configuration | `./.venv-test/bin/mypy src` now reaches real checking and fails with 2430 errors in 164 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_runtime_dependency_contract.py -q --no-cov` | Phase 1.3 mypy invocation normalization commit |
 
 ## Non-Blocking Verification Notes
 
@@ -132,4 +133,4 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
-- 2026-05-06 Phase 1.3: paused before Phase 1.4 because backend mypy is not clean. The project test environment initially lacked `mypy`; local verification installed `mypy==1.20.2` into `.venv-test` via `uv pip install --python ./.venv-test/bin/python 'mypy>=1.10'`. Direct `mypy src` fails package discovery due duplicate `api` module names; the corrected package-base invocation reaches real analysis but reports 2430 errors in 164 files. This is broad existing type debt and should be split into dedicated type-baseline subtasks before continuing the serial delivery plan.
+- 2026-05-06 Phase 1.3: paused before Phase 1.4 because backend mypy is not clean. The project test environment initially lacked `mypy`; local verification installed `mypy==1.20.2` into `.venv-test` via `uv pip install --python ./.venv-test/bin/python 'mypy>=1.10'`. `mypy` is now added to backend code-quality dependencies and `pyproject.toml` normalizes package discovery. Direct `./.venv-test/bin/mypy src` reaches real analysis but reports 2430 errors in 164 files. This is broad existing type debt and should be split into dedicated type-baseline subtasks before continuing the serial delivery plan.
