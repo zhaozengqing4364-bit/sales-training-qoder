@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 RuntimeEventCategory = Literal["quality", "cost", "failure", "mode"]
 RuntimeEventSeverity = Literal["info", "ok", "degraded", "failure"]
@@ -57,6 +57,14 @@ def _safe_list(value: Any) -> list[Any]:
     return normalized
 
 
+def _coerce_runtime_event_category(value: Any) -> RuntimeEventCategory:
+    return cast(RuntimeEventCategory, str(value or "quality"))
+
+
+def _coerce_runtime_event_severity(value: Any) -> RuntimeEventSeverity:
+    return cast(RuntimeEventSeverity, str(value or "info"))
+
+
 def build_runtime_event(
     *,
     event_id: str,
@@ -94,8 +102,8 @@ def coerce_runtime_events(value: Any) -> list[dict[str, Any]]:
             events.append(
                 build_runtime_event(
                     event_id=str(item.get("event_id") or "unknown_runtime_event"),
-                    category=str(item.get("category") or "quality"),
-                    severity=str(item.get("severity") or "info"),
+                    category=_coerce_runtime_event_category(item.get("category")),
+                    severity=_coerce_runtime_event_severity(item.get("severity")),
                     status=str(item.get("status") or "unknown"),
                     source=str(item.get("source") or "runtime"),
                     summary=str(item.get("summary") or "Runtime event recorded."),
