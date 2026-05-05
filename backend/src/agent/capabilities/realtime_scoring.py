@@ -402,7 +402,7 @@ class RealtimeScoringCapability(BaseCapability):
         if not scores:
             return ""
 
-        lowest_name = min(scores, key=scores.get)
+        lowest_name = min(scores, key=lambda name: scores[name])
         feedback_map = {
             "价值表达": "少讲功能，多讲业务结果和价值变化。",
             "客户收益连接": "把产品能力明确翻译成客户的成本、效率或营收收益。",
