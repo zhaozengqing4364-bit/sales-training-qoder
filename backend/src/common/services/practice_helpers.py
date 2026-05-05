@@ -55,6 +55,8 @@ class PracticeRetryEntryAssembler:
         if not isinstance(value, dict):
             return None
         raw_page_number = value.get("page_number")
+        if raw_page_number is None:
+            return None
         if isinstance(raw_page_number, bool):
             return None
         try:
