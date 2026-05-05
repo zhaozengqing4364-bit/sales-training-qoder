@@ -4,10 +4,12 @@ Constitution Principle I: User Experience Never Interrupts
 All functions should return Result instead of raising exceptions to user-facing code
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
 T = TypeVar("T")
+U = TypeVar("U")
 
 
 @dataclass
@@ -35,17 +37,17 @@ class Result(Generic[T]):
         """Get value, raise error if failed (internal use only)"""
         if not self.is_success:
             raise ValueError(f"Cannot unwrap failed result: {self.fallback}")
-        return self.value
+        return cast(T, self.value)
 
     def unwrap_or(self, default: T) -> T:
         """Get value or default if failed"""
-        return self.value if self.is_success else default
+        return cast(T, self.value) if self.is_success else default
 
-    def map(self, fn) -> "Result":
+    def map(self, fn: Callable[[T], U]) -> "Result[U]":
         """Transform value if success, preserve failure"""
         if self.is_success and self.value is not None:
             try:
-                return Result.ok(fn(self.value))
+                return Result.ok(fn(cast(T, self.value)))
             except (RuntimeError, ValueError) as e:
                 return Result.fail(str(e))
-        return self
+        return cast(Result[U], self)

@@ -27,6 +27,7 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [x] Type latency tracker constructor contract.
 - [x] Type KB lock metric callback contract.
 - [x] Type semantic cache hit payload contract.
+- [x] Type Result generic helper contracts.
 - [ ] Resolve backend mypy baseline blocker.
 - [ ] Configure Vitest to isolate `node_modules`.
 - [ ] Raise overall coverage to at least 60%.
@@ -71,4 +72,4 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 
 ## Review
 
-- 2026-05-06 Phase 1.3: backend `ruff check src tests`, frontend `npx eslint . --quiet`, frontend `npx tsc --noEmit`, and targeted touched-file tests passed. Backend mypy invocation is now normalized in `pyproject.toml`; direct `./.venv-test/bin/mypy src` reaches real checking and reports 2413 errors in 150 files after limiting installed untyped third-party library noise, typing backend entrypoint helpers, cleaning the shared backoff helper, typing retry focus page-number sanitation, typing the scoring ruleset schema literal constant, typing the document parse artifact loading contract, typing the OSS signing GET URL return contract, typing the admin permission dependency factory contract, typing the latency tracker constructor contract, typing the KB lock metric callback contract, and typing the semantic cache hit payload contract.
+- 2026-05-06 Phase 1.3: backend `ruff check src tests`, frontend `npx eslint . --quiet`, frontend `npx tsc --noEmit`, and targeted touched-file tests passed. Backend mypy invocation is now normalized in `pyproject.toml`; direct `./.venv-test/bin/mypy src` reaches real checking and reports 2410 errors in 149 files after limiting installed untyped third-party library noise, typing backend entrypoint helpers, cleaning the shared backoff helper, typing retry focus page-number sanitation, typing the scoring ruleset schema literal constant, typing the document parse artifact loading contract, typing the OSS signing GET URL return contract, typing the admin permission dependency factory contract, typing the latency tracker constructor contract, typing the KB lock metric callback contract, typing the semantic cache hit payload contract, and typing the Result generic helper contracts.
