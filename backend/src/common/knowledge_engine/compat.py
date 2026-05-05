@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,10 @@ from common.knowledge_engine.answerability import (
 )
 from common.knowledge_engine.assembler import KnowledgeAnswerAssembler
 from common.knowledge_engine.audit_repo import KnowledgeAnswerAuditRepository
+from common.knowledge_engine.config_repo import (
+    KnowledgeAnswerConfigRepository,
+    KnowledgeAnswerConfigSnapshot,
+)
 from common.knowledge_engine.engine import KnowledgeAnswerEngine
 from common.knowledge_engine.haystack_adapter import KnowledgeHaystackAdapter
 from common.knowledge_engine.reranker import KnowledgeReranker
@@ -34,12 +38,12 @@ class KnowledgeAnswerExecutionOutcome:
     rollout_mode: KnowledgeAnswerRolloutMode
 
 
-class _StaticConfigRepository:
+class _StaticConfigRepository(KnowledgeAnswerConfigRepository):
     def __init__(self, snapshot: Any) -> None:
         self._snapshot = snapshot
 
-    def get_active_config(self) -> Any:
-        return self._snapshot
+    def get_active_config(self) -> KnowledgeAnswerConfigSnapshot | None:
+        return cast(KnowledgeAnswerConfigSnapshot | None, self._snapshot)
 
 
 def build_answerability_diagnostics(
@@ -192,7 +196,7 @@ async def execute_knowledge_answer_engine(
     runtime_options: dict[str, Any],
     strict_kb_mode: bool,
 ) -> KnowledgeAnswerExecutionOutcome:
-    async def _compat_search_multiple(**kwargs):
+    async def _compat_search_multiple(**kwargs: Any) -> Any:
         result = await search_multiple(**kwargs)
         rows = result.value if getattr(result, "is_success", False) else None
         if not getattr(result, "is_success", False) or not isinstance(rows, list):
@@ -298,11 +302,12 @@ async def _persist_answer_result_audit(
 ) -> str | None:
     if not request.session_id:
         return None
+    session_id = request.session_id
 
     def _persist(sync_session: Session) -> str | None:
         repo = KnowledgeAnswerAuditRepository(sync_session)
         persisted = repo.create_run(
-            session_id=request.session_id,
+            session_id=session_id,
             config_version_id=_optional_text(
                 result.retrieval_summary.get("config_version_id")
             ),
@@ -325,7 +330,7 @@ async def _persist_answer_result_audit(
 
     run_sync = getattr(db, "run_sync", None)
     if callable(run_sync):
-        return await run_sync(_persist)
+        return cast(str | None, await run_sync(_persist))
     return _persist(db)
 
 

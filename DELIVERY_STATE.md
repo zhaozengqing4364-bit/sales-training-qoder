@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 cross-encoder optional import typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2293 errors in 97 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 knowledge answer compat typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2289 errors in 96 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -106,6 +106,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: analytics time window default, completed-session filters, scenario filters, scoring weights, effectiveness pass-flag names, evaluability filter, 24-to-48-hour retry window, percentage rounding, default zero values, dashboard stat fields, and failure fallback codes were not added or changed.
 - Latest typed boundary: cross-encoder reranker optional dependency loading in `common.knowledge_engine.cross_encoder_reranker` is typed as a lazy import boundary, not business configuration.
 - Latest unchanged business logic: `CROSS_ENCODER_BACKEND`, `CROSS_ENCODER_MODEL`, `CROSS_ENCODER_DEVICE`, `COHERE_API_KEY`, default local/cohere model names, max length, top-k bounds, score normalization, rerank strategy labels, cohere endpoint payload, model-load failure flagging, and original-order passthrough fallback were not added or changed.
+- Latest typed boundary: knowledge-answer compatibility layer config repository, search callback, audit session id, and async `run_sync` return contracts in `common.knowledge_engine.compat` are typed as runtime integration boundaries, not business configuration.
+- Latest unchanged business logic: `KNOWLEDGE_ANSWER_ENGINE_ENABLED`, `KNOWLEDGE_ANSWER_ENGINE_DUAL_RUN`, rollout mode resolution, compat/live/dual-run payload fields, answerability diagnostics, retrieval-mode derivation, citation/result payload shape, normalized snippet fallback, synthesized audit step names/order, audit final status selection, and transcript metadata keys were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -224,6 +226,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | DB session startup guard typing | `./.venv-test/bin/mypy src/common/db/session.py` now has no direct `src/common/db/session.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2298 errors in 99 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_db_session_compatibility.py tests/integration/test_startup_or_bootstrap_authority.py -q --no-cov` | Phase 1.3 DB session startup guard typing commit |
 | 2026-05-06 | Phase 1.3 | Analytics service row typing | `./.venv-test/bin/mypy src/common/analytics/analytics_service.py` now has no direct `src/common/analytics/analytics_service.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2294 errors in 98 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_analytics_api_normalization.py tests/unit/common/test_admin_analytics_service.py -q --no-cov` | Phase 1.3 analytics service row typing commit |
 | 2026-05-06 | Phase 1.3 | Cross-encoder optional import typing | `./.venv-test/bin/mypy src/common/knowledge_engine/cross_encoder_reranker.py` now has no direct `src/common/knowledge_engine/cross_encoder_reranker.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2293 errors in 97 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... cross_encoder unconfigured optional-import boundary check ... PY` | Phase 1.3 cross-encoder optional import typing commit |
+| 2026-05-06 | Phase 1.3 | Knowledge answer compat typing | `./.venv-test/bin/mypy src/common/knowledge_engine/compat.py` now has no direct `src/common/knowledge_engine/compat.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2289 errors in 96 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_knowledge_answer_feature_flag.py tests/integration/test_knowledge_flow.py::test_knowledge_check_surfaces_unified_runtime_events_and_knowledge_path_mode tests/integration/test_websocket_status_contract.py::test_stepfun_handler_runtime_diagnostics_include_unified_runtime_events -q --no-cov` | Phase 1.3 knowledge answer compat typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -234,6 +237,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2289 errors in 96 files after typing the knowledge answer compat boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2293 errors in 97 files after typing the cross-encoder optional import boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2294 errors in 98 files after typing the analytics service row boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2298 errors in 99 files after typing the DB session startup guard signatures. Phase 1.4 was not advanced.
