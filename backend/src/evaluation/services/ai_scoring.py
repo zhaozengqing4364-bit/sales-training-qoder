@@ -6,6 +6,7 @@ AI-based Real-time Scoring Service
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 
 from common.ai.llm_service import LLMService
 from common.error_handling.result import Result
@@ -17,7 +18,7 @@ logger = get_logger(__name__)
 class AIScoringService:
     """AI-based scoring service for real-time evaluation."""
 
-    DEFAULT_DIMENSIONS = [
+    DEFAULT_DIMENSIONS: list[dict[str, Any]] = [
         {
             "name": "专业度",
             "weight": 0.25,
@@ -87,10 +88,10 @@ class AIScoringService:
 
     async def evaluate_conversation(
         self,
-        conversation_history: list[dict],
+        conversation_history: list[dict[str, Any]],
         stage_name: str = "开场破冰",
-        dimensions: list[dict] | None = None,
-    ) -> Result[dict]:
+        dimensions: list[dict[str, Any]] | None = None,
+    ) -> Result[dict[str, Any]]:
         """
         使用 AI 异步评估对话质量。
 
@@ -134,7 +135,7 @@ class AIScoringService:
 
             # 解析 JSON 响应
             try:
-                response_text = result.value.strip()
+                response_text = cast(str, result.value).strip()
                 # 提取 JSON 部分（如果 LLM 返回了 markdown 代码块）
                 if "```json" in response_text:
                     response_text = (
@@ -145,7 +146,7 @@ class AIScoringService:
                         response_text.split("```")[1].split("```")[0].strip()
                     )
 
-                scoring_result = json.loads(response_text)
+                scoring_result = cast(dict[str, Any], json.loads(response_text))
 
                 # 验证必要的字段
                 if "scores" not in scoring_result:
@@ -164,7 +165,7 @@ class AIScoringService:
             logger.error(f"AI scoring error: {e}", exc_info=True)
             return Result.fail(f"[AI_SCORING_ERROR:{str(e)}]")
 
-    def _format_conversation(self, conversation: list[dict]) -> str:
+    def _format_conversation(self, conversation: list[dict[str, Any]]) -> str:
         """格式化对话历史。"""
         lines = []
         for msg in conversation[-10:]:  # 只取最近10轮，控制token长度
@@ -176,7 +177,11 @@ class AIScoringService:
                 lines.append(f"客户: {content}")
         return "\n".join(lines)
 
-    def _format_result(self, raw_result: dict, dimensions: list[dict]) -> dict:
+    def _format_result(
+        self,
+        raw_result: dict[str, Any],
+        dimensions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """将 AI 评分结果转换为前端格式。"""
         scores = raw_result.get("scores", {})
 
@@ -202,10 +207,10 @@ class AIScoringService:
 
     async def evaluate_with_fallback(
         self,
-        conversation_history: list[dict],
+        conversation_history: list[dict[str, Any]],
         stage_name: str = "开场破冰",
-        dimensions: list[dict] | None = None,
-    ) -> dict:
+        dimensions: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """
         评估对话，失败时返回默认评分。
 
@@ -217,7 +222,7 @@ class AIScoringService:
         )
 
         if result.is_success:
-            return result.value
+            return cast(dict[str, Any], result.value)
 
         # 返回默认评分
         dims = dimensions or self.DEFAULT_DIMENSIONS
