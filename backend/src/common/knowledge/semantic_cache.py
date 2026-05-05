@@ -105,19 +105,22 @@ class SemanticSearchCache:
             return None
 
         cached = await cache_manager.get(result_key)
-        if cached is None:
+        if not isinstance(cached, list) or any(
+            not isinstance(item, dict) for item in cached
+        ):
             self._misses += 1
             return None
 
+        results = [dict(item) for item in cached]
         self._hits += 1
         logger.debug(
             "Semantic cache hit",
             kb_count=len(kb_ids),
             similarity=round(best_similarity, 4),
             top_k=top_k,
-            cached_results=len(cached) if isinstance(cached, list) else 0,
+            cached_results=len(results),
         )
-        return cached
+        return results
 
     async def put(
         self,
