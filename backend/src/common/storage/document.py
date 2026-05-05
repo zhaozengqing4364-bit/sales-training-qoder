@@ -16,7 +16,7 @@ Environment Variables:
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from common.monitoring.logger import get_logger
 
@@ -190,7 +190,10 @@ class DocumentStorageService:
             artifact_path = self.get_parse_artifact_path(file_path)
             if not artifact_path.exists():
                 return None
-            return json.loads(artifact_path.read_text(encoding="utf-8"))
+            artifact: object = json.loads(artifact_path.read_text(encoding="utf-8"))
+            if isinstance(artifact, dict):
+                return cast(dict[str, Any], artifact)
+            return None
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as e:
             logger.warning(
                 f"Failed to load parse artifact: {e}", file_path=str(file_path)
