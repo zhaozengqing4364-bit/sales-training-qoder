@@ -14,7 +14,7 @@ References:
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 try:
     import edge_tts as _edge_tts
@@ -144,7 +144,7 @@ class TTSService:
     def provider(self) -> str:
         """Get current provider name"""
         if self._effective_config:
-            return self._effective_config.get("provider", "local")
+            return cast(str, self._effective_config.get("provider", "local"))
         return "local"
 
     def reload_config(self, config: ModelConfig | None = None) -> None:
@@ -180,7 +180,7 @@ class TTSService:
                 pitch=self.pitch,
             )
 
-            async def audio_stream():
+            async def audio_stream() -> AsyncIterator[bytes]:
                 """Async generator for audio chunks"""
                 try:
                     async for chunk in communicate.stream():
