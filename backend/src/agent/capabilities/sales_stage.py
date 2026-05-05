@@ -10,7 +10,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from agent.capabilities.base import BaseCapability, CapabilityConfig, CapabilityResult
 from agent.capabilities.registry import CapabilityRegistry
@@ -101,7 +101,9 @@ class SalesStageCapability(BaseCapability):
 
     def __init__(self, config: CapabilityConfig) -> None:
         super().__init__(config)
-        self._stages = self.config.get("stages", self.DEFAULT_STAGES)
+        self._stages = cast(
+            list[dict[str, Any]], self.config.get("stages", self.DEFAULT_STAGES)
+        )
         self._history_window = self.config.get("history_window", 5)
         self._stage_order = [s["id"] for s in self._stages]
         self._enforce_transitions = self.config.get("enforce_transitions", False)
