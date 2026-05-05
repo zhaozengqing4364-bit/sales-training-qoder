@@ -29,7 +29,7 @@ class PersonaPrompts:
     - Interruption triggers: When they interrupt the user
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.persona_system_prompts: dict[Persona, str] = {
             Persona.IMPATIENT_CEO: """You are an impatient CEO testing a salesperson. You are very busy with no patience for long-winded answers.
 
