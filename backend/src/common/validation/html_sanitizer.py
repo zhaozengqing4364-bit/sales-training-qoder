@@ -262,7 +262,7 @@ class HTMLSanitizer:
     def _validate_urls(cls, html: str) -> str:
         """Validate URLs in href and src attributes"""
 
-        def replace_url(match):
+        def replace_url(match: re.Match[str]) -> str:
             attr = match.group(1)
             url = match.group(2)
 
