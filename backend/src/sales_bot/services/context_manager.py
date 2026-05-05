@@ -88,7 +88,7 @@ class ContextManager:
     - Guide conversation flow
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.active_contexts: dict[uuid.UUID, ConversationContext] = {}
         self.max_turns_before_summarization = (
             6  # Summarize after 6 turns to save tokens
@@ -325,7 +325,7 @@ class ContextManager:
             )
             return Result.fail(fallback="[CLEANUP_FAILED]")
 
-    async def _summarize_context(self, session_id: uuid.UUID):
+    async def _summarize_context(self, session_id: uuid.UUID) -> None:
         """
         Summarize older turns to save tokens
 
