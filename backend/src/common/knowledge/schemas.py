@@ -11,7 +11,7 @@ References:
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -132,7 +132,7 @@ class KnowledgeBaseResponse(KnowledgeBaseBase):
 
     @field_validator("settings", mode="before")
     @classmethod
-    def _parse_settings(cls, v):
+    def _parse_settings(cls, v: Any) -> KnowledgeBaseSettings | None:
         return KnowledgeBaseSettings._parse_if_str(v)
 
 
@@ -154,7 +154,7 @@ class KnowledgeBaseListItem(BaseModel):
 
     @field_validator("settings", mode="before")
     @classmethod
-    def _parse_settings(cls, v):
+    def _parse_settings(cls, v: Any) -> KnowledgeBaseSettings | None:
         return KnowledgeBaseSettings._parse_if_str(v)
 
 
