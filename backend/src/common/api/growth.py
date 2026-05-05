@@ -28,7 +28,7 @@ class GoalUpsertRequest(BaseModel):
 async def get_growth_dashboard(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     result = await GrowthCenterService().get_dashboard_growth(
         db=db,
         user_id=str(current_user.user_id),
@@ -43,7 +43,7 @@ async def get_adaptive_difficulty_dry_run(
     limit: int = 10,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     result = await GrowthCenterService().get_adaptive_difficulty_dry_run(
         db=db,
         user_id=str(current_user.user_id),
@@ -62,7 +62,7 @@ async def list_notifications(
     include_read: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     result = await GrowthCenterService().list_notifications(
         db=db,
         user_id=str(current_user.user_id),
@@ -78,7 +78,7 @@ async def mark_notification_read(
     notification_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     result = await GrowthCenterService().mark_notification_read(
         db=db,
         user_id=str(current_user.user_id),
@@ -94,7 +94,7 @@ async def upsert_current_goal(
     payload: GoalUpsertRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     data: dict[str, Any] = payload.model_dump()
     result = await GrowthCenterService().upsert_goal(
         db=db,
