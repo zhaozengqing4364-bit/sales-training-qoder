@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from agent.capabilities.base import BaseCapability, CapabilityConfig, CapabilityResult
 from agent.capabilities.registry import CapabilityRegistry
@@ -230,7 +230,7 @@ class KnowledgeRetrievalCapability(BaseCapability):
                     error=str(result),
                 )
                 continue
-            merged_results.extend(result)
+            merged_results.extend(cast(list[dict[str, Any]], result))
 
         merged_results.sort(key=lambda x: x.get("score", 0), reverse=True)
         return merged_results[: self._top_k]
