@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 RAG profile API ORM typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2274 errors in 93 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 admin settings API return typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2269 errors in 92 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -114,6 +114,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: presentation point similarity threshold, cooldown default, required point IDs, keyword stop-word list, keyword overlap calculation, 0.8 semantic fallback keyword threshold, 0.5 embedding-failure keyword threshold, covered-point persistence, matched-text truncation length, missing-point stats, and feedback deduplication cooldown behavior were not added or changed.
 - Latest typed boundary: RAG profile admin API ORM id/default-field contracts in `admin.api.rag_profiles` are typed as SQLAlchemy runtime row boundaries, not business configuration.
 - Latest unchanged business logic: RAG profile route paths, admin dependency, schema defaults, field range validation, response redaction, cross-encoder API key encrypt/clear semantics, system-default unset/set flow, applied-KB count lookup, delete protection for default or applied profiles, knowledge-base listing fields, and response payload shape were not added or changed.
+- Latest typed boundary: admin settings mutation/validation endpoint return contracts in `admin.api.settings` are typed as FastAPI dict-or-JSONResponse contracts, not business configuration.
+- Latest unchanged business logic: admin settings route paths, `BusinessRuleConfig` storage lifecycle, surface keys, default definitions, field validators, permission dependency, validation failure mapping, publish/rollback behavior, audit log listing, response payload shape, and existing `response_model=None` runtime behavior for mixed response types were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -236,6 +238,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | ASR provider stream typing | `./.venv-test/bin/mypy src/common/audio/asr_with_fallback.py` now has no direct `src/common/audio/asr_with_fallback.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src/common/audio/asr_base.py src/common/audio/asr_with_fallback.py` now has no direct `src/common/audio/asr_base.py` or `src/common/audio/asr_with_fallback.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2282 errors in 95 files; `ruff check src/common/audio/asr_base.py src/common/audio/asr_with_fallback.py tests/unit/test_asr.py tests/unit/test_asr_provider_chain.py tests/unit/test_p0_fixes.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_asr.py::TestASRService::test_stream_transcribe_delegates tests/unit/test_asr_provider_chain.py tests/unit/test_p0_fixes.py::TestASRWithFallback -q --no-cov` | Phase 1.3 ASR provider stream typing commit |
 | 2026-05-06 | Phase 1.3 | Semantic point tracker embedding typing | `./.venv-test/bin/mypy src/presentation_coach/services/semantic_point_tracker.py` now has no direct `src/presentation_coach/services/semantic_point_tracker.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2279 errors in 94 files; `ruff check src/presentation_coach/services/semantic_point_tracker.py tests/unit/test_presentation_feedback_service_policy.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_presentation_feedback_service_policy.py -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... semantic point embedding success/fallback checks ... PY` | Phase 1.3 semantic point tracker embedding typing commit |
 | 2026-05-06 | Phase 1.3 | RAG profile API ORM typing | `./.venv-test/bin/mypy src/admin/api/rag_profiles.py` now has no direct `src/admin/api/rag_profiles.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2274 errors in 93 files; `ruff check src/admin/api/rag_profiles.py tests/integration/test_rag_profiles_api.py tests/unit/admin/test_rag_profile_security.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/admin/test_rag_profile_security.py tests/integration/test_rag_profiles_api.py -q --no-cov` | Phase 1.3 RAG profile API ORM typing commit |
+| 2026-05-06 | Phase 1.3 | Admin settings API return typing | `./.venv-test/bin/mypy src/admin/api/settings.py` now has no direct `src/admin/api/settings.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2269 errors in 92 files; `ruff check src/admin/api/settings.py tests/contract/test_admin_governance_contract.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/contract/test_admin_governance_contract.py::test_admin_settings_surface_defaults_validation_publish_rollback_and_audit tests/contract/test_admin_governance_contract.py::test_admin_settings_rejects_non_admin_user -q --no-cov` | Phase 1.3 admin settings API return typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -247,6 +250,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2269 errors in 92 files after typing the admin settings API return boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2274 errors in 93 files after typing the RAG profile API ORM boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2279 errors in 94 files after typing the semantic point tracker embedding boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2282 errors in 95 files after typing the ASR provider stream boundary. Phase 1.4 was not advanced.

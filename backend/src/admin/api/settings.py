@@ -193,7 +193,7 @@ async def get_admin_settings_surface(
     )
 
 
-@router.post("/{surface}/drafts")
+@router.post("/{surface}/drafts", response_model=None)
 async def create_or_update_admin_settings_draft(
     surface: SettingsSurface,
     payload: AdminSettingsValueRequest,
@@ -201,7 +201,7 @@ async def create_or_update_admin_settings_draft(
         require_admin_permission(ADMIN_SETTINGS_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any] | JSONResponse:
     key = _config_key(surface)
     service = BusinessRuleConfigService(db)
     try:
@@ -227,7 +227,7 @@ async def create_or_update_admin_settings_draft(
         )
 
 
-@router.post("/{surface}/validate")
+@router.post("/{surface}/validate", response_model=None)
 async def validate_admin_settings(
     surface: SettingsSurface,
     payload: AdminSettingsValueRequest,
@@ -235,7 +235,7 @@ async def validate_admin_settings(
         require_admin_permission(ADMIN_SETTINGS_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any] | JSONResponse:
     key = _config_key(surface)
     service = BusinessRuleConfigService(db)
     try:
@@ -252,7 +252,7 @@ async def validate_admin_settings(
         return _settings_error(exc)
 
 
-@router.post("/{surface}/preview")
+@router.post("/{surface}/preview", response_model=None)
 async def preview_admin_settings(
     surface: SettingsSurface,
     payload: AdminSettingsValueRequest,
@@ -260,7 +260,7 @@ async def preview_admin_settings(
         require_admin_permission(ADMIN_SETTINGS_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any] | JSONResponse:
     key = _config_key(surface)
     service = BusinessRuleConfigService(db)
     try:
@@ -277,7 +277,7 @@ async def preview_admin_settings(
         return _settings_error(exc)
 
 
-@router.post("/{surface}/publish")
+@router.post("/{surface}/publish", response_model=None)
 async def publish_admin_settings(
     surface: SettingsSurface,
     payload: AdminSettingsPublishRequest,
@@ -285,7 +285,7 @@ async def publish_admin_settings(
         require_admin_permission(ADMIN_SETTINGS_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any] | JSONResponse:
     key = _config_key(surface)
     service = BusinessRuleConfigService(db)
     try:
@@ -311,7 +311,7 @@ async def publish_admin_settings(
         )
 
 
-@router.post("/{surface}/rollback")
+@router.post("/{surface}/rollback", response_model=None)
 async def rollback_admin_settings(
     surface: SettingsSurface,
     payload: AdminSettingsRollbackRequest,
@@ -319,7 +319,7 @@ async def rollback_admin_settings(
         require_admin_permission(ADMIN_SETTINGS_MANAGE_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any] | JSONResponse:
     key = _config_key(surface)
     service = BusinessRuleConfigService(db)
     try:
