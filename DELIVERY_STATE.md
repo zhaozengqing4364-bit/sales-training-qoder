@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 PPT version manager typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2239 errors in 86 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 runtime diagnostics payload typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2232 errors in 85 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -128,6 +128,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: support runtime overview/fault payload fields, release-health status resolution, active/scoring status filters, stuck-scoring window, asset governance indexes, asset change labels, seven-day change counting semantics, admin paths, and supplemental log handling were not added or changed.
 - Latest typed boundary: PPT version manager constructor, cleanup history result, and current-version resolver contracts in `common.ppt.version_manager` are typed as filesystem/ORM value boundaries, not business configuration.
 - Latest unchanged business logic: PPT version storage path, current-presentation path, max retained versions, version directory naming, version history sorting, current-version comparison, rollback copy flow, cleanup deletion order, fallback error codes, and existing async current-version lookup behavior were not added or changed.
+- Latest typed boundary: runtime diagnostics claim-truth/main-issue/next-goal/coach-health payload normalization in `common.conversation.runtime_diagnostics` is typed as a runtime diagnostics payload boundary, not business configuration.
+- Latest unchanged business logic: claim truth status/source/evidence-score normalization, main-issue and next-goal required fields, coach-health status/message fallback copy, KB lock timeout/pass-score defaults, retrieval ledger bounds, retrieval status derivation, runtime event merge behavior, and diagnostics response payload fields were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -257,6 +259,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Circuit breaker signature typing | `./.venv-test/bin/mypy src/common/resilience/circuit_breaker.py`; `./.venv-test/bin/mypy src` now fails with 2249 errors in 88 files; `ruff check src/common/resilience/circuit_breaker.py tests/unit/test_p0_fixes.py tests/unit/test_voice_policy_monitor.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_p0_fixes.py::TestCircuitBreaker tests/unit/test_voice_policy_monitor.py::TestCircuitBreakerIntegration -q --no-cov` | Phase 1.3 circuit breaker signature typing commit |
 | 2026-05-06 | Phase 1.3 | Support runtime status typing | `./.venv-test/bin/mypy src/support/services/runtime_status_service.py` now has no direct `src/support/services/runtime_status_service.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2244 errors in 87 files; `ruff check src/support/services/runtime_status_service.py tests/unit/test_support_runtime_service.py tests/integration/test_support_runtime_api.py tests/contract/test_support_runtime.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_support_runtime_service.py tests/integration/test_support_runtime_api.py tests/contract/test_support_runtime.py -q --no-cov` | Phase 1.3 support runtime status typing commit |
 | 2026-05-06 | Phase 1.3 | PPT version manager typing | `./.venv-test/bin/mypy src/common/ppt/version_manager.py` now has no direct `src/common/ppt/version_manager.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2239 errors in 86 files; `ruff check src/common/ppt/version_manager.py`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... PPT version history sorting/current marker/cleanup checks with current-version resolver stub ... PY` | Phase 1.3 PPT version manager typing commit |
+| 2026-05-06 | Phase 1.3 | Runtime diagnostics payload typing | `./.venv-test/bin/mypy src/common/conversation/runtime_diagnostics.py` now has no direct `src/common/conversation/runtime_diagnostics.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2232 errors in 85 files; `ruff check src/common/conversation/runtime_diagnostics.py tests/unit/test_enhanced_handler_coach_health.py tests/integration/test_voice_runtime_session_snapshot.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_enhanced_handler_coach_health.py tests/integration/test_voice_runtime_session_snapshot.py::test_knowledge_check_reports_live_coach_health_from_registered_session_handler tests/integration/test_voice_runtime_session_snapshot.py::test_retrieval_facts_hit_with_weak_evidence_claim_truth_proves_independence -q --no-cov` | Phase 1.3 runtime diagnostics payload typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -269,6 +272,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2232 errors in 85 files after typing the runtime diagnostics payload boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2239 errors in 86 files after typing the PPT version manager boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2244 errors in 87 files after typing the support runtime status boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2249 errors in 88 files after typing the circuit breaker signature boundary. Phase 1.4 was not advanced.

@@ -52,10 +52,11 @@ def _normalize_main_issue_payload(value: Any) -> dict[str, Any] | None:
     issue_type = value.get("issue_type")
     issue_text = value.get("issue_text")
     recovery_rule = value.get("recovery_rule")
-    if not all(
-        isinstance(item, str) and item.strip()
-        for item in (issue_type, issue_text, recovery_rule)
-    ):
+    if not isinstance(issue_type, str) or not issue_type.strip():
+        return None
+    if not isinstance(issue_text, str) or not issue_text.strip():
+        return None
+    if not isinstance(recovery_rule, str) or not recovery_rule.strip():
         return None
     return {
         "issue_type": issue_type.strip(),
@@ -70,9 +71,11 @@ def _normalize_next_goal_payload(value: Any) -> dict[str, Any] | None:
     goal_type = value.get("goal_type")
     goal_text = value.get("goal_text")
     rule = value.get("rule")
-    if not all(
-        isinstance(item, str) and item.strip() for item in (goal_type, goal_text, rule)
-    ):
+    if not isinstance(goal_type, str) or not goal_type.strip():
+        return None
+    if not isinstance(goal_text, str) or not goal_text.strip():
+        return None
+    if not isinstance(rule, str) or not rule.strip():
         return None
     return {
         "goal_type": goal_type.strip(),
@@ -105,12 +108,13 @@ def _normalize_coach_health_payload(value: Any) -> dict[str, Any]:
                 else "实时辅导已恢复，后续建议会继续更新。"
             )
         )
+    normalized_message = str(message).strip()
     return {
         "status": status,
         "reason": reason.strip()
         if isinstance(reason, str) and reason.strip()
         else None,
-        "message": message.strip(),
+        "message": normalized_message,
     }
 
 
