@@ -14,13 +14,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from threading import RLock
-from typing import TypeVar
+from typing import Any
 
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
-
-T = TypeVar("T")
 
 
 class CircuitState(Enum):
@@ -72,7 +70,7 @@ class CircuitBreaker:
         timeout_seconds: int = 60,
         half_open_max_calls: int = 3,
         on_state_change: Callable[[CircuitState, CircuitState], None] | None = None,
-    ):
+    ) -> None:
         self.name = name
         self.config = CircuitBreakerConfig(
             failure_threshold=failure_threshold,
@@ -155,7 +153,7 @@ class CircuitBreaker:
 
             return True
 
-    def record_success(self):
+    def record_success(self) -> None:
         """Record a successful call"""
         with self._lock:
             self._total_successes += 1
@@ -180,7 +178,7 @@ class CircuitBreaker:
                 if self._failure_count > 0:
                     self._failure_count = 0
 
-    def record_failure(self):
+    def record_failure(self) -> None:
         """Record a failed call"""
         with self._lock:
             self._total_failures += 1
@@ -212,7 +210,7 @@ class CircuitBreaker:
                     )
                     self._transition_to(CircuitState.OPEN)
 
-    def _transition_to(self, new_state: CircuitState):
+    def _transition_to(self, new_state: CircuitState) -> None:
         """Transition to new state and trigger callback"""
         with self._lock:
             old_state = self._state
@@ -226,7 +224,7 @@ class CircuitBreaker:
                 except (RuntimeError, ValueError, OSError) as e:
                     logger.error(f"Circuit state change callback error: {e}")
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, Any]:
         """Get circuit breaker statistics"""
         with self._lock:
             return {
@@ -254,12 +252,16 @@ class CircuitBreaker:
 class CircuitBreakerRegistry:
     """Registry for managing multiple circuit breakers"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._breakers: dict[str, CircuitBreaker] = {}
         self._lock = RLock()
 
     def get_or_create(
-        self, name: str, failure_threshold: int = 5, timeout_seconds: int = 60, **kwargs
+        self,
+        name: str,
+        failure_threshold: int = 5,
+        timeout_seconds: int = 60,
+        **kwargs: Any,
     ) -> CircuitBreaker:
         """Get existing circuit breaker or create new one"""
         with self._lock:
@@ -277,7 +279,7 @@ class CircuitBreakerRegistry:
         with self._lock:
             return self._breakers.get(name)
 
-    def get_all_stats(self) -> dict:
+    def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """Get stats for all circuit breakers"""
         with self._lock:
             return {

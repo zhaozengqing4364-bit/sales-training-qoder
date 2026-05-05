@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 log sanitizer container typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2254 errors in 89 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 circuit breaker signature typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2249 errors in 88 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -122,6 +122,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: growth dashboard, adaptive-difficulty dry-run, notification listing/read flow, goal upsert request validation, growth route paths, error codes, user-facing fallback messages, response payload shape, and existing growth service delegation were not added or changed.
 - Latest typed boundary: log sanitizer dict/list container and structlog processor contracts in `common.logging.sanitizer` are typed as code-level logging safety boundaries, not business configuration.
 - Latest unchanged business logic: sensitive-field names, sensitive regex patterns, masking algorithm, database URL masking, recursive dict/list traversal, and structlog processor sanitization behavior were not added or changed.
+- Latest typed boundary: circuit breaker constructor, state-transition, stats, and registry signatures in `common.resilience.circuit_breaker` are typed as code-level resilience contracts, not business configuration.
+- Latest unchanged business logic: failure threshold, success threshold, timeout, half-open max-call defaults, can-execute behavior, success/failure recording, state transition rules, callback invocation, global registry behavior, and stats payload fields were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -248,6 +250,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Admin analytics score rounding typing | `./.venv-test/bin/mypy src/common/analytics/admin_analytics_service.py` now has no direct `src/common/analytics/admin_analytics_service.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2264 errors in 91 files; `ruff check src/common/analytics/admin_analytics_service.py tests/unit/common/test_admin_analytics_service.py tests/contract/test_analytics.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_admin_analytics_service.py tests/contract/test_analytics.py::TestAnalyticsContract::test_get_admin_leaderboard_projection_fields_contract -q --no-cov` | Phase 1.3 admin analytics score rounding typing commit |
 | 2026-05-06 | Phase 1.3 | Growth API return typing | `./.venv-test/bin/mypy src/common/api/growth.py` now has no direct `src/common/api/growth.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2259 errors in 90 files; `ruff check src/common/api/growth.py src/common/growth/growth_service.py src/common/growth/safety_policies.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/growth/test_growth_center.py tests/unit/common/growth/test_growth_safety_policies.py -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... growth router path registration check ... PY` | Phase 1.3 growth API return typing commit |
 | 2026-05-06 | Phase 1.3 | Log sanitizer container typing | `./.venv-test/bin/mypy src/common/logging/sanitizer.py`; `./.venv-test/bin/mypy src` now fails with 2254 errors in 89 files; `ruff check src/common/logging/sanitizer.py`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... sanitizer string/dict/list/database-url/processor checks ... PY` | Phase 1.3 log sanitizer container typing commit |
+| 2026-05-06 | Phase 1.3 | Circuit breaker signature typing | `./.venv-test/bin/mypy src/common/resilience/circuit_breaker.py`; `./.venv-test/bin/mypy src` now fails with 2249 errors in 88 files; `ruff check src/common/resilience/circuit_breaker.py tests/unit/test_p0_fixes.py tests/unit/test_voice_policy_monitor.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_p0_fixes.py::TestCircuitBreaker tests/unit/test_voice_policy_monitor.py::TestCircuitBreakerIntegration -q --no-cov` | Phase 1.3 circuit breaker signature typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -259,6 +262,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2249 errors in 88 files after typing the circuit breaker signature boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2254 errors in 89 files after typing the log sanitizer container boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2259 errors in 90 files after typing the growth API return boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2264 errors in 91 files after typing the admin analytics score rounding boundary. Phase 1.4 was not advanced.
