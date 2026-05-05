@@ -46,7 +46,7 @@ class VersionManager:
     - Clean up old versions
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.storage_base_path = "/data/ppt_versions"
         self.max_versions_per_presentation = 5
 
@@ -266,7 +266,7 @@ class VersionManager:
             if not result.is_success:
                 return Result.fail(fallback="[CLEANUP_FAILED]")
 
-            versions = result.value
+            versions = result.unwrap_or([])
 
             # Keep only the most recent N versions
             if len(versions) <= self.max_versions_per_presentation:
@@ -308,14 +308,14 @@ class VersionManager:
         try:
             import asyncio
 
-            async def _get():
+            async def _get() -> int:
                 result = await db.execute(
                     select(Presentation).where(
                         Presentation.presentation_id == presentation_id
                     )
                 )
                 presentation = result.scalar_one_or_none()
-                return presentation.version if presentation else 0
+                return int(getattr(presentation, "version", 0) or 0)
 
             return asyncio.run(_get())
         except Exception as e:

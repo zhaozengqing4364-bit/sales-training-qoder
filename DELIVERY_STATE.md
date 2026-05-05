@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 support runtime status typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2244 errors in 87 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 PPT version manager typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2239 errors in 86 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -126,6 +126,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: failure threshold, success threshold, timeout, half-open max-call defaults, can-execute behavior, success/failure recording, state transition rules, callback invocation, global registry behavior, and stats payload fields were not added or changed.
 - Latest typed boundary: support runtime overview snapshot and knowledge-document timestamp contracts in `support.services.runtime_status_service` are typed as runtime payload/ORM value boundaries, not business configuration.
 - Latest unchanged business logic: support runtime overview/fault payload fields, release-health status resolution, active/scoring status filters, stuck-scoring window, asset governance indexes, asset change labels, seven-day change counting semantics, admin paths, and supplemental log handling were not added or changed.
+- Latest typed boundary: PPT version manager constructor, cleanup history result, and current-version resolver contracts in `common.ppt.version_manager` are typed as filesystem/ORM value boundaries, not business configuration.
+- Latest unchanged business logic: PPT version storage path, current-presentation path, max retained versions, version directory naming, version history sorting, current-version comparison, rollback copy flow, cleanup deletion order, fallback error codes, and existing async current-version lookup behavior were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -254,6 +256,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Log sanitizer container typing | `./.venv-test/bin/mypy src/common/logging/sanitizer.py`; `./.venv-test/bin/mypy src` now fails with 2254 errors in 89 files; `ruff check src/common/logging/sanitizer.py`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... sanitizer string/dict/list/database-url/processor checks ... PY` | Phase 1.3 log sanitizer container typing commit |
 | 2026-05-06 | Phase 1.3 | Circuit breaker signature typing | `./.venv-test/bin/mypy src/common/resilience/circuit_breaker.py`; `./.venv-test/bin/mypy src` now fails with 2249 errors in 88 files; `ruff check src/common/resilience/circuit_breaker.py tests/unit/test_p0_fixes.py tests/unit/test_voice_policy_monitor.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_p0_fixes.py::TestCircuitBreaker tests/unit/test_voice_policy_monitor.py::TestCircuitBreakerIntegration -q --no-cov` | Phase 1.3 circuit breaker signature typing commit |
 | 2026-05-06 | Phase 1.3 | Support runtime status typing | `./.venv-test/bin/mypy src/support/services/runtime_status_service.py` now has no direct `src/support/services/runtime_status_service.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2244 errors in 87 files; `ruff check src/support/services/runtime_status_service.py tests/unit/test_support_runtime_service.py tests/integration/test_support_runtime_api.py tests/contract/test_support_runtime.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_support_runtime_service.py tests/integration/test_support_runtime_api.py tests/contract/test_support_runtime.py -q --no-cov` | Phase 1.3 support runtime status typing commit |
+| 2026-05-06 | Phase 1.3 | PPT version manager typing | `./.venv-test/bin/mypy src/common/ppt/version_manager.py` now has no direct `src/common/ppt/version_manager.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2239 errors in 86 files; `ruff check src/common/ppt/version_manager.py`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... PPT version history sorting/current marker/cleanup checks with current-version resolver stub ... PY` | Phase 1.3 PPT version manager typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -262,9 +265,11 @@ Based on the currently inspected code, the existing configuration system cannot 
 - The first ad hoc forbidden matcher assertion used `r"cheap\\s+deal"`, which matches a literal backslash instead of whitespace and failed with an empty match list. The assertion was corrected to `r"cheap\s+deal"` and rerun successfully; the failed attempt was not counted as verification.
 - The first ad hoc score processor callback assertion exposed a pre-existing logger-wrapper collision when `score_processor.py` passes `trace_id=` to a logger that already injects `trace_id`; it failed before asserting result payload. The callback contract was rerun with a no-op logger and passed. The logger collision is outside the typed callback atom and remains a later cleanup candidate.
 - `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_asr.py tests/unit/test_asr_provider_chain.py tests/unit/test_p0_fixes.py::TestASRWithFallback -q --no-cov` passed 11 ASR assertions and failed `tests/unit/test_asr.py::TestASRService::test_get_asr_service_singleton` because the local fallback imports optional `funasr`, which is not installed in `.venv-test`. The ASR stream typing atom was then verified with the no-local-model-loading subset listed in the implementation log.
+- The first ad hoc PPT version manager check called the existing `_get_current_version()` from inside an async flow and exposed its pre-existing `asyncio.run()` nested-loop warning/fallback behavior. That behavior was not changed in the PPT version manager typing atom; the version history and cleanup check was rerun with the current-version resolver stubbed and passed.
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2239 errors in 86 files after typing the PPT version manager boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2244 errors in 87 files after typing the support runtime status boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2249 errors in 88 files after typing the circuit breaker signature boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2254 errors in 89 files after typing the log sanitizer container boundary. Phase 1.4 was not advanced.
