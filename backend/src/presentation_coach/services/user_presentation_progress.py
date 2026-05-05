@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -123,10 +123,11 @@ class UserPresentationProgressService:
                 )
                 db.add(progress)
             else:
-                progress.last_page_number = page_number
-                progress.last_session_id = session_id
-                progress.last_practice_at = now
-                progress.updated_at = now
+                progress_for_update = cast(Any, progress)
+                progress_for_update.last_page_number = page_number
+                progress_for_update.last_session_id = session_id
+                progress_for_update.last_practice_at = now
+                progress_for_update.updated_at = now
 
             await db.commit()
             await db.refresh(progress)
