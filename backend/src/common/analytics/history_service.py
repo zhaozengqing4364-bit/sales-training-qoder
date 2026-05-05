@@ -312,7 +312,7 @@ class HistoryService:
     @staticmethod
     def build_statistics_payload(
         summaries: list[HistorySessionSummary],
-    ) -> dict[str, int | float]:
+    ) -> dict[str, int | float | str]:
         completed_sessions = [
             summary
             for summary in summaries
@@ -374,7 +374,11 @@ class HistoryService:
                 "score_basis": PROJECTION_SCORE_BASIS,
             }
 
-        scores = [float(summary.overall_score or 0.0) for summary in evaluable_sessions]
+        scores = [
+            summary.overall_score
+            for summary in evaluable_sessions
+            if summary.overall_score is not None
+        ]
         return {
             "completed_sessions": len(completed_sessions),
             "evaluable_sessions": len(evaluable_sessions),
@@ -407,7 +411,7 @@ class HistoryService:
                 "logic_score": summary.logic_score or 0,
                 "accuracy_score": summary.accuracy_score or 0,
                 "completeness_score": summary.completeness_score or 0,
-                "overall_score": float(summary.overall_score),
+                "overall_score": summary.overall_score,
                 "scenario_type": summary.scenario_type,
                 "overall_result": summary.overall_result,
                 "evaluable": True,
