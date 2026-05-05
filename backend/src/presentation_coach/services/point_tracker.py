@@ -16,7 +16,7 @@ class PointTracker:
     def __init__(self, required_points: list[str]):
         self.required_points = required_points
         self.covered_points: set[str] = set()
-        self.coverage_count = {}  # How many times each point was mentioned
+        self.coverage_count: dict[str, int] = {}  # How many times each point was mentioned
 
     def check_coverage(self, transcript: str) -> dict[str, Any]:
         """
@@ -65,7 +65,7 @@ class PointTracker:
         """Check if all required points have been covered"""
         return len(self.covered_points) == len(self.required_points)
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset tracking (e.g., for new page)"""
         self.covered_points.clear()
         self.coverage_count.clear()
