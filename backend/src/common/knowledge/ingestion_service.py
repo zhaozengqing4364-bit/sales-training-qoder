@@ -7,6 +7,7 @@ Implements Constitution Principles:
 """
 
 import uuid
+from typing import Any
 
 from common.error_handling.result import Result
 from common.knowledge.vector_store import get_vector_store
@@ -26,11 +27,11 @@ class IngestionService:
     - Enable semantic search during coaching
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.collection_name = "presentations"
-        self._vector_store = None  # Lazy reference
+        self._vector_store: Any = None  # Lazy reference
 
-    def _get_vector_store(self):
+    def _get_vector_store(self) -> Any:
         """Lazy get vector store"""
         if self._vector_store is None:
             self._vector_store = get_vector_store()
