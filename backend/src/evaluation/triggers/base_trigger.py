@@ -22,9 +22,9 @@ class TriggerContext:
     current_stage: str | None = None
     previous_stage: str | None = None
     start_time: float | None = None
-    metadata: dict[str, Any] = None
+    metadata: dict[str, Any] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.metadata is None:
             self.metadata = {}
 
