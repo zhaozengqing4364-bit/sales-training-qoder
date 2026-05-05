@@ -99,6 +99,7 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [x] Type PPT OCR processor optional dependency contracts.
 - [x] Type response cache entry and decorator contracts.
 - [x] Type presentation PPT parser optional dependency and page-context contracts.
+- [x] Type password reset URL and delivery lifecycle ORM contracts.
 - [ ] Resolve backend mypy baseline blocker.
 - [ ] Configure Vitest to isolate `node_modules`.
 - [ ] Raise overall coverage to at least 60%.
@@ -142,6 +143,8 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [ ] Create final `Release_Checklist.md`.
 
 ## Review
+
+- 2026-05-06 Phase 1.3 password reset atom: `./.venv-test/bin/mypy src/common/services/password_reset.py` has no direct `src/common/services/password_reset.py` errors while import-chain errors remain, `ruff check src/common/services/password_reset.py` passed, and password reset/auth recovery regression tests passed with 15 assertions. Full backend `./.venv-test/bin/mypy src` now reports 2181 errors in 77 files. Token expiry, minimum password length, rate-limit constants, status/reason values, delivery error truncation, token hashing, supersede/consume/expire behavior, active-user guard, reset URL separator behavior, email transport fallback, generic user-facing response, runtime DDL prohibition, and log masking were not changed. No business rules, prompts, thresholds, permissions, admin management entries, audit semantics, or configurable items were added.
 
 - 2026-05-06 Phase 1.3 PPT parser atom: `./.venv-test/bin/mypy src/presentation_coach/services/ppt_parser.py`, `ruff check src/presentation_coach/services/ppt_parser.py`, an ad hoc missing-dependency fallback and page-context runtime check, and `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_presentation_thumbnail_api.py -q --no-cov` passed. Full backend `./.venv-test/bin/mypy src` now reports 2188 errors in 78 files. The broader thumbnail command including `tests/unit/test_presentation_thumbnail_pipeline.py` failed because `.venv-test` lacks Pillow despite `requirements.txt` declaring it; this was not counted as passing verification. PPT parser supported formats, missing-dependency fallbacks, parse/thumbnail fallback codes, thumbnail dimensions/copy/colors/path naming, page-context fields/defaults, validity checks, and singleton behavior were not changed. No business rules, prompts, thresholds, permissions, admin management entries, audit semantics, or configurable items were added.
 

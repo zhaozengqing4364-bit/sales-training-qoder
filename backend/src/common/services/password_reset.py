@@ -81,9 +81,9 @@ class PasswordResetService:
     ) -> None:
         self.db = db
         self.email_service = email_service or build_password_reset_email_service()
-        self.frontend_base_url = frontend_base_url or os.getenv(
-            "PASSWORD_RESET_BASE_URL",
-            "/reset-password",
+        configured_frontend_base_url = os.getenv("PASSWORD_RESET_BASE_URL")
+        self.frontend_base_url: str = (
+            frontend_base_url or configured_frontend_base_url or "/reset-password"
         )
 
     async def request_password_reset(self, email: str) -> None:
@@ -224,9 +224,13 @@ class PasswordResetService:
                 reset_url=reset_url,
             )
         except Exception as exc:  # noqa: BLE001 - keep auth seam resilient to delivery outages
-            reset_token.delivery_status = PASSWORD_RESET_DELIVERY_STATUS_FAILED
-            reset_token.delivery_attempted_at = attempted_at
-            reset_token.delivery_error = self._format_delivery_error(exc)
+            setattr(
+                reset_token,
+                "delivery_status",
+                PASSWORD_RESET_DELIVERY_STATUS_FAILED,
+            )
+            setattr(reset_token, "delivery_attempted_at", attempted_at)
+            setattr(reset_token, "delivery_error", self._format_delivery_error(exc))
             await self.db.commit()
             logger.warning(
                 "Password reset email delivery failed",
@@ -236,9 +240,9 @@ class PasswordResetService:
             )
             return
 
-        reset_token.delivery_status = PASSWORD_RESET_DELIVERY_STATUS_SENT
-        reset_token.delivery_attempted_at = attempted_at
-        reset_token.delivery_error = None
+        setattr(reset_token, "delivery_status", PASSWORD_RESET_DELIVERY_STATUS_SENT)
+        setattr(reset_token, "delivery_attempted_at", attempted_at)
+        setattr(reset_token, "delivery_error", None)
         await self.db.commit()
 
         logger.info(
