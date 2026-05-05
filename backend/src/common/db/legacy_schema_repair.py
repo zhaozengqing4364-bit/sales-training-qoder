@@ -36,7 +36,9 @@ def _parse_json_dict(raw: Any) -> dict[str, Any]:
     return {}
 
 
-def repair_persona_policy_legacy_schema(sync_conn, *, repair_surface: str) -> bool:
+def repair_persona_policy_legacy_schema(
+    sync_conn: Any, *, repair_surface: str
+) -> bool:
     inspector = inspect(sync_conn)
     if "personas" not in set(inspector.get_table_names()):
         return False
@@ -92,7 +94,7 @@ def repair_persona_policy_legacy_schema(sync_conn, *, repair_surface: str) -> bo
     return False
 
 
-def _index_exists(inspector, table_name: str, index_name: str) -> bool:
+def _index_exists(inspector: Any, table_name: str, index_name: str) -> bool:
     try:
         indexes = inspector.get_indexes(table_name)
     except Exception:
@@ -100,7 +102,9 @@ def _index_exists(inspector, table_name: str, index_name: str) -> bool:
     return any(index.get("name") == index_name for index in indexes)
 
 
-def _get_check_constraint_sql(sync_conn, table_name: str, constraint_name: str) -> str:
+def _get_check_constraint_sql(
+    sync_conn: Any, table_name: str, constraint_name: str
+) -> str:
     inspector = inspect(sync_conn)
     try:
         constraints = inspector.get_check_constraints(table_name)
@@ -118,7 +122,9 @@ def _file_type_constraint_supports_spreadsheets(sql_text: str) -> bool:
     return "xlsx" in normalized and "xls" in normalized
 
 
-def _rebuild_sqlite_knowledge_documents_table(sync_conn, columns: set[str]) -> None:
+def _rebuild_sqlite_knowledge_documents_table(
+    sync_conn: Any, columns: set[str]
+) -> None:
     select_expressions = {
         "id": "id",
         "knowledge_base_id": "knowledge_base_id",
@@ -224,7 +230,7 @@ def _rebuild_sqlite_knowledge_documents_table(sync_conn, columns: set[str]) -> N
     sync_conn.execute(text("PRAGMA foreign_keys=ON"))
 
 
-def knowledge_documents_needs_legacy_repair(sync_conn) -> bool:
+def knowledge_documents_needs_legacy_repair(sync_conn: Any) -> bool:
     inspector = inspect(sync_conn)
     if "knowledge_documents" not in set(inspector.get_table_names()):
         return False
@@ -243,7 +249,9 @@ def knowledge_documents_needs_legacy_repair(sync_conn) -> bool:
     )
 
 
-def repair_knowledge_document_legacy_schema(sync_conn, *, repair_surface: str) -> bool:
+def repair_knowledge_document_legacy_schema(
+    sync_conn: Any, *, repair_surface: str
+) -> bool:
     inspector = inspect(sync_conn)
     if "knowledge_documents" not in set(inspector.get_table_names()):
         return False
