@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 report trends datetime boundary typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2318 errors in 104 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 error middleware return typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2314 errors in 103 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -92,6 +92,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: forbidden-word data sources, exact/regex matching strategy, failure-link traversal, match ordering, unique-match deduplication, default suggestion copy, severity values, and emitted match fields were not added or changed.
 - Latest typed boundary: report trend `start_time` ORM field contracts in `common.analytics.report_trends` are typed as SQLAlchemy/runtime datetime boundaries, not business configuration.
 - Latest unchanged business logic: same-user and same-scenario filtering, completed/evaluable score inclusion rules, score basis, scan limit, request limit bounds, trend sort order, delta calculation, no-history explanation copy, and response payload fields were not added or changed.
+- Latest typed boundary: error-handling middleware return contracts in `common.error_handling.middleware` are typed as ASGI/FastAPI response contracts, not business configuration.
+- Latest unchanged business logic: trace header names, traceparent/tracestate propagation, HTTP status codes, fallback codes, exception payload fields, user-facing fallback copy, and logging fields were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -203,6 +205,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | AI scoring dict boundary typing | `./.venv-test/bin/mypy src/evaluation/services/ai_scoring.py` now has no direct `src/evaluation/services/ai_scoring.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2326 errors in 106 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/evaluation/test_realtime_scoring.py -q --no-cov` | Phase 1.3 AI scoring dict boundary typing commit |
 | 2026-05-06 | Phase 1.3 | Aho matcher annotation typing | `./.venv-test/bin/mypy src/presentation_coach/services/aho_matcher.py`; `./.venv-test/bin/mypy src` now fails with 2322 errors in 105 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_presentation_feedback_service_policy.py tests/unit/test_presentation_handler_persistence.py::test_send_realtime_feedback_forbidden_word_emits_two_events -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... exact, regex, and unique matcher checks ... PY` | Phase 1.3 Aho matcher annotation typing commit |
 | 2026-05-06 | Phase 1.3 | Report trends datetime boundary typing | `./.venv-test/bin/mypy src/common/analytics/report_trends.py` now has no direct `src/common/analytics/report_trends.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2318 errors in 104 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/analytics/test_report_trends.py tests/unit/test_history_service_evidence_projection.py -q --no-cov` | Phase 1.3 report trends datetime boundary typing commit |
+| 2026-05-06 | Phase 1.3 | Error middleware return typing | `./.venv-test/bin/mypy src/common/error_handling/middleware.py`; `./.venv-test/bin/mypy src` now fails with 2314 errors in 103 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_error_handling_middleware.py tests/unit/test_trace_context.py -q --no-cov` | Phase 1.3 error middleware return typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -213,6 +216,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2314 errors in 103 files after typing the error middleware return boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2318 errors in 104 files after typing the report trends datetime boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2322 errors in 105 files after typing the Aho matcher annotation boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2326 errors in 106 files after typing the AIScoringService dict boundary. Phase 1.4 was not advanced.

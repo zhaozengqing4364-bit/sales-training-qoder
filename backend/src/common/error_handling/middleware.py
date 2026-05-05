@@ -23,7 +23,7 @@ class ErrorHandlerMiddleware:
     Never shows error popups to users - converts to graceful fallbacks
     """
 
-    def __init__(self, app: ASGIApp):
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     @staticmethod
@@ -33,7 +33,7 @@ class ErrorHandlerMiddleware:
         trace_id: str,
         response_traceparent: str | None,
         tracestate: str | None,
-    ):
+    ) -> None:
         headers = MutableHeaders(scope=message)
         headers["X-Trace-ID"] = trace_id
 
@@ -43,7 +43,7 @@ class ErrorHandlerMiddleware:
         if tracestate:
             headers["tracestate"] = tracestate
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Process request with error handling"""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -120,7 +120,7 @@ class ErrorHandlerMiddleware:
         return "[PLEASE_TRY_AGAIN]"
 
 
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """FastAPI global exception handler"""
     trace_id = get_trace_id()
 
@@ -141,7 +141,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-async def http_exception_handler(request: Request, exc: HTTPException):
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """FastAPI HTTPException handler with trace_id for observability."""
     trace_id = get_trace_id()
     detail = exc.detail
