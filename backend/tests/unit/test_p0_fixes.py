@@ -11,6 +11,7 @@ Tests for:
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -440,6 +441,7 @@ class TestASRWithFallback:
         service._transcribe_once = AsyncMock(
             side_effect=[Result.fail("[ASR_STREAMING_ERROR]"), Result.fail("[ASR_STREAMING_ERROR]")]
         )
+        service._asr_service = SimpleNamespace(provider_name="alibaba")
 
         helper_calls = []
 

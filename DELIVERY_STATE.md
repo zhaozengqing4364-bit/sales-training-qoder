@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 backend entrypoint type annotations commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2423 errors in 160 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 backoff helper mypy cleanup commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2422 errors in 159 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -128,6 +128,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Backend mypy invocation normalized to repo configuration | `./.venv-test/bin/mypy src` now reaches real checking and fails with 2430 errors in 164 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_runtime_dependency_contract.py -q --no-cov` | Phase 1.3 mypy invocation normalization commit |
 | 2026-05-06 | Phase 1.3 | Third-party mypy override cleanup for installed untyped libraries | `./.venv-test/bin/mypy src` now fails with 2427 errors in 163 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_runtime_dependency_contract.py tests/unit/test_oss_signing_service.py -q --no-cov` | Phase 1.3 third-party mypy override cleanup commit |
 | 2026-05-06 | Phase 1.3 | Backend entrypoint type annotations | `./.venv-test/bin/mypy src` now fails with 2423 errors in 160 files and no direct `src/main.py`, `src/app_factory.py`, or `src/http_routes.py` errors; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_app_factory.py tests/unit/common/test_route_integrity.py -q --no-cov` | Phase 1.3 backend entrypoint type annotations commit |
+| 2026-05-06 | Phase 1.3 | Backoff helper mypy cleanup and ASR retry test isolation | `./.venv-test/bin/mypy src/common/resilience/backoff.py`; `./.venv-test/bin/mypy src` now fails with 2422 errors in 159 files and no direct `src/common/resilience/backoff.py` errors; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_p0_fixes.py::TestASRWithFallback::test_jitter_backoff_helper_caps_delay tests/unit/test_p0_fixes.py::TestASRWithFallback::test_transcribe_uses_shared_jitter_backoff_helper tests/unit/test_asr_provider_chain.py -q --no-cov` | Phase 1.3 backoff helper mypy cleanup commit |
 
 ## Non-Blocking Verification Notes
 
@@ -135,4 +136,4 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
-- 2026-05-06 Phase 1.3: paused before Phase 1.4 because backend mypy is not clean. The project test environment initially lacked `mypy`; local verification installed `mypy==1.20.2` into `.venv-test` via `uv pip install --python ./.venv-test/bin/python 'mypy>=1.10'`. `mypy` is now added to backend code-quality dependencies and `pyproject.toml` normalizes package discovery. Direct `./.venv-test/bin/mypy src` reaches real analysis but reports 2423 errors in 160 files after limiting third-party overrides to installed untyped libraries and typing backend entrypoints. This is broad existing type debt and should be split into dedicated type-baseline subtasks before continuing the serial delivery plan.
+- 2026-05-06 Phase 1.3: paused before Phase 1.4 because backend mypy is not clean. The project test environment initially lacked `mypy`; local verification installed `mypy==1.20.2` into `.venv-test` via `uv pip install --python ./.venv-test/bin/python 'mypy>=1.10'`. `mypy` is now added to backend code-quality dependencies and `pyproject.toml` normalizes package discovery. Direct `./.venv-test/bin/mypy src` reaches real analysis but reports 2422 errors in 159 files after limiting third-party overrides to installed untyped libraries, typing backend entrypoints, and cleaning the shared backoff helper. This is broad existing type debt and should be split into dedicated type-baseline subtasks before continuing the serial delivery plan.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from math import pow
 
 
 def compute_jitter_backoff_seconds(
@@ -22,7 +23,7 @@ def compute_jitter_backoff_seconds(
     normalized_base = max(0.0, float(base_delay_seconds))
     normalized_cap = max(normalized_base, float(max_delay_seconds))
     capped_delay = min(
-        normalized_cap, normalized_base * (2 ** (normalized_attempt - 1))
+        normalized_cap, normalized_base * pow(2.0, normalized_attempt - 1)
     )
 
     if capped_delay <= 0:
@@ -34,4 +35,4 @@ def compute_jitter_backoff_seconds(
     if upper_bound <= lower_bound:
         return round(lower_bound, 6)
 
-    return round(random.uniform(lower_bound, upper_bound), 6)
+    return round(float(random.uniform(lower_bound, upper_bound)), 6)
