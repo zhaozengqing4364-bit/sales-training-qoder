@@ -8,7 +8,7 @@ fields present.  Missing history returns an explanation instead of fake zeroes.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -78,7 +78,9 @@ class ReportTrendService:
         )
         return {
             "session_id": str(session.session_id),
-            "date": _coerce_datetime(session.start_time).isoformat(),
+            "date": _coerce_datetime(
+                cast(datetime | None, session.start_time)
+            ).isoformat(),
             "scenario_type": str(scenario_type or "sales"),
             "logic_score": float(session.logic_score or 0.0),
             "accuracy_score": float(session.accuracy_score or 0.0),
@@ -143,7 +145,7 @@ class ReportTrendService:
                     }
                 )
 
-            target_time = _coerce_datetime(target.start_time)
+            target_time = _coerce_datetime(cast(datetime | None, target.start_time))
             candidate_result = await db.execute(
                 select(PracticeSession)
                 .options(selectinload(PracticeSession.scenario))
@@ -161,13 +163,16 @@ class ReportTrendService:
                     or "sales"
                 )
                 == scenario_type
-                and _coerce_datetime(session.start_time) <= target_time
+                and _coerce_datetime(cast(datetime | None, session.start_time))
+                <= target_time
                 and self._is_evaluable(session)
                 and self._has_complete_scores(session)
             ]
             qualified = sorted(
                 qualified,
-                key=lambda item: _coerce_datetime(item.start_time),
+                key=lambda item: _coerce_datetime(
+                    cast(datetime | None, item.start_time)
+                ),
             )[-normalized_limit:]
             points = [
                 self._point(session, str(target.session_id)) for session in qualified

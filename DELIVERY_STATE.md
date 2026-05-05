@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 Aho matcher annotation typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2322 errors in 105 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 report trends datetime boundary typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2318 errors in 104 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -90,6 +90,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: scoring dimensions, dimension weights, scoring prompt text, system message, JSON code-block extraction, default score values, feedback fallback copy, strengths/improvements defaults, and scoring error codes were not added or changed.
 - Latest typed boundary: Aho-Corasick matcher node, queue, and constructor contracts in `presentation_coach.services.aho_matcher` are typed as code-level algorithm internals, not business configuration.
 - Latest unchanged business logic: forbidden-word data sources, exact/regex matching strategy, failure-link traversal, match ordering, unique-match deduplication, default suggestion copy, severity values, and emitted match fields were not added or changed.
+- Latest typed boundary: report trend `start_time` ORM field contracts in `common.analytics.report_trends` are typed as SQLAlchemy/runtime datetime boundaries, not business configuration.
+- Latest unchanged business logic: same-user and same-scenario filtering, completed/evaluable score inclusion rules, score basis, scan limit, request limit bounds, trend sort order, delta calculation, no-history explanation copy, and response payload fields were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -200,6 +202,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Realtime feedback arbiter context typing | `./.venv-test/bin/mypy src/sales_bot/websocket/realtime_feedback_arbiter.py` now has no direct `src/sales_bot/websocket/realtime_feedback_arbiter.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2329 errors in 107 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py::test_run_realtime_feedback_keeps_single_action_card_and_prioritizes_score_over_low_severity_fuzzy_detection tests/unit/test_stepfun_realtime_handler.py::test_run_realtime_feedback_suppresses_duplicate_action_card_for_same_turn -q --no-cov` | Phase 1.3 realtime feedback arbiter context typing commit |
 | 2026-05-06 | Phase 1.3 | AI scoring dict boundary typing | `./.venv-test/bin/mypy src/evaluation/services/ai_scoring.py` now has no direct `src/evaluation/services/ai_scoring.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2326 errors in 106 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/evaluation/test_realtime_scoring.py -q --no-cov` | Phase 1.3 AI scoring dict boundary typing commit |
 | 2026-05-06 | Phase 1.3 | Aho matcher annotation typing | `./.venv-test/bin/mypy src/presentation_coach/services/aho_matcher.py`; `./.venv-test/bin/mypy src` now fails with 2322 errors in 105 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_presentation_feedback_service_policy.py tests/unit/test_presentation_handler_persistence.py::test_send_realtime_feedback_forbidden_word_emits_two_events -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/python - <<'PY' ... exact, regex, and unique matcher checks ... PY` | Phase 1.3 Aho matcher annotation typing commit |
+| 2026-05-06 | Phase 1.3 | Report trends datetime boundary typing | `./.venv-test/bin/mypy src/common/analytics/report_trends.py` now has no direct `src/common/analytics/report_trends.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2318 errors in 104 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/analytics/test_report_trends.py tests/unit/test_history_service_evidence_projection.py -q --no-cov` | Phase 1.3 report trends datetime boundary typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -210,6 +213,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2318 errors in 104 files after typing the report trends datetime boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2322 errors in 105 files after typing the Aho matcher annotation boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2326 errors in 106 files after typing the AIScoringService dict boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2329 errors in 107 files after typing the RealtimeFeedbackArbiter context boundary. Phase 1.4 was not advanced.
