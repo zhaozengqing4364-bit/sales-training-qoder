@@ -6,7 +6,7 @@ Provides semantic similarity matching beyond simple keyword matching
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from common.ai.embedding_service import EmbeddingService
 from common.error_handling.result import Result
@@ -60,10 +60,12 @@ class SemanticPointTracker:
         try:
             for idx, point in enumerate(self.required_points, start=1):
                 point_id = f"point_{idx}"
-                embedding_result = await self._embedding_service.get_embedding(point)
+                embedding_result = await self._embedding_service.embed(point)
 
                 if embedding_result.is_success:
-                    self.point_embeddings[point_id] = embedding_result.value
+                    self.point_embeddings[point_id] = cast(
+                        list[float], embedding_result.value
+                    )
                     logger.debug(f"Computed embedding for point: {point[:50]}...")
                 else:
                     logger.warning(f"Failed to get embedding for point: {point[:50]}")
@@ -90,9 +92,7 @@ class SemanticPointTracker:
         results = []
 
         # Get embedding for transcript
-        transcript_embedding_result = await self._embedding_service.get_embedding(
-            transcript
-        )
+        transcript_embedding_result = await self._embedding_service.embed(transcript)
 
         if not transcript_embedding_result.is_success:
             logger.warning(
@@ -100,7 +100,7 @@ class SemanticPointTracker:
             )
             return self._fallback_keyword_matching(transcript)
 
-        transcript_embedding = transcript_embedding_result.value
+        transcript_embedding = cast(list[float], transcript_embedding_result.value)
 
         for idx, point in enumerate(self.required_points, start=1):
             point_id = f"point_{idx}"
@@ -316,7 +316,7 @@ class SemanticPointTracker:
         if magnitude1 == 0 or magnitude2 == 0:
             return 0.0
 
-        return dot_product / (magnitude1 * magnitude2)
+        return cast(float, dot_product / (magnitude1 * magnitude2))
 
     def _is_in_cooldown(self, point_id: str) -> bool:
         """Check if point is in feedback cooldown period"""
