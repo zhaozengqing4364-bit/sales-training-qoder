@@ -98,6 +98,7 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [x] Type legacy schema repair SQLAlchemy boundary contracts.
 - [x] Type PPT OCR processor optional dependency contracts.
 - [x] Type response cache entry and decorator contracts.
+- [x] Type presentation PPT parser optional dependency and page-context contracts.
 - [ ] Resolve backend mypy baseline blocker.
 - [ ] Configure Vitest to isolate `node_modules`.
 - [ ] Raise overall coverage to at least 60%.
@@ -141,6 +142,8 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [ ] Create final `Release_Checklist.md`.
 
 ## Review
+
+- 2026-05-06 Phase 1.3 PPT parser atom: `./.venv-test/bin/mypy src/presentation_coach/services/ppt_parser.py`, `ruff check src/presentation_coach/services/ppt_parser.py`, an ad hoc missing-dependency fallback and page-context runtime check, and `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_presentation_thumbnail_api.py -q --no-cov` passed. Full backend `./.venv-test/bin/mypy src` now reports 2188 errors in 78 files. The broader thumbnail command including `tests/unit/test_presentation_thumbnail_pipeline.py` failed because `.venv-test` lacks Pillow despite `requirements.txt` declaring it; this was not counted as passing verification. PPT parser supported formats, missing-dependency fallbacks, parse/thumbnail fallback codes, thumbnail dimensions/copy/colors/path naming, page-context fields/defaults, validity checks, and singleton behavior were not changed. No business rules, prompts, thresholds, permissions, admin management entries, audit semantics, or configurable items were added.
 
 - 2026-05-06 Phase 1.3 response cache atom: `./.venv-test/bin/mypy src/common/cache/response_cache.py`, `ruff check src/common/cache/response_cache.py`, an ad hoc `ResponseCache` hit/expire/invalidate/decorator runtime check, and `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/cache/test_redis_cache.py tests/unit/test_stepfun_internal_knowledge_searcher.py -q --no-cov` passed. Full backend `./.venv-test/bin/mypy src` now reports 2196 errors in 79 files. Response cache default TTL, key generation material/hash shape, expiration fallback, cache-miss sentinel, invalidation/cleanup semantics, global singleton, and async decorator behavior were not changed. No business rules, prompts, thresholds, permissions, admin management entries, audit semantics, or configurable items were added.
 

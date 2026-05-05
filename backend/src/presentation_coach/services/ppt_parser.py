@@ -7,7 +7,7 @@ import io
 import os
 import textwrap
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 # Try to import python-pptx
 try:
-    from pptx import Presentation as PptxPresentation
+    from pptx import Presentation as PptxPresentation  # type: ignore[import-not-found]
 
     PPTX_AVAILABLE = True
 except ImportError:
@@ -25,7 +25,7 @@ except ImportError:
     logger.warning("python-pptx not installed. PPT parsing will be limited.")
 
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont  # type: ignore[import-not-found]
 
     PILLOW_AVAILABLE = True
 except ImportError:
@@ -39,7 +39,7 @@ except ImportError:
 class PPTParserService:
     """Service for parsing PowerPoint presentations"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.supported_formats = {".pptx", ".ppt"}
 
     async def parse_presentation(
@@ -68,7 +68,7 @@ class PPTParserService:
             with io.BytesIO(file_content) as stream:
                 prs = PptxPresentation(stream)
 
-                pages = []
+                pages: list[dict[str, Any]] = []
                 total_slides = len(prs.slides)
 
                 for idx, slide in enumerate(prs.slides, start=1):
@@ -88,9 +88,9 @@ class PPTParserService:
             logger.error(f"Failed to parse PPT: {str(e)}")
             return Result.fail(f"[PARSE_ERROR] {str(e)}")
 
-    def _extract_slide_content(self, slide, page_number: int) -> dict[str, Any]:
+    def _extract_slide_content(self, slide: Any, page_number: int) -> dict[str, Any]:
         """Extract text content from a single slide"""
-        texts = []
+        texts: list[str] = []
 
         # Extract text from all shapes
         for shape in slide.shapes:
@@ -118,7 +118,7 @@ class PPTParserService:
         """Extract presentation title from first slide or properties"""
         # Try to get from core properties
         if prs.core_properties and prs.core_properties.title:
-            return prs.core_properties.title
+            return cast(str, prs.core_properties.title)
 
         # Try to get from first slide title
         if len(prs.slides) > 0:
@@ -126,7 +126,7 @@ class PPTParserService:
             for shape in first_slide.shapes:
                 if shape.is_placeholder:
                     if hasattr(shape, "text") and shape.text.strip():
-                        return shape.text.strip()[:200]  # Limit length
+                        return cast(str, shape.text.strip()[:200])  # Limit length
 
         return "Untitled Presentation"
 
@@ -209,7 +209,7 @@ class PPTParserService:
 class PageContextService:
     """Service for managing page context during presentation sessions"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._session_pages: dict[str, dict[str, Any]] = {}
 
     def set_current_page(
@@ -248,7 +248,7 @@ class PageContextService:
             return False
 
         total_pages = context.get("total_pages", 0)
-        return 1 <= page_number <= total_pages
+        return 1 <= page_number <= cast(int, total_pages)
 
 
 # Singleton instances
