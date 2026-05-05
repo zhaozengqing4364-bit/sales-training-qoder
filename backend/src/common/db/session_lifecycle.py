@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -434,9 +434,12 @@ class SessionLifecycleService:
                     scenario_type=resolved_scenario_type,
                 )
 
-            end_time = session.end_time or timestamp
-            start_time = session.start_time or timestamp
-            total_duration_seconds = session.total_duration_seconds
+            end_time = cast(datetime, session.end_time or timestamp)
+            start_time = cast(datetime, session.start_time or timestamp)
+            total_duration_seconds: int | None = cast(
+                int | None,
+                session.total_duration_seconds,
+            )
             if end_time and start_time:
                 end_time_utc = self._coerce_utc_timestamp(end_time)
                 start_time_utc = self._coerce_utc_timestamp(start_time)
@@ -494,7 +497,7 @@ class SessionLifecycleService:
         if transition.action != "end" or not transition.changed:
             return
         await self._trigger_report_generation(
-            transition.session.session_id,
+            cast(str, transition.session.session_id),
             transition.scenario_type,
         )
 
