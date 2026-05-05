@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -279,7 +280,7 @@ async def evaluate_kb_lock_decision(
     *,
     query: str,
     effective_policy: dict[str, Any],
-    record_metric=None,
+    record_metric: Callable[..., Awaitable[None]] | None = None,
     decision_id: str = "",
 ) -> KbLockDecision:
     """Evaluate one-turn KB lock decision with deterministic pass/block result."""
