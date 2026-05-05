@@ -118,3 +118,13 @@ Based on the currently inspected code, the existing configuration and RBAC syste
 - The scan did not rely on proxy success signals; it instantiated the actual FastAPI application and enumerated mounted routes.
 - Static frontend mismatch count includes dynamic-query false positives, so actionable frontend items were manually checked against surrounding code before listing.
 - Warnings during app instantiation reported missing optional `python-pptx` and `Pillow`; they do not block route enumeration but may affect Phase 4 PPT fixture work.
+
+## Phase 1.2 Remediation Addendum
+
+Updated on: 2026-05-06
+
+- R1 resolved for the committed contract file: `specs/001-ai-practice-system/contracts/openapi.yaml` was regenerated from `create_app().openapi()` and now contains the runtime FastAPI path set.
+- R2 resolved for the committed contract file: `/api/v1/auth/wechat` is absent; `/api/v1/auth/wecom/start` and `/api/v1/auth/wecom/callback` are present.
+- OpenAPI generation warning resolved: `backend/src/admin/api/model_configs.py` now gives separate operation IDs to `PUT` and `PATCH /api/v1/admin/model-configs/{config_id}`.
+- Regression coverage added: `backend/tests/unit/common/test_route_integrity.py::test_committed_openapi_contract_matches_runtime_paths` compares committed OpenAPI paths against the runtime schema.
+- R3 remains intentionally deferred to Phase 2 because the objective explicitly scopes scoring-ruleset migration and legacy path compatibility to `/api/v1/admin/scoring-rulesets` in Phase 2.

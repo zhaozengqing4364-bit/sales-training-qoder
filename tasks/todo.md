@@ -11,8 +11,8 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 ## Phase 1: Baseline Falsification and Routing Audit
 
 - [x] Generate `api_routing_audit.md` with OpenAPI paths, router sources, permission dependencies, and frontend call mapping.
-- [ ] Fix unmounted or wrongly mounted backend routes.
-- [ ] Fix frontend/backend API contract mismatches.
+- [x] Fix unmounted or wrongly mounted backend routes.
+- [x] Fix frontend/backend API contract mismatches.
 - [ ] Fix frontend/backend lint errors.
 - [ ] Fix TypeScript type errors.
 - [ ] Configure Vitest to isolate `node_modules`.

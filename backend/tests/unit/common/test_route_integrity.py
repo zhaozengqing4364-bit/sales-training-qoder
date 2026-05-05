@@ -1,10 +1,19 @@
 """Route integrity checks for mounted FastAPI routes."""
 
 from collections import Counter
+from pathlib import Path
 
+import yaml
 from main import app
 
 IGNORED_METHODS = {"HEAD", "OPTIONS"}
+OPENAPI_CONTRACT_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "specs"
+    / "001-ai-practice-system"
+    / "contracts"
+    / "openapi.yaml"
+)
 
 
 def _collect_method_path_pairs() -> list[tuple[str, str]]:
@@ -95,3 +104,17 @@ def test_prompt_templates_static_route_precedes_dynamic_route() -> None:
     )
     template_id_index = prompt_routes.index("/api/v1/prompt-templates/{template_id}")
     assert by_scenario_index < template_id_index
+
+
+def test_committed_openapi_contract_matches_runtime_paths() -> None:
+    """Keep the committed OpenAPI file aligned with the FastAPI runtime schema."""
+    committed_schema = yaml.safe_load(OPENAPI_CONTRACT_PATH.read_text())
+    runtime_schema = app.openapi()
+
+    committed_paths = set(committed_schema["paths"])
+    runtime_paths = set(runtime_schema["paths"])
+
+    assert committed_paths == runtime_paths
+    assert "/api/v1/auth/wechat" not in committed_paths
+    assert "/api/v1/auth/wecom/start" in committed_paths
+    assert "/api/v1/auth/wecom/callback" in committed_paths

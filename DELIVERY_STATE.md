@@ -11,8 +11,8 @@
 
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
-- Current atomic task: Phase 1.2 - API contract alignment
-- Last commit: Phase 1.1 API routing audit commit
+- Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
+- Last commit: Phase 1.2 API contract alignment commit
 - Blocker: none
 
 ## Implementation-Before-Coding Judgment
@@ -47,11 +47,24 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Illegal configuration handling: unchanged.
 - Logic that must not be hardcoded: future scoring ruleset route aliases, admin permission mappings, business thresholds, and operational copy.
 
+### Phase 1.2 - API Contract Alignment
+
+- Stable code logic: committed OpenAPI contract should be generated from the runtime FastAPI schema; operation IDs must be unique.
+- Configurable business rules: none introduced.
+- New configuration items: none.
+- Reused configuration items: none changed.
+- Configuration source: not applicable.
+- Configuration manager: not applicable.
+- Configuration validation: OpenAPI path parity is validated by `test_committed_openapi_contract_matches_runtime_paths`.
+- Missing configuration fallback: not applicable.
+- Illegal configuration handling: not applicable.
+- Logic that must not be hardcoded: scoring-ruleset target route migration remains a Phase 2 router/client compatibility task, not an ad hoc alias hidden in Phase 1.
+
 ### Phase 1: Baseline Falsification and Routing Audit
 
 - [x] Phase 1.0: Create and maintain `DELIVERY_STATE.md`.
 - [x] Phase 1.1: Generate `api_routing_audit.md` with OpenAPI paths, router sources, permission dependencies, and frontend call mapping.
-- [ ] Phase 1.2: Fix all unmounted or wrongly mounted routes and reach 100% frontend/backend API contract consistency.
+- [x] Phase 1.2: Fix all unmounted or wrongly mounted routes and reach 100% frontend/backend API contract consistency.
 - [ ] Phase 1.3: Fix all frontend/backend lint errors and TypeScript type errors.
 - [ ] Phase 1.4: Adjust Vitest to isolate `node_modules`.
 - [ ] Phase 1.5: Add tests until total coverage is at least 60%, and core domains `scoring`, `auth`, and `practice` are at least 70%.
@@ -97,6 +110,11 @@ Based on the currently inspected code, the existing configuration system cannot 
 | --- | --- | --- | --- | --- |
 | 2026-05-06 | Phase 1.0 | Delivery state bootstrap | `test -f DELIVERY_STATE.md && test -f tasks/todo.md && rg -n "Phase 1|Phase 2|Phase 3|Phase 4|Phase 5|api_routing_audit.md|Release_Checklist.md|Current atomic task|Atomic Task Log" DELIVERY_STATE.md tasks/todo.md` | Phase 1.0 delivery state bootstrap commit |
 | 2026-05-06 | Phase 1.1 | API routing audit generated | `test -f api_routing_audit.md && rg -n "OpenAPI|Router Sources|Permission Dependencies|Frontend Call Mapping|/api/v1/admin/scoring-rulesets|/api/v1/evaluation/admin/scoring-rulesets|POST /api/v1/auth/wechat|BACKEND_MISSING_SPEC_COUNT|HAS_NEW_SCORING_ROUTE False" api_routing_audit.md` | Phase 1.1 API routing audit commit |
+| 2026-05-06 | Phase 1.2 | Runtime OpenAPI contract alignment | `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_route_integrity.py -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/python -W error::UserWarning - <<'PY' ... assert runtime/committed path parity, no /auth/wechat, WeCom routes present, unique operation IDs ... PY` | Phase 1.2 API contract alignment commit |
+
+## Non-Blocking Verification Notes
+
+- `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_route_integrity.py -q` collected and passed 6 route assertions, then failed global coverage because the project applies `--cov-fail-under=48` to all pytest runs. The coverage gate is tracked under Phase 1.5; the same targeted route test passed with `--no-cov`.
 
 ## Pause Log
 

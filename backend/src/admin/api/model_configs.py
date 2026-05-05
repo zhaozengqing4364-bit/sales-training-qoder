@@ -465,8 +465,15 @@ async def get_model_config(
         )
 
 
-@router.api_route(
-    "/{config_id}", methods=["PUT", "PATCH"], response_model=ModelConfigSuccessResponse
+@router.put(
+    "/{config_id}",
+    response_model=ModelConfigSuccessResponse,
+    operation_id="put_model_config",
+)
+@router.patch(
+    "/{config_id}",
+    response_model=ModelConfigSuccessResponse,
+    operation_id="patch_model_config",
 )
 async def update_model_config(
     config_id: str,
