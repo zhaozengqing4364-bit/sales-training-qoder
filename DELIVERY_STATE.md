@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 base capability result typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2339 errors in 110 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
+- Last commit: Phase 1.3 AI config manager ORM field typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2336 errors in 109 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `pptx`, `PIL`, `pytesseract`, `dashscope`, `haystack`, `pypdf`, `docx`, `xlrd`, `paddleocr`, `sentence_transformers`, and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -80,6 +80,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: context state keys, scoring weight lookup order, capability config merge order, conversation history windowing, and knowledge-base ID merge behavior were not added or changed.
 - Latest typed boundary: BaseCapability result payload and enabled flag contracts in `agent.capabilities.base` are typed as code-level capability runtime contracts, not business configuration.
 - Latest unchanged business logic: capability result fields, fallback error default, enabled config lookup, config size/depth validation, session lifecycle hooks, and usage-count state keys were not added or changed.
+- Latest typed boundary: AI ConfigManager ORM field contracts in `common.ai.config_manager` are typed as code-level SQLAlchemy/runtime value boundaries, not business configuration.
+- Latest unchanged business logic: environment variable names/defaults, provider/model defaults, API key requirement policy, base URL requirement policy, active/default model selection, database-first precedence, API key decryption flow, and environment fallback behavior were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -185,6 +187,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | History statistics payload typing | `./.venv-test/bin/mypy src/common/analytics/history_service.py` now has no direct `src/common/analytics/history_service.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2347 errors in 112 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_history_service_evidence_projection.py tests/unit/common/test_admin_analytics_service.py tests/unit/common/test_analytics_api_normalization.py -q --no-cov` | Phase 1.3 history statistics payload typing commit |
 | 2026-05-06 | Phase 1.3 | Agent context config typing | `./.venv-test/bin/mypy src/agent/context.py` now passes; `./.venv-test/bin/mypy src` now fails with 2343 errors in 111 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_knowledge_retrieval.py tests/unit/test_realtime_scoring.py -q --no-cov` | Phase 1.3 agent context config typing commit |
 | 2026-05-06 | Phase 1.3 | Base capability result typing | `./.venv-test/bin/mypy src/agent/capabilities/base.py` now has no direct `src/agent/capabilities/base.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2339 errors in 110 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_capability_base.py tests/unit/test_fuzzy_detection.py tests/unit/test_sales_stage.py tests/unit/test_knowledge_retrieval.py tests/unit/test_realtime_scoring.py -q --no-cov` | Phase 1.3 base capability result typing commit |
+| 2026-05-06 | Phase 1.3 | AI config manager ORM field typing | `./.venv-test/bin/mypy src/common/ai/config_manager.py` now has no direct `src/common/ai/config_manager.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2336 errors in 109 files; `ruff check src tests`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/admin/test_model_config_security.py tests/unit/common/test_config_manager_embedding_env.py -q --no-cov` | Phase 1.3 AI config manager ORM field typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -195,6 +198,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2336 errors in 109 files after typing the AI ConfigManager ORM field boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2350 errors in 113 files after typing the manager intervention timestamp boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2347 errors in 112 files after typing the history statistics payload boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2343 errors in 111 files after typing the AgentContext config boundary. Phase 1.4 was not advanced.

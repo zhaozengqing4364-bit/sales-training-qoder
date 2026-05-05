@@ -10,7 +10,7 @@ References:
 """
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -108,10 +108,11 @@ class ConfigManager:
                 self._by_type.clear()
 
                 for config in configs:
-                    self._cache[config.id] = config
+                    config_id = cast(str, config.id)
+                    self._cache[config_id] = config
 
                     # Group by type
-                    model_type = ModelType(config.model_type)
+                    model_type = ModelType(cast(str, config.model_type))
                     if model_type not in self._by_type:
                         self._by_type[model_type] = []
                     self._by_type[model_type].append(config)
@@ -215,7 +216,7 @@ class ConfigManager:
         Returns:
             Result with decrypted key or error
         """
-        return decrypt_api_key(config.api_key_encrypted)
+        return decrypt_api_key(cast(str, config.api_key_encrypted))
 
     def get_env_fallback(self, model_type: ModelType) -> dict[str, Any] | None:
         """
@@ -372,7 +373,7 @@ class ConfigManager:
         # Try database config first
         db_config = self.get_default_config(model_type)
         if db_config:
-            provider = db_config.provider
+            provider = cast(str, db_config.provider)
             if not self._api_key_required(model_type, provider):
                 return {
                     "provider": provider,
