@@ -119,15 +119,18 @@ class KnowledgeAnswerConfigRepository:
         if active_version is None:
             return None
 
+        config_version_id = _as_str(active_version.id)
         return KnowledgeAnswerConfigSnapshot(
-            config_version_id=active_version.id,
-            config_version_name=active_version.version_name,
-            query_profiles=self._load_query_profiles(active_version.id),
-            intent_rules=self._load_intent_rules(active_version.id),
-            entity_aliases=self._load_entity_aliases(active_version.id),
-            ranking_profiles=self._load_ranking_profiles(active_version.id),
-            answerability_profiles=self._load_answerability_profiles(active_version.id),
-            chunking_presets=self._load_chunking_presets(active_version.id),
+            config_version_id=config_version_id,
+            config_version_name=_as_str(active_version.version_name),
+            query_profiles=self._load_query_profiles(config_version_id),
+            intent_rules=self._load_intent_rules(config_version_id),
+            entity_aliases=self._load_entity_aliases(config_version_id),
+            ranking_profiles=self._load_ranking_profiles(config_version_id),
+            answerability_profiles=self._load_answerability_profiles(
+                config_version_id
+            ),
+            chunking_presets=self._load_chunking_presets(config_version_id),
         )
 
     def _get_active_version(self) -> KnowledgeConfigVersion | None:
@@ -159,16 +162,17 @@ class KnowledgeAnswerConfigRepository:
             .order_by(KnowledgeQueryProfile.profile_key.asc())
         )
         profiles = self._db_session.execute(statement).scalars().all()
-        return {
-            profile.profile_key: KnowledgeQueryProfileConfig(
-                profile_key=profile.profile_key,
-                description=profile.description,
-                rewrite_strategy=profile.rewrite_strategy,
-                max_rewrite_queries=profile.max_rewrite_queries,
-                stop_after_first_success=profile.stop_after_first_success,
+        configs: dict[str, KnowledgeQueryProfileConfig] = {}
+        for profile in profiles:
+            profile_key = _as_str(profile.profile_key)
+            configs[profile_key] = KnowledgeQueryProfileConfig(
+                profile_key=profile_key,
+                description=_as_optional_str(profile.description),
+                rewrite_strategy=_as_str(profile.rewrite_strategy),
+                max_rewrite_queries=_as_int(profile.max_rewrite_queries),
+                stop_after_first_success=_as_bool(profile.stop_after_first_success),
             )
-            for profile in profiles
-        }
+        return configs
 
     def _load_intent_rules(
         self, config_version_id: str
@@ -187,11 +191,11 @@ class KnowledgeAnswerConfigRepository:
         rules = self._db_session.execute(statement).scalars().all()
         return [
             KnowledgeIntentRuleConfig(
-                intent_key=rule.intent_key,
-                priority=rule.priority,
-                match_type=rule.match_type,
-                pattern=rule.pattern,
-                profile_key=rule.profile_key,
+                intent_key=_as_str(rule.intent_key),
+                priority=_as_int(rule.priority),
+                match_type=_as_str(rule.match_type),
+                pattern=_as_str(rule.pattern),
+                profile_key=_as_str(rule.profile_key),
             )
             for rule in rules
         ]
@@ -214,10 +218,10 @@ class KnowledgeAnswerConfigRepository:
         aliases = self._db_session.execute(statement).scalars().all()
         return [
             KnowledgeEntityAliasConfig(
-                canonical_entity=alias.canonical_entity,
-                alias=alias.alias,
-                entity_type=alias.entity_type,
-                confidence=alias.confidence,
+                canonical_entity=_as_str(alias.canonical_entity),
+                alias=_as_str(alias.alias),
+                entity_type=_as_str(alias.entity_type),
+                confidence=_as_float(alias.confidence),
             )
             for alias in aliases
         ]
@@ -235,25 +239,30 @@ class KnowledgeAnswerConfigRepository:
             .order_by(KnowledgeRankingProfile.profile_key.asc())
         )
         profiles = self._db_session.execute(statement).scalars().all()
-        return {
-            profile.profile_key: KnowledgeRankingProfileConfig(
-                profile_key=profile.profile_key,
-                title_exact_boost=profile.title_exact_boost,
-                entity_match_boost=profile.entity_match_boost,
+        configs: dict[str, KnowledgeRankingProfileConfig] = {}
+        for profile in profiles:
+            profile_key = _as_str(profile.profile_key)
+            configs[profile_key] = KnowledgeRankingProfileConfig(
+                profile_key=profile_key,
+                title_exact_boost=_as_float(profile.title_exact_boost),
+                entity_match_boost=_as_float(profile.entity_match_boost),
                 doc_type_weights=_json_object(profile.doc_type_weights_json),
                 section_weights=_json_object(profile.section_weights_json),
-                min_pass_score=profile.min_pass_score,
-                min_pass_score_keyword=profile.min_pass_score_keyword,
-                base_weight=getattr(profile, "base_weight", 0.50),
-                coverage_weight=getattr(profile, "coverage_weight", 0.20),
-                phrase_bonus=getattr(profile, "phrase_bonus", 0.15),
-                title_bonus_max=getattr(profile, "title_bonus_max", 0.10),
-                ratio_bonus_max=getattr(profile, "ratio_bonus_max", 0.05),
-                cross_encoder_weight=getattr(profile, "cross_encoder_weight", 0.0),
-                diversity_penalty=getattr(profile, "diversity_penalty", 0.12),
+                min_pass_score=_as_float(profile.min_pass_score),
+                min_pass_score_keyword=_as_float(profile.min_pass_score_keyword),
+                base_weight=_as_float(getattr(profile, "base_weight", 0.50)),
+                coverage_weight=_as_float(getattr(profile, "coverage_weight", 0.20)),
+                phrase_bonus=_as_float(getattr(profile, "phrase_bonus", 0.15)),
+                title_bonus_max=_as_float(getattr(profile, "title_bonus_max", 0.10)),
+                ratio_bonus_max=_as_float(getattr(profile, "ratio_bonus_max", 0.05)),
+                cross_encoder_weight=_as_float(
+                    getattr(profile, "cross_encoder_weight", 0.0)
+                ),
+                diversity_penalty=_as_float(
+                    getattr(profile, "diversity_penalty", 0.12)
+                ),
             )
-            for profile in profiles
-        }
+        return configs
 
     def _load_answerability_profiles(
         self,
@@ -268,16 +277,17 @@ class KnowledgeAnswerConfigRepository:
             .order_by(KnowledgeAnswerabilityProfile.profile_key.asc())
         )
         profiles = self._db_session.execute(statement).scalars().all()
-        return {
-            profile.profile_key: KnowledgeAnswerabilityProfileConfig(
-                profile_key=profile.profile_key,
+        configs: dict[str, KnowledgeAnswerabilityProfileConfig] = {}
+        for profile in profiles:
+            profile_key = _as_str(profile.profile_key)
+            configs[profile_key] = KnowledgeAnswerabilityProfileConfig(
+                profile_key=profile_key,
                 required_slots=_json_string_list(profile.required_slots_json),
                 optional_slots=_json_string_list(profile.optional_slots_json),
-                sufficient_threshold=profile.sufficient_threshold,
-                partial_threshold=profile.partial_threshold,
+                sufficient_threshold=_as_float(profile.sufficient_threshold),
+                partial_threshold=_as_float(profile.partial_threshold),
             )
-            for profile in profiles
-        }
+        return configs
 
     def _load_chunking_presets(
         self,
@@ -292,17 +302,40 @@ class KnowledgeAnswerConfigRepository:
             .order_by(KnowledgeChunkingPreset.profile_key.asc())
         )
         presets = self._db_session.execute(statement).scalars().all()
-        return {
-            preset.profile_key: KnowledgeChunkingPresetConfig(
-                profile_key=preset.profile_key,
-                description=preset.description,
-                chunking_strategy=preset.chunking_strategy,
-                chunk_size=preset.chunk_size,
-                chunk_overlap=preset.chunk_overlap,
-                is_default=preset.is_default,
+        configs: dict[str, KnowledgeChunkingPresetConfig] = {}
+        for preset in presets:
+            profile_key = _as_str(preset.profile_key)
+            configs[profile_key] = KnowledgeChunkingPresetConfig(
+                profile_key=profile_key,
+                description=_as_optional_str(preset.description),
+                chunking_strategy=_as_str(preset.chunking_strategy),
+                chunk_size=_as_int(preset.chunk_size),
+                chunk_overlap=_as_int(preset.chunk_overlap),
+                is_default=_as_bool(preset.is_default),
             )
-            for preset in presets
-        }
+        return configs
+
+
+def _as_str(value: Any) -> str:
+    return str(value)
+
+
+def _as_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _as_int(value: Any) -> int:
+    return int(value)
+
+
+def _as_float(value: Any) -> float:
+    return float(value)
+
+
+def _as_bool(value: Any) -> bool:
+    return bool(value)
 
 
 def _json_object(value: Any) -> dict[str, float]:
