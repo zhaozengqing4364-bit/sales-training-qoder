@@ -21,7 +21,7 @@ import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -59,6 +59,7 @@ from common.db.schemas import (
 from common.db.session import get_db
 from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
+    SessionLifecycleAction,
     SessionLifecycleService,
     SessionLifecycleTransition,
 )
@@ -71,6 +72,7 @@ from common.effectiveness import (
 from common.monitoring.logger import get_logger, get_trace_id
 from common.recommendations.next_practice import NextPracticeRecommendationService
 from common.services.practice_service import (
+    PracticeRouteServices,
     PracticeRuntimeDescriptorService,
     PracticeServiceError,
     build_practice_route_services,
@@ -79,7 +81,7 @@ from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
 from presentation_coach.services.coach_service import PresentationCoachService
 from sales_bot.services.bot_service import sales_bot_service
-from sales_bot.services.summary_service import summary_service
+from sales_bot.services.summary_service import ConversationSummary, summary_service
 from sales_bot.websocket.components.stepfun_message_helpers import (
     normalize_score_snapshot,
 )
@@ -92,7 +94,7 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-def _practice_services(db: AsyncSession):
+def _practice_services(db: AsyncSession) -> PracticeRouteServices:
     services = build_practice_route_services(db)
     services.session_create.logger = logger
     services.session_lifecycle.logger = logger
@@ -122,18 +124,30 @@ def _duration_seconds_between(
     return max(0, int((end_time_utc - start_time_utc).total_seconds()))
 
 
-def success_response(data, trace_id: str = None):
+def _runtime_float(value: Any) -> float | None:
+    return cast(float | None, value)
+
+
+def _runtime_int(value: Any) -> int | None:
+    return cast(int | None, value)
+
+
+def _runtime_datetime(value: Any) -> datetime | None:
+    return cast(datetime | None, value)
+
+
+def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
     """Create unified success response"""
     return {"success": True, "data": data, "trace_id": trace_id or get_trace_id()}
 
 
 def error_response(
     error_code: str,
-    trace_id: str = None,
+    trace_id: str | None = None,
     status_code: int = 400,
     message: str | None = None,
     details: dict[str, Any] | None = None,
-):
+) -> JSONResponse:
     """Create unified error response with HTTP status code."""
     payload: dict[str, Any] = {
         "success": False,
@@ -179,19 +193,29 @@ def _build_session_response(
     )
 
 
-def _build_lifecycle_response_payload(transition) -> SessionLifecycleResponse:
-    start_time = transition.session.start_time or datetime.now(UTC)
-    return SessionLifecycleResponse(
-        session_id=transition.session.session_id,
-        previous_status=transition.from_status,
-        status=transition.to_status,
-        ai_state=transition.ai_state,
-        changed=transition.changed,
-        scenario_type=transition.scenario_type,
-        runtime_subject="training_scenario_runtime",
-        start_time=start_time,
-        end_time=transition.session.end_time,
-        total_duration_seconds=transition.session.total_duration_seconds,
+def _build_lifecycle_response_payload(
+    transition: SessionLifecycleTransition,
+) -> SessionLifecycleResponse:
+    start_time = _runtime_datetime(
+        getattr(transition.session, "start_time", None)
+    ) or datetime.now(UTC)
+    return SessionLifecycleResponse.model_validate(
+        {
+            "session_id": getattr(transition.session, "session_id"),
+            "previous_status": transition.from_status,
+            "status": transition.to_status,
+            "ai_state": transition.ai_state,
+            "changed": transition.changed,
+            "scenario_type": transition.scenario_type,
+            "runtime_subject": "training_scenario_runtime",
+            "start_time": start_time,
+            "end_time": _runtime_datetime(
+                getattr(transition.session, "end_time", None)
+            ),
+            "total_duration_seconds": _runtime_int(
+                getattr(transition.session, "total_duration_seconds", None)
+            ),
+        }
     )
 
 
@@ -218,7 +242,9 @@ def _resolve_ws_scenario(scenario_type: str | None) -> str:
     )
 
 
-def _build_ws_status_payload(transition) -> dict[str, Any]:
+def _build_ws_status_payload(
+    transition: SessionLifecycleTransition,
+) -> dict[str, Any]:
     return {
         "type": "status",
         "timestamp": datetime.now(UTC).isoformat(),
@@ -230,7 +256,9 @@ def _build_ws_status_payload(transition) -> dict[str, Any]:
     }
 
 
-def _build_ws_session_ended_payload(transition) -> dict[str, Any]:
+def _build_ws_session_ended_payload(
+    transition: SessionLifecycleTransition,
+) -> dict[str, Any]:
     return {
         "type": "session_ended",
         "timestamp": datetime.now(UTC).isoformat(),
@@ -313,10 +341,14 @@ def _apply_sales_realtime_score_snapshot_to_session(
     )
     rollups = compatibility_readers.get("practice_session_rollup_fields_v1", {})
 
-    session.logic_score = float(rollups.get("logic_score") or 0.0)
-    session.accuracy_score = float(rollups.get("accuracy_score") or 0.0)
-    session.completeness_score = float(rollups.get("completeness_score") or 0.0)
-    session.effectiveness_snapshot = None
+    setattr(session, "logic_score", float(rollups.get("logic_score") or 0.0))
+    setattr(session, "accuracy_score", float(rollups.get("accuracy_score") or 0.0))
+    setattr(
+        session,
+        "completeness_score",
+        float(rollups.get("completeness_score") or 0.0),
+    )
+    setattr(session, "effectiveness_snapshot", None)
     return True
 
 
@@ -352,8 +384,12 @@ async def _sync_sales_realtime_terminal_evidence(
     ):
         return "stepfun_message_analysis"
 
-    session.effectiveness_snapshot = _build_sales_realtime_not_evaluable_snapshot(
-        reason="INSUFFICIENT_TURN_DATA"
+    setattr(
+        session,
+        "effectiveness_snapshot",
+        _build_sales_realtime_not_evaluable_snapshot(
+            reason="INSUFFICIENT_TURN_DATA"
+        ),
     )
     return "stepfun_insufficient_evidence"
 
@@ -424,7 +460,16 @@ async def _prepare_terminal_lifecycle_result(
                 )
             )
 
-        session = coach_result.value
+        coach_session = coach_result.value
+        if coach_session is None:
+            raise _LifecycleActionAbort(
+                build_server_error(
+                    "[SESSION_END_FAILED]",
+                    message="会话结束失败",
+                    session_id=session_id,
+                )
+            )
+        session = cast(PracticeSession, coach_session)
         transition.session = session
         snapshot = _ensure_effectiveness_snapshot(session)
     elif normalized_scenario_type == "sales":
@@ -456,6 +501,14 @@ async def _prepare_terminal_lifecycle_result(
                         )
                     )
                 summary = summary_result.value
+                if summary is None:
+                    raise _LifecycleActionAbort(
+                        build_server_error(
+                            "[SUMMARY_GENERATION_FAILED]",
+                            message="总结生成失败",
+                            session_id=session_id,
+                        )
+                    )
                 _apply_sales_summary_scores_if_missing(session, summary)
                 evidence_source = "summary"
 
@@ -514,7 +567,7 @@ async def _run_lifecycle_action(
         transition = await lifecycle_service.transition(
             session=session,
             scenario_type=scenario_type,
-            action=action,
+            action=cast(SessionLifecycleAction, action),
         )
         result = _LifecycleActionResult(transition=transition)
 
@@ -558,18 +611,20 @@ def _session_has_persisted_scores(session: PracticeSession) -> bool:
 
 
 def _apply_sales_summary_scores_if_missing(
-    session: PracticeSession, summary: Any
+    session: PracticeSession, summary: ConversationSummary
 ) -> None:
     """Idempotent score assignment for sales summary."""
-    if session.logic_score is None:
-        session.logic_score = summary.score_confidence
-    if session.accuracy_score is None:
-        session.accuracy_score = summary.score_persuasion
-    if session.completeness_score is None:
-        session.completeness_score = summary.score_clarity
+    if getattr(session, "logic_score", None) is None:
+        setattr(session, "logic_score", summary.score_confidence)
+    if getattr(session, "accuracy_score", None) is None:
+        setattr(session, "accuracy_score", summary.score_persuasion)
+    if getattr(session, "completeness_score", None) is None:
+        setattr(session, "completeness_score", summary.score_clarity)
 
 
-async def _broadcast_lifecycle_events(transition) -> None:
+async def _broadcast_lifecycle_events(
+    transition: SessionLifecycleTransition,
+) -> None:
     manager = get_connection_manager()
     scenario_key = _resolve_ws_scenario(getattr(transition, "scenario_type", None))
     session_id = str(transition.session.session_id)
@@ -588,7 +643,9 @@ async def _broadcast_lifecycle_events(transition) -> None:
         )
 
 
-async def _sync_live_handler_after_lifecycle_transition(transition) -> bool:
+async def _sync_live_handler_after_lifecycle_transition(
+    transition: SessionLifecycleTransition,
+) -> bool:
     """Keep the live websocket handler aligned with DB-backed lifecycle state."""
 
     session_manager = get_session_manager()
@@ -596,7 +653,9 @@ async def _sync_live_handler_after_lifecycle_transition(transition) -> bool:
     return await session_manager.sync_lifecycle_transition(transition)
 
 
-async def _close_live_handler_if_terminal(transition) -> bool:
+async def _close_live_handler_if_terminal(
+    transition: SessionLifecycleTransition,
+) -> bool:
     if not transition.session_ended:
         return False
 
@@ -617,7 +676,7 @@ async def start_session(
     session_data: SessionCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Start a new practice session."""
     try:
         services = _practice_services(db)
@@ -657,7 +716,7 @@ async def get_session(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get session details"""
     result = await db.execute(
         select(PracticeSession, Scenario.scenario_type)
@@ -689,7 +748,7 @@ async def control_session_lifecycle(
     payload: SessionLifecycleRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Control session lifecycle using explicit start/pause/resume/end actions."""
     services = _practice_services(db)
     session, scenario_type = await services.session_lifecycle.get_session_with_scenario(
@@ -754,7 +813,7 @@ async def update_session(
     update_data: SessionUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Update session status."""
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
@@ -794,7 +853,7 @@ async def end_session(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """End session and generate report."""
     services = _practice_services(db)
     session, scenario_type = await services.session_lifecycle.get_session_with_scenario(
@@ -862,7 +921,7 @@ async def get_session_report_trends(
     limit: int = Query(5, ge=1, le=12),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get recent same-scenario evaluable score trends for a report page."""
 
     result = await ReportTrendService().get_session_report_trends(
@@ -890,7 +949,7 @@ async def get_session_next_recommendation(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get ruleset-backed next-practice recommendation for one completed report."""
 
     result = await db.execute(
@@ -924,7 +983,7 @@ async def get_session_report(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get session report with scores."""
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
@@ -975,7 +1034,7 @@ async def get_session_knowledge_check(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """
     Knowledge grounding diagnostics for one session.
 
@@ -1060,17 +1119,17 @@ async def get_session_knowledge_check(
             session=session,
             scenario_type=resolved_scenario_type,
         )
-        if projection_result.is_success and isinstance(
-            projection_result.value.effectiveness_snapshot,
-            dict,
+        projection = projection_result.value
+        if (
+            projection_result.is_success
+            and projection is not None
+            and isinstance(projection.effectiveness_snapshot, dict)
         ):
             projection_effectiveness_snapshot = deepcopy(
-                projection_result.value.effectiveness_snapshot
+                projection.effectiveness_snapshot
             )
-            projection_conclusion_evidence = projection_result.value.conclusion_evidence
-            projection_evidence_degradation = (
-                projection_result.value.evidence_degradation
-            )
+            projection_conclusion_evidence = projection.conclusion_evidence
+            projection_evidence_degradation = projection.evidence_degradation
         elif not projection_result.is_success:
             logger.warning(
                 "practice_session_knowledge_check_projection_unavailable",
@@ -1100,12 +1159,12 @@ async def get_session_knowledge_check(
 
 @router.get("/practice/history")
 async def get_practice_history(
-    scenario_type: str = None,
+    scenario_type: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get user's practice history with pagination and summary metrics."""
     query = (
         select(PracticeSession)
@@ -1228,7 +1287,7 @@ async def get_practice_history(
 @router.get("/sessions/stats")
 async def get_session_stats(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+) -> Any:
     """
     Get user session statistics (R12.4)
 
@@ -1296,7 +1355,7 @@ async def get_enhanced_session_report(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """
     Get enhanced session report with dimension scores (R12.3)
 
@@ -1366,7 +1425,7 @@ async def get_enhanced_session_report(
     highlight_messages = messages_result.scalars().all()
 
     # Build highlights
-    highlights = []
+    highlights: list[SessionHighlight] = []
     for msg in highlight_messages:
         highlights.append(
             SessionHighlight(
@@ -1379,20 +1438,33 @@ async def get_enhanced_session_report(
         )
 
     # Calculate dimension scores from session data
-    dimension_scores = []
+    dimension_scores: list[DimensionScore] = []
 
     # Use existing scores if available
     if session.logic_score is not None:
         dimension_scores.append(
-            DimensionScore(name="逻辑性", score=session.logic_score, weight=0.33)
+            DimensionScore(
+                name="逻辑性",
+                score=_runtime_float(getattr(session, "logic_score", None)) or 0.0,
+                weight=0.33,
+            )
         )
     if session.accuracy_score is not None:
         dimension_scores.append(
-            DimensionScore(name="准确性", score=session.accuracy_score, weight=0.33)
+            DimensionScore(
+                name="准确性",
+                score=_runtime_float(getattr(session, "accuracy_score", None)) or 0.0,
+                weight=0.33,
+            )
         )
     if session.completeness_score is not None:
         dimension_scores.append(
-            DimensionScore(name="完整性", score=session.completeness_score, weight=0.34)
+            DimensionScore(
+                name="完整性",
+                score=_runtime_float(getattr(session, "completeness_score", None))
+                or 0.0,
+                weight=0.34,
+            )
         )
 
     # If no dimension scores, try to get from last message's score_snapshot
@@ -1430,14 +1502,14 @@ async def get_enhanced_session_report(
         )
     else:
         overall_score = (
-            (session.logic_score or 0)
-            + (session.accuracy_score or 0)
-            + (session.completeness_score or 0)
+            (_runtime_float(getattr(session, "logic_score", None)) or 0.0)
+            + (_runtime_float(getattr(session, "accuracy_score", None)) or 0.0)
+            + (_runtime_float(getattr(session, "completeness_score", None)) or 0.0)
         ) / 3
 
     # Generate strengths and improvements based on scores
-    strengths = []
-    improvements = []
+    strengths: list[str] = []
+    improvements: list[str] = []
 
     for dim in dimension_scores:
         if dim.score >= 80:
@@ -1454,12 +1526,16 @@ async def get_enhanced_session_report(
 
     # Calculate duration
     duration_seconds = None
-    if session.end_time and session.start_time:
+    session_end_time = _runtime_datetime(getattr(session, "end_time", None))
+    session_start_time = _runtime_datetime(getattr(session, "start_time", None))
+    if session_end_time and session_start_time:
         duration_seconds = _duration_seconds_between(
-            session.start_time, session.end_time
+            session_start_time, session_end_time
         )
-    elif session.total_duration_seconds:
-        duration_seconds = session.total_duration_seconds
+    elif getattr(session, "total_duration_seconds", None):
+        duration_seconds = _runtime_int(
+            getattr(session, "total_duration_seconds", None)
+        )
 
     # Count total turns
     turn_count_result = await db.execute(
@@ -1494,7 +1570,7 @@ async def get_comprehensive_report(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get comprehensive evaluation report for a session (Story 3.1).
 
     Returns detailed report with dimension scores, stage summaries,
@@ -1556,6 +1632,8 @@ async def get_comprehensive_report(
             return error_response("[REPORT_NOT_FOUND]", status_code=404)
 
         report = report_result.value
+        if report is None:
+            return error_response("[REPORT_NOT_FOUND]", status_code=404)
 
         return success_response(
             {
@@ -1596,7 +1674,7 @@ async def get_report_generation_status(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get report generation status for a session (Story 3.1).
 
     Returns the current status of report generation:
@@ -1641,7 +1719,7 @@ async def generate_audio_upload_url(
     body: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Generate a presigned PUT URL for browser-direct audio segment upload."""
     segment_sequence = body.get("segment_sequence")
     if (
@@ -1708,7 +1786,7 @@ async def register_audio_segment(
     body: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Register a successfully uploaded audio segment."""
     segment_sequence = body.get("segment_sequence")
     if (
@@ -1772,7 +1850,7 @@ async def list_audio_segments(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """List all audio segments registered for a session."""
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
@@ -1808,7 +1886,7 @@ async def register_audio_segment_failure(
     body: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Register a failed audio segment upload attempt."""
     segment_sequence = body.get("segment_sequence")
     if (
@@ -1882,10 +1960,9 @@ async def _update_audio_audit_failure_metrics(
     )
     failed_segment_count = failed_count_result.scalar() or 0
 
-    base_snapshot = (
-        deepcopy(session.voice_policy_snapshot)
-        if isinstance(session.voice_policy_snapshot, dict)
-        else {}
+    snapshot_raw = getattr(session, "voice_policy_snapshot", None)
+    base_snapshot: dict[str, Any] = (
+        deepcopy(snapshot_raw) if isinstance(snapshot_raw, dict) else {}
     )
     runtime_metrics = base_snapshot.get("runtime_metrics")
     if not isinstance(runtime_metrics, dict):
@@ -1907,4 +1984,4 @@ async def _update_audio_audit_failure_metrics(
     )
     runtime_metrics["audio_audit"] = audio_audit
     base_snapshot["runtime_metrics"] = runtime_metrics
-    session.voice_policy_snapshot = base_snapshot
+    setattr(session, "voice_policy_snapshot", base_snapshot)

@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 sales websocket router typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2032 errors in 71 files. The remaining failures are led by `common/api/practice.py` direct `no-untyped-def`, ORM `Column[...]` assignment/argument mismatches, and `union-attr` report projection issues; external import errors may still include dependencies absent from `.venv-test` or optional integrations such as `dashscope` and `langchain_anthropic`.
+- Last commit: Phase 1.3 practice API route typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 1977 errors in 70 files. The remaining failures are led by `agent/migrations/migrate_personas.py` JSON payload narrowing issues and broader existing ORM `Column[...]` typing debt; external import errors may still include dependencies absent from `.venv-test` or optional integrations such as `dashscope` and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -158,6 +158,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: completed-session gating, replay/highlight learning evidence composition, stage names, high-severity fuzzy marker selection, highlight anchor resolution/degradation semantics, presentation-vs-sales payload hiding, audio-audit best-effort behavior, and suggested-response copy were not added or changed.
 - Latest typed boundary: sales websocket route and handler return contracts, KB-lock policy ORM field reads, runtime policy snapshot assignment, and JWT subject extraction in `sales_bot.websocket.router` are typed as websocket/auth runtime boundaries, not business configuration.
 - Latest unchanged business logic: sales websocket auth resolution order, query-token compatibility behavior, invalid session handling, scenario mismatch close code, KB-lock enforcement, persisted voice-mode lock, agent/persona runtime lock, owner/admin access check, StepFun-vs-enhanced routing, and enhanced-handler fallback refusal were not added or changed.
+- Latest typed boundary: practice API response helpers, lifecycle websocket payload helpers, sales realtime score snapshot ORM writes, summary fallback narrowing, knowledge-check evidence projection reads, enhanced/comprehensive report projections, and audio-audit snapshot updates in `common.api.practice` are typed as FastAPI/read-model/runtime ORM boundaries, not business configuration.
+- Latest unchanged business logic: practice route paths, ownership/admin access checks, lifecycle state transitions, report generation triggers, session evidence fallback order, realtime scoring rollup semantics, enhanced report dimension labels/weights, default suggestions/copy, report status messages, audio segment validation tokens, OSS upload flow, and audio-audit metrics semantics were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -302,6 +304,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Replay API endpoint typing | `./.venv-test/bin/mypy src/common/conversation/api.py --show-error-codes --no-error-summary 2>&1 | rg 'src/common/conversation/api.py' || true` emits no direct `src/common/conversation/api.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2078 errors in 73 files; `ruff check src/common/conversation/api.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_replay_api.py tests/integration/test_highlight_review_api.py tests/unit/test_replay_service.py -q --no-cov` | Phase 1.3 replay API typing commit |
 | 2026-05-06 | Phase 1.3 | Replay service read-model typing | `./.venv-test/bin/mypy src/common/conversation/replay.py --show-error-codes --no-error-summary 2>&1 | rg 'src/common/conversation/replay.py' || true` emits no direct `src/common/conversation/replay.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2045 errors in 72 files; `ruff check src/common/conversation/replay.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_replay_api.py tests/integration/test_highlight_review_api.py tests/unit/test_replay_service.py -q --no-cov` | Phase 1.3 replay service typing commit |
 | 2026-05-06 | Phase 1.3 | Sales websocket router typing | `./.venv-test/bin/mypy src/sales_bot/websocket/router.py --show-error-codes --no-error-summary 2>&1 \| rg 'src/sales_bot/websocket/router.py' \|\| true` emits no direct `src/sales_bot/websocket/router.py` errors; `./.venv-test/bin/mypy src` now fails with 2032 errors in 71 files; `ruff check src/sales_bot/websocket/router.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_sales_websocket_router.py tests/unit/sales_bot/websocket/test_router_session_id.py -q --no-cov` passed 9 websocket router assertions | Phase 1.3 sales websocket router typing commit |
+| 2026-05-06 | Phase 1.3 | Practice API route/read-model typing | `./.venv-test/bin/mypy src/common/api/practice.py --show-error-codes --no-error-summary 2>&1 \| rg 'src/common/api/practice.py' \|\| true` emits no direct `src/common/api/practice.py` errors; `./.venv-test/bin/mypy src` now fails with 1977 errors in 70 files; `ruff check src/common/api/practice.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_persistence.py::test_prepare_terminal_lifecycle_result_marks_stepfun_session_not_evaluable_without_summary -q --no-cov` passed 4 assertions; `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_session_lifecycle_api.py -q --no-cov` passed 13 assertions; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/test_audio_segment_api.py -q --no-cov` passed 24 assertions | Phase 1.3 practice API route typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -318,6 +321,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 1977 errors in 70 files after typing the practice API route/read-model boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2032 errors in 71 files after typing the sales websocket router boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2045 errors in 72 files after typing the replay service read-model boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2078 errors in 73 files after typing the replay API endpoint boundary. Phase 1.4 was not advanced.
