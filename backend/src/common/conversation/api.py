@@ -9,7 +9,10 @@ References:
 - API Contract: docs/api-contract/replay.md
 """
 
+from __future__ import annotations
+
 import os
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -21,6 +24,7 @@ from common.conversation.highlight_review_service import (
     PUBLIC_SHARE_PATH_TEMPLATE,
     HighlightReviewService,
 )
+from common.conversation.models import ConversationMessage
 from common.conversation.replay import ReplayService
 from common.conversation.schemas import (
     ConversationErrorResponse,
@@ -42,6 +46,9 @@ from common.monitoring.logger import get_logger, get_trace_id
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["replay"])
+
+ApiResponse = dict[str, Any]
+EndpointResponse = ApiResponse | JSONResponse
 
 
 async def _ensure_session_access(
@@ -83,7 +90,7 @@ async def get_shared_highlight_review(
     request: Request,
     viewer: str | None = Query(None, max_length=120),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """Public token-gated readonly share endpoint for the internal WeCom pilot."""
     client_host = request.client.host if request.client else ""
     user_agent = request.headers.get("user-agent", "")
@@ -113,7 +120,7 @@ async def get_highlight_review(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """Read the current user's persisted highlight review list for a session."""
     result = await HighlightReviewService().get_review(
         db=db,
@@ -137,7 +144,7 @@ async def save_highlight_review(
     payload: HighlightReviewSaveRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """Replace the current user's session highlight review list."""
     result = await HighlightReviewService().save_review(
         db=db,
@@ -168,7 +175,7 @@ async def create_highlight_review_share(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """Create a consent-gated, TTL-bound WeCom pilot share link."""
     result = await HighlightReviewService().create_share(
         db=db,
@@ -207,7 +214,7 @@ async def revoke_highlight_review_share(
     payload: HighlightReviewShareRevokeRequest | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """Revoke a previously created highlight review share link."""
     result = await HighlightReviewService().revoke_share(
         db=db,
@@ -245,7 +252,7 @@ async def get_messages(
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """
     Get paginated conversation messages for a session.
 
@@ -271,7 +278,7 @@ async def get_messages(
         status_code = _get_status_code(error_code)
         return _error_response(status_code, error_code, result.fallback)
 
-    messages, total = result.value
+    messages, total = cast(tuple[list[ConversationMessage], int], result.value)
 
     return _success_response(
         {
@@ -299,7 +306,7 @@ async def get_message_detail(
     message_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """
     Get detailed information for a single message.
 
@@ -336,10 +343,10 @@ async def get_message_detail(
         status_code = _get_status_code(error_code)
         return _error_response(status_code, error_code, message_result.fallback)
 
-    message = message_result.value
+    message = cast(ConversationMessage, message_result.value)
 
     # Verify message belongs to session
-    if message.session_id != session_id:
+    if str(getattr(message, "session_id", "") or "") != session_id:
         return _error_response(
             404, "[MESSAGE_NOT_FOUND]", "Message not found in this session"
         )
@@ -362,7 +369,7 @@ async def get_replay_data(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """
     Get complete replay data for a session.
 
@@ -405,7 +412,7 @@ async def get_highlights(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse:
     """
     Get highlighted messages (key moments) from a session.
 
@@ -441,7 +448,7 @@ async def get_highlights(
         status_code = _get_status_code(error_code)
         return _error_response(status_code, error_code, result.fallback)
 
-    data = result.value
+    data = cast(dict[str, Any], result.value)
     return _success_response(
         {
             "highlights": data["highlights"],
@@ -453,6 +460,7 @@ async def get_highlights(
 
 @router.get(
     "/{session_id}/audio/{message_id}",
+    response_model=None,
     responses={
         200: {"description": "Audio file or redirect"},
         400: {
@@ -467,7 +475,7 @@ async def get_audio(
     message_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse | FileResponse | RedirectResponse:
     """
     Get audio file for a message.
 
@@ -506,30 +514,30 @@ async def get_audio(
     if not message_result.is_success:
         return _error_response(404, "[MESSAGE_NOT_FOUND]", "Message not found")
 
-    message = message_result.value
+    message = cast(ConversationMessage, message_result.value)
 
     # Verify message belongs to session
-    if message.session_id != session_id:
+    if str(getattr(message, "session_id", "") or "") != session_id:
         return _error_response(
             404, "[MESSAGE_NOT_FOUND]", "Message not found in this session"
         )
 
+    audio_url = str(getattr(message, "audio_url", "") or "")
+
     # Check audio URL exists
-    if not message.audio_url:
+    if not audio_url:
         return _error_response(
             404, "[AUDIO_NOT_AVAILABLE]", "Audio not available for this message"
         )
 
     # If it's a remote URL, redirect
-    if message.audio_url.startswith("http://") or message.audio_url.startswith(
-        "https://"
-    ):
-        return RedirectResponse(url=message.audio_url)
+    if audio_url.startswith("http://") or audio_url.startswith("https://"):
+        return RedirectResponse(url=audio_url)
 
     # If it's a local file, serve it
-    if os.path.exists(message.audio_url):
+    if os.path.exists(audio_url):
         return FileResponse(
-            message.audio_url,
+            audio_url,
             media_type="audio/mpeg",
             filename=f"message_{message_id}.mp3",
         )
@@ -539,6 +547,7 @@ async def get_audio(
 
 @router.get(
     "/{session_id}/audio-segments/{segment_sequence}",
+    response_model=None,
     responses={
         302: {"description": "Redirect to signed audio URL"},
         404: {
@@ -552,7 +561,7 @@ async def get_audio_segment_playback(
     segment_sequence: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> EndpointResponse | RedirectResponse:
     """Return a short-lived signed GET redirect for an uploaded audio segment.
 
     Validates session ownership and segment upload state before signing.
@@ -576,18 +585,20 @@ async def get_audio_segment_playback(
             f"Audio segment {segment_sequence} not found for session {session_id}",
         )
 
-    if segment.upload_status != "uploaded":
+    upload_status = str(getattr(segment, "upload_status", "") or "")
+    if upload_status != "uploaded":
         return _error_response(
             404,
             "[SEGMENT_NOT_UPLOADED]",
-            f"Audio segment {segment_sequence} has status '{segment.upload_status}', expected 'uploaded'",
+            f"Audio segment {segment_sequence} has status '{upload_status}', expected 'uploaded'",
         )
 
     try:
         from common.oss.signing import get_oss_signing_service
 
         signing = get_oss_signing_service()
-        signed_url = signing.generate_get_url(segment.object_key, expires=3600)
+        object_key = str(getattr(segment, "object_key", "") or "")
+        signed_url = signing.generate_get_url(object_key, expires=3600)
     except Exception as exc:
         logger.error(
             "audio_segment_signing_failed",
@@ -607,7 +618,7 @@ async def get_audio_segment_playback(
 # ========== Helper Functions ==========
 
 
-def _extract_error_code(fallback: str) -> str:
+def _extract_error_code(fallback: str | None) -> str:
     """Extract error code from fallback message"""
     if fallback and fallback.startswith("["):
         end = fallback.find("]")
@@ -639,7 +650,7 @@ def _get_status_code(error_code: str) -> int:
     return status_map.get(error_code, 500)
 
 
-def _success_response(data: dict) -> dict[str, object]:
+def _success_response(data: dict[str, Any] | None) -> ApiResponse:
     return {
         "success": True,
         "data": data,
@@ -647,7 +658,9 @@ def _success_response(data: dict) -> dict[str, object]:
     }
 
 
-def _error_response(status_code: int, error_code: str, message: str) -> JSONResponse:
+def _error_response(
+    status_code: int, error_code: str, message: str | None
+) -> JSONResponse:
     """Create unified error response with top-level fields."""
     return JSONResponse(
         status_code=status_code,
@@ -670,30 +683,38 @@ def _normalize_turn_number(
     return max(1, fallback_turn_number)
 
 
-def _message_to_response(message, fallback_turn_number: int = 1) -> dict:
+def _message_to_response(
+    message: ConversationMessage, fallback_turn_number: int = 1
+) -> dict[str, Any]:
     """Convert message model to response dict"""
+    raw_turn_number = getattr(message, "turn_number", None)
+    raw_timestamp = getattr(message, "timestamp", None)
+    timestamp = cast(Any, raw_timestamp)
     return {
-        "id": message.id,
-        "session_id": message.session_id,
+        "id": getattr(message, "id", None),
+        "session_id": getattr(message, "session_id", None),
         "turn_number": _normalize_turn_number(
-            message.turn_number, fallback_turn_number
+            raw_turn_number if isinstance(raw_turn_number, int) else None,
+            fallback_turn_number,
         ),
-        "role": message.role,
-        "content": message.content,
-        "audio_url": message.audio_url,
-        "timestamp": message.timestamp.isoformat() if message.timestamp else None,
-        "duration_ms": message.duration_ms,
-        "fuzzy_words": message.fuzzy_words,
-        "sales_stage": message.sales_stage,
-        "score_snapshot": message.score_snapshot,
-        "ai_feedback": message.ai_feedback,
-        "is_highlight": message.is_highlight,
-        "highlight_type": message.highlight_type,
-        "highlight_reason": message.highlight_reason,
+        "role": getattr(message, "role", None),
+        "content": getattr(message, "content", None),
+        "audio_url": getattr(message, "audio_url", None),
+        "timestamp": timestamp.isoformat() if hasattr(timestamp, "isoformat") else None,
+        "duration_ms": getattr(message, "duration_ms", None),
+        "fuzzy_words": getattr(message, "fuzzy_words", None),
+        "sales_stage": getattr(message, "sales_stage", None),
+        "score_snapshot": getattr(message, "score_snapshot", None),
+        "ai_feedback": getattr(message, "ai_feedback", None),
+        "is_highlight": getattr(message, "is_highlight", False),
+        "highlight_type": getattr(message, "highlight_type", None),
+        "highlight_reason": getattr(message, "highlight_reason", None),
     }
 
 
-def _message_to_detail_response(message, service: ReplayService) -> dict:
+def _message_to_detail_response(
+    message: ConversationMessage, service: ReplayService
+) -> dict[str, Any]:
     """Convert message model to detailed response dict with suggested response"""
     response = _message_to_response(message)
     response["suggested_response"] = service._generate_suggested_response(message)

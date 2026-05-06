@@ -12,8 +12,8 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend and frontend lint/type baseline
-- Last commit: Phase 1.3 knowledge answer engine typing commit
-- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2118 errors in 74 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `dashscope` and `langchain_anthropic`.
+- Last commit: Phase 1.3 replay API typing commit
+- Blocker: Backend mypy baseline is not production-clean. `./.venv-test/bin/mypy src` reaches real checking and now reports 2078 errors in 73 files. The remaining failures are led by `no-untyped-def`, `attr-defined`, `arg-type`, `assignment`, and `union-attr`; external import errors still include dependencies absent from `.venv-test` or optional integrations such as `dashscope` and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
 
@@ -152,6 +152,8 @@ Based on the currently inspected code, the existing configuration system cannot 
 - Latest unchanged business logic: active config version selection, enabled-profile filters, query/intent/entity/ranking/answerability/chunking sort order, existing default weight fallbacks, JSON weight normalization, and slot-list normalization were not added or changed.
 - Latest typed boundary: knowledge-answer engine orchestration callbacks, async retrieval execution, audit persistence, and trace payload helpers in `common.knowledge_engine.engine` are typed as runtime orchestration contracts, not business configuration.
 - Latest unchanged business logic: active-config gating, intent/profile routing, retrieval runtime option defaults, reranking top-k fallback, answerability evaluation, audit step ordering, compatibility source-status mapping, and retrieval-mode derivation were not added or changed.
+- Latest typed boundary: replay API endpoint return contracts, response helper payloads, audio redirect/file response route metadata, and conversation message serialization in `common.conversation.api` are typed as FastAPI/runtime API boundaries, not business configuration.
+- Latest unchanged business logic: replay route paths, access-control behavior, highlight review/share status handling, WeCom share response fields, session/message/audio error codes, status-code mapping, audio segment signing TTL, replay/highlight response payload fields, and user-facing fallback messages were not added or changed.
 
 ### Phase 1: Baseline Falsification and Routing Audit
 
@@ -293,6 +295,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 | 2026-05-06 | Phase 1.3 | Knowledge processor typing | `./.venv-test/bin/mypy src/common/knowledge/processor.py` has no direct `src/common/knowledge/processor.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2174 errors in 76 files; `ruff check src/common/knowledge/processor.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_document_processor_spreadsheet.py tests/unit/common/test_document_processor_image_ocr.py tests/unit/common/test_document_storage_artifacts.py tests/unit/common/test_knowledge_service_preview_fallback.py -q --no-cov`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_knowledge_api.py::TestKnowledgeBaseAPI::test_create_knowledge_base tests/integration/test_knowledge_api.py::TestKnowledgeBaseAPI::test_list_knowledge_bases tests/integration/test_knowledge_upload_persistence.py::test_upload_xlsx_document_visible_in_followup_list_request tests/integration/test_knowledge_upload_persistence.py::test_upload_xls_document_visible_in_followup_list_request -q --no-cov` | Phase 1.3 knowledge processor typing commit |
 | 2026-05-06 | Phase 1.3 | Knowledge config repository typing | `./.venv-test/bin/mypy src/common/knowledge_engine/config_repo.py` has no direct `src/common/knowledge_engine/config_repo.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2134 errors in 75 files; `ruff check src/common/knowledge_engine/config_repo.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_knowledge_answer_config_repo.py tests/unit/common/test_seed_knowledge_answer_config.py tests/unit/common/test_knowledge_answer_engine.py -q --no-cov` | Phase 1.3 knowledge config repository typing commit |
 | 2026-05-06 | Phase 1.3 | Knowledge answer engine orchestration typing | `./.venv-test/bin/mypy src/common/knowledge_engine/engine.py --show-error-codes --no-error-summary` has no direct `src/common/knowledge_engine/engine.py` errors while import-chain errors remain from `common.db.models`; `./.venv-test/bin/mypy src` now fails with 2118 errors in 74 files; `ruff check src/common/knowledge_engine/engine.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/unit/common/test_knowledge_answer_engine.py tests/unit/common/test_knowledge_answer_assembler.py tests/unit/common/test_knowledge_answerability.py -q --no-cov` | Phase 1.3 knowledge answer engine typing commit |
+| 2026-05-06 | Phase 1.3 | Replay API endpoint typing | `./.venv-test/bin/mypy src/common/conversation/api.py --show-error-codes --no-error-summary 2>&1 | rg 'src/common/conversation/api.py' || true` emits no direct `src/common/conversation/api.py` errors while import-chain errors remain; `./.venv-test/bin/mypy src` now fails with 2078 errors in 73 files; `ruff check src/common/conversation/api.py`; `PYTHONPATH=src ./.venv-test/bin/pytest tests/integration/test_replay_api.py tests/integration/test_highlight_review_api.py tests/unit/test_replay_service.py -q --no-cov` | Phase 1.3 replay API typing commit |
 
 ## Non-Blocking Verification Notes
 
@@ -308,6 +311,7 @@ Based on the currently inspected code, the existing configuration system cannot 
 
 ## Pause Log
 
+- 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2078 errors in 73 files after typing the replay API endpoint boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2118 errors in 74 files after typing the knowledge answer engine orchestration boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2134 errors in 75 files after typing the knowledge config repository boundary. Phase 1.4 was not advanced.
 - 2026-05-06 Phase 1.3 update: backend mypy remains the active blocker and now reports 2174 errors in 76 files after typing the knowledge processor boundary. Phase 1.4 was not advanced.
