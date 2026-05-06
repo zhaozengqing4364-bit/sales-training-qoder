@@ -10,14 +10,19 @@ References:
 - API Contract: docs/api-contract/replay.md
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
-from common.conversation.session_evidence import SessionEvidenceService
+from common.conversation.session_evidence import (
+    SessionEvidenceProjection,
+    SessionEvidenceService,
+)
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession, SessionStatus
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref_payload
@@ -34,6 +39,8 @@ STAGE_NAMES = {
     "objection": "异议处理",
     "closing": "促成成交",
 }
+
+MessageContextPayload = dict[str, dict[str, Any] | None]
 
 
 class ReplayService:
@@ -112,11 +119,12 @@ class ReplayService:
         if not session_result.is_success:
             return session_result
 
-        session = session_result.value
-        if session.status != SessionStatus.COMPLETED.value:
+        session = session_result.unwrap()
+        session_status = str(getattr(session, "status", "") or "")
+        if session_status != SessionStatus.COMPLETED.value:
             return Result.fail(
                 f"[SESSION_NOT_COMPLETED] Session must be completed for replay. "
-                f"Current status: {session.status}"
+                f"Current status: {session_status}"
             )
 
         return Result.ok(session)
@@ -141,7 +149,10 @@ class ReplayService:
             # Check session is completed
             session_result = await self._check_session_completed(session_id)
             if not session_result.is_success:
-                return session_result
+                return Result.fail(
+                    session_result.fallback
+                    or f"[SESSION_NOT_FOUND] Session with id '{session_id}' not found"
+                )
 
             # Count total messages
             count_stmt = (
@@ -189,9 +200,11 @@ class ReplayService:
                 require_completed=True,
             )
             if not projection_result.is_success:
-                return projection_result
+                return Result.fail(
+                    projection_result.fallback or "[SESSION_EVIDENCE_FAILED]"
+                )
 
-            projection = projection_result.value
+            projection = cast(SessionEvidenceProjection, projection_result.value)
             session = projection.session
             enriched_messages = self._attach_learning_evidence(
                 projection.messages,
@@ -392,9 +405,11 @@ class ReplayService:
                 require_completed=True,
             )
             if not projection_result.is_success:
-                return projection_result
+                return Result.fail(
+                    projection_result.fallback or "[SESSION_EVIDENCE_FAILED]"
+                )
 
-            projection = projection_result.value
+            projection = cast(SessionEvidenceProjection, projection_result.value)
             enriched_messages = self._attach_learning_evidence(
                 projection.messages,
                 projection,
@@ -821,48 +836,56 @@ class ReplayService:
         cumulative_ms = 0
 
         for msg in messages:
+            sales_stage = str(getattr(msg, "sales_stage", "") or "")
+            message_id = getattr(msg, "id", None)
             # Stage change marker
-            if msg.sales_stage and msg.sales_stage != current_stage:
+            if sales_stage and sales_stage != current_stage:
                 markers.append(
                     {
                         "timestamp_ms": cumulative_ms,
                         "type": "stage_change",
-                        "label": STAGE_NAMES.get(msg.sales_stage, msg.sales_stage),
-                        "message_id": msg.id,
+                        "label": STAGE_NAMES.get(sales_stage, sales_stage),
+                        "message_id": message_id,
                         "highlight_type": None,
                     }
                 )
-                current_stage = msg.sales_stage
+                current_stage = sales_stage
 
             # Fuzzy word markers (high severity only)
-            if msg.fuzzy_words:
-                for fw in msg.fuzzy_words:
+            fuzzy_words = getattr(msg, "fuzzy_words", None)
+            if isinstance(fuzzy_words, list):
+                for fw in fuzzy_words:
+                    if not isinstance(fw, dict):
+                        continue
                     if fw.get("severity") == "high":
                         matched_words = fw.get("matched", [])
+                        if not isinstance(matched_words, list):
+                            matched_words = []
                         markers.append(
                             {
                                 "timestamp_ms": cumulative_ms,
                                 "type": "fuzzy_word",
-                                "label": f"模糊词: {', '.join(matched_words)}",
-                                "message_id": msg.id,
+                                "label": f"模糊词: {', '.join(str(word) for word in matched_words)}",
+                                "message_id": message_id,
                                 "highlight_type": "bad",
                             }
                         )
 
             # Highlight markers
-            if msg.is_highlight:
+            if bool(getattr(msg, "is_highlight", False)):
                 markers.append(
                     {
                         "timestamp_ms": cumulative_ms,
                         "type": "highlight",
-                        "label": msg.highlight_reason or "关键时刻",
-                        "message_id": msg.id,
-                        "highlight_type": msg.highlight_type,
+                        "label": getattr(msg, "highlight_reason", None) or "关键时刻",
+                        "message_id": message_id,
+                        "highlight_type": getattr(msg, "highlight_type", None),
                     }
                 )
 
             # Accumulate duration
-            cumulative_ms += msg.duration_ms or 0
+            raw_duration = getattr(msg, "duration_ms", None)
+            cumulative_ms += int(raw_duration) if isinstance(raw_duration, int) else 0
 
         return markers
 
@@ -976,42 +999,49 @@ class ReplayService:
         Returns:
             dict: Context with prev_message and next_message
         """
-        context = {"prev_message": None, "next_message": None}
+        context: MessageContextPayload = {"prev_message": None, "next_message": None}
+
+        def _timestamp_to_iso(timestamp: Any) -> str | None:
+            isoformat = getattr(timestamp, "isoformat", None)
+            if not callable(isoformat):
+                return None
+            return str(isoformat())
 
         try:
+            raw_turn_number = getattr(message, "turn_number", None)
+            turn_number = raw_turn_number if isinstance(raw_turn_number, int) else 1
+            session_id = str(getattr(message, "session_id", "") or "")
             # Get previous message
-            if message.turn_number > 1:
+            if turn_number > 1:
                 prev_stmt = select(ConversationMessage).where(
-                    ConversationMessage.session_id == message.session_id,
-                    ConversationMessage.turn_number == message.turn_number - 1,
+                    ConversationMessage.session_id == session_id,
+                    ConversationMessage.turn_number == turn_number - 1,
                 )
                 prev_result = await self.db.execute(prev_stmt)
                 prev_msg = prev_result.scalar_one_or_none()
                 if prev_msg:
+                    prev_timestamp = getattr(prev_msg, "timestamp", None)
                     context["prev_message"] = {
-                        "id": prev_msg.id,
-                        "role": prev_msg.role,
-                        "content": prev_msg.content,
-                        "timestamp": prev_msg.timestamp.isoformat()
-                        if prev_msg.timestamp
-                        else None,
+                        "id": getattr(prev_msg, "id", None),
+                        "role": getattr(prev_msg, "role", None),
+                        "content": getattr(prev_msg, "content", None),
+                        "timestamp": _timestamp_to_iso(prev_timestamp),
                     }
 
             # Get next message
             next_stmt = select(ConversationMessage).where(
-                ConversationMessage.session_id == message.session_id,
-                ConversationMessage.turn_number == message.turn_number + 1,
+                ConversationMessage.session_id == session_id,
+                ConversationMessage.turn_number == turn_number + 1,
             )
             next_result = await self.db.execute(next_stmt)
             next_msg = next_result.scalar_one_or_none()
             if next_msg:
+                next_timestamp = getattr(next_msg, "timestamp", None)
                 context["next_message"] = {
-                    "id": next_msg.id,
-                    "role": next_msg.role,
-                    "content": next_msg.content,
-                    "timestamp": next_msg.timestamp.isoformat()
-                    if next_msg.timestamp
-                    else None,
+                    "id": getattr(next_msg, "id", None),
+                    "role": getattr(next_msg, "role", None),
+                    "content": getattr(next_msg, "content", None),
+                    "timestamp": _timestamp_to_iso(next_timestamp),
                 }
 
         except (SQLAlchemyError, ValueError) as e:
