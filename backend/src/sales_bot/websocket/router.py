@@ -5,8 +5,11 @@ Routes WebSocket connections for persona-centered sales sessions.
 Legacy simple-handler mode is disabled to prevent policy bypass.
 """
 
+from __future__ import annotations
+
 import os
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Query, WebSocket
 from sqlalchemy import select
@@ -54,7 +57,7 @@ async def sales_websocket(
     persona_id: str | None = Query(None, description="Persona UUID for enhanced mode"),
     voice_mode: str = Query("", description="Voice mode: legacy | stepfun_realtime"),
     trace_id: str = Query("", description="Request trace id for observability"),
-):
+) -> None:
     await _handle_sales_websocket(
         websocket=websocket,
         session_id=session_id,
@@ -78,7 +81,7 @@ async def sales_websocket_with_path(
     persona_id: str | None = Query(None, description="Persona UUID for enhanced mode"),
     voice_mode: str = Query("", description="Voice mode: legacy | stepfun_realtime"),
     trace_id: str = Query("", description="Request trace id for observability"),
-):
+) -> None:
     await _handle_sales_websocket(
         websocket=websocket,
         session_id=session_id,
@@ -101,7 +104,9 @@ def _parse_session_id(session_id: str | None) -> str | None:
         return None
 
 
-async def _reject_invalid_session_id(websocket: WebSocket, session_id: str | None):
+async def _reject_invalid_session_id(
+    websocket: WebSocket, session_id: str | None
+) -> None:
     logger.warning(
         "Rejected /ws/sales connection due to invalid session_id", session_id=session_id
     )
@@ -115,7 +120,7 @@ async def _reject_sales_websocket(
     code: int,
     reason: str,
     log_message: str,
-    **log_fields,
+    **log_fields: Any,
 ) -> None:
     logger.warning(log_message, **log_fields)
     await websocket.accept()
@@ -130,7 +135,7 @@ async def _handle_sales_websocket(
     persona_id: str | None,
     voice_mode: str,
     trace_id: str,
-):
+) -> None:
     """
     WebSocket endpoint for sales practice.
 
@@ -295,6 +300,11 @@ def _default_voice_mode() -> str:
     return default_mode
 
 
+def _optional_text(value: Any) -> str | None:
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
+
 async def _resolve_session_runtime(
     session_id: str,
 ) -> tuple[str | None, str, str | None, str | None]:
@@ -378,25 +388,26 @@ async def _is_kb_lock_unbound_session(session_id: str) -> bool:
             if not session:
                 return False
 
-            snapshot = (
-                session.voice_policy_snapshot
-                if isinstance(session.voice_policy_snapshot, dict)
-                else None
-            )
+            snapshot_raw = getattr(session, "voice_policy_snapshot", None)
+            snapshot = snapshot_raw if isinstance(snapshot_raw, dict) else None
 
             policy_service = VoiceRuntimePolicyService(db)
             resolved_policy = await policy_service.resolve_effective_policy(
-                agent_id=session.agent_id,
-                persona_id=session.persona_id,
-                voice_mode_override=session.voice_mode,
-                runtime_profile_override=session.voice_runtime_profile_id,
+                agent_id=_optional_text(getattr(session, "agent_id", None)),
+                persona_id=_optional_text(getattr(session, "persona_id", None)),
+                voice_mode_override=_optional_text(
+                    getattr(session, "voice_mode", None)
+                ),
+                runtime_profile_override=_optional_text(
+                    getattr(session, "voice_runtime_profile_id", None)
+                ),
             )
             refreshed_policy = _merge_snapshot_runtime_overlays(
                 resolved_policy=resolved_policy,
                 snapshot=snapshot,
             )
             if snapshot != refreshed_policy:
-                session.voice_policy_snapshot = refreshed_policy
+                setattr(session, "voice_policy_snapshot", refreshed_policy)
                 await db.commit()
             return is_kb_lock_unbound_snapshot(refreshed_policy)
     except Exception as exc:  # noqa: BLE001
@@ -432,7 +443,7 @@ async def _handle_stepfun_realtime_connection(
     session_id: str,
     token: str,
     trace_id: str | None = None,
-):
+) -> None:
     """Handle connection with StepFun realtime end-to-end voice model."""
     logger.info(
         f"Using StepFunRealtimeHandler for session {session_id}",
@@ -460,7 +471,7 @@ async def _handle_enhanced_connection(
     agent_id: str,
     persona_id: str,
     trace_id: str | None = None,
-):
+) -> None:
     """Handle connection with EnhancedSalesHandler (Agent Platform integration)."""
     logger.info(
         f"Using EnhancedSalesHandler for session {session_id}",
@@ -533,7 +544,7 @@ def _extract_user_id_from_token(token: str) -> str | None:
 
         payload = verify_token(token)
         if payload and "sub" in payload:
-            return payload["sub"]
+            return str(payload["sub"])
     except (JWTError, RuntimeError, ValueError, OSError) as e:
         logger.warning(f"Failed to decode token: {e}")
 
