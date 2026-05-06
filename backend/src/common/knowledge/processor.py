@@ -467,7 +467,7 @@ class DocumentProcessor:
         """Parse PDF file into page-scoped structured elements."""
         try:
             try:
-                from pypdf import PdfReader
+                from pypdf import PdfReader  # type: ignore[import-not-found]
             except ImportError:
                 logger.warning("pypdf not installed, PDF reading disabled")
                 return None
@@ -528,7 +528,7 @@ class DocumentProcessor:
         """Parse DOCX file into structured paragraph/table/image elements."""
         try:
             try:
-                from docx import Document
+                from docx import Document  # type: ignore[import-not-found]
             except ImportError:
                 logger.warning("python-docx not installed, DOCX reading disabled")
                 return None
@@ -637,7 +637,7 @@ class DocumentProcessor:
         """Parse legacy XLS workbook into sheet-scoped table rows."""
         try:
             try:
-                import xlrd
+                import xlrd  # type: ignore[import-untyped]
             except ImportError:
                 logger.warning("xlrd not installed, XLS reading disabled")
                 return None
@@ -1027,7 +1027,7 @@ class DocumentProcessor:
         """Run OCR on image bytes and return normalized text."""
         try:
             try:
-                from PIL import Image, ImageOps
+                from PIL import Image, ImageOps  # type: ignore[import-not-found]
             except ImportError:
                 logger.debug("Pillow not installed, image OCR disabled")
                 return None
@@ -1082,7 +1082,7 @@ class DocumentProcessor:
             return self._paddle_ocr_instance
 
         try:
-            from paddleocr import PaddleOCR
+            from paddleocr import PaddleOCR  # type: ignore[import-not-found]
         except ImportError:
             self._paddle_ocr_init_failed = True
             logger.debug("paddleocr not installed, PaddleOCR disabled")
@@ -1149,7 +1149,7 @@ class DocumentProcessor:
     def _ocr_with_tesseract(self, image: Any, source: str) -> str | None:
         """Fallback OCR implementation using pytesseract."""
         try:
-            import pytesseract
+            import pytesseract  # type: ignore[import-not-found]
         except ImportError:
             logger.debug("pytesseract not installed, tesseract OCR disabled")
             return None
@@ -1665,4 +1665,7 @@ def get_document_processor(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
-    return _document_processor
+    processor = _document_processor
+    if processor is None:
+        raise RuntimeError("Document processor initialization failed")
+    return processor
