@@ -2,21 +2,37 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Coroutine
+from typing import Any, cast
 
-from common.knowledge_engine.answerability import KnowledgeAnswerabilityEvaluator
+from common.db.models import KnowledgeAnswerRun
+from common.knowledge_engine.answerability import (
+    KnowledgeAnswerabilityEvaluator,
+    KnowledgeAnswerabilityResult,
+)
 from common.knowledge_engine.assembler import KnowledgeAnswerAssembler
 from common.knowledge_engine.audit_repo import KnowledgeAnswerAuditRepository
-from common.knowledge_engine.config_repo import KnowledgeAnswerConfigRepository
-from common.knowledge_engine.entity_resolver import KnowledgeEntityResolver
+from common.knowledge_engine.config_repo import (
+    KnowledgeAnswerConfigRepository,
+    KnowledgeAnswerConfigSnapshot,
+)
+from common.knowledge_engine.entity_resolver import (
+    KnowledgeEntityResolution,
+    KnowledgeEntityResolver,
+)
 from common.knowledge_engine.haystack_adapter import (
     KnowledgeHaystackAdapter,
     KnowledgeHaystackExecutionResult,
 )
-from common.knowledge_engine.intent_classifier import KnowledgeIntentClassifier
+from common.knowledge_engine.intent_classifier import (
+    KnowledgeIntentClassification,
+    KnowledgeIntentClassifier,
+)
 from common.knowledge_engine.reranker import KnowledgeReranker
-from common.knowledge_engine.retrieval_planner import KnowledgeRetrievalPlanner
+from common.knowledge_engine.retrieval_planner import (
+    KnowledgeRetrievalPlan,
+    KnowledgeRetrievalPlanner,
+)
 from common.knowledge_engine.schemas import (
     KnowledgeAnswerRequest,
     KnowledgeAnswerResult,
@@ -200,7 +216,10 @@ class KnowledgeAnswerEngine:
             }
         )
 
-        result = assembled.model_copy(update={"retrieval_summary": retrieval_summary})
+        result = cast(
+            KnowledgeAnswerResult,
+            assembled.model_copy(update={"retrieval_summary": retrieval_summary}),
+        )
         persisted = self._persist_audit(
             request=request,
             config_version_id=config_snapshot.config_version_id,
@@ -210,10 +229,18 @@ class KnowledgeAnswerEngine:
             audit_steps=audit_steps,
         )
         if persisted is not None:
-            result = result.model_copy(update={"audit_run_id": persisted.id})
+            result = cast(
+                KnowledgeAnswerResult,
+                result.model_copy(update={"audit_run_id": persisted.id}),
+            )
         return result
 
-    def _resolve_query(self, query: str, *, config_snapshot=None):
+    def _resolve_query(
+        self,
+        query: str,
+        *,
+        config_snapshot: KnowledgeAnswerConfigSnapshot | None = None,
+    ) -> KnowledgeEntityResolution:
         if config_snapshot is not None and getattr(
             config_snapshot, "entity_aliases", None
         ):
@@ -223,21 +250,29 @@ class KnowledgeAnswerEngine:
             return resolver.resolve_query(query)
         return self._entity_resolver.resolve_query(query)
 
-    def _execute_plan(self, request: KnowledgeAnswerRequest, retrieval_plan):
+    def _execute_plan(
+        self,
+        request: KnowledgeAnswerRequest,
+        retrieval_plan: KnowledgeRetrievalPlan,
+    ) -> KnowledgeHaystackExecutionResult:
+        adapter = self._haystack_adapter
+        if adapter is None:
+            return KnowledgeHaystackExecutionResult()
+
         runtime_options = dict(request.runtime_options)
+        raw_metadata_filter = runtime_options.get("metadata_filter")
+        metadata_filter = (
+            dict(raw_metadata_filter) if isinstance(raw_metadata_filter, dict) else None
+        )
         return _run_async(
-            self._haystack_adapter.execute_plan(
+            adapter.execute_plan(
                 plan=retrieval_plan,
                 knowledge_base_ids=list(request.knowledge_base_ids),
                 top_k=max(1, int(runtime_options.get("top_k") or 5)),
                 similarity_threshold=float(
                     runtime_options.get("similarity_threshold") or 0.58
                 ),
-                metadata_filter=(
-                    dict(runtime_options.get("metadata_filter"))
-                    if isinstance(runtime_options.get("metadata_filter"), dict)
-                    else None
-                ),
+                metadata_filter=metadata_filter,
                 enable_hybrid=bool(runtime_options.get("enable_hybrid", True)),
                 keyword_candidate_limit=max(
                     1, int(runtime_options.get("keyword_candidate_limit") or 32)
@@ -259,7 +294,7 @@ class KnowledgeAnswerEngine:
         answerability: str,
         blocked_reason: Any,
         audit_steps: list[KnowledgeAuditStep],
-    ):
+    ) -> KnowledgeAnswerRun | None:
         if self._audit_repository is None or not request.session_id:
             return None
         final_status = "blocked" if answerability == "blocked" else "completed"
@@ -304,14 +339,16 @@ class KnowledgeAnswerEngine:
 
 def default_haystack_pipeline_factory() -> Any | None:
     try:
-        from haystack import Pipeline
+        from haystack import Pipeline  # type: ignore[import-not-found]
     except ImportError:
         return None
 
     return Pipeline()
 
 
-def _run_async(awaitable):
+def _run_async(
+    awaitable: Coroutine[Any, Any, KnowledgeHaystackExecutionResult],
+) -> KnowledgeHaystackExecutionResult:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -355,7 +392,9 @@ def _audit_value(value: Any) -> Any:
     return value
 
 
-def _entity_resolution_payload(entity_resolution) -> dict[str, Any]:
+def _entity_resolution_payload(
+    entity_resolution: KnowledgeEntityResolution,
+) -> dict[str, Any]:
     return {
         "resolved": entity_resolution.resolved,
         "normalized_query": entity_resolution.normalized_query,
@@ -375,7 +414,9 @@ def _entity_resolution_payload(entity_resolution) -> dict[str, Any]:
     }
 
 
-def _classification_payload(classification) -> dict[str, Any]:
+def _classification_payload(
+    classification: KnowledgeIntentClassification,
+) -> dict[str, Any]:
     return {
         "intent_key": classification.intent_key,
         "profile_key": classification.profile_key,
@@ -386,7 +427,7 @@ def _classification_payload(classification) -> dict[str, Any]:
     }
 
 
-def _retrieval_plan_payload(retrieval_plan) -> dict[str, Any]:
+def _retrieval_plan_payload(retrieval_plan: KnowledgeRetrievalPlan) -> dict[str, Any]:
     return {
         "profile_key": retrieval_plan.profile_key,
         "intent_key": retrieval_plan.intent_key,
@@ -428,7 +469,8 @@ def _execution_trace_payload(
 
 
 def _compat_source_status(
-    answerability_result, execution_result: KnowledgeHaystackExecutionResult
+    answerability_result: KnowledgeAnswerabilityResult,
+    execution_result: KnowledgeHaystackExecutionResult,
 ) -> str:
     if answerability_result.answerability == "blocked":
         if execution_result.search_failures:
@@ -438,7 +480,7 @@ def _compat_source_status(
         return "miss"
     if execution_result.rows:
         return "hit"
-    return answerability_result.source_status
+    return str(answerability_result.source_status)
 
 
 def _retrieval_mode_from_rows(rows: list[dict[str, Any]]) -> str:
