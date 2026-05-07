@@ -9,15 +9,21 @@ Phase 2.2: TTS服务工厂和降级机制
 - 自动降级链: 阿里云 → Edge-TTS → 浏览器TTS
 """
 
+from __future__ import annotations
+
 import os
 import time
 from collections.abc import Awaitable, Callable
 from enum import Enum
+from typing import TYPE_CHECKING, Protocol, TypedDict
 
 from common.ai.config_manager import get_config_manager
 from common.ai.models import ModelType
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+
+if TYPE_CHECKING:
+    from common.audio.tts_service import TTSChunk
 
 logger = get_logger(__name__)
 
@@ -87,6 +93,54 @@ class TTSProvider(Enum):
     BROWSER = "browser"  # 浏览器TTS (降级)
 
 
+class _AliyunTTSProvider(Protocol):
+    """Runtime contract for the Aliyun streaming TTS provider."""
+
+    api_key: str | None
+
+    async def synthesize_streaming(
+        self,
+        text: str,
+        on_chunk: Callable[[bytes, int, bool], Awaitable[None]],
+        voice: str | None = None,
+        stream_id: str | None = None,
+    ) -> Result[int]: ...
+
+    async def synthesize_to_file(
+        self,
+        text: str,
+        output_file: str,
+        voice: str | None = None,
+    ) -> Result[bool]: ...
+
+
+class _EdgeTTSProvider(Protocol):
+    """Runtime contract for the Edge-TTS provider."""
+
+    async def synthesize_streaming(
+        self,
+        text: str,
+        on_chunk: Callable[[TTSChunk], Awaitable[None]],
+        voice: str | None = None,
+    ) -> Result[int]: ...
+
+    async def synthesize_to_file(
+        self,
+        text: str,
+        output_file: str,
+        voice: str | None = None,
+    ) -> Result[bool]: ...
+
+
+class _TTSMetrics(TypedDict):
+    primary_success: int
+    primary_failures: int
+    fallback_success: int
+    fallback_failures: int
+    browser_fallbacks: int
+    last_provider: str | None
+
+
 class TTSServiceFactory:
     """TTS服务工厂"""
 
@@ -105,13 +159,14 @@ class TTSServiceFactory:
             ValueError: 如果提供商名称未知
         """
         runtime_config = _resolve_tts_runtime_config()
-        provider = (
+        runtime_provider = runtime_config.get("provider") if runtime_config else None
+        provider_name = (
             provider
-            or (runtime_config.get("provider") if runtime_config else None)
+            or (runtime_provider if isinstance(runtime_provider, str) else None)
             or os.getenv("TTS_PROVIDER", TTSProvider.ALIYUN.value)
         )
 
-        if provider == TTSProvider.ALIYUN.value:
+        if provider_name == TTSProvider.ALIYUN.value:
             from common.audio.aliyun_streaming_tts import get_aliyun_tts_service
 
             api_key = runtime_config.get("api_key") if runtime_config else None
@@ -120,20 +175,20 @@ class TTSServiceFactory:
                 api_key=api_key if isinstance(api_key, str) else None,
                 default_voice=voice if isinstance(voice, str) and voice else None,
             )
-        elif provider in {TTSProvider.EDGE.value, "local"}:
+        elif provider_name in {TTSProvider.EDGE.value, "local"}:
             from common.audio.tts_service import get_tts_service
 
             service = get_tts_service()
             _apply_edge_voice_config(service, runtime_config)
             return service
-        elif provider == TTSProvider.BROWSER.value:
+        elif provider_name == TTSProvider.BROWSER.value:
             # 浏览器TTS不需要后端服务
             raise ValueError(
                 "Browser TTS is a client-side fallback, "
                 "not available as a backend service"
             )
         else:
-            raise ValueError(f"Unknown TTS provider: {provider}")
+            raise ValueError(f"Unknown TTS provider: {provider_name}")
 
 
 class TTSServiceWithFallback:
@@ -142,13 +197,13 @@ class TTSServiceWithFallback:
     降级顺序: 阿里云 → Edge-TTS → 浏览器TTS
     """
 
-    def __init__(self):
-        self.primary_service: object | None = None
-        self.fallback_service: object | None = None
+    def __init__(self) -> None:
+        self.primary_service: _AliyunTTSProvider | None = None
+        self.fallback_service: _EdgeTTSProvider | None = None
         self.primary_available = False
         self.fallback_available = False
         self.runtime_config = _resolve_tts_runtime_config()
-        self.metrics = {
+        self.metrics: _TTSMetrics = {
             "primary_success": 0,
             "primary_failures": 0,
             "fallback_success": 0,
@@ -157,9 +212,12 @@ class TTSServiceWithFallback:
             "last_provider": None,
         }
 
+        runtime_provider = (
+            self.runtime_config.get("provider") if self.runtime_config else None
+        )
         configured_provider = (
-            self.runtime_config.get("provider")
-            if self.runtime_config
+            runtime_provider
+            if isinstance(runtime_provider, str)
             else os.getenv("TTS_PROVIDER", TTSProvider.ALIYUN.value)
         )
 
@@ -261,8 +319,6 @@ class TTSServiceWithFallback:
         if self.fallback_available and self.fallback_service:
             try:
                 # 适配Edge-TTS接口
-                from common.audio.tts_service import TTSChunk
-
                 async def edge_on_chunk(chunk: TTSChunk) -> None:
                     await on_chunk(
                         chunk.audio,
@@ -360,7 +416,7 @@ class TTSServiceWithFallback:
         logger.error("All TTS file services failed")
         return Result.fail("[USE_BROWSER_TTS]")
 
-    def get_status(self) -> dict:
+    def get_status(self) -> dict[str, object]:
         """
         获取TTS服务状态
 
@@ -410,7 +466,7 @@ def reset_tts_service_with_fallback() -> None:
     logger.debug("TTS service with fallback reset")
 
 
-def get_tts_service():
+def get_tts_service() -> _EdgeTTSProvider:
     """Compatibility wrapper for tests and legacy patch points."""
     from common.audio.tts_service import get_tts_service as _get_tts_service
 
@@ -420,7 +476,7 @@ def get_tts_service():
 def get_aliyun_tts_service(
     api_key: str | None = None,
     default_voice: str | None = None,
-):
+) -> _AliyunTTSProvider:
     """Compatibility wrapper for tests and legacy patch points."""
     from common.audio.aliyun_streaming_tts import get_aliyun_tts_service as _get_aliyun
 
