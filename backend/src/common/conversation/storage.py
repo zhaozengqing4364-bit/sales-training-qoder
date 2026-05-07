@@ -29,6 +29,15 @@ VALID_OBJECTION_LEDGER_CLOSURE_STATES = frozenset(
 )
 
 
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
+def _orm_dict(row: object, name: str) -> dict[str, Any] | None:
+    value = getattr(row, name, None)
+    return value if isinstance(value, dict) else None
+
+
 def normalize_objection_ledger(
     objection_ledger: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
@@ -149,7 +158,7 @@ class MessageStorageService:
             # Apply analysis data if provided
             if analysis_data:
                 if "fuzzy_words" in analysis_data:
-                    message.fuzzy_words = analysis_data["fuzzy_words"]
+                    _set_orm_field(message, "fuzzy_words", analysis_data["fuzzy_words"])
 
                 transcript_metadata = (
                     analysis_data.get("transcript_metadata")
@@ -160,17 +169,23 @@ class MessageStorageService:
                     transcript_metadata is not None
                     or "objection_ledger" in analysis_data
                 ):
-                    message.transcript_metadata = _merge_transcript_metadata(
-                        transcript_metadata,
-                        analysis_data.get("objection_ledger"),
+                    _set_orm_field(
+                        message,
+                        "transcript_metadata",
+                        _merge_transcript_metadata(
+                            transcript_metadata,
+                            analysis_data.get("objection_ledger"),
+                        ),
                     )
 
                 if "sales_stage" in analysis_data:
-                    message.sales_stage = analysis_data["sales_stage"]
+                    _set_orm_field(message, "sales_stage", analysis_data["sales_stage"])
                 if "score_snapshot" in analysis_data:
-                    message.score_snapshot = analysis_data["score_snapshot"]
+                    _set_orm_field(
+                        message, "score_snapshot", analysis_data["score_snapshot"]
+                    )
                 if "ai_feedback" in analysis_data:
-                    message.ai_feedback = analysis_data["ai_feedback"]
+                    _set_orm_field(message, "ai_feedback", analysis_data["ai_feedback"])
 
             self.db.add(message)
             await self.db.commit()
@@ -230,13 +245,17 @@ class MessageStorageService:
 
             # Update fields if provided
             if fuzzy_words is not None:
-                message.fuzzy_words = fuzzy_words
+                _set_orm_field(message, "fuzzy_words", fuzzy_words)
             if transcript_metadata is not None or objection_ledger is not None:
-                message.transcript_metadata = _merge_transcript_metadata(
-                    transcript_metadata
-                    if transcript_metadata is not None
-                    else message.transcript_metadata,
-                    objection_ledger,
+                _set_orm_field(
+                    message,
+                    "transcript_metadata",
+                    _merge_transcript_metadata(
+                        transcript_metadata
+                        if transcript_metadata is not None
+                        else _orm_dict(message, "transcript_metadata"),
+                        objection_ledger,
+                    ),
                 )
             if sales_stage is not None:
                 # Validate sales stage
@@ -251,11 +270,11 @@ class MessageStorageService:
                     return Result.fail(
                         f"[INVALID_SALES_STAGE] Invalid sales stage: {sales_stage}"
                     )
-                message.sales_stage = sales_stage
+                _set_orm_field(message, "sales_stage", sales_stage)
             if score_snapshot is not None:
-                message.score_snapshot = score_snapshot
+                _set_orm_field(message, "score_snapshot", score_snapshot)
             if ai_feedback is not None:
-                message.ai_feedback = ai_feedback
+                _set_orm_field(message, "ai_feedback", ai_feedback)
 
             await self.db.commit()
             await self.db.refresh(message)
@@ -312,9 +331,9 @@ class MessageStorageService:
                 )
 
             # Update highlight fields
-            message.is_highlight = True
-            message.highlight_type = highlight_type
-            message.highlight_reason = highlight_reason
+            _set_orm_field(message, "is_highlight", True)
+            _set_orm_field(message, "highlight_type", highlight_type)
+            _set_orm_field(message, "highlight_reason", highlight_reason)
 
             await self.db.commit()
             await self.db.refresh(message)
