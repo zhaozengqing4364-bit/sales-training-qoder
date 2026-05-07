@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,7 +74,12 @@ class PracticeAudioAuditService:
         if not segments:
             return None
 
-        voice_policy = session.voice_policy_snapshot or {}
+        session_any = cast(Any, session)
+        voice_policy: dict[str, Any] = (
+            session_any.voice_policy_snapshot
+            if isinstance(session_any.voice_policy_snapshot, dict)
+            else {}
+        )
         runtime_metrics = (
             voice_policy.get("runtime_metrics")
             if isinstance(voice_policy, dict)
@@ -95,35 +100,39 @@ class PracticeAudioAuditService:
         segment_schemas: list[AudioAuditSegmentSchema] = []
 
         for seg in segments:
-            if seg.upload_status == "uploaded":
+            seg_any = cast(Any, seg)
+            if seg_any.upload_status == "uploaded":
                 uploaded_count += 1
-                total_bytes += seg.size_bytes or 0
-                if latest_sequence is None or seg.segment_sequence > latest_sequence:
-                    latest_sequence = seg.segment_sequence
-                if seg.created_at is not None:
-                    last_uploaded_at = seg.created_at.isoformat()
-            elif seg.upload_status == "failed":
+                total_bytes += int(seg_any.size_bytes or 0)
+                if latest_sequence is None or seg_any.segment_sequence > latest_sequence:
+                    latest_sequence = int(seg_any.segment_sequence)
+                if seg_any.created_at is not None:
+                    last_uploaded_at = seg_any.created_at.isoformat()
+            elif seg_any.upload_status == "failed":
                 failed_count += 1
-            elif seg.upload_status == "pending":
+            elif seg_any.upload_status == "pending":
                 pending_count += 1
 
             playback_path = None
-            if seg.upload_status == "uploaded":
-                playback_path = f"/api/v1/sessions/{session_id}/audio-segments/{seg.segment_sequence}"
+            if seg_any.upload_status == "uploaded":
+                playback_path = f"/api/v1/sessions/{session_id}/audio-segments/{seg_any.segment_sequence}"
 
             segment_schemas.append(
                 AudioAuditSegmentSchema(
-                    segment_sequence=seg.segment_sequence,
-                    created_at=seg.created_at.isoformat() if seg.created_at else None,
-                    duration_ms=seg.duration_ms,
-                    size_bytes=seg.size_bytes,
-                    upload_status=seg.upload_status,
+                    segment_sequence=seg_any.segment_sequence,
+                    created_at=(
+                        seg_any.created_at.isoformat() if seg_any.created_at else None
+                    ),
+                    duration_ms=seg_any.duration_ms,
+                    size_bytes=seg_any.size_bytes,
+                    upload_status=seg_any.upload_status,
                     playback_path=playback_path,
-                    error_message=seg.error_message,
+                    error_message=seg_any.error_message,
                 )
             )
 
         total_segments = len(segments)
+        learner_status: Literal["available", "partial", "missing"]
         if uploaded_count > 0 and uploaded_count == total_segments:
             learner_status = "available"
         elif uploaded_count > 0:
@@ -274,7 +283,7 @@ class PracticeReportService:
                 status_code=500,
             )
 
-        projection = projection_result.value
+        projection = projection_result.unwrap()
         scenario_type_enum = (
             ScenarioType.PRESENTATION
             if scenario_type == "presentation"
@@ -479,7 +488,10 @@ class PracticeReportService:
                 continue
             name = str(item.get("name") or "")
             try:
-                by_name[name] = float(item.get("score"))
+                raw_score = item.get("score")
+                if raw_score is None:
+                    continue
+                by_name[name] = float(raw_score)
             except (TypeError, ValueError):
                 continue
 
@@ -503,10 +515,11 @@ class PracticeReportService:
 
     @staticmethod
     def _overall_score(session: PracticeSession) -> float:
+        session_any = cast(Any, session)
         return (
-            (session.logic_score or 0)
-            + (session.accuracy_score or 0)
-            + (session.completeness_score or 0)
+            float(session_any.logic_score or 0)
+            + float(session_any.accuracy_score or 0)
+            + float(session_any.completeness_score or 0)
         ) / 3
 
     @staticmethod
@@ -623,14 +636,14 @@ class PracticeAudioSegmentService:
         )
         segment = existing.scalar_one_or_none()
 
-        if segment and segment.upload_status == "uploaded":
-            return
-
-        if segment:
-            segment.object_key = object_key
-            segment.content_type = content_type
-            segment.upload_status = "pending"
-            segment.error_message = None
+        if segment is not None:
+            segment_any = cast(Any, segment)
+            if segment_any.upload_status == "uploaded":
+                return
+            segment_any.object_key = object_key
+            segment_any.content_type = content_type
+            segment_any.upload_status = "pending"
+            segment_any.error_message = None
         else:
             self.db.add(
                 SessionAudioSegment(
@@ -677,16 +690,17 @@ class PracticeAudioSegmentService:
         )
         segment = existing.scalar_one_or_none()
 
-        if segment:
-            segment.object_key = object_key
-            segment.upload_status = "uploaded"
-            segment.error_message = None
-            if not segment.content_type:
-                segment.content_type = "audio/webm"
+        if segment is not None:
+            segment_any = cast(Any, segment)
+            segment_any.object_key = object_key
+            segment_any.upload_status = "uploaded"
+            segment_any.error_message = None
+            if not segment_any.content_type:
+                segment_any.content_type = "audio/webm"
             if size_bytes is not None:
-                segment.size_bytes = size_bytes
+                segment_any.size_bytes = size_bytes
             if duration_ms is not None:
-                segment.duration_ms = duration_ms
+                segment_any.duration_ms = duration_ms
         else:
             segment = SessionAudioSegment(
                 session_id=session_id,
@@ -699,8 +713,9 @@ class PracticeAudioSegmentService:
             )
             self.db.add(segment)
 
-        if session.audio_url is None:
-            session.audio_url = f"audio/{session_id}/"
+        session_any = cast(Any, session)
+        if session_any.audio_url is None:
+            session_any.audio_url = f"audio/{session_id}/"
 
         await self.db.flush()
         await self._update_uploaded_audio_audit_metrics(
@@ -712,6 +727,7 @@ class PracticeAudioSegmentService:
 
         await self.db.commit()
         await self.db.refresh(segment)
+        segment_any = cast(Any, segment)
 
         logger.info(
             "audio_segment_registered",
@@ -722,15 +738,15 @@ class PracticeAudioSegmentService:
         )
 
         return {
-            "id": segment.id,
+            "id": segment_any.id,
             "session_id": session_id,
-            "segment_sequence": segment.segment_sequence,
-            "object_key": segment.object_key,
-            "upload_status": segment.upload_status,
-            "size_bytes": segment.size_bytes,
-            "duration_ms": segment.duration_ms,
-            "created_at": segment.created_at.isoformat()
-            if segment.created_at
+            "segment_sequence": segment_any.segment_sequence,
+            "object_key": segment_any.object_key,
+            "upload_status": segment_any.upload_status,
+            "size_bytes": segment_any.size_bytes,
+            "duration_ms": segment_any.duration_ms,
+            "created_at": segment_any.created_at.isoformat()
+            if segment_any.created_at
             else None,
         }
 
@@ -782,10 +798,11 @@ class PracticeAudioSegmentService:
         )
         segment = existing.scalar_one_or_none()
 
-        if segment:
-            if segment.upload_status != "uploaded":
-                segment.upload_status = "failed"
-                segment.error_message = error_token
+        if segment is not None:
+            segment_any = cast(Any, segment)
+            if segment_any.upload_status != "uploaded":
+                segment_any.upload_status = "failed"
+                segment_any.error_message = error_token
         else:
             segment = SessionAudioSegment(
                 session_id=session_id,
@@ -797,8 +814,9 @@ class PracticeAudioSegmentService:
             )
             self.db.add(segment)
 
-        if session.audio_url is None:
-            session.audio_url = f"audio/{session_id}/"
+        session_any = cast(Any, session)
+        if session_any.audio_url is None:
+            session_any.audio_url = f"audio/{session_id}/"
 
         await self.db.flush()
         await self._update_audio_audit_failure_metrics(
@@ -809,6 +827,7 @@ class PracticeAudioSegmentService:
         await self.db.commit()
         await self.db.refresh(session)
         await self.db.refresh(segment)
+        segment_any = cast(Any, segment)
 
         logger.info(
             "audio_segment_failure_registered",
@@ -819,13 +838,13 @@ class PracticeAudioSegmentService:
         )
 
         return {
-            "id": segment.id,
+            "id": segment_any.id,
             "session_id": session_id,
-            "segment_sequence": segment.segment_sequence,
-            "upload_status": segment.upload_status,
-            "error_message": segment.error_message,
-            "created_at": segment.created_at.isoformat()
-            if segment.created_at
+            "segment_sequence": segment_any.segment_sequence,
+            "upload_status": segment_any.upload_status,
+            "error_message": segment_any.error_message,
+            "created_at": segment_any.created_at.isoformat()
+            if segment_any.created_at
             else None,
         }
 
@@ -856,9 +875,10 @@ class PracticeAudioSegmentService:
         )
         failed_segment_count = failed_count_result.scalar() or 0
 
-        base_snapshot = (
-            deepcopy(session.voice_policy_snapshot)
-            if isinstance(session.voice_policy_snapshot, dict)
+        session_any = cast(Any, session)
+        base_snapshot: dict[str, Any] = (
+            deepcopy(session_any.voice_policy_snapshot)
+            if isinstance(session_any.voice_policy_snapshot, dict)
             else {}
         )
         runtime_metrics = base_snapshot.get("runtime_metrics")
@@ -887,7 +907,7 @@ class PracticeAudioSegmentService:
         )
         runtime_metrics["audio_audit"] = audio_audit
         base_snapshot["runtime_metrics"] = runtime_metrics
-        session.voice_policy_snapshot = base_snapshot
+        session_any.voice_policy_snapshot = base_snapshot
 
     async def _update_audio_audit_failure_metrics(
         self,
@@ -904,9 +924,10 @@ class PracticeAudioSegmentService:
         )
         failed_segment_count = failed_count_result.scalar() or 0
 
-        base_snapshot = (
-            deepcopy(session.voice_policy_snapshot)
-            if isinstance(session.voice_policy_snapshot, dict)
+        session_any = cast(Any, session)
+        base_snapshot: dict[str, Any] = (
+            deepcopy(session_any.voice_policy_snapshot)
+            if isinstance(session_any.voice_policy_snapshot, dict)
             else {}
         )
         runtime_metrics = base_snapshot.get("runtime_metrics")
@@ -929,7 +950,7 @@ class PracticeAudioSegmentService:
         )
         runtime_metrics["audio_audit"] = audio_audit
         base_snapshot["runtime_metrics"] = runtime_metrics
-        session.voice_policy_snapshot = base_snapshot
+        session_any.voice_policy_snapshot = base_snapshot
 
 
 __all__ = [
