@@ -63,10 +63,11 @@ class VersionManager:
         Returns: PPTVersion or Result.fail
         """
         try:
+            presentation_key = str(presentation_id)
             # Get current version number
             result = await db.execute(
                 select(Presentation).where(
-                    Presentation.presentation_id == presentation_id
+                    Presentation.presentation_id == presentation_key
                 )
             )
             presentation = result.scalar_one_or_none()
@@ -74,7 +75,7 @@ class VersionManager:
             if not presentation:
                 return Result.fail(fallback="[PRESENTATION_NOT_FOUND]")
 
-            version_number = (presentation.version or 0) + 1
+            version_number = int(getattr(presentation, "version_number", 0) or 0) + 1
             version_id = uuid.uuid4()
 
             # Create version directory
@@ -88,8 +89,9 @@ class VersionManager:
             shutil.copy2(file_path, version_file_path)
 
             # Update presentation version
-            presentation.version = version_number
-            presentation.updated_at = datetime.now()
+            setattr(presentation, "version_number", version_number)
+            if hasattr(presentation, "updated_at"):
+                setattr(presentation, "updated_at", datetime.now())
 
             await db.commit()
 
@@ -220,14 +222,15 @@ class VersionManager:
             # Update presentation version
             result = await db.execute(
                 select(Presentation).where(
-                    Presentation.presentation_id == presentation_id
+                    Presentation.presentation_id == str(presentation_id)
                 )
             )
             presentation = result.scalar_one_or_none()
 
             if presentation:
-                presentation.version = version_number
-                presentation.updated_at = datetime.now()
+                setattr(presentation, "version_number", version_number)
+                if hasattr(presentation, "updated_at"):
+                    setattr(presentation, "updated_at", datetime.now())
                 await db.commit()
 
             logger.info(
@@ -311,11 +314,11 @@ class VersionManager:
             async def _get() -> int:
                 result = await db.execute(
                     select(Presentation).where(
-                        Presentation.presentation_id == presentation_id
+                        Presentation.presentation_id == str(presentation_id)
                     )
                 )
                 presentation = result.scalar_one_or_none()
-                return int(getattr(presentation, "version", 0) or 0)
+                return int(getattr(presentation, "version_number", 0) or 0)
 
             return asyncio.run(_get())
         except Exception as e:
