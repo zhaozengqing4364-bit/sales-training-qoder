@@ -16,7 +16,11 @@ logger = get_logger(__name__)
 
 # 尝试导入 dashscope，如果不存在则提供 mock 实现
 try:
-    from dashscope.audio.tts_v2 import AudioFormat, ResultCallback, SpeechSynthesizer
+    from dashscope.audio.tts_v2 import (  # type: ignore[import-not-found]
+        AudioFormat,
+        ResultCallback,
+        SpeechSynthesizer,
+    )
 
     DASHSCOPE_AVAILABLE = True
 except ImportError:
@@ -184,7 +188,7 @@ class StreamCallbackHandler(ResultCallback):
 
     def __init__(
         self, on_chunk: Callable[[bytes, int, bool], Awaitable[None]], stream_id: str
-    ):
+    ) -> None:
         super().__init__()
         self.on_chunk = on_chunk
         self.stream_id = stream_id
@@ -192,6 +196,7 @@ class StreamCallbackHandler(ResultCallback):
         self.total_duration_ms = 0
         self.completion_event = asyncio.Event()
         self.error: Exception | None = None
+        self._loop: asyncio.AbstractEventLoop | None
         try:
             self._loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -201,11 +206,11 @@ class StreamCallbackHandler(ResultCallback):
         # 估算参数 (MP3 @ 16kHz, ~128kbps)
         self.BYTES_PER_MS = 16
 
-    def on_open(self):
+    def on_open(self) -> None:
         """连接打开"""
         logger.debug(f"TTS stream opened: stream_id={self.stream_id}")
 
-    def on_data(self, data: bytes):
+    def on_data(self, data: bytes) -> None:
         """接收音频数据块"""
         try:
             # 估算时长
@@ -226,7 +231,7 @@ class StreamCallbackHandler(ResultCallback):
             logger.error(f"Error processing TTS chunk: {e}")
             self.error = e
 
-    def on_close(self):
+    def on_close(self) -> None:
         """连接关闭"""
         try:
             # 发送最终标记
@@ -244,13 +249,13 @@ class StreamCallbackHandler(ResultCallback):
         finally:
             self.completion_event.set()
 
-    def on_error(self, message: str):
+    def on_error(self, message: str) -> None:
         """错误处理"""
         logger.error(f"TTS stream error: {message}")
         self.error = Exception(message)
         self.completion_event.set()
 
-    async def wait_completion(self):
+    async def wait_completion(self) -> None:
         """等待合成完成"""
         await self.completion_event.wait()
 
@@ -269,16 +274,18 @@ class StreamCallbackHandler(ResultCallback):
 
     def _submit_chunk(self, data: bytes, chunk_index: int, is_final: bool) -> None:
         """Schedule async chunk callback with ordering/error tracking."""
+        async def _run_callback() -> None:
+            await self.on_chunk(data, chunk_index, is_final)
+
         if self._loop is None:
             try:
                 self._loop = asyncio.get_running_loop()
             except RuntimeError:
-                asyncio.run(self.on_chunk(data, chunk_index, is_final))
+                asyncio.run(_run_callback())
                 return
 
-        future = asyncio.run_coroutine_threadsafe(
-            self.on_chunk(data, chunk_index, is_final),
-            self._loop,
+        future: concurrent.futures.Future[None] = asyncio.run_coroutine_threadsafe(
+            _run_callback(), self._loop
         )
         self._pending_futures.append(future)
 
