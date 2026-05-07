@@ -21,10 +21,11 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, TypeAlias, cast
 
 from common.analytics.release_verification_service import (
     CheckType,
@@ -117,6 +118,20 @@ class DocumentationCheckResult:
     details: dict[str, Any] | None = None
 
 
+TestExecutionResultT: TypeAlias = TestExecutionResult
+CoverageReportT: TypeAlias = CoverageReport
+HealthCheckResultT: TypeAlias = HealthCheckResult
+SecurityCheckResultT: TypeAlias = SecurityCheckResult
+DocumentationCheckResultT: TypeAlias = DocumentationCheckResult
+CheckResultT: TypeAlias = (
+    TestExecutionResultT
+    | HealthCheckResultT
+    | SecurityCheckResultT
+    | DocumentationCheckResultT
+)
+CheckRunnerT: TypeAlias = Callable[[Any, str], Awaitable[CheckResultT]]
+
+
 class VerificationRunner:
     """
     Automated release verification runner
@@ -125,11 +140,13 @@ class VerificationRunner:
     the release verification records.
     """
 
-    TestExecutionResult = TestExecutionResult
-    CoverageReport = CoverageReport
-    HealthCheckResult = HealthCheckResult
-    SecurityCheckResult = SecurityCheckResult
-    DocumentationCheckResult = DocumentationCheckResult
+    TestExecutionResult: ClassVar[type[TestExecutionResultT]] = TestExecutionResult
+    CoverageReport: ClassVar[type[CoverageReportT]] = CoverageReport
+    HealthCheckResult: ClassVar[type[HealthCheckResultT]] = HealthCheckResult
+    SecurityCheckResult: ClassVar[type[SecurityCheckResultT]] = SecurityCheckResult
+    DocumentationCheckResult: ClassVar[type[DocumentationCheckResultT]] = (
+        DocumentationCheckResult
+    )
 
     def __init__(self, backend_root: Path | None = None):
         """
@@ -140,7 +157,7 @@ class VerificationRunner:
         """
         self.backend_root = backend_root or Path(__file__).parent.parent.parent.parent
         self.repo_root = self.backend_root.parent
-        self.test_results: list[TestExecutionResult] = []
+        self.test_results: list[TestExecutionResultT] = []
 
     def _elapsed_ms_since(self, start_time: datetime) -> int:
         """Return elapsed milliseconds from a UTC start timestamp."""
@@ -148,7 +165,7 @@ class VerificationRunner:
 
     async def run_all_checks(
         self,
-        db,
+        db: Any,
         release_candidate_id: str,
         skip_checks: list[str] | None = None,
     ) -> Result[dict[str, Any]]:
@@ -168,7 +185,7 @@ class VerificationRunner:
 
         # Run checks in parallel where possible
         # Core quality gates (blocking)
-        core_checks = [
+        core_checks: list[tuple[str, CheckRunnerT]] = [
             ("unit_tests", self._run_unit_tests),
             ("coverage", self._run_coverage_check),
             ("integration_tests", self._run_integration_tests),
@@ -177,7 +194,7 @@ class VerificationRunner:
         ]
 
         # Additional verification checks
-        additional_checks = [
+        additional_checks: list[tuple[str, CheckRunnerT]] = [
             ("health", self._run_health_checks),
             ("security", self._run_security_checks),
             ("documentation", self._run_documentation_checks),
@@ -227,8 +244,8 @@ class VerificationRunner:
         return Result(value=results)
 
     async def _run_unit_tests(
-        self, db, release_candidate_id: str
-    ) -> TestExecutionResult:
+        self, db: Any, release_candidate_id: str
+    ) -> TestExecutionResultT:
         """Run unit tests with proper result parsing"""
         logger.info("Starting unit tests execution...")
 
@@ -362,8 +379,8 @@ class VerificationRunner:
         return stats
 
     async def _run_coverage_check(
-        self, db, release_candidate_id: str
-    ) -> TestExecutionResult:
+        self, db: Any, release_candidate_id: str
+    ) -> TestExecutionResultT:
         """Run coverage check and verify against quality gate"""
         logger.info("Starting coverage check...")
 
@@ -450,8 +467,8 @@ class VerificationRunner:
             )
 
     async def _run_integration_tests(
-        self, db, release_candidate_id: str
-    ) -> TestExecutionResult:
+        self, db: Any, release_candidate_id: str
+    ) -> TestExecutionResultT:
         """Run integration tests"""
         logger.info("Starting integration tests...")
 
@@ -530,8 +547,8 @@ class VerificationRunner:
             )
 
     async def _run_contract_tests(
-        self, db, release_candidate_id: str
-    ) -> TestExecutionResult:
+        self, db: Any, release_candidate_id: str
+    ) -> TestExecutionResultT:
         """Run contract tests (NFR19: 100% required)"""
         logger.info("Starting contract tests...")
 
@@ -619,8 +636,8 @@ class VerificationRunner:
             )
 
     async def _run_performance_tests(
-        self, db, release_candidate_id: str
-    ) -> TestExecutionResult:
+        self, db: Any, release_candidate_id: str
+    ) -> TestExecutionResultT:
         """Run performance tests and verify NFR metrics"""
         logger.info("Starting performance tests...")
 
@@ -762,7 +779,7 @@ class VerificationRunner:
                 error_message=error_msg,
             )
 
-    def _load_coverage_report(self) -> CoverageReport | None:
+    def _load_coverage_report(self) -> CoverageReportT | None:
         """Load coverage report from coverage.json"""
         coverage_file = self.backend_root / "coverage.json"
         if not coverage_file.exists():
@@ -810,7 +827,7 @@ class VerificationRunner:
 
     async def _update_verification_record(
         self,
-        db,
+        db: Any,
         release_candidate_id: str,
         check_type: CheckType,
         check_name: str,
@@ -965,7 +982,7 @@ class VerificationRunner:
 
     async def _sync_check_result_record(
         self,
-        db,
+        db: Any,
         release_candidate_id: str,
         check_key: str,
         check_result: Any,
@@ -1003,7 +1020,7 @@ class VerificationRunner:
 
         details = None
         if is_dataclass(check_result):
-            details = asdict(check_result)  # pyright: ignore[reportArgumentType]
+            details = cast(dict[str, Any], asdict(cast(Any, check_result)))
         elif isinstance(check_result, dict):
             details = check_result
 
@@ -1019,13 +1036,13 @@ class VerificationRunner:
         )
 
     async def _run_health_checks(
-        self, db, release_candidate_id: str
-    ) -> HealthCheckResult:
+        self, db: Any, release_candidate_id: str
+    ) -> HealthCheckResultT:
         """Run pre-deployment health checks"""
         logger.info("Starting health checks...")
 
         start_time = datetime.now(UTC)
-        health_results = []
+        health_results: list[tuple[str, HealthCheckResultT]] = []
 
         try:
             # Check 1: Database connectivity
@@ -1096,7 +1113,7 @@ class VerificationRunner:
                 error_message=error_msg,
             )
 
-    async def _check_database_health(self) -> tuple[str, HealthCheckResult]:
+    async def _check_database_health(self) -> tuple[str, HealthCheckResultT]:
         """Check database connectivity"""
         try:
             from sqlalchemy import text
@@ -1126,7 +1143,7 @@ class VerificationRunner:
                 ),
             )
 
-    async def _check_api_health(self) -> tuple[str, HealthCheckResult]:
+    async def _check_api_health(self) -> tuple[str, HealthCheckResultT]:
         """Check API health endpoints"""
         try:
             # Simple health check on common endpoints
@@ -1157,7 +1174,7 @@ class VerificationRunner:
                 ),
             )
 
-    async def _check_websocket_health(self) -> tuple[str, HealthCheckResult]:
+    async def _check_websocket_health(self) -> tuple[str, HealthCheckResultT]:
         """Check WebSocket capability"""
         try:
             # Check WebSocket handler can be imported and initialized
@@ -1182,7 +1199,7 @@ class VerificationRunner:
                 ),
             )
 
-    async def _check_external_dependencies(self) -> tuple[str, HealthCheckResult]:
+    async def _check_external_dependencies(self) -> tuple[str, HealthCheckResultT]:
         """Check external dependencies availability"""
         try:
             # Check for required environment variables
@@ -1220,13 +1237,13 @@ class VerificationRunner:
             )
 
     async def _run_security_checks(
-        self, db, release_candidate_id: str
-    ) -> SecurityCheckResult:
+        self, db: Any, release_candidate_id: str
+    ) -> SecurityCheckResultT:
         """Run security vulnerability checks"""
         logger.info("Starting security checks...")
 
         start_time = datetime.now(UTC)
-        security_results = []
+        security_results: list[tuple[str, SecurityCheckResultT]] = []
 
         try:
             # Check 1: Bandit (Python security scanner)
@@ -1310,7 +1327,7 @@ class VerificationRunner:
                 error_message=error_msg,
             )
 
-    async def _run_bandit_scan(self) -> tuple[str, SecurityCheckResult]:
+    async def _run_bandit_scan(self) -> tuple[str, SecurityCheckResultT]:
         """Run Bandit security scan"""
         try:
             result = subprocess.run(
@@ -1384,7 +1401,7 @@ class VerificationRunner:
                 ),
             )
 
-    async def _run_safety_scan(self) -> tuple[str, SecurityCheckResult]:
+    async def _run_safety_scan(self) -> tuple[str, SecurityCheckResultT]:
         """Run Safety dependency vulnerability scan"""
         try:
             result = subprocess.run(
@@ -1397,7 +1414,7 @@ class VerificationRunner:
 
             if result.returncode == 0:
                 # Parse safety output for vulnerabilities
-                vulnerabilities = []
+                vulnerabilities: list[dict[str, Any]] = []
                 if result.stdout:
                     # Safety output format varies, simplified parsing
                     pass
@@ -1464,7 +1481,7 @@ class VerificationRunner:
                 ),
             )
 
-    async def _run_secrets_scan(self) -> tuple[str, SecurityCheckResult]:
+    async def _run_secrets_scan(self) -> tuple[str, SecurityCheckResultT]:
         """Scan for secrets/sensitive data leakage"""
         try:
             from pathlib import Path
@@ -1522,14 +1539,14 @@ class VerificationRunner:
             )
 
     async def _run_documentation_checks(
-        self, db, release_candidate_id: str
-    ) -> DocumentationCheckResult:
+        self, db: Any, release_candidate_id: str
+    ) -> DocumentationCheckResultT:
         """Run documentation update validation checks"""
         logger.info("Starting documentation checks...")
 
         start_time = datetime.now(UTC)
-        doc_results = []
-        missing_sections = []
+        doc_results: list[tuple[str, DocumentationCheckResultT]] = []
+        missing_sections: list[str] = []
 
         try:
             # Check 1: API contract documentation
@@ -1610,7 +1627,7 @@ class VerificationRunner:
                 details={"error": error_msg},
             )
 
-    def _check_api_contracts(self) -> DocumentationCheckResult:
+    def _check_api_contracts(self) -> DocumentationCheckResultT:
         """Check if API contract documentation exists"""
         start_time = datetime.now(UTC)
         try:
@@ -1648,7 +1665,7 @@ class VerificationRunner:
                 details={"error": str(e)[:200]},
             )
 
-    def _check_readme(self) -> DocumentationCheckResult:
+    def _check_readme(self) -> DocumentationCheckResultT:
         """Check if README exists and is updated"""
         start_time = datetime.now(UTC)
         try:
@@ -1680,7 +1697,7 @@ class VerificationRunner:
                 details={"error": str(e)[:200]},
             )
 
-    def _check_deployment_docs(self) -> DocumentationCheckResult:
+    def _check_deployment_docs(self) -> DocumentationCheckResultT:
         """Check if deployment documentation exists"""
         start_time = datetime.now(UTC)
         try:
