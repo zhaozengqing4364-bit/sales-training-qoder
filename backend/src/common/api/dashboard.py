@@ -12,8 +12,9 @@ Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
 """
 
 import json
+import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends
@@ -85,13 +86,13 @@ class Recommendation(BaseModel):
     is_due_today: bool = True
 
 
-def _encode_focus_intent(focus_intent: dict | None) -> str | None:
+def _encode_focus_intent(focus_intent: dict[str, Any] | None) -> str | None:
     if not focus_intent:
         return None
     return quote(json.dumps(focus_intent, ensure_ascii=False, separators=(",", ":")))
 
 
-def _build_retry_target_path(retry_entry: dict) -> str:
+def _build_retry_target_path(retry_entry: dict[str, Any]) -> str:
     scenario_type = retry_entry.get("scenario_type")
     agent_id = retry_entry.get("agent_id")
     persona_id = retry_entry.get("persona_id")
@@ -115,17 +116,17 @@ def _build_retry_target_path(retry_entry: dict) -> str:
 def _build_next_goal_recommendation(session: PracticeSession) -> Recommendation | None:
     scenario = getattr(session, "scenario", None)
     scenario_type = getattr(scenario, "scenario_type", None) or "sales"
-    snapshot = (
+    snapshot: dict[str, Any] = (
         session.effectiveness_snapshot
         if isinstance(session.effectiveness_snapshot, dict)
         else {}
     )
-    main_issue = (
+    main_issue: dict[str, Any] | None = (
         snapshot.get("main_issue")
         if isinstance(snapshot.get("main_issue"), dict)
         else None
     )
-    next_goal = (
+    next_goal: dict[str, Any] | None = (
         snapshot.get("next_goal")
         if isinstance(snapshot.get("next_goal"), dict)
         else None
@@ -176,12 +177,12 @@ def _build_next_goal_recommendation(session: PracticeSession) -> Recommendation 
     )
 
 
-def _count_page_issues(page_summary: dict) -> int:
+def _count_page_issues(page_summary: dict[str, Any]) -> int:
     issue_clusters = page_summary.get("issue_clusters")
     return len(issue_clusters) if isinstance(issue_clusters, list) else 0
 
 
-def _count_missing_points(page_summary: dict) -> int:
+def _count_missing_points(page_summary: dict[str, Any]) -> int:
     missing_points = page_summary.get("missing_required_points")
     return len(missing_points) if isinstance(missing_points, list) else 0
 
@@ -279,7 +280,7 @@ def calculate_trend_percentage(current: float, previous: float) -> float:
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+) -> dict[str, Any]:
     """
     Get dashboard statistics for current user
 
@@ -290,7 +291,7 @@ async def get_dashboard_stats(
     Requirements: 2.1, 2.2, 2.3
     """
     try:
-        user_id = str(current_user.user_id)
+        user_id = uuid.UUID(str(current_user.user_id))
         now = datetime.now(UTC)
 
         # Calculate week boundaries
@@ -356,11 +357,15 @@ async def get_dashboard_stats(
         # ========== Projection-backed score summary ==========
         history_result = await history_service.get_user_history(
             db=db,
-            user_id=current_user.user_id,
+            user_id=user_id,
             limit=100,
             offset=0,
         )
-        history_summaries = history_result.value if history_result.is_success else []
+        history_summaries = (
+            history_result.value
+            if history_result.is_success and history_result.value is not None
+            else []
+        )
         score_summary = history_service.build_projection_score_summary(
             history_summaries
         )
@@ -493,7 +498,7 @@ async def get_dashboard_stats(
 @router.get("/recommendations/latest")
 async def get_recommendation(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+) -> dict[str, Any]:
     """
     Get training recommendation for current user
 
@@ -508,7 +513,7 @@ async def get_recommendation(
     Requirements: 2.4, 2.5
     """
     try:
-        user_id = str(current_user.user_id)
+        user_id = uuid.UUID(str(current_user.user_id))
         now = datetime.now(UTC)
         week_ago = now - timedelta(days=7)
 
@@ -562,7 +567,7 @@ async def get_recommendation(
                     session=last_completed,
                     scenario_type="presentation",
                 )
-                if projection_result.is_success:
+                if projection_result.is_success and projection_result.value is not None:
                     presentation_recommendation = (
                         _build_presentation_page_recommendation(
                             last_completed,
@@ -585,7 +590,7 @@ async def get_recommendation(
 
             scores = {"逻辑性": logic, "准确性": accuracy, "完整性": completeness}
 
-            weakest = min(scores, key=scores.get)
+            weakest = min(scores, key=lambda name: scores[name])
             weakest_score = scores[weakest]
 
             if weakest_score < 60:
