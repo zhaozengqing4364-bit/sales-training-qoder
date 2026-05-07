@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +49,14 @@ DEFAULT_FALLBACK_CONFIG: dict[str, Any] = {
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _orm_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
 
 
 def _to_bool(value: Any, default: bool) -> bool:
@@ -422,27 +430,37 @@ class PresentationAIPolicyService:
             self.db.add(record)
 
         if "enabled" in policy_payload:
-            record.enabled = _to_bool(
-                policy_payload.get("enabled"), bool(record.enabled)
+            _set_orm_field(
+                record,
+                "enabled",
+                _to_bool(policy_payload.get("enabled"), bool(_orm_field(record, "enabled"))),
             )
 
         if "prompt_config" in policy_payload:
-            record.prompt_config = self._normalize_prompt_config(
-                _as_dict(policy_payload.get("prompt_config"))
+            _set_orm_field(
+                record,
+                "prompt_config",
+                self._normalize_prompt_config(_as_dict(policy_payload.get("prompt_config"))),
             )
 
         if "rule_config" in policy_payload:
-            record.rule_config = self._normalize_rule_config(
-                _as_dict(policy_payload.get("rule_config"))
+            _set_orm_field(
+                record,
+                "rule_config",
+                self._normalize_rule_config(_as_dict(policy_payload.get("rule_config"))),
             )
 
         if "fallback_config" in policy_payload:
-            record.fallback_config = self._normalize_fallback_config(
-                _as_dict(policy_payload.get("fallback_config"))
+            _set_orm_field(
+                record,
+                "fallback_config",
+                self._normalize_fallback_config(
+                    _as_dict(policy_payload.get("fallback_config"))
+                ),
             )
 
-        record.updated_by = updated_by
-        record.updated_at = datetime.now(UTC)
+        _set_orm_field(record, "updated_by", updated_by)
+        _set_orm_field(record, "updated_at", datetime.now(UTC))
 
         await self.db.flush()
         await self.db.refresh(record)
@@ -459,7 +477,7 @@ class PresentationAIPolicyService:
         presentation_id: str | None = None,
     ) -> dict[str, Any]:
         default_policy = self._default_policy_payload()
-        effective_policy = {
+        effective_policy: dict[str, Any] = {
             "enabled": True,
             "prompt_config": dict(default_policy["prompt_config"]),
             "rule_config": dict(default_policy["rule_config"]),
