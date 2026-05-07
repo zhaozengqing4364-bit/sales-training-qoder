@@ -12,7 +12,9 @@ import json
 import uuid
 from typing import Any
 
+from fastapi import WebSocket
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
 from agent.capabilities.realtime_scoring import RealtimeScoringCapability
@@ -21,6 +23,7 @@ from agent.models import Agent, Persona
 from agent.services.persona_policy import normalize_persona_policy
 from common.db.models import PracticeSession
 from common.db.session import AsyncSessionLocal
+from common.db.session_lifecycle import SessionLifecycleTransition
 from common.monitoring.logger import get_logger
 from presentation_coach.services.coach_service import PresentationCoachService
 from presentation_coach.services.feedback_service import get_feedback_service
@@ -44,7 +47,7 @@ logger = get_logger(__name__)
 class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
     """StepFun realtime handler adapted for presentation scenario."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.scenario = "presentation"
         self.session_scenario_type = "presentation"
@@ -60,11 +63,11 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
 
     async def handle_connection(
         self,
-        websocket,
+        websocket: WebSocket,
         session_id: str,
         token: str,
         trace_id: str | None = None,
-    ):
+    ) -> None:
         try:
             await super().handle_connection(
                 websocket,
@@ -75,7 +78,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
         finally:
             self.feedback_service.clear_session(session_id)
 
-    async def _load_effective_policy(self):
+    async def _load_effective_policy(self) -> None:
         await super()._load_effective_policy()
         await self._load_presentation_ai_policy()
 
@@ -116,7 +119,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
                 )
         return normalized
 
-    async def _refresh_sales_stage_runtime_config(self, db) -> None:  # noqa: ANN001
+    async def _refresh_sales_stage_runtime_config(self, db: AsyncSession) -> None:
         """
         Keep sales-only capabilities disabled for presentation sessions.
 
@@ -243,7 +246,10 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
         self.current_page = max(1, page_number)
         await self._emit_current_page_context()
 
-    async def sync_lifecycle_transition(self, transition) -> None:
+    async def sync_lifecycle_transition(
+        self,
+        transition: SessionLifecycleTransition,
+    ) -> None:
         """Mirror REST lifecycle writes into the live presentation realtime handler."""
         await super().sync_lifecycle_transition(transition)
 
@@ -253,7 +259,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
         ):
             await self._emit_current_page_context()
 
-    async def _handle_client_text(self, raw_text: str):
+    async def _handle_client_text(self, raw_text: str) -> None:
         """Extend base client routing with PPT page context semantics."""
         try:
             message = json.loads(raw_text)
@@ -361,16 +367,19 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
         fallback_message: str,
     ) -> str:
         effective_policy = self._get_presentation_ai_policy()
-        prompt_config = (
-            effective_policy.get("prompt_config")
-            if isinstance(effective_policy.get("prompt_config"), dict)
-            else {}
-        )
-        fallback_config = (
-            effective_policy.get("fallback_config")
-            if isinstance(effective_policy.get("fallback_config"), dict)
-            else {}
-        )
+        raw_prompt_config = effective_policy.get("prompt_config")
+        prompt_config: dict[str, Any]
+        if isinstance(raw_prompt_config, dict):
+            prompt_config = raw_prompt_config
+        else:
+            prompt_config = {}
+
+        raw_fallback_config = effective_policy.get("fallback_config")
+        fallback_config: dict[str, Any]
+        if isinstance(raw_fallback_config, dict):
+            fallback_config = raw_fallback_config
+        else:
+            fallback_config = {}
 
         enable_prompt_first = bool(prompt_config.get("enable_prompt_first", True))
         explicit_template_id = str(
@@ -505,9 +514,11 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
                 exc_info=True,
             )
 
-        rendered = self.prompt_role_resolver.resolve_interruption_message(
+        rendered = str(
+            self.prompt_role_resolver.resolve_interruption_message(
             context=context,
             template_text=template_text,
+            )
         )
         if rendered.strip():
             return rendered.strip()
@@ -515,7 +526,10 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
             return fallback_message.strip()
         return "请调整当前页表达后继续。"
 
-    async def _handle_upstream_transcription_completed(self, event: dict) -> None:
+    async def _handle_upstream_transcription_completed(
+        self,
+        event: dict[str, Any],
+    ) -> None:
         """Persist final transcript and emit PPT-specific realtime feedback events."""
         transcript = event.get("transcript", "")
         if not transcript:
