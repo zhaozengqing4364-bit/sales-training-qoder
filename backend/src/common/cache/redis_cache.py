@@ -14,14 +14,18 @@ import fnmatch
 import json
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any
+from typing import Any, ParamSpec, TypeVar, cast
 
 from common.config import settings
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+P = ParamSpec("P")
+R = TypeVar("R")
+KeyBuilder = Callable[..., str]
 
 
 class CacheManager:
@@ -57,7 +61,7 @@ class CacheManager:
             memory_max_entries or settings.CACHE_MEMORY_MAX_ENTRIES
         )
 
-    async def connect(self, redis_url: str = "redis://localhost:6379"):
+    async def connect(self, redis_url: str = "redis://localhost:6379") -> None:
         """Connect to Redis"""
         try:
             import redis.asyncio as redis
@@ -89,7 +93,7 @@ class CacheManager:
 
         return None
 
-    async def set(self, key: str, value: Any, ttl: int | None = None):
+    async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """Set value in cache"""
         try:
             if self._redis:
@@ -106,7 +110,7 @@ class CacheManager:
         except (ConnectionError, TimeoutError, OSError, ValueError) as e:
             logger.error(f"Cache set error: {e}")
 
-    async def delete(self, key: str):
+    async def delete(self, key: str) -> None:
         """Delete key from cache"""
         try:
             if self._redis:
@@ -116,7 +120,7 @@ class CacheManager:
         except (ConnectionError, TimeoutError, OSError, ValueError) as e:
             logger.error(f"Cache delete error: {e}")
 
-    async def delete_pattern(self, pattern: str):
+    async def delete_pattern(self, pattern: str) -> None:
         """Delete all keys matching pattern"""
         try:
             if self._redis:
@@ -132,7 +136,7 @@ class CacheManager:
         except (ConnectionError, TimeoutError, OSError, ValueError) as e:
             logger.error(f"Cache delete_pattern error: {e}")
 
-    async def clear(self):
+    async def clear(self) -> None:
         """Clear all cache"""
         try:
             if self._redis:
@@ -160,13 +164,15 @@ def get_cache() -> CacheManager:
     return _cache
 
 
-async def init_cache(redis_url: str = "redis://localhost:6379"):
+async def init_cache(redis_url: str = "redis://localhost:6379") -> None:
     """Initialize global cache"""
     cache = get_cache()
     await cache.connect(redis_url)
 
 
-def cached(key_prefix: str, ttl: int = 3600, key_builder: Callable | None = None):
+def cached(
+    key_prefix: str, ttl: int = 3600, key_builder: KeyBuilder | None = None
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Cache decorator for async functions
 
@@ -176,9 +182,9 @@ def cached(key_prefix: str, ttl: int = 3600, key_builder: Callable | None = None
             return await db.get_agent(agent_id)
     """
 
-    def decorator(func: Callable):
+    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             cache = get_cache()
 
             # Build cache key
@@ -195,7 +201,7 @@ def cached(key_prefix: str, ttl: int = 3600, key_builder: Callable | None = None
             cached_value = await cache.get(cache_key)
             if cached_value is not None:
                 logger.debug(f"Cache hit: {cache_key}")
-                return cached_value
+                return cast(R, cached_value)
 
             # Execute function
             result = await func(*args, **kwargs)
@@ -211,7 +217,9 @@ def cached(key_prefix: str, ttl: int = 3600, key_builder: Callable | None = None
     return decorator
 
 
-def cache_invalidate(key_prefix: str):
+def cache_invalidate(
+    key_prefix: str,
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Decorator to invalidate cache after function execution
 
@@ -221,9 +229,9 @@ def cache_invalidate(key_prefix: str):
             await db.update_agent(agent_id, data)
     """
 
-    def decorator(func: Callable):
+    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             result = await func(*args, **kwargs)
 
             # Invalidate cache
