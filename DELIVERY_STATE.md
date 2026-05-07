@@ -12,7 +12,7 @@
 - Overall status: in_progress
 - Current phase: Phase 1 - Baseline Falsification and Routing Audit
 - Current atomic task: Phase 1.3 - Backend mypy frontier rebaseline after sales websocket handler slices
-- Last commit: Phase 1.3 practice report typing commit
+- Last commit: Type sales websocket handler boundaries
 - Blocker: Backend mypy baseline is still not production-clean. A fresh full `PYTHONPATH=src .venv-test/bin/mypy src` rebaseline now reports 1832 `src/...` error lines across 64 files, and the current frontier is dominated by `src/sales_bot/websocket/stepfun_realtime_handler.py`. The direct `src/common/services/practice_report_service.py`, `src/sales_bot/websocket/enhanced_handler.py`, and `src/sales_bot/websocket/simple_handler.py` errors are now closed, but external import errors may still include dependencies absent from `.venv-test` or optional integrations such as `dashscope` and `langchain_anthropic`.
 
 ## Implementation-Before-Coding Judgment
