@@ -12,6 +12,7 @@ import base64
 import contextlib
 import json
 from collections.abc import AsyncIterator
+from typing import Protocol, cast
 
 import websockets
 from websockets.exceptions import ConnectionClosed
@@ -21,6 +22,22 @@ from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class _ASRWebSocket(Protocol):
+    """Minimal WebSocket contract used by the Alibaba ASR provider."""
+
+    def __aiter__(self) -> AsyncIterator[str | bytes]:
+        """Iterate incoming websocket messages."""
+
+    async def recv(self) -> str | bytes:
+        """Receive one websocket message."""
+
+    async def send(self, message: str) -> None:
+        """Send one websocket message."""
+
+    async def close(self) -> None:
+        """Close the websocket connection."""
 
 
 class AlibabaASRProvider(ASRProvider):
@@ -43,7 +60,7 @@ class AlibabaASRProvider(ASRProvider):
         api_url: str | None = None,
         app_key: str | None = None,
         extra_config: dict | None = None,
-    ):
+    ) -> None:
         """
         Initialize Alibaba ASR provider.
 
@@ -91,7 +108,7 @@ class AlibabaASRProvider(ASRProvider):
             yield Result.fail("[USE_BROWSER_ASR]")
             return
 
-        ws_connection = None
+        ws_connection: _ASRWebSocket | None = None
         receive_task: asyncio.Task | None = None
         try:
             # Connect to WebSocket
@@ -101,8 +118,12 @@ class AlibabaASRProvider(ASRProvider):
             }
 
             logger.info(f"Connecting to ASR WebSocket: {self.url}")
-            ws_connection = await asyncio.wait_for(
-                websockets.connect(self.url, additional_headers=headers), timeout=10.0
+            ws_connection = cast(
+                _ASRWebSocket,
+                await asyncio.wait_for(
+                    websockets.connect(self.url, additional_headers=headers),
+                    timeout=10.0,
+                ),
             )
 
             logger.info("Connected to Alibaba Cloud ASR WebSocket")
@@ -140,9 +161,9 @@ class AlibabaASRProvider(ASRProvider):
                 logger.warning("Timeout waiting for session response, continuing...")
 
             # Start receiving task
-            transcript_queue = asyncio.Queue(maxsize=64)
+            transcript_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=64)
             final_event = asyncio.Event()
-            accumulated_text = []
+            accumulated_text: list[str] = []
 
             receive_task = asyncio.create_task(
                 self._receive_transcriptions(
@@ -238,11 +259,11 @@ class AlibabaASRProvider(ASRProvider):
 
     async def _receive_transcriptions(
         self,
-        ws_connection,
-        transcript_queue: asyncio.Queue,
+        ws_connection: _ASRWebSocket,
+        transcript_queue: asyncio.Queue[str],
         final_event: asyncio.Event,
-        accumulated_text: list,
-    ):
+        accumulated_text: list[str],
+    ) -> None:
         """Receive transcription events from WebSocket"""
 
         def _offer_transcript(transcript: str) -> None:
@@ -315,7 +336,9 @@ class AlibabaASRProvider(ASRProvider):
             logger.warning("WebSocket connection closed during receive")
             final_event.set()
 
-    async def _send_silence(self, ws_connection, duration_ms: int = 600):
+    async def _send_silence(
+        self, ws_connection: _ASRWebSocket, duration_ms: int = 600
+    ) -> None:
         """Send silence to trigger VAD finalization"""
         silence_chunks = duration_ms // 20  # 20ms chunks
         for _ in range(silence_chunks):
@@ -339,14 +362,14 @@ class AlibabaASRProvider(ASRProvider):
             Result with transcribed text or fallback
         """
 
-        async def audio_stream():
+        async def audio_stream() -> AsyncIterator[bytes]:
             with open(audio_file, "rb") as f:
                 while chunk := f.read(3200):  # 100ms chunks
                     yield chunk
 
-        full_transcript = []
+        full_transcript: list[str] = []
         async for result in self.stream_transcribe(audio_stream()):
-            if result.is_success:
+            if result.is_success and result.value:
                 full_transcript.append(result.value)
 
         if full_transcript:
@@ -376,4 +399,4 @@ class AlibabaASRProvider(ASRProvider):
 
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Alibaba ASR health check failed: {str(e)}")
-            return Result.fail(False)
+            return Result.fail("[USE_BROWSER_ASR]")
