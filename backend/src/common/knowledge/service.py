@@ -13,6 +13,7 @@ References:
 from __future__ import annotations
 
 import asyncio
+import builtins
 import inspect
 import os
 import re
@@ -21,7 +22,7 @@ import uuid
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from hashlib import md5
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -56,7 +57,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-QUERY_EXPANSION_MAP: dict[str, list[str]] = {
+QUERY_EXPANSION_MAP: dict[str, builtins.list[str]] = {
     "价格": ["报价", "费用", "收费", "多少钱"],
     "实习": ["试用", "体验", "演练"],
     "实训": ["演练", "培训", "模拟"],
@@ -171,7 +172,9 @@ class KnowledgeService:
     """Knowledge Base management service."""
 
     _search_health_cache: dict[str, tuple[float, dict[str, int]]] = {}
-    _ready_document_ids_cache: dict[str, tuple[float, dict[str, list[str]]]] = {}
+    _ready_document_ids_cache: dict[
+        str, tuple[float, dict[str, builtins.list[str]]]
+    ] = {}
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -180,7 +183,7 @@ class KnowledgeService:
         self._last_ready_doc_ids_cache_hit = False
 
     @staticmethod
-    def _build_kb_cache_key(kb_ids: list[str]) -> str:
+    def _build_kb_cache_key(kb_ids: builtins.list[str]) -> str:
         unique_ids = sorted(
             {str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()}
         )
@@ -195,7 +198,33 @@ class KnowledgeService:
             return {}
         return dict(self._last_search_timing)
 
-    async def get_search_health(self, kb_ids: list[str]) -> dict[str, int]:
+    @staticmethod
+    def _orm_field(row: object, name: str) -> Any:
+        return cast(Any, getattr(row, name))
+
+    @staticmethod
+    def _set_orm_field(row: object, name: str, value: object) -> None:
+        setattr(row, name, value)
+
+    @staticmethod
+    def _orm_int(row: object, name: str, default: int = 0) -> int:
+        try:
+            return int(getattr(row, name, default) or default)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _orm_str(row: object, name: str, default: str = "") -> str:
+        value = getattr(row, name, default)
+        return str(value if value is not None else default)
+
+    @staticmethod
+    def _require_value(result: Result[Any]) -> Any:
+        if result.value is None:
+            raise ValueError("[RESULT_VALUE_REQUIRED]")
+        return result.value
+
+    async def get_search_health(self, kb_ids: builtins.list[str]) -> dict[str, int]:
         self._last_search_health_cache_hit = False
         normalized_ids = [str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()]
         if not normalized_ids:
@@ -268,8 +297,8 @@ class KnowledgeService:
 
     async def _get_ready_document_ids_by_kb(
         self,
-        kb_ids: list[str],
-    ) -> dict[str, list[str]]:
+        kb_ids: builtins.list[str],
+    ) -> dict[str, builtins.list[str]]:
         self._last_ready_doc_ids_cache_hit = False
         normalized_ids = [str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()]
         if not normalized_ids:
@@ -290,7 +319,7 @@ class KnowledgeService:
         )
         rows = (await self.db.execute(stmt)).all()
 
-        ready_docs: dict[str, list[str]] = {}
+        ready_docs: dict[str, builtins.list[str]] = {}
         for kb_id, doc_id in rows:
             ready_docs.setdefault(str(kb_id), []).append(str(doc_id))
         if READY_DOC_IDS_CACHE_TTL_SECONDS > 0:
@@ -339,7 +368,7 @@ class KnowledgeService:
         page_size: int = 20,
         category: str | None = None,
         status: str | None = None,
-    ) -> tuple[list[KnowledgeBaseListItem], int]:
+    ) -> tuple[builtins.list[KnowledgeBaseListItem], int]:
         """Get paginated KnowledgeBase list - R5.2"""
         # 参数边界校验
         page = max(1, page)
@@ -402,9 +431,9 @@ class KnowledgeService:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             if value is not None:
-                setattr(kb, field, value)
+                self._set_orm_field(kb, field, value)
 
-        kb.updated_at = datetime.now(UTC)
+        self._set_orm_field(kb, "updated_at", datetime.now(UTC))
 
         await self.db.flush()
         await self.db.refresh(kb)
@@ -428,7 +457,7 @@ class KnowledgeService:
 
         # Delete vector collection
         vector_store = get_knowledge_vector_store()
-        await vector_store.delete_collection(kb.vector_collection)
+        await vector_store.delete_collection(self._orm_str(kb, "vector_collection"))
 
         # Delete from database (cascades to documents)
         await self.db.delete(kb)
@@ -458,12 +487,14 @@ class KnowledgeService:
             referencing_agents = [
                 a
                 for a in agents
-                if a.default_knowledge_base_ids
-                and kb_id in a.default_knowledge_base_ids
+                if self._orm_field(a, "default_knowledge_base_ids")
+                and kb_id in self._orm_field(a, "default_knowledge_base_ids")
             ]
 
             if referencing_agents:
-                names = ", ".join(a.name for a in referencing_agents[:3])
+                names = ", ".join(
+                    self._orm_str(agent, "name") for agent in referencing_agents[:3]
+                )
                 return f"Referenced by Agents: {names}"
 
             # Check Personas
@@ -474,11 +505,15 @@ class KnowledgeService:
             referencing_personas = [
                 p
                 for p in personas
-                if p.knowledge_base_ids and kb_id in p.knowledge_base_ids
+                if self._orm_field(p, "knowledge_base_ids")
+                and kb_id in self._orm_field(p, "knowledge_base_ids")
             ]
 
             if referencing_personas:
-                names = ", ".join(p.name for p in referencing_personas[:3])
+                names = ", ".join(
+                    self._orm_str(persona, "name")
+                    for persona in referencing_personas[:3]
+                )
                 return f"Referenced by Personas: {names}"
 
             return None
@@ -541,8 +576,12 @@ class KnowledgeService:
             self.db.add(doc)
 
             # Update document count
-            kb = kb_result.value
-            kb.document_count += 1
+            kb = self._require_value(kb_result)
+            self._set_orm_field(
+                kb,
+                "document_count",
+                self._orm_int(kb, "document_count") + 1,
+            )
 
             await self.db.flush()
             await self.db.refresh(doc)
@@ -581,7 +620,7 @@ class KnowledgeService:
 
     async def list_documents(
         self, kb_id: str, page: int = 1, page_size: int = 20
-    ) -> Result[tuple[list[KnowledgeDocumentListItem], int]]:
+    ) -> Result[tuple[builtins.list[KnowledgeDocumentListItem], int]]:
         """Get documents in a KnowledgeBase"""
         kb_result = await self.get_by_id(kb_id)
         if not kb_result.is_success:
@@ -644,16 +683,17 @@ class KnowledgeService:
         # Get KB for vector collection name
         kb_result = await self.get_by_id(kb_id)
         if kb_result.is_success:
-            kb = kb_result.value
+            kb = self._require_value(kb_result)
+            vector_collection = self._orm_str(kb, "vector_collection")
 
             # Delete vectors
             vector_store = get_knowledge_vector_store()
             await vector_store.delete_document_chunks(
-                collection_name=kb.vector_collection, document_id=doc_id
+                collection_name=vector_collection, document_id=doc_id
             )
 
             # Invalidate BM25 index for this collection
-            get_bm25_index_manager().invalidate_collection(kb.vector_collection)
+            get_bm25_index_manager().invalidate_collection(vector_collection)
 
             # Invalidate semantic cache for this KB
             try:
@@ -662,8 +702,20 @@ class KnowledgeService:
                 logger.debug("Semantic cache invalidation failed, non-critical")
 
             # Update KB stats
-            kb.document_count = max(0, kb.document_count - 1)
-            kb.total_chunks = max(0, kb.total_chunks - doc.chunk_count)
+            self._set_orm_field(
+                kb,
+                "document_count",
+                max(0, self._orm_int(kb, "document_count") - 1),
+            )
+            self._set_orm_field(
+                kb,
+                "total_chunks",
+                max(
+                    0,
+                    self._orm_int(kb, "total_chunks")
+                    - self._orm_int(doc, "chunk_count"),
+                ),
+            )
 
         await self.db.delete(doc)
         await self.db.flush()
@@ -686,18 +738,22 @@ class KnowledgeService:
         if not doc:
             return Result.fail("[DOCUMENT_NOT_FOUND]")
 
-        old_chunk_count = doc.chunk_count
-        doc.status = status
-        doc.chunk_count = chunk_count
-        doc.error_message = error_message
+        old_chunk_count = self._orm_int(doc, "chunk_count")
+        self._set_orm_field(doc, "status", status)
+        self._set_orm_field(doc, "chunk_count", chunk_count)
+        self._set_orm_field(doc, "error_message", error_message)
 
         # Update KB total_chunks
         if status == DocumentStatus.READY.value:
-            kb_result = await self.get_by_id(doc.knowledge_base_id)
+            kb_result = await self.get_by_id(self._orm_str(doc, "knowledge_base_id"))
             if kb_result.is_success:
-                kb = kb_result.value
+                kb = self._require_value(kb_result)
                 # Adjust for any previous chunks
-                kb.total_chunks = kb.total_chunks - old_chunk_count + chunk_count
+                self._set_orm_field(
+                    kb,
+                    "total_chunks",
+                    self._orm_int(kb, "total_chunks") - old_chunk_count + chunk_count,
+                )
 
         await self.db.flush()
         await self.db.refresh(doc)
@@ -717,7 +773,7 @@ class KnowledgeService:
         keyword_candidate_limit: int = 32,
         enable_rerank: bool = False,
         rerank_top_k: int = 8,
-    ) -> Result[list[dict[str, Any]]]:
+    ) -> Result[builtins.list[dict[str, Any]]]:
         """
         Search knowledge base using vector similarity.
 
@@ -748,7 +804,7 @@ class KnowledgeService:
 
     async def search_multiple(
         self,
-        kb_ids: list[str],
+        kb_ids: builtins.list[str],
         query: str,
         top_k: int = 3,
         similarity_threshold: float = 0.7,
@@ -758,7 +814,7 @@ class KnowledgeService:
         embedding_timeout_ms: int = 0,
         enable_rerank: bool = False,
         rerank_top_k: int = 8,
-    ) -> Result[list[dict[str, Any]]]:
+    ) -> Result[builtins.list[dict[str, Any]]]:
         """
         Search multiple knowledge bases.
 
@@ -831,9 +887,9 @@ class KnowledgeService:
         )
 
         embedding_service = get_embedding_service()
-        vector_results: list[dict[str, Any]] = []
+        vector_results: builtins.list[dict[str, Any]] = []
         embedding_failure: str | None = None
-        query_embeddings: list[tuple[str, list[float]]] = []
+        query_embeddings: builtins.list[tuple[str, builtins.list[float]]] = []
 
         kb_contexts: dict[str, Any] = {}
         for kb_id in searchable_kb_ids:
@@ -859,9 +915,9 @@ class KnowledgeService:
             embedding_started_at = time.monotonic()
 
             async def _collect_query_embeddings() -> tuple[
-                list[tuple[str, list[float]]], str | None
+                builtins.list[tuple[str, builtins.list[float]]], str | None
             ]:
-                collected_embeddings: list[tuple[str, list[float]]] = []
+                collected_embeddings: builtins.list[tuple[str, builtins.list[float]]] = []
                 failure_reason: str | None = None
                 should_use_batch = KNOWLEDGE_EMBED_BATCH_ENABLED
                 if should_use_batch:
@@ -954,10 +1010,10 @@ class KnowledgeService:
                     *,
                     kb_id: str,
                     kb: Any,
-                    ready_document_ids: list[str],
+                    ready_document_ids: builtins.list[str],
                     variant: str,
-                    query_embedding: list[float],
-                ) -> list[dict[str, Any]]:
+                    query_embedding: builtins.list[float],
+                ) -> builtins.list[dict[str, Any]]:
                     async with semaphore:
                         adaptive_threshold = self._adapt_similarity_threshold(
                             query=variant,
@@ -976,7 +1032,7 @@ class KnowledgeService:
                     if not isinstance(search_result.value, list):
                         return []
 
-                    enriched_rows: list[dict[str, Any]] = []
+                    enriched_rows: builtins.list[dict[str, Any]] = []
                     for row in search_result.value:
                         normalized_row = dict(row)
                         normalized_row["knowledge_base_id"] = kb_id
@@ -985,7 +1041,7 @@ class KnowledgeService:
                         enriched_rows.append(normalized_row)
                     return enriched_rows
 
-                vector_tasks: list[asyncio.Task[list[dict[str, Any]]]] = []
+                vector_tasks: builtins.list[asyncio.Task[builtins.list[dict[str, Any]]]] = []
                 for kb_id, kb in kb_contexts.items():
                     ready_document_ids = ready_document_ids_by_kb.get(kb_id, [])
                     if not ready_document_ids:
@@ -1019,7 +1075,7 @@ class KnowledgeService:
                 "Embedding service not configured, fallback to keyword matching"
             )
 
-        keyword_results: list[dict[str, Any]] = []
+        keyword_results: builtins.list[dict[str, Any]] = []
         should_run_keyword_fallback = False
         if enable_hybrid:
             should_run_keyword_fallback = True
@@ -1053,7 +1109,7 @@ class KnowledgeService:
         }
 
         candidate_top_k = max(1, max(top_k, rerank_top_k))
-        final_results: list[dict[str, Any]] = []
+        final_results: builtins.list[dict[str, Any]] = []
 
         if enable_hybrid:
             fused_results = self._fuse_retrieval_results(
@@ -1193,7 +1249,7 @@ class KnowledgeService:
         return Result.ok(final_results)
 
     @staticmethod
-    def _build_keyword_candidates(query: str, candidate_limit: int = 32) -> list[str]:
+    def _build_keyword_candidates(query: str, candidate_limit: int = 32) -> builtins.list[str]:
         """Build coarse keywords for fallback retrieval without embeddings."""
         normalized_query = query.strip().lower()
         if not normalized_query:
@@ -1201,7 +1257,7 @@ class KnowledgeService:
 
         expansion_terms = KnowledgeService._expand_query_terms(normalized_query)
 
-        candidates: list[str] = []
+        candidates: builtins.list[str] = []
         seen: set[str] = set()
 
         def add_candidate(token: str) -> None:
@@ -1245,9 +1301,9 @@ class KnowledgeService:
         return candidates[:candidate_limit]
 
     @staticmethod
-    def _expand_query_terms(normalized_query: str) -> list[str]:
+    def _expand_query_terms(normalized_query: str) -> builtins.list[str]:
         """Expand query with lightweight Chinese synonyms for recall gain."""
-        terms: list[str] = []
+        terms: builtins.list[str] = []
         seen: set[str] = set()
 
         def add_term(value: str) -> None:
@@ -1277,12 +1333,12 @@ class KnowledgeService:
         return terms[:24]
 
     @staticmethod
-    def _build_query_variants(query: str, max_variants: int = 3) -> list[str]:
+    def _build_query_variants(query: str, max_variants: int = 3) -> builtins.list[str]:
         normalized_query = query.strip().lower()
         if not normalized_query:
             return []
 
-        variants: list[str] = []
+        variants: builtins.list[str] = []
         seen: set[str] = set()
 
         def add_variant(value: str) -> None:
@@ -1370,10 +1426,10 @@ class KnowledgeService:
     @staticmethod
     def _fuse_retrieval_results(
         *,
-        vector_results: list[dict[str, Any]],
-        keyword_results: list[dict[str, Any]],
+        vector_results: builtins.list[dict[str, Any]],
+        keyword_results: builtins.list[dict[str, Any]],
         top_k: int,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         if not vector_results and not keyword_results:
             return []
 
@@ -1412,7 +1468,7 @@ class KnowledgeService:
                 existing.get("_vector_score", 0.0), vector_score
             )
 
-        fused_rows: list[dict[str, Any]] = []
+        fused_rows: builtins.list[dict[str, Any]] = []
         for item in combined.values():
             vector_score = float(item.pop("_vector_score", 0.0) or 0.0)
             keyword_score = float(item.pop("_keyword_score", 0.0) or 0.0)
@@ -1440,8 +1496,8 @@ class KnowledgeService:
     def _keyword_match_score(
         normalized_content: str,
         normalized_query: str,
-        candidates: list[str],
-        hint_terms: list[str] | None = None,
+        candidates: builtins.list[str],
+        hint_terms: builtins.list[str] | None = None,
     ) -> float:
         """Score keyword overlap for fallback search."""
         if not normalized_content:
@@ -1476,8 +1532,8 @@ class KnowledgeService:
         return score + coverage
 
     @staticmethod
-    def _extract_fuzzy_terms(text: str, max_terms: int = 48) -> list[str]:
-        terms: list[str] = []
+    def _extract_fuzzy_terms(text: str, max_terms: int = 48) -> builtins.list[str]:
+        terms: builtins.list[str] = []
         seen: set[str] = set()
         for token in SEARCH_TERM_RE.findall(text.lower()):
             term = token.strip()
@@ -1558,8 +1614,8 @@ class KnowledgeService:
     def _keyword_fuzzy_bonus(
         *,
         normalized_content: str,
-        candidates: list[str],
-        hint_terms: list[str] | None = None,
+        candidates: builtins.list[str],
+        hint_terms: builtins.list[str] | None = None,
     ) -> float:
         fuzzy_terms = KnowledgeService._extract_fuzzy_terms(
             normalized_content, max_terms=24
@@ -1572,7 +1628,7 @@ class KnowledgeService:
         if not fuzzy_terms:
             return 0.0
 
-        unique_terms: list[str] = []
+        unique_terms: builtins.list[str] = []
         seen_terms: set[str] = set()
         for term in fuzzy_terms:
             if term in seen_terms:
@@ -1607,14 +1663,14 @@ class KnowledgeService:
 
     async def _search_multiple_by_keywords(
         self,
-        kb_ids: list[str],
+        kb_ids: builtins.list[str],
         query: str,
         top_k: int,
         metadata_filter: dict[str, Any] | None = None,
         candidate_limit: int = 32,
-        query_variants: list[str] | None = None,
-        ready_document_ids_by_kb: dict[str, list[str]] | None = None,
-    ) -> list[dict[str, Any]]:
+        query_variants: builtins.list[str] | None = None,
+        ready_document_ids_by_kb: dict[str, builtins.list[str]] | None = None,
+    ) -> builtins.list[dict[str, Any]]:
         """BM25-based sparse retrieval — replaces brute-force collection scan.
 
         Uses a lazily-built in-memory BM25 index per ChromaDB collection.
@@ -1632,7 +1688,7 @@ class KnowledgeService:
 
         # Build a combined query string for BM25: original + variant keywords
         expanded_query = normalized_query
-        merged_candidates: list[str] = []
+        merged_candidates: builtins.list[str] = []
         seen_candidates: set[str] = set()
         for variant in variants:
             for candidate in self._build_keyword_candidates(
@@ -1654,38 +1710,40 @@ class KnowledgeService:
 
         vector_store = get_knowledge_vector_store()
         bm25_manager = get_bm25_index_manager()
-        merged_results: list[dict[str, Any]] = []
+        merged_results: builtins.list[dict[str, Any]] = []
 
         for kb_id in kb_ids:
             kb_result = await self.get_by_id(kb_id)
             if not kb_result.is_success:
                 continue
 
-            kb = kb_result.value
+            kb = self._require_value(kb_result)
+            vector_collection = self._orm_str(kb, "vector_collection")
+            knowledge_base_name = self._orm_str(kb, "name")
             ready_document_ids = None
             if isinstance(ready_document_ids_by_kb, dict):
                 ready_document_ids = {
                     str(doc_id) for doc_id in ready_document_ids_by_kb.get(kb_id, [])
                 }
 
-            collection = vector_store._get_collection(kb.vector_collection)
+            collection = vector_store._get_collection(vector_collection)
             if collection is None:
                 continue
 
-            bm25_hits: list[tuple[str, float]] = []
+            bm25_hits: builtins.list[tuple[str, float]] = []
             max_bm25_score = 0.0
 
             # Ensure BM25 index is built and fresh (lazy + auto-rebuild on stale)
             try:
                 bm25_manager.ensure_index(
-                    collection_name=kb.vector_collection,
+                    collection_name=vector_collection,
                     get_all_chunks=lambda c=collection: c.get(
                         include=["documents", "metadatas"]
                     ),
                     get_chunk_count=lambda c=collection: c.count(),
                 )
                 bm25_hits = bm25_manager.search(
-                    collection_name=kb.vector_collection,
+                    collection_name=vector_collection,
                     query=expanded_query,
                     top_k=max(top_k, 20),
                 )
@@ -1701,7 +1759,7 @@ class KnowledgeService:
             if bm25_hits and max_bm25_score > 0:
                 # Fetch metadata for hit chunk IDs
                 hit_ids = [chunk_id for chunk_id, _ in bm25_hits]
-                id_to_meta = bm25_manager.get_metadatas(kb.vector_collection, hit_ids)
+                id_to_meta = bm25_manager.get_metadatas(vector_collection, hit_ids)
 
                 for chunk_id, bm25_score in bm25_hits:
                     metadata = id_to_meta.get(chunk_id, {})
@@ -1747,7 +1805,7 @@ class KnowledgeService:
                                 "chunk_index": metadata.get("chunk_index"),
                             },
                             "knowledge_base_id": kb_id,
-                            "knowledge_base_name": kb.name,
+                            "knowledge_base_name": knowledge_base_name,
                             "retrieval_mode": "keyword_fallback",
                         }
                     )
@@ -1763,19 +1821,18 @@ class KnowledgeService:
                 )
                 continue
 
-            raw_ids = raw_chunks.get("ids", []) if isinstance(raw_chunks, dict) else []
-            raw_docs = (
-                raw_chunks.get("documents", []) if isinstance(raw_chunks, dict) else []
-            )
-            raw_metas = (
-                raw_chunks.get("metadatas", []) if isinstance(raw_chunks, dict) else []
-            )
+            raw_ids_value = raw_chunks.get("ids", []) if isinstance(raw_chunks, dict) else []
+            raw_docs_value = raw_chunks.get("documents", []) if isinstance(raw_chunks, dict) else []
+            raw_metas_value = raw_chunks.get("metadatas", []) if isinstance(raw_chunks, dict) else []
+            raw_ids = raw_ids_value if isinstance(raw_ids_value, list) else []
+            raw_docs = raw_docs_value if isinstance(raw_docs_value, list) else []
+            raw_metas = raw_metas_value if isinstance(raw_metas_value, list) else []
 
             for index, content in enumerate(raw_docs):
                 if not isinstance(content, str) or not content.strip():
                     continue
 
-                metadata = (
+                metadata = dict(
                     raw_metas[index]
                     if index < len(raw_metas) and isinstance(raw_metas[index], dict)
                     else {}
@@ -1798,7 +1855,7 @@ class KnowledgeService:
                     continue
 
                 chunk_index = metadata.get("chunk_index")
-                chunk_id = raw_ids[index] if index < len(raw_ids) else None
+                chunk_id = str(raw_ids[index]) if index < len(raw_ids) else ""
                 normalized_score = round(min(0.95, 0.45 + score * 0.07), 4)
                 merged_results.append(
                     {
@@ -1812,19 +1869,19 @@ class KnowledgeService:
                             "chunk_id": chunk_id,
                         },
                         "knowledge_base_id": kb_id,
-                        "knowledge_base_name": kb.name,
+                            "knowledge_base_name": knowledge_base_name,
                         "retrieval_mode": "keyword_fallback",
                     }
                 )
 
-        merged_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        merged_results.sort(key=lambda x: float(x.get("score") or 0), reverse=True)
         return merged_results[: max(1, top_k)]
 
     # ========== Document Preview ==========
 
     async def get_document_chunks(
         self, kb_id: str, doc_id: str, page: int = 1, page_size: int = 10
-    ) -> Result[tuple[list[dict[str, Any]], int]]:
+    ) -> Result[tuple[builtins.list[dict[str, Any]], int]]:
         """
         Get document chunks for preview.
 
@@ -1834,12 +1891,12 @@ class KnowledgeService:
         if not doc_result.is_success:
             return Result.fail("[DOCUMENT_NOT_FOUND]")
 
-        doc = doc_result.value  # Validate document exists
+        doc = self._require_value(doc_result)  # Validate document exists
         kb_result = await self.get_by_id(kb_id)
         if not kb_result.is_success:
             return Result.fail("[KNOWLEDGE_BASE_NOT_FOUND]")
 
-        kb = kb_result.value
+        kb = self._require_value(kb_result)
 
         artifact_preview = self._get_document_chunks_from_artifact(doc, page, page_size)
         if artifact_preview is not None:
@@ -1847,7 +1904,7 @@ class KnowledgeService:
 
         # Get chunks from vector store
         vector_store = get_knowledge_vector_store()
-        collection = vector_store._get_collection(kb.vector_collection)
+        collection = vector_store._get_collection(self._orm_str(kb, "vector_collection"))
 
         if not collection:
             logger.warning(
@@ -1864,7 +1921,12 @@ class KnowledgeService:
                 where={"document_id": doc_id}, include=["documents", "metadatas"]
             )
 
-            if not results or not results["documents"]:
+            result_documents = results.get("documents") if isinstance(results, dict) else []
+            result_metadatas = results.get("metadatas") if isinstance(results, dict) else []
+            documents = result_documents if isinstance(result_documents, list) else []
+            metadatas = result_metadatas if isinstance(result_metadatas, list) else []
+
+            if not documents:
                 logger.info(
                     "No vector chunks found for document, fallback to source document chunks",
                     knowledge_base_id=kb_id,
@@ -1876,9 +1938,13 @@ class KnowledgeService:
                 return Result.ok(fallback)
 
             # Format chunks
-            chunks = []
-            for i, doc_content in enumerate(results["documents"]):
-                metadata = results["metadatas"][i] if results["metadatas"] else {}
+            chunks: builtins.list[dict[str, Any]] = []
+            for i, doc_content in enumerate(documents):
+                metadata = (
+                    metadatas[i]
+                    if i < len(metadatas) and isinstance(metadatas[i], dict)
+                    else {}
+                )
                 chunks.append(
                     {
                         "index": metadata.get("chunk_index", i),
@@ -1897,7 +1963,7 @@ class KnowledgeService:
                 )
 
             # Sort by index
-            chunks.sort(key=lambda x: x["index"])
+            chunks.sort(key=lambda x: str(x.get("index", "")))
             total = len(chunks)
 
             # Paginate
@@ -1917,11 +1983,14 @@ class KnowledgeService:
         doc: KnowledgeDocument,
         page: int,
         page_size: int,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[builtins.list[dict[str, Any]], int]:
         """Fallback preview by reading original source file and splitting into chunks."""
         try:
             processor = get_document_processor()
-            parse_result = await processor._parse_document(doc.file_url, doc.file_type)  # noqa: SLF001
+            parse_result = await processor._parse_document(  # noqa: SLF001
+                self._orm_str(doc, "file_url"),
+                self._orm_str(doc, "file_type"),
+            )
             if not parse_result:
                 return ([], 0)
 
@@ -1952,11 +2021,11 @@ class KnowledgeService:
         doc: KnowledgeDocument,
         page: int,
         page_size: int,
-    ) -> tuple[list[dict[str, Any]], int] | None:
+    ) -> tuple[builtins.list[dict[str, Any]], int] | None:
         """Primary preview path based on the stored structured parse artifact."""
         try:
             storage = get_document_storage_service()
-            artifact = storage.load_parse_artifact(doc.file_url)
+            artifact = storage.load_parse_artifact(self._orm_str(doc, "file_url"))
             if not isinstance(artifact, dict):
                 return None
 
