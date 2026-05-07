@@ -4,7 +4,7 @@ Handles coaching workflow, scoring, and session management
 """
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
@@ -19,11 +19,24 @@ from common.db.models import (
     RequiredTalkingPoint,
     Scenario,
 )
-from common.db.schemas import InterruptionType, SessionDetail
+from common.db.schemas import InterruptionType
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _orm_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
+def _orm_datetime(row: object, name: str) -> datetime | None:
+    value = _orm_field(row, name)
+    return value if isinstance(value, datetime) else None
 
 
 class PresentationCoachService:
@@ -43,13 +56,13 @@ class PresentationCoachService:
         """
         try:
             # Verify presentation exists and is ready
-            result = await self.db.execute(
+            presentation_result = await self.db.execute(
                 select(Presentation).where(
                     Presentation.presentation_id == presentation_id,
                     Presentation.status == "ready",
                 )
             )
-            presentation = result.scalar_one_or_none()
+            presentation = presentation_result.scalar_one_or_none()
 
             if not presentation:
                 return Result.fail("Presentation not found or not ready")
@@ -68,7 +81,7 @@ class PresentationCoachService:
                     active_count=active_count,
                 )
 
-            result = await self.db.execute(
+            scenario_result = await self.db.execute(
                 select(Scenario)
                 .where(
                     Scenario.scenario_type == "presentation",
@@ -77,7 +90,7 @@ class PresentationCoachService:
                 .order_by(Scenario.created_at.desc(), Scenario.scenario_id.desc())
                 .limit(1)
             )
-            scenario = result.scalar_one_or_none()
+            scenario = scenario_result.scalar_one_or_none()
 
             if not scenario:
                 scenario = Scenario(
@@ -136,7 +149,7 @@ class PresentationCoachService:
         session_id: str,
         *,
         commit: bool = True,
-    ) -> Result[SessionDetail]:
+    ) -> Result[PracticeSession]:
         """End session and generate report"""
         try:
             session_result = await self.db.execute(
@@ -147,16 +160,23 @@ class PresentationCoachService:
             if session is None:
                 return Result.fail("[SESSION_NOT_FOUND]")
 
-            if session.end_time is None:
-                session.end_time = datetime.now(UTC)
+            end_time = _orm_datetime(session, "end_time")
+            if end_time is None:
+                end_time = datetime.now(UTC)
+                _set_orm_field(session, "end_time", end_time)
 
-            if session.status not in {"completed", "scoring"}:
-                session.status = "completed"
+            if _orm_field(session, "status") not in {"completed", "scoring"}:
+                _set_orm_field(session, "status", "completed")
 
-            if session.start_time and session.end_time:
-                session.total_duration_seconds = max(
-                    0,
-                    int((session.end_time - session.start_time).total_seconds()),
+            start_time = _orm_datetime(session, "start_time")
+            if start_time and end_time:
+                _set_orm_field(
+                    session,
+                    "total_duration_seconds",
+                    max(
+                        0,
+                        int((end_time - start_time).total_seconds()),
+                    ),
                 )
 
             if commit:
@@ -286,12 +306,14 @@ class PresentationCoachService:
             await self.db.rollback()
             return Result.fail("[LOG_FAILED]")
 
-    async def _calculate_scores(self, session: PracticeSession, *, commit: bool = True):
+    async def _calculate_scores(
+        self, session: PracticeSession, *, commit: bool = True
+    ) -> None:
         """Calculate session scores (logic, accuracy, completeness)"""
         # Get interruption events
         result = await self.db.execute(
             select(InterruptionEvent).where(
-                InterruptionEvent.session_id == session.session_id
+                InterruptionEvent.session_id == _orm_field(session, "session_id")
             )
         )
         events = result.scalars().all()
@@ -301,30 +323,38 @@ class PresentationCoachService:
 
         if total_events == 0:
             # No interruptions - perfect score
-            session.logic_score = 100.0
-            session.accuracy_score = 100.0
-            session.completeness_score = 100.0
+            _set_orm_field(session, "logic_score", 100.0)
+            _set_orm_field(session, "accuracy_score", 100.0)
+            _set_orm_field(session, "completeness_score", 100.0)
         else:
             # Count effective interruptions
             effective = sum(1 for e in events if e.was_effective)
 
             # Logic score: based on effective interruptions
-            session.logic_score = min(100, (effective / total_events) * 100)
+            _set_orm_field(
+                session, "logic_score", min(100.0, (effective / total_events) * 100.0)
+            )
 
             # Accuracy score: inverse of forbidden word interruptions
             forbidden_count = sum(
                 1 for e in events if e.interruption_type == "forbidden_word"
             )
-            session.accuracy_score = max(0, 100 - (forbidden_count * 10))
+            _set_orm_field(
+                session, "accuracy_score", max(0.0, 100.0 - (forbidden_count * 10.0))
+            )
 
             # Completeness score: based on required points coverage
             missing_count = sum(
                 1 for e in events if e.interruption_type == "missing_point"
             )
-            session.completeness_score = max(0, 100 - (missing_count * 15))
+            _set_orm_field(
+                session,
+                "completeness_score",
+                max(0.0, 100.0 - (missing_count * 15.0)),
+            )
 
         # Mark as completed
-        session.status = "completed"
+        _set_orm_field(session, "status", "completed")
 
         if commit:
             await self.db.commit()
