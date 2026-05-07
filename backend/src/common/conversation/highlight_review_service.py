@@ -69,6 +69,12 @@ def _trim_text(value: str | None, *, limit: int) -> str | None:
     return cleaned[:limit]
 
 
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
 def _desensitize_text(value: str | None, *, limit: int = 280) -> str | None:
     cleaned = _trim_text(value, limit=limit)
     if cleaned is None:
@@ -90,8 +96,8 @@ def _stage_label(message: ConversationMessage, override: str | None) -> str | No
 def _reason(message: ConversationMessage, override: str | None) -> str | None:
     return (
         _trim_text(override, limit=500)
-        or _trim_text(message.highlight_reason, limit=500)
-        or _trim_text(message.ai_feedback, limit=500)
+        or _trim_text(_optional_str(getattr(message, "highlight_reason", None)), limit=500)
+        or _trim_text(_optional_str(getattr(message, "ai_feedback", None)), limit=500)
     )
 
 
@@ -212,16 +218,16 @@ class HighlightReviewService:
                 db.add(review)
                 await db.flush()
 
-            review.title = _trim_text(title, limit=160)
-            review.schema_version = HIGHLIGHT_REVIEW_SCHEMA_VERSION
-            review.updated_at = _now()
+            setattr(review, "title", _trim_text(title, limit=160))
+            setattr(review, "schema_version", HIGHLIGHT_REVIEW_SCHEMA_VERSION)
+            setattr(review, "updated_at", _now())
 
             await db.execute(
                 delete(HighlightReviewItem).where(
                     HighlightReviewItem.review_id == review.review_id
                 )
             )
-            message_by_id = {message.id: message for message in messages}
+            message_by_id = {str(message.id): message for message in messages}
             for index, message_id in enumerate(unique_message_ids):
                 message = message_by_id[message_id]
                 source_item = item_by_message_id[message_id]
@@ -447,8 +453,8 @@ class HighlightReviewService:
             await db.commit()
             return Result.fail("[HIGHLIGHT_SHARE_INACTIVE]")
 
-        share.last_accessed_at = _now()
-        share.access_count = int(share.access_count or 0) + 1
+        setattr(share, "last_accessed_at", _now())
+        setattr(share, "access_count", int(share.access_count or 0) + 1)
         db.add(
             self._audit_log(
                 share_id=str(share.share_id),
@@ -557,7 +563,10 @@ class HighlightReviewService:
             message_id=str(message.id),
             turn_number=max(1, int(message.turn_number or 1)),
             role=str(message.role),
-            content_excerpt=_trim_text(message.content, limit=1000) or "",
+            content_excerpt=_trim_text(
+                _optional_str(getattr(message, "content", None)), limit=1000
+            )
+            or "",
             reason=_reason(message, source_item.get("reason")),
             stage_name=_stage_label(message, source_item.get("stage_name")),
             issue_label=_trim_text(source_item.get("issue_label"), limit=80),
