@@ -10,6 +10,7 @@ Use for:
 
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Any, Protocol
 
 import numpy as np
 from funasr import AutoModel
@@ -21,6 +22,32 @@ from common.monitoring.logger import get_logger
 logger = get_logger(__name__)
 
 
+class _FunASRModel(Protocol):
+    """Minimal runtime contract used from FunASR's dynamically typed model."""
+
+    def generate(self, *args: Any, **kwargs: Any) -> Any:
+        """Run FunASR inference."""
+
+
+def _extract_text(result: object) -> str | None:
+    """Extract text from the FunASR result shapes used by this provider."""
+    if isinstance(result, dict):
+        text = result.get("text")
+        if isinstance(text, str) and text:
+            return text
+
+    if isinstance(result, list) and result:
+        first = result[0]
+        if isinstance(first, dict):
+            text = first.get("text")
+            if isinstance(text, str) and text:
+                return text
+        if isinstance(first, str) and first:
+            return first
+
+    return None
+
+
 class LocalASRProvider(ASRProvider):
     """
     Local ASR provider using funasr with qwen3-asr-flash model
@@ -29,12 +56,12 @@ class LocalASRProvider(ASRProvider):
     Use for: Development, offline scenarios, API fallback
     """
 
-    def __init__(self, device: str = "cuda"):
+    def __init__(self, device: str = "cuda") -> None:
         self.device = device
-        self.model = None
+        self.model: _FunASRModel | None = None
         self._loaded = False
 
-    def _ensure_loaded(self):
+    def _ensure_loaded(self) -> None:
         """Lazy load model only when needed"""
         if self._loaded:
             return
@@ -104,9 +131,14 @@ class LocalASRProvider(ASRProvider):
 
             # Run ASR (blocking, so run in thread pool)
             loop = asyncio.get_event_loop()
+            model = self.model
+            if model is None:
+                logger.warning("Local ASR model is unavailable for chunk processing")
+                return None
+
             result = await loop.run_in_executor(
                 None,
-                lambda: self.model.generate(
+                lambda: model.generate(
                     input=audio_np,
                     cache={},
                     language="auto",
@@ -114,10 +146,7 @@ class LocalASRProvider(ASRProvider):
                 ),
             )
 
-            if result and "text" in result:
-                return result["text"]
-
-            return None
+            return _extract_text(result)
 
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.warning(f"Chunk processing error: {str(e)}")
@@ -137,14 +166,20 @@ class LocalASRProvider(ASRProvider):
 
         try:
             loop = asyncio.get_event_loop()
+            model = self.model
+            if model is None:
+                logger.warning("Local ASR model is unavailable for file transcription")
+                return Result.fail("[USE_BROWSER_ASR]")
+
             result = await loop.run_in_executor(
-                None, lambda: self.model.generate(input=audio_file)
+                None, lambda: model.generate(input=audio_file)
             )
 
-            if result and "text" in result:
-                return Result.ok(result["text"])
-            else:
-                return Result.fail("[USE_BROWSER_ASR]")
+            text = _extract_text(result)
+            if text:
+                return Result.ok(text)
+
+            return Result.fail("[USE_BROWSER_ASR]")
 
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Local file transcription error: {str(e)}")
@@ -162,4 +197,4 @@ class LocalASRProvider(ASRProvider):
             return Result.ok(self._loaded)
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Local ASR health check failed: {str(e)}")
-            return Result.fail(False)
+            return Result.fail("[USE_BROWSER_ASR]")
