@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,14 @@ from common.db.schemas import (
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _orm_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
 
 
 class ManagerInterventionServiceError(Exception):
@@ -123,49 +131,55 @@ class ManagerInterventionWriteService:
             raise ManagerInterventionServiceError(
                 status_code=400,
                 detail="[INTERVENTION_EMPTY_UPDATE]",
-            )
+        )
 
         if "note" in fields_set:
-            intervention.note = payload.note
+            _set_orm_field(intervention, "note", payload.note)
 
         if "reminder_status" in fields_set:
-            intervention.reminder_status = payload.reminder_status.value
-            if payload.reminder_status == ManagerInterventionReminderStatus.SENT:
-                intervention.reminder_sent_at = datetime.now(UTC)
+            reminder_status_value = (
+                payload.reminder_status.value
+                if payload.reminder_status is not None
+                else str(_orm_field(intervention, "reminder_status"))
+            )
+            _set_orm_field(intervention, "reminder_status", reminder_status_value)
+            if reminder_status_value == ManagerInterventionReminderStatus.SENT.value:
+                _set_orm_field(intervention, "reminder_sent_at", datetime.now(UTC))
             else:
-                intervention.reminder_sent_at = None
+                _set_orm_field(intervention, "reminder_sent_at", None)
 
         if "resolving_session_id" in fields_set:
-            intervention.resolving_session_id = (
+            resolving_session_id = (
                 str(payload.resolving_session_id)
                 if payload.resolving_session_id is not None
                 else None
             )
-            if intervention.resolving_session_id:
+            _set_orm_field(intervention, "resolving_session_id", resolving_session_id)
+            if resolving_session_id:
                 await self._validate_resolving_session(
-                    intervention_user_id=str(intervention.user_id),
-                    resolving_session_id=str(intervention.resolving_session_id),
+                    intervention_user_id=str(_orm_field(intervention, "user_id")),
+                    resolving_session_id=resolving_session_id,
                 )
 
         requested_due_state = (
             payload.due_state.value
             if payload.due_state is not None
-            else intervention.due_state
+            else str(_orm_field(intervention, "due_state"))
         )
         due_state, reminder_status, reminder_sent_at = self._normalize_state(
             due_state=requested_due_state,
-            reminder_status=str(intervention.reminder_status),
+            reminder_status=str(_orm_field(intervention, "reminder_status")),
             resolving_session_id=(
-                str(intervention.resolving_session_id)
-                if intervention.resolving_session_id is not None
+                str(_orm_field(intervention, "resolving_session_id"))
+                if _orm_field(intervention, "resolving_session_id") is not None
                 else None
             ),
         )
-        intervention.due_state = due_state
-        intervention.reminder_status = reminder_status
+        _set_orm_field(intervention, "due_state", due_state)
+        _set_orm_field(intervention, "reminder_status", reminder_status)
         if reminder_sent_at is not None:
-            intervention.reminder_sent_at = reminder_sent_at
-        intervention.updated_at = datetime.now(UTC)
+            _set_orm_field(intervention, "reminder_sent_at", reminder_sent_at)
+        _set_orm_field(intervention, "updated_at", datetime.now(UTC))
 
         await self.db.commit()
         await self.db.refresh(intervention)
@@ -198,12 +212,21 @@ class ManagerInterventionWriteService:
 
         if intervention is not None:
             if payload.note is not None:
-                intervention.note = payload.note
-            intervention.reminder_status = ManagerInterventionReminderStatus.SENT.value
-            intervention.reminder_sent_at = datetime.now(UTC)
-            if intervention.due_state != ManagerInterventionDueState.RESOLVED.value:
-                intervention.due_state = ManagerInterventionDueState.DUE.value
-            intervention.updated_at = datetime.now(UTC)
+                _set_orm_field(intervention, "note", payload.note)
+            _set_orm_field(
+                intervention,
+                "reminder_status",
+                ManagerInterventionReminderStatus.SENT.value,
+            )
+            _set_orm_field(intervention, "reminder_sent_at", datetime.now(UTC))
+            if (
+                _orm_field(intervention, "due_state")
+                != ManagerInterventionDueState.RESOLVED.value
+            ):
+                _set_orm_field(
+                    intervention, "due_state", ManagerInterventionDueState.DUE.value
+                )
+            _set_orm_field(intervention, "updated_at", datetime.now(UTC))
             await self.db.commit()
 
         logger.info(
