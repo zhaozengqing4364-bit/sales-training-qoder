@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
@@ -74,8 +74,28 @@ class PromptTemplateService:
         Args:
             db_session: SQLAlchemy async session
         """
-        self.db = db_session
+        self._db_session = db_session
         self.loader = get_loader()
+
+    @property
+    def db(self) -> AsyncSession:
+        """Return the DB session required by CRUD/governance operations."""
+        if self._db_session is None:
+            raise RuntimeError("[PROMPT_TEMPLATE_DB_SESSION_REQUIRED]")
+        return self._db_session
+
+    @staticmethod
+    def _orm_field(row: object, name: str) -> Any:
+        return cast(Any, getattr(row, name))
+
+    @staticmethod
+    def _set_orm_field(row: object, name: str, value: object) -> None:
+        setattr(row, name, value)
+
+    @classmethod
+    def _orm_datetime(cls, row: object, name: str) -> datetime | None:
+        value = cls._orm_field(row, name)
+        return value if isinstance(value, datetime) else None
 
     @staticmethod
     def _audit_identifier(actor: Any | None) -> tuple[str | None, str]:
@@ -255,6 +275,7 @@ class PromptTemplateService:
 
     @staticmethod
     def _template_snapshot(db_template: Any) -> dict[str, Any]:
+        updated_at = PromptTemplateService._orm_datetime(db_template, "updated_at")
         return {
             "id": str(getattr(db_template, "id", "") or ""),
             "name": str(getattr(db_template, "name", "") or ""),
@@ -263,11 +284,7 @@ class PromptTemplateService:
             "variables": getattr(db_template, "variables", None),
             "is_active": bool(getattr(db_template, "is_active", False)),
             "is_default": bool(getattr(db_template, "is_default", False)),
-            "updated_at": (
-                getattr(db_template, "updated_at", None).isoformat()
-                if getattr(db_template, "updated_at", None)
-                else None
-            ),
+            "updated_at": updated_at.isoformat() if updated_at else None,
         }
 
     @classmethod
@@ -423,9 +440,9 @@ class PromptTemplateService:
             if bool(getattr(row, "is_active", False)) or bool(
                 getattr(row, "is_default", False)
             ):
-                row.is_active = False
-                row.is_default = False
-                row.updated_at = now
+                self._set_orm_field(row, "is_active", False)
+                self._set_orm_field(row, "is_default", False)
+                self._set_orm_field(row, "updated_at", now)
             after = self._template_snapshot(row)
             remediated.append({"before": before, "after": after, "issues": issues})
 
@@ -548,7 +565,7 @@ class PromptTemplateService:
         *,
         actor: Any | None = None,
         reason: str = "update_prompt_template",
-    ) -> PromptTemplateGovernanceRollbackResponse | None:
+    ) -> PromptTemplate | None:
         """Update an existing template.
 
         Args:
@@ -576,7 +593,7 @@ class PromptTemplateService:
                 value = value.value if hasattr(value, "value") else value
             setattr(db_template, field, value)
 
-        db_template.updated_at = datetime.now(UTC)
+        self._set_orm_field(db_template, "updated_at", datetime.now(UTC))
         self._queue_audit_log(
             action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.update",
             actor=actor,
@@ -623,8 +640,8 @@ class PromptTemplateService:
 
         before = self._template_snapshot(db_template)
         # Soft delete - just deactivate
-        db_template.is_active = False
-        db_template.updated_at = datetime.now(UTC)
+        self._set_orm_field(db_template, "is_active", False)
+        self._set_orm_field(db_template, "updated_at", datetime.now(UTC))
         self._queue_audit_log(
             action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.disable",
             actor=actor,
@@ -1035,10 +1052,10 @@ class PromptTemplateService:
             if dry_run:
                 continue
 
-            row.variables = after["variables"]
-            row.is_active = after["is_active"]
-            row.is_default = after["is_default"]
-            row.updated_at = datetime.now(UTC)
+            self._set_orm_field(row, "variables", after["variables"])
+            self._set_orm_field(row, "is_active", after["is_active"])
+            self._set_orm_field(row, "is_default", after["is_default"])
+            self._set_orm_field(row, "updated_at", datetime.now(UTC))
             await self._queue_prompt_governance_audit(
                 action="prompt_template.governance_migrate",
                 actor=actor,
@@ -1068,7 +1085,7 @@ class PromptTemplateService:
         template_id: UUID,
         actor: Any | None = None,
         reason: str = "PromptTemplate governance rollback",
-    ) -> dict[str, Any] | None:
+    ) -> PromptTemplateGovernanceRollbackResponse | None:
         from common.db.models import PromptTemplate as PromptTemplateDB
         from common.db.models import SystemLog
 
@@ -1088,7 +1105,8 @@ class PromptTemplateService:
         issues: list[str] = []
         for audit in audit_result.scalars().all():
             try:
-                details = json.loads(audit.details or "{}")
+                details_raw = self._orm_field(audit, "details")
+                details = json.loads(details_raw if isinstance(details_raw, str) else "{}")
             except json.JSONDecodeError:
                 continue
             if str(details.get("template_id")) == str(template_id) and isinstance(
@@ -1107,17 +1125,21 @@ class PromptTemplateService:
             raise ValueError("[PROMPT_GOVERNANCE_ROLLBACK_NOT_AVAILABLE]")
 
         current = self._snapshot_db_template(row)
-        row.variables = before.get("variables")
-        row.is_active = bool(before.get("is_active"))
-        row.is_default = bool(before.get("is_default"))
-        row.prompt_type = str(before.get("prompt_type") or row.prompt_type)
-        row.updated_at = datetime.now(UTC)
+        self._set_orm_field(row, "variables", before.get("variables"))
+        self._set_orm_field(row, "is_active", bool(before.get("is_active")))
+        self._set_orm_field(row, "is_default", bool(before.get("is_default")))
+        self._set_orm_field(
+            row,
+            "prompt_type",
+            str(before.get("prompt_type") or self._orm_field(row, "prompt_type")),
+        )
+        self._set_orm_field(row, "updated_at", datetime.now(UTC))
 
         safety_overrides: list[str] = []
         restored_issues = self._governance_issues_for_row(row)
         if restored_issues and (row.is_active or row.is_default):
-            row.is_active = False
-            row.is_default = False
+            self._set_orm_field(row, "is_active", False)
+            self._set_orm_field(row, "is_default", False)
             safety_overrides.append("disabled_invalid_after_rollback")
 
         await self._queue_prompt_governance_audit(
@@ -1248,8 +1270,8 @@ class PromptTemplateService:
         if not template:
             return False
 
-        template.is_default = True
-        template.updated_at = now
+        self._set_orm_field(template, "is_default", True)
+        self._set_orm_field(template, "updated_at", now)
         self._queue_audit_log(
             action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.set_default",
             actor=actor,
@@ -1414,9 +1436,9 @@ class PromptTemplateService:
             "is_active": bool(assignment.is_active),
         }
         if is_active is not None:
-            assignment.is_active = is_active
+            self._set_orm_field(assignment, "is_active", is_active)
         if template_id is not None:
-            assignment.template_id = str(template_id)
+            self._set_orm_field(assignment, "template_id", str(template_id))
         self._queue_audit_log(
             action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.update_scenario",
             actor=actor,
