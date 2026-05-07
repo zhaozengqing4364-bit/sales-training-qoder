@@ -18,7 +18,7 @@ Use for:
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from funasr import AutoModel
@@ -29,6 +29,27 @@ from common.monitoring.latency_tracker import get_latency_tracker
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class _FunASRModel(Protocol):
+    """Minimal runtime contract used from FunASR's dynamically typed model."""
+
+    def generate(self, *args: Any, **kwargs: Any) -> Any:
+        """Run FunASR inference."""
+
+
+def _extract_text(result: object) -> str | None:
+    """Extract text from the FunASR result shapes used by this provider."""
+    if isinstance(result, list) and result:
+        first = result[0]
+        if isinstance(first, dict):
+            text = first.get("text")
+            if isinstance(text, str) and text:
+                return text
+        if isinstance(first, str) and first:
+            return first
+
+    return None
 
 
 class LocalStreamingASRProvider(ASRProvider):
@@ -55,7 +76,7 @@ class LocalStreamingASRProvider(ASRProvider):
         chunk_size_ms: int = 600,
         encoder_chunk_look_back: int = 4,
         decoder_chunk_look_back: int = 1,
-    ):
+    ) -> None:
         """
         Initialize streaming ASR provider.
 
@@ -70,7 +91,7 @@ class LocalStreamingASRProvider(ASRProvider):
         self.encoder_chunk_look_back = encoder_chunk_look_back
         self.decoder_chunk_look_back = decoder_chunk_look_back
 
-        self._model = None
+        self._model: _FunASRModel | None = None
         self._loaded = False
 
         # Streaming state
@@ -258,9 +279,14 @@ class LocalStreamingASRProvider(ASRProvider):
 
             # Run streaming inference in thread pool (blocking operation)
             loop = asyncio.get_event_loop()
+            model = self._model
+            if model is None:
+                logger.warning("Streaming ASR model is unavailable for chunk processing")
+                return None
+
             result = await loop.run_in_executor(
                 None,
-                lambda: self._model.generate(
+                lambda: model.generate(
                     input=audio_np,
                     cache=self._cache,
                     is_final=is_final,
@@ -273,17 +299,7 @@ class LocalStreamingASRProvider(ASRProvider):
             # Debug: Log raw FunASR result
             logger.info(f"FunASR raw result (is_final={is_final}): {result}")
 
-            # Extract text from result
-            if result and isinstance(result, list) and len(result) > 0:
-                if isinstance(result[0], dict) and "text" in result[0]:
-                    text = result[0]["text"]
-                    if text:  # Only return non-empty text
-                        return text
-                elif isinstance(result[0], str):
-                    if result[0]:  # Only return non-empty text
-                        return result[0]
-
-            return None
+            return _extract_text(result)
 
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.warning(f"Chunk processing error: {str(e)}")
@@ -298,20 +314,21 @@ class LocalStreamingASRProvider(ASRProvider):
         """
         try:
             loop = asyncio.get_event_loop()
+            model = self._model
+            if model is None:
+                logger.warning("Streaming ASR model is unavailable for finalization")
+                return None
+
             result = await loop.run_in_executor(
                 None,
-                lambda: self._model.generate(
+                lambda: model.generate(
                     input=np.array([], dtype=np.float32),
                     cache=self._cache,
                     is_final=True,
                 ),
             )
 
-            if result and isinstance(result, list) and len(result) > 0:
-                if isinstance(result[0], dict) and "text" in result[0]:
-                    return result[0]["text"]
-
-            return None
+            return _extract_text(result)
 
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.warning(f"Stream finalization error: {str(e)}")
@@ -333,19 +350,22 @@ class LocalStreamingASRProvider(ASRProvider):
 
         try:
             loop = asyncio.get_event_loop()
+            model = self._model
+            if model is None:
+                logger.warning("Streaming ASR model is unavailable for file transcription")
+                return Result.fail("[USE_BROWSER_ASR]")
+
             result = await loop.run_in_executor(
                 None,
-                lambda: self._model.generate(
+                lambda: model.generate(
                     input=audio_file,
                     batch_size_s=300,  # Process up to 300s at once
                 ),
             )
 
-            if result and isinstance(result, list) and len(result) > 0:
-                if isinstance(result[0], dict) and "text" in result[0]:
-                    return Result.ok(result[0]["text"])
-                elif isinstance(result[0], str):
-                    return Result.ok(result[0])
+            text = _extract_text(result)
+            if text:
+                return Result.ok(text)
 
             return Result.fail("[USE_BROWSER_ASR]")
 
@@ -365,7 +385,7 @@ class LocalStreamingASRProvider(ASRProvider):
             return Result.ok(self._loaded and self._model is not None)
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Health check failed: {str(e)}")
-            return Result.fail(False)
+            return Result.fail("[USE_BROWSER_ASR]")
 
     @property
     def is_streaming(self) -> bool:
