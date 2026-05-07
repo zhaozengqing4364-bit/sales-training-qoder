@@ -7,11 +7,19 @@ Implements Constitution Principles:
 
 import logging
 import time
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeAlias
 
 from prometheus_client import Counter, Gauge, Histogram, Info
 from prometheus_client.exposition import generate_latest
 
 logger = logging.getLogger(__name__)
+
+ASGIScope: TypeAlias = dict[str, Any]
+ASGIMessage: TypeAlias = dict[str, Any]
+ASGIReceive: TypeAlias = Callable[[], Awaitable[ASGIMessage]]
+ASGISend: TypeAlias = Callable[[ASGIMessage], Awaitable[None]]
+ASGIApp: TypeAlias = Callable[[ASGIScope, ASGIReceive, ASGISend], Awaitable[None]]
 
 
 # Metrics
@@ -124,10 +132,12 @@ class MetricsMiddleware:
     FastAPI middleware to track HTTP metrics
     """
 
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(
+        self, scope: ASGIScope, receive: ASGIReceive, send: ASGISend
+    ) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -138,7 +148,7 @@ class MetricsMiddleware:
         # Process request
         status_code = 200
 
-        async def send_wrapper(message):
+        async def send_wrapper(message: ASGIMessage) -> None:
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = message["status"]
@@ -162,8 +172,11 @@ class MetricsMiddleware:
 
 
 def track_practice_session(
-    scenario_type: str, status: str, duration: float, scores: dict
-):
+    scenario_type: str,
+    status: str,
+    duration: float,
+    scores: dict[str, float | int | None],
+) -> None:
     """Track practice session metrics"""
     practice_sessions_total.labels(scenario_type=scenario_type, status=status).inc()
 
@@ -179,7 +192,9 @@ def track_practice_session(
             ).observe(score_value)
 
 
-def track_llm_request(service: str, status: str, duration: float, tokens: dict):
+def track_llm_request(
+    service: str, status: str, duration: float, tokens: dict[str, float | int]
+) -> None:
     """Track LLM request metrics"""
     llm_requests_total.labels(service=service, status=status).inc()
 
@@ -189,26 +204,26 @@ def track_llm_request(service: str, status: str, duration: float, tokens: dict):
         llm_tokens_total.labels(service=service, token_type=token_type).inc(token_count)
 
 
-def track_asr_request(status: str, duration: float):
+def track_asr_request(status: str, duration: float) -> None:
     """Track ASR request metrics"""
     asr_requests_total.labels(status=status).inc()
     asr_request_duration_seconds.observe(duration)
 
 
-def track_tts_request(status: str, provider: str, duration: float):
+def track_tts_request(status: str, provider: str, duration: float) -> None:
     """Track TTS request metrics"""
     tts_requests_total.labels(status=status).inc()
     tts_request_duration_seconds.labels(provider=provider).observe(duration)
 
 
-def track_websocket_connection(scenario_type: str, delta: int):
+def track_websocket_connection(scenario_type: str, delta: int) -> None:
     """Track active WebSocket connections"""
     websocket_connections_active.labels(scenario_type=scenario_type).inc(delta)
 
 
 def track_websocket_message(
     scenario_type: str, direction: str, duration: float, message_type: str
-):
+) -> None:
     """Track WebSocket message metrics"""
     websocket_messages_total.labels(
         scenario_type=scenario_type, direction=direction
@@ -219,12 +234,14 @@ def track_websocket_message(
     ).observe(duration)
 
 
-def track_error(service: str, error_type: str):
+def track_error(service: str, error_type: str) -> None:
     """Track error metrics"""
     errors_total.labels(service=service, error_type=error_type).inc()
 
 
-def track_frontend_analytics_event(event_type: str, status: str = "accepted"):
+def track_frontend_analytics_event(
+    event_type: str, status: str = "accepted"
+) -> None:
     """Track frontend analytics beacons that reach the backend truth line."""
     frontend_analytics_events_total.labels(
         event_type=event_type,
@@ -234,7 +251,7 @@ def track_frontend_analytics_event(event_type: str, status: str = "accepted"):
 
 def track_voice_policy_rollback(
     service_type: str, from_provider: str, to_provider: str, reason: str
-):
+) -> None:
     """Track voice policy rollback metrics"""
     voice_policy_rollbacks_total.labels(
         service_type=service_type,
@@ -254,7 +271,7 @@ def track_voice_policy_rollback(
 
 def track_voice_policy_state_change(
     service_type: str, from_state: str, to_state: str, reason: str
-):
+) -> None:
     """Track voice policy state changes"""
     voice_policy_state_changes_total.labels(
         service_type=service_type,
@@ -277,7 +294,7 @@ def get_metrics() -> bytes:
     return generate_latest()
 
 
-def initialize_metrics(version: str, environment: str):
+def initialize_metrics(version: str, environment: str) -> None:
     """Initialize application info"""
     application_info.info(
         {
