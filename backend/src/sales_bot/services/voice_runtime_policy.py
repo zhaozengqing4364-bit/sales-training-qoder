@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,45 @@ except ImportError:
     MONITORING_AVAILABLE = False
 
 logger = get_logger(__name__)
+
+
+def _orm_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
+def _orm_str(row: object, name: str) -> str:
+    return str(_orm_field(row, name))
+
+
+def _orm_optional_str(row: object, name: str) -> str | None:
+    value = _orm_field(row, name)
+    return str(value) if value is not None else None
+
+
+def _orm_bool(row: object, name: str) -> bool:
+    return bool(_orm_field(row, name))
+
+
+def _orm_int(row: object, name: str) -> int:
+    return int(_orm_field(row, name) or 0)
+
+
+def _orm_float(row: object, name: str) -> float:
+    return float(_orm_field(row, name) or 0.0)
+
+
+def _orm_dict(row: object, name: str) -> dict[str, Any]:
+    value = _orm_field(row, name)
+    return value if isinstance(value, dict) else {}
+
+
+def _orm_datetime(row: object, name: str) -> datetime | None:
+    value = _orm_field(row, name)
+    return value if isinstance(value, datetime) else None
 
 
 ALLOWED_VOICE_MODES = {"legacy", "stepfun_realtime"}
@@ -426,48 +465,76 @@ class VoiceRuntimePolicyService:
             await self._clear_default_profile(exclude_profile_id=profile_id)
 
         if "name" in payload and payload["name"] is not None:
-            profile.name = str(payload["name"])
+            _set_orm_field(profile, "name", str(payload["name"]))
         if "description" in payload:
-            profile.description = payload.get("description")
+            _set_orm_field(profile, "description", payload.get("description"))
         if "is_default" in payload:
-            profile.is_default = _to_bool(payload.get("is_default"), profile.is_default)
+            _set_orm_field(
+                profile,
+                "is_default",
+                _to_bool(payload.get("is_default"), _orm_bool(profile, "is_default")),
+            )
         if "is_active" in payload:
-            profile.is_active = _to_bool(payload.get("is_active"), profile.is_active)
+            _set_orm_field(
+                profile,
+                "is_active",
+                _to_bool(payload.get("is_active"), _orm_bool(profile, "is_active")),
+            )
         if "voice_mode" in payload:
-            profile.voice_mode = self._normalize_voice_mode(
-                payload.get("voice_mode"), default=profile.voice_mode
+            _set_orm_field(
+                profile,
+                "voice_mode",
+                self._normalize_voice_mode(
+                    payload.get("voice_mode"), default=_orm_str(profile, "voice_mode")
+                ),
             )
         if "model_name" in payload and payload["model_name"] is not None:
-            profile.model_name = str(payload["model_name"])
+            _set_orm_field(profile, "model_name", str(payload["model_name"]))
         if "voice_name" in payload and payload["voice_name"] is not None:
-            profile.voice_name = str(payload["voice_name"])
+            _set_orm_field(profile, "voice_name", str(payload["voice_name"]))
         if "temperature" in payload and payload["temperature"] is not None:
-            profile.temperature = _to_float(payload["temperature"], profile.temperature)
+            _set_orm_field(
+                profile,
+                "temperature",
+                _to_float(payload["temperature"], _orm_float(profile, "temperature")),
+            )
         if (
             "input_audio_format" in payload
             and payload["input_audio_format"] is not None
         ):
-            profile.input_audio_format = str(payload["input_audio_format"])
+            _set_orm_field(
+                profile, "input_audio_format", str(payload["input_audio_format"])
+            )
         if (
             "output_audio_format" in payload
             and payload["output_audio_format"] is not None
         ):
-            profile.output_audio_format = str(payload["output_audio_format"])
+            _set_orm_field(
+                profile, "output_audio_format", str(payload["output_audio_format"])
+            )
         if (
             "output_sample_rate" in payload
             and payload["output_sample_rate"] is not None
         ):
-            profile.output_sample_rate = _to_int(
-                payload["output_sample_rate"], profile.output_sample_rate, minimum=8000
+            _set_orm_field(
+                profile,
+                "output_sample_rate",
+                _to_int(
+                    payload["output_sample_rate"],
+                    _orm_int(profile, "output_sample_rate"),
+                    minimum=8000,
+                ),
             )
         if "turn_detection" in payload:
-            profile.turn_detection = payload.get("turn_detection")
+            _set_orm_field(profile, "turn_detection", payload.get("turn_detection"))
         if "tool_policy" in payload:
-            profile.tool_policy = self._normalize_tool_policy(
-                _as_dict(payload.get("tool_policy"))
+            _set_orm_field(
+                profile,
+                "tool_policy",
+                self._normalize_tool_policy(_as_dict(payload.get("tool_policy"))),
             )
 
-        profile.updated_at = datetime.now(UTC)
+        _set_orm_field(profile, "updated_at", datetime.now(UTC))
         await self.db.flush()
         await self.db.refresh(profile)
         return self._serialize_profile(profile)
@@ -477,7 +544,7 @@ class VoiceRuntimePolicyService:
         if not profile:
             return False
 
-        was_default = bool(profile.is_default)
+        was_default = _orm_bool(profile, "is_default")
         await self.db.delete(profile)
         await self.db.flush()
 
@@ -489,8 +556,8 @@ class VoiceRuntimePolicyService:
             )
             next_default = next_default_result.scalar_one_or_none()
             if next_default:
-                next_default.is_default = True
-                next_default.updated_at = datetime.now(UTC)
+                _set_orm_field(next_default, "is_default", True)
+                _set_orm_field(next_default, "updated_at", datetime.now(UTC))
                 await self.db.flush()
         return True
 
@@ -528,7 +595,11 @@ class VoiceRuntimePolicyService:
             self.db.add(policy)
 
         if "enabled" in payload:
-            policy.enabled = _to_bool(payload.get("enabled"), policy.enabled)
+            _set_orm_field(
+                policy,
+                "enabled",
+                _to_bool(payload.get("enabled"), _orm_bool(policy, "enabled")),
+            )
 
         if "runtime_profile_id" in payload:
             runtime_profile_id = payload.get("runtime_profile_id")
@@ -536,41 +607,55 @@ class VoiceRuntimePolicyService:
                 runtime_profile = await self.get_profile(str(runtime_profile_id))
                 if not runtime_profile:
                     raise ValueError("Runtime profile not found")
-                policy.runtime_profile_id = runtime_profile.id
+                _set_orm_field(
+                    policy, "runtime_profile_id", _orm_str(runtime_profile, "id")
+                )
             else:
-                policy.runtime_profile_id = None
+                _set_orm_field(policy, "runtime_profile_id", None)
 
         if "voice_mode_override" in payload:
             override_mode = payload.get("voice_mode_override")
             if override_mode is None or str(override_mode).strip() == "":
-                policy.voice_mode_override = None
+                _set_orm_field(policy, "voice_mode_override", None)
             else:
-                policy.voice_mode_override = self._normalize_voice_mode(
-                    override_mode, default="legacy"
+                _set_orm_field(
+                    policy,
+                    "voice_mode_override",
+                    self._normalize_voice_mode(override_mode, default="legacy"),
                 )
 
         if "model_override" in payload:
             model_override = payload.get("model_override")
-            policy.model_override = str(model_override) if model_override else None
+            _set_orm_field(
+                policy, "model_override", str(model_override) if model_override else None
+            )
 
         if "voice_override" in payload:
             voice_override = payload.get("voice_override")
-            policy.voice_override = str(voice_override) if voice_override else None
+            _set_orm_field(
+                policy, "voice_override", str(voice_override) if voice_override else None
+            )
 
         if "temperature_override" in payload:
             value = payload.get("temperature_override")
-            policy.temperature_override = (
-                None if value is None else _to_float(value, 0.7)
+            _set_orm_field(
+                policy,
+                "temperature_override",
+                None if value is None else _to_float(value, 0.7),
             )
 
         if "tool_policy_override" in payload:
-            policy.tool_policy_override = self._normalize_tool_policy(
-                self._sanitize_agent_tool_policy_override(
-                    _as_dict(payload.get("tool_policy_override"))
-                )
+            _set_orm_field(
+                policy,
+                "tool_policy_override",
+                self._normalize_tool_policy(
+                    self._sanitize_agent_tool_policy_override(
+                        _as_dict(payload.get("tool_policy_override"))
+                    )
+                ),
             )
 
-        policy.updated_at = datetime.now(UTC)
+        _set_orm_field(policy, "updated_at", datetime.now(UTC))
         await self.db.flush()
         await self.db.refresh(policy)
         return self._serialize_agent_policy(policy)
@@ -627,10 +712,12 @@ class VoiceRuntimePolicyService:
         if (
             not runtime_profile
             and agent_policy
-            and agent_policy.runtime_profile_id
-            and agent_policy.enabled
+            and (agent_policy_runtime_profile_id := _orm_optional_str(
+                agent_policy, "runtime_profile_id"
+            ))
+            and _orm_bool(agent_policy, "enabled")
         ):
-            runtime_profile = await self.get_profile(agent_policy.runtime_profile_id)
+            runtime_profile = await self.get_profile(agent_policy_runtime_profile_id)
             if runtime_profile:
                 source["runtime_profile"] = "agent_policy"
 
@@ -851,10 +938,10 @@ class VoiceRuntimePolicyService:
         result = await self.db.execute(stmt)
         current_defaults = result.scalars().all()
         for profile in current_defaults:
-            if exclude_profile_id and profile.id == exclude_profile_id:
+            if exclude_profile_id and _orm_str(profile, "id") == exclude_profile_id:
                 continue
-            profile.is_default = False
-            profile.updated_at = datetime.now(UTC)
+            _set_orm_field(profile, "is_default", False)
+            _set_orm_field(profile, "updated_at", datetime.now(UTC))
         if current_defaults:
             await self.db.flush()
 
