@@ -28,12 +28,15 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.types import TypeEngine
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    """Shared declarative base for all SQLAlchemy ORM models."""
 
 
-def _jsonb_compatible_type():
+def _jsonb_compatible_type() -> TypeEngine[object]:
     return JSON().with_variant(postgresql.JSONB(astext_type=Text()), "postgresql")
 
 
