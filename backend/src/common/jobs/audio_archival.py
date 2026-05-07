@@ -40,15 +40,19 @@ class AudioArchivalJob:
         retention_days: int | None = None,
         audio_storage_path: str | None = None,
         archive_storage_path: str | None = None,
-    ):
+    ) -> None:
         self.retention_days = retention_days or int(
             os.getenv("AUDIO_ARCHIVAL_RETENTION_DAYS", "365")
         )
-        self.audio_storage_path = audio_storage_path or os.getenv(
-            "AUDIO_STORAGE_PATH", "/data/audio"
+        self.audio_storage_path: str = (
+            audio_storage_path
+            if audio_storage_path is not None
+            else os.getenv("AUDIO_STORAGE_PATH") or "/data/audio"
         )
-        self.archive_storage_path = archive_storage_path or os.getenv(
-            "AUDIO_ARCHIVE_STORAGE_PATH", "/data/audio_archived"
+        self.archive_storage_path: str = (
+            archive_storage_path
+            if archive_storage_path is not None
+            else os.getenv("AUDIO_ARCHIVE_STORAGE_PATH") or "/data/audio_archived"
         )
 
     async def archive_old_audio(
