@@ -6,7 +6,7 @@ import json
 import os
 from copy import deepcopy
 from datetime import UTC, date, datetime, time
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -33,6 +33,29 @@ from common.growth.safety_policies import GrowthSafetyPolicyService
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _orm_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
+def _orm_str(row: object, name: str) -> str:
+    return str(_orm_field(row, name))
+
+
+def _orm_bool(row: object, name: str) -> bool:
+    return bool(_orm_field(row, name))
+
+
+def _orm_date(row: object, name: str) -> date:
+    value = _orm_field(row, name)
+    if isinstance(value, date):
+        return value
+    raise TypeError(f"{name} must be a date")
 
 
 class GrowthCenterService:
@@ -152,7 +175,7 @@ class GrowthCenterService:
     @classmethod
     def _is_completed_evaluable(cls, session: PracticeSession) -> bool:
         return (
-            session.status == SessionStatus.COMPLETED.value
+            _orm_str(session, "status") == SessionStatus.COMPLETED.value
             and cls._is_evaluable(session)
             and cls._overall_score(session) is not None
         )
@@ -353,9 +376,10 @@ class GrowthCenterService:
             if not isinstance(item, dict):
                 continue
             code = str(item.get("code") or "").strip()
-            condition = item.get("condition")
-            if not code or not isinstance(condition, dict):
+            condition_raw = item.get("condition")
+            if not code or not isinstance(condition_raw, dict):
                 continue
+            condition = cast(dict[str, Any], condition_raw)
 
             result = await db.execute(
                 select(Achievement).where(Achievement.code == code)
@@ -364,14 +388,20 @@ class GrowthCenterService:
             if achievement is None:
                 achievement = Achievement(code=code)
                 db.add(achievement)
-            achievement.name = str(item.get("name") or code)
-            achievement.description = str(item.get("description") or code)
-            achievement.icon_key = str(item.get("icon_key") or "trophy")
-            achievement.condition_json = {
-                "ruleset_version": self.achievement_ruleset.get("version"),
-                **condition,
-            }
-            achievement.enabled = bool(item.get("enabled", True))
+            _set_orm_field(achievement, "name", str(item.get("name") or code))
+            _set_orm_field(
+                achievement, "description", str(item.get("description") or code)
+            )
+            _set_orm_field(achievement, "icon_key", str(item.get("icon_key") or "trophy"))
+            _set_orm_field(
+                achievement,
+                "condition_json",
+                {
+                    "ruleset_version": self.achievement_ruleset.get("version"),
+                    **condition,
+                },
+            )
+            _set_orm_field(achievement, "enabled", bool(item.get("enabled", True)))
             definitions.append(achievement)
 
         await db.flush()
@@ -383,9 +413,10 @@ class GrowthCenterService:
         *,
         eligible_sessions: list[PracticeSession],
     ) -> tuple[bool, dict[str, Any]]:
-        condition = (
-            achievement.condition_json
-            if isinstance(achievement.condition_json, dict)
+        condition_value = _orm_field(achievement, "condition_json")
+        condition: dict[str, Any] = (
+            cast(dict[str, Any], condition_value)
+            if isinstance(condition_value, dict)
             else {}
         )
         condition_type = condition.get("type")
@@ -435,7 +466,7 @@ class GrowthCenterService:
             newly_unlocked: list[dict[str, Any]] = []
 
             for achievement in definitions:
-                if not achievement.enabled:
+                if not _orm_bool(achievement, "enabled"):
                     continue
                 is_met, evidence = self._condition_met(
                     achievement,
@@ -465,15 +496,18 @@ class GrowthCenterService:
                 db.add(unlock)
                 await db.flush()
                 newly_unlocked.append(self._achievement_payload(achievement, unlock))
+                achievement_name = _orm_str(achievement, "name")
+                achievement_description = _orm_str(achievement, "description")
+                achievement_code = _orm_str(achievement, "code")
                 await self._create_notification_if_absent(
                     db=db,
                     user_id=user_id,
                     type_="achievement",
-                    title=f"解锁徽章：{achievement.name}",
-                    content=achievement.description,
+                    title=f"解锁徽章：{achievement_name}",
+                    content=achievement_description,
                     action_label="查看徽章",
                     action_path="/",
-                    source=f"achievement:{achievement.code}",
+                    source=f"achievement:{achievement_code}",
                     evidence=evidence,
                 )
 
@@ -683,8 +717,8 @@ class GrowthCenterService:
             notification = result.scalar_one_or_none()
             if notification is None:
                 return Result.fail("[NOTIFICATION_NOT_FOUND] Notification not found")
-            notification.is_read = True
-            notification.read_at = datetime.now(UTC)
+            _set_orm_field(notification, "is_read", True)
+            _set_orm_field(notification, "read_at", datetime.now(UTC))
             await db.commit()
             await db.refresh(notification)
             return Result.ok(self._notification_payload(notification))
@@ -722,7 +756,7 @@ class GrowthCenterService:
                 )
             )
             for goal in active_result.scalars().all():
-                goal.is_active = False
+                _set_orm_field(goal, "is_active", False)
 
             goal = UserGoal(
                 user_id=user_id,
@@ -746,10 +780,12 @@ class GrowthCenterService:
     async def _goal_payload(
         self, *, db: AsyncSession, goal: UserGoal
     ) -> dict[str, Any]:
-        start_dt = datetime.combine(goal.start_date, time.min, tzinfo=UTC)
-        end_dt = datetime.combine(goal.end_date, time.max, tzinfo=UTC)
+        start_date = _orm_date(goal, "start_date")
+        end_date = _orm_date(goal, "end_date")
+        start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        end_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
         sessions = await self._eligible_sessions(
-            db=db, user_id=str(goal.user_id), limit=200
+            db=db, user_id=_orm_str(goal, "user_id"), limit=200
         )
         scoped = [
             session
@@ -763,7 +799,8 @@ class GrowthCenterService:
             )
             <= end_dt
         ]
-        if goal.goal_type == "monthly_presentations":
+        goal_type = _orm_str(goal, "goal_type")
+        if goal_type == "monthly_presentations":
             scoped = [
                 session
                 for session in scoped
@@ -771,19 +808,19 @@ class GrowthCenterService:
                 == "presentation"
             ]
         current_progress = len(scoped)
-        target_count = int(goal.target_count)
+        target_count = int(_orm_field(goal, "target_count"))
         return {
-            "goal_id": str(goal.goal_id),
-            "goal_type": goal.goal_type,
-            "period": goal.period,
+            "goal_id": _orm_str(goal, "goal_id"),
+            "goal_type": goal_type,
+            "period": _orm_str(goal, "period"),
             "target_count": target_count,
             "current_progress": current_progress,
             "progress_ratio": min(
                 1.0, current_progress / target_count if target_count else 0.0
             ),
-            "start_date": goal.start_date.isoformat(),
-            "end_date": goal.end_date.isoformat(),
-            "is_active": bool(goal.is_active),
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "is_active": _orm_bool(goal, "is_active"),
         }
 
     async def _current_goal(
