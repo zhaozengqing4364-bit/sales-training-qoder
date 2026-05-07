@@ -13,9 +13,11 @@ References:
 
 import asyncio
 import os
-from typing import Any
+from typing import Any, cast
 
 import chromadb
+from chromadb.api import ClientAPI
+from chromadb.api.models.Collection import Collection
 from chromadb.config import Settings
 
 from common.error_handling.result import Result
@@ -41,7 +43,7 @@ class KnowledgeVectorStore:
 
     def __init__(self, persist_dir: str | None = None):
         self.persist_dir = persist_dir or CHROMADB_PERSIST_DIR
-        self.client: chromadb.PersistentClient | None = None
+        self.client: ClientAPI | None = None
         self._initialized = False
         self._write_lock = asyncio.Lock()  # 写入锁，防止并发写入冲突
 
@@ -66,13 +68,16 @@ class KnowledgeVectorStore:
             logger.error(f"ChromaDB initialization error: {e}")
             return False
 
-    def _get_collection(self, collection_name: str) -> chromadb.Collection | None:
+    def _get_collection(self, collection_name: str) -> Collection | None:
         """Get or create a collection."""
         if not self._ensure_initialized():
             return None
+        client = self.client
+        if client is None:
+            return None
 
         try:
-            return self.client.get_or_create_collection(
+            return client.get_or_create_collection(
                 name=collection_name,
                 metadata={
                     "hnsw:space": "cosine",
@@ -161,9 +166,9 @@ class KnowledgeVectorStore:
 
                 collection.add(
                     ids=ids,
-                    embeddings=embeddings,
+                    embeddings=cast(Any, embeddings),
                     documents=documents,
-                    metadatas=metadatas,
+                    metadatas=cast(Any, metadatas),
                 )
 
                 logger.info(
@@ -236,7 +241,7 @@ class KnowledgeVectorStore:
 
             # Query
             results = collection.query(
-                query_embeddings=[query_embedding],
+                query_embeddings=cast(Any, [query_embedding]),
                 n_results=top_k,
                 where=where,
                 include=["documents", "metadatas", "distances"],
@@ -377,9 +382,12 @@ class KnowledgeVectorStore:
         """
         if not self._ensure_initialized():
             return Result.ok(True)
+        client = self.client
+        if client is None:
+            return Result.ok(True)
 
         try:
-            self.client.delete_collection(name=collection_name)
+            client.delete_collection(name=collection_name)
             logger.info(f"Deleted collection {collection_name}")
             return Result.ok(True)
 
@@ -432,8 +440,8 @@ class VectorStore:
     def __init__(self, persist_dir: str | None = None):
         self.persist_dir = persist_dir or CHROMADB_PERSIST_DIR
         self.collection_name = "ppt_knowledge"
-        self.client: chromadb.PersistentClient | None = None
-        self.collection: chromadb.Collection | None = None
+        self.client: ClientAPI | None = None
+        self.collection: Collection | None = None
         self._initialized = False
 
     def _ensure_initialized(self) -> bool:
@@ -461,7 +469,7 @@ class VectorStore:
             logger.error(f"VectorStore initialization error: {e}")
             return False
 
-    def _get_legacy_collection(self) -> chromadb.Collection | None:
+    def _get_legacy_collection(self) -> Collection | None:
         """Get collection for legacy API, allowing test-time mock injection."""
         if self.collection is not None:
             return self.collection
@@ -483,7 +491,7 @@ class VectorStore:
             return Result.fail("[USE_KEYWORD_SEARCH]")
 
         try:
-            collection.add(documents=texts, metadatas=metadatas, ids=ids)
+            collection.add(documents=texts, metadatas=cast(Any, metadatas), ids=ids)
             return Result.ok(True)
         except Exception as e:
             logger.error(f"Failed to add documents: {e}")
@@ -502,7 +510,9 @@ class VectorStore:
             return Result.fail("[USE_KEYWORD_SEARCH]")
 
         try:
-            collection.update(ids=[doc_id], documents=[text], metadatas=[metadata])
+            collection.update(
+                ids=[doc_id], documents=[text], metadatas=cast(Any, [metadata])
+            )
             return Result.ok(True)
         except Exception as e:
             logger.error(f"Failed to update document: {e}")
@@ -514,7 +524,7 @@ class VectorStore:
         presentation_id: str,
         page_number: int | None = None,
         n_results: int = 3,
-        **kwargs,
+        **kwargs: Any,
     ) -> Result[list[dict[str, Any]]]:
         """Query vector store for similar documents."""
         collection = self._get_legacy_collection()
@@ -589,7 +599,7 @@ class VectorStore:
 
         try:
             where = {"presentation_id": presentation_id}
-            results = collection.get(where=where)
+            results = collection.get(where=cast(Any, where))
 
             matches = []
             if results and results["documents"]:
