@@ -11,6 +11,12 @@ SalesCoachingFocusType = Literal[
     "objection_handling_gap",
     "next_step_gap",
 ]
+SalesClaimTruthStatus = Literal[
+    "unsupported_claim",
+    "weak_evidence",
+    "evidence_pending",
+    "evidence_verified",
+]
 SalesCoachingDimension = Literal[
     "价值表达",
     "客户收益连接",
@@ -38,6 +44,15 @@ class NextGoal(TypedDict):
     rule: str
 
 
+class ClaimTruth(TypedDict, total=False):
+    status: SalesClaimTruthStatus
+    label: str
+    source: str
+    reason: str
+    evidence_score: float
+    closure_state: str
+
+
 class SalesReportAlignment(TypedDict):
     alignment_used: bool
     stage_key: SalesStageKey | None
@@ -45,6 +60,17 @@ class SalesReportAlignment(TypedDict):
     fallback_reason: str | None
     main_issue: MainIssue
     next_goal: NextGoal
+    claim_truth: ClaimTruth | None
+
+
+class LiveSessionConclusionSummary(TypedDict):
+    alignment_used: bool
+    stage_key: SalesStageKey | None
+    focus_type: SalesCoachingFocusType | None
+    fallback_reason: str | None
+    main_issue: MainIssue | None
+    next_goal: NextGoal | None
+    claim_truth: ClaimTruth | None
 
 
 class ActionCard(TypedDict):
