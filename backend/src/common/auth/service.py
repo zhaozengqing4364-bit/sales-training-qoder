@@ -8,7 +8,8 @@ import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from http.cookies import SimpleCookie
-from typing import Any, NoReturn
+from typing import Any, Literal, NoReturn
+from typing import cast as typing_cast
 from urllib.parse import urlencode
 
 import httpx
@@ -18,7 +19,8 @@ from fastapi import Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError as JWTError
 from passlib.context import CryptContext
-from sqlalchemy import cast, or_, select
+from sqlalchemy import cast as sa_cast
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import String as SQLAlchemyString
 
@@ -41,6 +43,7 @@ AUTH_CSRF_HEADER_NAME = os.getenv("AUTH_CSRF_HEADER_NAME", "X-CSRF-Token")
 AUTH_SESSION_COOKIE_SAMESITE = (
     os.getenv("AUTH_SESSION_COOKIE_SAMESITE", "lax").strip().lower() or "lax"
 )
+CookieSameSite = Literal["lax", "strict", "none"]
 
 security = HTTPBearer(auto_error=False)
 # Login compatibility seam:
@@ -263,6 +266,14 @@ def _env_truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _user_field(user: User, name: str) -> Any:
+    return typing_cast(Any, getattr(user, name))
+
+
+def _set_user_field(user: User, name: str, value: object) -> None:
+    setattr(user, name, value)
+
+
 def _websocket_query_token_enabled() -> bool:
     env = _current_environment()
     configured = os.getenv("WEBSOCKET_QUERY_TOKEN_ENABLED", "").strip().lower()
@@ -289,8 +300,10 @@ def get_session_cookie_max_age_seconds() -> int:
     return max(1, JWT_EXPIRATION_HOURS * 3600)
 
 
-def get_session_cookie_samesite() -> str:
-    return AUTH_SESSION_COOKIE_SAMESITE
+def get_session_cookie_samesite() -> CookieSameSite:
+    if AUTH_SESSION_COOKIE_SAMESITE in {"strict", "none"}:
+        return typing_cast(CookieSameSite, AUTH_SESSION_COOKIE_SAMESITE)
+    return "lax"
 
 
 def get_session_cookie_secure() -> bool:
@@ -527,7 +540,7 @@ async def get_current_user(
 
     # Cast UUID column to VARCHAR for string comparison
     result = await db.execute(
-        select(User).where(cast(User.user_id, SQLAlchemyString) == user_id)
+        select(User).where(sa_cast(User.user_id, SQLAlchemyString) == user_id)
     )
     user = result.scalar_one_or_none()
 
@@ -584,7 +597,7 @@ async def get_current_admin_user_for_app_routes(
     return current_user
 
 
-def require_role(allowed_roles: list[str]):
+def require_role(allowed_roles: list[str]) -> Any:
     """
     Dependency factory for role-based access control.
 
@@ -694,12 +707,12 @@ async def upsert_wecom_user(db: AsyncSession, profile: dict[str, Any]) -> User:
         )
         db.add(user)
     else:
-        user.wechat_user_id = wecom_user_id
-        user.name = name or user.name or wecom_user_id
+        _set_user_field(user, "wechat_user_id", wecom_user_id)
+        _set_user_field(user, "name", name or _user_field(user, "name") or wecom_user_id)
         if email:
-            user.email = email
+            _set_user_field(user, "email", email)
         if department is not None:
-            user.department = department
+            _set_user_field(user, "department", department)
 
     await db.commit()
     await db.refresh(user)
@@ -707,7 +720,7 @@ async def upsert_wecom_user(db: AsyncSession, profile: dict[str, Any]) -> User:
 
 
 async def mark_user_logged_in(db: AsyncSession, user: User) -> User:
-    user.last_login = datetime.now(UTC)
+    _set_user_field(user, "last_login", datetime.now(UTC))
     await db.commit()
     await db.refresh(user)
     return user
@@ -747,11 +760,11 @@ async def get_dev_user(db: AsyncSession) -> User:
         return user
 
     # Keep dev account identity fields canonical for predictable local testing.
-    user.wechat_user_id = "dev_wechat_user"
+    _set_user_field(user, "wechat_user_id", "dev_wechat_user")
     if not user.email:
-        user.email = "dev@example.com"
+        _set_user_field(user, "email", "dev@example.com")
     if not user.name:
-        user.name = "Developer"
+        _set_user_field(user, "name", "Developer")
     await db.commit()
     await db.refresh(user)
 
