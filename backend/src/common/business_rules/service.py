@@ -33,6 +33,31 @@ _ACTIVE_STATUSES = {"published", "disabled"}
 _HISTORY_STATUSES = {"published", "archived", "disabled"}
 
 
+def _orm_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
+def _orm_dict(row: object, name: str) -> dict[str, Any]:
+    return dict(_orm_field(row, name) or {})
+
+
+def _orm_str(row: object, name: str) -> str:
+    return str(_orm_field(row, name))
+
+
+def _orm_int(row: object, name: str) -> int:
+    return int(_orm_field(row, name))
+
+
+def _orm_datetime(row: object, name: str) -> datetime | None:
+    value = getattr(row, name, None)
+    return value if isinstance(value, datetime) else None
+
+
 @dataclass(frozen=True)
 class BusinessRuleResolution:
     key: str
@@ -182,13 +207,13 @@ class BusinessRuleConfigService:
             return draft
 
         before = self.snapshot(draft)
-        draft.value_json = normalized
-        draft.default_value_json = deepcopy(definition.default_value)
-        draft.schema_version = definition.schema_version
-        draft.enabled = normalized.get("enabled") is not False
-        draft.validation_errors_json = []
-        draft.updated_by = actor_id
-        draft.updated_at = datetime.now(UTC)
+        _set_orm_field(draft, "value_json", normalized)
+        _set_orm_field(draft, "default_value_json", deepcopy(definition.default_value))
+        _set_orm_field(draft, "schema_version", definition.schema_version)
+        _set_orm_field(draft, "enabled", normalized.get("enabled") is not False)
+        _set_orm_field(draft, "validation_errors_json", [])
+        _set_orm_field(draft, "updated_by", actor_id)
+        _set_orm_field(draft, "updated_at", datetime.now(UTC))
         await self._db.flush()
         self._queue_audit(
             action="update_draft",
@@ -246,8 +271,8 @@ class BusinessRuleConfigService:
         return {
             "valid": True,
             "summary": summary,
-            "active_version": active.version if active is not None else None,
-            "active_config_id": str(active.id) if active is not None else None,
+            "active_version": _orm_int(active, "version") if active is not None else None,
+            "active_config_id": _orm_str(active, "id") if active is not None else None,
         }
 
     async def publish(
@@ -261,26 +286,28 @@ class BusinessRuleConfigService:
         draft = await self._target_draft(key=key, config_id=config_id)
         if draft is None:
             raise ValueError("[BUSINESS_RULE_DRAFT_NOT_FOUND]")
-        normalized = validate_business_rule_value(key, dict(draft.value_json or {}))
+        normalized = validate_business_rule_value(key, _orm_dict(draft, "value_json"))
         current_active = await self._active_config_for_key(key)
         before_snapshot = self.snapshot(current_active) if current_active else None
 
         active_rows = await self._active_configs_for_key(key)
         for row in active_rows:
-            if row.id != draft.id:
-                row.status = "archived"
-                row.enabled = False
-                row.updated_by = actor_id
-                row.updated_at = datetime.now(UTC)
+            if _orm_str(row, "id") != _orm_str(draft, "id"):
+                _set_orm_field(row, "status", "archived")
+                _set_orm_field(row, "enabled", False)
+                _set_orm_field(row, "updated_by", actor_id)
+                _set_orm_field(row, "updated_at", datetime.now(UTC))
 
-        draft.value_json = normalized
-        draft.status = (
+        _set_orm_field(draft, "value_json", normalized)
+        _set_orm_field(
+            draft,
+            "status",
             "published" if normalized.get("enabled") is not False else "disabled"
         )
-        draft.enabled = normalized.get("enabled") is not False
-        draft.validation_errors_json = []
-        draft.updated_by = actor_id
-        draft.updated_at = datetime.now(UTC)
+        _set_orm_field(draft, "enabled", normalized.get("enabled") is not False)
+        _set_orm_field(draft, "validation_errors_json", [])
+        _set_orm_field(draft, "updated_by", actor_id)
+        _set_orm_field(draft, "updated_at", datetime.now(UTC))
         await self._db.flush()
         self._queue_audit(
             action="publish",
@@ -308,28 +335,32 @@ class BusinessRuleConfigService:
         )
         if target is None:
             raise ValueError("[BUSINESS_RULE_ROLLBACK_TARGET_NOT_FOUND]")
-        normalized = validate_business_rule_value(key, dict(target.value_json or {}))
+        normalized = validate_business_rule_value(key, _orm_dict(target, "value_json"))
         current_active = await self._active_config_for_key(key)
-        if current_active is not None and current_active.id == target.id:
+        if current_active is not None and _orm_str(current_active, "id") == _orm_str(
+            target, "id"
+        ):
             raise ValueError("[BUSINESS_RULE_ROLLBACK_TARGET_ALREADY_ACTIVE]")
         before_snapshot = self.snapshot(current_active) if current_active else None
 
         active_rows = await self._active_configs_for_key(key)
         for row in active_rows:
-            if row.id != target.id:
-                row.status = "archived"
-                row.enabled = False
-                row.updated_by = actor_id
-                row.updated_at = datetime.now(UTC)
+            if _orm_str(row, "id") != _orm_str(target, "id"):
+                _set_orm_field(row, "status", "archived")
+                _set_orm_field(row, "enabled", False)
+                _set_orm_field(row, "updated_by", actor_id)
+                _set_orm_field(row, "updated_at", datetime.now(UTC))
 
-        target.value_json = normalized
-        target.status = (
+        _set_orm_field(target, "value_json", normalized)
+        _set_orm_field(
+            target,
+            "status",
             "published" if normalized.get("enabled") is not False else "disabled"
         )
-        target.enabled = normalized.get("enabled") is not False
-        target.validation_errors_json = []
-        target.updated_by = actor_id
-        target.updated_at = datetime.now(UTC)
+        _set_orm_field(target, "enabled", normalized.get("enabled") is not False)
+        _set_orm_field(target, "validation_errors_json", [])
+        _set_orm_field(target, "updated_by", actor_id)
+        _set_orm_field(target, "updated_at", datetime.now(UTC))
         await self._db.flush()
         self._queue_audit(
             action="rollback",
@@ -352,13 +383,13 @@ class BusinessRuleConfigService:
         if active is None:
             raise ValueError("[BUSINESS_RULE_ACTIVE_NOT_FOUND]")
         before = self.snapshot(active)
-        value = dict(active.value_json or {})
+        value = _orm_dict(active, "value_json")
         value["enabled"] = False
-        active.value_json = validate_business_rule_value(key, value)
-        active.status = "disabled"
-        active.enabled = False
-        active.updated_by = actor_id
-        active.updated_at = datetime.now(UTC)
+        _set_orm_field(active, "value_json", validate_business_rule_value(key, value))
+        _set_orm_field(active, "status", "disabled")
+        _set_orm_field(active, "enabled", False)
+        _set_orm_field(active, "updated_by", actor_id)
+        _set_orm_field(active, "updated_at", datetime.now(UTC))
         await self._db.flush()
         self._queue_audit(
             action="disable",
@@ -378,7 +409,7 @@ class BusinessRuleConfigService:
         reason: str | None = None,
     ) -> BusinessRuleConfig:
         row = await self.get_config(config_id)
-        if row is None or row.status != "draft":
+        if row is None or _orm_str(row, "status") != "draft":
             raise ValueError("[BUSINESS_RULE_DRAFT_NOT_FOUND]")
         before = self.snapshot(row)
         self._queue_audit(
@@ -403,7 +434,7 @@ class BusinessRuleConfigService:
         active = await self._active_config_for_key(key)
         if active is not None:
             try:
-                value = validate_business_rule_value(key, dict(active.value_json or {}))
+                value = validate_business_rule_value(key, _orm_dict(active, "value_json"))
                 source = (
                     "database_disabled" if value.get("enabled") is False else "database"
                 )
@@ -412,9 +443,9 @@ class BusinessRuleConfigService:
                     domain=definition.domain,
                     value=value,
                     source=source,
-                    config_id=str(active.id),
-                    version=int(active.version),
-                    status=str(active.status),
+                    config_id=_orm_str(active, "id"),
+                    version=_orm_int(active, "version"),
+                    status=_orm_str(active, "status"),
                 )
             except (
                 BusinessRuleValidationError,
@@ -425,13 +456,13 @@ class BusinessRuleConfigService:
                 logger.warning(
                     "business_rule_active_invalid_fallback",
                     key=key,
-                    config_id=str(active.id),
-                    version=active.version,
+                    config_id=_orm_str(active, "id"),
+                    version=_orm_int(active, "version"),
                     error=str(exc),
                 )
                 previous = await self._latest_valid_history_before(
                     key=key,
-                    before_version=active.version,
+                    before_version=_orm_int(active, "version"),
                 )
                 if previous is not None:
                     return previous
@@ -479,35 +510,41 @@ class BusinessRuleConfigService:
     def snapshot(row: BusinessRuleConfig | None) -> dict[str, Any] | None:
         if row is None:
             return None
+        updated_at = _orm_datetime(row, "updated_at")
         return {
-            "id": str(row.id),
-            "domain": row.domain,
-            "key": row.key,
-            "schema_version": row.schema_version,
-            "status": row.status,
-            "version": row.version,
-            "enabled": bool(row.enabled),
-            "value": deepcopy(row.value_json),
-            "default_value": deepcopy(row.default_value_json),
-            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "id": _orm_str(row, "id"),
+            "domain": _orm_str(row, "domain"),
+            "key": _orm_str(row, "key"),
+            "schema_version": _orm_str(row, "schema_version"),
+            "status": _orm_str(row, "status"),
+            "version": _orm_int(row, "version"),
+            "enabled": bool(_orm_field(row, "enabled")),
+            "value": deepcopy(_orm_field(row, "value_json")),
+            "default_value": deepcopy(_orm_field(row, "default_value_json")),
+            "updated_at": updated_at.isoformat() if updated_at else None,
         }
 
     @staticmethod
     def audit_snapshot(row: BusinessRuleConfigAuditLog) -> dict[str, Any]:
+        created_at = _orm_datetime(row, "created_at")
         return {
-            "id": str(row.id),
-            "config_id": str(row.config_id) if row.config_id else None,
-            "domain": row.domain,
-            "config_key": row.config_key,
-            "action": row.action,
-            "actor_id": str(row.actor_id) if row.actor_id else None,
-            "before_version": row.before_version,
-            "after_version": row.after_version,
-            "before_snapshot": deepcopy(row.before_snapshot_json),
-            "after_snapshot": deepcopy(row.after_snapshot_json),
-            "reason": row.reason,
-            "trace_id": row.trace_id,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "id": _orm_str(row, "id"),
+            "config_id": str(_orm_field(row, "config_id"))
+            if _orm_field(row, "config_id")
+            else None,
+            "domain": _orm_str(row, "domain"),
+            "config_key": _orm_str(row, "config_key"),
+            "action": _orm_str(row, "action"),
+            "actor_id": str(_orm_field(row, "actor_id"))
+            if _orm_field(row, "actor_id")
+            else None,
+            "before_version": _orm_field(row, "before_version"),
+            "after_version": _orm_field(row, "after_version"),
+            "before_snapshot": deepcopy(_orm_field(row, "before_snapshot_json")),
+            "after_snapshot": deepcopy(_orm_field(row, "after_snapshot_json")),
+            "reason": _orm_str(row, "reason"),
+            "trace_id": _orm_field(row, "trace_id"),
+            "created_at": created_at.isoformat() if created_at else None,
         }
 
     async def _latest_config_for_key(self, key: str) -> BusinessRuleConfig | None:
@@ -574,7 +611,11 @@ class BusinessRuleConfigService:
     ) -> BusinessRuleConfig | None:
         if config_id:
             row = await self.get_config(config_id)
-            if row is None or row.key != key or row.status != "draft":
+            if (
+                row is None
+                or _orm_str(row, "key") != key
+                or _orm_str(row, "status") != "draft"
+            ):
                 return None
             return row
         return await self._latest_draft_for_key(key)
@@ -588,7 +629,11 @@ class BusinessRuleConfigService:
     ) -> BusinessRuleConfig | None:
         if target_config_id:
             row = await self.get_config(target_config_id)
-            if row is None or row.key != key or row.status not in _HISTORY_STATUSES:
+            if (
+                row is None
+                or _orm_str(row, "key") != key
+                or _orm_str(row, "status") not in _HISTORY_STATUSES
+            ):
                 return None
             return row
         if target_version is not None:
@@ -609,7 +654,9 @@ class BusinessRuleConfigService:
             BusinessRuleConfig.status == "archived",
         )
         if active is not None:
-            statement = statement.where(BusinessRuleConfig.version < active.version)
+            statement = statement.where(
+                BusinessRuleConfig.version < _orm_int(active, "version")
+            )
         statement = statement.order_by(BusinessRuleConfig.version.desc()).limit(1)
         result = await self._db.execute(statement)
         return result.scalar_one_or_none()
@@ -634,7 +681,7 @@ class BusinessRuleConfigService:
         )
         for row in result.scalars().all():
             try:
-                value = validate_business_rule_value(key, dict(row.value_json or {}))
+                value = validate_business_rule_value(key, _orm_dict(row, "value_json"))
             except (BusinessRuleValidationError, KeyError, TypeError, ValueError):
                 continue
             return BusinessRuleResolution(
@@ -642,9 +689,9 @@ class BusinessRuleConfigService:
                 domain=definition.domain,
                 value=value,
                 source="database_previous",
-                config_id=str(row.id),
-                version=int(row.version),
-                status=str(row.status),
+                config_id=_orm_str(row, "id"),
+                version=_orm_int(row, "version"),
+                status=_orm_str(row, "status"),
                 fallback_reason="active_invalid_used_previous",
             )
         return None
@@ -663,10 +710,12 @@ class BusinessRuleConfigService:
         before_snapshot: dict[str, Any] | None = None,
         after_snapshot: dict[str, Any] | None = None,
     ) -> None:
-        resolved_key = config.key if config is not None else config_key
+        resolved_key = _orm_str(config, "key") if config is not None else config_key
         if resolved_key is None:
             raise ValueError("config key is required for audit")
-        resolved_domain = config.domain if config is not None else domain
+        resolved_domain = (
+            _orm_str(config, "domain") if config is not None else domain
+        )
         if resolved_domain is None:
             resolved_domain = get_business_rule_definition(resolved_key).domain
 
@@ -681,7 +730,7 @@ class BusinessRuleConfigService:
 
         self._db.add(
             BusinessRuleConfigAuditLog(
-                config_id=str(config.id) if config is not None else None,
+                config_id=_orm_str(config, "id") if config is not None else None,
                 domain=resolved_domain,
                 config_key=resolved_key,
                 action=action,
