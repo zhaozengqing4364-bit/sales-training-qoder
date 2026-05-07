@@ -142,6 +142,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 from sales_bot.websocket.stepfun_realtime_constants import (
     DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
     DEFAULT_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES,
@@ -177,7 +178,7 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
     return getattr(module, name, fallback) if module is not None else fallback
 
 
-class StepFunRealtimeSalesStageMixin:
+class StepFunRealtimeSalesStageMixin(StepFunRealtimeStateBase):
     async def _ensure_sales_stage_context(self) -> None:
         """Initialize sales-stage capability context once per handler session."""
         if self._sales_stage_context is not None:
@@ -395,14 +396,14 @@ class StepFunRealtimeSalesStageMixin:
             return max(1, self.turn_count)
         return max(1, self.turn_count + 1)
 
-    async def _send_transcript(self, text: str, is_final: bool):
+    async def _send_transcript(self, text: str, is_final: bool) -> None:
         """Send ASR transcript in existing frontend message format."""
         await self.manager.send_json(
             self.websocket,
             build_asr_transcript_event(text=text, is_final=is_final),
         )
 
-    async def _send_status(self, ai_state: str):
+    async def _send_status(self, ai_state: str) -> None:
         self.ai_state = ai_state
         await self.manager.send_json(
             self.websocket,
@@ -414,13 +415,13 @@ class StepFunRealtimeSalesStageMixin:
             ),
         )
 
-    async def _send_heartbeat(self):
+    async def _send_heartbeat(self) -> None:
         await self.manager.send_json(
             self.websocket,
             build_heartbeat_event(),
         )
 
-    async def _send_error(self, code: str, message: str):
+    async def _send_error(self, code: str, message: str) -> None:
         self._record_runtime_error(code, message)
         await self.manager.send_json(
             self.websocket,

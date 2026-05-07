@@ -142,6 +142,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 from sales_bot.websocket.stepfun_realtime_constants import (
     DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
     DEFAULT_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES,
@@ -177,7 +178,17 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
     return getattr(module, name, fallback) if module is not None else fallback
 
 
-class StepFunRealtimePolicyMixin:
+def _optional_runtime_score(value: Any) -> float | None:
+    """Normalize nullable ORM/runtime score fields."""
+    if value is None or hasattr(value, "expression"):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
     @staticmethod
     def _normalize_kb_ids(raw_kb_ids: Any) -> list[str]:
         if not isinstance(raw_kb_ids, list):
@@ -522,17 +533,21 @@ class StepFunRealtimePolicyMixin:
         not_evaluable_reason = None if evaluable else "INSUFFICIENT_TURN_DATA"
 
         if normalized_score_snapshot is None:
-            session.effectiveness_snapshot = evaluate_effectiveness_snapshot(
-                metrics=build_sales_effectiveness_metrics(
-                    overall_score=0.0,
-                    logic_score=0.0,
-                    accuracy_score=0.0,
-                    completeness_score=0.0,
-                    turn_count=max(0, self.turn_count),
+            setattr(
+                session,
+                "effectiveness_snapshot",
+                evaluate_effectiveness_snapshot(
+                    metrics=build_sales_effectiveness_metrics(
+                        overall_score=0.0,
+                        logic_score=0.0,
+                        accuracy_score=0.0,
+                        completeness_score=0.0,
+                        turn_count=max(0, self.turn_count),
+                    ),
+                    main_capability_passed=False,
+                    evaluable=False,
+                    not_evaluable_reason="INSUFFICIENT_TURN_DATA",
                 ),
-                main_capability_passed=False,
-                evaluable=False,
-                not_evaluable_reason="INSUFFICIENT_TURN_DATA",
             )
             logger.info(
                 "practice_session_evidence_not_evaluable",
@@ -555,24 +570,29 @@ class StepFunRealtimePolicyMixin:
             overall_score=overall_score,
             dimension_scores=normalized_score_snapshot.get("dimension_scores"),
         )
-        session.logic_score = rollups["logic_score"]
-        session.accuracy_score = rollups["accuracy_score"]
-        session.completeness_score = rollups["completeness_score"]
+        logic_score = _optional_runtime_score(rollups.get("logic_score")) or 0.0
+        accuracy_score = _optional_runtime_score(rollups.get("accuracy_score")) or 0.0
+        completeness_score = (
+            _optional_runtime_score(rollups.get("completeness_score")) or 0.0
+        )
+        setattr(session, "logic_score", logic_score)
+        setattr(session, "accuracy_score", accuracy_score)
+        setattr(session, "completeness_score", completeness_score)
 
         snapshot = evaluate_effectiveness_snapshot(
             metrics=build_sales_effectiveness_metrics(
                 overall_score=overall_score,
                 dimension_scores=normalized_score_snapshot.get("dimension_scores"),
-                logic_score=session.logic_score,
-                accuracy_score=session.accuracy_score,
-                completeness_score=session.completeness_score,
+                logic_score=logic_score,
+                accuracy_score=accuracy_score,
+                completeness_score=completeness_score,
                 turn_count=max(0, self.turn_count),
             ),
             main_capability_passed=overall_score >= 70.0,
             evaluable=evaluable,
             not_evaluable_reason=not_evaluable_reason,
         )
-        session.effectiveness_snapshot = snapshot
+        setattr(session, "effectiveness_snapshot", snapshot)
 
         if snapshot.get("evaluable", False):
             logger.info(
@@ -610,7 +630,7 @@ class StepFunRealtimePolicyMixin:
         await self._send_status("idle")
         return False
 
-    async def _connect_upstream(self):
+    async def _connect_upstream(self) -> None:
         """Connect to StepFun realtime WebSocket and initialize session."""
         query = urlencode({"model": self._stepfun_model})
         endpoint = f"{self._stepfun_url}?{query}"
@@ -681,7 +701,7 @@ class StepFunRealtimePolicyMixin:
         logger.info("StepFun session.update sent")
         await self._maybe_start_kb_lock_warmup()
 
-    async def _close_upstream(self):
+    async def _close_upstream(self) -> None:
         """Close upstream connection safely."""
         await self._stop_upstream_keepalive_task()
         if self.upstream_ws:
@@ -716,7 +736,7 @@ class StepFunRealtimePolicyMixin:
             self._run_kb_lock_warmup(normalized_kb_ids)
         )
 
-    async def _handle_client_text(self, raw_text: str):
+    async def _handle_client_text(self, raw_text: str) -> None:
         """Parse and route frontend JSON messages."""
         try:
             message = json.loads(raw_text)
@@ -876,7 +896,7 @@ class StepFunRealtimePolicyMixin:
                 },
             )
 
-    async def _handle_binary_frame(self, data: bytes):
+    async def _handle_binary_frame(self, data: bytes) -> None:
         """Handle binary audio frames from frontend."""
         if len(data) < 2:
             return

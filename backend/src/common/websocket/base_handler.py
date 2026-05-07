@@ -7,6 +7,7 @@ import asyncio
 from collections.abc import Mapping
 from contextlib import suppress
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
@@ -19,6 +20,9 @@ from common.websocket.session_state_service import (
     SessionStateSnapshot,
     get_session_state_service,
 )
+
+if TYPE_CHECKING:
+    from common.db.session_lifecycle import SessionLifecycleTransition
 
 logger = get_logger(__name__)
 
@@ -48,7 +52,7 @@ def _get_websocket_header_value(websocket: WebSocket, header_name: str) -> str:
 class ConnectionManager:
     """Manage WebSocket connections across all scenarios"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Scenario -> Session ID -> WebSocket
         self.active_connections: dict[str, dict[str, WebSocket]] = {
             "presentation": {},
@@ -56,7 +60,9 @@ class ConnectionManager:
         }
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, scenario: str, session_id: str):
+    async def connect(
+        self, websocket: WebSocket, scenario: str, session_id: str
+    ) -> None:
         """Accept and track connection"""
         await websocket.accept()
         async with self._lock:
@@ -75,7 +81,7 @@ class ConnectionManager:
             },
         )
 
-    async def disconnect(self, scenario: str, session_id: str):
+    async def disconnect(self, scenario: str, session_id: str) -> None:
         """Remove connection from tracking"""
         async with self._lock:
             if scenario in self.active_connections:
@@ -84,14 +90,20 @@ class ConnectionManager:
             f"WebSocket disconnected: scenario={scenario}, session={session_id}"
         )
 
-    async def send_json(self, websocket: WebSocket, message: dict):
+    async def send_json(
+        self, websocket: WebSocket | None, message: dict[str, Any]
+    ) -> None:
         """Send JSON message safely"""
+        if websocket is None:
+            return
         try:
             await websocket.send_json(message)
         except Exception as e:
             logger.error(f"Failed to send message: {str(e)}")
 
-    async def broadcast_to_session(self, scenario: str, session_id: str, message: dict):
+    async def broadcast_to_session(
+        self, scenario: str, session_id: str, message: dict[str, Any]
+    ) -> None:
         """Send message to specific session"""
         websocket = None
         async with self._lock:
@@ -127,7 +139,7 @@ class BaseWebSocketHandler:
     def __init__(self, scenario: str):
         self.scenario = scenario
         self.manager = get_connection_manager()
-        self.message_queue: asyncio.Queue | None = None
+        self.message_queue: asyncio.Queue[dict[str, Any]] | None = None
         self.running = False
         self.websocket: WebSocket | None = None
         self.session_id: str | None = None
@@ -152,7 +164,9 @@ class BaseWebSocketHandler:
         )
         return DEFAULT_MESSAGE_QUEUE_SIZE
 
-    async def _enqueue_received_message(self, websocket: WebSocket, data: dict) -> None:
+    async def _enqueue_received_message(
+        self, websocket: WebSocket, data: dict[str, Any]
+    ) -> None:
         """Enqueue a received message without allowing unbounded memory growth."""
         if self.message_queue is None:
             logger.warning("Dropping websocket message before queue initialization")
@@ -191,7 +205,7 @@ class BaseWebSocketHandler:
         session_id: str,
         token: str,
         trace_id: str | None = None,
-    ):
+    ) -> None:
         """
         Main connection handler
         Override in subclasses for scenario-specific logic
@@ -237,7 +251,7 @@ class BaseWebSocketHandler:
         self.running = True
 
         # Restore state if reconnection
-        if is_reconnection:
+        if existing_state.value is not None and is_reconnection:
             logger.info(f"Reconnection detected for session: {session_id}")
             await self._restore_session_state(existing_state.value)
 
@@ -278,7 +292,9 @@ class BaseWebSocketHandler:
             await self.manager.disconnect(self.scenario, session_id)
             processing_task.cancel()
 
-    async def _enqueue_message(self, data: dict, websocket: WebSocket) -> bool:
+    async def _enqueue_message(
+        self, data: dict[str, Any], websocket: WebSocket
+    ) -> bool:
         """Enqueue a message without allowing unbounded memory growth."""
         if self.message_queue is None:
             return False
@@ -321,13 +337,13 @@ class BaseWebSocketHandler:
             )
             return False
 
-    async def send_message(self, message: dict):
+    async def send_message(self, message: dict[str, Any]) -> None:
         """Send message to current websocket connection (SessionManager hook)."""
         if not self.websocket:
             return
         await self.manager.send_json(self.websocket, message)
 
-    async def close(self, code: int = 1000, reason: str = "Session closed"):
+    async def close(self, code: int = 1000, reason: str = "Session closed") -> None:
         """Close current websocket connection safely (SessionManager hook)."""
         if not self.websocket:
             return
@@ -338,20 +354,25 @@ class BaseWebSocketHandler:
         except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Failed to close websocket: {e}")
 
-    async def sync_lifecycle_transition(self, transition) -> None:
+    async def sync_lifecycle_transition(
+        self, transition: "SessionLifecycleTransition"
+    ) -> None:
         """Apply persisted lifecycle state pushed from REST controls."""
         if hasattr(self, "session_status"):
             self.session_status = transition.to_status
         if hasattr(self, "ai_state"):
             self.ai_state = transition.ai_state
 
-    async def _process_messages(self):
+    async def _process_messages(self) -> None:
         """
         Process messages from queue
         Override in subclasses for scenario-specific message handling
         """
         while self.running:
             try:
+                if self.message_queue is None:
+                    logger.warning("Stopping message processor without initialized queue")
+                    break
                 message = await self.message_queue.get()
                 await self.handle_message(message)
             except asyncio.CancelledError:
@@ -359,7 +380,7 @@ class BaseWebSocketHandler:
             except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Message processing error: {str(e)}")
 
-    async def handle_message(self, message: dict):
+    async def handle_message(self, message: dict[str, Any]) -> None:
         """
         Handle individual message
         Override in subclasses
@@ -376,7 +397,7 @@ class BaseWebSocketHandler:
         error_code: str,
         message: str,
         user_action: str | None = None,
-    ):
+    ) -> None:
         """
         Send error message (not shown as popup to user)
         Constitution: All errors converted to graceful degradation
@@ -406,7 +427,7 @@ class BaseWebSocketHandler:
             user_id=self.user_id,
         )
 
-    async def _save_session_state(self):
+    async def _save_session_state(self) -> None:
         """Save current session state snapshot."""
         if not self.session_id:
             return
@@ -419,7 +440,7 @@ class BaseWebSocketHandler:
         else:
             logger.warning(f"Failed to save session state: {result.fallback}")
 
-    async def _restore_session_state(self, state: SessionStateSnapshot):
+    async def _restore_session_state(self, state: SessionStateSnapshot) -> None:
         """
         Restore session state from snapshot.
         Override in subclasses to handle scenario-specific state restoration.
@@ -430,7 +451,7 @@ class BaseWebSocketHandler:
         )
         # Base implementation - subclasses can override to restore specific state
 
-    async def _send_reconnection_success(self, state: SessionStateSnapshot):
+    async def _send_reconnection_success(self, state: SessionStateSnapshot) -> None:
         """
         Send reconnection success message to client.
         """

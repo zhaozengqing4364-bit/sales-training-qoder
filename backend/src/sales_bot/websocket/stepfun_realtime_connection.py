@@ -142,6 +142,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 from sales_bot.websocket.stepfun_realtime_constants import (
     DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
     DEFAULT_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES,
@@ -177,7 +178,7 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
     return getattr(module, name, fallback) if module is not None else fallback
 
 
-class StepFunRealtimeConnectionMixin:
+class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
     @staticmethod
     def _normalize_connection_epoch(value: Any) -> int:
         try:
@@ -673,7 +674,7 @@ class StepFunRealtimeConnectionMixin:
             user_id=self.user_id,
         )
 
-    async def _restore_session_state(self, state: SessionStateSnapshot):
+    async def _restore_session_state(self, state: SessionStateSnapshot) -> None:
         """Restore the minimal StepFun runtime subset required to continue training."""
         await super()._restore_session_state(state)
 
@@ -756,7 +757,7 @@ class StepFunRealtimeConnectionMixin:
         )
         await self._send_reconnection_success(self._create_state_snapshot())
 
-    async def _save_session_state(self):
+    async def _save_session_state(self) -> None:
         """Persist reconnectable state, or clear dirty snapshots after terminal exits."""
         if not self.session_id:
             return
@@ -801,7 +802,7 @@ class StepFunRealtimeConnectionMixin:
                 error=result.fallback,
             )
 
-    async def send_message(self, message: dict):
+    async def send_message(self, message: dict[str, Any]) -> None:
         """Send SessionManager notifications with reconnect diagnostics."""
         websocket = self._get_active_websocket()
         if not websocket:
@@ -832,7 +833,7 @@ class StepFunRealtimeConnectionMixin:
         session_id: str,
         token: str,
         trace_id: str | None = None,
-    ):
+    ) -> None:
         """Main lifecycle for frontend WS + upstream StepFun WS."""
         resolved_token = resolve_websocket_token(
             query_token=token,

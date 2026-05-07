@@ -142,6 +142,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 from sales_bot.websocket.stepfun_realtime_constants import (
     DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
     DEFAULT_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES,
@@ -177,7 +178,7 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
     return getattr(module, name, fallback) if module is not None else fallback
 
 
-class StepFunRealtimeFeedbackMixin:
+class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
     async def _ensure_feedback_context(self) -> None:
         """Initialize context used by fuzzy detection and realtime scoring."""
         if self._feedback_context is not None:

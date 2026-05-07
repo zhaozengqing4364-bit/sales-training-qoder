@@ -22,6 +22,7 @@ from urllib.parse import urlencode
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from websockets.exceptions import ConnectionClosed
 
 from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
@@ -38,6 +39,7 @@ from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
     SessionLifecycleAction,
     SessionLifecycleService,
+    SessionLifecycleTransition,
 )
 from common.effectiveness import (
     build_live_session_conclusion_summary,
@@ -142,6 +144,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 from sales_bot.websocket.stepfun_realtime_constants import (
     DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
     DEFAULT_INTERNAL_RETRIEVAL_CACHE_MAX_ENTRIES,
@@ -177,8 +180,8 @@ def _handler_symbol(name: str, fallback: Any) -> Any:
     return getattr(module, name, fallback) if module is not None else fallback
 
 
-class StepFunRealtimeUpstreamMixin:
-    async def _commit_and_respond(self):
+class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
+    async def _commit_and_respond(self) -> None:
         """Commit buffered user audio and trigger model response."""
         if not self._has_uncommitted_audio:
             logger.debug(
@@ -285,7 +288,7 @@ class StepFunRealtimeUpstreamMixin:
         await self._send_upstream(response_payload)
         return True
 
-    async def _handle_interrupt(self, reason: str):
+    async def _handle_interrupt(self, reason: str) -> None:
         """Stop current generation and clear buffered input."""
         interrupted_stream_id = (
             self._active_response.stream_id if self._active_response else None
@@ -311,7 +314,7 @@ class StepFunRealtimeUpstreamMixin:
             "listening" if self.session_status == "in_progress" else "idle"
         )
 
-    async def _handle_session_end(self):
+    async def _handle_session_end(self) -> None:
         """Close session after notifying frontend."""
         await self._cancel_pending_response_after_commit()
         self._reset_turn_runtime_state()
@@ -384,7 +387,9 @@ class StepFunRealtimeUpstreamMixin:
             return f"Realtime 上游连接已关闭：{close_reason}"
         return "Realtime 上游连接已关闭，请点击“重新连接”。"
 
-    async def sync_lifecycle_transition(self, transition) -> None:
+    async def sync_lifecycle_transition(
+        self, transition: SessionLifecycleTransition
+    ) -> None:
         """Mirror REST lifecycle transitions into the live StepFun runtime."""
         await super().sync_lifecycle_transition(transition)
         self.session_scenario_type = transition.scenario_type or self.scenario
@@ -403,7 +408,7 @@ class StepFunRealtimeUpstreamMixin:
                         error=str(exc),
                     )
 
-    async def _receive_upstream_events(self):
+    async def _receive_upstream_events(self) -> None:
         """Receive events from StepFun and map them to frontend messages."""
         while self.running:
             if self.upstream_ws is None:
@@ -466,7 +471,7 @@ class StepFunRealtimeUpstreamMixin:
                 )
                 self.running = False
 
-    async def _handle_upstream_event(self, event: dict):
+    async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
         """Map selected StepFun events to existing frontend contract."""
         event_type = str(event.get("type", ""))
         self._last_upstream_event_type = event_type
@@ -969,7 +974,7 @@ class StepFunRealtimeUpstreamMixin:
         await self._send_status("listening")
         return True
 
-    async def _forward_audio_delta_chunk(self, delta_b64: str):
+    async def _forward_audio_delta_chunk(self, delta_b64: str) -> None:
         """Forward one upstream audio delta as frontend tts_chunk for low-latency playback."""
         response_state = self._active_response
         if not response_state:
@@ -1020,7 +1025,7 @@ class StepFunRealtimeUpstreamMixin:
 
     async def _accumulate_function_call_arguments(
         self, event: dict, done: bool = False
-    ):
+    ) -> None:
         """Collect function-call arguments from delta/done events."""
         call_id, name, arguments_part = parse_function_call_event(event)
         if not call_id:
@@ -1358,7 +1363,7 @@ class StepFunRealtimeUpstreamMixin:
             ]
         return filtered_tools
 
-    async def _send_upstream(self, payload: dict):
+    async def _send_upstream(self, payload: dict[str, Any]) -> None:
         """Send one event to StepFun upstream."""
         if self.upstream_ws is None:
             return

@@ -29,6 +29,7 @@ from urllib.parse import urlencode
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from websockets.exceptions import ConnectionClosed
 
 from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
@@ -45,6 +46,7 @@ from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
     SessionLifecycleAction,
     SessionLifecycleService,
+    SessionLifecycleTransition,
 )
 from common.effectiveness import (
     build_live_session_conclusion_summary,
@@ -145,6 +147,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 
 logger = get_logger(__name__)
 
@@ -166,6 +169,24 @@ DEFAULT_UPSTREAM_KEEPALIVE_ENABLED = True
 DEFAULT_UPSTREAM_KEEPALIVE_INTERVAL_MS = 20000
 DEFAULT_UPSTREAM_KEEPALIVE_PONG_TIMEOUT_MS = 5000
 TERMINAL_SESSION_STATUSES = {"scoring", "completed"}
+
+
+def _optional_runtime_text(value: Any) -> str | None:
+    """Normalize nullable ORM/runtime identifiers without treating SQLAlchemy columns as values."""
+    if value is None or hasattr(value, "expression"):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_runtime_score(value: Any) -> float | None:
+    """Normalize nullable ORM/runtime score fields."""
+    if value is None or hasattr(value, "expression"):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 # T01 inventory for M021/S04: these are the shipped StepFun/runtime behaviors that
 # already emit degraded/fallback signals implicitly, but not yet as one normalized
@@ -228,7 +249,7 @@ class StepFunRealtimeHandler(
     StepFunRealtimeFeedbackMixin,
     StepFunRealtimeUpstreamMixin,
     StepFunRealtimeSalesStageMixin,
-    BaseWebSocketHandler,
+    StepFunRealtimeStateBase,
 ):
     """
     Proxy handler for StepFun Realtime API.
@@ -241,7 +262,7 @@ class StepFunRealtimeHandler(
     BINARY_AUDIO_CHUNK = 0x01
     BINARY_AUDIO_INTERRUPT = 0x02
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("sales")
         self.upstream_ws = None
         self._upstream_task: asyncio.Task | None = None
@@ -912,11 +933,11 @@ class StepFunRealtimeHandler(
             user_id=self.user_id,
         )
 
-    async def _restore_session_state(self, state: SessionStateSnapshot):
+    async def _restore_session_state(self, state: SessionStateSnapshot) -> None:
         """Restore reconnect state using the StepFun connection mixin authority."""
         await super()._restore_session_state(state)
 
-    async def _save_session_state(self):
+    async def _save_session_state(self) -> None:
         """Persist reconnectable state, or clear dirty snapshots after terminal exits."""
         if not self.session_id:
             return
@@ -961,7 +982,7 @@ class StepFunRealtimeHandler(
                 error=result.fallback,
             )
 
-    async def send_message(self, message: dict):
+    async def send_message(self, message: dict[str, Any]) -> None:
         """Send SessionManager notifications with reconnect diagnostics."""
         websocket = self._get_active_websocket()
         if not websocket:
@@ -992,7 +1013,7 @@ class StepFunRealtimeHandler(
         session_id: str,
         token: str,
         trace_id: str | None = None,
-    ):
+    ) -> None:
         """Main lifecycle for frontend WS + upstream StepFun WS."""
         resolved_token = resolve_websocket_token(
             query_token=token,
@@ -1108,7 +1129,7 @@ class StepFunRealtimeHandler(
             await self._save_session_state()
             await self.manager.disconnect(self.scenario, session_id)
 
-    async def _load_effective_policy(self):
+    async def _load_effective_policy(self) -> None:
         """Load effective voice policy from session snapshot or resolver service."""
         self._effective_policy = {}
         async with AsyncSessionLocal() as db:
@@ -1124,16 +1145,22 @@ class StepFunRealtimeHandler(
                 )
                 return
 
-            self._session_agent_id = str(session.agent_id) if session.agent_id else None
-            self._session_persona_id = (
-                str(session.persona_id) if session.persona_id else None
+            session_any = cast(Any, session)
+            self._session_agent_id = _optional_runtime_text(
+                getattr(session, "agent_id", None)
             )
-            self._session_user_id = str(session.user_id) if session.user_id else None
+            self._session_persona_id = _optional_runtime_text(
+                getattr(session, "persona_id", None)
+            )
+            self._session_user_id = _optional_runtime_text(
+                getattr(session, "user_id", None)
+            )
             await self._refresh_sales_stage_runtime_config(db)
 
+            snapshot_raw = getattr(session, "voice_policy_snapshot", None)
             snapshot = (
-                session.voice_policy_snapshot
-                if isinstance(session.voice_policy_snapshot, dict)
+                snapshot_raw
+                if isinstance(snapshot_raw, dict)
                 else None
             )
 
@@ -1143,17 +1170,23 @@ class StepFunRealtimeHandler(
             else:
                 policy_service = VoiceRuntimePolicyService(db)
                 resolved_policy = await policy_service.resolve_effective_policy(
-                    agent_id=session.agent_id,
-                    persona_id=session.persona_id,
-                    voice_mode_override=session.voice_mode,
-                    runtime_profile_override=session.voice_runtime_profile_id,
+                    agent_id=self._session_agent_id,
+                    persona_id=self._session_persona_id,
+                    voice_mode_override=_optional_runtime_text(
+                        getattr(session, "voice_mode", None)
+                    ),
+                    runtime_profile_override=_optional_runtime_text(
+                        getattr(session, "voice_runtime_profile_id", None)
+                    ),
                 )
                 self._effective_policy = resolved_policy
-                session.voice_policy_snapshot = self._effective_policy
-                session.voice_mode = self._effective_policy.get(
-                    "voice_mode", session.voice_mode or "legacy"
+                session_any.voice_policy_snapshot = self._effective_policy
+                session_any.voice_mode = self._effective_policy.get(
+                    "voice_mode",
+                    _optional_runtime_text(getattr(session, "voice_mode", None))
+                    or "legacy",
                 )
-                session.voice_runtime_profile_id = self._effective_policy.get(
+                session_any.voice_runtime_profile_id = self._effective_policy.get(
                     "runtime_profile_id"
                 )
                 await db.commit()
@@ -1161,7 +1194,7 @@ class StepFunRealtimeHandler(
 
             guardrail_applied = self._enforce_tool_policy_guardrails()
             if guardrail_applied:
-                session.voice_policy_snapshot = self._effective_policy
+                session_any.voice_policy_snapshot = self._effective_policy
                 await db.commit()
 
             self._stepfun_model = str(
@@ -1557,7 +1590,7 @@ class StepFunRealtimeHandler(
 
         return merged
 
-    async def _refresh_sales_stage_runtime_config(self, db) -> None:
+    async def _refresh_sales_stage_runtime_config(self, db: AsyncSession) -> None:
         """Load stage runtime config from Agent/Persona and rebuild capability."""
         agent_capabilities_config: dict[str, Any] = {}
         persona_behavior_config: dict[str, Any] = {}
@@ -1677,7 +1710,7 @@ class StepFunRealtimeHandler(
         self._latest_action_card = None
         self._feedback_pacing_state = RealtimeFeedbackPacingState()
 
-    async def _sync_session_state(self):
+    async def _sync_session_state(self) -> None:
         if not self.session_id:
             return
 
@@ -1703,7 +1736,10 @@ class StepFunRealtimeHandler(
         not_evaluable_reason = None if evaluable else "INSUFFICIENT_TURN_DATA"
 
         if normalized_score_snapshot is None:
-            session.effectiveness_snapshot = evaluate_effectiveness_snapshot(
+            setattr(
+                session,
+                "effectiveness_snapshot",
+                evaluate_effectiveness_snapshot(
                 metrics=build_sales_effectiveness_metrics(
                     overall_score=0.0,
                     logic_score=0.0,
@@ -1714,6 +1750,7 @@ class StepFunRealtimeHandler(
                 main_capability_passed=False,
                 evaluable=False,
                 not_evaluable_reason="INSUFFICIENT_TURN_DATA",
+                ),
             )
             logger.info(
                 "practice_session_evidence_not_evaluable",
@@ -1736,24 +1773,29 @@ class StepFunRealtimeHandler(
             overall_score=overall_score,
             dimension_scores=normalized_score_snapshot.get("dimension_scores"),
         )
-        session.logic_score = rollups["logic_score"]
-        session.accuracy_score = rollups["accuracy_score"]
-        session.completeness_score = rollups["completeness_score"]
+        logic_score = _optional_runtime_score(rollups.get("logic_score")) or 0.0
+        accuracy_score = _optional_runtime_score(rollups.get("accuracy_score")) or 0.0
+        completeness_score = (
+            _optional_runtime_score(rollups.get("completeness_score")) or 0.0
+        )
+        setattr(session, "logic_score", logic_score)
+        setattr(session, "accuracy_score", accuracy_score)
+        setattr(session, "completeness_score", completeness_score)
 
         snapshot = evaluate_effectiveness_snapshot(
             metrics=build_sales_effectiveness_metrics(
                 overall_score=overall_score,
                 dimension_scores=normalized_score_snapshot.get("dimension_scores"),
-                logic_score=session.logic_score,
-                accuracy_score=session.accuracy_score,
-                completeness_score=session.completeness_score,
+                logic_score=logic_score,
+                accuracy_score=accuracy_score,
+                completeness_score=completeness_score,
                 turn_count=max(0, self.turn_count),
             ),
             main_capability_passed=overall_score >= 70.0,
             evaluable=evaluable,
             not_evaluable_reason=not_evaluable_reason,
         )
-        session.effectiveness_snapshot = snapshot
+        setattr(session, "effectiveness_snapshot", snapshot)
 
         if snapshot.get("evaluable", False):
             logger.info(
@@ -1773,7 +1815,9 @@ class StepFunRealtimeHandler(
                 turn_count=max(0, self.turn_count),
             )
 
-    async def _apply_lifecycle_action(self, action: SessionLifecycleAction):
+    async def _apply_lifecycle_action(
+        self, action: SessionLifecycleAction
+    ) -> object | None:
         if not self.session_id:
             return None
 
@@ -1835,7 +1879,7 @@ class StepFunRealtimeHandler(
         await self._send_status("idle")
         return False
 
-    async def _connect_upstream(self):
+    async def _connect_upstream(self) -> None:
         """Connect to StepFun realtime WebSocket and initialize session."""
         query = urlencode({"model": self._stepfun_model})
         endpoint = f"{self._stepfun_url}?{query}"
@@ -1906,7 +1950,7 @@ class StepFunRealtimeHandler(
         logger.info("StepFun session.update sent")
         await self._maybe_start_kb_lock_warmup()
 
-    async def _close_upstream(self):
+    async def _close_upstream(self) -> None:
         """Close upstream connection safely."""
         await self._stop_upstream_keepalive_task()
         if self.upstream_ws:
@@ -1980,7 +2024,7 @@ class StepFunRealtimeHandler(
                 embedding_client_warmed=embedding_client_warmed,
             )
 
-    async def _handle_client_text(self, raw_text: str):
+    async def _handle_client_text(self, raw_text: str) -> None:
         """Parse and route frontend JSON messages."""
         try:
             message = json.loads(raw_text)
@@ -2140,7 +2184,7 @@ class StepFunRealtimeHandler(
                 },
             )
 
-    async def _handle_binary_frame(self, data: bytes):
+    async def _handle_binary_frame(self, data: bytes) -> None:
         """Handle binary audio frames from frontend."""
         if len(data) < 2:
             return
@@ -3135,7 +3179,7 @@ class StepFunRealtimeHandler(
 
         return await self._create_response(count_turn=True)
 
-    async def _commit_and_respond(self):
+    async def _commit_and_respond(self) -> None:
         """Commit buffered user audio and trigger model response."""
         if not self._has_uncommitted_audio:
             logger.debug(
@@ -3242,7 +3286,7 @@ class StepFunRealtimeHandler(
         await self._send_upstream(response_payload)
         return True
 
-    async def _handle_interrupt(self, reason: str):
+    async def _handle_interrupt(self, reason: str) -> None:
         """Stop current generation and clear buffered input."""
         interrupted_stream_id = (
             self._active_response.stream_id if self._active_response else None
@@ -3272,7 +3316,7 @@ class StepFunRealtimeHandler(
             "listening" if self.session_status == "in_progress" else "idle"
         )
 
-    async def _handle_session_end(self):
+    async def _handle_session_end(self) -> None:
         """Close session after notifying frontend."""
         await self._cancel_pending_response_after_commit()
         self._reset_turn_runtime_state()
@@ -3405,11 +3449,13 @@ class StepFunRealtimeHandler(
 
         return False
 
-    async def sync_lifecycle_transition(self, transition) -> None:
+    async def sync_lifecycle_transition(
+        self, transition: SessionLifecycleTransition
+    ) -> None:
         """Mirror REST lifecycle transitions through the StepFun upstream mixin."""
         await super().sync_lifecycle_transition(transition)
 
-    async def _receive_upstream_events(self):
+    async def _receive_upstream_events(self) -> None:
         """Receive events from StepFun and map them to frontend messages."""
         while self.running:
             if self.upstream_ws is None:
@@ -3472,7 +3518,7 @@ class StepFunRealtimeHandler(
                 )
                 self.running = False
 
-    async def _handle_upstream_event(self, event: dict):
+    async def _handle_upstream_event(self, event: dict[str, Any]) -> None:
         """Map selected StepFun events to existing frontend contract."""
         event_type = str(event.get("type", ""))
         self._last_upstream_event_type = event_type
@@ -3960,13 +4006,13 @@ class StepFunRealtimeHandler(
         await self._send_status("listening")
         return True
 
-    async def _forward_audio_delta_chunk(self, delta_b64: str):
+    async def _forward_audio_delta_chunk(self, delta_b64: str) -> None:
         """Forward audio deltas through the StepFun upstream TTS contract builder."""
         await super()._forward_audio_delta_chunk(delta_b64)
 
     async def _accumulate_function_call_arguments(
         self, event: dict, done: bool = False
-    ):
+    ) -> None:
         """Collect function-call arguments from delta/done events."""
         call_id, name, arguments_part = parse_function_call_event(event)
         if not call_id:
@@ -4424,7 +4470,7 @@ class StepFunRealtimeHandler(
             ]
         return filtered_tools
 
-    async def _send_upstream(self, payload: dict):
+    async def _send_upstream(self, payload: dict[str, Any]) -> None:
         """Send one event to StepFun upstream."""
         if self.upstream_ws is None:
             return
@@ -4648,14 +4694,14 @@ class StepFunRealtimeHandler(
             return max(1, self.turn_count)
         return max(1, self.turn_count + 1)
 
-    async def _send_transcript(self, text: str, is_final: bool):
+    async def _send_transcript(self, text: str, is_final: bool) -> None:
         """Send ASR transcript in existing frontend message format."""
         await self.manager.send_json(
             self.websocket,
             build_asr_transcript_event(text=text, is_final=is_final),
         )
 
-    async def _send_status(self, ai_state: str):
+    async def _send_status(self, ai_state: str) -> None:
         self.ai_state = ai_state
         await self.manager.send_json(
             self.websocket,
@@ -4667,13 +4713,13 @@ class StepFunRealtimeHandler(
             ),
         )
 
-    async def _send_heartbeat(self):
+    async def _send_heartbeat(self) -> None:
         await self.manager.send_json(
             self.websocket,
             build_heartbeat_event(),
         )
 
-    async def _send_error(self, code: str, message: str):
+    async def _send_error(self, code: str, message: str) -> None:
         self._record_runtime_error(code, message)
         await self.manager.send_json(
             self.websocket,
