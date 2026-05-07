@@ -9,6 +9,8 @@ Implements Constitution Principles:
 NEW-15: Refactored to inherit from BaseSalesHandler (common pipeline).
 """
 
+from typing import Any
+
 from sqlalchemy import select
 
 from common.ai.llm_service import get_llm_service
@@ -105,7 +107,7 @@ DEFAULT_PERSONA_CONFIG = {
 }
 
 
-async def get_persona_from_db(persona_id: str) -> dict | None:
+async def get_persona_from_db(persona_id: str) -> dict[str, Any] | None:
     """Load persona configuration from database."""
     try:
         # Import here to avoid circular imports
@@ -118,7 +120,10 @@ async def get_persona_from_db(persona_id: str) -> dict | None:
 
             if persona:
                 # Build greeting from behavior_config or use default
-                behavior = persona.behavior_config or {}
+                raw_behavior = persona.behavior_config
+                behavior: dict[str, Any] = (
+                    raw_behavior if isinstance(raw_behavior, dict) else {}
+                )
                 typical_questions = behavior.get("typical_questions", [])
                 greeting = (
                     typical_questions[0]
@@ -146,12 +151,12 @@ class SimpleSalesHandler(BaseSalesHandler):
     Adds: default persona configs, DB persona loading, simple LLM generation.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("sales")
         self.persona_id: str | None = None
-        self.persona_config: dict | None = None
+        self.persona_config: dict[str, Any] | None = None
 
-    async def _load_persona_config(self, persona_id: str | None) -> dict:
+    async def _load_persona_config(self, persona_id: str | None) -> dict[str, Any]:
         """Load persona configuration from database or use default."""
         # Try to load from database first
         if persona_id:
@@ -165,7 +170,7 @@ class SimpleSalesHandler(BaseSalesHandler):
         logger.info(f"Using default persona: {default_key}")
         return DEFAULT_PERSONA_CONFIG[default_key]
 
-    async def _on_connection_established(self, **kwargs):
+    async def _on_connection_established(self, **kwargs: Any) -> None:
         """Load persona config when connection is established."""
         persona_id = kwargs.get("persona_id")
         if persona_id:
@@ -174,13 +179,16 @@ class SimpleSalesHandler(BaseSalesHandler):
         if not self.persona_config:
             self.persona_config = await self._load_persona_config(self.persona_id)
 
-    async def _generate_response(self, user_text: str, **kwargs) -> str | None:
+    async def _generate_response(self, text: str, **kwargs: Any) -> str | None:
         """Generate LLM response based on persona."""
         try:
             llm_service = get_llm_service()
 
             # Get system prompt from loaded persona config
-            system_prompt = self.persona_config.get("system_prompt", "你是一个AI助手。")
+            persona_config = self.persona_config or DEFAULT_PERSONA_CONFIG[
+                "impatient_ceo"
+            ]
+            system_prompt = persona_config.get("system_prompt", "你是一个AI助手。")
             knowledge_context = str(kwargs.get("knowledge_context") or "").strip()
             if knowledge_context:
                 system_prompt = (
@@ -196,10 +204,15 @@ class SimpleSalesHandler(BaseSalesHandler):
                 "history": self.conversation_history[-10:],  # Last 10 messages
             }
 
+            session_id = self.session_id
+            if not session_id:
+                logger.warning("Missing session_id for LLM generation")
+                return None
+
             # Generate response
             result = await llm_service.generate(
-                prompt=user_text,
-                session_id=self.session_id,
+                prompt=text,
+                session_id=session_id,
                 system_message=system_prompt,
                 context=context,
             )
@@ -222,7 +235,13 @@ class SimpleSalesHandler(BaseSalesHandler):
     def _get_fallback_response(self) -> str:
         """Get fallback response based on persona."""
         # Use traits from persona config if available
-        traits = self.persona_config.get("traits", {})
+        persona_config = self.persona_config or DEFAULT_PERSONA_CONFIG[
+            "impatient_ceo"
+        ]
+        raw_traits: Any = persona_config.get("traits", {})
+        traits: dict[str, Any] = (
+            raw_traits if isinstance(raw_traits, dict) else {}
+        )
         personality = traits.get("性格", "")
 
         if "急躁" in personality or "impatient" in personality.lower():
@@ -236,13 +255,16 @@ class SimpleSalesHandler(BaseSalesHandler):
         else:
             return "请继续。"
 
-    async def _send_greeting(self):
+    async def _send_greeting(self) -> None:
         """Send persona greeting with TTS."""
         if self.turn_count > 0:
             return
 
-        greeting = self.persona_config.get("greeting", "你好，请开始吧。")
-        persona_name = self.persona_config.get("name", "AI助手")
+        persona_config = self.persona_config or DEFAULT_PERSONA_CONFIG[
+            "impatient_ceo"
+        ]
+        greeting = persona_config.get("greeting", "你好，请开始吧。")
+        persona_name = persona_config.get("name", "AI助手")
 
         logger.info(f"Sending greeting for persona: {persona_name}")
 
@@ -259,13 +281,13 @@ class SimpleSalesHandler(BaseSalesHandler):
         # Update status to listening
         await self._send_status("listening")
 
-    async def set_persona(self, persona_id: str):
+    async def set_persona(self, persona_id: str) -> None:
         """Set the persona for this session"""
         self.persona_id = persona_id
         self.persona_config = await self._load_persona_config(persona_id)
         logger.info(f"Set persona: {self.persona_config.get('name', persona_id)}")
 
-    def set_bot_session(self, session_uuid):
+    def set_bot_session(self, session_uuid: str) -> None:
         """Set the bot session UUID for linking with existing session"""
         self.bot_session_uuid = session_uuid
         logger.info(f"Linked to bot session: {session_uuid}")
