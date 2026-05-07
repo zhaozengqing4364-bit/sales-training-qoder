@@ -157,7 +157,7 @@ async def list_prompt_templates(
     limit: int = Query(100, ge=1, le=1000, description="Limit results"),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> list[PromptTemplate]:
+) -> list[PromptTemplate] | JSONResponse:
     """List prompt templates with optional filtering."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -196,7 +196,7 @@ async def get_template_for_scenario(
     scenario_id: str | None = None,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> PromptTemplate | None:
+) -> PromptTemplate | JSONResponse | None:
     """Get the best matching template for a scenario."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -229,7 +229,7 @@ async def create_prompt_template(
     data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> PromptTemplate:
+) -> PromptTemplate | JSONResponse:
     """Create a new prompt template."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -447,7 +447,7 @@ async def get_prompt_template(
     template_id: str,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> PromptTemplate:
+) -> PromptTemplate | JSONResponse:
     """Get a prompt template by ID."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -489,7 +489,7 @@ async def update_prompt_template(
     data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> PromptTemplate:
+) -> PromptTemplate | JSONResponse:
     """Update a prompt template."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -535,12 +535,12 @@ async def update_prompt_template(
         )
 
 
-@router.delete("/{template_id}", status_code=204)
+@router.delete("/{template_id}", status_code=204, response_model=None)
 async def delete_prompt_template(
     template_id: str,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> None:
+) -> None | JSONResponse:
     """Delete (deactivate) a prompt template."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -559,6 +559,7 @@ async def delete_prompt_template(
                 error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
                 message="模板不存在",
             )
+        return None
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -574,7 +575,7 @@ async def render_prompt_template(
     request: PromptRenderRequest,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> PromptRenderResponse:
+) -> PromptRenderResponse | JSONResponse:
     """Render a prompt template with variables."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -616,7 +617,7 @@ async def set_default_template(
     prompt_type: PromptType,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> PromptTemplate:
+) -> PromptTemplate | JSONResponse:
     """Set a template as the default for its type."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -678,7 +679,7 @@ async def list_scenario_prompts(
     is_active: bool | None = Query(None, description="Filter by active status"),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> list[ScenarioPrompt]:
+) -> list[ScenarioPrompt] | JSONResponse:
     """List scenario prompt assignments with optional filtering."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -704,7 +705,7 @@ async def create_scenario_prompt(
     data: ScenarioPromptCreate,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> ScenarioPrompt:
+) -> ScenarioPrompt | JSONResponse:
     """Create a scenario prompt assignment."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -735,7 +736,7 @@ async def get_scenario_prompt(
     assignment_id: UUID,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> ScenarioPrompt:
+) -> ScenarioPrompt | JSONResponse:
     """Get a scenario prompt assignment by ID."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -766,7 +767,7 @@ async def update_scenario_prompt(
     template_id: UUID | None = Query(None, description="New template ID"),
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> ScenarioPrompt:
+) -> ScenarioPrompt | JSONResponse:
     """Update a scenario prompt assignment."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -804,12 +805,12 @@ async def update_scenario_prompt(
         )
 
 
-@scenario_router.delete("/{assignment_id}", status_code=204)
+@scenario_router.delete("/{assignment_id}", status_code=204, response_model=None)
 async def delete_scenario_prompt(
     assignment_id: UUID,
     current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
-) -> None:
+) -> None | JSONResponse:
     """Delete a scenario prompt assignment."""
     admin_error = _require_prompt_admin_or_error(current_user)
     if admin_error is not None:
@@ -826,6 +827,7 @@ async def delete_scenario_prompt(
                 error_code="[SCENARIO_PROMPT_NOT_FOUND]",
                 message="场景提示词绑定不存在",
             )
+        return None
     except SQLAlchemyError as exc:
         return _prompt_error_response(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
