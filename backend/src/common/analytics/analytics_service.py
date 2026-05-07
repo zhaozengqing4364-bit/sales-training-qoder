@@ -15,7 +15,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db.models import PracticeSession, RequiredTalkingPoint, Scenario
+from common.db.models import Page, PracticeSession, RequiredTalkingPoint, Scenario
 from common.error_handling.result import Result
 
 logger = logging.getLogger(__name__)
@@ -333,8 +333,12 @@ class AnalyticsService:
             query = (
                 select(RequiredTalkingPoint)
                 .join(
+                    Page,
+                    RequiredTalkingPoint.page_id == Page.page_id,
+                )
+                .join(
                     PracticeSession,
-                    RequiredTalkingPoint.presentation_id
+                    Page.presentation_id
                     == PracticeSession.presentation_id,
                 )
                 .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
@@ -358,7 +362,7 @@ class AnalyticsService:
 
                 gaps.append(
                     CommonGaps(
-                        point_text=point.point_text,
+                        point_text=str(point.description),
                         miss_count=miss_count,
                         miss_rate=miss_rate,
                     )
