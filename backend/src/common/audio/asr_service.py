@@ -11,6 +11,7 @@ References:
 - Constitution Principle V: Cost Control - ¥0.00033/s (API) vs free (local)
 """
 
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from common.ai.config_manager import get_config_manager
@@ -140,13 +141,13 @@ class ASRService:
     @property
     def provider(self) -> ASRProvider:
         """Get current ASR provider"""
-        return self._provider
+        return self._require_provider()
 
     @property
     def provider_name(self) -> str:
         """Get current provider name"""
         if self._effective_config:
-            return self._effective_config.get("provider", "local")
+            return str(self._effective_config.get("provider", "local"))
         return "local"
 
     @property
@@ -164,7 +165,16 @@ class ASRService:
         self._config = config
         self._init_provider()
 
-    async def stream_transcribe(self, audio_stream, sample_rate: int = 16000):
+    def _require_provider(self) -> ASRProvider:
+        if self._provider is None:
+            self._init_provider()
+        if self._provider is None:
+            raise RuntimeError("ASR provider initialization failed")
+        return self._provider
+
+    async def stream_transcribe(
+        self, audio_stream: AsyncIterator[bytes], sample_rate: int = 16000
+    ) -> AsyncIterator[Result[str]]:
         """
         Stream transcribe audio chunks.
 
@@ -175,7 +185,8 @@ class ASRService:
         Yields:
             Result with transcribed text
         """
-        async for result in self._provider.stream_transcribe(audio_stream, sample_rate):
+        provider = self._require_provider()
+        async for result in provider.stream_transcribe(audio_stream, sample_rate):
             yield result
 
     async def transcribe_file(self, audio_file: str) -> Result[str]:
@@ -188,7 +199,7 @@ class ASRService:
         Returns:
             Result with transcribed text
         """
-        return await self._provider.transcribe_file(audio_file)
+        return await self._require_provider().transcribe_file(audio_file)
 
     async def health_check(self) -> Result[bool]:
         """
@@ -197,7 +208,7 @@ class ASRService:
         Returns:
             Result indicating if provider is available
         """
-        return await self._provider.health_check()
+        return await self._require_provider().health_check()
 
 
 # Singleton instance (lazy loading)
