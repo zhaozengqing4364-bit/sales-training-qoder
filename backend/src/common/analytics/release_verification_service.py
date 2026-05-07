@@ -18,7 +18,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from unittest.mock import Mock
 
 from sqlalchemy import select
@@ -32,6 +32,41 @@ from common.db.models import (
 from common.error_handling.result import Result
 
 logger = logging.getLogger(__name__)
+
+
+def _orm_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _set_orm_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
+def _orm_str(row: object, name: str) -> str:
+    return str(_orm_field(row, name))
+
+
+def _orm_optional_str(row: object, name: str) -> str | None:
+    value = _orm_field(row, name)
+    return str(value) if value is not None else None
+
+
+def _orm_int(row: object, name: str) -> int:
+    return int(_orm_field(row, name) or 0)
+
+
+def _orm_bool(row: object, name: str) -> bool:
+    return bool(_orm_field(row, name))
+
+
+def _orm_dict(row: object, name: str) -> dict[str, Any] | None:
+    value = _orm_field(row, name)
+    return value if isinstance(value, dict) else None
+
+
+def _orm_datetime(row: object, name: str) -> datetime | None:
+    value = _orm_field(row, name)
+    return value if isinstance(value, datetime) else None
 
 
 # Type aliases
@@ -467,25 +502,27 @@ class ReleaseVerificationService:
                 )
                 .order_by(ReleaseVerificationRecord.created_at)
             )
-            checks = checks_result.scalars().all()
+            checks = list(checks_result.scalars().all())
 
             # Build gate status summary
             gate_status: dict[str, dict[str, Any]] = {}
             for check in checks:
-                if check.check_type not in gate_status:
-                    gate_status[check.check_type] = {
+                check_type = _orm_str(check, "check_type")
+                check_status = _orm_str(check, "status")
+                if check_type not in gate_status:
+                    gate_status[check_type] = {
                         "total": 0,
                         "passed": 0,
                         "failed": 0,
                         "pending": 0,
                     }
-                gate_status[check.check_type]["total"] += 1
-                if check.status == "passed":
-                    gate_status[check.check_type]["passed"] += 1
-                elif check.status == "failed":
-                    gate_status[check.check_type]["failed"] += 1
-                elif check.status == "pending":
-                    gate_status[check.check_type]["pending"] += 1
+                gate_status[check_type]["total"] += 1
+                if check_status == "passed":
+                    gate_status[check_type]["passed"] += 1
+                elif check_status == "failed":
+                    gate_status[check_type]["failed"] += 1
+                elif check_status == "pending":
+                    gate_status[check_type]["pending"] += 1
 
             # Generate recommendations
             recommendations = self._generate_recommendations(summary, checks)
@@ -632,36 +669,37 @@ class ReleaseVerificationService:
         recommendations = []
 
         # Check for failed items
-        failed_checks = [c for c in checks if c.status == "failed"]
+        failed_checks = [c for c in checks if _orm_str(c, "status") == "failed"]
         if failed_checks:
             recommendations.append(
                 f"Address {len(failed_checks)} failed check(s) before proceeding"
             )
 
         # Check for pending items
-        if summary.pending_checks > 0:
-            recommendations.append(
-                f"Complete {summary.pending_checks} pending check(s)"
-            )
+        pending_checks = _orm_int(summary, "pending_checks")
+        if pending_checks > 0:
+            recommendations.append(f"Complete {pending_checks} pending check(s)")
 
         # Contract tests must be 100% (NFR19)
-        contract_checks = [c for c in checks if c.check_type == "contract"]
-        failed_contracts = [c for c in contract_checks if c.status == "failed"]
+        contract_checks = [c for c in checks if _orm_str(c, "check_type") == "contract"]
+        failed_contracts = [
+            c for c in contract_checks if _orm_str(c, "status") == "failed"
+        ]
         if failed_contracts:
             recommendations.append(
                 "CRITICAL: Contract tests must pass 100% (NFR19) before release"
             )
 
         # Performance checks
-        perf_checks = [c for c in checks if c.check_type == "performance"]
-        failed_perf = [c for c in perf_checks if c.status == "failed"]
+        perf_checks = [c for c in checks if _orm_str(c, "check_type") == "performance"]
+        failed_perf = [c for c in perf_checks if _orm_str(c, "status") == "failed"]
         if failed_perf:
             recommendations.append(
                 "Review performance benchmarks to ensure NFR thresholds are met"
             )
 
         # If all passed
-        if summary.passed_checks == summary.total_checks:
+        if _orm_int(summary, "passed_checks") == _orm_int(summary, "total_checks"):
             recommendations.append("All checks passed - ready for go decision")
 
         return recommendations
@@ -670,46 +708,50 @@ class ReleaseVerificationService:
         self, record: ReleaseVerificationRecord
     ) -> VerificationRecordView:
         """Convert model to view"""
+        executed_at = _orm_datetime(record, "executed_at")
+        created_at = _orm_datetime(record, "created_at")
+        updated_at = _orm_datetime(record, "updated_at")
         return VerificationRecordView(
-            record_id=record.record_id,
-            release_version=record.release_version,
-            release_candidate_id=record.release_candidate_id,
-            check_type=record.check_type,
-            check_name=record.check_name,
-            check_description=record.check_description,
-            status=record.status,
-            passed=record.passed,
-            details=record.details,
-            error_message=record.error_message,
-            executed_by=record.executed_by,
-            executed_at=record.executed_at.isoformat() if record.executed_at else None,
-            duration_ms=record.duration_ms,
-            created_at=record.created_at.isoformat() if record.created_at else "",
-            updated_at=record.updated_at.isoformat() if record.updated_at else "",
+            record_id=_orm_str(record, "record_id"),
+            release_version=_orm_str(record, "release_version"),
+            release_candidate_id=_orm_str(record, "release_candidate_id"),
+            check_type=_orm_str(record, "check_type"),
+            check_name=_orm_str(record, "check_name"),
+            check_description=_orm_optional_str(record, "check_description"),
+            status=_orm_str(record, "status"),
+            passed=_orm_bool(record, "passed"),
+            details=_orm_dict(record, "details"),
+            error_message=_orm_optional_str(record, "error_message"),
+            executed_by=_orm_optional_str(record, "executed_by"),
+            executed_at=executed_at.isoformat() if executed_at else None,
+            duration_ms=_orm_field(record, "duration_ms"),
+            created_at=created_at.isoformat() if created_at else "",
+            updated_at=updated_at.isoformat() if updated_at else "",
         )
 
     def _summary_to_view(
         self, summary: ReleaseVerificationSummary
     ) -> VerificationSummaryView:
         """Convert model to view"""
+        created_at = _orm_datetime(summary, "created_at")
+        updated_at = _orm_datetime(summary, "updated_at")
+        finalized_at = _orm_datetime(summary, "finalized_at")
         return VerificationSummaryView(
-            summary_id=summary.summary_id,
-            release_version=summary.release_version,
-            release_candidate_id=summary.release_candidate_id,
-            total_checks=summary.total_checks,
-            passed_checks=summary.passed_checks,
-            failed_checks=summary.failed_checks,
-            skipped_checks=summary.skipped_checks,
-            pending_checks=summary.pending_checks,
-            overall_status=summary.overall_status,
-            go_no_go_decision=summary.go_no_go_decision,
-            decision_reason=summary.decision_reason,
-            created_at=summary.created_at.isoformat() if summary.created_at else "",
-            updated_at=summary.updated_at.isoformat() if summary.updated_at else "",
-            finalized_at=summary.finalized_at.isoformat()
-            if summary.finalized_at
-            else None,
-            finalized_by=summary.finalized_by,
+            summary_id=_orm_str(summary, "summary_id"),
+            release_version=_orm_str(summary, "release_version"),
+            release_candidate_id=_orm_str(summary, "release_candidate_id"),
+            total_checks=_orm_int(summary, "total_checks"),
+            passed_checks=_orm_int(summary, "passed_checks"),
+            failed_checks=_orm_int(summary, "failed_checks"),
+            skipped_checks=_orm_int(summary, "skipped_checks"),
+            pending_checks=_orm_int(summary, "pending_checks"),
+            overall_status=_orm_str(summary, "overall_status"),
+            go_no_go_decision=_orm_optional_str(summary, "go_no_go_decision"),
+            decision_reason=_orm_optional_str(summary, "decision_reason"),
+            created_at=created_at.isoformat() if created_at else "",
+            updated_at=updated_at.isoformat() if updated_at else "",
+            finalized_at=finalized_at.isoformat() if finalized_at else None,
+            finalized_by=_orm_optional_str(summary, "finalized_by"),
         )
 
     async def check_quality_gate(
@@ -749,7 +791,7 @@ class ReleaseVerificationService:
                 )
                 .order_by(ReleaseVerificationRecord.created_at)
             )
-            checks = checks_result.scalars().all()
+            checks = list(checks_result.scalars().all())
 
             # Quality gate thresholds
             quality_gates = {
@@ -800,27 +842,29 @@ class ReleaseVerificationService:
             warnings = []
 
             for check in checks:
-                gate_key = check.check_type
+                gate_key = _orm_str(check, "check_type")
+                check_status = _orm_str(check, "status")
+                check_details = _orm_dict(check, "details")
                 if gate_key not in quality_gates:
                     continue
 
-                if check.status == "passed":
+                if check_status == "passed":
                     quality_gates[gate_key]["status"] = "pass"
 
                     # Extract actual values from details
-                    if check.details:
-                        if check.check_type == "coverage":
-                            coverage = check.details.get("coverage_percentage")
+                    if check_details:
+                        if gate_key == "coverage":
+                            coverage = check_details.get("coverage_percentage")
                             if coverage:
                                 quality_gates[gate_key]["current_value"] = coverage
-                        elif check.check_type == "performance":
+                        elif gate_key == "performance":
                             # Check latency metrics
-                            if "thresholds" in check.details:
-                                quality_gates[gate_key]["thresholds"] = check.details[
+                            if "thresholds" in check_details:
+                                quality_gates[gate_key]["thresholds"] = check_details[
                                     "thresholds"
                                 ]
 
-                elif check.status == "failed":
+                elif check_status == "failed":
                     quality_gates[gate_key]["status"] = "fail"
 
                     if gate_key == "contract":
@@ -840,7 +884,7 @@ class ReleaseVerificationService:
                             "Performance benchmarks did not meet NFR thresholds"
                         )
 
-                elif check.status == "pending":
+                elif check_status == "pending":
                     quality_gates[gate_key]["status"] = "pending"
 
             # Determine overall gate status
@@ -924,7 +968,7 @@ class ReleaseVerificationService:
                 return Result.fail(fallback="[SUMMARY_NOT_FOUND]")
 
             # Check if all checks are complete
-            if summary.pending_checks > 0:
+            if _orm_int(summary, "pending_checks") > 0:
                 return Result.fail(
                     fallback="[PENDING_CHECKS_EXIST]",
                 )
@@ -934,36 +978,50 @@ class ReleaseVerificationService:
             if not gate_result.is_success:
                 return Result.fail(fallback="[GATE_CHECK_FAILED]")
 
-            gate_status = gate_result.value
+            gate_status = gate_result.value or {}
+            gates = gate_status.get("gates")
+            gate_values = gates.values() if isinstance(gates, dict) else []
+            blocking_failures = gate_status.get("blocking_failures")
+            blocking_failure_list = (
+                [str(item) for item in blocking_failures]
+                if isinstance(blocking_failures, list)
+                else []
+            )
+            warnings = gate_status.get("warnings")
+            warning_list = (
+                [str(item) for item in warnings] if isinstance(warnings, list) else []
+            )
 
             # Determine decision based on gate status
-            if gate_status["can_release"]:
+            if gate_status.get("can_release"):
                 decision = "go"
                 reason = "All quality gates passed: " + ", ".join(
-                    f"{g['name']}={g['status']}" for g in gate_status["gates"].values()
+                    f"{g['name']}={g['status']}"
+                    for g in gate_values
+                    if isinstance(g, dict)
                 )
-            elif gate_status["blocking_failures"]:
+            elif blocking_failure_list:
                 decision = "no_go"
-                reason = "Blocking failures: " + "; ".join(
-                    gate_status["blocking_failures"]
-                )
+                reason = "Blocking failures: " + "; ".join(blocking_failure_list)
             else:
                 decision = "conditional"
-                reason = "Non-critical warnings: " + "; ".join(gate_status["warnings"])
+                reason = "Non-critical warnings: " + "; ".join(warning_list)
 
             # Update summary with decision
-            summary.go_no_go_decision = decision
-            summary.decision_reason = reason
-            summary.finalized_at = datetime.now(UTC)
-            summary.finalized_by = finalized_by
+            _set_orm_field(summary, "go_no_go_decision", decision)
+            _set_orm_field(summary, "decision_reason", reason)
+            _set_orm_field(summary, "finalized_at", datetime.now(UTC))
+            _set_orm_field(summary, "finalized_by", finalized_by)
 
             # Set overall status based on decision
             if decision == "go":
-                summary.overall_status = "passed"
+                _set_orm_field(summary, "overall_status", "passed")
             elif decision == "no_go":
-                summary.overall_status = "failed"
+                _set_orm_field(summary, "overall_status", "failed")
             else:
-                summary.overall_status = "passed"  # Conditional is still a pass
+                _set_orm_field(
+                    summary, "overall_status", "passed"
+                )  # Conditional is still a pass
 
             await db.commit()
             await db.refresh(summary)
