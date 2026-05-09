@@ -19,6 +19,7 @@ from supervisor.schemas import (
     RetrainingTaskCreate,
     SupervisorReviewCreate,
     SupervisorReviewDecisionUpdate,
+    SupervisorScoreCalibrationUpsert,
 )
 from supervisor.service import SupervisorReviewService, SupervisorServiceError
 
@@ -82,6 +83,29 @@ async def list_supervisor_reviews(
         )
 
 
+@router.get("/supervisor/report-view/{session_id}")
+async def get_training_report_view(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Read the unified report view used for evidence-based supervisor review."""
+    try:
+        view = await SupervisorReviewService(db).get_training_report_view(
+            session_id=session_id,
+            current_user=current_user,
+        )
+        return success_response(view.model_dump(mode="json"))
+    except SupervisorServiceError as exc:
+        return _service_error(exc)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[TRAINING_REPORT_VIEW_FAILED]",
+            message="证据化报告暂时无法读取。",
+            exc=exc,
+        )
+
+
 @router.post("/supervisor/reviews", status_code=201)
 async def create_supervisor_review(
     payload: SupervisorReviewCreate,
@@ -126,6 +150,31 @@ async def update_supervisor_review_decision(
         return build_server_error(
             "[SUPERVISOR_REVIEW_UPDATE_FAILED]",
             message="主管评审决策暂时无法保存。",
+            exc=exc,
+        )
+
+
+@router.post("/supervisor/reviews/{review_id}/score-calibrations")
+async def upsert_supervisor_score_calibration(
+    review_id: str,
+    payload: SupervisorScoreCalibrationUpsert,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Save a supervisor score calibration without changing the original AI score."""
+    try:
+        calibration = await SupervisorReviewService(db).upsert_score_calibration(
+            review_id=review_id,
+            payload=payload,
+            supervisor=current_user,
+        )
+        return success_response(calibration.model_dump(mode="json"))
+    except SupervisorServiceError as exc:
+        return _service_error(exc)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[SUPERVISOR_SCORE_CALIBRATION_FAILED]",
+            message="主管评分校准暂时无法保存。",
             exc=exc,
         )
 

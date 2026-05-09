@@ -1524,6 +1524,75 @@ class RetrainingTask(Base):
     )
 
 
+class SupervisorScoreCalibration(Base):
+    """Supervisor correction of an AI dimension score without mutating AI output."""
+
+    __tablename__ = "supervisor_score_calibrations"
+
+    calibration_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    review_id = Column(
+        String(36),
+        ForeignKey("supervisor_reviews.review_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    dimension = Column(String(120), nullable=False)
+    ai_score = Column(Float, nullable=True)
+    supervisor_score = Column(Float, nullable=True)
+    calibration_label = Column(String(32), nullable=False)
+    comment = Column(Text, nullable=True)
+    calibrated_by_user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "calibration_label IN ('accurate', 'too_high', 'too_low', 'wrong_reason', 'missing_evidence')",
+            name="ck_supervisor_score_calibration_label",
+        ),
+        CheckConstraint(
+            "ai_score IS NULL OR (ai_score >= 0 AND ai_score <= 100)",
+            name="ck_supervisor_score_calibration_ai_score",
+        ),
+        CheckConstraint(
+            "supervisor_score IS NULL OR (supervisor_score >= 0 AND supervisor_score <= 100)",
+            name="ck_supervisor_score_calibration_supervisor_score",
+        ),
+        UniqueConstraint(
+            "review_id",
+            "dimension",
+            name="uq_supervisor_score_calibration_review_dimension",
+        ),
+        Index(
+            "idx_supervisor_score_calibrations_session_dimension",
+            "session_id",
+            "dimension",
+        ),
+    )
+
+
 class ScoringRuleset(Base):
     """Versioned scoring ruleset managed through the admin control plane."""
 

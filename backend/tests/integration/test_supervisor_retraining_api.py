@@ -136,6 +136,37 @@ async def _create_presentation_session(
     return session
 
 
+async def _create_sales_session_without_evidence(
+    db: AsyncSession,
+    *,
+    user: User,
+) -> PracticeSession:
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name=f"sales_{uuid.uuid4().hex[:8]}",
+        description="Sales evidence-missing scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=datetime.now(UTC),
+        end_time=datetime.now(UTC),
+        logic_score=60.0,
+        accuracy_score=58.0,
+        completeness_score=62.0,
+        report_status="completed",
+        total_duration_seconds=8 * 60,
+    )
+    db.add_all([scenario, session])
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
 def _auth_headers(user: User) -> dict[str, str]:
     token = create_access_token(data={"sub": str(user.user_id)})
     return {"Authorization": f"Bearer {token}"}
@@ -199,6 +230,75 @@ async def test_phase2_acceptance_smoke_supervisor_retraining_loop(
     assert review_body["required_retraining"] is True
     assert review_body["retraining_tasks"][0]["skill_dimension"] == "逻辑结构"
 
+    report_view_response = await async_client.get(
+        f"/api/v1/supervisor/report-view/{source_session.session_id}",
+        headers=_auth_headers(supervisor),
+    )
+    assert report_view_response.status_code == 200
+    report_view = report_view_response.json()["data"]
+    assert report_view["session_id"] == str(source_session.session_id)
+    assert report_view["scenario_type"] == "presentation"
+    assert report_view["trainee"]["user_id"] == str(trainee.user_id)
+    assert report_view["dimension_scores"]
+    assert report_view["evidence_items"]
+    assert {
+        "session_id",
+        "scenario_type",
+        "trainee",
+        "overall_score",
+        "readiness_suggestion",
+        "dimension_scores",
+        "key_strengths",
+        "key_issues",
+        "evidence_items",
+        "recommendations",
+        "risk_flags",
+        "next_actions",
+        "supervisor_review",
+        "retraining_tasks",
+        "before_after",
+    }.issubset(report_view.keys())
+    assert any(
+        item["quote"] or item["source_page_id"]
+        for item in report_view["evidence_items"]
+    )
+
+    first_dimension = report_view["dimension_scores"][0]
+    calibration_response = await async_client.post(
+        f"/api/v1/supervisor/reviews/{review_body['review_id']}/score-calibrations",
+        headers=_auth_headers(supervisor),
+        json={
+            "session_id": str(source_session.session_id),
+            "dimension": first_dimension["name"],
+            "ai_score": first_dimension["score"],
+            "supervisor_score": 72.0,
+            "calibration_label": "too_high",
+            "comment": "AI 评分略高，案例证据不足。",
+        },
+    )
+    assert calibration_response.status_code == 200
+    calibration = calibration_response.json()["data"]
+    assert calibration["review_id"] == review_body["review_id"]
+    assert calibration["dimension"] == first_dimension["name"]
+    assert calibration["ai_score"] == first_dimension["score"]
+    assert calibration["supervisor_score"] == 72.0
+    assert calibration["calibration_label"] == "too_high"
+
+    calibrated_view_response = await async_client.get(
+        f"/api/v1/supervisor/report-view/{source_session.session_id}",
+        headers=_auth_headers(supervisor),
+    )
+    assert calibrated_view_response.status_code == 200
+    calibrated_view = calibrated_view_response.json()["data"]
+    calibrations = calibrated_view["supervisor_review"]["calibrations"]
+    assert calibrations[0]["dimension"] == first_dimension["name"]
+    unchanged_dimension = next(
+        item
+        for item in calibrated_view["dimension_scores"]
+        if item["name"] == first_dimension["name"]
+    )
+    assert unchanged_dimension["score"] == first_dimension["score"]
+
     task = review_body["retraining_tasks"][0]
     task_response = await async_client.get(
         "/api/v1/retraining/tasks",
@@ -258,6 +358,37 @@ async def test_phase2_acceptance_smoke_supervisor_retraining_loop(
 
 
 @pytest.mark.asyncio
+async def test_training_report_view_marks_missing_evidence_without_fabrication(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    trainee = await _create_user(test_db, role="user", email_prefix="phase3-trainee")
+    supervisor = await _create_user(
+        test_db, role="admin", email_prefix="phase3-supervisor"
+    )
+    source_session = await _create_sales_session_without_evidence(
+        test_db, user=trainee
+    )
+
+    response = await async_client.get(
+        f"/api/v1/supervisor/report-view/{source_session.session_id}",
+        headers=_auth_headers(supervisor),
+    )
+
+    assert response.status_code == 200
+    view = response.json()["data"]
+    assert view["dimension_scores"]
+    missing_items = [
+        item
+        for item in view["evidence_items"]
+        if item["evidence_type"] == "evidence_missing"
+    ]
+    assert missing_items
+    assert all(item["quote"] is None for item in missing_items)
+    assert any(flag["code"] == "evidence_missing" for flag in view["risk_flags"])
+
+
+@pytest.mark.asyncio
 async def test_supervisor_write_routes_reject_non_admin(
     async_client,
     test_db: AsyncSession,
@@ -278,3 +409,32 @@ async def test_supervisor_write_routes_reject_non_admin(
 
     assert response.status_code == 403
     assert response.json()["error"] == "[ADMIN_REQUIRED]"
+
+    review_response = await async_client.post(
+        "/api/v1/supervisor/reviews",
+        headers=_auth_headers(
+            await _create_user(
+                test_db, role="admin", email_prefix="phase3-admin"
+            )
+        ),
+        json={
+            "session_id": str(source_session.session_id),
+            "decision": "pending",
+            "readiness_status": "not_ready",
+        },
+    )
+    assert review_response.status_code == 201
+    review_id = review_response.json()["data"]["review_id"]
+    calibration_response = await async_client.post(
+        f"/api/v1/supervisor/reviews/{review_id}/score-calibrations",
+        headers=_auth_headers(trainee),
+        json={
+            "session_id": str(source_session.session_id),
+            "dimension": "逻辑结构",
+            "ai_score": 62.0,
+            "supervisor_score": 60.0,
+            "calibration_label": "accurate",
+        },
+    )
+    assert calibration_response.status_code == 403
+    assert calibration_response.json()["error"] == "[ADMIN_REQUIRED]"

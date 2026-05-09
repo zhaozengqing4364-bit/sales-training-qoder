@@ -9,11 +9,54 @@
 
 ## Current Status
 
-- Overall status: phase_2_acceptance_smoke_complete_paused_before_phase_3
-- Current phase: Phase 2 - Supervisor Review and Retraining Loop
-- Current atomic task: Phase 2 acceptance smoke complete; paused before Phase 3
-- Last commit: `Phase 2 acceptance smoke for supervisor retraining loop`
-- Blocker: none for Phase 2 acceptance smoke. Full backend mypy remains tracked as the Phase 1 gray-release debt ceiling, not a Phase 2 zero-error release blocker.
+- Overall status: phase_3_evidence_report_calibration_complete_paused_before_phase_4
+- Current phase: Phase 3 - Evidence-Based Report and Supervisor Calibration
+- Current atomic task: Phase 3 evidence-based report and calibration complete; paused before Phase 4
+- Last commit: `Phase 3 evidence based report and calibration`
+- Blocker: none for Phase 3. Full backend mypy remains tracked as the Phase 1 gray-release debt ceiling, not a Phase 3 zero-error release blocker.
+
+## Phase 3 Evidence-Based Report and Supervisor Calibration - 2026-05-09
+
+- Stable code logic changed: added a supervisor-facing API/read-model `TrainingReportViewModel`, evidence item projection for report dimensions and key issues, explicit `evidence_missing` handling, `SupervisorScoreCalibration` persistence, score-calibration API, and minimal report-page evidence/calibration UI.
+- Configurable business rules changed: none. This phase did not add scoring thresholds, scoring weights, RBAC matrices, menu rules, report publication policy, or admin-adjustable evidence-display policy.
+- New configuration items: none.
+- Reused configuration items: existing `admin`/`user` role split, existing practice report API/read-model surfaces, existing supervisor review/retraining APIs, existing report page, and existing frontend API client.
+- Configuration source/manager/validation: unchanged. Calibration payloads are validated by Pydantic and database constraints; report evidence uses existing persisted message/page/knowledge metadata. No new system setting, dictionary, or admin configuration table was introduced.
+- Missing/illegal configuration handling: not applicable for new managed config because no new configurable policy was introduced. Missing report evidence is represented as `evidence_missing` instead of synthesizing quote/page/source data.
+- Fixed rules retained in code and reason:
+  - Calibration labels `accurate`, `too_high`, `too_low`, `wrong_reason`, and `missing_evidence` are stable workflow states for supervisor score review.
+  - AI original dimension scores are immutable in this phase; supervisor calibration is stored separately and does not overwrite the AI report.
+  - Evidence projection prefers persisted transcript messages, PPT page IDs, and knowledge source IDs; if none exists, it emits `evidence_missing`.
+- Phase 3 backend artifacts:
+  - `backend/src/common/db/models.py`: `SupervisorScoreCalibration`.
+  - `backend/alembic/versions/20260509_1200_038_supervisor_score_calibration.py`: creates supervisor score calibration table/indexes/constraints.
+  - `backend/src/supervisor/schemas.py`: `TrainingReportViewModel`, evidence item schemas, and calibration schemas.
+  - `backend/src/supervisor/service.py`: training report view assembly, evidence binding, and score calibration upsert.
+  - `backend/src/supervisor/api.py`: `GET /api/v1/supervisor/report-view/{session_id}` and `POST /api/v1/supervisor/reviews/{review_id}/score-calibrations`.
+  - `backend/tests/integration/test_supervisor_retraining_api.py`: focused coverage for evidence view, `evidence_missing`, calibration persistence, and admin-only calibration writes.
+- Phase 3 frontend artifacts:
+  - `web/src/lib/api/types.ts`: training report view and calibration types.
+  - `web/src/lib/api/client.ts`: supervisor report-view and calibration API methods.
+  - `web/src/app/(user)/practice/[sessionId]/report/page.tsx`: evidence-based "why deducted" panel and supervisor calibration controls.
+  - `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`: evidence rendering and calibration save coverage.
+- Phase 3 API routes verified:
+  - `GET /api/v1/supervisor/report-view/{session_id}`
+  - `POST /api/v1/supervisor/reviews/{review_id}/score-calibrations`
+- Verification:
+  - `cd backend && alembic upgrade head`: passed.
+  - `cd backend && ruff check src tests`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/pytest tests/integration/test_supervisor_retraining_api.py -q --no-cov`: 3 passed, 1 third-party deprecation warning.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/auth --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/api/practice.py --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/evaluation --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/sales_bot --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/presentation_coach --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/effectiveness --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/supervisor src/router_registry.py --show-error-codes`: passed.
+  - `cd web && npx tsc --noEmit`: passed.
+  - `cd web && npx eslint . --quiet`: passed.
+  - `cd web && npx vitest run`: 89 test files and 549 tests passed.
+- Explicitly not performed: Phase 4 planning, full E2E, full RBAC, StepFun refactor, `/api/v1/admin/scoring-rulesets` migration, coverage-threshold uplift, and unrelated `.codex/**` or root `AGENTS.md` cleanup.
 
 ## Phase 2 Acceptance Smoke - 2026-05-09
 

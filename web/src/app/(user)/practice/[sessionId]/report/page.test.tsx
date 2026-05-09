@@ -23,6 +23,8 @@ const {
     listSupervisorReviewsMock,
     createSupervisorReviewMock,
     updateSupervisorReviewDecisionMock,
+    getTrainingReportViewMock,
+    upsertScoreCalibrationMock,
     completeRetrainingTaskWithSessionMock,
     useCurrentUserMock,
 } = vi.hoisted(() => ({
@@ -44,6 +46,8 @@ const {
     listSupervisorReviewsMock: vi.fn(),
     createSupervisorReviewMock: vi.fn(),
     updateSupervisorReviewDecisionMock: vi.fn(),
+    getTrainingReportViewMock: vi.fn(),
+    upsertScoreCalibrationMock: vi.fn(),
     completeRetrainingTaskWithSessionMock: vi.fn(),
     useCurrentUserMock: vi.fn(),
 }));
@@ -119,9 +123,11 @@ vi.mock("@/lib/api/client", async () => {
             },
             supervisor: {
                 ...actual.api.supervisor,
+                getTrainingReportView: getTrainingReportViewMock,
                 listReviews: listSupervisorReviewsMock,
                 createReview: createSupervisorReviewMock,
                 updateReviewDecision: updateSupervisorReviewDecisionMock,
+                upsertScoreCalibration: upsertScoreCalibrationMock,
             },
             retraining: {
                 ...actual.api.retraining,
@@ -291,6 +297,86 @@ const baseMainIssue = {
     recovery_rule: "至少完成 3 轮有效问答。",
 };
 
+const baseTrainingReportView = {
+    session_id: "session-1",
+    scenario_type: "sales",
+    trainee: {
+        user_id: "user-1",
+        name: "员工",
+        email: "learner@example.com",
+    },
+    overall_score: 72,
+    readiness_suggestion: "pending_supervisor_review",
+    dimension_scores: [
+        {
+            name: "准确表达",
+            score: 74,
+            description: "事实支撑和表达一致性。",
+            evidence_item_ids: ["evidence-1"],
+        },
+    ],
+    key_strengths: ["能主动回应客户异议。"],
+    key_issues: [
+        {
+            issue: "ROI 证据不足",
+            dimension: "准确表达",
+            reason: "缺少可验证客户案例。",
+            severity: null,
+            evidence_item_ids: ["evidence-1", "evidence-2"],
+        },
+    ],
+    evidence_items: [
+        {
+            evidence_id: "evidence-1",
+            dimension: "准确表达",
+            issue: "ROI 证据不足",
+            evidence_type: "transcript_quote",
+            turn_number: 2,
+            speaker: "user",
+            quote: "我们大概能帮你提升 ROI。",
+            source_message_id: "message-2",
+            source_page_id: null,
+            knowledge_source_id: null,
+            reason: "用户原话缺少具体证据。",
+            severity: null,
+            confidence: null,
+        },
+        {
+            evidence_id: "evidence-2",
+            dimension: "准确表达",
+            issue: "ROI 证据不足",
+            evidence_type: "evidence_missing",
+            turn_number: null,
+            speaker: null,
+            quote: null,
+            source_message_id: null,
+            source_page_id: null,
+            knowledge_source_id: null,
+            reason: "没有检索到可引用知识来源。",
+            severity: null,
+            confidence: null,
+        },
+    ],
+    recommendations: ["补充真实客户 ROI 案例。"],
+    risk_flags: [
+        {
+            code: "evidence_missing",
+            message: "部分扣分项缺少证据。",
+            evidence_item_ids: ["evidence-2"],
+        },
+    ],
+    next_actions: [
+        {
+            action_type: "recommendation",
+            label: "补充真实客户 ROI 案例。",
+            target: null,
+        },
+    ],
+    supervisor_review: null,
+    retraining_tasks: [],
+    before_after: null,
+};
+
 const baseReplayData = {
     session_id: "session-1",
     agent_name: "销售教练",
@@ -446,6 +532,8 @@ describe("ReportPage", () => {
         listSupervisorReviewsMock.mockReset();
         createSupervisorReviewMock.mockReset();
         updateSupervisorReviewDecisionMock.mockReset();
+        getTrainingReportViewMock.mockReset();
+        upsertScoreCalibrationMock.mockReset();
         completeRetrainingTaskWithSessionMock.mockReset();
         useCurrentUserMock.mockReset();
         localStorage.clear();
@@ -563,6 +651,16 @@ describe("ReportPage", () => {
         createSessionMock.mockResolvedValue({ session_id: "retry-1" });
         getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
         listSupervisorReviewsMock.mockResolvedValue([]);
+        getTrainingReportViewMock.mockResolvedValue(baseTrainingReportView);
+        upsertScoreCalibrationMock.mockResolvedValue({
+            review_id: "review-1",
+            session_id: "session-1",
+            dimension: "准确表达",
+            ai_score: 74,
+            supervisor_score: 68,
+            calibration_label: "too_high",
+            comment: "证据不足，AI 偏高。",
+        });
         completeRetrainingTaskWithSessionMock.mockResolvedValue({
             task_id: "task-1",
             status: "completed",
@@ -637,11 +735,16 @@ describe("ReportPage", () => {
             updated_at: "2026-05-09T00:00:00Z",
             retraining_tasks: [],
             before_after: null,
+            calibrations: [],
         });
 
         render(<ReportPage />);
 
         expect(await screen.findByText("主管评审")).toBeTruthy();
+        expect(await screen.findByText("为什么扣分")).toBeTruthy();
+        expect(screen.getByText("ROI 证据不足")).toBeTruthy();
+        expect(screen.getByText("我们大概能帮你提升 ROI。")).toBeTruthy();
+        expect(screen.getByText("evidence_missing")).toBeTruthy();
         fireEvent.change(screen.getByPlaceholderText("填写主管反馈"), {
             target: { value: "先补强证据表达再上岗。" },
         });
@@ -657,6 +760,31 @@ describe("ReportPage", () => {
             });
         });
         expect(await screen.findByText("要求复训已保存。")).toBeTruthy();
+        expect(await screen.findByText("主管评分校准")).toBeTruthy();
+        fireEvent.change(screen.getByLabelText("主管分"), {
+            target: { value: "68" },
+        });
+        fireEvent.change(screen.getByLabelText("校准判断"), {
+            target: { value: "too_high" },
+        });
+        fireEvent.change(screen.getByPlaceholderText("说明为什么调高、调低或认为证据不足"), {
+            target: { value: "证据不足，AI 偏高。" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "保存校准" }));
+        await waitFor(() => {
+            expect(upsertScoreCalibrationMock).toHaveBeenCalledWith(
+                "review-1",
+                {
+                    session_id: "session-1",
+                    dimension: "准确表达",
+                    ai_score: 74,
+                    supervisor_score: 68,
+                    calibration_label: "too_high",
+                    comment: "证据不足，AI 偏高。",
+                },
+            );
+        });
+        expect(await screen.findByText("主管评分校准已保存，AI 原始分已保留。")).toBeTruthy();
     });
 
     it("shows learner-facing supervisor feedback and before-after comparison", async () => {
@@ -710,6 +838,7 @@ describe("ReportPage", () => {
                         },
                     ],
                 },
+                calibrations: [],
             },
         ]);
 

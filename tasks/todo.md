@@ -142,6 +142,16 @@ This file mirrors `DELIVERY_STATE.md` at task-list granularity. `DELIVERY_STATE.
 - [ ] Disable dev-login and default secrets in production.
 - [ ] Create final `Release_Checklist.md`.
 
+## Phase 3: Evidence-Based Report and Supervisor Calibration
+
+- [x] Add Phase 3 delivery-state entry and configuration judgment.
+- [x] Add API/read-model `TrainingReportViewModel` without merging underlying report services.
+- [x] Bind key issues and dimension scores to evidence items, using `evidence_missing` when no source exists.
+- [x] Add `SupervisorScoreCalibration` persistence and API.
+- [x] Show report evidence and calibration controls on the existing report page without large UI refactor.
+- [x] Add focused backend and frontend tests.
+- [x] Run Phase 3 verification commands and commit `Phase 3 evidence based report and calibration`.
+
 ## Review
 
 - 2026-05-06 Phase 1.3 password reset atom: `./.venv-test/bin/mypy src/common/services/password_reset.py` has no direct `src/common/services/password_reset.py` errors while import-chain errors remain, `ruff check src/common/services/password_reset.py` passed, and password reset/auth recovery regression tests passed with 15 assertions. Full backend `./.venv-test/bin/mypy src` now reports 2181 errors in 77 files. Token expiry, minimum password length, rate-limit constants, status/reason values, delivery error truncation, token hashing, supersede/consume/expire behavior, active-user guard, reset URL separator behavior, email transport fallback, generic user-facing response, runtime DDL prohibition, and log masking were not changed. No business rules, prompts, thresholds, permissions, admin management entries, audit semantics, or configurable items were added.

@@ -2630,6 +2630,29 @@ export interface BeforeAfterComparison {
     retraining_completed: boolean;
 }
 
+export type CalibrationLabel = "accurate" | "too_high" | "too_low" | "wrong_reason" | "missing_evidence";
+
+export interface SupervisorScoreCalibration {
+    review_id: string;
+    session_id: string;
+    dimension: string;
+    ai_score?: number | null;
+    supervisor_score?: number | null;
+    calibration_label: CalibrationLabel;
+    comment?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+}
+
+export interface SupervisorScoreCalibrationUpsertRequest {
+    session_id: string;
+    dimension: string;
+    ai_score?: number | null;
+    supervisor_score?: number | null;
+    calibration_label: CalibrationLabel;
+    comment?: string | null;
+}
+
 export interface RetrainingTask {
     task_id: string;
     user_id: string;
@@ -2677,6 +2700,7 @@ export interface SupervisorReview {
     updated_at?: string | null;
     retraining_tasks: RetrainingTask[];
     before_after?: BeforeAfterComparison | null;
+    calibrations: SupervisorScoreCalibration[];
 }
 
 export interface SupervisorReviewCreateRequest {
@@ -2709,6 +2733,73 @@ export interface SupervisorTeamReport {
     started_at?: string | null;
     completed_at?: string | null;
     latest_review?: SupervisorReview | null;
+    before_after?: BeforeAfterComparison | null;
+}
+
+export interface TrainingReportTrainee {
+    user_id: string;
+    name?: string | null;
+    email?: string | null;
+}
+
+export interface TrainingReportEvidenceItem {
+    evidence_id: string;
+    dimension?: string | null;
+    issue?: string | null;
+    evidence_type: string;
+    turn_number?: number | null;
+    speaker?: string | null;
+    quote?: string | null;
+    source_message_id?: string | null;
+    source_page_id?: string | null;
+    knowledge_source_id?: string | null;
+    reason?: string | null;
+    severity?: string | null;
+    confidence?: number | null;
+}
+
+export interface TrainingReportDimensionScore {
+    name: string;
+    score?: number | null;
+    description?: string | null;
+    evidence_item_ids: string[];
+}
+
+export interface TrainingReportIssue {
+    issue: string;
+    dimension?: string | null;
+    reason?: string | null;
+    severity?: string | null;
+    evidence_item_ids: string[];
+}
+
+export interface TrainingReportRiskFlag {
+    code: string;
+    message: string;
+    evidence_item_ids: string[];
+}
+
+export interface TrainingReportNextAction {
+    action_type: string;
+    label: string;
+    target?: string | null;
+}
+
+export interface TrainingReportViewModel {
+    session_id: string;
+    scenario_type: string;
+    trainee: TrainingReportTrainee;
+    overall_score?: number | null;
+    readiness_suggestion: string;
+    dimension_scores: TrainingReportDimensionScore[];
+    key_strengths: string[];
+    key_issues: TrainingReportIssue[];
+    evidence_items: TrainingReportEvidenceItem[];
+    recommendations: string[];
+    risk_flags: TrainingReportRiskFlag[];
+    next_actions: TrainingReportNextAction[];
+    supervisor_review?: SupervisorReview | null;
+    retraining_tasks: RetrainingTask[];
     before_after?: BeforeAfterComparison | null;
 }
 

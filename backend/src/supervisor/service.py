@@ -12,13 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import (
     ComprehensiveReport,
+    ConversationMessage,
+    Page,
     PracticeSession,
     RetrainingTask,
     Scenario,
     SupervisorReview,
+    SupervisorScoreCalibration,
     User,
 )
 from common.db.schemas import ScenarioType, SessionCreate
+from common.services.practice_report_service import PracticeReportService
 from common.services.practice_session_service import (
     PracticeServiceError,
     PracticeSessionCreateService,
@@ -33,7 +37,16 @@ from supervisor.schemas import (
     SupervisorReviewCreate,
     SupervisorReviewDecisionUpdate,
     SupervisorReviewResponse,
+    SupervisorScoreCalibrationResponse,
+    SupervisorScoreCalibrationUpsert,
     SupervisorTeamReport,
+    TrainingReportDimensionScore,
+    TrainingReportEvidenceItem,
+    TrainingReportIssue,
+    TrainingReportNextAction,
+    TrainingReportRiskFlag,
+    TrainingReportTrainee,
+    TrainingReportViewModel,
 )
 
 DEFAULT_RETRAINING_DIMENSION = "综合表现"
@@ -90,11 +103,114 @@ def _uuid_or_none(value: Any) -> uuid.UUID | None:
         return None
 
 
+def _short_text(value: Any, *, max_length: int = 240) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 1]}..."
+
+
 class SupervisorReviewService:
     """Coordinates supervisor review decisions and retraining task lifecycle."""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+
+    async def get_training_report_view(
+        self,
+        *,
+        session_id: str,
+        current_user: User,
+    ) -> TrainingReportViewModel:
+        session = await self._get_session(session_id)
+        if session is None:
+            raise SupervisorServiceError(
+                "[SESSION_NOT_FOUND]",
+                status_code=404,
+                message="训练记录不存在。",
+            )
+        self._assert_session_access(session, current_user)
+
+        scenario_type = await self._get_session_scenario_type(session)
+        trainee = await self._get_user(_as_str(session.user_id))
+        review = await self._get_review_for_session(session_id)
+        review_response = (
+            await self._serialize_review(review) if review is not None else None
+        )
+        tasks = review_response.retraining_tasks if review_response is not None else []
+        before_after = review_response.before_after if review_response is not None else None
+        report = await self._build_session_report_or_none(
+            session_id=session_id,
+            session=session,
+            scenario_type=scenario_type,
+        )
+        stored_report = await self._get_report(session_id)
+        messages = await self._get_messages_for_session(session_id)
+        pages_by_number = await self._get_pages_by_number(session)
+
+        dimension_scores, key_issues, evidence_items = self._build_report_evidence(
+            session=session,
+            scenario_type=scenario_type,
+            report=report,
+            stored_report=stored_report,
+            messages=messages,
+            pages_by_number=pages_by_number,
+        )
+        missing_evidence_ids = [
+            item.evidence_id
+            for item in evidence_items
+            if item.evidence_type == "evidence_missing"
+        ]
+        risk_flags: list[TrainingReportRiskFlag] = []
+        if missing_evidence_ids:
+            risk_flags.append(
+                TrainingReportRiskFlag(
+                    code="evidence_missing",
+                    message="部分扣分项或维度分暂缺可引用原话、页码或知识来源。",
+                    evidence_item_ids=missing_evidence_ids,
+                )
+            )
+        if getattr(report, "evaluable", None) is False:
+            risk_flags.append(
+                TrainingReportRiskFlag(
+                    code="not_evaluable",
+                    message="当前训练证据不足，报告不会进入正式均分。",
+                )
+            )
+
+        return TrainingReportViewModel(
+            session_id=session_id,
+            scenario_type=scenario_type,
+            trainee=TrainingReportTrainee(
+                user_id=_as_str(getattr(trainee, "user_id", session.user_id)),
+                name=cast(str | None, getattr(trainee, "name", None)),
+                email=cast(str | None, getattr(trainee, "email", None)),
+            ),
+            overall_score=self._report_overall_score(report, stored_report, session),
+            readiness_suggestion=(
+                _as_str(review_response.readiness_status)
+                if review_response is not None
+                else "pending_supervisor_review"
+            ),
+            dimension_scores=dimension_scores,
+            key_strengths=self._report_key_strengths(report, stored_report),
+            key_issues=key_issues,
+            evidence_items=evidence_items,
+            recommendations=self._report_recommendations(report, stored_report),
+            risk_flags=risk_flags,
+            next_actions=self._build_next_actions(
+                report=report,
+                stored_report=stored_report,
+                tasks=tasks,
+            ),
+            supervisor_review=review_response,
+            retraining_tasks=tasks,
+            before_after=before_after,
+        )
 
     async def list_team_reports(
         self,
@@ -237,6 +353,54 @@ class SupervisorReviewService:
             await self.db.refresh(review)
 
         return await self._serialize_review(review)
+
+    async def upsert_score_calibration(
+        self,
+        *,
+        review_id: str,
+        payload: SupervisorScoreCalibrationUpsert,
+        supervisor: User,
+    ) -> SupervisorScoreCalibrationResponse:
+        self._require_admin(supervisor)
+        review = await self._get_review(review_id)
+        if review is None:
+            raise SupervisorServiceError(
+                "[SUPERVISOR_REVIEW_NOT_FOUND]",
+                status_code=404,
+                message="主管评审不存在。",
+            )
+        if payload.session_id != _as_str(review.session_id):
+            raise SupervisorServiceError(
+                "[CALIBRATION_SESSION_MISMATCH]",
+                status_code=422,
+                message="校准会话必须与主管评审会话一致。",
+            )
+
+        dimension = payload.dimension.strip()
+        result = await self.db.execute(
+            select(SupervisorScoreCalibration).where(
+                SupervisorScoreCalibration.review_id == review_id,
+                SupervisorScoreCalibration.dimension == dimension,
+            )
+        )
+        calibration = result.scalar_one_or_none()
+        if calibration is None:
+            calibration = SupervisorScoreCalibration(
+                calibration_id=str(uuid.uuid4()),
+                review_id=review_id,
+                session_id=payload.session_id,
+                dimension=dimension,
+            )
+        setattr(calibration, "ai_score", payload.ai_score)
+        setattr(calibration, "supervisor_score", payload.supervisor_score)
+        setattr(calibration, "calibration_label", payload.calibration_label)
+        setattr(calibration, "comment", payload.comment)
+        setattr(calibration, "calibrated_by_user_id", _as_str(supervisor.user_id))
+        setattr(calibration, "updated_at", _now())
+        self.db.add(calibration)
+        await self._commit_with_unique_handling()
+        await self.db.refresh(calibration)
+        return self._serialize_calibration(calibration)
 
     async def list_tasks(
         self,
@@ -415,9 +579,47 @@ class SupervisorReviewService:
                 message="你没有权限访问该复训任务。",
             )
 
+    def _assert_session_access(self, session: PracticeSession, user: User) -> None:
+        if _is_admin(user):
+            return
+        if _as_str(session.user_id) != _as_str(user.user_id):
+            raise SupervisorServiceError(
+                "[ACCESS_DENIED]",
+                status_code=403,
+                message="你没有权限访问该训练报告。",
+            )
+
     async def _get_user(self, user_id: str) -> User | None:
         result = await self.db.execute(select(User).where(User.user_id == user_id))
         return result.scalar_one_or_none()
+
+    async def _get_messages_for_session(
+        self,
+        session_id: str,
+    ) -> list[ConversationMessage]:
+        result = await self.db.execute(
+            select(ConversationMessage)
+            .where(ConversationMessage.session_id == session_id)
+            .order_by(ConversationMessage.turn_number)
+        )
+        return list(result.scalars().all())
+
+    async def _get_pages_by_number(
+        self,
+        session: PracticeSession,
+    ) -> dict[int, Page]:
+        presentation_id = _as_str(getattr(session, "presentation_id", ""))
+        if not presentation_id:
+            return {}
+        result = await self.db.execute(
+            select(Page).where(Page.presentation_id == presentation_id)
+        )
+        pages: dict[int, Page] = {}
+        for page in result.scalars().all():
+            page_number = getattr(page, "page_number", None)
+            if isinstance(page_number, int):
+                pages[page_number] = page
+        return pages
 
     async def _get_session(self, session_id: str) -> PracticeSession | None:
         result = await self.db.execute(
@@ -450,6 +652,16 @@ class SupervisorReviewService:
             select(RetrainingTask)
             .where(RetrainingTask.source_review_id == review_id)
             .order_by(RetrainingTask.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def _get_calibrations_for_review(
+        self, review_id: str
+    ) -> list[SupervisorScoreCalibration]:
+        result = await self.db.execute(
+            select(SupervisorScoreCalibration)
+            .where(SupervisorScoreCalibration.review_id == review_id)
+            .order_by(SupervisorScoreCalibration.created_at.desc())
         )
         return list(result.scalars().all())
 
@@ -532,6 +744,7 @@ class SupervisorReviewService:
     ) -> SupervisorReviewResponse:
         tasks = await self._get_tasks_for_review(_as_str(review.review_id))
         serialized_tasks = [await self._serialize_task(task) for task in tasks]
+        calibrations = await self._get_calibrations_for_review(_as_str(review.review_id))
         before_after = next(
             (task.before_after for task in serialized_tasks if task.before_after),
             None,
@@ -550,6 +763,26 @@ class SupervisorReviewService:
             updated_at=cast(datetime | None, review.updated_at),
             retraining_tasks=serialized_tasks,
             before_after=before_after,
+            calibrations=[
+                self._serialize_calibration(calibration)
+                for calibration in calibrations
+            ],
+        )
+
+    def _serialize_calibration(
+        self,
+        calibration: SupervisorScoreCalibration,
+    ) -> SupervisorScoreCalibrationResponse:
+        return SupervisorScoreCalibrationResponse(
+            review_id=_as_str(calibration.review_id),
+            session_id=_as_str(calibration.session_id),
+            dimension=_as_str(calibration.dimension),
+            ai_score=_as_float(calibration.ai_score),
+            supervisor_score=_as_float(calibration.supervisor_score),
+            calibration_label=cast(Any, calibration.calibration_label),
+            comment=cast(str | None, calibration.comment),
+            created_at=cast(datetime | None, calibration.created_at),
+            updated_at=cast(datetime | None, calibration.updated_at),
         )
 
     async def _serialize_task(self, task: RetrainingTask) -> RetrainingTaskResponse:
@@ -567,6 +800,436 @@ class SupervisorReviewService:
             updated_at=cast(datetime | None, task.updated_at),
             before_after=await self._build_before_after(task),
         )
+
+    async def _build_session_report_or_none(
+        self,
+        *,
+        session_id: str,
+        session: PracticeSession,
+        scenario_type: str,
+    ) -> Any | None:
+        try:
+            return await PracticeReportService(self.db).build_session_report(
+                session_id=session_id,
+                session=session,
+                scenario_type=scenario_type,
+            )
+        except PracticeServiceError:
+            return None
+
+    def _build_report_evidence(
+        self,
+        *,
+        session: PracticeSession,
+        scenario_type: str,
+        report: Any | None,
+        stored_report: ComprehensiveReport | None,
+        messages: list[ConversationMessage],
+        pages_by_number: dict[int, Page],
+    ) -> tuple[
+        list[TrainingReportDimensionScore],
+        list[TrainingReportIssue],
+        list[TrainingReportEvidenceItem],
+    ]:
+        evidence_items: list[TrainingReportEvidenceItem] = []
+
+        def add_evidence(
+            *,
+            dimension: str | None,
+            issue: str | None,
+            reason: str | None,
+            page_number: int | None = None,
+            turn_number: int | None = None,
+            quote: str | None = None,
+            knowledge_source_id: str | None = None,
+            confidence: float | None = None,
+        ) -> str:
+            source_page = pages_by_number.get(page_number) if page_number else None
+            source_message = self._select_message(messages, turn_number=turn_number)
+            resolved_quote = quote or (
+                _short_text(getattr(source_message, "content", None))
+                if source_message is not None
+                else None
+            )
+            evidence_type = "evidence_missing"
+            if knowledge_source_id:
+                evidence_type = "knowledge_source"
+            elif source_page is not None:
+                evidence_type = "ppt_page"
+            elif source_message is not None:
+                evidence_type = "transcript_quote"
+
+            evidence_id = f"evidence-{len(evidence_items) + 1}"
+            evidence_items.append(
+                TrainingReportEvidenceItem(
+                    evidence_id=evidence_id,
+                    dimension=dimension,
+                    issue=issue,
+                    evidence_type=evidence_type,
+                    turn_number=cast(int | None, getattr(source_message, "turn_number", None)),
+                    speaker=cast(str | None, getattr(source_message, "role", None)),
+                    quote=resolved_quote,
+                    source_message_id=(
+                        _as_str(getattr(source_message, "id", None))
+                        if source_message is not None
+                        else None
+                    ),
+                    source_page_id=(
+                        _as_str(getattr(source_page, "page_id", None))
+                        if source_page is not None
+                        else None
+                    ),
+                    knowledge_source_id=knowledge_source_id,
+                    reason=reason,
+                    severity=None,
+                    confidence=confidence,
+                )
+            )
+            return evidence_id
+
+        dimension_scores = self._report_dimension_scores(
+            session=session,
+            report=report,
+            stored_report=stored_report,
+        )
+        for index, dimension in enumerate(dimension_scores):
+            page_number = index + 1 if scenario_type == "presentation" else None
+            evidence_id = add_evidence(
+                dimension=dimension.name,
+                issue=None,
+                reason=f"{dimension.name} 维度分的可追溯证据。",
+                page_number=page_number,
+            )
+            dimension.evidence_item_ids.append(evidence_id)
+
+        raw_issues = self._report_raw_issues(
+            scenario_type=scenario_type,
+            report=report,
+            stored_report=stored_report,
+        )
+        key_issues: list[TrainingReportIssue] = []
+        for raw_issue in raw_issues:
+            issue_text = str(raw_issue.get("issue") or "").strip()
+            if not issue_text:
+                continue
+            evidence_id = add_evidence(
+                dimension=cast(str | None, raw_issue.get("dimension")),
+                issue=issue_text,
+                reason=cast(str | None, raw_issue.get("reason")),
+                page_number=cast(int | None, raw_issue.get("page_number")),
+                turn_number=cast(int | None, raw_issue.get("turn_number")),
+                quote=_short_text(raw_issue.get("quote")),
+                knowledge_source_id=cast(str | None, raw_issue.get("knowledge_source_id")),
+                confidence=cast(float | None, raw_issue.get("confidence")),
+            )
+            key_issues.append(
+                TrainingReportIssue(
+                    issue=issue_text,
+                    dimension=cast(str | None, raw_issue.get("dimension")),
+                    reason=cast(str | None, raw_issue.get("reason")),
+                    severity=cast(str | None, raw_issue.get("severity")),
+                    evidence_item_ids=[evidence_id],
+                )
+            )
+
+        knowledge_evidence = self._knowledge_evidence_from_report(report)
+        if knowledge_evidence is not None:
+            add_evidence(
+                dimension=knowledge_evidence.get("dimension"),
+                issue=knowledge_evidence.get("issue"),
+                reason=knowledge_evidence.get("reason"),
+                quote=knowledge_evidence.get("quote"),
+                knowledge_source_id=knowledge_evidence.get("knowledge_source_id"),
+                confidence=cast(float | None, knowledge_evidence.get("confidence")),
+            )
+
+        return dimension_scores, key_issues, evidence_items
+
+    def _report_dimension_scores(
+        self,
+        *,
+        session: PracticeSession,
+        report: Any | None,
+        stored_report: ComprehensiveReport | None,
+    ) -> list[TrainingReportDimensionScore]:
+        presentation_review = self._as_dict(getattr(report, "presentation_review", None))
+        presentation_dimensions = presentation_review.get("dimension_scores")
+        if isinstance(presentation_dimensions, list) and presentation_dimensions:
+            return [
+                TrainingReportDimensionScore(
+                    name=str(item.get("name") or item.get("dimension") or ""),
+                    score=_as_float(item.get("score")),
+                    description=cast(str | None, item.get("description")),
+                )
+                for item in presentation_dimensions
+                if isinstance(item, dict) and (item.get("name") or item.get("dimension"))
+            ]
+
+        stored_dimensions = getattr(stored_report, "dimension_scores", None)
+        if isinstance(stored_dimensions, list) and stored_dimensions:
+            parsed = []
+            for item in stored_dimensions:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name") or item.get("dimension") or "").strip()
+                if not name:
+                    continue
+                parsed.append(
+                    TrainingReportDimensionScore(
+                        name=name,
+                        score=_as_float(item.get("score")),
+                        description=cast(str | None, item.get("description")),
+                    )
+                )
+            if parsed:
+                return parsed
+
+        return [
+            TrainingReportDimensionScore(
+                name="逻辑结构",
+                score=_as_float(getattr(report, "logic_score", None))
+                or _as_float(getattr(session, "logic_score", None)),
+                description="训练表达结构与推进逻辑。",
+            ),
+            TrainingReportDimensionScore(
+                name="准确表达",
+                score=_as_float(getattr(report, "accuracy_score", None))
+                or _as_float(getattr(session, "accuracy_score", None)),
+                description="内容准确性、事实支撑和表达一致性。",
+            ),
+            TrainingReportDimensionScore(
+                name="完整覆盖",
+                score=_as_float(getattr(report, "completeness_score", None))
+                or _as_float(getattr(session, "completeness_score", None)),
+                description="训练目标、关键步骤和必要信息覆盖度。",
+            ),
+        ]
+
+    def _report_raw_issues(
+        self,
+        *,
+        scenario_type: str,
+        report: Any | None,
+        stored_report: ComprehensiveReport | None,
+    ) -> list[dict[str, Any]]:
+        issues: list[dict[str, Any]] = []
+        presentation_review = self._as_dict(getattr(report, "presentation_review", None))
+        if scenario_type == "presentation" and presentation_review:
+            for item in self._as_string_list(presentation_review.get("improvements")):
+                issues.append(
+                    {
+                        "issue": item,
+                        "dimension": "PPT 表达",
+                        "reason": "来自 PPT 复盘改进项。",
+                    }
+                )
+            page_summaries = presentation_review.get("page_summaries")
+            if isinstance(page_summaries, list):
+                for page_summary in page_summaries:
+                    if not isinstance(page_summary, dict):
+                        continue
+                    page_number = self._as_int(page_summary.get("page_number"))
+                    for point in self._as_string_list(
+                        page_summary.get("missing_required_points")
+                    ):
+                        issues.append(
+                            {
+                                "issue": f"第 {page_number or '--'} 页遗漏要点：{point}",
+                                "dimension": "要点覆盖",
+                                "page_number": page_number,
+                                "reason": "必讲要点未被页级复盘判定为已覆盖。",
+                            }
+                        )
+                    issue_clusters = page_summary.get("issue_clusters")
+                    if not isinstance(issue_clusters, list):
+                        continue
+                    for cluster in issue_clusters:
+                        if not isinstance(cluster, dict):
+                            continue
+                        turn_numbers = cluster.get("turn_numbers")
+                        evidence = self._as_string_list(cluster.get("evidence"))
+                        issues.append(
+                            {
+                                "issue": str(
+                                    cluster.get("summary")
+                                    or cluster.get("issue_type")
+                                    or "页级表达问题"
+                                ),
+                                "dimension": str(
+                                    cluster.get("issue_type") or "PPT 表达"
+                                ),
+                                "page_number": page_number,
+                                "turn_number": (
+                                    turn_numbers[0]
+                                    if isinstance(turn_numbers, list)
+                                    and turn_numbers
+                                    and isinstance(turn_numbers[0], int)
+                                    else None
+                                ),
+                                "quote": evidence[0] if evidence else None,
+                                "reason": "来自 PPT 页级问题簇。",
+                            }
+                        )
+            return issues
+
+        main_issue = self._as_dict(getattr(report, "main_issue", None))
+        issue_text = _short_text(main_issue.get("issue_text"))
+        if issue_text:
+            issues.append(
+                {
+                    "issue": issue_text,
+                    "dimension": cast(str | None, main_issue.get("issue_type")),
+                    "reason": cast(str | None, main_issue.get("recovery_rule")),
+                }
+            )
+        stored_improvements = getattr(stored_report, "key_improvements", None)
+        for item in self._as_string_list(stored_improvements):
+            issues.append(
+                {
+                    "issue": item,
+                    "dimension": "综合报告",
+                    "reason": "来自综合报告改进项。",
+                }
+            )
+        return issues
+
+    def _knowledge_evidence_from_report(
+        self,
+        report: Any | None,
+    ) -> dict[str, Any] | None:
+        snapshot = self._as_dict(getattr(report, "effectiveness_snapshot", None))
+        retrieval_facts = self._as_dict(snapshot.get("retrieval_facts"))
+        latest_attempt = self._as_dict(retrieval_facts.get("latest_attempt"))
+        result_summaries = latest_attempt.get("result_summaries")
+        if not isinstance(result_summaries, list) or not result_summaries:
+            return None
+        first = result_summaries[0]
+        if not isinstance(first, dict):
+            return None
+        source_id = _short_text(
+            first.get("knowledge_base_id") or first.get("document_id")
+        )
+        if not source_id:
+            return None
+        return {
+            "dimension": "知识库证据",
+            "issue": "知识库 grounding",
+            "quote": _short_text(first.get("snippet")),
+            "knowledge_source_id": source_id,
+            "reason": "来自训练时最近一次知识库检索命中。",
+            "confidence": _as_float(first.get("score")),
+        }
+
+    def _report_key_strengths(
+        self,
+        report: Any | None,
+        stored_report: ComprehensiveReport | None,
+    ) -> list[str]:
+        presentation_review = self._as_dict(getattr(report, "presentation_review", None))
+        strengths = self._as_string_list(presentation_review.get("strengths"))
+        if strengths:
+            return strengths
+        return self._as_string_list(getattr(stored_report, "key_strengths", None))
+
+    def _report_recommendations(
+        self,
+        report: Any | None,
+        stored_report: ComprehensiveReport | None,
+    ) -> list[str]:
+        presentation_review = self._as_dict(getattr(report, "presentation_review", None))
+        recommendations = self._as_string_list(presentation_review.get("recommendations"))
+        if recommendations:
+            return recommendations
+        recommendations = self._as_string_list(getattr(report, "suggestions", None))
+        recommendations.extend(
+            item
+            for item in self._as_string_list(getattr(stored_report, "recommendations", None))
+            if item not in recommendations
+        )
+        return recommendations
+
+    def _build_next_actions(
+        self,
+        *,
+        report: Any | None,
+        stored_report: ComprehensiveReport | None,
+        tasks: list[RetrainingTaskResponse],
+    ) -> list[TrainingReportNextAction]:
+        actions = [
+            TrainingReportNextAction(
+                action_type="recommendation",
+                label=item,
+            )
+            for item in self._report_recommendations(report, stored_report)
+        ]
+        actions.extend(
+            TrainingReportNextAction(
+                action_type="retraining_task",
+                label=task.title,
+                target=task.task_id,
+            )
+            for task in tasks
+        )
+        return actions
+
+    def _report_overall_score(
+        self,
+        report: Any | None,
+        stored_report: ComprehensiveReport | None,
+        session: PracticeSession,
+    ) -> float | None:
+        return (
+            _as_float(getattr(report, "overall_score", None))
+            or _as_float(getattr(stored_report, "overall_score", None))
+            or _as_float(
+                (
+                    float(getattr(session, "logic_score", 0) or 0)
+                    + float(getattr(session, "accuracy_score", 0) or 0)
+                    + float(getattr(session, "completeness_score", 0) or 0)
+                )
+                / 3
+            )
+        )
+
+    @staticmethod
+    def _as_dict(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump(mode="json")
+            if isinstance(dumped, dict):
+                return dumped
+        return {}
+
+    @staticmethod
+    def _as_string_list(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [text for text in (_short_text(item) for item in value) if text]
+
+    @staticmethod
+    def _as_int(value: Any) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _select_message(
+        messages: list[ConversationMessage],
+        *,
+        turn_number: int | None = None,
+    ) -> ConversationMessage | None:
+        if turn_number is not None:
+            for message in messages:
+                if getattr(message, "turn_number", None) == turn_number:
+                    return message
+        for preferred_role in ("user", "assistant"):
+            for message in messages:
+                if getattr(message, "role", None) == preferred_role:
+                    return message
+        return messages[0] if messages else None
 
     async def _build_before_after(
         self, task: RetrainingTask

@@ -136,7 +136,10 @@ import {
     SupervisorReview,
     SupervisorReviewCreateRequest,
     SupervisorReviewDecisionUpdateRequest,
+    SupervisorScoreCalibration,
+    SupervisorScoreCalibrationUpsertRequest,
     SupervisorTeamReport,
+    TrainingReportViewModel,
     RetrainingTask,
     RetrainingTaskCreateRequest,
     RetrainingTaskCompleteRequest,
@@ -1964,6 +1967,10 @@ export const api = {
     },
 
     supervisor: {
+        getTrainingReportView: async (sessionId: string) => {
+            return apiFetch<TrainingReportViewModel>(`/supervisor/report-view/${encodeURIComponent(sessionId)}`);
+        },
+
         listTeamReports: async (params?: { limit?: number }) => {
             const searchParams = new URLSearchParams();
             if (params?.limit) searchParams.set("limit", String(params.limit));
@@ -1993,6 +2000,19 @@ export const api = {
                 method: "PATCH",
                 body: JSON.stringify(payload),
             });
+        },
+
+        upsertScoreCalibration: async (
+            reviewId: string,
+            payload: SupervisorScoreCalibrationUpsertRequest,
+        ) => {
+            return apiFetch<SupervisorScoreCalibration>(
+                `/supervisor/reviews/${encodeURIComponent(reviewId)}/score-calibrations`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
         },
     },
 

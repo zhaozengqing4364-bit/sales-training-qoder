@@ -35,8 +35,12 @@ import {
     ReplayAnchor,
     ReplayData,
     ReportTrendsResponse,
+    CalibrationLabel,
     SupervisorDecision,
     SupervisorReview,
+    TrainingReportEvidenceItem,
+    TrainingReportIssue,
+    TrainingReportViewModel,
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import { normalizeInternalRecommendationPath } from "@/lib/recommendation-routing";
@@ -160,6 +164,14 @@ const READINESS_STATUS_LABELS: Record<ReadinessStatus, string> = {
     shadow_only: "仅影子跟练",
     ready_for_trial: "可试点上岗",
     approved: "正式通过",
+};
+
+const CALIBRATION_LABELS: Record<CalibrationLabel, string> = {
+    accurate: "AI 评分准确",
+    too_high: "AI 偏高",
+    too_low: "AI 偏低",
+    wrong_reason: "理由不对",
+    missing_evidence: "证据不足",
 };
 
 function formatScoreValue(value?: number | null): string {
@@ -723,6 +735,135 @@ function SupervisorBeforeAfterPanel({
     );
 }
 
+function evidenceItemsForIssue(
+    view: TrainingReportViewModel,
+    issue: TrainingReportIssue,
+): TrainingReportEvidenceItem[] {
+    const ids = new Set(issue.evidence_item_ids);
+    return view.evidence_items.filter((item) => ids.has(item.evidence_id));
+}
+
+function formatEvidenceSource(item: TrainingReportEvidenceItem): string {
+    if (item.evidence_type === "evidence_missing") {
+        return "evidence_missing";
+    }
+    const parts = [
+        item.turn_number ? `回合 ${item.turn_number}` : null,
+        item.speaker ? (item.speaker === "assistant" ? "AI 客户" : "学员") : null,
+        item.source_page_id ? `PPT 页 ${item.source_page_id.slice(0, 8)}` : null,
+        item.knowledge_source_id ? `知识来源 ${item.knowledge_source_id}` : null,
+    ].filter(Boolean);
+    return parts.join(" · ") || item.evidence_type;
+}
+
+function EvidenceLine({ item }: { item: TrainingReportEvidenceItem }) {
+    const isMissing = item.evidence_type === "evidence_missing";
+    return (
+        <div className={cn(
+            "rounded-lg border p-3",
+            isMissing ? "border-amber-200 bg-amber-50" : "border-slate-100 bg-white/80",
+        )}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs font-semibold",
+                    isMissing
+                        ? "border-amber-200 bg-white text-amber-800"
+                        : "border-slate-200 bg-slate-50 text-slate-700",
+                )}>
+                    {formatEvidenceSource(item)}
+                </span>
+                {typeof item.confidence === "number" ? (
+                    <span className="text-xs text-slate-500">confidence {item.confidence.toFixed(2)}</span>
+                ) : null}
+            </div>
+            {item.quote ? (
+                <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-sm leading-6 text-slate-800">
+                    {item.quote}
+                </blockquote>
+            ) : (
+                <p className={cn("mt-2 text-sm", isMissing ? "text-amber-800" : "text-slate-600")}>
+                    {isMissing ? "暂无可引用原话、页码或知识来源。" : "该证据来自结构化来源，暂无原话摘录。"}
+                </p>
+            )}
+            {item.reason ? (
+                <p className="mt-2 text-xs text-slate-500">{item.reason}</p>
+            ) : null}
+        </div>
+    );
+}
+
+function EvidenceBasedIssuesPanel({
+    view,
+}: {
+    view: TrainingReportViewModel | null;
+}) {
+    if (!view) {
+        return null;
+    }
+    const issueRows = view.key_issues.length
+        ? view.key_issues
+        : view.dimension_scores
+            .filter((dimension) => dimension.evidence_item_ids.length)
+            .map((dimension) => ({
+                issue: `${dimension.name} 维度证据`,
+                dimension: dimension.name,
+                reason: dimension.description ?? null,
+                severity: null,
+                evidence_item_ids: dimension.evidence_item_ids,
+            }));
+
+    if (!issueRows.length) {
+        return null;
+    }
+
+    return (
+        <GlassCard className="p-6 mb-6 border border-amber-100 bg-amber-50/40">
+            <div className="mb-4">
+                <h2 className="text-lg font-semibold text-zinc-900">为什么扣分</h2>
+                <p className="mt-1 text-sm text-zinc-600">
+                    主管可逐项查看扣分依据；缺少来源时明确标记 evidence_missing。
+                </p>
+            </div>
+            <div className="space-y-4">
+                {issueRows.map((issue, index) => {
+                    const evidenceItems = evidenceItemsForIssue(view, issue);
+                    return (
+                        <div key={`${issue.issue}-${index}`} className="rounded-xl border border-amber-100 bg-white/80 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="text-sm font-bold text-slate-900">{issue.issue}</h3>
+                                {issue.dimension ? (
+                                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                                        {issue.dimension}
+                                    </span>
+                                ) : null}
+                            </div>
+                            {issue.reason ? (
+                                <p className="mt-2 text-sm text-slate-700">原因：{issue.reason}</p>
+                            ) : null}
+                            <div className="mt-3 space-y-2">
+                                {evidenceItems.length ? (
+                                    evidenceItems.map((item) => (
+                                        <EvidenceLine key={item.evidence_id} item={item} />
+                                    ))
+                                ) : (
+                                    <EvidenceLine
+                                        item={{
+                                            evidence_id: `${issue.issue}-${index}-missing`,
+                                            evidence_type: "evidence_missing",
+                                            issue: issue.issue,
+                                            dimension: issue.dimension,
+                                        }}
+                                    />
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </GlassCard>
+    );
+}
+
 export default function ComprehensiveReportPage() {
     const router = useRouter();
     const params = useParams();
@@ -754,6 +895,13 @@ export default function ComprehensiveReportPage() {
     const [reviewComment, setReviewComment] = useState("");
     const [supervisorReviewSubmitting, setSupervisorReviewSubmitting] = useState<SupervisorDecision | null>(null);
     const [retrainingCompletionHint, setRetrainingCompletionHint] = useState<string | null>(null);
+    const [trainingReportView, setTrainingReportView] = useState<TrainingReportViewModel | null>(null);
+    const [trainingReportViewHint, setTrainingReportViewHint] = useState<string | null>(null);
+    const [calibrationDimension, setCalibrationDimension] = useState("");
+    const [calibrationScore, setCalibrationScore] = useState("");
+    const [calibrationLabel, setCalibrationLabel] = useState<CalibrationLabel>("accurate");
+    const [calibrationComment, setCalibrationComment] = useState("");
+    const [calibrationSubmitting, setCalibrationSubmitting] = useState(false);
 
     const isSupervisor = currentUser?.role === "admin";
     const latestSupervisorReview = supervisorReviews[0] ?? null;
@@ -777,14 +925,31 @@ export default function ComprehensiveReportPage() {
         }
     }, [sessionId]);
 
+    const loadTrainingReportView = useCallback(async () => {
+        setTrainingReportViewHint(null);
+        try {
+            const view = await api.supervisor.getTrainingReportView(sessionId);
+            setTrainingReportView(view);
+        } catch (err) {
+            setTrainingReportView(null);
+            setTrainingReportViewHint(`证据化报告暂时无法读取：${getApiErrorMessage(err)}`);
+            debug.warn("[Report] Training report view unavailable", {
+                sessionId,
+                error: err,
+            });
+        }
+    }, [sessionId]);
+
     useEffect(() => {
         if (!report) {
             setSupervisorReviews([]);
+            setTrainingReportView(null);
             return;
         }
 
         void loadSupervisorReviews();
-    }, [loadSupervisorReviews, report]);
+        void loadTrainingReportView();
+    }, [loadSupervisorReviews, loadTrainingReportView, report]);
 
     useEffect(() => {
         if (!latestSupervisorReview) {
@@ -797,6 +962,34 @@ export default function ComprehensiveReportPage() {
         latestSupervisorReview?.comment,
         latestSupervisorReview?.readiness_status,
         latestSupervisorReview?.review_id,
+    ]);
+
+    useEffect(() => {
+        const dimensions = trainingReportView?.dimension_scores ?? [];
+        if (!dimensions.length) {
+            setCalibrationDimension("");
+            setCalibrationScore("");
+            return;
+        }
+        const selected = dimensions.find((item) => item.name === calibrationDimension)
+            ?? dimensions[0];
+        const existing = latestSupervisorReview?.calibrations.find(
+            (item) => item.dimension === selected.name,
+        );
+        setCalibrationDimension(selected.name);
+        setCalibrationScore(
+            typeof existing?.supervisor_score === "number"
+                ? String(existing.supervisor_score)
+                : typeof selected.score === "number"
+                    ? String(selected.score)
+                    : "",
+        );
+        setCalibrationLabel(existing?.calibration_label ?? "accurate");
+        setCalibrationComment(existing?.comment ?? "");
+    }, [
+        calibrationDimension,
+        latestSupervisorReview?.calibrations,
+        trainingReportView?.dimension_scores,
     ]);
 
     useEffect(() => {
@@ -821,6 +1014,7 @@ export default function ComprehensiveReportPage() {
                 clearRetrainingTaskSessionLink(sessionId);
                 setRetrainingCompletionHint("复训任务已完成，主管可查看前后对比。");
                 void loadSupervisorReviews();
+                void loadTrainingReportView();
             })
             .catch((err) => {
                 if (cancelled) {
@@ -837,7 +1031,7 @@ export default function ComprehensiveReportPage() {
         return () => {
             cancelled = true;
         };
-    }, [loadSupervisorReviews, report, sessionId]);
+    }, [loadSupervisorReviews, loadTrainingReportView, report, sessionId]);
 
     useEffect(() => {
         if (!report) {
@@ -1584,6 +1778,7 @@ export default function ComprehensiveReportPage() {
                 ...currentReviews.filter((item) => item.review_id !== savedReview.review_id),
             ]);
             setSupervisorReviewHint(`${SUPERVISOR_DECISION_LABELS[decision]}已保存。`);
+            void loadTrainingReportView();
         } catch (err) {
             setSupervisorReviewHint(`主管评审保存失败：${getApiErrorMessage(err)}`);
             debug.warn("[Report] Supervisor review save failed", {
@@ -1593,6 +1788,60 @@ export default function ComprehensiveReportPage() {
             });
         } finally {
             setSupervisorReviewSubmitting(null);
+        }
+    };
+
+    const submitScoreCalibration = async () => {
+        if (!latestSupervisorReview || !trainingReportView || !calibrationDimension) {
+            setSupervisorReviewHint("请先保存主管评审，再进行评分校准。");
+            return;
+        }
+        const selectedDimension = trainingReportView.dimension_scores.find(
+            (item) => item.name === calibrationDimension,
+        );
+        const supervisorScore = Number.parseFloat(calibrationScore);
+        if (!Number.isFinite(supervisorScore) || supervisorScore < 0 || supervisorScore > 100) {
+            setSupervisorReviewHint("主管校准分必须在 0 到 100 之间。");
+            return;
+        }
+
+        setCalibrationSubmitting(true);
+        setSupervisorReviewHint(null);
+        try {
+            const saved = await api.supervisor.upsertScoreCalibration(
+                latestSupervisorReview.review_id,
+                {
+                    session_id: sessionId,
+                    dimension: calibrationDimension,
+                    ai_score: selectedDimension?.score ?? null,
+                    supervisor_score: supervisorScore,
+                    calibration_label: calibrationLabel,
+                    comment: calibrationComment.trim() || null,
+                },
+            );
+            setSupervisorReviews((currentReviews) => currentReviews.map((review) => {
+                if (review.review_id !== latestSupervisorReview.review_id) {
+                    return review;
+                }
+                return {
+                    ...review,
+                    calibrations: [
+                        saved,
+                        ...review.calibrations.filter((item) => item.dimension !== saved.dimension),
+                    ],
+                };
+            }));
+            setSupervisorReviewHint("主管评分校准已保存，AI 原始分已保留。");
+            void loadTrainingReportView();
+        } catch (err) {
+            setSupervisorReviewHint(`主管评分校准保存失败：${getApiErrorMessage(err)}`);
+            debug.warn("[Report] Supervisor calibration save failed", {
+                sessionId,
+                dimension: calibrationDimension,
+                error: err,
+            });
+        } finally {
+            setCalibrationSubmitting(false);
         }
     };
 
@@ -1741,6 +1990,89 @@ export default function ComprehensiveReportPage() {
                                     </Button>
                                 ))}
                             </div>
+                            {latestSupervisorReview && trainingReportView?.dimension_scores.length ? (
+                                <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-slate-900">主管评分校准</h3>
+                                            <p className="mt-1 text-xs text-slate-600">
+                                                校准只保存主管判断，不覆盖 AI 原始维度分。
+                                            </p>
+                                        </div>
+                                        {latestSupervisorReview.calibrations.length ? (
+                                            <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                                已校准 {latestSupervisorReview.calibrations.length} 项
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_0.8fr_1fr]">
+                                        <label className="text-sm font-semibold text-slate-700">
+                                            维度
+                                            <select
+                                                value={calibrationDimension}
+                                                onChange={(event) => setCalibrationDimension(event.target.value)}
+                                                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400"
+                                            >
+                                                {trainingReportView.dimension_scores.map((dimension) => (
+                                                    <option key={dimension.name} value={dimension.name}>
+                                                        {dimension.name} · AI {formatScoreValue(dimension.score)}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                        <label className="text-sm font-semibold text-slate-700">
+                                            主管分
+                                            <input
+                                                value={calibrationScore}
+                                                onChange={(event) => setCalibrationScore(event.target.value)}
+                                                inputMode="decimal"
+                                                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400"
+                                            />
+                                        </label>
+                                        <label className="text-sm font-semibold text-slate-700">
+                                            校准判断
+                                            <select
+                                                value={calibrationLabel}
+                                                onChange={(event) => setCalibrationLabel(event.target.value as CalibrationLabel)}
+                                                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400"
+                                            >
+                                                {Object.entries(CALIBRATION_LABELS).map(([value, label]) => (
+                                                    <option key={value} value={value}>{label}</option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <label className="mt-3 block text-sm font-semibold text-slate-700">
+                                        校准说明
+                                        <textarea
+                                            value={calibrationComment}
+                                            onChange={(event) => setCalibrationComment(event.target.value)}
+                                            rows={2}
+                                            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400"
+                                            placeholder="说明为什么调高、调低或认为证据不足"
+                                        />
+                                    </label>
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="primary"
+                                            size="sm"
+                                            disabled={calibrationSubmitting}
+                                            onClick={() => void submitScoreCalibration()}
+                                        >
+                                            {calibrationSubmitting ? "保存中..." : "保存校准"}
+                                        </Button>
+                                        {latestSupervisorReview.calibrations.map((item) => (
+                                            <span
+                                                key={`${item.dimension}-${item.calibration_label}`}
+                                                className="rounded-full border border-blue-100 bg-white px-2.5 py-1 text-xs text-blue-800"
+                                            >
+                                                {item.dimension}: {formatScoreValue(item.ai_score)} → {formatScoreValue(item.supervisor_score)} · {CALIBRATION_LABELS[item.calibration_label]}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
                         </div>
                     )}
 
@@ -1751,6 +2083,14 @@ export default function ComprehensiveReportPage() {
                     )}
                 </GlassCard>
             )}
+
+            {trainingReportViewHint ? (
+                <GlassCard className="p-4 mb-6 border border-slate-200 bg-slate-50/80">
+                    <p className="text-sm text-slate-700">{trainingReportViewHint}</p>
+                </GlassCard>
+            ) : null}
+
+            <EvidenceBasedIssuesPanel view={trainingReportView} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <GlassCard className="p-6 border border-blue-100 bg-blue-50/40">
