@@ -9,11 +9,41 @@
 
 ## Current Status
 
-- Overall status: phase_2_complete_paused_before_phase_3
+- Overall status: phase_2_acceptance_smoke_complete_paused_before_phase_3
 - Current phase: Phase 2 - Supervisor Review and Retraining Loop
-- Current atomic task: Phase 2 complete; paused before Phase 3
-- Last commit: `Phase 2 supervisor review and retraining loop`
-- Blocker: none for Phase 2. Full backend mypy remains tracked as the Phase 1 gray-release debt ceiling, not a Phase 2 zero-error release blocker.
+- Current atomic task: Phase 2 acceptance smoke complete; paused before Phase 3
+- Last commit: `Phase 2 acceptance smoke for supervisor retraining loop`
+- Blocker: none for Phase 2 acceptance smoke. Full backend mypy remains tracked as the Phase 1 gray-release debt ceiling, not a Phase 2 zero-error release blocker.
+
+## Phase 2 Acceptance Smoke - 2026-05-09
+
+- Stable code logic changed: no product runtime logic changed. The focused backend integration test was upgraded into an acceptance smoke that exercises the committed supervisor review and retraining loop through real API calls.
+- Configurable business rules changed: none.
+- New configuration items: none.
+- Reused configuration items: existing `admin`/`user` role split and existing Phase 2 supervisor/retraining API surfaces.
+- Smoke chain verified:
+  - created test trainee and supervisor users.
+  - created a presentation practice session with the minimum page, talking-point, and message evidence required by the report endpoint.
+  - read `GET /api/v1/practice/sessions/{session_id}/report`.
+  - created a pending review with `POST /api/v1/supervisor/reviews`.
+  - changed the review to `needs_retraining` with `PATCH /api/v1/supervisor/reviews/{review_id}/decision`.
+  - confirmed an automatic `RetrainingTask`.
+  - confirmed the employee can read the task from `GET /api/v1/retraining/tasks`.
+  - started a retraining session with `POST /api/v1/retraining/tasks/{task_id}/start-session`.
+  - bound the completed retraining session with `POST /api/v1/retraining/tasks/{task_id}/complete-with-session`.
+  - confirmed before/after data from both supervisor team reports and supervisor review reads.
+- Frontend smoke scope: no frontend product code was changed. Existing report page and dashboard entry points were checked by source search and full frontend test suite:
+  - report page contains supervisor review controls, `readiness_status`, `通过`, `打回`, `要求复训`, and before/after rendering.
+  - dashboard contains `主管复训任务` and `开始复训` entry.
+- Bug findings: the first smoke run failed because the test-created presentation session lacked the page/talking-point/message evidence needed by the real report endpoint and returned `[SESSION_EVIDENCE_FAILED]`. The fix was limited to the test fixture by seeding realistic minimal presentation evidence. No product runtime code was changed.
+- Verification:
+  - `cd backend && alembic upgrade head`: passed.
+  - `cd backend && ruff check src tests`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/pytest tests/integration/test_supervisor_retraining_api.py -q --no-cov`: 2 passed, 1 third-party deprecation warning.
+  - `cd web && npx tsc --noEmit`: passed.
+  - `cd web && npx eslint . --quiet`: passed.
+  - `cd web && npx vitest run`: 89 test files and 549 tests passed.
+- Explicitly not performed: full E2E, Phase 3 evidence report, full RBAC, StepFun refactor, leaderboard work, auth certificate work, and unrelated `.codex/**` or root `AGENTS.md` cleanup.
 
 ## Phase 2 Supervisor Review and Retraining Loop - 2026-05-09
 

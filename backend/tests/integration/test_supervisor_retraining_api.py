@@ -7,7 +7,15 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
-from common.db.models import PracticeSession, Presentation, Scenario, User
+from common.conversation.models import ConversationMessage
+from common.db.models import (
+    Page,
+    PracticeSession,
+    Presentation,
+    RequiredTalkingPoint,
+    Scenario,
+    User,
+)
 
 
 async def _create_user(
@@ -54,7 +62,35 @@ async def _create_presentation_session(
         description="Presentation review scenario",
         is_active=True,
     )
-    db.add_all([presentation, scenario])
+    page_1 = Page(
+        page_id=str(uuid.uuid4()),
+        presentation_id=presentation.presentation_id,
+        page_number=1,
+        ocr_extracted_text="第一页业务目标与客户痛点",
+    )
+    page_2 = Page(
+        page_id=str(uuid.uuid4()),
+        presentation_id=presentation.presentation_id,
+        page_number=2,
+        ocr_extracted_text="第二页 ROI 结果与客户案例",
+    )
+    talking_points = [
+        RequiredTalkingPoint(
+            point_id=str(uuid.uuid4()),
+            page_id=page_1.page_id,
+            description="业务目标",
+            created_by="admin",
+            confirmed_by_admin=True,
+        ),
+        RequiredTalkingPoint(
+            point_id=str(uuid.uuid4()),
+            page_id=page_2.page_id,
+            description="客户案例",
+            created_by="admin",
+            confirmed_by_admin=True,
+        ),
+    ]
+    db.add_all([presentation, scenario, page_1, page_2, *talking_points])
     await db.flush()
     session = PracticeSession(
         session_id=str(uuid.uuid4()),
@@ -68,7 +104,32 @@ async def _create_presentation_session(
         accuracy_score=accuracy_score,
         completeness_score=completeness_score,
         report_status="completed",
+        total_duration_seconds=12 * 60,
     )
+    messages = [
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=1,
+            role="user",
+            content="第一页先讲业务目标与客户痛点。",
+            timestamp=datetime.now(UTC),
+            duration_ms=1800,
+            transcript_metadata={"page_number": 1},
+            score_snapshot={"overall_score": logic_score},
+        ),
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=2,
+            role="user",
+            content="第二页补充 ROI 结果和客户案例。",
+            timestamp=datetime.now(UTC),
+            duration_ms=2200,
+            transcript_metadata={"page_number": 2},
+            score_snapshot={"overall_score": accuracy_score},
+        ),
+    ]
+    if status == "completed":
+        db.add_all(messages)
     db.add(session)
     await db.commit()
     await db.refresh(session)
@@ -81,7 +142,7 @@ def _auth_headers(user: User) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_supervisor_review_creates_retraining_task_and_before_after(
+async def test_phase2_acceptance_smoke_supervisor_retraining_loop(
     async_client,
     test_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -93,11 +154,37 @@ async def test_supervisor_review_creates_retraining_task_and_before_after(
     )
     source_session = await _create_presentation_session(test_db, user=trainee)
 
+    report_response = await async_client.get(
+        f"/api/v1/practice/sessions/{source_session.session_id}/report",
+        headers=_auth_headers(supervisor),
+    )
+    assert report_response.status_code == 200
+    report_body = report_response.json()["data"]
+    assert report_body["session_id"] == str(source_session.session_id)
+    assert report_body["overall_score"] > 0
+
     review_response = await async_client.post(
         "/api/v1/supervisor/reviews",
         headers=_auth_headers(supervisor),
         json={
             "session_id": str(source_session.session_id),
+            "decision": "pending",
+            "readiness_status": "not_ready",
+            "comment": "主管已查看报告，等待复训决策。",
+            "required_retraining": False,
+        },
+    )
+
+    assert review_response.status_code == 201
+    review_body = review_response.json()["data"]
+    assert review_body["decision"] == "pending"
+    assert review_body["required_retraining"] is False
+    assert review_body["retraining_tasks"] == []
+
+    decision_response = await async_client.patch(
+        f"/api/v1/supervisor/reviews/{review_body['review_id']}/decision",
+        headers=_auth_headers(supervisor),
+        json={
             "decision": "needs_retraining",
             "readiness_status": "shadow_only",
             "comment": "补强演讲结构后再试讲。",
@@ -106,8 +193,8 @@ async def test_supervisor_review_creates_retraining_task_and_before_after(
         },
     )
 
-    assert review_response.status_code == 201
-    review_body = review_response.json()["data"]
+    assert decision_response.status_code == 200
+    review_body = decision_response.json()["data"]
     assert review_body["decision"] == "needs_retraining"
     assert review_body["required_retraining"] is True
     assert review_body["retraining_tasks"][0]["skill_dimension"] == "逻辑结构"
@@ -159,6 +246,15 @@ async def test_supervisor_review_creates_retraining_task_and_before_after(
     )
     assert source_report["latest_review"]["decision"] == "needs_retraining"
     assert source_report["before_after"]["completed_session_id"] == started_session_id
+
+    reviews_response = await async_client.get(
+        f"/api/v1/supervisor/reviews?session_id={source_session.session_id}",
+        headers=_auth_headers(supervisor),
+    )
+    assert reviews_response.status_code == 200
+    readable_review = reviews_response.json()["data"][0]
+    assert readable_review["before_after"]["retraining_completed"] is True
+    assert readable_review["before_after"]["score_delta"] > 0
 
 
 @pytest.mark.asyncio
