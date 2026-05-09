@@ -9,11 +9,49 @@
 
 ## Current Status
 
-- Overall status: phase_3_evidence_report_calibration_complete_paused_before_phase_4
+- Overall status: phase_3_acceptance_smoke_complete_paused_before_phase_4
 - Current phase: Phase 3 - Evidence-Based Report and Supervisor Calibration
-- Current atomic task: Phase 3 evidence-based report and calibration complete; paused before Phase 4
-- Last commit: `Phase 3 evidence based report and calibration`
-- Blocker: none for Phase 3. Full backend mypy remains tracked as the Phase 1 gray-release debt ceiling, not a Phase 3 zero-error release blocker.
+- Current atomic task: Phase 3 acceptance smoke for evidence and calibration complete; paused before Phase 4
+- Last commit: `Phase 3 acceptance smoke for evidence and calibration`
+- Blocker: none for Phase 3 acceptance smoke behavior. Verification caveat: the exact filtered integration command without `--no-cov` runs the selected tests successfully but exits non-zero because the project-level coverage fail-under applies to the partial `-k` selection. Full backend mypy remains tracked as the Phase 1 gray-release debt ceiling, not a Phase 3 zero-error release blocker.
+
+## Phase 3 Acceptance Smoke for Evidence and Calibration - 2026-05-09
+
+- Stable code logic changed: tightened the supervisor evidence projection so transcript evidence is matched by PPT page metadata before falling back to the first available transcript message. This keeps quotes aligned with the `source_page_id` returned in `TrainingReportViewModel`.
+- Test-only logic changed: upgraded the focused supervisor integration smoke to seed a realistic presentation session with user transcript messages, an AI/customer assistant message, PPT pages, and required talking points; the smoke now asserts evidence provenance, calibration persistence, authorization failure paths, and the existing Phase 2 review/retraining loop.
+- Configurable business rules changed: none. This acceptance smoke did not add scoring thresholds, scoring weights, RBAC matrices, menu rules, report publication policy, evidence display policy, StepFun behavior, or scoring-ruleset route migration.
+- New configuration items: none.
+- Reused configuration items: existing `admin`/`user` role split, existing supervisor report-view/read-model API, existing supervisor review and retraining APIs, existing report evidence metadata, existing pytest/Vitest tool configuration.
+- Configuration source/manager/validation: unchanged. The page-to-message binding uses persisted `ConversationMessage.transcript_metadata.page_number` and existing PPT `Page.page_id`; calibration payload validation remains Pydantic/database-backed.
+- Missing/illegal configuration handling: not applicable for new managed config because no new configurable policy was introduced. Missing report evidence is still represented as `evidence_missing` and the smoke asserts missing evidence does not fabricate a quote.
+- Fixed rules retained in code and reason:
+  - Page-metadata evidence binding is stable provenance logic: when a report item references a PPT page, the selected transcript quote should come from the same page when that metadata exists.
+  - AI/customer transcript messages use the existing persisted conversation role `assistant`; this is part of the transcript read model, not a configurable business rule.
+  - Calibration labels remain stable supervisor review workflow states. Supervisor calibration is still stored separately and does not overwrite the AI-generated dimension score.
+- Acceptance smoke chain verified:
+  - created test trainee and supervisor users.
+  - created a presentation training session with PPT pages, required talking points, user conversation messages, and an assistant/AI customer message.
+  - called `GET /api/v1/supervisor/report-view/{session_id}` through the real API/read-model path.
+  - asserted `TrainingReportViewModel` includes `dimension_scores`, `key_issues`, `evidence_items`, `supervisor_review`, `retraining_tasks`, and `before_after`.
+  - asserted evidence can reference a user quote, an assistant quote, and a PPT `source_page_id`.
+  - asserted missing evidence returns `evidence_missing` with `quote is None`.
+  - created a supervisor review, saved a calibration with `POST /api/v1/supervisor/reviews/{review_id}/score-calibrations`, and asserted `supervisor_score`, original `ai_score`, and `calibration_label`.
+  - asserted the calibrated report view keeps the original AI dimension score unchanged.
+  - asserted non-admin and unauthenticated callers cannot write score calibrations.
+  - reran the Phase 2 supervisor review and retraining smoke inside the same focused integration test file to confirm Phase 3 did not break the review/retraining loop.
+- Phase 3 acceptance backend artifacts:
+  - `backend/src/supervisor/service.py`: page-aware transcript evidence selection.
+  - `backend/tests/integration/test_supervisor_retraining_api.py`: strengthened focused acceptance smoke for user/assistant evidence, PPT page IDs, missing evidence, calibration immutability, authorization, and Phase 2 retraining regression coverage.
+- Verification:
+  - `cd backend && alembic upgrade head`: passed.
+  - `cd backend && ruff check src tests`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/pytest tests/integration/test_supervisor_retraining_api.py -q --no-cov`: 3 passed, 1 third-party deprecation warning.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/pytest tests/integration -q -k "report_view or calibration or supervisor"`: selected tests passed, but command exited 1 because project-level coverage fail-under requires 48% and the partial `-k` run measured 32.50%. No selected test assertion failed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/pytest tests/integration -q -k "report_view or calibration or supervisor" --no-cov`: 4 passed, 2 warnings.
+  - `cd web && npx tsc --noEmit`: passed.
+  - `cd web && npx eslint . --quiet`: passed.
+  - `cd web && npx vitest run`: 89 test files and 549 tests passed.
+- Explicitly not performed: Phase 4 planning, full E2E, full RBAC, StepFun refactor, `/api/v1/admin/scoring-rulesets` migration, coverage-threshold uplift, and unrelated `.codex/**`, root `AGENTS.md`, or `.sisyphus/` cleanup.
 
 ## Phase 3 Evidence-Based Report and Supervisor Calibration - 2026-05-09
 

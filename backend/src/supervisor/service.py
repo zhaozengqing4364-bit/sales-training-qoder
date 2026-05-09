@@ -845,7 +845,11 @@ class SupervisorReviewService:
             confidence: float | None = None,
         ) -> str:
             source_page = pages_by_number.get(page_number) if page_number else None
-            source_message = self._select_message(messages, turn_number=turn_number)
+            source_message = self._select_message(
+                messages,
+                turn_number=turn_number,
+                page_number=page_number,
+            )
             resolved_quote = quote or (
                 _short_text(getattr(source_message, "content", None))
                 if source_message is not None
@@ -1220,16 +1224,36 @@ class SupervisorReviewService:
         messages: list[ConversationMessage],
         *,
         turn_number: int | None = None,
+        page_number: int | None = None,
     ) -> ConversationMessage | None:
         if turn_number is not None:
             for message in messages:
                 if getattr(message, "turn_number", None) == turn_number:
                     return message
+        if page_number is not None:
+            page_messages = [
+                message
+                for message in messages
+                if SupervisorReviewService._message_page_number(message) == page_number
+            ]
+            for preferred_role in ("user", "assistant"):
+                for message in page_messages:
+                    if getattr(message, "role", None) == preferred_role:
+                        return message
+            if page_messages:
+                return page_messages[0]
         for preferred_role in ("user", "assistant"):
             for message in messages:
                 if getattr(message, "role", None) == preferred_role:
                     return message
         return messages[0] if messages else None
+
+    @staticmethod
+    def _message_page_number(message: ConversationMessage) -> int | None:
+        metadata = getattr(message, "transcript_metadata", None)
+        if not isinstance(metadata, dict):
+            return None
+        return SupervisorReviewService._as_int(metadata.get("page_number"))
 
     async def _build_before_after(
         self, task: RetrainingTask

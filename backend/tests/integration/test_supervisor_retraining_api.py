@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
@@ -74,6 +75,12 @@ async def _create_presentation_session(
         page_number=2,
         ocr_extracted_text="第二页 ROI 结果与客户案例",
     )
+    page_3 = Page(
+        page_id=str(uuid.uuid4()),
+        presentation_id=presentation.presentation_id,
+        page_number=3,
+        ocr_extracted_text="第三页真实案例支撑与落地计划",
+    )
     talking_points = [
         RequiredTalkingPoint(
             point_id=str(uuid.uuid4()),
@@ -89,8 +96,15 @@ async def _create_presentation_session(
             created_by="admin",
             confirmed_by_admin=True,
         ),
+        RequiredTalkingPoint(
+            point_id=str(uuid.uuid4()),
+            page_id=page_3.page_id,
+            description="真实案例支撑",
+            created_by="admin",
+            confirmed_by_admin=True,
+        ),
     ]
-    db.add_all([presentation, scenario, page_1, page_2, *talking_points])
+    db.add_all([presentation, scenario, page_1, page_2, page_3, *talking_points])
     await db.flush()
     session = PracticeSession(
         session_id=str(uuid.uuid4()),
@@ -126,6 +140,16 @@ async def _create_presentation_session(
             duration_ms=2200,
             transcript_metadata={"page_number": 2},
             score_snapshot={"overall_score": accuracy_score},
+        ),
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=3,
+            role="assistant",
+            content="客户追问：这个 ROI 结果有什么真实案例支撑？",
+            timestamp=datetime.now(UTC),
+            duration_ms=1200,
+            transcript_metadata={"page_number": 3},
+            score_snapshot=None,
         ),
     ]
     if status == "completed":
@@ -240,7 +264,13 @@ async def test_phase2_acceptance_smoke_supervisor_retraining_loop(
     assert report_view["scenario_type"] == "presentation"
     assert report_view["trainee"]["user_id"] == str(trainee.user_id)
     assert report_view["dimension_scores"]
+    assert isinstance(report_view["key_issues"], list)
     assert report_view["evidence_items"]
+    assert report_view["supervisor_review"]["review_id"] == review_body["review_id"]
+    assert report_view["retraining_tasks"]
+    assert report_view["before_after"]["source_session_id"] == str(
+        source_session.session_id
+    )
     assert {
         "session_id",
         "scenario_type",
@@ -261,6 +291,28 @@ async def test_phase2_acceptance_smoke_supervisor_retraining_loop(
     assert any(
         item["quote"] or item["source_page_id"]
         for item in report_view["evidence_items"]
+    )
+    page_rows = await test_db.execute(
+        select(Page.page_id).where(Page.presentation_id == source_session.presentation_id)
+    )
+    expected_page_ids = {str(page_id) for page_id in page_rows.scalars().all()}
+    evidence_items = report_view["evidence_items"]
+    assert any(
+        item["speaker"] == "user"
+        and item["quote"]
+        and "第一页先讲业务目标" in item["quote"]
+        for item in evidence_items
+    )
+    assert any(
+        item["speaker"] == "assistant"
+        and item["quote"]
+        and "真实案例支撑" in item["quote"]
+        for item in evidence_items
+    )
+    assert any(
+        item["evidence_type"] == "ppt_page"
+        and item["source_page_id"] in expected_page_ids
+        for item in evidence_items
     )
 
     first_dimension = report_view["dimension_scores"][0]
@@ -298,6 +350,7 @@ async def test_phase2_acceptance_smoke_supervisor_retraining_loop(
         if item["name"] == first_dimension["name"]
     )
     assert unchanged_dimension["score"] == first_dimension["score"]
+    assert unchanged_dimension["score"] == calibration["ai_score"]
 
     task = review_body["retraining_tasks"][0]
     task_response = await async_client.get(
@@ -438,3 +491,15 @@ async def test_supervisor_write_routes_reject_non_admin(
     )
     assert calibration_response.status_code == 403
     assert calibration_response.json()["error"] == "[ADMIN_REQUIRED]"
+
+    unauthorized_calibration_response = await async_client.post(
+        f"/api/v1/supervisor/reviews/{review_id}/score-calibrations",
+        json={
+            "session_id": str(source_session.session_id),
+            "dimension": "逻辑结构",
+            "ai_score": 62.0,
+            "supervisor_score": 60.0,
+            "calibration_label": "accurate",
+        },
+    )
+    assert unauthorized_calibration_response.status_code == 401
