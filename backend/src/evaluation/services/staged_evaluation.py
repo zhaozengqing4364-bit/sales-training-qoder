@@ -28,6 +28,22 @@ from evaluation.triggers.base_trigger import TriggerContext
 from prompt_templates.service import PromptTemplateService
 
 
+def _runtime_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _runtime_int(row: object, name: str, default: int = 0) -> int:
+    try:
+        return int(getattr(row, name, default) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _runtime_list(row: object, name: str) -> list[Any]:
+    value = getattr(row, name, [])
+    return value if isinstance(value, list) else []
+
+
 @dataclass
 class StageEvaluationResult:
     """Result of evaluating a single stage."""
@@ -176,21 +192,22 @@ class StagedEvaluationService:
             llm_payload = llm_result.value
             if llm_payload is None:
                 return Result.fail("[LLM_EVALUATION_FAILED:EMPTY_RESPONSE]")
-            llm_payload = cast(str | dict[Any, Any] | bytes, llm_payload)
+            llm_payload_typed = cast(str | dict[Any, Any] | bytes, llm_payload)
 
             # Parse evaluation result
             parse_result = await parse_llm_response(
-                llm_payload, StageEvaluationResponse
+                llm_payload_typed, StageEvaluationResponse
             )
             if not parse_result.is_success:
                 return Result.fail(f"[LLM_VALIDATION_FAILED:{parse_result.fallback}]")
 
-            parsed_eval = parse_result.value
+            parsed_eval = cast(StageEvaluationResponse | None, parse_result.value)
             if parsed_eval is None:
                 return Result.fail("[LLM_VALIDATION_FAILED:EMPTY_RESPONSE]")
 
             weaknesses: list[str] = []
-            raw_value = llm_payload
+            raw_value: str | dict[Any, Any] | bytes = llm_payload_typed
+            raw_dict: dict[Any, Any] | None = None
             if isinstance(raw_value, str):
                 try:
                     raw_dict = json.loads(raw_value)
@@ -332,15 +349,15 @@ class StagedEvaluationService:
 
         return [
             StageEvaluationResult(
-                stage_number=r.stage_number,
-                start_turn=r.start_turn,
-                end_turn=r.end_turn,
-                timestamp=r.created_at,
-                scores=r.scores or {},
-                strengths=r.strengths or [],
-                weaknesses=r.weaknesses or [],
-                suggestions=r.suggestions or [],
-                summary=r.summary or "",
+                stage_number=_runtime_int(r, "stage_number"),
+                start_turn=_runtime_int(r, "start_turn"),
+                end_turn=_runtime_int(r, "end_turn"),
+                timestamp=_runtime_field(r, "created_at"),
+                scores=dict(_runtime_field(r, "scores") or {}),
+                strengths=[str(item) for item in _runtime_list(r, "strengths")],
+                weaknesses=[str(item) for item in _runtime_list(r, "weaknesses")],
+                suggestions=[str(item) for item in _runtime_list(r, "suggestions")],
+                summary=str(_runtime_field(r, "summary") or ""),
             )
             for r in db_results
         ]

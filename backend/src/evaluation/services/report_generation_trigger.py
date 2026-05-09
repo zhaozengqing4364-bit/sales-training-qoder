@@ -9,9 +9,10 @@ Story 3.1: 会话结束自动生成训练报告
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,8 +33,16 @@ from evaluation.services.comprehensive_report import ComprehensiveReportService
 logger = get_logger(__name__)
 
 
+def _set_runtime_field(row: object, name: str, value: object) -> None:
+    setattr(row, name, value)
+
+
+def _runtime_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
 @asynccontextmanager
-async def get_db_session() -> AsyncSession:
+async def get_db_session() -> AsyncIterator[AsyncSession]:
     """Create an async DB session for fire-and-forget report generation."""
     async with AsyncSessionLocal() as db:
         yield db
@@ -119,6 +128,7 @@ class ReportGenerationTrigger:
             result = await self._generate_report_with_retry(session_id, scenario_type)
 
             if result.is_success:
+                generated_report = result.value
                 await self._update_report_status(
                     session_id,
                     ReportGenerationStatus.COMPLETED,
@@ -131,9 +141,7 @@ class ReportGenerationTrigger:
                 logger.info(
                     "report_generation_completed",
                     session_id=session_id,
-                    overall_score=result.value.overall_score
-                    if hasattr(result.value, "overall_score")
-                    else None,
+                    overall_score=getattr(generated_report, "overall_score", None),
                 )
             else:
                 error_msg = result.fallback or "Unknown error"
@@ -193,7 +201,10 @@ class ReportGenerationTrigger:
         result = await self.db.execute(stmt)
         session = result.scalar_one_or_none()
 
-        if session is None or session.status != SessionStatus.SCORING.value:
+        if (
+            session is None
+            or _runtime_field(session, "status") != SessionStatus.SCORING.value
+        ):
             return
 
         projection_result = await SessionEvidenceService(self.db).get_projection(
@@ -211,6 +222,13 @@ class ReportGenerationTrigger:
             return
 
         projection = projection_result.value
+        if projection is None:
+            logger.info(
+                "sales_session_finalization_deferred",
+                session_id=session_id,
+                reason="missing_projection",
+            )
+            return
         if not projection.evidence_completeness.get("session_scores", False):
             logger.info(
                 "sales_session_finalization_deferred",
@@ -219,12 +237,12 @@ class ReportGenerationTrigger:
             )
             return
 
-        session.status = SessionStatus.COMPLETED.value
+        _set_runtime_field(session, "status", SessionStatus.COMPLETED.value)
         await self.db.flush()
         logger.info(
             "sales_session_finalized",
             session_id=session_id,
-            report_status=session.report_status,
+            report_status=_runtime_field(session, "report_status"),
             message_count=projection.evidence_completeness.get("message_count"),
             projection_complete=projection.evidence_completeness.get("complete"),
         )
@@ -257,7 +275,7 @@ class ReportGenerationTrigger:
         )
 
         # Get realtime scoring context from Track D (if available)
-        scoring_context = None
+        scoring_context: dict[str, Any] | None = None
         try:
             from evaluation.services.realtime_scoring import RealtimeScoringService
 
@@ -265,7 +283,7 @@ class ReportGenerationTrigger:
                 session_id=session_id,
                 db_session=self.db,
             )
-            if scoring_result.is_success:
+            if scoring_result.is_success and isinstance(scoring_result.value, dict):
                 scoring_context = scoring_result.value
                 logger.info(
                     "scoring_context_loaded",
@@ -292,7 +310,11 @@ class ReportGenerationTrigger:
         if scoring_context is not None:
             kwargs["scoring_context"] = scoring_context
 
-        result = await self.report_service.generate_report(**kwargs)
+        report_service = self.report_service
+        if report_service is None:
+            return Result.fail("[REPORT_SERVICE_UNAVAILABLE]")
+
+        result = await report_service.generate_report(**kwargs)
 
         return result
 
@@ -322,13 +344,13 @@ class ReportGenerationTrigger:
             )
             return None
 
-        session.report_status = status.value
+        _set_runtime_field(session, "report_status", status.value)
         if status == ReportGenerationStatus.COMPLETED:
-            session.report_generated_at = datetime.now(UTC)
+            _set_runtime_field(session, "report_generated_at", datetime.now(UTC))
         if error:
-            session.report_error = error
+            _set_runtime_field(session, "report_error", error)
         elif status != ReportGenerationStatus.FAILED:
-            session.report_error = None
+            _set_runtime_field(session, "report_error", None)
         await self.db.flush()
         return session
 
@@ -355,11 +377,13 @@ class ReportGenerationTrigger:
         return Result.ok(
             {
                 "session_id": session_id,
-                "report_status": session.report_status,
-                "report_generated_at": session.report_generated_at.isoformat()
-                if session.report_generated_at
+                "report_status": _runtime_field(session, "report_status"),
+                "report_generated_at": _runtime_field(
+                    session, "report_generated_at"
+                ).isoformat()
+                if _runtime_field(session, "report_generated_at")
                 else None,
-                "report_error": session.report_error,
+                "report_error": _runtime_field(session, "report_error"),
             }
         )
 
@@ -387,6 +411,7 @@ async def trigger_report_generation(
     """
     try:
         if db is None:
+            db_session: AsyncSession
             async with get_db_session() as db_session:
                 trigger = ReportGenerationTrigger(db_session, owns_db_session=True)
                 await trigger.trigger_on_session_end(session_id, scenario_type)

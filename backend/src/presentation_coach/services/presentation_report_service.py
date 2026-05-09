@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,7 +111,7 @@ class PresentationReportService:
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
 
-    async def build_report(self, session_id: str):
+    async def build_report(self, session_id: str) -> Result[Any]:
         from evaluation.services.comprehensive_report import (
             ComprehensiveReport,
             DimensionScore,
@@ -256,8 +256,13 @@ class PresentationReportService:
             .order_by(Page.page_number)
         )
         pages = list(pages_result.scalars().all())
-        page_ids = [page.page_id for page in pages]
-        page_number_by_id = {page.page_id: page.page_number for page in pages}
+        page_ids = [str(getattr(page, "page_id", "") or "") for page in pages]
+        page_number_by_id = {
+            str(getattr(page, "page_id", "") or ""): int(
+                cast(int, getattr(page, "page_number", 0)) or 0
+            )
+            for page in pages
+        }
 
         required_points_by_page: dict[int, list[str]] = defaultdict(list)
         if page_ids:
@@ -267,10 +272,14 @@ class PresentationReportService:
                 .where(RequiredTalkingPoint.confirmed_by_admin.is_(True))
             )
             for point in list(points_result.scalars().all()):
-                page_number = page_number_by_id.get(point.page_id)
+                point_page_id = cast(str | None, getattr(point, "page_id", None))
+                if point_page_id is None:
+                    continue
+                page_number = page_number_by_id.get(point_page_id)
                 if page_number is None:
                     continue
-                required_points_by_page[page_number].append(point.description)
+                description = str(getattr(point, "description", "") or "")
+                required_points_by_page[page_number].append(description)
 
         forbidden_words_by_page: dict[int, list[str]] = defaultdict(list)
         global_forbidden_words: list[str] = []
@@ -288,8 +297,13 @@ class PresentationReportService:
                 phrase = str(getattr(forbidden_word, "phrase", "") or "").strip()
                 if not phrase:
                     continue
-                page_number = page_number_by_id.get(
-                    getattr(forbidden_word, "page_id", None)
+                forbidden_page_id = cast(
+                    str | None, getattr(forbidden_word, "page_id", None)
+                )
+                page_number = (
+                    page_number_by_id.get(forbidden_page_id)
+                    if forbidden_page_id is not None
+                    else None
                 )
                 if page_number is None:
                     global_forbidden_words.append(phrase)
@@ -321,7 +335,8 @@ class PresentationReportService:
         scoring_ruleset: ScoringRulesetView | None = None,
     ) -> dict[str, Any]:
         normalized_texts = [
-            _normalize_text(message.content) for message in user_messages
+            _normalize_text(str(getattr(message, "content", "") or ""))
+            for message in user_messages
         ]
         combined_text = "".join(normalized_texts)
 
@@ -1032,20 +1047,17 @@ class PresentationReportService:
             matched_points = list(coverage["matched_by_page"].get(page_number, []))
             missing_points = list(coverage["missing_by_page"].get(page_number, []))
             combined_page_text = "".join(
-                _normalize_text(message.content) for message in messages
+                _normalize_text(str(getattr(message, "content", "") or ""))
+                for message in messages
+            )
+            page_content = "".join(
+                str(getattr(message, "content", "") or "") for message in messages
             )
             avg_score = _clamp_score(
                 58
                 + min(18, len(combined_page_text) / 80)
                 + min(12, len(matched_points) * 6)
-                + (
-                    8
-                    if (
-                        "?" in "".join(message.content for message in messages)
-                        or "？" in "".join(message.content for message in messages)
-                    )
-                    else 0
-                )
+                + (8 if ("?" in page_content or "？" in page_content) else 0)
             )
             summaries.append(
                 {
@@ -1208,8 +1220,11 @@ class PresentationReportService:
     def _extract_page_number(transcript_metadata: dict[str, Any] | None) -> int | None:
         if not isinstance(transcript_metadata, dict):
             return None
+        raw_page_number = transcript_metadata.get("page_number")
+        if raw_page_number is None:
+            return None
         try:
-            page_number = int(transcript_metadata.get("page_number"))
+            page_number = int(raw_page_number)
         except (TypeError, ValueError):
             return None
         return max(1, page_number)

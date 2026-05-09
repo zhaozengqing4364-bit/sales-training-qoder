@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from common.ai.llm_service import get_llm_service
 from common.error_handling.result import Result
-from sales_bot.services.context_manager import context_manager
+from sales_bot.services.context_manager import ConversationContext, context_manager
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +46,10 @@ class SummaryService:
     - Identifies strengths and weaknesses
     """
 
-    def __init__(self):
-        self.parser = PydanticOutputParser(pydantic_object=ConversationSummary)
+    def __init__(self) -> None:
+        self.parser: PydanticOutputParser[ConversationSummary] = PydanticOutputParser(
+            pydantic_object=ConversationSummary
+        )
 
         self.summary_prompt = PromptTemplate(
             template="""Analyze this sales conversation and provide a summary.
@@ -87,6 +89,7 @@ Provide an objective assessment of the salesperson's performance.""",
 
         Returns: ConversationSummary or Result.fail
         """
+        context_for_fallback: ConversationContext | None = None
         try:
             # Get conversation context
             context_result = await context_manager.get_context(session_id)
@@ -94,6 +97,9 @@ Provide an objective assessment of the salesperson's performance.""",
                 return Result.fail(fallback="[CONTEXT_NOT_FOUND]")
 
             context = context_result.value
+            if context is None:
+                return Result.fail(fallback="[CONTEXT_NOT_FOUND]")
+            context_for_fallback = context
 
             # Build transcript
             transcript = self._build_transcript(context)
@@ -135,7 +141,9 @@ Provide an objective assessment of the salesperson's performance.""",
                 "LLM timeout generating summary", extra={"session_id": str(session_id)}
             )
             # Fallback to rule-based summary
-            return Result(value=self._generate_fallback_summary(context_result.value))
+            if context_for_fallback is None:
+                return Result.fail(fallback="[CONTEXT_NOT_FOUND]")
+            return Result(value=self._generate_fallback_summary(context_for_fallback))
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to generate summary",
@@ -144,7 +152,7 @@ Provide an objective assessment of the salesperson's performance.""",
             )
             return Result.fail(fallback="[SUMMARY_FAILED]")
 
-    def _build_transcript(self, context) -> str:
+    def _build_transcript(self, context: ConversationContext) -> str:
         """Build formatted transcript from conversation turns"""
         if not context.turns:
             return "No conversation turns recorded."
@@ -165,7 +173,9 @@ Provide an objective assessment of the salesperson's performance.""",
 
         return "\n".join(lines)
 
-    def _generate_fallback_summary(self, context) -> ConversationSummary:
+    def _generate_fallback_summary(
+        self, context: ConversationContext
+    ) -> ConversationSummary:
         """
         Generate rule-based summary when LLM fails
 

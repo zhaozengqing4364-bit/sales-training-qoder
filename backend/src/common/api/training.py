@@ -12,7 +12,7 @@ Requirements: 3.1, 3.2, 3.3
 """
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -30,6 +30,15 @@ from common.monitoring.logger import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+def _runtime_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _runtime_datetime(row: object, name: str) -> datetime | None:
+    value = getattr(row, name, None)
+    return value if isinstance(value, datetime) else None
 
 
 # ========== Schemas ==========
@@ -98,7 +107,7 @@ TRAINING_CATEGORIES = [
 
 
 @router.get("/training-categories")
-async def get_training_categories(db: AsyncSession = Depends(get_db)):
+async def get_training_categories(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """
     Get list of training categories
 
@@ -117,7 +126,10 @@ async def get_training_categories(db: AsyncSession = Depends(get_db)):
         )
 
         result = await db.execute(agent_counts_stmt)
-        agent_counts = {row.category: row.count for row in result}
+        agent_counts = {
+            str(_runtime_field(row, "category")): int(_runtime_field(row, "count") or 0)
+            for row in result
+        }
 
         # Update categories with actual agent counts
         categories = []
@@ -141,7 +153,7 @@ async def get_sessions(
     sort: str = Query("start_time:desc", description="Sort field and direction"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Get user's session history with pagination
 
@@ -181,9 +193,10 @@ async def get_sessions(
             .select_from(PracticeSession)
             .where(PracticeSession.user_id == user_id)
         )
-        total = (await db.execute(count_query)).scalar() or 0
+        total = int((await db.execute(count_query)).scalar() or 0)
 
         # Apply sorting
+        order_col: Any
         if sort_field == "start_time":
             order_col = PracticeSession.start_time
         elif sort_field == "score":
@@ -216,19 +229,24 @@ async def get_sessions(
         items = []
         for session in sessions:
             # Calculate duration
-            if session.total_duration_seconds:
-                duration_seconds = session.total_duration_seconds
-            elif session.end_time and session.start_time:
+            total_duration_seconds = int(
+                _runtime_field(session, "total_duration_seconds") or 0
+            )
+            start_time = _runtime_datetime(session, "start_time")
+            end_time = _runtime_datetime(session, "end_time")
+            if total_duration_seconds:
+                duration_seconds = total_duration_seconds
+            elif end_time and start_time:
                 duration_seconds = int(
-                    (session.end_time - session.start_time).total_seconds()
+                    (end_time - start_time).total_seconds()
                 )
             else:
                 duration_seconds = 0
 
             # Calculate overall score
-            logic = session.logic_score or 0
-            accuracy = session.accuracy_score or 0
-            completeness = session.completeness_score or 0
+            logic = float(_runtime_field(session, "logic_score") or 0)
+            accuracy = float(_runtime_field(session, "accuracy_score") or 0)
+            completeness = float(_runtime_field(session, "completeness_score") or 0)
             score = (
                 round((logic + accuracy + completeness) / 3, 1)
                 if any([logic, accuracy, completeness])
@@ -240,30 +258,31 @@ async def get_sessions(
             title = "练习会话"
 
             # Use preloaded relations to avoid N+1 queries
-            scenario = session.scenario
+            scenario = _runtime_field(session, "scenario")
             if scenario:
-                agent_type = scenario.scenario_type
-                if scenario.scenario_type == "presentation":
+                scenario_type = str(_runtime_field(scenario, "scenario_type"))
+                agent_type = scenario_type
+                if scenario_type == "presentation":
                     title = "演讲练习"
-                elif scenario.scenario_type == "sales":
+                elif scenario_type == "sales":
                     title = "销售对练"
 
-            agent = session.agent
+            agent = _runtime_field(session, "agent")
             if agent:
-                title = agent.name
-                agent_type = agent.category
+                title = str(_runtime_field(agent, "name"))
+                agent_type = str(_runtime_field(agent, "category"))
 
-            persona = session.persona
+            persona = _runtime_field(session, "persona")
             if persona:
-                title = f"{title} - {persona.name}"
+                title = f"{title} - {_runtime_field(persona, 'name')}"
 
             items.append(
                 SessionItem(
-                    id=str(session.session_id),
+                    id=str(_runtime_field(session, "session_id")),
                     title=title,
                     agent_type=agent_type,
-                    start_time=session.start_time.isoformat()
-                    if session.start_time
+                    start_time=start_time.isoformat()
+                    if start_time
                     else datetime.now(UTC).isoformat(),
                     duration_seconds=duration_seconds,
                     score=score,

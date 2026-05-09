@@ -29,9 +29,10 @@ import base64
 import json
 import time
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -44,6 +45,7 @@ from common.db.session import AsyncSessionLocal
 from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
     SessionLifecycleService,
+    SessionLifecycleTransition,
 )
 from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
 from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
@@ -121,10 +123,11 @@ class BaseSalesHandler(BaseWebSocketHandler):
         websocket: WebSocket,
         session_id: str,
         token: str,
-        **kwargs,
-    ):
+        trace_id: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Handle WebSocket connection for sales practice."""
-        incoming_trace_id = normalize_trace_id(kwargs.get("trace_id"))
+        incoming_trace_id = normalize_trace_id(trace_id or kwargs.get("trace_id"))
         if incoming_trace_id:
             set_trace_id(incoming_trace_id)
 
@@ -132,7 +135,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         self.session_id = session_id
 
         # Hook for subclass-specific setup
-        await self._on_connection_established(**kwargs)
+        await self._on_connection_established(trace_id=incoming_trace_id, **kwargs)
 
         # Accept connection
         await self.manager.connect(websocket, self.scenario, session_id)
@@ -170,9 +173,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
                             self.message_queue.put_nowait(data)
                         except asyncio.QueueFull:
                             logger.warning(
-                                "Message queue overflow, dropping message: session=%s type=%s",
-                                session_id,
-                                data.get("type"),
+                                "Message queue overflow, dropping message",
+                                session_id=session_id,
+                                message_type=data.get("type"),
                             )
                             await self._send_error(
                                 "[WS_QUEUE_OVERFLOW]",
@@ -202,11 +205,11 @@ class BaseSalesHandler(BaseWebSocketHandler):
                     await self._response_task
             await self._on_connection_closed()
 
-    async def _on_connection_established(self, **kwargs):
+    async def _on_connection_established(self, **kwargs: Any) -> None:
         """Hook for subclass-specific setup after connection params are set."""
         pass
 
-    async def _on_connection_closed(self):
+    async def _on_connection_closed(self) -> None:
         """Hook for subclass-specific cleanup on disconnect."""
         if not self.session_id:
             return
@@ -220,7 +223,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
                     fallback=result.fallback,
                 )
 
-    async def _sync_session_state(self):
+    async def _sync_session_state(self) -> None:
         """Load current persisted session lifecycle state."""
         if not self.session_id:
             return
@@ -243,7 +246,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
         except (RuntimeError, ValueError, OSError) as exc:
             logger.warning(f"Failed to sync session lifecycle state: {exc}")
 
-    async def _apply_lifecycle_action(self, action: str):
+    async def _apply_lifecycle_action(
+        self, action: Literal["start", "pause", "resume", "end"]
+    ) -> Any | None:
         """Apply one lifecycle action through DB state machine."""
         if not self.session_id:
             return None
@@ -303,7 +308,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         await self._send_status("idle")
         return False
 
-    async def _send_delayed_greeting(self):
+    async def _send_delayed_greeting(self) -> None:
         """Send greeting after a short delay to ensure client is ready."""
         if self._greeting_sent:
             return
@@ -313,7 +318,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
         self._greeting_sent = True
         await self._send_greeting()
 
-    async def sync_lifecycle_transition(self, transition) -> None:
+    async def sync_lifecycle_transition(
+        self, transition: SessionLifecycleTransition
+    ) -> None:
         """Mirror REST lifecycle transitions into the live handler state."""
         await super().sync_lifecycle_transition(transition)
         self.session_scenario_type = transition.scenario_type or self.scenario
@@ -324,11 +331,15 @@ class BaseSalesHandler(BaseWebSocketHandler):
         if transition.action in {"pause", "end"}:
             await self._stop_streaming_asr()
 
-    async def _process_messages(self):
+    async def _process_messages(self) -> None:
         """Process messages from queue."""
         while self.running:
             try:
-                message = await self.message_queue.get()
+                queue = self.message_queue
+                if queue is None:
+                    logger.warning("Stopping sales message processor without queue")
+                    break
+                message = await queue.get()
                 await self.handle_message(message)
             except asyncio.CancelledError:
                 break
@@ -337,10 +348,11 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     # ========== Message Routing ==========
 
-    async def handle_message(self, message: dict):
+    async def handle_message(self, message: dict[str, Any]) -> None:
         """Handle incoming WebSocket message."""
-        msg_type = message.get("type")
-        data = message.get("data", {})
+        msg_type = str(message.get("type") or "")
+        raw_data = message.get("data", {})
+        data = raw_data if isinstance(raw_data, dict) else {}
 
         if self.session_id:
             await get_session_manager().update_activity(self.session_id)
@@ -443,11 +455,13 @@ class BaseSalesHandler(BaseWebSocketHandler):
             logger.error(f"Error handling message {msg_type}: {str(e)}")
             await self._send_error("[PROCESSING_ERROR]", "处理消息时出错")
 
-    async def _handle_custom_message(self, msg_type: str, data: dict, message: dict):
+    async def _handle_custom_message(
+        self, msg_type: str, data: dict[str, Any], message: dict[str, Any]
+    ) -> None:
         """Override in subclasses to handle additional message types."""
         logger.warning(f"Unknown message type: {msg_type}")
 
-    async def _handle_session_end(self):
+    async def _handle_session_end(self) -> None:
         """Handle session end request from client.
 
         Stops ASR, sends session_ended confirmation, and closes the WebSocket.
@@ -476,7 +490,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         # Stop the message processing loop — this will trigger cleanup in handle_connection
         self.running = False
 
-    async def _handle_interrupt(self, reason: str = "manual"):
+    async def _handle_interrupt(self, reason: str = "manual") -> None:
         """Handle interrupt request and notify client with stable event envelope."""
         logger.info(
             f"Interrupt received: session_id={self.session_id}, reason={reason}"
@@ -509,7 +523,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         )
 
     @staticmethod
-    def _extract_text_payload(data: dict) -> str:
+    def _extract_text_payload(data: dict[str, Any]) -> str:
         """
         Extract text payload from websocket data.
 
@@ -534,7 +548,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
     BINARY_AUDIO_CHUNK = 0x01
     BINARY_AUDIO_INTERRUPT = 0x02
 
-    async def _handle_binary_frame(self, data: bytes):
+    async def _handle_binary_frame(self, data: bytes) -> None:
         """
         Handle a binary WebSocket frame (v1-13).
 
@@ -562,7 +576,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         else:
             logger.warning(f"Unknown binary frame type: 0x{frame_type:02x}")
 
-    async def _enqueue_audio_bytes(self, audio_bytes: bytes):
+    async def _enqueue_audio_bytes(self, audio_bytes: bytes) -> None:
         """Enqueue raw PCM audio bytes to the ASR pipeline (shared by binary & JSON paths)."""
         if not audio_bytes:
             return
@@ -613,7 +627,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         if backpressure_action is not None:
             await self._send_backpressure(backpressure_action, queue_size)
 
-    async def _handle_audio_chunk(self, data: dict):
+    async def _handle_audio_chunk(self, data: dict[str, Any]) -> None:
         """Handle JSON audio_chunk message (legacy Base64 path, kept for backward compatibility)."""
         audio_base64 = data.get("audio", "")
         interrupt = data.get("interrupt", False)
@@ -629,7 +643,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Failed to decode audio: {e}")
 
-    async def _start_streaming_asr(self):
+    async def _start_streaming_asr(self) -> None:
         """Start streaming ASR session."""
         # 停止之前的 ASR 任务（如果有）
         await self._stop_streaming_asr()
@@ -646,7 +660,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         await self._send_status("listening")
         logger.info("Started streaming ASR session")
 
-    async def _stop_streaming_asr(self):
+    async def _stop_streaming_asr(self) -> None:
         """Stop streaming ASR session and process the result."""
         # 使用状态锁防止并发调用导致的竞争条件
         should_send_resume = False
@@ -728,16 +742,18 @@ class BaseSalesHandler(BaseWebSocketHandler):
             logger.info("No transcript to process")
             await self._send_status("listening")
 
-    async def _run_streaming_asr(self):
+    async def _run_streaming_asr(self) -> str | None:
         """Run streaming ASR and process results."""
         asr_service = get_asr_service()
         total_bytes = 0
 
-        async def audio_generator():
+        async def audio_generator() -> AsyncIterator[bytes]:
             """Generate audio chunks from queue."""
             nonlocal total_bytes
             while True:
                 try:
+                    if self.asr_queue is None:
+                        break
                     chunk = await asyncio.wait_for(self.asr_queue.get(), timeout=30.0)
                     if chunk is None:  # 结束标记
                         logger.info(f"Audio stream ended, total {total_bytes} bytes")
@@ -767,8 +783,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
             raise
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Streaming ASR error: {e}", exc_info=True)
+        return self.current_transcript or None
 
-    async def _handle_audio_end(self):
+    async def _handle_audio_end(self) -> None:
         """Handle audio end signal - trigger ASR commit."""
         if self.asr_task is None or self.asr_task.done():
             logger.debug("Ignoring audio_end - no active ASR task")
@@ -778,7 +795,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     # ========== Text Processing (override in subclasses for enhanced behavior) ==========
 
-    async def _process_user_text(self, text: str):
+    async def _process_user_text(self, text: str) -> None:
         """
         Process user text: generate LLM response and TTS.
         Override in subclasses for capability integration, DB storage, etc.
@@ -863,7 +880,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             )
             return True
 
-    async def _process_user_text_safe(self, text: str):
+    async def _process_user_text_safe(self, text: str) -> None:
         """Background wrapper for _process_user_text to avoid unhandled task exceptions."""
         try:
             await self._process_user_text(text)
@@ -931,7 +948,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     # ========== Abstract methods (must be overridden) ==========
 
-    async def _generate_response(self, text: str, **kwargs) -> str | None:
+    async def _generate_response(self, text: str, **kwargs: Any) -> str | None:
         """Generate LLM response. Override in subclasses."""
         raise NotImplementedError("Subclasses must implement _generate_response")
 
@@ -939,13 +956,13 @@ class BaseSalesHandler(BaseWebSocketHandler):
         """Get fallback response. Override in subclasses."""
         return "请继续。"
 
-    async def _send_greeting(self):
+    async def _send_greeting(self) -> None:
         """Send persona greeting. Override in subclasses."""
         raise NotImplementedError("Subclasses must implement _send_greeting")
 
     # ========== WebSocket Message Senders ==========
 
-    async def _send_transcript(self, text: str, is_final: bool):
+    async def _send_transcript(self, text: str, is_final: bool) -> None:
         """Send ASR transcript to client."""
         await self.manager.send_json(
             self.websocket,
@@ -960,7 +977,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             },
         )
 
-    async def _send_tts_response(self, text: str, request_id: int):
+    async def _send_tts_response(self, text: str, request_id: int) -> None:
         """
         Send TTS audio response to client.
         Override in subclasses for streaming TTS or custom TTS config.
@@ -975,7 +992,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
             result = await tts_service.synthesize(text)
 
             if result.is_success:
-                audio_chunks = []
+                audio_chunks: list[bytes] = []
+                if result.value is None:
+                    await self._send_tts_fallback(text, request_id)
+                    return
                 async for chunk in result.value:
                     audio_chunks.append(chunk)
 
@@ -1023,7 +1043,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             logger.error(f"TTS error: {str(e)}", exc_info=True)
             await self._send_tts_fallback(text, request_id)
 
-    async def _send_tts_fallback(self, text: str, request_id: int):
+    async def _send_tts_fallback(self, text: str, request_id: int) -> None:
         """Send text-only TTS fallback for browser TTS."""
         await self.manager.send_json(
             self.websocket,
@@ -1041,7 +1061,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             },
         )
 
-    async def _send_status(self, ai_state: str):
+    async def _send_status(self, ai_state: str) -> None:
         """Send status update to client."""
         self.ai_state = ai_state
         await self.manager.send_json(
@@ -1058,7 +1078,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             },
         )
 
-    async def _send_heartbeat(self):
+    async def _send_heartbeat(self) -> None:
         """Send heartbeat to client."""
         await self.manager.send_json(
             self.websocket,
@@ -1069,7 +1089,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             },
         )
 
-    async def _send_error(self, code: str, message: str):
+    async def _send_error(self, code: str, message: str) -> None:
         """Send error to client."""
         await self.manager.send_json(
             self.websocket,
@@ -1088,7 +1108,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             },
         )
 
-    async def _send_backpressure(self, action: str, queue_size: int):
+    async def _send_backpressure(self, action: str, queue_size: int) -> None:
         """Send backpressure signal to client."""
         payload = {
             "timestamp": datetime.now(UTC).isoformat(),
@@ -1116,7 +1136,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
             },
         )
 
-    async def _send_audio_drop_notice(self, queue_size: int, dropped_chunks: int):
+    async def _send_audio_drop_notice(
+        self, queue_size: int, dropped_chunks: int
+    ) -> None:
         """Notify client when audio chunk is dropped due to queue overflow."""
         await self.manager.send_json(
             self.websocket,

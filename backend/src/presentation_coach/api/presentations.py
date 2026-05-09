@@ -442,10 +442,10 @@ async def _replace_pages_and_metadata(
                 )
             )
 
-    presentation.pages = list(new_pages_by_number.values())
-    presentation.total_pages = int(parsed_data.get("total_pages", 0) or 0)
-    presentation.ocr_progress = 1.0
-    presentation.status = "ready"
+    setattr(presentation, "pages", list(new_pages_by_number.values()))
+    setattr(presentation, "total_pages", int(parsed_data.get("total_pages", 0) or 0))
+    setattr(presentation, "ocr_progress", 1.0)
+    setattr(presentation, "status", "ready")
     await db.commit()
 
 
@@ -455,7 +455,7 @@ async def list_presentations(
     limit: int = 20,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """List all presentations"""
     _ = current_user
     query = select(Presentation)
@@ -472,7 +472,9 @@ async def list_presentations(
     seven_days_ago = datetime.now(UTC) - timedelta(days=7)
 
     for presentation in presentations:
-        upload_date = RuntimeStatusService._coerce_datetime(presentation.upload_date)
+        upload_date = RuntimeStatusService._coerce_datetime(
+            cast(datetime | str | None, getattr(presentation, "upload_date", None))
+        )
         extra_anomalies: list[dict[str, Any]] = []
         if presentation.status == "failed":
             extra_anomalies.append(
@@ -523,7 +525,7 @@ async def upload_presentation(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Upload a new PPT presentation with automatic parsing"""
     presentation: Presentation | None = None
     file_path: Path | None = None
@@ -650,7 +652,7 @@ async def replace_presentation(
     title: str | None = Form(None),
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Replace a standard PPT in place while preserving presentation_id."""
     _ = current_user
     file_path: Path | None = None
@@ -707,13 +709,13 @@ async def replace_presentation(
         _atomic_write_bytes(file_path, content)
 
         if isinstance(title, str) and title.strip():
-            presentation.title = title.strip()
-        presentation.file_url = str(file_path)
-        presentation.file_size_bytes = len(content)
-        presentation.upload_date = datetime.now(UTC)
-        presentation.version_number = next_version
-        presentation.status = "processing"
-        presentation.ocr_progress = 0.0
+            setattr(presentation, "title", title.strip())
+        setattr(presentation, "file_url", str(file_path))
+        setattr(presentation, "file_size_bytes", len(content))
+        setattr(presentation, "upload_date", datetime.now(UTC))
+        setattr(presentation, "version_number", next_version)
+        setattr(presentation, "status", "processing")
+        setattr(presentation, "ocr_progress", 0.0)
         await db.commit()
 
         parser = get_ppt_parser()
@@ -722,8 +724,8 @@ async def replace_presentation(
         if not parse_result.is_success or not isinstance(parse_result.value, dict):
             failed_presentation = await _load_presentation_detail(db, presentation_id)
             if failed_presentation:
-                failed_presentation.status = "failed"
-                failed_presentation.ocr_progress = 0.0
+                setattr(failed_presentation, "status", "failed")
+                setattr(failed_presentation, "ocr_progress", 0.0)
                 await db.commit()
                 failed_presentation = await _load_presentation_detail(
                     db, presentation_id
@@ -785,8 +787,8 @@ async def replace_presentation(
         try:
             failed_presentation = await _load_presentation_detail(db, presentation_id)
             if failed_presentation is not None:
-                failed_presentation.status = "failed"
-                failed_presentation.ocr_progress = 0.0
+                setattr(failed_presentation, "status", "failed")
+                setattr(failed_presentation, "ocr_progress", 0.0)
                 await db.commit()
         except Exception as mark_error:
             await db.rollback()
@@ -808,7 +810,7 @@ async def get_presentation(
     presentation_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get presentation details"""
     _ = current_user
     presentation = await _load_presentation_detail(db, presentation_id)
@@ -828,7 +830,7 @@ async def get_presentation_progress(
     presentation_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get current user's durable resume marker for a presentation."""
 
     result = await UserPresentationProgressService().get_progress(
@@ -851,7 +853,7 @@ async def save_presentation_progress(
     body: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Save current user's last page for future PPT resume prompts."""
 
     last_page_number = body.get("last_page_number")
@@ -897,7 +899,7 @@ async def delete_presentation(
     presentation_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Delete a presentation"""
     result = await db.execute(
         select(Presentation).where(Presentation.presentation_id == presentation_id)
@@ -923,7 +925,7 @@ async def get_presentation_pages(
     presentation_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get presentation pages"""
     _ = current_user
     result = await db.execute(
@@ -945,7 +947,7 @@ async def get_presentation_page_thumbnail(
     page_number: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     _ = current_user
 
     page_result = await db.execute(
@@ -984,7 +986,7 @@ async def get_talking_points(
     page_number: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get required talking points for a page"""
     _ = current_user
     page_result = await db.execute(
@@ -1019,7 +1021,7 @@ async def add_talking_point(
     point: RequiredTalkingPointCreate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Add required talking point to a page"""
     _ = current_user
     page_result = await db.execute(
@@ -1056,7 +1058,7 @@ async def get_forbidden_words(
     presentation_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get forbidden words for presentation"""
     _ = current_user
     result = await db.execute(
@@ -1076,7 +1078,7 @@ async def add_forbidden_word(
     word: ForbiddenWordCreate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Add forbidden word to presentation"""
     _ = current_user
     forbidden_word = ForbiddenWord(

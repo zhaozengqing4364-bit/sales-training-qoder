@@ -10,6 +10,7 @@ import base64
 import inspect
 import json
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -24,6 +25,7 @@ from common.conversation.storage import MessageStorageService
 from common.db.models import PracticeSession
 from common.db.schemas import InterruptionType
 from common.db.session import AsyncSessionLocal
+from common.db.session_lifecycle import SessionLifecycleTransition
 from common.monitoring.logger import get_logger, set_trace_id
 from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.base_handler import BaseWebSocketHandler
@@ -56,7 +58,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
     BINARY_AUDIO_CHUNK = 0x01
     BINARY_AUDIO_INTERRUPT = 0x02
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("presentation")
         self.asr_service = get_asr_service()
         self.tts_service = get_tts_service()
@@ -64,7 +66,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         self.forbidden_matcher = get_forbidden_matcher()
         self.feedback_service = get_feedback_service()
         self.prompt_role_resolver = PresentationPromptRoleResolver()
-        self.point_tracker = None
+        self.point_tracker: PointTracker | None = None
         self._effective_ai_policy: dict[str, Any] | None = None
 
         # State tracking
@@ -79,12 +81,12 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
 
         # ASR streaming state
         self.asr_queue: asyncio.Queue[bytes | None] | None = None
-        self.asr_task: asyncio.Task | None = None
+        self.asr_task: asyncio.Task[Any] | None = None
         self.current_transcript = ""
         self.audio_buffer_size = 0
         self.MIN_AUDIO_SIZE = 4800
         self.current_stream_id: str | None = None
-        self._tts_task: asyncio.Task | None = None
+        self._tts_task: asyncio.Task[Any] | None = None
         self.ASR_QUEUE_MAX_SIZE = 200
         self.ASR_HIGH_WATERMARK = 150
         self.ASR_LOW_WATERMARK = 100
@@ -231,7 +233,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         )
         return snapshot
 
-    async def _restore_session_state(self, state: SessionStateSnapshot):
+    async def _restore_session_state(self, state: SessionStateSnapshot) -> None:
         """
         Restore session state from snapshot for presentation coaching.
         Restores page, turn count, and AI state.
@@ -255,7 +257,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         # Re-send current page context to ensure UI consistency
         await self._restore_page_context()
 
-    async def _restore_page_context(self):
+    async def _restore_page_context(self) -> None:
         """
         Restore page context after reconnection.
         Re-sends current page requirements and state to ensure UI consistency.
@@ -312,7 +314,9 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             logger.error(f"Failed to restore page context: {str(e)}")
             # Continue without page context to avoid blocking reconnection
 
-    async def sync_lifecycle_transition(self, transition) -> None:
+    async def sync_lifecycle_transition(
+        self, transition: SessionLifecycleTransition
+    ) -> None:
         """Mirror REST lifecycle writes into the live presentation runtime."""
         await super().sync_lifecycle_transition(transition)
 
@@ -331,7 +335,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         session_id: str,
         token: str,
         trace_id: str | None = None,
-    ):
+    ) -> None:
         """Handle presentation websocket with text + binary audio frames."""
         # Set trace_id from token or generate new
         try:
@@ -416,7 +420,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             await self.manager.disconnect(self.scenario, session_id)
             processing_task.cancel()
 
-    async def _handle_binary_frame(self, data: bytes):
+    async def _handle_binary_frame(self, data: bytes) -> None:
         """Handle binary audio frames from frontend."""
         if len(data) < 1:
             logger.warning(f"Binary frame too short: {len(data)} bytes")
@@ -437,7 +441,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
 
         logger.warning(f"Unknown binary frame type: 0x{frame_type:02x}")
 
-    async def handle_message(self, message: dict):
+    async def handle_message(self, message: dict[str, Any]) -> None:
         """Handle incoming message"""
         msg_type = message.get("type")
         payload = message.get("data", {})
@@ -484,7 +488,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         except Exception as e:
             logger.error(f"Error handling message {msg_type}: {str(e)}")
 
-    async def _handle_audio_chunk(self, data: dict):
+    async def _handle_audio_chunk(self, data: dict[str, Any]) -> None:
         """
         Handle audio chunk from user
         Stream through ASR and check for interruption triggers
@@ -506,7 +510,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             except (ValueError, RuntimeError, OSError) as exc:
                 logger.warning(f"Failed to decode presentation audio chunk: {exc}")
 
-    async def _enqueue_audio_bytes(self, audio_bytes: bytes):
+    async def _enqueue_audio_bytes(self, audio_bytes: bytes) -> None:
         """Enqueue audio bytes into ASR pipeline."""
         if not audio_bytes:
             return
@@ -541,7 +545,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                     queue_size=self.asr_queue.qsize(),
                 )
 
-    async def _start_streaming_asr(self):
+    async def _start_streaming_asr(self) -> None:
         """Start streaming ASR task if not running."""
         if self.asr_task and not self.asr_task.done() and self.asr_queue is not None:
             return
@@ -554,7 +558,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         self.is_user_speaking = True
         await self._send_status("listening")
 
-    async def _stop_streaming_asr(self, *, process_transcript: bool = True):
+    async def _stop_streaming_asr(self, *, process_transcript: bool = True) -> None:
         """Stop ASR stream and optionally process final transcript."""
         if self.asr_queue is None and (self.asr_task is None or self.asr_task.done()):
             return
@@ -592,10 +596,10 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         self.transcript_buffer = final_transcript
         await self._check_and_interrupt()
 
-    async def _run_streaming_asr(self):
+    async def _run_streaming_asr(self) -> None:
         """Consume queued audio and stream ASR transcript updates."""
 
-        async def audio_generator():
+        async def audio_generator() -> AsyncIterator[bytes]:
             while True:
                 if self.asr_queue is None:
                     break
@@ -631,13 +635,13 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         except (RuntimeError, ValueError, OSError) as exc:
             logger.error(f"Presentation streaming ASR failed: {exc}", exc_info=True)
 
-    async def _handle_audio_end(self):
+    async def _handle_audio_end(self) -> None:
         """Handle end-of-utterance signal from frontend."""
         # Do not clear transcript buffers before ASR finalization.
         # Short utterances can still contain valid recognized text.
         await self._stop_streaming_asr(process_transcript=True)
 
-    async def _handle_user_speaking(self, is_speaking: bool):
+    async def _handle_user_speaking(self, is_speaking: bool) -> None:
         """
         Handle user speaking state change
         When user stops speaking, check if interruption is needed
@@ -651,10 +655,10 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         # User stopped speaking - finalize current ASR segment
         await self._handle_audio_end()
 
-    async def _send_transcript(self, text: str, is_final: bool):
+    async def _send_transcript(self, text: str, is_final: bool) -> None:
         await self.event_emitter.send_transcript(text=text, is_final=is_final)
 
-    async def _check_and_interrupt(self):
+    async def _check_and_interrupt(self) -> None:
         """
         Check if interruption is needed based on current transcript
         Constitution: <100ms detection, <300ms end-to-end latency
@@ -741,9 +745,10 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                 effective_policy = await self._load_effective_ai_policy(
                     session_id=session_id
                 )
-                fallback_config = (
-                    effective_policy.get("fallback_config")
-                    if isinstance(effective_policy.get("fallback_config"), dict)
+                raw_fallback_config = effective_policy.get("fallback_config")
+                fallback_config: dict[str, Any] = (
+                    raw_fallback_config
+                    if isinstance(raw_fallback_config, dict)
                     else {}
                 )
                 enable_detector_fallback = bool(
@@ -786,7 +791,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                     )
                 await self._send_status("listening")
 
-    async def _send_interruption(self, decision: dict):
+    async def _send_interruption(self, decision: dict[str, Any]) -> None:
         """
         Send interruption to user via TTS
         """
@@ -890,15 +895,13 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             if self.session_id
             else {}
         )
-        prompt_config = (
-            effective_policy.get("prompt_config")
-            if isinstance(effective_policy.get("prompt_config"), dict)
-            else {}
+        raw_prompt_config = effective_policy.get("prompt_config")
+        prompt_config: dict[str, Any] = (
+            raw_prompt_config if isinstance(raw_prompt_config, dict) else {}
         )
-        fallback_config = (
-            effective_policy.get("fallback_config")
-            if isinstance(effective_policy.get("fallback_config"), dict)
-            else {}
+        raw_fallback_config = effective_policy.get("fallback_config")
+        fallback_config: dict[str, Any] = (
+            raw_fallback_config if isinstance(raw_fallback_config, dict) else {}
         )
         enable_prompt_first = bool(prompt_config.get("enable_prompt_first", True))
         explicit_template_id = str(
@@ -1033,12 +1036,13 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                     exc_info=True,
                 )
 
-        return self.prompt_role_resolver.resolve_interruption_message(
+        resolved_message = self.prompt_role_resolver.resolve_interruption_message(
             context=context,
             template_text=template_text,
         )
+        return str(resolved_message)
 
-    async def _handle_page_change(self, page_number: int):
+    async def _handle_page_change(self, page_number: int) -> None:
         """Handle page change"""
         self.current_page = page_number
 
@@ -1079,18 +1083,18 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                 requirements=requirements,
             )
 
-    async def _handle_pause(self):
+    async def _handle_pause(self) -> None:
         """Handle session pause"""
         self.session_status = "paused"
         await self._stop_streaming_asr(process_transcript=False)
         await self._send_status("idle")
 
-    async def _handle_resume(self):
+    async def _handle_resume(self) -> None:
         """Handle session resume"""
         self.session_status = "in_progress"
         await self._send_status("listening")
 
-    async def _handle_interrupt(self, reason: str = "manual"):
+    async def _handle_interrupt(self, reason: str = "manual") -> None:
         self.is_ai_speaking = False
         self._stream_generation += 1
         self._active_tts_generation = self._stream_generation
@@ -1134,7 +1138,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             low_watermark=self.ASR_LOW_WATERMARK,
         )
 
-    async def _handle_control(self, action: str):
+    async def _handle_control(self, action: str) -> None:
         normalized_action = action.strip().lower()
 
         if normalized_action == "start":
@@ -1202,9 +1206,9 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
 
             async with AsyncSessionLocal() as db:
                 coach_service = PresentationCoachService(db)
-                result = await coach_service.end_session(self.session_id)
+                end_result = await coach_service.end_session(self.session_id)
 
-            if not result.is_success:
+            if not end_result.is_success:
                 await self._send_error("[END_FAILED]", "会话结束失败")
                 return
 
@@ -1402,7 +1406,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
 
         return result.is_success
 
-    async def _send_status(self, ai_state: str):
+    async def _send_status(self, ai_state: str) -> None:
         """Send structured status event with observability context."""
         self.ai_state = ai_state
         await self.event_emitter.send_status(
@@ -1412,7 +1416,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             current_page=self.current_page,
         )
 
-    async def _send_error(self, code: str, message: str):
+    async def _send_error(self, code: str, message: str) -> None:
         """Send structured error event with session context."""
         await self.event_emitter.send_error(
             code=code,
@@ -1422,7 +1426,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             turn_count=self.turn_count,
         )
 
-    async def _handle_session_end(self):
+    async def _handle_session_end(self) -> None:
         """Notify frontend session ended with trace context."""
         await self.event_emitter.send_session_ended(
             session_id=self.session_id,
@@ -1431,6 +1435,6 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
         )
         self.running = False
 
-    def send_status(self, ai_state: str):
+    def send_status(self, ai_state: str) -> None:
         """Backwards-compatible fire-and-forget status sender."""
         asyncio.create_task(self._send_status(ai_state))

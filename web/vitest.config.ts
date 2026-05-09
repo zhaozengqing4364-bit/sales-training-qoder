@@ -8,7 +8,12 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 10000,
     include: ["**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
-    exclude: [...configDefaults.exclude, "tests/e2e/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      "**/node_modules/**",
+      "node_modules/**",
+      "tests/e2e/**",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "json-summary", "html"],

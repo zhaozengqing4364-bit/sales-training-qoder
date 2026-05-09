@@ -16,7 +16,7 @@ import inspect
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -47,6 +47,25 @@ logger = get_logger(__name__)
 
 def _is_test_mock_object(value: Any) -> bool:
     return type(value).__module__.startswith("unittest.mock")
+
+
+def _runtime_field(row: object, name: str) -> Any:
+    return cast(Any, getattr(row, name))
+
+
+def _runtime_datetime(row: object, name: str) -> datetime | None:
+    value = getattr(row, name, None)
+    return value if isinstance(value, datetime) else None
+
+
+def _runtime_list(row: object, name: str) -> list[Any]:
+    value = getattr(row, name, [])
+    return value if isinstance(value, list) else []
+
+
+def _runtime_dict(row: object, name: str) -> dict[str, Any] | None:
+    value = getattr(row, name, None)
+    return value if isinstance(value, dict) else None
 
 
 @dataclass
@@ -244,7 +263,7 @@ class ComprehensiveReportService:
             .outerjoin(Scenario, Scenario.scenario_id == PracticeSession.scenario_id)
             .where(PracticeSession.session_id == session_id)
         )
-        row = result.first()
+        row: Any = result.first()
         if inspect.isawaitable(row):
             row = await row
         if row is None or _is_test_mock_object(row):
@@ -336,6 +355,8 @@ class ComprehensiveReportService:
                 return ""
 
             context = context_result.value
+            if context is None:
+                return ""
             lines = []
             for turn in context.turns:
                 lines.append(f"用户: {turn.user_text}")
@@ -369,22 +390,34 @@ class ComprehensiveReportService:
                 return Result.fail("[REPORT_NOT_FOUND]")
 
             report = ComprehensiveReport(
-                session_id=db_report.session_id,
-                generated_at=db_report.created_at or datetime.now(UTC),
-                overall_score=db_report.overall_score or 0.0,
+                session_id=str(_runtime_field(db_report, "session_id")),
+                generated_at=_runtime_datetime(db_report, "created_at")
+                or datetime.now(UTC),
+                overall_score=float(_runtime_field(db_report, "overall_score") or 0.0),
                 dimension_scores=[
-                    DimensionScore(**d) for d in (db_report.dimension_scores or [])
+                    DimensionScore(**d)
+                    for d in _runtime_list(db_report, "dimension_scores")
+                    if isinstance(d, dict)
                 ],
-                stage_summaries=db_report.stage_summaries or [],
-                key_strengths=db_report.key_strengths or [],
-                key_improvements=db_report.key_improvements or [],
-                detailed_feedback=db_report.detailed_feedback or "",
-                recommendations=db_report.recommendations or [],
-                scoring_metadata=(
-                    db_report.scoring_metadata
-                    if isinstance(getattr(db_report, "scoring_metadata", None), dict)
-                    else None
+                stage_summaries=[
+                    item
+                    for item in _runtime_list(db_report, "stage_summaries")
+                    if isinstance(item, dict)
+                ],
+                key_strengths=[
+                    str(item) for item in _runtime_list(db_report, "key_strengths")
+                ],
+                key_improvements=[
+                    str(item)
+                    for item in _runtime_list(db_report, "key_improvements")
+                ],
+                detailed_feedback=str(
+                    _runtime_field(db_report, "detailed_feedback") or ""
                 ),
+                recommendations=[
+                    str(item) for item in _runtime_list(db_report, "recommendations")
+                ],
+                scoring_metadata=_runtime_dict(db_report, "scoring_metadata"),
             )
             if report.scoring_metadata:
                 report.ruleset_id = report.scoring_metadata.get("ruleset_id")
@@ -660,14 +693,19 @@ class ComprehensiveReportService:
                 return Result.fail(
                     contract_result.fallback or "[REPORT_PROMPT_COMPILE_FAILED]"
                 )
+            compiled_contract = contract_result.value
+            if compiled_contract is None:
+                return Result.fail("[REPORT_PROMPT_COMPILE_FAILED:EMPTY_CONTRACT]")
 
             # Call LLM
-            llm_result = await self.llm.generate_report(contract_result.value)
+            llm_result = await self.llm.generate_report(compiled_contract)
             if not llm_result.is_success:
                 return Result.fail(llm_result.fallback or "[LLM_ERROR]")
 
             raw_value = llm_result.value
-            raw_payload = None
+            if raw_value is None:
+                return Result.fail("[LLM_ERROR:EMPTY_RESPONSE]")
+            raw_payload: dict[str, Any] | None = None
             if isinstance(raw_value, str):
                 try:
                     raw_payload = json.loads(raw_value)
@@ -677,7 +715,7 @@ class ComprehensiveReportService:
                 raw_payload = raw_value
 
             parse_result = await parse_llm_response(
-                llm_result.value, ComprehensiveReportResponse
+                raw_value, ComprehensiveReportResponse
             )
             if not parse_result.is_success:
                 if isinstance(raw_payload, dict):
@@ -687,7 +725,7 @@ class ComprehensiveReportService:
 
                 return Result.fail(f"[LLM_VALIDATION_FAILED:{parse_result.fallback}]")
 
-            parsed = parse_result.value
+            parsed = cast(ComprehensiveReportResponse | None, parse_result.value)
             if parsed is None:
                 return Result.fail("[LLM_VALIDATION_FAILED:EMPTY_RESPONSE]")
 
@@ -791,8 +829,8 @@ class ComprehensiveReportService:
                 db_report = DBModel(session_id=report.session_id)
                 self.db.add(db_report)
 
-            db_report.overall_score = report.overall_score
-            db_report.dimension_scores = [
+            setattr(db_report, "overall_score", report.overall_score)
+            setattr(db_report, "dimension_scores", [
                 {
                     "name": ds.name,
                     "score": ds.score,
@@ -800,15 +838,15 @@ class ComprehensiveReportService:
                     "description": ds.description,
                 }
                 for ds in report.dimension_scores
-            ]
-            db_report.stage_summaries = report.stage_summaries
-            db_report.key_strengths = report.key_strengths
-            db_report.key_improvements = report.key_improvements
-            db_report.detailed_feedback = report.detailed_feedback
-            db_report.recommendations = report.recommendations
+            ])
+            setattr(db_report, "stage_summaries", report.stage_summaries)
+            setattr(db_report, "key_strengths", report.key_strengths)
+            setattr(db_report, "key_improvements", report.key_improvements)
+            setattr(db_report, "detailed_feedback", report.detailed_feedback)
+            setattr(db_report, "recommendations", report.recommendations)
             if hasattr(db_report, "scoring_metadata"):
-                db_report.scoring_metadata = report.scoring_metadata
-            db_report.created_at = report.generated_at
+                setattr(db_report, "scoring_metadata", report.scoring_metadata)
+            setattr(db_report, "created_at", report.generated_at)
             await self.db.commit()
             return Result.ok(None)
         except SQLAlchemyError as e:

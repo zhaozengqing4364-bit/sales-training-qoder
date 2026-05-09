@@ -3,6 +3,8 @@ Evaluation API Routes
 Staged Evaluation and Comprehensive Report endpoints (C6-C7)
 """
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -27,18 +29,6 @@ from prompt_templates.service import PromptTemplateService
 
 router = APIRouter(prefix="/evaluation", tags=["evaluation"])
 router.include_router(admin_scoring_rulesets_router)
-
-
-def _evaluation_error_response(
-    *,
-    status_code: int,
-    error_code: str,
-    message: str,
-) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code,
-        content=error_response(error_code, message=message),
-    )
 
 
 def _evaluation_error_response(
@@ -84,7 +74,7 @@ def _build_report_service(db: AsyncSession) -> ComprehensiveReportService:
     )
 
 
-def _build_response(report) -> ComprehensiveReportResponse:
+def _build_response(report: Any) -> ComprehensiveReportResponse:
     """Convert internal ComprehensiveReport to API response."""
     generated_at = ""
     if hasattr(report, "generated_at") and report.generated_at:
@@ -135,7 +125,7 @@ async def get_comprehensive_report(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ComprehensiveReportResponse | JSONResponse:
     """Get existing comprehensive report for a session."""
     has_access = await verify_session_access(session_id, current_user, db)
     if not has_access:
@@ -172,7 +162,7 @@ async def generate_comprehensive_report(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ComprehensiveReportResponse | JSONResponse:
     """Generate a new comprehensive report for a session using AI evaluation."""
     has_access = await verify_session_access(session_id, current_user, db)
     if not has_access:
@@ -193,15 +183,25 @@ async def generate_comprehensive_report(
             session_id=session_id,
         )
 
+    if result.value is None:
+        return build_server_error(
+            "[REPORT_GENERATION_FAILED]",
+            message="Report generation returned no payload",
+            session_id=session_id,
+        )
+
     return _build_response(result.value)
 
 
-@router.get("/sessions/{session_id}/feedback")
+@router.get(
+    "/sessions/{session_id}/feedback",
+    response_model=list[RealtimeEvaluationFeedback],
+)
 async def get_realtime_feedback(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> list[RealtimeEvaluationFeedback] | JSONResponse:
     from common.db.models import StagedEvaluationResult
 
     has_access = await verify_session_access(session_id, current_user, db)
@@ -221,13 +221,14 @@ async def get_realtime_feedback(
 
     feedback_list = []
     for eval_item in evaluations:
+        eval_row = cast(Any, eval_item)
         feedback_list.append(
             RealtimeEvaluationFeedback(
-                stage_number=eval_item.stage_number,
-                timestamp=eval_item.created_at.isoformat(),
-                scores=eval_item.scores or {},
-                feedback=eval_item.summary or "",
-                suggestions=eval_item.suggestions or [],
+                stage_number=int(eval_row.stage_number or 0),
+                timestamp=eval_row.created_at.isoformat(),
+                scores=dict(eval_row.scores or {}),
+                feedback=str(eval_row.summary or ""),
+                suggestions=list(eval_row.suggestions or []),
                 trigger_type="turn_count",
             )
         )

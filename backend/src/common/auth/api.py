@@ -157,7 +157,7 @@ def error_response(
     )
 
 
-def _invalid_credentials_response():
+def _invalid_credentials_response() -> JSONResponse:
     """Return secure, non-enumerable auth failure response."""
     return error_response(
         "[INVALID_CREDENTIALS]",
@@ -226,12 +226,12 @@ def _is_valid_password(provided_password: str, expected_password: str) -> bool:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    return bool(pwd_context.verify(plain_password, hashed_password))
 
 
 def hash_password(password: str) -> str:
     """Hash a password"""
-    return pwd_context.hash(password)
+    return str(pwd_context.hash(password))
 
 
 def _set_login_authority_headers(
@@ -257,7 +257,7 @@ def _sanitize_return_to(value: str | None) -> str:
 
 
 def _build_frontend_url(path: str) -> str:
-    base_url = get_frontend_base_url()
+    base_url = str(get_frontend_base_url())
     normalized_path = path if path.startswith("/") else f"/{path}"
     return f"{base_url}{normalized_path}"
 
@@ -272,7 +272,7 @@ def _auth_error_redirect(error_code: str) -> str:
 @router.post("/auth/login")
 async def login(
     credentials: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)
-):
+) -> JSONResponse:
     """
     Controlled login endpoint.
     Validates existing active account and configured credentials,
@@ -341,7 +341,7 @@ async def login(
         )
 
         # Update last login
-        user.last_login = datetime.now(UTC)
+        setattr(user, "last_login", datetime.now(UTC))
         await db.commit()
 
         # Build response
@@ -389,7 +389,7 @@ async def logout(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> JSONResponse:
     """
     User logout endpoint
 
@@ -430,7 +430,7 @@ async def logout(
 
 
 @router.get("/auth/providers")
-async def get_auth_providers(request: Request):
+async def get_auth_providers(request: Request) -> dict[str, Any]:
     wecom = get_wecom_provider_diagnostics()
     dev_fallback_enabled = is_dev_login_enabled()
     return success_response(
@@ -457,7 +457,7 @@ async def get_auth_providers(request: Request):
 
 
 @router.get("/auth/wecom/start", name="wecom_start")
-async def start_wecom_login(request: Request):
+async def start_wecom_login(request: Request) -> Response:
     wecom = get_wecom_provider_diagnostics()
     if not wecom["configured"]:
         return error_response(
@@ -486,7 +486,7 @@ async def handle_wecom_callback(
     code: str | None = None,
     state: str | None = None,
     db: AsyncSession = Depends(get_db),
-):
+) -> RedirectResponse:
     expected_state = (
         request.cookies.get(get_wecom_oauth_state_cookie_name()) or ""
     ).strip()
@@ -564,7 +564,7 @@ async def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
-):
+) -> JSONResponse:
     """
     Request a password reset token.
     Always returns success to prevent email enumeration.
@@ -595,7 +595,7 @@ async def forgot_password(
 async def reset_password(
     body: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
-):
+) -> JSONResponse:
     """
     Reset password using a valid reset token.
     Token must not be expired or already used.

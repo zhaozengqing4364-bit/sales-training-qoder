@@ -9,11 +9,45 @@
 
 ## Current Status
 
-- Overall status: in_progress
-- Current phase: Phase 1 - Baseline Falsification and Routing Audit
-- Current atomic task: Phase 1.3 - Continue backend mypy frontier after prompt-template API return-contract boundary
-- Last commit: Type prompt template API return contracts
-- Blocker: Backend mypy baseline is still not production-clean. A fresh full `PYTHONPATH=src .venv-test/bin/mypy src --show-error-codes` rebaseline now reports 681 error lines across 32 files. The direct `src/prompt_templates/api/routes.py`, `src/common/knowledge/service.py`, `src/common/auth/service.py`, `src/common/knowledge/vector_store.py`, `src/prompt_templates/service.py`, `src/admin/services/manager_intervention_service.py`, `src/presentation_coach/services/coach_service.py`, `src/presentation_coach/services/presentation_ai_policy_service.py`, `src/common/audio/tts_factory.py`, `src/common/audio/asr_service.py`, `src/sales_bot/services/voice_runtime_policy.py`, `src/common/analytics/verification_runner.py`, `src/common/growth/growth_service.py`, `src/common/conversation/storage.py`, `src/common/jobs/audio_archival.py`, `src/common/analytics/analytics_service.py`, `src/common/analytics/release_verification_service.py`, `src/common/business_rules/service.py`, `src/common/conversation/highlight_review_service.py`, `src/common/ppt/version_manager.py`, `src/common/cache/redis_cache.py`, `src/common/db/models.py`, `src/common/audio/asr_streaming.py`, `src/common/audio/aliyun_streaming_tts.py`, `src/common/audio/asr_alibaba.py`, `src/common/audio/asr_local.py`, `src/common/monitoring/metrics.py`, `src/common/effectiveness/evaluator.py`, `src/common/effectiveness/schemas.py`, `src/common/websocket/base_handler.py`, and `src/sales_bot/websocket/stepfun_realtime_{state,connection,feedback,policy,sales_stage,upstream,handler}.py` errors are closed; the current first frontier is now `src/common/api/training.py`, followed by agent API return contracts, auth API typing debt, release verification API typing debt, business rules API typing debt, knowledge-answer admin API typing debt, knowledge API typing debt, admin analytics typing debt, sales/presentation websocket annotations, practice session service typing debt, and other SQLAlchemy instance-field service debt.
+- Overall status: paused_after_phase_1
+- Current phase: Phase 1 - Gray Release Baseline
+- Current atomic task: Phase 1 complete; awaiting explicit user confirmation before Phase 2
+- Last commit: `Phase 1 gray release baseline`
+- Blocker: none for Phase 1. Full backend mypy is intentionally tracked as a gray-release debt ceiling, not a zero-error release blocker.
+
+## Phase 1 Gray Release Baseline - 2026-05-09
+
+- Stable code logic changed: type boundaries for FastAPI response contracts, SQLAlchemy runtime field writes/reads, WebSocket lifecycle signatures, ASR queue narrowing, presentation report projections, and Vitest test discovery.
+- Configurable business rules changed: none. No scoring thresholds, prompt content, permission mappings, lifecycle policy, PPT forbidden-word behavior, sales runtime policy, or StepFun behavior was changed to satisfy typing.
+- New configuration items: none.
+- Reused configuration items: existing backend `pyproject.toml` tool settings and existing `web/vitest.config.ts`.
+- Configuration source/manager/validation: unchanged; Phase 1 only changes verification gates and type/runtime boundaries.
+- Missing/illegal configuration handling: unchanged.
+- Logic that must not be hardcoded: Phase 2+ business policy work must still route scoring rules, RBAC, admin dictionaries, evidence policy, and audit controls through managed configuration instead of scattered code constants.
+- Type debt baseline artifact: `type_debt_baseline.md`.
+- Baseline full mypy command: `cd backend && PYTHONPATH=src .venv-test/bin/mypy src --show-error-codes || true`.
+- Baseline recorded in artifact: 674 errors across 31 files, 286 source files checked.
+- Final full mypy ceiling check: 490 errors across 21 files, 286 source files checked; below the 674/31 baseline.
+- Phase 1.3 gate result:
+  - `cd backend && ruff check src tests`: passed.
+  - `cd web && npx eslint . --quiet`: passed.
+  - `cd web && npx tsc --noEmit`: passed.
+  - `cd web && npx vitest run`: passed; 89 test files and 545 tests, with `node_modules` excluded.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/auth --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/api/practice.py --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/evaluation --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/sales_bot --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/presentation_coach --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/effectiveness --show-error-codes`: passed.
+- Core focused tests:
+  - Auth: `tests/integration/test_auth_login_api.py`, `tests/integration/test_password_reset_api.py`, `tests/unit/common/test_auth_transport_matrix.py`: 35 passed.
+  - Practice contracts/evidence: `tests/contract/test_training_api.py`, `tests/contract/test_practice_evidence_contract.py`: 35 passed.
+  - Scoring/effectiveness: `tests/unit/evaluation/test_staged_evaluation_service.py`, `tests/unit/evaluation/test_comprehensive_report_service.py`, `tests/unit/test_report_generation_trigger.py`, `tests/unit/test_effectiveness_canonical_kernel.py`, `tests/unit/test_effectiveness_sales_coaching_focus.py`: 86 passed.
+  - Sales training: `tests/unit/sales_bot/websocket/test_base_sales_handler_safety.py`, `tests/integration/test_sales_websocket_tts.py`, `tests/integration/test_sales_value_training_flow.py`: 8 passed.
+  - Presentation training: `tests/unit/test_presentation_report_service.py`, `tests/unit/test_presentation_handler_persistence.py`, `tests/integration/test_presentation_flow.py`, `tests/integration/test_presentation_report_flow.py`: 41 passed.
+- Additional import check: `PYTHONPATH=src .venv-test/bin/python - <<'PY' ... from main import app ... PY` passed and loaded 319 routes after FastAPI response annotation fixes.
+- Residual risk accepted for Phase 1: full backend mypy still has 490 errors in non-core-gate surfaces, primarily remaining SQLAlchemy runtime field typing and admin/knowledge/analytics API return contract debt. This is tracked debt, not hidden pass status.
+- Phase discipline: Phase 2 supervisor review/retraining loop has not started and must wait for explicit user confirmation.
 
 ## Implementation-Before-Coding Judgment
 
