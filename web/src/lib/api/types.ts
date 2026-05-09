@@ -2607,6 +2607,111 @@ export interface AdaptiveDifficultyDryRunResponse {
     items: AdaptiveDifficultyDryRunItem[];
 }
 
+export type SupervisorDecision = "pending" | "approved" | "rejected" | "needs_retraining";
+
+export type ReadinessStatus = "not_ready" | "shadow_only" | "ready_for_trial" | "approved";
+
+export type RetrainingTaskStatus = "todo" | "in_progress" | "completed" | "cancelled";
+
+export interface ScoreDimensionDelta {
+    name: string;
+    original_score?: number | null;
+    retraining_score?: number | null;
+    delta?: number | null;
+}
+
+export interface BeforeAfterComparison {
+    source_session_id: string;
+    completed_session_id?: string | null;
+    original_score?: number | null;
+    retraining_score?: number | null;
+    score_delta?: number | null;
+    weak_dimension_changes: ScoreDimensionDelta[];
+    retraining_completed: boolean;
+}
+
+export interface RetrainingTask {
+    task_id: string;
+    user_id: string;
+    source_session_id: string;
+    source_review_id: string;
+    skill_dimension: string;
+    title: string;
+    description?: string | null;
+    status: RetrainingTaskStatus;
+    completed_session_id?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+    before_after?: BeforeAfterComparison | null;
+}
+
+export interface RetrainingTaskCreateRequest {
+    user_id?: string | null;
+    source_session_id: string;
+    source_review_id: string;
+    skill_dimension: string;
+    title: string;
+    description?: string | null;
+}
+
+export interface RetrainingTaskCompleteRequest {
+    completed_session_id: string;
+}
+
+export interface RetrainingTaskStartResponse {
+    task: RetrainingTask;
+    session_id: string;
+}
+
+export interface SupervisorReview {
+    review_id: string;
+    session_id: string;
+    trainee_user_id: string;
+    supervisor_user_id: string;
+    decision: SupervisorDecision;
+    readiness_status: ReadinessStatus;
+    comment?: string | null;
+    required_retraining: boolean;
+    audit_metadata?: Record<string, unknown> | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+    retraining_tasks: RetrainingTask[];
+    before_after?: BeforeAfterComparison | null;
+}
+
+export interface SupervisorReviewCreateRequest {
+    session_id: string;
+    decision?: SupervisorDecision;
+    readiness_status?: ReadinessStatus;
+    comment?: string | null;
+    required_retraining?: boolean;
+    skill_dimension?: string | null;
+    audit_metadata?: Record<string, unknown> | null;
+}
+
+export interface SupervisorReviewDecisionUpdateRequest {
+    decision: SupervisorDecision;
+    readiness_status?: ReadinessStatus | null;
+    comment?: string | null;
+    required_retraining?: boolean | null;
+    skill_dimension?: string | null;
+    audit_metadata?: Record<string, unknown> | null;
+}
+
+export interface SupervisorTeamReport {
+    session_id: string;
+    trainee_user_id: string;
+    trainee_name?: string | null;
+    scenario_type: string;
+    status: string;
+    report_status?: string | null;
+    overall_score?: number | null;
+    started_at?: string | null;
+    completed_at?: string | null;
+    latest_review?: SupervisorReview | null;
+    before_after?: BeforeAfterComparison | null;
+}
+
 export interface SessionStats {
     total_sessions: number;
     weekly_sessions: number;

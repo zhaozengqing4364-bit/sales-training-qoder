@@ -1393,6 +1393,137 @@ class ComprehensiveReport(Base):
     __table_args__ = {"extend_existing": True}
 
 
+class SupervisorReview(Base):
+    """Supervisor decision for one completed practice report."""
+
+    __tablename__ = "supervisor_reviews"
+
+    review_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    trainee_user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    supervisor_user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    decision = Column(String(32), nullable=False, default="pending", index=True)
+    readiness_status = Column(String(32), nullable=False, default="not_ready")
+    comment = Column(Text, nullable=True)
+    required_retraining = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    audit_metadata = Column(_jsonb_compatible_type(), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('pending', 'approved', 'rejected', 'needs_retraining')",
+            name="ck_supervisor_review_decision",
+        ),
+        CheckConstraint(
+            "readiness_status IN ('not_ready', 'shadow_only', 'ready_for_trial', 'approved')",
+            name="ck_supervisor_review_readiness_status",
+        ),
+        UniqueConstraint("session_id", name="uq_supervisor_review_session"),
+        Index("idx_supervisor_reviews_trainee_decision", "trainee_user_id", "decision"),
+        Index(
+            "idx_supervisor_reviews_supervisor_created",
+            "supervisor_user_id",
+            "created_at",
+        ),
+    )
+
+
+class RetrainingTask(Base):
+    """Minimal task created when a supervisor requires retraining."""
+
+    __tablename__ = "retraining_tasks"
+
+    task_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_review_id = Column(
+        String(36),
+        ForeignKey("supervisor_reviews.review_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    skill_dimension = Column(String(120), nullable=False)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(32), nullable=False, default="todo", index=True)
+    completed_session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('todo', 'in_progress', 'completed', 'cancelled')",
+            name="ck_retraining_task_status",
+        ),
+        UniqueConstraint(
+            "source_review_id",
+            "skill_dimension",
+            name="uq_retraining_task_review_dimension",
+        ),
+        Index("idx_retraining_tasks_user_status", "user_id", "status"),
+        Index(
+            "idx_retraining_tasks_source_completed",
+            "source_session_id",
+            "completed_session_id",
+        ),
+    )
+
+
 class ScoringRuleset(Base):
     """Versioned scoring ruleset managed through the admin control plane."""
 

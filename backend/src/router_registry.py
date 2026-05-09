@@ -48,6 +48,7 @@ from presentation_coach.api import presentations
 from prompt_templates.api.routes import router as prompt_templates_router
 from prompt_templates.api.routes import scenario_router as scenario_prompts_router
 from sales_bot.api.scenarios import router as scenarios_router
+from supervisor.api import router as supervisor_router
 from support.api.runtime_status import router as support_runtime_router
 
 
@@ -239,3 +240,4 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(scenario_prompts_router, tags=["scenario-prompts"])
 
     app.include_router(evaluation_router, prefix="/api/v1", tags=["evaluation"])
+    app.include_router(supervisor_router, prefix="/api/v1", tags=["supervisor"])

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,20 +6,26 @@ import HomePage from "./page";
 import packageJson from "../../../package.json";
 
 const {
+    routerPushMock,
     getStatsMock,
     getRecommendationMock,
     getGrowthMock,
     getHistoryMock,
     getOpenInterventionMock,
     getMyHistoryMock,
+    listRetrainingTasksMock,
+    startRetrainingTaskSessionMock,
     useCurrentUserMock,
 } = vi.hoisted(() => ({
+    routerPushMock: vi.fn(),
     getStatsMock: vi.fn(),
     getRecommendationMock: vi.fn(),
     getGrowthMock: vi.fn(),
     getHistoryMock: vi.fn(),
     getOpenInterventionMock: vi.fn(),
     getMyHistoryMock: vi.fn(),
+    listRetrainingTasksMock: vi.fn(),
+    startRetrainingTaskSessionMock: vi.fn(),
     useCurrentUserMock: vi.fn(),
 }));
 
@@ -31,7 +37,7 @@ vi.mock("next/link", () => ({
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
-        push: vi.fn(),
+        push: routerPushMock,
     }),
     usePathname: () => "/",
     useParams: () => ({}),
@@ -99,6 +105,11 @@ vi.mock("@/lib/api/client", async () => {
                 getOpenIntervention: getOpenInterventionMock,
                 getMyHistory: getMyHistoryMock,
             },
+            retraining: {
+                ...actual.api.retraining,
+                listTasks: listRetrainingTasksMock,
+                startTaskSession: startRetrainingTaskSessionMock,
+            },
         },
     };
 });
@@ -117,13 +128,17 @@ async function flushDashboardData() {
 describe("HomePage dashboard header", () => {
     beforeEach(() => {
         vi.useRealTimers();
+        routerPushMock.mockReset();
         getStatsMock.mockReset();
         getRecommendationMock.mockReset();
         getGrowthMock.mockReset();
         getHistoryMock.mockReset();
         getOpenInterventionMock.mockReset();
         getMyHistoryMock.mockReset();
+        listRetrainingTasksMock.mockReset();
+        startRetrainingTaskSessionMock.mockReset();
         useCurrentUserMock.mockReset();
+        localStorage.clear();
 
         getStatsMock.mockResolvedValue({
             weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
@@ -152,6 +167,20 @@ describe("HomePage dashboard header", () => {
         });
         getOpenInterventionMock.mockResolvedValue(null);
         getMyHistoryMock.mockResolvedValue({ sessions: [], total: 0, page: 1, page_size: 50, total_pages: 0 });
+        listRetrainingTasksMock.mockResolvedValue([]);
+        startRetrainingTaskSessionMock.mockResolvedValue({
+            session_id: "retraining-session-1",
+            task: {
+                task_id: "task-1",
+                user_id: "user-1",
+                source_session_id: "source-session-1",
+                source_review_id: "review-1",
+                skill_dimension: "证据与收益",
+                title: "复训：证据与收益",
+                description: null,
+                status: "in_progress",
+            },
+        });
         useCurrentUserMock.mockReturnValue({ data: null });
     });
 
@@ -633,6 +662,53 @@ describe("HomePage dashboard header", () => {
         expect(screen.getByText(/创建于/)).toBeTruthy();
         expect(screen.getByRole("link", { name: "去训练" }).getAttribute("href")).toBe("/training");
         expect(screen.queryByText("manager_user_id")).toBeNull();
+    });
+
+    it("shows retraining tasks and starts a linked retraining session", async () => {
+        listRetrainingTasksMock.mockResolvedValueOnce([
+            {
+                task_id: "task-1",
+                user_id: "user-1",
+                source_session_id: "source-session-1",
+                source_review_id: "review-1",
+                skill_dimension: "证据与收益",
+                title: "复训：证据与收益",
+                description: "先补足 ROI 证据。",
+                status: "todo",
+                completed_session_id: null,
+                before_after: null,
+            },
+        ]);
+        startRetrainingTaskSessionMock.mockResolvedValueOnce({
+            session_id: "retraining-session-1",
+            task: {
+                task_id: "task-1",
+                user_id: "user-1",
+                source_session_id: "source-session-1",
+                source_review_id: "review-1",
+                skill_dimension: "证据与收益",
+                title: "复训：证据与收益",
+                description: "先补足 ROI 证据。",
+                status: "in_progress",
+            },
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("主管复训任务")).toBeTruthy();
+        expect(screen.getByText("复训：证据与收益")).toBeTruthy();
+        expect(screen.getByText("先补足 ROI 证据。")).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: /开始复训/ }));
+
+        await waitFor(() => {
+            expect(startRetrainingTaskSessionMock).toHaveBeenCalledWith("task-1");
+        });
+        expect(routerPushMock).toHaveBeenCalledWith(
+            "/practice/retraining-session-1?retraining_task_id=task-1&source_session_id=source-session-1",
+        );
+        expect(localStorage.getItem("qoder.retrainingTaskSession.v1:retraining-session-1")).toContain('"task_id":"task-1"');
     });
 
     it("hides manager intervention card when none is open or when the reminder endpoint fails", async () => {

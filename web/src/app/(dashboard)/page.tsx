@@ -18,12 +18,13 @@ import {
     Flame,
 } from "lucide-react";
 import Link from "next/link";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import { dashboardConfig } from "@/lib/dashboard-config";
 import { debug } from "@/lib/debug";
 import { normalizeInternalRecommendationPath } from "@/lib/recommendation-routing";
-import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, SessionItem } from "@/lib/api/types";
+import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, RetrainingTask, SessionItem } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { persistRetrainingTaskSessionLink } from "@/lib/retraining-task-session";
 import {
     Dialog,
     DialogClose,
@@ -199,6 +200,13 @@ function getRecommendationSourceCopy(recommendation: Recommendation): string | n
     return null;
 }
 
+function formatRetrainingTaskStatus(status: RetrainingTask["status"]): string {
+    if (status === "todo") return "待复训";
+    if (status === "in_progress") return "复训中";
+    if (status === "completed") return "已完成";
+    return "已取消";
+}
+
 function isTodayRetryRecommendation(recommendation: Recommendation): boolean {
     return Boolean(
         recommendation.is_due_today
@@ -307,6 +315,9 @@ export default function HomePage() {
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
     const [dashboardDegradedSections, setDashboardDegradedSections] = useState<string[]>([]);
     const [openIntervention, setOpenIntervention] = useState<LearnerOpenIntervention | null>(null);
+    const [retrainingTasks, setRetrainingTasks] = useState<RetrainingTask[]>([]);
+    const [retrainingTaskHint, setRetrainingTaskHint] = useState<string | null>(null);
+    const [startingRetrainingTaskId, setStartingRetrainingTaskId] = useState<string | null>(null);
     const [momentumSessions, setMomentumSessions] = useState<MomentumSessionSource[]>([]);
     const [dashboardReloadVersion, setDashboardReloadVersion] = useState(0);
 
@@ -390,6 +401,20 @@ export default function HomePage() {
                     if (!cancelled) setOpenIntervention(null);
                 });
 
+            void api.retraining.listTasks()
+                .then((value) => {
+                    if (cancelled) return;
+                    setRetrainingTasks(value.filter((task) => task.status === "todo" || task.status === "in_progress"));
+                    setRetrainingTaskHint(null);
+                    markSection("复训任务", false);
+                })
+                .catch((error) => {
+                    if (cancelled) return;
+                    setRetrainingTasks([]);
+                    setRetrainingTaskHint(`复训任务暂时无法读取：${getApiErrorMessage(error)}`);
+                    markSection("复训任务", true);
+                });
+
             void api.user.getMyHistory({ page: 1, page_size: 50 })
                 .then((value) => {
                     if (!cancelled) setMomentumSessions(value.sessions.map(mapHistorySummaryToMomentumSource));
@@ -459,6 +484,33 @@ export default function HomePage() {
         displayRecommendation.focus ? `本次焦点：${displayRecommendation.focus}` : null,
         suggestedDurationCopy ? `建议时长：${suggestedDurationCopy}` : null,
     ].filter((detail): detail is string => Boolean(detail));
+    const activeRetrainingTasks = retrainingTasks.filter((task) => task.status === "todo" || task.status === "in_progress");
+
+    const handleStartRetrainingTask = async (task: RetrainingTask) => {
+        setStartingRetrainingTaskId(task.task_id);
+        setRetrainingTaskHint(null);
+
+        try {
+            const result = await api.retraining.startTaskSession(task.task_id);
+            persistRetrainingTaskSessionLink(result.session_id, {
+                task_id: task.task_id,
+                source_session_id: task.source_session_id,
+                source_review_id: task.source_review_id,
+            });
+            const nextParams = new URLSearchParams();
+            nextParams.set("retraining_task_id", task.task_id);
+            nextParams.set("source_session_id", task.source_session_id);
+            router.push(`/practice/${result.session_id}?${nextParams.toString()}`);
+        } catch (error) {
+            setRetrainingTaskHint(`复训会话创建失败：${getApiErrorMessage(error)}`);
+            debug.warn("[Dashboard] Retraining session start failed", {
+                taskId: task.task_id,
+                error,
+            });
+        } finally {
+            setStartingRetrainingTaskId(null);
+        }
+    };
     const versionDialogHighlights = [
         {
             title: displayRecommendation.title,
@@ -697,6 +749,59 @@ export default function HomePage() {
                                 </Button>
                             </Link>
                         </div>
+                    </GlassCard>
+                </section>
+            )}
+
+            {(activeRetrainingTasks.length > 0 || retrainingTaskHint) && (
+                <section>
+                    <GlassCard className="p-5 border border-blue-200 bg-blue-50/80">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">主管复训任务</p>
+                                <h2 className="mt-2 text-lg font-bold text-slate-900">
+                                    {activeRetrainingTasks.length > 0 ? `待处理 ${activeRetrainingTasks.length} 项` : "复训任务暂不可用"}
+                                </h2>
+                                {retrainingTaskHint ? (
+                                    <p className="mt-2 text-sm leading-6 text-blue-800">{retrainingTaskHint}</p>
+                                ) : null}
+                            </div>
+                            <Link href="/history">
+                                <Button variant="outline" className="rounded-full">
+                                    查看训练历史
+                                </Button>
+                            </Link>
+                        </div>
+                        {activeRetrainingTasks.length > 0 && (
+                            <div className="mt-4 grid gap-3">
+                                {activeRetrainingTasks.map((task) => (
+                                    <div key={task.task_id} className="rounded-xl border border-blue-100 bg-white/90 p-4">
+                                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                            <div>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <h3 className="font-bold text-slate-900">{task.title}</h3>
+                                                    <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                                        {formatRetrainingTaskStatus(task.status)}
+                                                    </span>
+                                                </div>
+                                                <p className="mt-2 text-sm text-slate-600">
+                                                    {task.description || `聚焦 ${task.skill_dimension} 完成复训。`}
+                                                </p>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                className="rounded-full bg-blue-700 text-white hover:bg-blue-800"
+                                                disabled={startingRetrainingTaskId !== null}
+                                                onClick={() => void handleStartRetrainingTask(task)}
+                                            >
+                                                {startingRetrainingTaskId === task.task_id ? "创建中..." : "开始复训"}
+                                                <ArrowRight className="ml-2 w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </GlassCard>
                 </section>
             )}

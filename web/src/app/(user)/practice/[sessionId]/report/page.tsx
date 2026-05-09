@@ -30,13 +30,21 @@ import {
     KnowledgeCheckDiagnostics,
     PracticeSessionReport,
     PresentationReview,
+    ReadinessStatus,
     Recommendation,
     ReplayAnchor,
     ReplayData,
     ReportTrendsResponse,
+    SupervisorDecision,
+    SupervisorReview,
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import { normalizeInternalRecommendationPath } from "@/lib/recommendation-routing";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import {
+    clearRetrainingTaskSessionLink,
+    readRetrainingTaskSessionLink,
+} from "@/lib/retraining-task-session";
 import {
     extractSessionLearningCue,
     formatClaimTruthEvidenceNote,
@@ -138,6 +146,26 @@ function getScoreLabel(score: number): string {
     if (score >= 80) return "良好";
     if (score >= 60) return "及格";
     return "待改进";
+}
+
+const SUPERVISOR_DECISION_LABELS: Record<SupervisorDecision, string> = {
+    pending: "待评审",
+    approved: "通过",
+    rejected: "打回",
+    needs_retraining: "要求复训",
+};
+
+const READINESS_STATUS_LABELS: Record<ReadinessStatus, string> = {
+    not_ready: "暂不达标",
+    shadow_only: "仅影子跟练",
+    ready_for_trial: "可试点上岗",
+    approved: "正式通过",
+};
+
+function formatScoreValue(value?: number | null): string {
+    return typeof value === "number" && Number.isFinite(value)
+        ? value.toFixed(1)
+        : "--";
 }
 
 function formatTrendDelta(delta?: number | null): string {
@@ -628,10 +656,78 @@ function buildHighlightReviewFocusIntent({
     };
 }
 
+function SupervisorBeforeAfterPanel({
+    review,
+}: {
+    review: SupervisorReview;
+}) {
+    const comparison = review.before_after;
+    if (!comparison) {
+        return null;
+    }
+
+    return (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 className="text-sm font-bold text-slate-900">复训前后对比</h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                        来源会话 {comparison.source_session_id.slice(0, 8)}
+                        {comparison.completed_session_id ? ` · 复训会话 ${comparison.completed_session_id.slice(0, 8)}` : ""}
+                    </p>
+                </div>
+                <span className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-semibold",
+                    comparison.retraining_completed
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700",
+                )}>
+                    {comparison.retraining_completed ? "复训已完成" : "复训未完成"}
+                </span>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-lg bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-500">原训练分数</p>
+                    <p className="mt-1 text-xl font-black text-slate-900">{formatScoreValue(comparison.original_score)}</p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-500">复训后分数</p>
+                    <p className="mt-1 text-xl font-black text-slate-900">{formatScoreValue(comparison.retraining_score)}</p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-500">分数变化</p>
+                    <p className={cn(
+                        "mt-1 text-xl font-black",
+                        (comparison.score_delta ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700",
+                    )}>
+                        {formatTrendDelta(comparison.score_delta)}
+                    </p>
+                </div>
+            </div>
+            {comparison.weak_dimension_changes.length > 0 && (
+                <div className="mt-4 space-y-2">
+                    {comparison.weak_dimension_changes.map((item) => (
+                        <div key={item.name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2 text-sm">
+                            <span className="font-semibold text-slate-700">{item.name}</span>
+                            <span className="text-slate-600">
+                                {formatScoreValue(item.original_score)} → {formatScoreValue(item.retraining_score)}
+                                <span className={cn("ml-2 font-bold", (item.delta ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700")}>
+                                    {formatTrendDelta(item.delta)}
+                                </span>
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function ComprehensiveReportPage() {
     const router = useRouter();
     const params = useParams();
     const sessionId = params.sessionId as string;
+    const { data: currentUser } = useCurrentUser();
 
     const { loading, report, error } = useSessionReportData(sessionId);
     const [enhancedReport, setEnhancedReport] = useState<ComprehensiveReport | null>(null);
@@ -651,6 +747,97 @@ export default function ComprehensiveReportPage() {
     const [highlightShareUrl, setHighlightShareUrl] = useState<string | null>(null);
     const [highlightShareLoading, setHighlightShareLoading] = useState(false);
     const [retryHint, setRetryHint] = useState<string | null>(null);
+    const [supervisorReviews, setSupervisorReviews] = useState<SupervisorReview[]>([]);
+    const [supervisorReviewLoading, setSupervisorReviewLoading] = useState(false);
+    const [supervisorReviewHint, setSupervisorReviewHint] = useState<string | null>(null);
+    const [readinessStatus, setReadinessStatus] = useState<ReadinessStatus>("ready_for_trial");
+    const [reviewComment, setReviewComment] = useState("");
+    const [supervisorReviewSubmitting, setSupervisorReviewSubmitting] = useState<SupervisorDecision | null>(null);
+    const [retrainingCompletionHint, setRetrainingCompletionHint] = useState<string | null>(null);
+
+    const isSupervisor = currentUser?.role === "admin";
+    const latestSupervisorReview = supervisorReviews[0] ?? null;
+
+    const loadSupervisorReviews = useCallback(async () => {
+        setSupervisorReviewLoading(true);
+        setSupervisorReviewHint(null);
+
+        try {
+            const reviews = await api.supervisor.listReviews({ session_id: sessionId });
+            setSupervisorReviews(reviews);
+        } catch (err) {
+            setSupervisorReviews([]);
+            setSupervisorReviewHint(`主管评审暂时无法读取：${getApiErrorMessage(err)}`);
+            debug.warn("[Report] Supervisor reviews unavailable", {
+                sessionId,
+                error: err,
+            });
+        } finally {
+            setSupervisorReviewLoading(false);
+        }
+    }, [sessionId]);
+
+    useEffect(() => {
+        if (!report) {
+            setSupervisorReviews([]);
+            return;
+        }
+
+        void loadSupervisorReviews();
+    }, [loadSupervisorReviews, report]);
+
+    useEffect(() => {
+        if (!latestSupervisorReview) {
+            return;
+        }
+
+        setReadinessStatus(latestSupervisorReview.readiness_status);
+        setReviewComment(latestSupervisorReview.comment ?? "");
+    }, [
+        latestSupervisorReview?.comment,
+        latestSupervisorReview?.readiness_status,
+        latestSupervisorReview?.review_id,
+    ]);
+
+    useEffect(() => {
+        if (!report) {
+            return;
+        }
+
+        const link = readRetrainingTaskSessionLink(sessionId);
+        if (!link) {
+            return;
+        }
+
+        let cancelled = false;
+        setRetrainingCompletionHint("正在同步复训完成状态...");
+
+        api.retraining
+            .completeTaskWithSession(link.task_id, { completed_session_id: sessionId })
+            .then(() => {
+                if (cancelled) {
+                    return;
+                }
+                clearRetrainingTaskSessionLink(sessionId);
+                setRetrainingCompletionHint("复训任务已完成，主管可查看前后对比。");
+                void loadSupervisorReviews();
+            })
+            .catch((err) => {
+                if (cancelled) {
+                    return;
+                }
+                setRetrainingCompletionHint(`复训完成状态同步失败：${getApiErrorMessage(err)}`);
+                debug.warn("[Report] Retraining task completion sync failed", {
+                    sessionId,
+                    taskId: link.task_id,
+                    error: err,
+                });
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [loadSupervisorReviews, report, sessionId]);
 
     useEffect(() => {
         if (!report) {
@@ -1374,6 +1561,41 @@ export default function ComprehensiveReportPage() {
     const retrievalWeakEvidenceNote = formatWeakEvidenceRetrievalNote(claimTruth, retrievalFacts);
     const retrievalResultSummaries = retrievalFacts?.latest_attempt?.result_summaries ?? [];
 
+    const submitSupervisorDecision = async (decision: SupervisorDecision) => {
+        setSupervisorReviewSubmitting(decision);
+        setSupervisorReviewHint(null);
+
+        const payload = {
+            decision,
+            readiness_status: readinessStatus,
+            comment: reviewComment.trim() || null,
+            required_retraining: decision === "needs_retraining",
+        };
+
+        try {
+            const savedReview = latestSupervisorReview
+                ? await api.supervisor.updateReviewDecision(latestSupervisorReview.review_id, payload)
+                : await api.supervisor.createReview({
+                    ...payload,
+                    session_id: sessionId,
+                });
+            setSupervisorReviews((currentReviews) => [
+                savedReview,
+                ...currentReviews.filter((item) => item.review_id !== savedReview.review_id),
+            ]);
+            setSupervisorReviewHint(`${SUPERVISOR_DECISION_LABELS[decision]}已保存。`);
+        } catch (err) {
+            setSupervisorReviewHint(`主管评审保存失败：${getApiErrorMessage(err)}`);
+            debug.warn("[Report] Supervisor review save failed", {
+                sessionId,
+                decision,
+                error: err,
+            });
+        } finally {
+            setSupervisorReviewSubmitting(null);
+        }
+    };
+
     if (loading) {
         return (
             <div className="container mx-auto px-4 py-12 text-center">
@@ -1429,6 +1651,106 @@ export default function ComprehensiveReportPage() {
                     </p>
                 </div>
             </GlassCard>
+
+            {(isSupervisor || latestSupervisorReview || supervisorReviewHint || retrainingCompletionHint) && (
+                <GlassCard className="p-6 mb-6 border border-slate-200 bg-slate-50/70">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 className="text-lg font-semibold text-zinc-900">主管评审</h2>
+                            <p className="mt-1 text-sm text-zinc-600">
+                                {supervisorReviewLoading
+                                    ? "正在读取主管评审..."
+                                    : latestSupervisorReview
+                                        ? `${SUPERVISOR_DECISION_LABELS[latestSupervisorReview.decision]} · ${READINESS_STATUS_LABELS[latestSupervisorReview.readiness_status]}`
+                                        : "当前报告还没有主管评审。"}
+                            </p>
+                        </div>
+                        {latestSupervisorReview?.required_retraining ? (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                                已要求复训
+                            </span>
+                        ) : null}
+                    </div>
+
+                    {latestSupervisorReview?.comment ? (
+                        <div className="mt-4 rounded-xl border border-white bg-white/80 p-4">
+                            <p className="text-xs font-semibold text-slate-500">主管反馈</p>
+                            <p className="mt-2 text-sm leading-6 text-slate-800">{latestSupervisorReview.comment}</p>
+                        </div>
+                    ) : null}
+
+                    {latestSupervisorReview?.retraining_tasks.length ? (
+                        <div className="mt-4 grid gap-2">
+                            {latestSupervisorReview.retraining_tasks.map((task) => (
+                                <div key={task.task_id} className="rounded-xl border border-slate-100 bg-white/80 p-3 text-sm">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <span className="font-semibold text-slate-800">{task.title}</span>
+                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                                            {task.status}
+                                        </span>
+                                    </div>
+                                    {task.description ? (
+                                        <p className="mt-2 text-slate-600">{task.description}</p>
+                                    ) : null}
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
+
+                    {latestSupervisorReview ? (
+                        <SupervisorBeforeAfterPanel review={latestSupervisorReview} />
+                    ) : null}
+
+                    {isSupervisor && (
+                        <div className="mt-5 rounded-xl border border-slate-200 bg-white/90 p-4">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
+                                <label className="text-sm font-semibold text-slate-700">
+                                    上岗状态
+                                    <select
+                                        value={readinessStatus}
+                                        onChange={(event) => setReadinessStatus(event.target.value as ReadinessStatus)}
+                                        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400"
+                                    >
+                                        {Object.entries(READINESS_STATUS_LABELS).map(([value, label]) => (
+                                            <option key={value} value={value}>{label}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="text-sm font-semibold text-slate-700">
+                                    评语
+                                    <textarea
+                                        value={reviewComment}
+                                        onChange={(event) => setReviewComment(event.target.value)}
+                                        rows={3}
+                                        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400"
+                                        placeholder="填写主管反馈"
+                                    />
+                                </label>
+                            </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {(["approved", "rejected", "needs_retraining"] as SupervisorDecision[]).map((decision) => (
+                                    <Button
+                                        key={decision}
+                                        type="button"
+                                        variant={decision === "needs_retraining" ? "primary" : "outline"}
+                                        size="sm"
+                                        disabled={supervisorReviewSubmitting !== null}
+                                        onClick={() => void submitSupervisorDecision(decision)}
+                                    >
+                                        {supervisorReviewSubmitting === decision ? "保存中..." : SUPERVISOR_DECISION_LABELS[decision]}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {(supervisorReviewHint || retrainingCompletionHint) && (
+                        <p className="mt-4 text-xs text-slate-600">
+                            {supervisorReviewHint || retrainingCompletionHint}
+                        </p>
+                    )}
+                </GlassCard>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <GlassCard className="p-6 border border-blue-100 bg-blue-50/40">

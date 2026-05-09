@@ -20,6 +20,11 @@ const {
     getComprehensiveReportMock,
     generateComprehensiveReportMock,
     getSegmentAudioBlobUrlMock,
+    listSupervisorReviewsMock,
+    createSupervisorReviewMock,
+    updateSupervisorReviewDecisionMock,
+    completeRetrainingTaskWithSessionMock,
+    useCurrentUserMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     getReportMock: vi.fn(),
@@ -36,6 +41,11 @@ const {
     getComprehensiveReportMock: vi.fn(),
     generateComprehensiveReportMock: vi.fn(),
     getSegmentAudioBlobUrlMock: vi.fn(),
+    listSupervisorReviewsMock: vi.fn(),
+    createSupervisorReviewMock: vi.fn(),
+    updateSupervisorReviewDecisionMock: vi.fn(),
+    completeRetrainingTaskWithSessionMock: vi.fn(),
+    useCurrentUserMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -107,9 +117,23 @@ vi.mock("@/lib/api/client", async () => {
                 getComprehensiveReport: getComprehensiveReportMock,
                 generateComprehensiveReport: generateComprehensiveReportMock,
             },
+            supervisor: {
+                ...actual.api.supervisor,
+                listReviews: listSupervisorReviewsMock,
+                createReview: createSupervisorReviewMock,
+                updateReviewDecision: updateSupervisorReviewDecisionMock,
+            },
+            retraining: {
+                ...actual.api.retraining,
+                completeTaskWithSession: completeRetrainingTaskWithSessionMock,
+            },
         },
     };
 });
+
+vi.mock("@/hooks/use-current-user", () => ({
+    useCurrentUser: useCurrentUserMock,
+}));
 
 const baseRetrievalFacts = {
     kb_bound: true,
@@ -419,6 +443,11 @@ describe("ReportPage", () => {
         getComprehensiveReportMock.mockReset();
         generateComprehensiveReportMock.mockReset();
         getSegmentAudioBlobUrlMock.mockReset();
+        listSupervisorReviewsMock.mockReset();
+        createSupervisorReviewMock.mockReset();
+        updateSupervisorReviewDecisionMock.mockReset();
+        completeRetrainingTaskWithSessionMock.mockReset();
+        useCurrentUserMock.mockReset();
         localStorage.clear();
 
         getReplayMock.mockResolvedValue(baseReplayData);
@@ -533,6 +562,23 @@ describe("ReportPage", () => {
         });
         createSessionMock.mockResolvedValue({ session_id: "retry-1" });
         getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
+        listSupervisorReviewsMock.mockResolvedValue([]);
+        completeRetrainingTaskWithSessionMock.mockResolvedValue({
+            task_id: "task-1",
+            status: "completed",
+        });
+        useCurrentUserMock.mockReturnValue({
+            data: {
+                id: "user-1",
+                user_id: "user-1",
+                display_name: "员工",
+                name: "员工",
+                email: "learner@example.com",
+                role: "user",
+                is_active: true,
+                created_at: "2026-04-01T00:00:00Z",
+            },
+        });
     });
 
     it("renders evaluable-only trend comparison and ruleset recommendation on report", async () => {
@@ -555,6 +601,156 @@ describe("ReportPage", () => {
         );
         expect(getReportTrendsMock).toHaveBeenCalledWith("session-1", 5);
         expect(getNextRecommendationMock).toHaveBeenCalledWith("session-1");
+    });
+
+    it("lets supervisors submit a retraining decision from the report page", async () => {
+        useCurrentUserMock.mockReturnValue({
+            data: {
+                id: "admin-1",
+                user_id: "admin-1",
+                display_name: "主管",
+                name: "主管",
+                email: "manager@example.com",
+                role: "admin",
+                is_active: true,
+                created_at: "2026-04-01T00:00:00Z",
+            },
+        });
+        getReportMock.mockResolvedValue(baseReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+        createSupervisorReviewMock.mockResolvedValue({
+            review_id: "review-1",
+            session_id: "session-1",
+            trainee_user_id: "user-1",
+            supervisor_user_id: "admin-1",
+            decision: "needs_retraining",
+            readiness_status: "ready_for_trial",
+            comment: "先补强证据表达再上岗。",
+            required_retraining: true,
+            audit_metadata: {},
+            created_at: "2026-05-09T00:00:00Z",
+            updated_at: "2026-05-09T00:00:00Z",
+            retraining_tasks: [],
+            before_after: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("主管评审")).toBeTruthy();
+        fireEvent.change(screen.getByPlaceholderText("填写主管反馈"), {
+            target: { value: "先补强证据表达再上岗。" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "要求复训" }));
+
+        await waitFor(() => {
+            expect(createSupervisorReviewMock).toHaveBeenCalledWith({
+                session_id: "session-1",
+                decision: "needs_retraining",
+                readiness_status: "ready_for_trial",
+                comment: "先补强证据表达再上岗。",
+                required_retraining: true,
+            });
+        });
+        expect(await screen.findByText("要求复训已保存。")).toBeTruthy();
+    });
+
+    it("shows learner-facing supervisor feedback and before-after comparison", async () => {
+        getReportMock.mockResolvedValue(baseReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+        listSupervisorReviewsMock.mockResolvedValue([
+            {
+                review_id: "review-1",
+                session_id: "session-1",
+                trainee_user_id: "user-1",
+                supervisor_user_id: "admin-1",
+                decision: "needs_retraining",
+                readiness_status: "shadow_only",
+                comment: "复训前先补足 ROI 证据。",
+                required_retraining: true,
+                audit_metadata: {},
+                created_at: "2026-05-09T00:00:00Z",
+                updated_at: "2026-05-09T00:00:00Z",
+                retraining_tasks: [
+                    {
+                        task_id: "task-1",
+                        user_id: "user-1",
+                        source_session_id: "session-1",
+                        source_review_id: "review-1",
+                        skill_dimension: "证据与收益",
+                        title: "复训：证据与收益",
+                        description: "复训前先补足 ROI 证据。",
+                        status: "completed",
+                        completed_session_id: "session-retry-1",
+                        before_after: null,
+                    },
+                ],
+                before_after: {
+                    source_session_id: "session-1",
+                    completed_session_id: "session-retry-1",
+                    original_score: 72,
+                    retraining_score: 84,
+                    score_delta: 12,
+                    retraining_completed: true,
+                    weak_dimension_changes: [
+                        {
+                            name: "证据与收益",
+                            original_score: 62,
+                            retraining_score: 80,
+                            delta: 18,
+                        },
+                    ],
+                },
+            },
+        ]);
+
+        render(<ReportPage />);
+
+        expect((await screen.findAllByText("复训前先补足 ROI 证据。")).length).toBeGreaterThan(0);
+        expect(screen.getByText("复训前后对比")).toBeTruthy();
+        expect(screen.getByText("复训已完成")).toBeTruthy();
+        expect(screen.getAllByText("证据与收益").length).toBeGreaterThan(0);
+        expect(screen.getByText("+12.0 分")).toBeTruthy();
+    });
+
+    it("marks a retraining task complete when its completed report opens", async () => {
+        localStorage.setItem(
+            "qoder.retrainingTaskSession.v1:session-1",
+            JSON.stringify({
+                schema_version: "retraining_task_session_link_v1",
+                task_id: "task-1",
+                source_session_id: "source-session-1",
+                source_review_id: "review-1",
+                started_at: "2026-05-09T00:00:00Z",
+            }),
+        );
+        getReportMock.mockResolvedValue(baseReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+
+        render(<ReportPage />);
+
+        await waitFor(() => {
+            expect(completeRetrainingTaskWithSessionMock).toHaveBeenCalledWith(
+                "task-1",
+                { completed_session_id: "session-1" },
+            );
+        });
+        expect(await screen.findByText("复训任务已完成，主管可查看前后对比。")).toBeTruthy();
+        expect(localStorage.getItem("qoder.retrainingTaskSession.v1:session-1")).toBeNull();
     });
 
     it("downgrades unsafe report recommendation targets to the training route", async () => {

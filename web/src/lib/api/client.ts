@@ -133,6 +133,14 @@ import {
     AdminModelConfigTestRequest,
     AdminModelConfigUpdateRequest,
     AdaptiveDifficultyDryRunResponse,
+    SupervisorReview,
+    SupervisorReviewCreateRequest,
+    SupervisorReviewDecisionUpdateRequest,
+    SupervisorTeamReport,
+    RetrainingTask,
+    RetrainingTaskCreateRequest,
+    RetrainingTaskCompleteRequest,
+    RetrainingTaskStartResponse,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -1952,6 +1960,71 @@ export const api = {
                 scenario_type?: string | null;
                 message?: string;
             }>(`/analytics/leaderboard/my-rank${query}`);
+        },
+    },
+
+    supervisor: {
+        listTeamReports: async (params?: { limit?: number }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.limit) searchParams.set("limit", String(params.limit));
+            const query = searchParams.toString();
+            return apiFetch<SupervisorTeamReport[]>(`/supervisor/team/reports${query ? `?${query}` : ""}`);
+        },
+
+        listReviews: async (params?: { session_id?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.session_id) searchParams.set("session_id", params.session_id);
+            const query = searchParams.toString();
+            return apiFetch<SupervisorReview[]>(`/supervisor/reviews${query ? `?${query}` : ""}`);
+        },
+
+        createReview: async (payload: SupervisorReviewCreateRequest) => {
+            return apiFetch<SupervisorReview>("/supervisor/reviews", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        updateReviewDecision: async (
+            reviewId: string,
+            payload: SupervisorReviewDecisionUpdateRequest,
+        ) => {
+            return apiFetch<SupervisorReview>(`/supervisor/reviews/${encodeURIComponent(reviewId)}/decision`, {
+                method: "PATCH",
+                body: JSON.stringify(payload),
+            });
+        },
+    },
+
+    retraining: {
+        listTasks: async (params?: { status?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.status) searchParams.set("status", params.status);
+            const query = searchParams.toString();
+            return apiFetch<RetrainingTask[]>(`/retraining/tasks${query ? `?${query}` : ""}`);
+        },
+
+        createTask: async (payload: RetrainingTaskCreateRequest) => {
+            return apiFetch<RetrainingTask>("/retraining/tasks", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        startTaskSession: async (taskId: string) => {
+            return apiFetch<RetrainingTaskStartResponse>(`/retraining/tasks/${encodeURIComponent(taskId)}/start-session`, {
+                method: "POST",
+            });
+        },
+
+        completeTaskWithSession: async (
+            taskId: string,
+            payload: RetrainingTaskCompleteRequest,
+        ) => {
+            return apiFetch<RetrainingTask>(`/retraining/tasks/${encodeURIComponent(taskId)}/complete-with-session`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
         },
     },
 

@@ -9,11 +9,63 @@
 
 ## Current Status
 
-- Overall status: paused_after_phase_1
-- Current phase: Phase 1 - Gray Release Baseline
-- Current atomic task: Phase 1 complete; awaiting explicit user confirmation before Phase 2
-- Last commit: `Phase 1 gray release baseline`
-- Blocker: none for Phase 1. Full backend mypy is intentionally tracked as a gray-release debt ceiling, not a zero-error release blocker.
+- Overall status: phase_2_complete_paused_before_phase_3
+- Current phase: Phase 2 - Supervisor Review and Retraining Loop
+- Current atomic task: Phase 2 complete; paused before Phase 3
+- Last commit: `Phase 2 supervisor review and retraining loop`
+- Blocker: none for Phase 2. Full backend mypy remains tracked as the Phase 1 gray-release debt ceiling, not a Phase 2 zero-error release blocker.
+
+## Phase 2 Supervisor Review and Retraining Loop - 2026-05-09
+
+- Stable code logic changed: added the minimal supervisor review state model, retraining task lifecycle, supervisor report read model, before/after score projection, frontend report-page supervisor action surface, learner supervisor-feedback surface, dashboard retraining-task entry, and client-side retraining task/session correlation used to call task completion after the retraining report opens.
+- Configurable business rules changed: none. This phase did not introduce scoring thresholds, ranking rules, new permission matrices, auth certificate behavior, StepFun behavior, leaderboard logic, or managed business-policy switches. `decision`, `readiness_status`, and `status` values are treated as stable workflow states for the minimum Phase 2 loop.
+- New configuration items: none.
+- Reused configuration items: existing `admin`/`user` role split, existing FastAPI auth/session dependencies, existing practice session creation/runtime lock, existing report generation/report page, existing frontend API base URL and auth/error handling.
+- Configuration source/manager/validation: unchanged. No new admin-config table or dictionary source was introduced in Phase 2.
+- Missing/illegal configuration handling: not applicable for new managed config because no new configurable rule was introduced. API payloads are validated by Pydantic schemas; database constraints guard review/task state values.
+- Fixed rules retained in code and reason:
+  - Review decisions, readiness statuses, and retraining task statuses are stable workflow state machine values required for data integrity and API contracts.
+  - Minimal UI labels for those stable states are retained in the route components for Phase 2. If operator-facing copy becomes adjustable, the future change should move labels into the existing admin settings/dictionary governance surface and update `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/app/(dashboard)/page.tsx`, and `web/src/lib/api/types.ts`.
+  - The `qoder.retrainingTaskSession.v1:*` localStorage key is a stable client correlation key, not a business rule. It is centralized in `web/src/lib/retraining-task-session.ts`.
+- Logic that must not be hardcoded in later phases: full RBAC role/permission/menu/action mappings, audit policy, scoring-ruleset route migration policy, ASR correction governance, knowledge retrieval grounding policy, scoring evidence publication rules, report display policy, replay sharing policy, backend dictionary management, and presentation-training audit policy.
+- Phase 2 backend artifacts:
+  - `backend/src/common/db/models.py`: `SupervisorReview` and `RetrainingTask`.
+  - `backend/alembic/versions/20260509_0900_037_supervisor_retraining_loop.py`: creates supervisor review and retraining task tables/indexes/constraints.
+  - `backend/src/supervisor/`: schemas, service, and API router.
+  - `backend/src/router_registry.py`: mounts supervisor/retraining API routes under `/api/v1`.
+  - `backend/tests/integration/test_supervisor_retraining_api.py`: focused backend integration coverage.
+- Phase 2 frontend artifacts:
+  - `web/src/lib/api/types.ts` and `web/src/lib/api/client.ts`: supervisor/retraining API types and façade methods.
+  - `web/src/lib/retraining-task-session.ts`: client-side started-retraining-session correlation.
+  - `web/src/app/(user)/practice/[sessionId]/report/page.tsx`: admin review controls, learner feedback display, before/after comparison, and retraining completion sync.
+  - `web/src/app/(dashboard)/page.tsx`: learner retraining task card and start action.
+  - Co-located page tests updated for report and dashboard surfaces.
+- Phase 2 API routes verified:
+  - `GET /api/v1/supervisor/team/reports`
+  - `GET /api/v1/supervisor/reviews`
+  - `POST /api/v1/supervisor/reviews`
+  - `PATCH /api/v1/supervisor/reviews/{review_id}/decision`
+  - `GET /api/v1/retraining/tasks`
+  - `POST /api/v1/retraining/tasks`
+  - `POST /api/v1/retraining/tasks/{task_id}/start-session`
+  - `POST /api/v1/retraining/tasks/{task_id}/complete-with-session`
+- Verification:
+  - `cd backend && alembic upgrade head`: passed.
+  - `cd backend && ruff check src tests`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/auth --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/api/practice.py --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/evaluation --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/sales_bot --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/presentation_coach --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/common/effectiveness --show-error-codes`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/mypy src/supervisor src/router_registry.py --show-error-codes`: passed.
+  - `cd backend && .venv-test/bin/python -m py_compile src/supervisor/api.py src/supervisor/service.py src/supervisor/schemas.py src/router_registry.py src/common/db/models.py alembic/versions/20260509_0900_037_supervisor_retraining_loop.py`: passed.
+  - `cd backend && PYTHONPATH=src .venv-test/bin/pytest tests/integration/test_supervisor_retraining_api.py -q --no-cov`: 2 passed, 1 third-party deprecation warning.
+  - `cd web && npx tsc --noEmit`: passed.
+  - `cd web && npx eslint . --quiet`: passed.
+  - `cd web && npx vitest run`: 89 test files and 549 tests passed.
+- Explicitly not implemented in Phase 2: full RBAC, leaderboard work, auth certificate work, StepFun refactor, `/api/v1/admin/scoring-rulesets` migration, and Phase 3 SMART planning.
+- Worktree hygiene: unrelated `.codex/**` deletions and root `AGENTS.md` modification are external dirty state and are not part of this phase.
 
 ## Phase 1 Gray Release Baseline - 2026-05-09
 
@@ -47,7 +99,7 @@
   - Presentation training: `tests/unit/test_presentation_report_service.py`, `tests/unit/test_presentation_handler_persistence.py`, `tests/integration/test_presentation_flow.py`, `tests/integration/test_presentation_report_flow.py`: 41 passed.
 - Additional import check: `PYTHONPATH=src .venv-test/bin/python - <<'PY' ... from main import app ... PY` passed and loaded 319 routes after FastAPI response annotation fixes.
 - Residual risk accepted for Phase 1: full backend mypy still has 490 errors in non-core-gate surfaces, primarily remaining SQLAlchemy runtime field typing and admin/knowledge/analytics API return contract debt. This is tracked debt, not hidden pass status.
-- Phase discipline: Phase 2 supervisor review/retraining loop has not started and must wait for explicit user confirmation.
+- Phase discipline: superseded by the Phase 2 section above; Phase 2 is now complete and execution is paused before Phase 3.
 
 ## Implementation-Before-Coding Judgment
 
