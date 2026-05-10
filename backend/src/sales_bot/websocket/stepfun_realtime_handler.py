@@ -58,9 +58,13 @@ from common.effectiveness import (
 )
 from common.effectiveness.schemas import ActionCard, PassFlags
 from common.knowledge.kb_lock_guard import (
-    build_kb_coach_grounding_context,
+    apply_answerability_output_guard as apply_kb_answerability_output_guard,
+    build_answerability_instruction_overlay as build_kb_answerability_instruction_overlay,
+    build_blocked_response_from_answerability as build_kb_blocked_response_from_answerability,
     evaluate_kb_lock_decision,
-    resolve_kb_lock_mode,
+    evaluate_retrieval_grounding_decision,
+    extract_answerability_diagnostics,
+    resolve_answerability_mode as resolve_kb_answerability_mode,
 )
 from common.knowledge.service import KnowledgeService
 from common.knowledge_engine.runtime_events import (
@@ -114,10 +118,6 @@ from sales_bot.websocket.components.stepfun_helpers import (
 )
 from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
     search_internal_knowledge,
-)
-from sales_bot.websocket.components.stepfun_knowledge_helpers import (
-    is_product_overview_query,
-    resolve_grounding_context_limits,
 )
 from sales_bot.websocket.components.stepfun_message_helpers import (
     extract_analysis_patch_fields,
@@ -543,79 +543,26 @@ class StepFunRealtimeHandler(
         diagnostics = self._latest_knowledge_answer_diagnostics
         if not isinstance(diagnostics, dict):
             return "default", None
-
-        answerability = str(diagnostics.get("answerability") or "").strip().lower()
-        source_status = str(diagnostics.get("source_status") or "").strip().lower()
-        kb_lock_required = self._is_kb_lock_required_for_current_policy()
-
-        if kb_lock_required and answerability in {"blocked", "insufficient"}:
-            return "blocked", diagnostics
-        if answerability == "partial":
-            return "partial", diagnostics
-        if answerability in {"blocked", "insufficient"} or source_status in {
-            "miss",
-            "kb_not_ready",
-            "search_failed",
-        }:
-            return "ungrounded", diagnostics
-        return "grounded", diagnostics
+        return (
+            resolve_kb_answerability_mode(
+                diagnostics,
+                kb_lock_required=self._is_kb_lock_required_for_current_policy(),
+            ),
+            diagnostics,
+        )
 
     @staticmethod
     def _build_answerability_instruction_overlay(
         mode: str,
         diagnostics: dict[str, Any] | None,
     ) -> str:
-        if not isinstance(diagnostics, dict):
-            return ""
-
-        answerability = str(diagnostics.get("answerability") or "").strip().lower()
-        rewritten_queries = diagnostics.get("rewritten_queries")
-        citations = diagnostics.get("citations")
-        query_line = ""
-        if isinstance(rewritten_queries, list):
-            normalized_queries = [
-                str(item).strip() for item in rewritten_queries if str(item).strip()
-            ]
-            if normalized_queries:
-                query_line = "\n本轮检索改写：" + "；".join(normalized_queries[:4])
-        citation_count = len(citations) if isinstance(citations, list) else 0
-
-        if mode == "partial":
-            return (
-                "\n【回答约束】当前仅有部分内部证据可用。"
-                "你只能回答已被当前内部片段直接支持的部分；未被支持的部分必须明确说“当前内部知识库未提供足够依据”。"
-                "禁止把推测、常识补充或模型记忆写成内部事实。"
-                f"\n当前 answerability：{answerability or 'partial'}；可引用片段数：{citation_count}"
-                f"{query_line}"
-            )
-        if mode == "ungrounded":
-            return (
-                "\n【回答约束】当前回答不以内部知识库确认为准。"
-                "如果继续回答，只能提供一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。"
-                "不得把一般性知识描述成企业内部资料、正式产品事实、报价、版本承诺或客户案例。"
-                f"\n当前 answerability：{answerability or 'unknown'}；可引用片段数：{citation_count}"
-                f"{query_line}"
-            )
-        if mode == "grounded":
-            return (
-                "\n【回答约束】当前轮应优先依据已命中的内部片段回答；若片段未覆盖某部分，请明确说明不确定。"
-                f"\n当前 answerability：{answerability or 'sufficient'}；可引用片段数：{citation_count}"
-                f"{query_line}"
-            )
-        return ""
+        return build_kb_answerability_instruction_overlay(mode, diagnostics)
 
     def _build_blocked_response_from_answerability(
         self,
         diagnostics: dict[str, Any] | None,
     ) -> str:
-        if not isinstance(diagnostics, dict):
-            return "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
-        source_status = str(diagnostics.get("source_status") or "").strip().lower()
-        if source_status == "kb_not_ready":
-            return "当前内部知识库尚未就绪，暂时无法基于内部资料回答。请稍后重试，或补充更具体的产品关键词。"
-        if source_status == "search_failed":
-            return "当前内部知识检索失败，暂时无法基于内部资料安全回答。请稍后重试。"
-        return "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
+        return build_kb_blocked_response_from_answerability(diagnostics)
 
     @staticmethod
     def _split_response_sentences(text: str) -> list[str]:
@@ -627,52 +574,102 @@ class StepFunRealtimeHandler(
         return cleaned or [normalized]
 
     def _apply_answerability_output_guard(self, response_text: str) -> str:
-        diagnostics = self._latest_knowledge_answer_diagnostics
-        if not isinstance(diagnostics, dict):
-            return response_text
-
-        answerability = str(diagnostics.get("answerability") or "").strip().lower()
-        if answerability != "partial":
-            return response_text
-
-        citations = diagnostics.get("citations")
-        if not isinstance(citations, list) or not citations:
-            return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
-
-        support_texts: list[str] = []
-        for citation in citations:
-            if not isinstance(citation, dict):
-                continue
-            for key in ("claim", "snippet"):
-                value = str(citation.get(key) or "").strip()
-                if value:
-                    support_texts.append(value)
-
-        if not support_texts:
-            return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
-
-        kept_sentences: list[str] = []
-        for sentence in self._split_response_sentences(response_text):
-            compact_sentence = sentence.replace(" ", "")
-            if any(
-                compact_sentence
-                and (
-                    compact_sentence in support_text.replace(" ", "")
-                    or support_text.replace(" ", "") in compact_sentence
-                )
-                for support_text in support_texts
-            ):
-                kept_sentences.append(sentence)
-
-        if kept_sentences:
-            return "".join(kept_sentences)
-        return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
+        return apply_kb_answerability_output_guard(
+            response_text,
+            self._latest_knowledge_answer_diagnostics,
+        )
 
     def _get_effective_tool_policy(self) -> dict[str, Any]:
         tool_policy = self._effective_policy.get("tool_policy")
         if isinstance(tool_policy, dict):
             return tool_policy
         return {}
+
+    @staticmethod
+    def _merge_transcript_normalization_lexicon(
+        base_policy: dict[str, Any],
+        kb_lexicon: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any], bool]:
+        if not kb_lexicon:
+            return base_policy, False
+
+        existing_lexicon = base_policy.get("transcript_normalization_lexicon")
+        merged_lexicon = (
+            list(existing_lexicon) if isinstance(existing_lexicon, list) else []
+        )
+        seen: set[tuple[str, tuple[str, ...], str]] = set()
+        for item in merged_lexicon:
+            if not isinstance(item, dict):
+                continue
+            aliases = item.get("aliases")
+            alias_tuple = tuple(str(alias) for alias in aliases if str(alias).strip()) if isinstance(aliases, list) else ()
+            seen.add(
+                (
+                    str(item.get("canonical_term") or ""),
+                    alias_tuple,
+                    str(item.get("scope") or ""),
+                )
+            )
+
+        changed = False
+        for item in kb_lexicon:
+            aliases = item.get("aliases")
+            if not isinstance(aliases, list) or not aliases:
+                continue
+            alias_tuple = tuple(str(alias) for alias in aliases if str(alias).strip())
+            key = (
+                str(item.get("canonical_term") or ""),
+                alias_tuple,
+                str(item.get("scope") or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged_lexicon.append(dict(item))
+            changed = True
+
+        if not changed:
+            return base_policy, False
+        next_policy = dict(base_policy)
+        next_policy["transcript_normalization_lexicon"] = merged_lexicon
+        next_policy.setdefault("transcript_normalization_enabled", True)
+        return next_policy, True
+
+    async def _merge_kb_dictionary_into_effective_policy(self, db: AsyncSession) -> bool:
+        knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+        if not isinstance(knowledge_base_ids, list) or not knowledge_base_ids:
+            return False
+        tool_policy = self._effective_policy.get("tool_policy")
+        if not isinstance(tool_policy, dict):
+            tool_policy = {}
+
+        try:
+            kb_lexicon = await KnowledgeService(db).active_dictionary_lexicon(
+                [str(kb_id) for kb_id in knowledge_base_ids if str(kb_id).strip()]
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "Skipped KB dictionary transcript normalization merge",
+                session_id=self.session_id,
+                error=str(exc),
+            )
+            return False
+
+        merged_tool_policy, changed = self._merge_transcript_normalization_lexicon(
+            tool_policy,
+            kb_lexicon,
+        )
+        if not changed:
+            return False
+        self._effective_policy = dict(self._effective_policy)
+        self._effective_policy["tool_policy"] = merged_tool_policy
+        source = self._effective_policy.get("source")
+        if not isinstance(source, dict):
+            source = {}
+        source = dict(source)
+        source["kb_dictionary_lexicon"] = "knowledge_base_active_dictionary"
+        self._effective_policy["source"] = source
+        return True
 
     def _get_max_questions_per_turn(self) -> int:
         raw_value = self._get_effective_tool_policy().get("max_questions_per_turn", 1)
@@ -1193,7 +1190,8 @@ class StepFunRealtimeHandler(
                 policy_source = "resolved"
 
             guardrail_applied = self._enforce_tool_policy_guardrails()
-            if guardrail_applied:
+            dictionary_applied = await self._merge_kb_dictionary_into_effective_policy(db)
+            if guardrail_applied or dictionary_applied:
                 session_any.voice_policy_snapshot = self._effective_policy
                 await db.commit()
 
@@ -2721,24 +2719,13 @@ class StepFunRealtimeHandler(
                     "cache_hit_ready_docs": False,
                     "cache_hit_internal_retrieval": False,
                 }
-                kb_lock_mode = resolve_kb_lock_mode(tool_policy)
-                product_overview_query = is_product_overview_query(normalized_query)
-                if kb_lock_mode == "coach_mode" and not product_overview_query:
-                    decision_status = "coach_search_timeout"
-                    blocked = False
-                    self._pending_blocked_response_text = ""
-                    self._pending_grounding_context = build_kb_coach_grounding_context(
-                        normalized_query,
-                        decision_status,
-                    )
-                else:
-                    decision_status = "blocked_search_timeout"
-                    blocked = True
-                    self._pending_blocked_response_text = (
-                        "当前内部知识检索超时，暂时无法基于内部资料确认该产品信息。"
-                        "请稍后重试，或补充更具体的产品关键词、版本或业务场景。"
-                    )
-                    self._pending_grounding_context = ""
+                decision_status = "blocked_search_timeout"
+                blocked = True
+                self._pending_blocked_response_text = (
+                    "当前内部知识检索超时，暂时无法基于内部资料回答这个问题。"
+                    "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
+                )
+                self._pending_grounding_context = ""
                 await self._record_kb_lock_decision(
                     status=decision_status,
                     blocked=blocked,
@@ -2920,6 +2907,12 @@ class StepFunRealtimeHandler(
                     if isinstance(knowledge_base_ids, list)
                     else 0,
                 )
+                if has_bound_knowledge_base:
+                    self._pending_blocked_response_text = (
+                        "当前内部知识检索超时，暂时无法基于内部资料回答这个问题。"
+                        "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
+                    )
+                    self._pending_grounding_context = ""
                 return
         else:
             retrieval = await self._tool_search_internal_knowledge(retrieval_payload)
@@ -2930,121 +2923,44 @@ class StepFunRealtimeHandler(
                 reason="invalid_retrieval_payload",
                 query_length=len(normalized_query),
             )
+            if has_bound_knowledge_base:
+                self._pending_blocked_response_text = (
+                    "当前内部知识检索结果不可用，暂时无法基于内部资料回答这个问题。"
+                    "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
+                )
+                self._pending_grounding_context = ""
             return
-        knowledge_answer_diagnostics = retrieval.get("_answerability")
+        grounding_decision = evaluate_retrieval_grounding_decision(
+            query=normalized_query,
+            effective_policy=self._effective_policy,
+            retrieval_payload=retrieval,
+        )
         self._latest_knowledge_answer_diagnostics = (
-            copy.deepcopy(knowledge_answer_diagnostics)
-            if isinstance(knowledge_answer_diagnostics, dict)
+            copy.deepcopy(grounding_decision.diagnostics)
+            if isinstance(grounding_decision.diagnostics, dict)
             else None
         )
-        if int(retrieval.get("count") or 0) <= 0:
+        self._pending_grounding_context = grounding_decision.grounding_context
+        self._pending_blocked_response_text = grounding_decision.user_message
+        if not grounding_decision.allow_generation:
             self._log_grounding_debug(
-                "prefetch_skipped",
-                reason="retrieval_empty",
+                "prefetch_grounding_blocked",
                 query_length=len(normalized_query),
-                retrieval_message=str(retrieval.get("message") or ""),
-            )
-            if has_bound_knowledge_base:
-                retrieval_message = str(retrieval.get("message") or "").strip()
-                if (
-                    "尚未处理完成" in retrieval_message
-                    or "kb_not_ready" in retrieval_message.lower()
-                ):
-                    self._pending_grounding_context = (
-                        "当前内部知识库尚未就绪。\n"
-                        f"用户问题：{normalized_query}\n"
-                        "如果继续回答，只能给出一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。\n"
-                        "请优先提示用户稍后重试，或改问已确认录入的产品关键词。"
-                    )
-                else:
-                    self._pending_grounding_context = (
-                        "当前内部知识库未检索到充分证据。\n"
-                        f"用户问题：{normalized_query}\n"
-                        "如果继续回答，只能给出一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。\n"
-                        "不得将一般性知识表述为企业内部资料、正式产品事实、报价、版本承诺或客户案例。\n"
-                        "请优先引导用户补充更具体的产品关键词、版本信息或场景。"
-                    )
-                self._log_grounding_debug(
-                    "prefetch_guardrail_applied",
-                    reason="retrieval_empty",
-                    query_length=len(normalized_query),
-                )
-            return
-
-        rows = retrieval.get("results")
-        if not isinstance(rows, list):
-            return
-
-        snippet_limit, snippet_char_limit = resolve_grounding_context_limits(
-            normalized_query
-        )
-        snippets: list[str] = []
-        for index, row in enumerate(rows[:snippet_limit], start=1):
-            if not isinstance(row, dict):
-                continue
-            snippet = str(row.get("snippet") or "").strip()
-            if not snippet:
-                continue
-            snippet = snippet[:snippet_char_limit]
-            snippets.append(f"{index}. {snippet}")
-
-        if not snippets:
-            self._log_grounding_debug(
-                "prefetch_skipped",
-                reason="snippet_empty",
-                query_length=len(normalized_query),
-            )
-            self._pending_grounding_context = (
-                "当前检索结果缺少可直接引用的内部片段。\n"
-                f"用户问题：{normalized_query}\n"
-                "如果继续回答，只能给出一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。\n"
-                "不得把未被内部片段支持的内容说成公司正式资料或确定产品事实。"
-            )
-            self._log_grounding_debug(
-                "prefetch_guardrail_applied",
-                reason="snippet_empty",
-                query_length=len(normalized_query),
-            )
-            return
-
-        self._pending_grounding_context = (
-            "请在当前轮优先依据以下内部知识回答，并保持角色真实自然；若命中片段与模型既有知识冲突，必须以命中片段为准，不得自行补充片段外事实。\n"
-            f"用户问题：{normalized_query}\n"
-            + "\n".join(snippets)
-            + "\n若信息不足，请明确说明不确定之处。"
-        )
-        answerability_mode, answerability_diagnostics = (
-            self._resolve_answerability_mode()
-        )
-        if answerability_mode == "blocked":
-            self._pending_grounding_context = ""
-            self._pending_blocked_response_text = (
-                self._build_blocked_response_from_answerability(
-                    answerability_diagnostics,
-                )
-            )
-            self._log_grounding_debug(
-                "prefetch_answerability_blocked",
-                query_length=len(normalized_query),
+                status=grounding_decision.status,
+                answerability_mode=grounding_decision.answerability_mode,
                 answerability=str(
-                    (answerability_diagnostics or {}).get("answerability") or ""
+                    (grounding_decision.diagnostics or {}).get("answerability") or ""
                 ),
                 source_status=str(
-                    (answerability_diagnostics or {}).get("source_status") or ""
+                    (grounding_decision.diagnostics or {}).get("source_status") or ""
                 ),
             )
             return
-        answerability_overlay = self._build_answerability_instruction_overlay(
-            answerability_mode,
-            answerability_diagnostics,
-        )
-        if answerability_overlay:
-            self._pending_grounding_context += answerability_overlay
         self._log_grounding_debug(
             "prefetch_applied",
             query_length=len(normalized_query),
-            snippet_count=len(snippets),
-            answerability_mode=answerability_mode,
+            snippet_count=grounding_decision.result_count,
+            answerability_mode=grounding_decision.answerability_mode,
         )
 
     async def _schedule_response_after_commit(self) -> None:
@@ -4113,6 +4029,30 @@ class StepFunRealtimeHandler(
         output_payload: dict[str, Any]
         if function_name == "search_internal_knowledge":
             output_payload = await self._tool_search_internal_knowledge(arguments_obj)
+            grounding_decision = evaluate_retrieval_grounding_decision(
+                query=str(arguments_obj.get("query") or ""),
+                effective_policy=self._effective_policy,
+                retrieval_payload=output_payload,
+            )
+            self._latest_knowledge_answer_diagnostics = (
+                copy.deepcopy(grounding_decision.diagnostics)
+                if isinstance(grounding_decision.diagnostics, dict)
+                else None
+            )
+            if grounding_decision.allow_generation:
+                self._pending_blocked_response_text = ""
+                if grounding_decision.grounding_context:
+                    self._pending_grounding_context = grounding_decision.grounding_context
+            else:
+                self._pending_grounding_context = ""
+                self._pending_blocked_response_text = grounding_decision.user_message
+                self._log_grounding_debug(
+                    "function_call_grounding_blocked",
+                    call_id=call_id,
+                    query_length=len(str(arguments_obj.get("query") or "").strip()),
+                    status=grounding_decision.status,
+                    answerability_mode=grounding_decision.answerability_mode,
+                )
         else:
             output_payload = build_unsupported_function_output(function_name)
 

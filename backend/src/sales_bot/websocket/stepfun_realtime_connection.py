@@ -49,8 +49,12 @@ from common.effectiveness import (
 )
 from common.effectiveness.schemas import ActionCard, PassFlags
 from common.knowledge.kb_lock_guard import (
+    apply_answerability_output_guard as apply_kb_answerability_output_guard,
+    build_answerability_instruction_overlay as build_kb_answerability_instruction_overlay,
+    build_blocked_response_from_answerability as build_kb_blocked_response_from_answerability,
     build_kb_coach_grounding_context,
     evaluate_kb_lock_decision,
+    resolve_answerability_mode as resolve_kb_answerability_mode,
     resolve_kb_lock_mode,
 )
 from common.knowledge.service import KnowledgeService
@@ -284,79 +288,26 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
         diagnostics = self._latest_knowledge_answer_diagnostics
         if not isinstance(diagnostics, dict):
             return "default", None
-
-        answerability = str(diagnostics.get("answerability") or "").strip().lower()
-        source_status = str(diagnostics.get("source_status") or "").strip().lower()
-        kb_lock_required = self._is_kb_lock_required_for_current_policy()
-
-        if kb_lock_required and answerability in {"blocked", "insufficient"}:
-            return "blocked", diagnostics
-        if answerability == "partial":
-            return "partial", diagnostics
-        if answerability in {"blocked", "insufficient"} or source_status in {
-            "miss",
-            "kb_not_ready",
-            "search_failed",
-        }:
-            return "ungrounded", diagnostics
-        return "grounded", diagnostics
+        return (
+            resolve_kb_answerability_mode(
+                diagnostics,
+                kb_lock_required=self._is_kb_lock_required_for_current_policy(),
+            ),
+            diagnostics,
+        )
 
     @staticmethod
     def _build_answerability_instruction_overlay(
         mode: str,
         diagnostics: dict[str, Any] | None,
     ) -> str:
-        if not isinstance(diagnostics, dict):
-            return ""
-
-        answerability = str(diagnostics.get("answerability") or "").strip().lower()
-        rewritten_queries = diagnostics.get("rewritten_queries")
-        citations = diagnostics.get("citations")
-        query_line = ""
-        if isinstance(rewritten_queries, list):
-            normalized_queries = [
-                str(item).strip() for item in rewritten_queries if str(item).strip()
-            ]
-            if normalized_queries:
-                query_line = "\n本轮检索改写：" + "；".join(normalized_queries[:4])
-        citation_count = len(citations) if isinstance(citations, list) else 0
-
-        if mode == "partial":
-            return (
-                "\n【回答约束】当前仅有部分内部证据可用。"
-                "你只能回答已被当前内部片段直接支持的部分；未被支持的部分必须明确说“当前内部知识库未提供足够依据”。"
-                "禁止把推测、常识补充或模型记忆写成内部事实。"
-                f"\n当前 answerability：{answerability or 'partial'}；可引用片段数：{citation_count}"
-                f"{query_line}"
-            )
-        if mode == "ungrounded":
-            return (
-                "\n【回答约束】当前回答不以内部知识库确认为准。"
-                "如果继续回答，只能提供一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。"
-                "不得把一般性知识描述成企业内部资料、正式产品事实、报价、版本承诺或客户案例。"
-                f"\n当前 answerability：{answerability or 'unknown'}；可引用片段数：{citation_count}"
-                f"{query_line}"
-            )
-        if mode == "grounded":
-            return (
-                "\n【回答约束】当前轮应优先依据已命中的内部片段回答；若片段未覆盖某部分，请明确说明不确定。"
-                f"\n当前 answerability：{answerability or 'sufficient'}；可引用片段数：{citation_count}"
-                f"{query_line}"
-            )
-        return ""
+        return build_kb_answerability_instruction_overlay(mode, diagnostics)
 
     def _build_blocked_response_from_answerability(
         self,
         diagnostics: dict[str, Any] | None,
     ) -> str:
-        if not isinstance(diagnostics, dict):
-            return "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
-        source_status = str(diagnostics.get("source_status") or "").strip().lower()
-        if source_status == "kb_not_ready":
-            return "当前内部知识库尚未就绪，暂时无法基于内部资料回答。请稍后重试，或补充更具体的产品关键词。"
-        if source_status == "search_failed":
-            return "当前内部知识检索失败，暂时无法基于内部资料安全回答。请稍后重试。"
-        return "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
+        return build_kb_blocked_response_from_answerability(diagnostics)
 
     @staticmethod
     def _split_response_sentences(text: str) -> list[str]:
@@ -368,46 +319,10 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
         return cleaned or [normalized]
 
     def _apply_answerability_output_guard(self, response_text: str) -> str:
-        diagnostics = self._latest_knowledge_answer_diagnostics
-        if not isinstance(diagnostics, dict):
-            return response_text
-
-        answerability = str(diagnostics.get("answerability") or "").strip().lower()
-        if answerability != "partial":
-            return response_text
-
-        citations = diagnostics.get("citations")
-        if not isinstance(citations, list) or not citations:
-            return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
-
-        support_texts: list[str] = []
-        for citation in citations:
-            if not isinstance(citation, dict):
-                continue
-            for key in ("claim", "snippet"):
-                value = str(citation.get(key) or "").strip()
-                if value:
-                    support_texts.append(value)
-
-        if not support_texts:
-            return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
-
-        kept_sentences: list[str] = []
-        for sentence in self._split_response_sentences(response_text):
-            compact_sentence = sentence.replace(" ", "")
-            if any(
-                compact_sentence
-                and (
-                    compact_sentence in support_text.replace(" ", "")
-                    or support_text.replace(" ", "") in compact_sentence
-                )
-                for support_text in support_texts
-            ):
-                kept_sentences.append(sentence)
-
-        if kept_sentences:
-            return "".join(kept_sentences)
-        return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
+        return apply_kb_answerability_output_guard(
+            response_text,
+            self._latest_knowledge_answer_diagnostics,
+        )
 
     def _get_effective_tool_policy(self) -> dict[str, Any]:
         tool_policy = self._effective_policy.get("tool_policy")

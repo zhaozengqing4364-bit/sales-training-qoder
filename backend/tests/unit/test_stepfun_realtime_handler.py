@@ -626,7 +626,7 @@ async def test_prepare_grounding_context_forces_retrieval_when_kb_bound_and_inte
 
 
 @pytest.mark.asyncio
-async def test_prepare_grounding_context_applies_internal_only_guardrail_when_kb_retrieval_empty():
+async def test_prepare_grounding_context_blocks_any_bound_kb_query_when_retrieval_empty():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
         "knowledge_base_ids": ["kb-1"],
@@ -645,14 +645,13 @@ async def test_prepare_grounding_context_applies_internal_only_guardrail_when_kb
 
     await handler._prepare_grounding_context("我们的产品线有哪些")
 
-    assert "当前内部知识库未检索到充分证据" in handler._pending_grounding_context
-    assert "我们的产品线有哪些" in handler._pending_grounding_context
-    assert "以下回答不以内部知识库确认为准" in handler._pending_grounding_context
-    assert "一般性参考" in handler._pending_grounding_context
+    assert handler._pending_grounding_context == ""
+    assert "没有足够依据" in handler._pending_blocked_response_text
+    assert "更具体的关键词" in handler._pending_blocked_response_text
 
 
 @pytest.mark.asyncio
-async def test_prepare_grounding_context_applies_internal_only_guardrail_when_kb_not_ready():
+async def test_prepare_grounding_context_blocks_any_bound_kb_query_when_kb_not_ready():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
         "knowledge_base_ids": ["kb-1"],
@@ -671,9 +670,9 @@ async def test_prepare_grounding_context_applies_internal_only_guardrail_when_kb
 
     await handler._prepare_grounding_context("请介绍实习专家产品名录")
 
-    assert "以下回答不以内部知识库确认为准" in handler._pending_grounding_context
-    assert "请介绍实习专家产品名录" in handler._pending_grounding_context
-    assert "一般性参考" in handler._pending_grounding_context
+    assert handler._pending_grounding_context == ""
+    assert "没有足够依据" in handler._pending_blocked_response_text
+    assert "更具体的关键词" in handler._pending_blocked_response_text
 
 
 @pytest.mark.asyncio
@@ -715,7 +714,7 @@ async def test_prepare_grounding_context_sets_blocked_response_when_kb_lock_bloc
 
 
 @pytest.mark.asyncio
-async def test_prepare_grounding_context_timeout_degrades_to_coach_mode(monkeypatch):
+async def test_prepare_grounding_context_timeout_blocks_even_in_coach_mode(monkeypatch):
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
         "knowledge_base_ids": ["kb-1"],
@@ -727,19 +726,66 @@ async def test_prepare_grounding_context_timeout_degrades_to_coach_mode(monkeypa
     }
     handler._record_kb_lock_decision = AsyncMock()
 
-    async def _raise_timeout(*_args, **_kwargs):
+    async def _raise_timeout(awaitable, *_args, **_kwargs):
+        awaitable.close()
         raise stepfun_module.asyncio.TimeoutError
 
     monkeypatch.setattr(stepfun_module.asyncio, "wait_for", _raise_timeout)
 
     await handler._prepare_grounding_context("我这轮话术应该怎么讲更清楚")
 
-    assert handler._pending_blocked_response_text == ""
-    assert "训练辅导模式" in handler._pending_grounding_context
-    assert "我这轮话术应该怎么讲更清楚" in handler._pending_grounding_context
+    assert handler._pending_grounding_context == ""
+    assert "知识检索超时" in handler._pending_blocked_response_text
     decision_kwargs = handler._record_kb_lock_decision.await_args.kwargs
-    assert decision_kwargs["status"] == "coach_search_timeout"
-    assert decision_kwargs["blocked"] is False
+    assert decision_kwargs["status"] == "blocked_search_timeout"
+    assert decision_kwargs["blocked"] is True
+
+
+@pytest.mark.asyncio
+async def test_prepare_grounding_context_blocks_bound_kb_query_when_non_strict_retrieval_times_out(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+            "require_kb_grounding": False,
+        },
+    }
+
+    async def _raise_timeout(awaitable, *_args, **_kwargs):
+        awaitable.close()
+        raise stepfun_module.asyncio.TimeoutError
+
+    monkeypatch.setattr(stepfun_module.asyncio, "wait_for", _raise_timeout)
+
+    await handler._prepare_grounding_context("帮我介绍一下石溪科技。")
+
+    assert handler._pending_grounding_context == ""
+    assert "知识检索超时" in handler._pending_blocked_response_text
+    assert "这个问题" in handler._pending_blocked_response_text
+
+
+@pytest.mark.asyncio
+async def test_prepare_grounding_context_blocks_bound_kb_query_when_non_strict_retrieval_payload_is_invalid():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+            "require_kb_grounding": False,
+        },
+    }
+    handler._tool_search_internal_knowledge = AsyncMock(return_value=None)
+
+    await handler._prepare_grounding_context("帮我介绍一下石溪科技。")
+
+    assert handler._pending_grounding_context == ""
+    assert "检索结果不可用" in handler._pending_blocked_response_text
+    assert "这个问题" in handler._pending_blocked_response_text
 
 
 def test_enforce_tool_policy_guardrails_auto_enables_kb_lock_for_legacy_snapshot(
@@ -999,6 +1045,64 @@ async def test_execute_function_call_defers_followup_while_response_active():
     payload = handler._send_upstream.await_args.args[0]
     assert payload["item"]["type"] == "function_call_output"
     assert payload["item"]["call_id"] == "call-1"
+
+
+@pytest.mark.asyncio
+async def test_execute_function_call_blocks_followup_when_bound_kb_query_is_ungrounded():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "require_kb_grounding": False,
+        },
+    }
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._persist_message = AsyncMock()
+    handler._send_upstream = AsyncMock()
+    handler._sales_stage_lock = asyncio.Lock()
+    handler._feedback_context = None
+    handler._tool_search_internal_knowledge = AsyncMock(
+        return_value={
+            "query": "帮我介绍一下石溪科技。",
+            "count": 0,
+            "results": [],
+            "message": "未命中",
+            "_answerability": {
+                "answerability": "insufficient",
+                "source_status": "miss",
+                "citations": [],
+            },
+        }
+    )
+
+    executed = await handler._execute_function_call(
+        call_id="call-ungrounded-product",
+        function_name="search_internal_knowledge",
+        raw_arguments='{"query":"帮我介绍一下石溪科技。"}',
+        trigger_followup_response=True,
+    )
+
+    assert executed is True
+    persist_args = handler._persist_message.await_args
+    assert persist_args is not None
+    assert "没有足够依据" in persist_args.kwargs["content"]
+    assert handler._pending_blocked_response_text == ""
+    assert handler._pending_grounding_context == ""
+    assert handler._send_upstream.await_count == 1
+    send_upstream_args = handler._send_upstream.await_args
+    assert send_upstream_args is not None
+    function_output = send_upstream_args.args[0]
+    assert function_output["item"]["type"] == "function_call_output"
+    handler.manager.send_json.assert_awaited_once()
+    manager_send_args = handler.manager.send_json.await_args
+    assert manager_send_args is not None
+    blocked_payload = manager_send_args.args[1]
+    assert blocked_payload["type"] == "tts_audio"
+    assert "没有足够依据" in blocked_payload["data"]["text"]
 
 
 @pytest.mark.asyncio
@@ -1533,6 +1637,93 @@ async def test_load_effective_policy_prefers_frozen_session_snapshot_over_live_r
 
 
 @pytest.mark.asyncio
+async def test_load_effective_policy_merges_active_kb_dictionary_into_transcript_normalization(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-dictionary"
+
+    frozen_snapshot = {
+        "voice_mode": "stepfun_realtime",
+        "runtime_profile_id": "profile-dict",
+        "model_name": "step-audio-2",
+        "voice_name": "qingchunshaonv",
+        "temperature": 0.7,
+        "input_audio_format": "pcm16",
+        "output_audio_format": "pcm16",
+        "output_sample_rate": 24000,
+        "instructions": "dictionary merge instructions",
+        "instruction_contract_hash": "hash-dictionary",
+        "knowledge_base_ids": ["kb-dict-1"],
+        "tool_policy": {
+            "transcript_normalization_enabled": True,
+            "transcript_normalization_lexicon": [],
+        },
+    }
+    session_obj = SimpleNamespace(
+        session_id="session-dictionary",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        user_id="user-1",
+        voice_policy_snapshot=frozen_snapshot,
+        voice_mode="stepfun_realtime",
+        voice_runtime_profile_id="profile-dict",
+    )
+
+    class DummyResult:
+        def scalar_one_or_none(self):
+            return session_obj
+
+    class DummyDb:
+        def __init__(self):
+            self.commit = AsyncMock()
+
+        async def execute(self, _stmt):
+            return DummyResult()
+
+    dummy_db = DummyDb()
+
+    class DummyDbSessionContext:
+        async def __aenter__(self):
+            return dummy_db
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeKnowledgeService:
+        def __init__(self, _db):
+            pass
+
+        async def active_dictionary_lexicon(self, kb_ids):
+            assert kb_ids == ["kb-dict-1"]
+            return [
+                {
+                    "canonical_term": "石犀科技",
+                    "aliases": ["实习科技"],
+                    "entity_type": "organization",
+                    "confidence": 0.96,
+                    "scope": "knowledge_base:kb-dict-1",
+                }
+            ]
+
+    monkeypatch.setattr(
+        stepfun_module, "AsyncSessionLocal", lambda: DummyDbSessionContext()
+    )
+    monkeypatch.setattr(stepfun_module, "KnowledgeService", FakeKnowledgeService)
+
+    handler._refresh_sales_stage_runtime_config = AsyncMock()
+    handler._enforce_tool_policy_guardrails = MagicMock(return_value=False)
+    handler._ensure_knowledge_runtime_metrics = MagicMock()
+
+    await handler._load_effective_policy()
+
+    assert handler._effective_policy["tool_policy"]["transcript_normalization_enabled"] is True
+    assert handler._effective_policy["tool_policy"]["transcript_normalization_lexicon"][0]["canonical_term"] == "石犀科技"
+    assert handler._effective_policy["source"]["kb_dictionary_lexicon"] == "knowledge_base_active_dictionary"
+    dummy_db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_tool_search_internal_knowledge_includes_error_detail_on_failure(
     monkeypatch,
 ):
@@ -1921,7 +2112,7 @@ async def test_create_response_merges_base_contract_and_grounding_instructions()
 
 
 @pytest.mark.asyncio
-async def test_create_response_keeps_hard_no_hallucination_guardrail_when_bound_kb_retrieval_is_empty():
+async def test_create_response_blocks_product_overview_when_bound_kb_retrieval_is_empty():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
         "knowledge_base_ids": ["kb-1"],
@@ -1941,19 +2132,65 @@ async def test_create_response_keeps_hard_no_hallucination_guardrail_when_bound_
     )
     handler._send_status = AsyncMock()
     handler._send_upstream = AsyncMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler.websocket = MagicMock()
+    handler._persist_message = AsyncMock()
+    handler._sales_stage_lock = asyncio.Lock()
+    handler._feedback_context = None
 
     await handler._prepare_grounding_context("请你讲一下实习，介绍一下实习这个产品。")
     created = await handler._create_response(count_turn=True)
 
     assert created is True
-    payload = handler._send_upstream.await_args.args[0]
-    assert payload["type"] == "response.create"
-    instructions = payload["response"]["instructions"]
-    assert "当前内部知识库未检索到充分证据" in instructions
-    assert "请你讲一下实习，介绍一下实习这个产品。" in instructions
-    assert "以下回答不以内部知识库确认为准" in instructions
-    assert "一般性参考" in instructions
-    assert "不得将一般性知识表述为企业内部资料" in instructions
+    handler._send_upstream.assert_not_awaited()
+    handler.manager.send_json.assert_awaited_once()
+    blocked_payload = handler.manager.send_json.await_args.args[1]
+    assert blocked_payload["type"] == "tts_audio"
+    assert "内部知识库没有足够依据" in blocked_payload["data"]["text"]
+
+
+@pytest.mark.asyncio
+async def test_create_response_blocks_product_overview_when_bound_kb_retrieval_is_empty_even_without_strict_lock():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+            "require_kb_grounding": False,
+        },
+    }
+    handler._stepfun_instructions = "【系统总指令】你是企业产品专家。"
+    handler._tool_search_internal_knowledge = AsyncMock(
+        return_value={
+            "count": 0,
+            "results": [],
+            "message": "未命中",
+            "_answerability": {
+                "answerability": "insufficient",
+                "source_status": "miss",
+            },
+        }
+    )
+    handler._send_status = AsyncMock()
+    handler._send_upstream = AsyncMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler.websocket = MagicMock()
+    handler._persist_message = AsyncMock()
+    handler._sales_stage_lock = asyncio.Lock()
+    handler._feedback_context = None
+
+    await handler._prepare_grounding_context("帮我介绍一下石溪科技。")
+    created = await handler._create_response(count_turn=True)
+
+    assert created is True
+    handler._send_upstream.assert_not_awaited()
+    handler.manager.send_json.assert_awaited_once()
+    blocked_payload = handler.manager.send_json.await_args.args[1]
+    assert blocked_payload["type"] == "tts_audio"
+    assert "内部知识库没有足够依据" in blocked_payload["data"]["text"]
 
 
 @pytest.mark.asyncio
@@ -2150,7 +2387,7 @@ async def test_flush_active_response_falls_back_when_partial_mode_has_no_support
 
 
 @pytest.mark.asyncio
-async def test_prepare_grounding_context_blocks_product_overview_when_coach_mode_times_out():
+async def test_prepare_grounding_context_blocks_any_bound_kb_query_when_coach_mode_times_out():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
         "knowledge_base_ids": ["kb-1"],
@@ -2180,7 +2417,8 @@ async def test_prepare_grounding_context_blocks_product_overview_when_coach_mode
         )
 
     assert handler._pending_grounding_context == ""
-    assert "暂时无法基于内部资料确认" in handler._pending_blocked_response_text
+    assert "知识检索超时" in handler._pending_blocked_response_text
+    assert "这个问题" in handler._pending_blocked_response_text
 
 
 @pytest.mark.asyncio

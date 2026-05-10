@@ -620,6 +620,92 @@ async def test_env_fallback_policy_defaults_to_latest_realtime_model(
 
 
 @pytest.mark.asyncio
+async def test_resolve_effective_policy_defaults_strict_audit_when_persona_requires_kb_without_mode(
+    test_db: AsyncSession,
+):
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="严格知识库角色",
+        description="绑定知识库且显式要求 grounding",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是采购负责人。",
+        knowledge_base_ids=["kb-strict-1"],
+        persona_policy={
+            "system_prompt": "你是采购负责人。",
+            "knowledge_base_ids": ["kb-strict-1"],
+            "tool_policy": {"require_kb_grounding": True},
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="默认 Realtime 档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(persona_id=persona.id)
+
+    assert effective["tool_policy"]["require_kb_grounding"] is True
+    assert effective["tool_policy"]["kb_lock_mode"] == "strict_audit"
+    assert (
+        effective["source"]["kb_lock_mode_default"]
+        == "strict_when_kb_grounding_required"
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_preserves_explicit_coach_mode_when_persona_requires_kb(
+    test_db: AsyncSession,
+):
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="辅导模式角色",
+        description="显式选择 coach_mode",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是采购负责人。",
+        knowledge_base_ids=["kb-coach-1"],
+        persona_policy={
+            "system_prompt": "你是采购负责人。",
+            "knowledge_base_ids": ["kb-coach-1"],
+            "tool_policy": {
+                "require_kb_grounding": True,
+                "kb_lock_mode": "coach_mode",
+            },
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="默认 Realtime 档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(persona_id=persona.id)
+
+    assert effective["tool_policy"]["require_kb_grounding"] is True
+    assert effective["tool_policy"]["kb_lock_mode"] == "coach_mode"
+    assert "kb_lock_mode_default" not in effective["source"]
+
+
+@pytest.mark.asyncio
 async def test_create_profile_rejects_deprecated_instruction_template(
     test_db: AsyncSession,
 ):

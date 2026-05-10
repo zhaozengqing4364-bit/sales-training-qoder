@@ -24,6 +24,7 @@ PERSONA_OWNED_TOOL_POLICY_KEYS: set[str] = {
     "enforcement_level",
     "allow_web_search_without_kb",
     "require_kb_grounding",
+    "kb_lock_mode",
 }
 
 _BOOL_TOOL_POLICY_KEYS = {
@@ -39,6 +40,7 @@ _STRING_TOOL_POLICY_KEYS = {
     "retrieval_priority",
     "network_access_mode",
     "enforcement_level",
+    "kb_lock_mode",
 }
 
 _PERSONA_STRING_EXTENSION_KEYS = {

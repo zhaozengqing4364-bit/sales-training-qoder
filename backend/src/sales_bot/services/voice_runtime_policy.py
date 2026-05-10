@@ -834,9 +834,14 @@ class VoiceRuntimePolicyService:
         ):
             tool_policy["require_kb_grounding"] = True
             source["kb_lock_default"] = "auto_enabled_when_kb_bound"
-            if not has_explicit_kb_lock_mode:
-                tool_policy["kb_lock_mode"] = "strict_audit"
-                source["kb_lock_mode_default"] = "legacy_strict_default"
+
+        if (
+            has_bound_knowledge_base
+            and bool(tool_policy.get("require_kb_grounding", False))
+            and not has_explicit_kb_lock_mode
+        ):
+            tool_policy["kb_lock_mode"] = "strict_audit"
+            source["kb_lock_mode_default"] = "strict_when_kb_grounding_required"
 
         tool_policy = ToolPolicyResolver.apply_runtime_enforcement(
             tool_policy,
