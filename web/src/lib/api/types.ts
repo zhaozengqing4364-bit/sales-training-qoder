@@ -1114,6 +1114,29 @@ export interface AdminKnowledgeBase {
     governance_summary?: AssetGovernanceSummary | null;
 }
 
+export type AdminKnowledgeDictionaryEntryStatus = "draft" | "active" | "archived";
+
+export interface AdminKnowledgeDictionaryEntry {
+    id: string;
+    knowledge_base_id: string;
+    canonical_term: string;
+    aliases: string[];
+    term_type: string;
+    status: AdminKnowledgeDictionaryEntryStatus;
+    confidence: number;
+    source: string;
+    evidence_count: number;
+    notes?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AdminKnowledgeDictionaryGenerateResponse {
+    created: number;
+    skipped: number;
+    items: AdminKnowledgeDictionaryEntry[];
+}
+
 export interface KnowledgeBaseSettings {
     chunking: ChunkingSettings;
     semantic_cache: SemanticCacheSettings;

@@ -26,6 +26,8 @@ import {
     AdminAgentIndustryPackContract,
     AdminPersonaIndustryPackContract,
     AdminKnowledgeBase,
+    AdminKnowledgeDictionaryEntry,
+    AdminKnowledgeDictionaryGenerateResponse,
     AdminKnowledgeDocument,
     AdminKnowledgeDocumentPreviewResponse,
     AdminKnowledgeSearchResponse,
@@ -711,6 +713,27 @@ function normalizeAdminKnowledgeBase(input: unknown): AdminKnowledgeBase {
         created_at: toStringValue(raw.created_at),
         updated_at: toStringValue(raw.updated_at),
         governance_summary: normalizeAssetGovernanceSummary(raw.governance_summary),
+    };
+}
+
+function normalizeAdminKnowledgeDictionaryEntry(input: unknown): AdminKnowledgeDictionaryEntry {
+    const raw = toRecord(input);
+    const aliases = Array.isArray(raw.aliases)
+        ? raw.aliases.map((item) => toStringValue(item).trim()).filter(Boolean)
+        : [];
+    return {
+        id: toStringValue(raw.id),
+        knowledge_base_id: toStringValue(raw.knowledge_base_id),
+        canonical_term: toStringValue(raw.canonical_term),
+        aliases,
+        term_type: toStringValue(raw.term_type, "other"),
+        status: toStringValue(raw.status, "draft") as AdminKnowledgeDictionaryEntry["status"],
+        confidence: toNumberValue(raw.confidence, 95),
+        source: toStringValue(raw.source, "manual"),
+        evidence_count: toNumberValue(raw.evidence_count, 0),
+        notes: toNullableStringValue(raw.notes),
+        created_at: toStringValue(raw.created_at),
+        updated_at: toStringValue(raw.updated_at),
     };
 }
 
@@ -2887,6 +2910,55 @@ export const api = {
 
         deleteKnowledgeBase: async (id: string) => {
             return apiFetch<void>(`/admin/knowledge/${id}`, { method: "DELETE" });
+        },
+
+        getKnowledgeDictionaryEntries: async (kbId: string, status?: string) => {
+            const query = status ? `?status=${encodeURIComponent(status)}` : "";
+            const result = await apiFetch<{ items?: unknown[]; total?: unknown }>(
+                `/admin/knowledge/${kbId}/dictionary-entries${query}`,
+            );
+            return {
+                items: Array.isArray(result.items)
+                    ? result.items.map(normalizeAdminKnowledgeDictionaryEntry)
+                    : [],
+                total: toNumberValue(result.total, 0),
+            };
+        },
+
+        createKnowledgeDictionaryEntry: async (kbId: string, data: Partial<AdminKnowledgeDictionaryEntry>) => {
+            const result = await apiFetch<unknown>(`/admin/knowledge/${kbId}/dictionary-entries`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+            return normalizeAdminKnowledgeDictionaryEntry(result);
+        },
+
+        updateKnowledgeDictionaryEntry: async (kbId: string, entryId: string, data: Partial<AdminKnowledgeDictionaryEntry>) => {
+            const result = await apiFetch<unknown>(`/admin/knowledge/${kbId}/dictionary-entries/${entryId}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+            return normalizeAdminKnowledgeDictionaryEntry(result);
+        },
+
+        deleteKnowledgeDictionaryEntry: async (kbId: string, entryId: string) => {
+            return apiFetch<{ deleted: boolean }>(`/admin/knowledge/${kbId}/dictionary-entries/${entryId}`, {
+                method: "DELETE",
+            });
+        },
+
+        generateKnowledgeDictionaryEntries: async (kbId: string, limit = 30): Promise<AdminKnowledgeDictionaryGenerateResponse> => {
+            const result = await apiFetch<{ created?: unknown; skipped?: unknown; items?: unknown[] }>(
+                `/admin/knowledge/${kbId}/dictionary-entries/generate?limit=${limit}`,
+                { method: "POST" },
+            );
+            return {
+                created: toNumberValue(result.created, 0),
+                skipped: toNumberValue(result.skipped, 0),
+                items: Array.isArray(result.items)
+                    ? result.items.map(normalizeAdminKnowledgeDictionaryEntry)
+                    : [],
+            };
         },
 
         // ── RAG Profile Management ──

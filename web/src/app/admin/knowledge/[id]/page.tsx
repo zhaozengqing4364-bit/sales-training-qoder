@@ -7,12 +7,14 @@ import Link from "next/link";
 import {
     AlertCircle,
     ArrowLeft,
+    BookOpen,
     CheckCircle,
     Clock,
     Database,
     Eye,
     FileText,
     Loader2,
+    Plus,
     RefreshCcw,
     RotateCcw,
     Search,
@@ -26,6 +28,7 @@ import { KnowledgeAnswerConsole } from "@/components/admin/knowledge-answer/know
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
     AdminKnowledgeBase,
+    AdminKnowledgeDictionaryEntry,
     AdminKnowledgeDocument,
     AdminKnowledgeSearchResult,
 } from "@/lib/api/types";
@@ -71,6 +74,18 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.R
         color: "bg-red-50 text-red-700 border-red-200",
         icon: <AlertCircle className="w-3 h-3" />,
     },
+};
+
+const dictionaryStatusLabels: Record<string, string> = {
+    draft: "草稿",
+    active: "已发布",
+    archived: "已归档",
+};
+
+const dictionaryStatusColors: Record<string, string> = {
+    draft: "bg-amber-50 text-amber-700 border-amber-100",
+    active: "bg-green-50 text-green-700 border-green-100",
+    archived: "bg-slate-50 text-slate-500 border-slate-100",
 };
 
 const formatFileSize = (bytes: number): string => {
@@ -177,6 +192,7 @@ export default function KnowledgeDetailPage() {
 
     const [kb, setKb] = useState<AdminKnowledgeBase | null>(null);
     const [docs, setDocs] = useState<AdminKnowledgeDocument[]>([]);
+    const [dictionaryEntries, setDictionaryEntries] = useState<AdminKnowledgeDictionaryEntry[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -197,6 +213,12 @@ export default function KnowledgeDetailPage() {
     const [searchMessage, setSearchMessage] = useState<string | null>(null);
     const [searchError, setSearchError] = useState<string | null>(null);
 
+    const [dictionaryForm, setDictionaryForm] = useState({ canonical_term: "", aliases: "", term_type: "other" });
+    const [editingDictionaryEntry, setEditingDictionaryEntry] = useState<AdminKnowledgeDictionaryEntry | null>(null);
+    const [isSavingDictionary, setIsSavingDictionary] = useState(false);
+    const [isGeneratingDictionary, setIsGeneratingDictionary] = useState(false);
+    const [dictionaryError, setDictionaryError] = useState<string | null>(null);
+
     // ── RAG Profile State ──
     const [ragProfiles, setRagProfiles] = useState<Array<{ id: string; name: string }>>([]);
     const [savingProfile, setSavingProfile] = useState(false);
@@ -212,12 +234,14 @@ export default function KnowledgeDetailPage() {
         setIsLoading(true);
         setError(null);
         try {
-            const [kbData, docsData] = await Promise.all([
+            const [kbData, docsData, dictionaryData] = await Promise.all([
                 api.admin.getKnowledgeBase(kbId),
                 api.admin.getKnowledgeBaseDocuments(kbId),
+                api.admin.getKnowledgeDictionaryEntries(kbId),
             ]);
             setKb(kbData);
             setDocs(docsData);
+            setDictionaryEntries(dictionaryData.items);
         } catch (err) {
             debug.error("Failed to load knowledge base:", err);
             setError(getApiErrorMessage(err));
@@ -533,6 +557,93 @@ export default function KnowledgeDetailPage() {
         }
     };
 
+    const parseDictionaryAliases = (value: string): string[] => value
+        .split(/[，,\n]/)
+        .map((item) => item.trim())
+        .filter((item, index, all) => item && all.indexOf(item) === index);
+
+    const resetDictionaryForm = () => {
+        setDictionaryForm({ canonical_term: "", aliases: "", term_type: "other" });
+        setEditingDictionaryEntry(null);
+    };
+
+    const handleSaveDictionaryEntry = async () => {
+        const canonicalTerm = dictionaryForm.canonical_term.trim();
+        if (!canonicalTerm) {
+            setDictionaryError("请输入标准词。");
+            return;
+        }
+        setIsSavingDictionary(true);
+        setDictionaryError(null);
+        try {
+            const payload = {
+                canonical_term: canonicalTerm,
+                aliases: parseDictionaryAliases(dictionaryForm.aliases),
+                term_type: dictionaryForm.term_type,
+            };
+            if (editingDictionaryEntry) {
+                await api.admin.updateKnowledgeDictionaryEntry(kbId, editingDictionaryEntry.id, payload);
+                toast.success("词典条目已更新。");
+            } else {
+                await api.admin.createKnowledgeDictionaryEntry(kbId, { ...payload, status: "draft" });
+                toast.success("词典草稿已创建。");
+            }
+            resetDictionaryForm();
+            await loadData();
+        } catch (err) {
+            setDictionaryError(getApiErrorMessage(err));
+        } finally {
+            setIsSavingDictionary(false);
+        }
+    };
+
+    const handleEditDictionaryEntry = (entry: AdminKnowledgeDictionaryEntry) => {
+        setEditingDictionaryEntry(entry);
+        setDictionaryForm({
+            canonical_term: entry.canonical_term,
+            aliases: entry.aliases.join("，"),
+            term_type: entry.term_type,
+        });
+        setDictionaryError(null);
+    };
+
+    const handleUpdateDictionaryStatus = async (entry: AdminKnowledgeDictionaryEntry, status: "active" | "archived") => {
+        try {
+            await api.admin.updateKnowledgeDictionaryEntry(kbId, entry.id, { status });
+            toast.success(status === "active" ? "词条已发布。" : "词条已归档。");
+            await loadData();
+        } catch (err) {
+            toast.error(getApiErrorMessage(err));
+        }
+    };
+
+    const handleDeleteDictionaryEntry = async (entry: AdminKnowledgeDictionaryEntry) => {
+        try {
+            await api.admin.deleteKnowledgeDictionaryEntry(kbId, entry.id);
+            toast.success("词典条目已删除。");
+            if (editingDictionaryEntry?.id === entry.id) {
+                resetDictionaryForm();
+            }
+            await loadData();
+        } catch (err) {
+            toast.error(getApiErrorMessage(err));
+        }
+    };
+
+    const handleGenerateDictionaryDrafts = async () => {
+        setIsGeneratingDictionary(true);
+        setDictionaryError(null);
+        try {
+            const result = await api.admin.generateKnowledgeDictionaryEntries(kbId, 30);
+            toast.success(`已生成 ${result.created} 个草稿，跳过 ${result.skipped} 个已有或低频候选。`);
+            await loadData();
+        } catch (err) {
+            setDictionaryError(getApiErrorMessage(err));
+        } finally {
+            setIsGeneratingDictionary(false);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
@@ -815,6 +926,113 @@ export default function KnowledgeDetailPage() {
                                 <p className="text-sm leading-6 text-slate-700 whitespace-pre-wrap text-pretty">
                                     {result.content}
                                 </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </GlassCard>
+
+
+            <GlassCard className="p-6 space-y-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <h2 className="font-bold text-slate-900">知识库词典</h2>
+                        <p className="text-sm text-slate-500">按当前知识库管理标准词与 ASR 误识别别名，发布后随绑定知识库参与检索归一化。</p>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => void handleGenerateDictionaryDrafts()}
+                        disabled={isGeneratingDictionary || readyDocuments.length === 0}
+                    >
+                        {isGeneratingDictionary ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 生成中</>
+                        ) : (
+                            <><BookOpen className="w-4 h-4 mr-2" /> 从文档生成草稿</>
+                        )}
+                    </Button>
+                </div>
+
+                <div className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 md:grid-cols-[1fr_1fr_10rem_auto] md:items-end">
+                    <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">标准词</label>
+                        <input
+                            value={dictionaryForm.canonical_term}
+                            onChange={(event) => setDictionaryForm((prev) => ({ ...prev, canonical_term: event.target.value }))}
+                            placeholder="例如：石犀科技"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">别名/误识别词</label>
+                        <input
+                            value={dictionaryForm.aliases}
+                            onChange={(event) => setDictionaryForm((prev) => ({ ...prev, aliases: event.target.value }))}
+                            placeholder="实习科技，石溪科技"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">类型</label>
+                        <select
+                            value={dictionaryForm.term_type}
+                            onChange={(event) => setDictionaryForm((prev) => ({ ...prev, term_type: event.target.value }))}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
+                        >
+                            <option value="other">其他</option>
+                            <option value="organization">组织</option>
+                            <option value="product">产品</option>
+                            <option value="feature">功能</option>
+                        </select>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button onClick={() => void handleSaveDictionaryEntry()} disabled={isSavingDictionary} className="rounded-full">
+                            {isSavingDictionary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
+                            {editingDictionaryEntry ? "保存" : "添加"}
+                        </Button>
+                        {editingDictionaryEntry && (
+                            <Button variant="outline" onClick={resetDictionaryForm} className="rounded-full">取消</Button>
+                        )}
+                    </div>
+                </div>
+
+                {dictionaryError && (
+                    <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {dictionaryError}
+                    </div>
+                )}
+
+                {dictionaryEntries.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+                        暂无词典条目。可从已就绪文档生成草稿，或手动添加标准词与误识别别名。
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {dictionaryEntries.map((entry) => (
+                            <div key={entry.id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white/80 p-4 md:flex-row md:items-center md:justify-between">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-semibold text-slate-900">{entry.canonical_term}</span>
+                                        <Badge className={`${dictionaryStatusColors[entry.status] || dictionaryStatusColors.draft} border`}>
+                                            {dictionaryStatusLabels[entry.status] || entry.status}
+                                        </Badge>
+                                        <span className="text-xs text-slate-400">{entry.term_type} · 来源 {entry.source}</span>
+                                    </div>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        别名：{entry.aliases.length > 0 ? entry.aliases.join("、") : "未配置"} · 证据次数 {entry.evidence_count}
+                                    </p>
+                                </div>
+                                <div className="flex gap-2 flex-wrap">
+                                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => handleEditDictionaryEntry(entry)}>编辑</Button>
+                                    {entry.status !== "active" && (
+                                        <Button size="sm" className="rounded-full" onClick={() => void handleUpdateDictionaryStatus(entry, "active")}>发布</Button>
+                                    )}
+                                    {entry.status !== "archived" && (
+                                        <Button variant="outline" size="sm" className="rounded-full" onClick={() => void handleUpdateDictionaryStatus(entry, "archived")}>归档</Button>
+                                    )}
+                                    <Button variant="ghost" size="sm" className="rounded-full text-red-600 hover:bg-red-50" onClick={() => void handleDeleteDictionaryEntry(entry)}>删除</Button>
+                                </div>
                             </div>
                         ))}
                     </div>

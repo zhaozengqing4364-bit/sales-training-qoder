@@ -15,6 +15,11 @@ const {
     getKnowledgeAnswerRunStepsMock,
     uploadDocumentMock,
     searchKnowledgeBaseMock,
+    getKnowledgeDictionaryEntriesMock,
+    createKnowledgeDictionaryEntryMock,
+    updateKnowledgeDictionaryEntryMock,
+    deleteKnowledgeDictionaryEntryMock,
+    generateKnowledgeDictionaryEntriesMock,
     reprocessKnowledgeDocumentMock,
     successToastMock,
     errorToastMock,
@@ -30,6 +35,11 @@ const {
     getKnowledgeAnswerRunStepsMock: vi.fn(),
     uploadDocumentMock: vi.fn(),
     searchKnowledgeBaseMock: vi.fn(),
+    getKnowledgeDictionaryEntriesMock: vi.fn(),
+    createKnowledgeDictionaryEntryMock: vi.fn(),
+    updateKnowledgeDictionaryEntryMock: vi.fn(),
+    deleteKnowledgeDictionaryEntryMock: vi.fn(),
+    generateKnowledgeDictionaryEntriesMock: vi.fn(),
     reprocessKnowledgeDocumentMock: vi.fn(),
     successToastMock: vi.fn(),
     errorToastMock: vi.fn(),
@@ -79,6 +89,11 @@ vi.mock("@/lib/api/client", async () => {
                 getKnowledgeAnswerRunSteps: getKnowledgeAnswerRunStepsMock,
                 uploadDocument: uploadDocumentMock,
                 searchKnowledgeBase: searchKnowledgeBaseMock,
+                getKnowledgeDictionaryEntries: getKnowledgeDictionaryEntriesMock,
+                createKnowledgeDictionaryEntry: createKnowledgeDictionaryEntryMock,
+                updateKnowledgeDictionaryEntry: updateKnowledgeDictionaryEntryMock,
+                deleteKnowledgeDictionaryEntry: deleteKnowledgeDictionaryEntryMock,
+                generateKnowledgeDictionaryEntries: generateKnowledgeDictionaryEntriesMock,
             },
             adminTools: {
                 ...actual.api.adminTools,
@@ -101,6 +116,11 @@ describe("KnowledgeDetailPage", () => {
         getKnowledgeAnswerRunStepsMock.mockReset();
         uploadDocumentMock.mockReset();
         searchKnowledgeBaseMock.mockReset();
+        getKnowledgeDictionaryEntriesMock.mockReset();
+        createKnowledgeDictionaryEntryMock.mockReset();
+        updateKnowledgeDictionaryEntryMock.mockReset();
+        deleteKnowledgeDictionaryEntryMock.mockReset();
+        generateKnowledgeDictionaryEntriesMock.mockReset();
         reprocessKnowledgeDocumentMock.mockReset();
         successToastMock.mockReset();
         errorToastMock.mockReset();
@@ -138,6 +158,29 @@ describe("KnowledgeDetailPage", () => {
                 created_at: "2026-03-23T00:00:00Z",
             },
         ]);
+
+        getKnowledgeDictionaryEntriesMock.mockResolvedValue({
+            items: [
+                {
+                    id: "dict-1",
+                    knowledge_base_id: "kb-1",
+                    canonical_term: "石犀科技",
+                    aliases: ["实习科技"],
+                    term_type: "organization",
+                    status: "draft",
+                    confidence: 96,
+                    source: "manual",
+                    evidence_count: 2,
+                    created_at: "2026-03-23T00:00:00Z",
+                    updated_at: "2026-03-23T00:00:00Z",
+                },
+            ],
+            total: 1,
+        });
+        createKnowledgeDictionaryEntryMock.mockResolvedValue({ id: "dict-2" });
+        updateKnowledgeDictionaryEntryMock.mockResolvedValue({ id: "dict-1" });
+        deleteKnowledgeDictionaryEntryMock.mockResolvedValue({ deleted: true });
+        generateKnowledgeDictionaryEntriesMock.mockResolvedValue({ created: 1, skipped: 0, items: [] });
 
         getKnowledgeAnswerAdminConfigMock.mockResolvedValue({
             active_version: {
@@ -315,6 +358,47 @@ describe("KnowledgeDetailPage", () => {
             expect(uploadDocumentMock).toHaveBeenCalledTimes(1);
         });
         expect(uploadDocumentMock).toHaveBeenCalledWith("kb-1", expect.any(FormData));
+    });
+
+    it("manages knowledge dictionary entries from the KB detail page", async () => {
+        render(<KnowledgeDetailPage />);
+
+        await screen.findByText("知识库词典");
+        expect(screen.getByText("石犀科技")).toBeTruthy();
+        expect(screen.getByText(/实习科技/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: /从文档生成草稿/i }));
+        await waitFor(() => {
+            expect(generateKnowledgeDictionaryEntriesMock).toHaveBeenCalledWith("kb-1", 30);
+        });
+
+        fireEvent.change(screen.getByPlaceholderText("例如：石犀科技"), {
+            target: { value: "销售演练" },
+        });
+        fireEvent.change(screen.getByPlaceholderText("实习科技，石溪科技"), {
+            target: { value: "销售训练,销讲演练" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /添加/i }));
+
+        await waitFor(() => {
+            expect(createKnowledgeDictionaryEntryMock).toHaveBeenCalledWith(
+                "kb-1",
+                expect.objectContaining({
+                    canonical_term: "销售演练",
+                    aliases: ["销售训练", "销讲演练"],
+                    status: "draft",
+                }),
+            );
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "发布" }));
+        await waitFor(() => {
+            expect(updateKnowledgeDictionaryEntryMock).toHaveBeenCalledWith(
+                "kb-1",
+                "dict-1",
+                { status: "active" },
+            );
+        });
     });
 
     it("runs batch uploads through a three-file queue and keeps per-file failures visible", async () => {
