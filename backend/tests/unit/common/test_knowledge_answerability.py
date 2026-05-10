@@ -165,6 +165,49 @@ class TestKnowledgeAnswerabilityEvaluator:
         assert result.coverage["required_ratio"] == pytest.approx(0.0)
         assert result.coverage["overall_ratio"] == pytest.approx(1 / 3)
 
+    def test_marks_insufficient_when_slots_exist_but_evidence_does_not_support_query_terms(self):
+        evaluator = KnowledgeAnswerabilityEvaluator(
+            answerability_profiles={
+                "product_overview": KnowledgeAnswerabilityProfileConfig(
+                    profile_key="product_overview",
+                    required_slots=["definition", "capability"],
+                    optional_slots=["use_case"],
+                    sufficient_threshold=1.0,
+                    partial_threshold=0.5,
+                )
+            }
+        )
+
+        result = evaluator.evaluate(
+            profile_key="product_overview",
+            rows=[
+                {
+                    "document_title": "石犀科技产品手册",
+                    "snippet": "石犀科技是一家智慧城市解决方案提供商。",
+                    "slot_hits": ["definition", "capability", "use_case"],
+                }
+            ],
+            execution_result=KnowledgeHaystackExecutionResult(
+                rows=[],
+                executed_steps=[
+                    KnowledgeExecutedQueryStep(
+                        query="介绍一下实习成绩",
+                        stage="primary",
+                        profile_key="product_overview",
+                        status="hit",
+                        hit_count=1,
+                        retrieval_modes=["hybrid"],
+                    )
+                ],
+                search_failures=[],
+                stopped_early=False,
+            ),
+        )
+
+        assert result.answerability == "insufficient"
+        assert result.audit["blocked_reason"] == "query_not_supported_by_evidence"
+        assert result.audit["evidence_supported"] is False
+
     def test_marks_blocked_when_retrieval_failed_before_any_slot_could_be_covered(self):
         evaluator = KnowledgeAnswerabilityEvaluator(
             answerability_profiles={
@@ -234,3 +277,34 @@ class TestKnowledgeAnswerabilityEvaluator:
         assert result.source_status == "ready"
         assert result.audit["mode"] == "count_fallback"
         assert result.audit["hit_count"] == 2
+
+    def test_count_fallback_marks_insufficient_when_hits_do_not_support_query_terms(self):
+        evaluator = KnowledgeAnswerabilityEvaluator(answerability_profiles={})
+
+        result = evaluator.evaluate(
+            profile_key="missing_profile",
+            rows=[
+                {"document_title": "石犀科技手册", "snippet": "石犀科技提供智慧城市服务。"},
+                {"document_title": "石犀科技能力", "snippet": "平台支持水务和城管场景。"},
+                {"document_title": "石犀科技案例", "snippet": "案例覆盖城市治理项目。"},
+            ],
+            execution_result=KnowledgeHaystackExecutionResult(
+                rows=[],
+                executed_steps=[
+                    KnowledgeExecutedQueryStep(
+                        query="介绍一下实习成绩",
+                        stage="primary",
+                        profile_key="missing_profile",
+                        status="hit",
+                        hit_count=3,
+                        retrieval_modes=["hybrid"],
+                    )
+                ],
+                search_failures=[],
+                stopped_early=False,
+            ),
+        )
+
+        assert result.answerability == "insufficient"
+        assert result.audit["mode"] == "count_fallback"
+        assert result.audit["evidence_supported"] is False

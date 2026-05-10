@@ -207,6 +207,158 @@ def test_engine_answer_runs_full_orchestration_and_persists_audit(
     assert persisted_run.retrieval_summary_json["resolved_query"] == "请介绍一下石犀科技"
 
 
+def test_engine_blocks_when_retrieved_rows_do_not_support_user_query_terms(
+    db_session: Session,
+    practice_session: PracticeSession,
+):
+    _seed_runtime_config(db_session)
+    version_id = db_session.query(db_models.KnowledgeConfigVersion.id).scalar()
+    db_session.add(
+        db_models.KnowledgeIntentRule(
+            config_version_id=version_id,
+            intent_key="internship_score_intro",
+            priority=20,
+            match_type="regex",
+            pattern="介绍一下.*实习成绩",
+            profile_key="product_overview",
+        )
+    )
+    db_session.commit()
+    captured_queries: list[str] = []
+
+    async def search_multiple(**kwargs):
+        captured_queries.append(str(kwargs["query"]))
+        return Result.ok(
+            [
+                {
+                    "knowledge_base_id": "kb-1",
+                    "knowledge_base_name": "产品知识库",
+                    "document_id": "doc-1",
+                    "chunk_id": "chunk-1",
+                    "document_title": "石犀科技产品手册",
+                    "content": "石犀科技是成都本土的智慧城市解决方案提供商。",
+                    "snippet": "石犀科技是成都本土的智慧城市解决方案提供商。",
+                    "score": 0.92,
+                    "retrieval_mode": "hybrid",
+                    "slot_hits": ["definition", "capability", "use_case"],
+                    "metadata": {"doc_type": "product", "section": "overview"},
+                }
+            ]
+        )
+
+    engine = KnowledgeAnswerEngine(
+        config_repository=KnowledgeAnswerConfigRepository(db_session),
+        entity_resolver=KnowledgeEntityResolver(),
+        intent_classifier_factory=KnowledgeIntentClassifier,
+        retrieval_planner_factory=KnowledgeRetrievalPlanner,
+        haystack_adapter=KnowledgeHaystackAdapter(search_multiple=search_multiple),
+        reranker=KnowledgeReranker(),
+        answerability_evaluator_factory=KnowledgeAnswerabilityEvaluator,
+        assembler=KnowledgeAnswerAssembler(),
+        audit_repository=KnowledgeAnswerAuditRepository(db_session),
+    )
+
+    result = engine.answer(
+        KnowledgeAnswerRequest(
+            query="介绍一下实习成绩",
+            session_id=str(practice_session.session_id),
+            scenario_type="sales",
+            knowledge_base_ids=["kb-1"],
+            entrypoint="stepfun_realtime",
+            runtime_options={
+                "top_k": 3,
+                "similarity_threshold": 0.65,
+                "enable_hybrid": True,
+                "keyword_candidate_limit": 32,
+                "embedding_timeout_ms": 0,
+                "enable_rerank": True,
+                "rerank_top_k": 8,
+            },
+        )
+    )
+
+    assert captured_queries == ["介绍一下实习成绩"]
+    assert result.answerability == "insufficient"
+    assert result.final_text is None
+    assert result.blocked_text is not None
+    assert result.retrieval_summary["blocked_reason"] == "query_not_supported_by_evidence"
+
+
+def test_engine_accepts_evidence_supported_by_runtime_asr_lexicon(
+    db_session: Session,
+    practice_session: PracticeSession,
+):
+    _seed_runtime_config(db_session)
+    captured_queries: list[str] = []
+
+    async def search_multiple(**kwargs):
+        captured_queries.append(str(kwargs["query"]))
+        return Result.ok(
+            [
+                {
+                    "knowledge_base_id": "kb-1",
+                    "knowledge_base_name": "产品知识库",
+                    "document_id": "doc-1",
+                    "chunk_id": "chunk-1",
+                    "document_title": "石犀科技产品手册",
+                    "content": "石犀科技是一家销售训练平台，支持企业知识驱动演练。",
+                    "snippet": "石犀科技是一家销售训练平台。",
+                    "score": 0.92,
+                    "retrieval_mode": "hybrid",
+                    "slot_hits": ["definition", "capability", "use_case"],
+                    "metadata": {"doc_type": "product", "section": "overview"},
+                }
+            ]
+        )
+
+    engine = KnowledgeAnswerEngine(
+        config_repository=KnowledgeAnswerConfigRepository(db_session),
+        entity_resolver=KnowledgeEntityResolver(),
+        intent_classifier_factory=KnowledgeIntentClassifier,
+        retrieval_planner_factory=KnowledgeRetrievalPlanner,
+        haystack_adapter=KnowledgeHaystackAdapter(search_multiple=search_multiple),
+        reranker=KnowledgeReranker(),
+        answerability_evaluator_factory=KnowledgeAnswerabilityEvaluator,
+        assembler=KnowledgeAnswerAssembler(),
+        audit_repository=KnowledgeAnswerAuditRepository(db_session),
+    )
+
+    result = engine.answer(
+        KnowledgeAnswerRequest(
+            query="请介绍一下实习科技",
+            session_id=str(practice_session.session_id),
+            scenario_type="sales",
+            knowledge_base_ids=["kb-1"],
+            entrypoint="stepfun_realtime",
+            runtime_options={
+                "top_k": 3,
+                "similarity_threshold": 0.65,
+                "enable_hybrid": True,
+                "keyword_candidate_limit": 32,
+                "embedding_timeout_ms": 0,
+                "enable_rerank": True,
+                "rerank_top_k": 8,
+                "tool_policy": {
+                    "transcript_normalization_lexicon": [
+                        {
+                            "canonical_term": "石犀",
+                            "aliases": ["实习"],
+                        }
+                    ]
+                },
+            },
+        )
+    )
+
+    assert captured_queries == ["请介绍一下石犀科技"]
+    assert result.answerability == "sufficient"
+    assert result.final_text == "根据知识库证据：\n1. 石犀科技是一家销售训练平台。"
+    assert result.blocked_text is None
+    assert result.retrieval_summary["resolved_query"] == "请介绍一下石犀科技"
+    assert result.retrieval_summary["entity_resolution"]["matches"][0]["matched_text"] == "实习"
+    assert result.retrieval_summary["entity_resolution"]["matches"][0]["match_source"] == "alias"
+
+
 def test_engine_answer_returns_placeholder_contract_with_observability_fields_when_no_config(
     db_session: Session,
 ):

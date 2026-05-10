@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from common.knowledge.retrieval_helpers import (
+    build_answerability_assessment,
+    build_rewritten_queries,
+)
 from sales_bot.websocket.components.stepfun_helpers import (
     ensure_knowledge_runtime_metrics,
     update_knowledge_runtime_metrics,
@@ -42,6 +46,39 @@ def test_resolve_retrieval_params_with_defaults_and_invalid_values():
     assert enable_hybrid is True
     assert keyword_limit == 32
 
+
+def test_build_rewritten_queries_expands_configured_asr_aliases_without_hardcoding():
+    variants = build_rewritten_queries(
+        "帮我介绍一下石溪科技",
+        tool_policy={
+            "transcript_normalization_lexicon": [
+                {
+                    "canonical_term": "石犀",
+                    "aliases": ["石溪", "实习"],
+                }
+            ]
+        },
+    )
+
+    assert variants[0] == "帮我介绍一下石溪科技"
+    assert "帮我介绍一下石犀科技" in variants
+
+
+def test_build_rewritten_queries_expands_canonical_to_alias_variants_for_legacy_docs():
+    variants = build_rewritten_queries(
+        "石犀科技报价",
+        tool_policy={
+            "transcript_normalization_lexicon": [
+                {
+                    "canonical_term": "石犀",
+                    "aliases": ["石溪"],
+                }
+            ]
+        },
+    )
+
+    assert "石溪科技报价" in variants
+
     top_k, threshold, enable_hybrid, keyword_limit = resolve_retrieval_params(
         {"top_k": "x"},
         {
@@ -54,6 +91,71 @@ def test_resolve_retrieval_params_with_defaults_and_invalid_values():
     assert threshold == 0.58
     assert enable_hybrid is False
     assert keyword_limit == 32
+
+
+def test_answerability_blocks_hits_that_do_not_support_query_terms():
+    assessment = build_answerability_assessment(
+        query="介绍一下实习成绩",
+        results=[
+            {
+                "knowledge_base_id": "kb-1",
+                "document_title": "石犀科技产品手册",
+                "snippet": "石犀科技是成都本土的智慧城市解决方案提供商。",
+                "score": 0.93,
+            },
+            {
+                "knowledge_base_id": "kb-1",
+                "document_title": "石犀科技能力说明",
+                "snippet": "石犀科技提供销售训练、角色扮演和复盘评分能力。",
+                "score": 0.9,
+            }
+        ],
+        source_status="hit",
+        strict_kb_mode=True,
+        rewritten_queries=["介绍一下实习成绩"],
+    )
+
+    assert assessment["answerability"] == "insufficient"
+    assert assessment["evidence_supported"] is False
+
+
+def test_answerability_accepts_evidence_supported_by_configured_asr_alias_variant():
+    rewritten_queries = build_rewritten_queries(
+        "介绍一下实习科技",
+        tool_policy={
+            "transcript_normalization_lexicon": [
+                {
+                    "canonical_term": "石犀",
+                    "aliases": ["实习"],
+                }
+            ]
+        },
+    )
+
+    assessment = build_answerability_assessment(
+        query="介绍一下实习科技",
+        results=[
+            {
+                "knowledge_base_id": "kb-1",
+                "document_title": "石犀科技产品手册",
+                "snippet": "石犀科技是成都本土的智慧城市解决方案提供商。",
+                "score": 0.93,
+            },
+            {
+                "knowledge_base_id": "kb-1",
+                "document_title": "石犀科技能力说明",
+                "snippet": "石犀科技提供销售训练、角色扮演和复盘评分能力。",
+                "score": 0.9,
+            }
+        ],
+        source_status="hit",
+        strict_kb_mode=True,
+        rewritten_queries=rewritten_queries,
+    )
+
+    assert "介绍一下石犀科技" in rewritten_queries
+    assert assessment["evidence_supported"] is True
+    assert assessment["answerability"] == "sufficient"
 
 
 def test_resolve_retrieval_params_applies_entity_query_adaptation():
