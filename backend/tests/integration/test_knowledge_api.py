@@ -302,6 +302,57 @@ class TestKnowledgeDocumentAPI:
         assert response.status_code == 404
 
 
+class TestKnowledgeDictionaryAPI:
+    async def test_dictionary_entry_crud_and_publish_flow(
+        self, async_client, auth_headers, sample_kb_data
+    ):
+        create_response = await async_client.post(
+            "/api/v1/admin/knowledge", json=sample_kb_data, headers=auth_headers
+        )
+        kb_id = create_response.json()["data"]["id"]
+
+        response = await async_client.post(
+            f"/api/v1/admin/knowledge/{kb_id}/dictionary-entries",
+            json={
+                "canonical_term": "石犀科技",
+                "aliases": ["实习科技", "石溪科技"],
+                "term_type": "organization",
+                "status": "draft",
+                "confidence": 96,
+                "notes": "ASR 易误识别词",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 201
+        created = response.json()["data"]
+        assert created["knowledge_base_id"] == kb_id
+        assert created["aliases"] == ["实习科技", "石溪科技"]
+        assert created["status"] == "draft"
+
+        update_response = await async_client.put(
+            f"/api/v1/admin/knowledge/{kb_id}/dictionary-entries/{created['id']}",
+            json={"status": "active"},
+            headers=auth_headers,
+        )
+        assert update_response.status_code == 200
+        assert update_response.json()["data"]["status"] == "active"
+
+        list_response = await async_client.get(
+            f"/api/v1/admin/knowledge/{kb_id}/dictionary-entries?status=active",
+            headers=auth_headers,
+        )
+        assert list_response.status_code == 200
+        assert list_response.json()["data"]["total"] == 1
+
+        delete_response = await async_client.delete(
+            f"/api/v1/admin/knowledge/{kb_id}/dictionary-entries/{created['id']}",
+            headers=auth_headers,
+        )
+        assert delete_response.status_code == 200
+        assert delete_response.json()["data"]["deleted"] is True
+
+
 class TestKnowledgeSearchAPI:
     """Tests for knowledge search endpoint parity (admin + internal)."""
 

@@ -43,11 +43,14 @@ from .models import DocumentStatus, KnowledgeDocument
 from .processor import get_document_processor
 from .schemas import (
     CreateKnowledgeBaseRequest,
+    CreateKnowledgeDictionaryEntryRequest,
     DocumentChunk,
     DocumentPreviewResponse,
     KnowledgeBaseCreateResponse,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
+    KnowledgeDictionaryEntryListResponse,
+    KnowledgeDictionaryGenerateResponse,
     KnowledgeDocumentListResponse,
     KnowledgeDocumentResponse,
     KnowledgeDocumentUploadResponse,
@@ -56,6 +59,7 @@ from .schemas import (
     SearchResult,
     SearchResultMetadata,
     UpdateKnowledgeBaseRequest,
+    UpdateKnowledgeDictionaryEntryRequest,
 )
 from .service import KnowledgeService
 from .vector_store import get_knowledge_vector_store
@@ -111,6 +115,15 @@ def _search_failure_status_code(detail: str | None) -> int:
     if "[KNOWLEDGE_SEARCH_UNAVAILABLE]" in normalized_detail:
         return 503
     return 400
+
+
+def _dictionary_failure_status_code(detail: str | None) -> int:
+    normalized_detail = str(detail or "").strip()
+    if "[KNOWLEDGE_DICTIONARY_ENTRY_DUPLICATE]" in normalized_detail:
+        return 409
+    if "[KNOWLEDGE_DICTIONARY_ENTRY_INVALID]" in normalized_detail:
+        return 400
+    return 404
 
 
 async def process_document_background(
@@ -311,6 +324,7 @@ async def create_knowledge_base(
         raise HTTPException(status_code=400, detail=result.fallback)
 
     kb = result.value
+    assert kb is not None
     commit_error = await _commit_or_error(db)
     if commit_error is not None:
         return commit_error
@@ -413,11 +427,12 @@ async def list_knowledge_bases(
             if document.status == DocumentStatus.FAILED.value
         ]
         if failed_documents:
+            failed_at_values = [
+                RuntimeStatusService._coerce_datetime(document.created_at)
+                for document in failed_documents
+            ]
             latest_failed_at = max(
-                (
-                    RuntimeStatusService._coerce_datetime(document.created_at)
-                    for document in failed_documents
-                ),
+                (value for value in failed_at_values if value is not None),
                 default=None,
             )
             extra_anomalies.append(
@@ -438,11 +453,12 @@ async def list_knowledge_bases(
             in {DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value}
         ]
         if processing_documents:
+            processing_at_values = [
+                RuntimeStatusService._coerce_datetime(document.created_at)
+                for document in processing_documents
+            ]
             latest_processing_at = max(
-                (
-                    RuntimeStatusService._coerce_datetime(document.created_at)
-                    for document in processing_documents
-                ),
+                (value for value in processing_at_values if value is not None),
                 default=None,
             )
             extra_anomalies.append(
@@ -571,10 +587,118 @@ async def assign_rag_profile(
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
     kb = result.value
+    assert kb is not None
     kb.rag_profile_id = rag_profile_id
     await db.commit()
 
     return {"success": True, "data": {"rag_profile_id": rag_profile_id}}
+
+
+# ========== Dictionary Endpoints ==========
+
+
+@admin_router.get("/{kb_id}/dictionary-entries", response_model=dict)
+async def list_dictionary_entries(
+    kb_id: str,
+    status: str | None = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    service = KnowledgeService(db)
+    result = await service.list_dictionary_entries(kb_id, status=status)
+    if not result.is_success or result.value is None:
+        raise HTTPException(status_code=404, detail=result.fallback)
+    items, total = result.value
+    return {
+        "success": True,
+        "data": KnowledgeDictionaryEntryListResponse(
+            items=items,
+            total=total,
+        ).model_dump(),
+    }
+
+
+@admin_router.post("/{kb_id}/dictionary-entries", response_model=dict, status_code=201)
+async def create_dictionary_entry(
+    kb_id: str,
+    request: CreateKnowledgeDictionaryEntryRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    service = KnowledgeService(db)
+    result = await service.create_dictionary_entry(kb_id, request)
+    if not result.is_success:
+        raise HTTPException(
+            status_code=_dictionary_failure_status_code(result.fallback),
+            detail=result.fallback,
+        )
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
+    return {"success": True, "data": result.value.model_dump() if result.value else None}
+
+
+@admin_router.put("/{kb_id}/dictionary-entries/{entry_id}", response_model=dict)
+async def update_dictionary_entry(
+    kb_id: str,
+    entry_id: str,
+    request: UpdateKnowledgeDictionaryEntryRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    service = KnowledgeService(db)
+    result = await service.update_dictionary_entry(kb_id, entry_id, request)
+    if not result.is_success:
+        raise HTTPException(
+            status_code=_dictionary_failure_status_code(result.fallback),
+            detail=result.fallback,
+        )
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
+    return {"success": True, "data": result.value.model_dump() if result.value else None}
+
+
+@admin_router.delete("/{kb_id}/dictionary-entries/{entry_id}", response_model=dict)
+async def delete_dictionary_entry(
+    kb_id: str,
+    entry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    service = KnowledgeService(db)
+    result = await service.delete_dictionary_entry(kb_id, entry_id)
+    if not result.is_success:
+        raise HTTPException(status_code=404, detail=result.fallback)
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
+    return {"success": True, "data": {"deleted": True}}
+
+
+@admin_router.post("/{kb_id}/dictionary-entries/generate", response_model=dict)
+async def generate_dictionary_entries(
+    kb_id: str,
+    limit: int = Query(30, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    service = KnowledgeService(db)
+    result = await service.generate_dictionary_drafts(kb_id, limit=limit)
+    if not result.is_success or result.value is None:
+        raise HTTPException(status_code=404, detail=result.fallback)
+    created, skipped = result.value
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
+    return {
+        "success": True,
+        "data": KnowledgeDictionaryGenerateResponse(
+            created=len(created),
+            skipped=skipped,
+            items=created,
+        ).model_dump(),
+    }
 
 
 # ========== Document Endpoints ==========
@@ -621,6 +745,7 @@ async def upload_document(
         raise HTTPException(status_code=404, detail="[KNOWLEDGE_BASE_NOT_FOUND]")
 
     kb = kb_result.value
+    assert kb is not None
     content_hash = hashlib.sha256(content).hexdigest()
 
     # Deduplicate by content hash in same KB.
@@ -681,6 +806,7 @@ async def upload_document(
         raise HTTPException(status_code=400, detail=result.fallback)
 
     doc = result.value
+    assert doc is not None
     try:
         await db.commit()
     except Exception as e:
@@ -767,7 +893,7 @@ async def list_documents(
     service = KnowledgeService(db)
     result = await service.list_documents(kb_id, page, page_size)
 
-    if not result.is_success:
+    if not result.is_success or result.value is None:
         raise HTTPException(status_code=404, detail=result.fallback)
 
     items, total = result.value
@@ -814,8 +940,9 @@ async def delete_document(
     doc_result = await service.get_document(kb_id, doc_id)
     if doc_result.is_success:
         doc = doc_result.value
-        storage = get_document_storage_service()
-        await storage.delete_document(kb_id, doc_id, doc.file_type)
+        if doc is not None:
+            storage = get_document_storage_service()
+            await storage.delete_document(kb_id, doc_id, doc.file_type)
 
     result = await service.delete_document(kb_id, doc_id)
 
@@ -841,7 +968,7 @@ async def preview_document(
     service = KnowledgeService(db)
     result = await service.get_document_chunks(kb_id, doc_id, page, page_size)
 
-    if not result.is_success:
+    if not result.is_success or result.value is None:
         raise HTTPException(status_code=404, detail=result.fallback)
 
     chunks, total = result.value
@@ -956,6 +1083,7 @@ async def reprocess_document(
         raise HTTPException(status_code=404, detail=doc_result.fallback)
 
     doc = doc_result.value
+    assert doc is not None
 
     # Only allow reprocessing of failed or pending documents
     if doc.status not in (DocumentStatus.FAILED.value, DocumentStatus.PENDING.value):
@@ -970,6 +1098,7 @@ async def reprocess_document(
         raise HTTPException(status_code=404, detail="[KNOWLEDGE_BASE_NOT_FOUND]")
 
     kb = kb_result.value
+    assert kb is not None
 
     # Delete existing vectors if any
     vector_store = get_knowledge_vector_store()

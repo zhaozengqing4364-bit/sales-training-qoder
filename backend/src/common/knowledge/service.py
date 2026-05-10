@@ -15,10 +15,12 @@ from __future__ import annotations
 import asyncio
 import builtins
 import inspect
+import json
 import os
 import re
 import time
 import uuid
+from collections import Counter
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from hashlib import md5
@@ -40,14 +42,19 @@ from .models import (
     DocumentStatus,
     KnowledgeBase,
     KnowledgeBaseStatus,
+    KnowledgeDictionaryEntry,
+    KnowledgeDictionaryEntryStatus,
     KnowledgeDocument,
 )
 from .processor import get_document_processor
 from .schemas import (
     CreateKnowledgeBaseRequest,
+    CreateKnowledgeDictionaryEntryRequest,
     KnowledgeBaseListItem,
+    KnowledgeDictionaryEntryResponse,
     KnowledgeDocumentListItem,
     UpdateKnowledgeBaseRequest,
+    UpdateKnowledgeDictionaryEntryRequest,
 )
 from .vector_store import get_knowledge_vector_store
 
@@ -95,6 +102,31 @@ QUERY_STOPWORDS: set[str] = {
 
 VERSION_TOKEN_RE = re.compile(r"\bv?\d+(?:\.\d+){0,2}[a-z]?\b", re.IGNORECASE)
 SEARCH_TERM_RE = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]{2,12}")
+DICTIONARY_TERM_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9._-]{1,30}|[\u4e00-\u9fff]{2,12}")
+DICTIONARY_STOP_TERMS: set[str] = {
+    "我们",
+    "可以",
+    "这个",
+    "那个",
+    "进行",
+    "通过",
+    "支持",
+    "提供",
+    "用户",
+    "客户",
+    "系统",
+    "平台",
+    "产品",
+    "服务",
+    "功能",
+    "能力",
+    "方案",
+    "企业",
+    "知识",
+    "训练",
+    "介绍",
+    "使用",
+}
 
 
 def _resolve_cache_ttl_seconds(
@@ -414,6 +446,7 @@ class KnowledgeService:
 
         if not kb:
             return Result.fail("[KNOWLEDGE_BASE_NOT_FOUND]")
+        assert kb is not None
 
         return Result.ok(kb)
 
@@ -427,6 +460,7 @@ class KnowledgeService:
 
         if not kb:
             return Result.fail("[KNOWLEDGE_BASE_NOT_FOUND]")
+        assert kb is not None
 
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
@@ -449,6 +483,7 @@ class KnowledgeService:
 
         if not kb:
             return Result.fail("[KNOWLEDGE_BASE_NOT_FOUND]")
+        assert kb is not None
 
         # Check if referenced by Agent/Persona
         ref_check = await self._check_references(kb_id)
@@ -671,6 +706,257 @@ class KnowledgeService:
             return Result.fail("[DOCUMENT_NOT_FOUND]")
 
         return Result.ok(doc)
+
+    # ========== Knowledge Dictionary ==========
+
+    @staticmethod
+    def _parse_aliases_json(value: Any) -> builtins.list[str]:
+        if isinstance(value, list):
+            raw_aliases = value
+        else:
+            try:
+                raw_aliases = json.loads(str(value or "[]"))
+            except json.JSONDecodeError:
+                raw_aliases = []
+        aliases: builtins.list[str] = []
+        for item in raw_aliases if isinstance(raw_aliases, list) else []:
+            alias = str(item or "").strip()
+            if alias and alias not in aliases:
+                aliases.append(alias)
+        return aliases
+
+    @classmethod
+    def _dictionary_entry_response(
+        cls, entry: KnowledgeDictionaryEntry
+    ) -> KnowledgeDictionaryEntryResponse:
+        return KnowledgeDictionaryEntryResponse(
+            id=str(entry.id),
+            knowledge_base_id=str(entry.knowledge_base_id),
+            canonical_term=str(entry.canonical_term),
+            aliases=cls._parse_aliases_json(entry.aliases_json),
+            term_type=str(entry.term_type),
+            status=str(entry.status),
+            confidence=int(entry.confidence or 0),
+            source=str(entry.source),
+            evidence_count=int(entry.evidence_count or 0),
+            notes=entry.notes,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+        )
+
+    @staticmethod
+    def _dictionary_integrity_error_code(error: IntegrityError) -> str:
+        detail = str(error.orig if getattr(error, "orig", None) else error).lower()
+        if (
+            "uq_knowledge_dictionary_entry_kb_canonical" in detail
+            or "unique" in detail
+            or "duplicate" in detail
+        ):
+            return "[KNOWLEDGE_DICTIONARY_ENTRY_DUPLICATE]"
+        return "[KNOWLEDGE_DICTIONARY_ENTRY_INVALID]"
+
+    async def list_dictionary_entries(
+        self,
+        kb_id: str,
+        *,
+        status: str | None = None,
+    ) -> Result[tuple[builtins.list[KnowledgeDictionaryEntryResponse], int]]:
+        kb_result = await self.get_by_id(kb_id)
+        if not kb_result.is_success:
+            return Result.fail("[KNOWLEDGE_BASE_NOT_FOUND]")
+
+        stmt = select(KnowledgeDictionaryEntry).where(
+            KnowledgeDictionaryEntry.knowledge_base_id == kb_id
+        )
+        if status:
+            stmt = stmt.where(KnowledgeDictionaryEntry.status == status)
+        stmt = stmt.order_by(
+            KnowledgeDictionaryEntry.status.asc(),
+            KnowledgeDictionaryEntry.evidence_count.desc(),
+            KnowledgeDictionaryEntry.canonical_term.asc(),
+        )
+        rows = (await self.db.execute(stmt)).scalars().all()
+        items = [self._dictionary_entry_response(row) for row in rows]
+        return Result.ok((items, len(items)))
+
+    async def create_dictionary_entry(
+        self,
+        kb_id: str,
+        data: CreateKnowledgeDictionaryEntryRequest,
+        *,
+        source: str = "manual",
+        evidence_count: int = 0,
+    ) -> Result[KnowledgeDictionaryEntryResponse]:
+        kb_result = await self.get_by_id(kb_id)
+        if not kb_result.is_success:
+            return Result.fail("[KNOWLEDGE_BASE_NOT_FOUND]")
+        canonical_term = data.canonical_term.strip()
+        aliases = [alias for alias in data.aliases if alias != canonical_term]
+        try:
+            entry = KnowledgeDictionaryEntry(
+                knowledge_base_id=kb_id,
+                canonical_term=canonical_term,
+                aliases_json=json.dumps(aliases, ensure_ascii=False),
+                term_type=data.term_type.strip() or "other",
+                status=data.status,
+                confidence=data.confidence,
+                source=source,
+                evidence_count=max(0, int(evidence_count or 0)),
+                notes=data.notes,
+            )
+            self.db.add(entry)
+            await self.db.flush()
+            await self.db.refresh(entry)
+            return Result.ok(self._dictionary_entry_response(entry))
+        except IntegrityError as exc:
+            await self.db.rollback()
+            return Result.fail(self._dictionary_integrity_error_code(exc))
+
+    async def update_dictionary_entry(
+        self,
+        kb_id: str,
+        entry_id: str,
+        data: UpdateKnowledgeDictionaryEntryRequest,
+    ) -> Result[KnowledgeDictionaryEntryResponse]:
+        stmt = select(KnowledgeDictionaryEntry).where(
+            KnowledgeDictionaryEntry.id == entry_id,
+            KnowledgeDictionaryEntry.knowledge_base_id == kb_id,
+        )
+        entry = (await self.db.execute(stmt)).scalar_one_or_none()
+        if entry is None:
+            return Result.fail("[KNOWLEDGE_DICTIONARY_ENTRY_NOT_FOUND]")
+        update_data = data.model_dump(exclude_unset=True)
+        if "canonical_term" in update_data and update_data["canonical_term"] is not None:
+            entry.canonical_term = str(update_data["canonical_term"]).strip()
+        if "aliases" in update_data and update_data["aliases"] is not None:
+            aliases = [
+                alias
+                for alias in data.aliases or []
+                if alias != str(entry.canonical_term)
+            ]
+            entry.aliases_json = json.dumps(aliases, ensure_ascii=False)
+        for field_name in ("term_type", "status", "confidence", "notes"):
+            if field_name in update_data:
+                setattr(entry, field_name, update_data[field_name])
+        try:
+            await self.db.flush()
+            await self.db.refresh(entry)
+            return Result.ok(self._dictionary_entry_response(entry))
+        except IntegrityError as exc:
+            await self.db.rollback()
+            return Result.fail(self._dictionary_integrity_error_code(exc))
+
+    async def delete_dictionary_entry(self, kb_id: str, entry_id: str) -> Result[bool]:
+        stmt = select(KnowledgeDictionaryEntry).where(
+            KnowledgeDictionaryEntry.id == entry_id,
+            KnowledgeDictionaryEntry.knowledge_base_id == kb_id,
+        )
+        entry = (await self.db.execute(stmt)).scalar_one_or_none()
+        if entry is None:
+            return Result.fail("[KNOWLEDGE_DICTIONARY_ENTRY_NOT_FOUND]")
+        await self.db.delete(entry)
+        await self.db.flush()
+        return Result.ok(True)
+
+    async def active_dictionary_lexicon(
+        self, kb_ids: builtins.list[str]
+    ) -> builtins.list[dict[str, Any]]:
+        normalized_ids = [str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()]
+        if not normalized_ids:
+            return []
+        stmt = select(KnowledgeDictionaryEntry).where(
+            KnowledgeDictionaryEntry.knowledge_base_id.in_(normalized_ids),
+            KnowledgeDictionaryEntry.status == KnowledgeDictionaryEntryStatus.ACTIVE.value,
+        )
+        rows = (await self.db.execute(stmt)).scalars().all()
+        lexicon: builtins.list[dict[str, Any]] = []
+        for row in rows:
+            aliases = self._parse_aliases_json(row.aliases_json)
+            if not aliases:
+                continue
+            lexicon.append(
+                {
+                    "canonical_term": str(row.canonical_term),
+                    "aliases": aliases,
+                    "entity_type": str(row.term_type or "other"),
+                    "confidence": min(1.0, max(0.0, float(row.confidence or 0) / 100.0)),
+                    "scope": f"knowledge_base:{row.knowledge_base_id}",
+                }
+            )
+        return lexicon
+
+    @staticmethod
+    def _extract_dictionary_terms_from_text(text: str) -> Counter[str]:
+        counter: Counter[str] = Counter()
+        for match in DICTIONARY_TERM_RE.finditer(text):
+            term = match.group(0).strip()
+            if len(term) < 2 or term in DICTIONARY_STOP_TERMS:
+                continue
+            if len(set(term)) == 1:
+                continue
+            counter[term] += 1
+        return counter
+
+    async def generate_dictionary_drafts(
+        self,
+        kb_id: str,
+        *,
+        limit: int = 30,
+    ) -> Result[tuple[builtins.list[KnowledgeDictionaryEntryResponse], int]]:
+        kb_result = await self.get_by_id(kb_id)
+        if not kb_result.is_success:
+            return Result.fail("[KNOWLEDGE_BASE_NOT_FOUND]")
+        doc_stmt = select(KnowledgeDocument).where(
+            KnowledgeDocument.knowledge_base_id == kb_id,
+            KnowledgeDocument.status == DocumentStatus.READY.value,
+        )
+        docs = (await self.db.execute(doc_stmt)).scalars().all()
+        if not docs:
+            return Result.ok(([], 0))
+
+        term_counts: Counter[str] = Counter()
+        for doc in docs[:20]:
+            chunk_result = await self.get_document_chunks(kb_id, str(doc.id), 1, 100)
+            chunk_items = chunk_result.value[0] if chunk_result.is_success and chunk_result.value else []
+            for chunk in chunk_items:
+                term_counts.update(
+                    self._extract_dictionary_terms_from_text(str(chunk.get("content") or ""))
+                )
+
+        existing_stmt = select(KnowledgeDictionaryEntry.canonical_term).where(
+            KnowledgeDictionaryEntry.knowledge_base_id == kb_id
+        )
+        existing = {
+            str(item)
+            for item in (await self.db.execute(existing_stmt)).scalars().all()
+        }
+
+        created: builtins.list[KnowledgeDictionaryEntryResponse] = []
+        skipped = 0
+        for term, count in term_counts.most_common(max(1, min(limit, 100))):
+            if count < 2 or term in existing:
+                skipped += 1
+                continue
+            request = CreateKnowledgeDictionaryEntryRequest(
+                canonical_term=term,
+                aliases=[],
+                term_type="auto",
+                status=KnowledgeDictionaryEntryStatus.DRAFT.value,
+                confidence=min(95, 60 + min(count, 7) * 5),
+                notes="从知识库已就绪文档中自动抽取，需人工补充误识别别名后发布。",
+            )
+            result = await self.create_dictionary_entry(
+                kb_id,
+                request,
+                source="auto_extract",
+                evidence_count=count,
+            )
+            if result.is_success and result.value is not None:
+                created.append(result.value)
+                existing.add(term)
+            else:
+                skipped += 1
+        return Result.ok((created, skipped))
 
     async def delete_document(self, kb_id: str, doc_id: str) -> Result[bool]:
         """Delete document and its vectors"""
