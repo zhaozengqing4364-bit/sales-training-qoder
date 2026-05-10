@@ -73,6 +73,38 @@ interface KnowledgeSearchResponse {
 }
 ```
 
+### `KnowledgeDictionaryEntryResponse`
+
+```typescript
+interface KnowledgeDictionaryEntryResponse {
+  id: string;
+  knowledge_base_id: string;
+  canonical_term: string;
+  aliases: string[];
+  term_type: string;
+  status: "draft" | "active" | "archived";
+  confidence: number; // 0-100
+  source: "manual" | "auto_extract" | string;
+  evidence_count: number;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface KnowledgeDictionaryEntryListResponse {
+  items: KnowledgeDictionaryEntryResponse[];
+  total: number;
+}
+
+interface KnowledgeDictionaryGenerateResponse {
+  created: number;
+  skipped: number;
+  items: KnowledgeDictionaryEntryResponse[];
+}
+```
+
+> 运行时语义：仅 `status = "active"` 且包含 `aliases` 的词条会随绑定知识库注入检索运行时 `transcript_normalization_lexicon`，用于查询归一化和别名扩展；最终回答仍必须由知识库证据命中支撑，词典不会绕过 evidence gate。
+
 ---
 
 ## 已实现接口清单
@@ -104,6 +136,16 @@ interface KnowledgeSearchResponse {
 |------|------|------|
 | `POST` | `/api/v1/admin/knowledge/{kb_id}/search` | 管理端检索 |
 | `POST` | `/api/v1/internal/knowledge/{kb_id}/search` | 内部检索（同响应契约） |
+
+### 知识库词典
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/admin/knowledge/{kb_id}/dictionary-entries` | 查询知识库词典条目，可用 `status` 过滤 |
+| `POST` | `/api/v1/admin/knowledge/{kb_id}/dictionary-entries` | 创建词典条目（默认草稿） |
+| `PUT` | `/api/v1/admin/knowledge/{kb_id}/dictionary-entries/{entry_id}` | 更新词典条目或发布/归档 |
+| `DELETE` | `/api/v1/admin/knowledge/{kb_id}/dictionary-entries/{entry_id}` | 删除词典条目 |
+| `POST` | `/api/v1/admin/knowledge/{kb_id}/dictionary-entries/generate` | 从已就绪文档抽取候选词，生成草稿 |
 
 ---
 
@@ -243,6 +285,90 @@ Content-Type: application/json
 
 > 请求体与响应体与管理端检索一致，同样返回 `results + total`。
 
+### 创建并发布知识库词典条目
+
+```http
+POST /api/v1/admin/knowledge/{kb_id}/dictionary-entries
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "canonical_term": "石犀科技",
+  "aliases": ["实习科技", "石溪科技"],
+  "term_type": "organization",
+  "status": "draft",
+  "confidence": 96,
+  "notes": "ASR 易误识别词"
+}
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "dict-uuid-001",
+    "knowledge_base_id": "kb-uuid-001",
+    "canonical_term": "石犀科技",
+    "aliases": ["实习科技", "石溪科技"],
+    "term_type": "organization",
+    "status": "draft",
+    "confidence": 96,
+    "source": "manual",
+    "evidence_count": 0,
+    "notes": "ASR 易误识别词",
+    "created_at": "2026-05-09T13:00:00Z",
+    "updated_at": "2026-05-09T13:00:00Z"
+  }
+}
+```
+
+发布词条：
+
+```http
+PUT /api/v1/admin/knowledge/{kb_id}/dictionary-entries/{entry_id}
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{ "status": "active" }
+```
+
+### 从知识库文档生成词典草稿
+
+```http
+POST /api/v1/admin/knowledge/{kb_id}/dictionary-entries/generate?limit=30
+Authorization: Bearer <token>
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "created": 2,
+    "skipped": 4,
+    "items": [
+      {
+        "id": "dict-uuid-002",
+        "knowledge_base_id": "kb-uuid-001",
+        "canonical_term": "石犀科技",
+        "aliases": [],
+        "term_type": "auto",
+        "status": "draft",
+        "confidence": 80,
+        "source": "auto_extract",
+        "evidence_count": 4,
+        "notes": "从知识库已就绪文档中自动抽取，需人工补充误识别别名后发布。",
+        "created_at": "2026-05-09T13:01:00Z",
+        "updated_at": "2026-05-09T13:01:00Z"
+      }
+    ]
+  }
+}
+```
+
 ### 重新处理文档
 
 ```http
@@ -275,6 +401,10 @@ Authorization: Bearer <token>
 | `[INVALID_FILE]` / `[INVALID_FILE_CONTENT]` | `400` | 文件名或文件内容不合法 |
 | `[FILE_SAVE_FAILED]` | `500` | 文件落盘失败 |
 | `[INVALID_STATUS]` | `400` | 文档状态不允许重处理 |
+| `[KNOWLEDGE_DICTIONARY_ENTRY_NOT_FOUND]` | `404` | 词典条目不存在或不属于当前知识库 |
+| `[KNOWLEDGE_DICTIONARY_ENTRY_DUPLICATE]` | `409` | 同一知识库下标准词重复 |
+| `[KNOWLEDGE_DICTIONARY_ENTRY_INVALID]` | `400` | 词典条目违反数据库约束（非重复类） |
+| `[REQUEST_VALIDATION_ERROR]` | `422` | 词典状态、置信度或字段长度不合法 |
 
 ---
 
@@ -286,3 +416,4 @@ Authorization: Bearer <token>
 | 2026-02-10 | 明确 admin/internal 双检索契约 | 统一 `results + total` 响应结构 |
 | 2026-02-10 | 补齐文档重处理接口 | 增加 `reprocess` 约束与响应示例 |
 | 2026-02-10 | 清理历史规划引用 | 移除已废弃 roadmap 引用与旧示例 |
+| 2026-05-09 | 新增知识库级词典契约 | 支持创建/生成/发布 KB-scoped alias dictionary，并说明 evidence gate 约束 |

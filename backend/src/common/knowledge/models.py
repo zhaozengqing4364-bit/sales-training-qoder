@@ -65,6 +65,14 @@ class DocumentFileType(str, enum.Enum):
     XLS = "xls"
 
 
+class KnowledgeDictionaryEntryStatus(str, enum.Enum):
+    """Knowledge-base scoped dictionary entry lifecycle."""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
 class KnowledgeBase(Base):
     """
     KnowledgeBase - Document collection for AI context
@@ -134,6 +142,11 @@ class KnowledgeBase(Base):
         back_populates="knowledge_base",
         cascade="all, delete-orphan",
     )
+    dictionary_entries = relationship(
+        "KnowledgeDictionaryEntry",
+        back_populates="knowledge_base",
+        cascade="all, delete-orphan",
+    )
     rag_profile = relationship(
         "RagProfile",
         back_populates="knowledge_bases",
@@ -196,6 +209,53 @@ class KnowledgeDocument(Base):
 
     # Relationships
     knowledge_base = relationship("KnowledgeBase", back_populates="documents")
+
+
+class KnowledgeDictionaryEntry(Base):
+    """KB-scoped canonical term and ASR/search alias dictionary entry."""
+
+    __tablename__ = "knowledge_dictionary_entries"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    knowledge_base_id = Column(
+        String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False
+    )
+    canonical_term = Column(String(255), nullable=False)
+    aliases_json = Column(Text, nullable=False, default="[]")
+    term_type = Column(String(50), nullable=False, default="other")
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    confidence = Column(Integer, nullable=False, default=95)
+    source = Column(String(50), nullable=False, default="manual")
+    evidence_count = Column(Integer, nullable=False, default=0)
+    notes = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'active', 'archived')",
+            name="ck_knowledge_dictionary_entry_status",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 100",
+            name="ck_knowledge_dictionary_entry_confidence",
+        ),
+        UniqueConstraint(
+            "knowledge_base_id",
+            "canonical_term",
+            name="uq_knowledge_dictionary_entry_kb_canonical",
+        ),
+        Index("idx_knowledge_dictionary_entries_kb", "knowledge_base_id"),
+        Index("idx_knowledge_dictionary_entries_status", "status"),
+    )
+
+    knowledge_base = relationship(
+        "KnowledgeBase", back_populates="dictionary_entries"
+    )
 
 
 # ── Late import to register RagProfile in SQLAlchemy metadata ──

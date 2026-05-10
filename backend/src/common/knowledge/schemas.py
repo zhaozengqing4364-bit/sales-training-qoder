@@ -22,6 +22,7 @@ KnowledgeBaseCategoryType = str  # "product" | "competitor" | "faq" | "policy"
 KnowledgeBaseStatusType = str  # "active" | "archived"
 DocumentStatusType = str  # "pending" | "processing" | "ready" | "failed"
 DocumentFileTypeType = str  # "pdf" | "docx" | "txt" | "md" | "xlsx" | "xls"
+KnowledgeDictionaryEntryStatusType = Literal["draft", "active", "archived"]
 
 
 # ========== KnowledgeBase Schemas ==========
@@ -251,6 +252,76 @@ class KnowledgeDocumentUploadResponse(BaseModel):
     file_size: int
     status: DocumentStatusType = "pending"
     created_at: datetime
+
+
+# ========== Knowledge Dictionary Schemas ==========
+
+
+class KnowledgeDictionaryEntryBase(BaseModel):
+    """KB-scoped ASR/query dictionary entry."""
+
+    canonical_term: str = Field(..., min_length=2, max_length=255)
+    aliases: list[str] = Field(default_factory=list, max_length=20)
+    term_type: str = Field(default="other", max_length=50)
+    status: KnowledgeDictionaryEntryStatusType = Field(default="draft")
+    confidence: int = Field(default=95, ge=0, le=100)
+    notes: str | None = Field(default=None, max_length=500)
+
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def _normalize_aliases(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            return []
+        aliases: list[str] = []
+        for item in value:
+            alias = str(item or "").strip()
+            if alias and alias not in aliases:
+                aliases.append(alias)
+        return aliases[:20]
+
+
+class CreateKnowledgeDictionaryEntryRequest(KnowledgeDictionaryEntryBase):
+    pass
+
+
+class UpdateKnowledgeDictionaryEntryRequest(BaseModel):
+    canonical_term: str | None = Field(default=None, min_length=2, max_length=255)
+    aliases: list[str] | None = Field(default=None, max_length=20)
+    term_type: str | None = Field(default=None, max_length=50)
+    status: KnowledgeDictionaryEntryStatusType | None = None
+    confidence: int | None = Field(default=None, ge=0, le=100)
+    notes: str | None = Field(default=None, max_length=500)
+
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def _normalize_aliases(cls, value: Any) -> list[str] | None:
+        if value is None:
+            return None
+        return KnowledgeDictionaryEntryBase._normalize_aliases(value)
+
+
+class KnowledgeDictionaryEntryResponse(KnowledgeDictionaryEntryBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    knowledge_base_id: str
+    source: str
+    evidence_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeDictionaryEntryListResponse(BaseModel):
+    items: list[KnowledgeDictionaryEntryResponse]
+    total: int
+
+
+class KnowledgeDictionaryGenerateResponse(BaseModel):
+    created: int
+    skipped: int
+    items: list[KnowledgeDictionaryEntryResponse]
 
 
 # ========== Document Preview Schemas ==========
