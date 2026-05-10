@@ -17,6 +17,12 @@ from common.db.models import (
     KnowledgeRankingProfile,
 )
 from common.error_handling.result import Result
+from common.knowledge.models import (
+    KnowledgeBase,
+    KnowledgeDictionaryEntry,
+    KnowledgeDictionaryEntryStatus,
+)
+from common.knowledge.service import KnowledgeService
 from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
     search_internal_knowledge,
 )
@@ -608,6 +614,125 @@ async def _seed_runtime_config(factory: async_sessionmaker[AsyncSession]) -> Non
         await session.commit()
 
 
+async def _seed_active_dictionary_entry(
+    factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with factory() as session:
+        session.add(
+            KnowledgeBase(
+                id="kb-dict-1",
+                name="词典知识库",
+                description="验证持久化 KB 词典运行时注入",
+                category="product",
+                vector_collection="kb_dict_1",
+                embedding_model="text-embedding-3-small",
+                document_count=1,
+                total_chunks=2,
+                status="active",
+            )
+        )
+        session.add(
+            KnowledgeDictionaryEntry(
+                knowledge_base_id="kb-dict-1",
+                canonical_term="石犀科技",
+                aliases_json='["实习科技"]',
+                term_type="organization",
+                status=KnowledgeDictionaryEntryStatus.ACTIVE.value,
+                confidence=96,
+                source="manual",
+                evidence_count=2,
+                notes="runtime test",
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_search_internal_knowledge_uses_persisted_active_kb_dictionary_and_keeps_evidence_gate(
+    async_session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await _seed_active_dictionary_entry(async_session_factory)
+    monkeypatch.setenv("KNOWLEDGE_ANSWER_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("KNOWLEDGE_ANSWER_ENGINE_DUAL_RUN", "false")
+    record_metric = AsyncMock()
+    captured_queries: list[str] = []
+
+    class RuntimeKnowledgeService(KnowledgeService):
+        async def get_search_health(self, **kwargs):
+            return {
+                "is_ready": True,
+                "ready_document_count": 1,
+                "ready_chunk_count": 2,
+                "vector_chunk_count": 2,
+            }
+
+        async def search_multiple(self, **kwargs):
+            captured_queries.append(str(kwargs["query"]))
+            query = str(kwargs["query"])
+            if query == "请介绍一下石犀科技":
+                return Result.ok(
+                    [
+                        {
+                            "knowledge_base_id": "kb-dict-1",
+                            "knowledge_base_name": "词典知识库",
+                            "document_title": "石犀科技产品介绍",
+                            "content": "石犀科技是一家销售训练平台。",
+                            "snippet": "石犀科技是一家销售训练平台。",
+                            "score": 0.86,
+                            "retrieval_mode": "hybrid",
+                            "metadata": {"doc_type": "product", "section": "overview"},
+                        }
+                    ]
+                )
+            return Result.ok([])
+
+    payload = await search_internal_knowledge(
+        arguments_obj={"query": "请介绍一下实习科技", "top_k": 3},
+        effective_policy={
+            "knowledge_base_ids": ["kb-dict-1"],
+            "tool_policy": {
+                "require_kb_grounding": True,
+                "retrieval_similarity_threshold": 0.65,
+                "retrieval_enable_hybrid": True,
+            },
+        },
+        session_factory=async_session_factory,
+        knowledge_service_cls=RuntimeKnowledgeService,
+        record_metric=record_metric,
+    )
+
+    assert captured_queries[:2] == ["请介绍一下实习科技", "请介绍一下石犀科技"]
+    assert "请介绍一下石犀科技" in payload["rewritten_queries"]
+    assert payload["count"] == 1
+    assert payload["_answerability"]["answerability"] in {"partial", "sufficient"}
+    assert payload["_answerability"]["evidence_supported"] is True
+
+    class NoEvidenceKnowledgeService(RuntimeKnowledgeService):
+        async def search_multiple(self, **kwargs):
+            return Result.ok([])
+
+    no_evidence_payload = await search_internal_knowledge(
+        arguments_obj={"query": "请介绍一下实习科技", "top_k": 3},
+        effective_policy={
+            "knowledge_base_ids": ["kb-dict-1"],
+            "tool_policy": {
+                "require_kb_grounding": True,
+                "retrieval_similarity_threshold": 0.65,
+                "retrieval_enable_hybrid": True,
+            },
+        },
+        session_factory=async_session_factory,
+        knowledge_service_cls=NoEvidenceKnowledgeService,
+        record_metric=AsyncMock(),
+    )
+
+    assert "请介绍一下石犀科技" in no_evidence_payload["rewritten_queries"]
+    assert no_evidence_payload["count"] == 0
+    assert no_evidence_payload["_answerability"]["answerability"] == "insufficient"
+    assert no_evidence_payload["_answerability"]["evidence_supported"] is False
+
+
 @pytest.mark.asyncio
 async def test_search_internal_knowledge_uses_config_driven_resolution_planning_adapter_and_reranking(
     async_session_factory,
@@ -666,8 +791,20 @@ async def test_search_internal_knowledge_uses_config_driven_resolution_planning_
                 "cache_hit_ready_docs": False,
             }
 
+        async def active_dictionary_lexicon(self, kb_ids):
+            assert kb_ids == ["kb-1"]
+            return [
+                {
+                    "canonical_term": "石犀科技",
+                    "aliases": ["实习科技"],
+                    "entity_type": "organization",
+                    "confidence": 0.96,
+                    "scope": "knowledge_base:kb-1",
+                }
+            ]
+
     payload = await search_internal_knowledge(
-        arguments_obj={"query": "请介绍一下世袭科技", "top_k": 3},
+        arguments_obj={"query": "请介绍一下实习科技", "top_k": 3},
         effective_policy={
             "knowledge_base_ids": ["kb-1"],
             "tool_policy": {

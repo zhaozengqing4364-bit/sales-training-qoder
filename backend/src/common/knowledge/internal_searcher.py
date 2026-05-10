@@ -161,7 +161,7 @@ async def search_internal_knowledge(
         embedding_timeout_ms = 0
     embedding_timeout_ms = max(0, min(10000, embedding_timeout_ms))
     metadata_filter = resolve_metadata_filter(arguments_obj, tool_policy)
-    rewritten_queries = build_rewritten_queries(query)
+    rewritten_queries = build_rewritten_queries(query, tool_policy=tool_policy)
     session_id = str(arguments_obj.get("session_id") or "").strip() or None
 
     entity_resolution_payload: dict[str, Any] | None = None
@@ -251,6 +251,31 @@ async def search_internal_knowledge(
                     path_mode="live" if rollout_mode == "enabled" else "compat",
                 )
 
+            active_dictionary_lexicon = []
+            get_active_dictionary_lexicon = getattr(
+                knowledge_service, "active_dictionary_lexicon", None
+            )
+            if callable(get_active_dictionary_lexicon):
+                maybe_lexicon = get_active_dictionary_lexicon(kb_ids)
+                if asyncio.iscoroutine(maybe_lexicon):
+                    maybe_lexicon = await cast(Awaitable[Any], maybe_lexicon)
+                if isinstance(maybe_lexicon, list):
+                    active_dictionary_lexicon = [
+                        item for item in maybe_lexicon if isinstance(item, dict)
+                    ]
+            if active_dictionary_lexicon:
+                tool_policy = dict(tool_policy)
+                existing_lexicon = tool_policy.get("transcript_normalization_lexicon")
+                merged_lexicon = (
+                    list(existing_lexicon) if isinstance(existing_lexicon, list) else []
+                )
+                merged_lexicon.extend(active_dictionary_lexicon)
+                tool_policy["transcript_normalization_lexicon"] = merged_lexicon
+                rewritten_queries = build_rewritten_queries(
+                    query,
+                    tool_policy=tool_policy,
+                )
+
             config_snapshot = await _load_active_config_snapshot(db)
             aggregated_rows: list[dict[str, Any]] = []
             search_started_at = time.monotonic()
@@ -278,6 +303,7 @@ async def search_internal_knowledge(
                         "enable_rerank": enable_rerank,
                         "rerank_top_k": rerank_top_k,
                         "metadata_filter": metadata_filter or {},
+                        "tool_policy": dict(tool_policy),
                     },
                     strict_kb_mode=strict_kb_mode,
                 )
