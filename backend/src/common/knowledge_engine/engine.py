@@ -15,6 +15,7 @@ from common.knowledge_engine.audit_repo import KnowledgeAnswerAuditRepository
 from common.knowledge_engine.config_repo import (
     KnowledgeAnswerConfigRepository,
     KnowledgeAnswerConfigSnapshot,
+    KnowledgeEntityAliasConfig,
 )
 from common.knowledge_engine.entity_resolver import (
     KnowledgeEntityResolution,
@@ -104,6 +105,7 @@ class KnowledgeAnswerEngine:
             output_builder=lambda: self._resolve_query(
                 request.query,
                 config_snapshot=config_snapshot,
+                runtime_options=request.runtime_options,
             ),
         )
         classifier = self._intent_classifier_factory(
@@ -240,13 +242,17 @@ class KnowledgeAnswerEngine:
         query: str,
         *,
         config_snapshot: KnowledgeAnswerConfigSnapshot | None = None,
+        runtime_options: dict[str, Any] | None = None,
     ) -> KnowledgeEntityResolution:
-        if config_snapshot is not None and getattr(
-            config_snapshot, "entity_aliases", None
-        ):
-            resolver = KnowledgeEntityResolver(
-                entity_aliases=config_snapshot.entity_aliases
-            )
+        entity_aliases = list(
+            config_snapshot.entity_aliases
+            if config_snapshot is not None
+            and getattr(config_snapshot, "entity_aliases", None)
+            else []
+        )
+        entity_aliases.extend(_runtime_lexicon_entity_aliases(runtime_options or {}))
+        if entity_aliases:
+            resolver = KnowledgeEntityResolver(entity_aliases=entity_aliases)
             return resolver.resolve_query(query)
         return self._entity_resolver.resolve_query(query)
 
@@ -297,7 +303,9 @@ class KnowledgeAnswerEngine:
     ) -> KnowledgeAnswerRun | None:
         if self._audit_repository is None or not request.session_id:
             return None
-        final_status = "blocked" if answerability == "blocked" else "completed"
+        final_status = (
+            "blocked" if answerability in {"blocked", "insufficient"} else "completed"
+        )
         return self._audit_repository.create_run(
             session_id=request.session_id,
             config_version_id=config_version_id,
@@ -362,6 +370,50 @@ def _run_async(
 
 def _normalize_payload(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _runtime_lexicon_entity_aliases(
+    runtime_options: dict[str, Any],
+) -> list[KnowledgeEntityAliasConfig]:
+    tool_policy = runtime_options.get("tool_policy")
+    if not isinstance(tool_policy, dict):
+        return []
+    entries = tool_policy.get("transcript_normalization_lexicon")
+    if not isinstance(entries, list):
+        return []
+
+    aliases: list[KnowledgeEntityAliasConfig] = []
+    seen: set[tuple[str, str]] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        canonical_term = str(entry.get("canonical_term") or "").strip()
+        raw_aliases = entry.get("aliases")
+        if not canonical_term or not isinstance(raw_aliases, list):
+            continue
+        entity_type = str(entry.get("entity_type") or "asr_lexicon").strip()
+        try:
+            confidence = float(entry.get("confidence") or 0.95)
+        except (TypeError, ValueError):
+            confidence = 0.95
+        for raw_alias in raw_aliases:
+            alias = str(raw_alias or "").strip()
+            if not alias or alias == canonical_term:
+                continue
+            dedupe_key = (canonical_term, alias)
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            aliases.append(
+                KnowledgeEntityAliasConfig(
+                    canonical_entity=canonical_term,
+                    alias=alias,
+                    entity_type=entity_type,
+                    confidence=confidence,
+                    profile_source="runtime_tool_policy",
+                )
+            )
+    return aliases
 
 
 def _audit_output_payload(value: Any) -> dict[str, Any]:

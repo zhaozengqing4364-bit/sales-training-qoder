@@ -28,6 +28,41 @@ MAX_KNOWLEDGE_RETRIEVAL_SNIPPET_CHARS = 240
 MAX_KNOWLEDGE_RETRIEVAL_LEDGER_KB_IDS = 8
 MAX_RETRIEVAL_QUERY_VARIANTS = 4
 MAX_ANSWER_CITATIONS = 6
+QUERY_EVIDENCE_RE = re.compile(r"[a-z0-9\u4e00-\u9fff]+", re.IGNORECASE)
+QUERY_STOP_PHRASES = (
+    "请",
+    "帮我",
+    "麻烦",
+    "一下",
+    "介绍一下",
+    "介绍",
+    "讲一下",
+    "说一下",
+    "告诉我",
+    "什么是",
+    "是什么",
+    "有哪些",
+    "如何",
+    "怎么",
+    "产品介绍",
+    "产品",
+    "公司",
+    "情况",
+    "信息",
+)
+GENERIC_QUERY_TERMS = {
+    "科技",
+    "公司",
+    "产品",
+    "介绍",
+    "一下",
+    "情况",
+    "信息",
+    "能力",
+    "功能",
+    "业务",
+    "服务",
+}
 
 
 def _normalize_whitespace(value: Any) -> str:
@@ -124,12 +159,46 @@ def is_product_overview_query(query: str) -> bool:
     return bool(PRODUCT_OVERVIEW_QUERY_RE.search(normalized))
 
 
-def build_rewritten_queries(query: str) -> list[str]:
+def _build_lexicon_query_variants(
+    query: str,
+    tool_policy: dict[str, Any] | None,
+) -> list[str]:
+    """Build safe query variants from configured ASR alias lexicon."""
+    if not isinstance(tool_policy, dict):
+        return []
+    entries = tool_policy.get("transcript_normalization_lexicon")
+    if not isinstance(entries, list):
+        return []
+
+    variants: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        canonical_term = _normalize_whitespace(entry.get("canonical_term"))
+        aliases = entry.get("aliases")
+        if not canonical_term or not isinstance(aliases, list):
+            continue
+        for raw_alias in aliases:
+            alias = _normalize_whitespace(raw_alias)
+            if not alias or alias == canonical_term:
+                continue
+            if alias in query:
+                variants.append(query.replace(alias, canonical_term))
+            if canonical_term in query:
+                variants.append(query.replace(canonical_term, alias))
+    return variants
+
+
+def build_rewritten_queries(
+    query: str,
+    tool_policy: dict[str, Any] | None = None,
+) -> list[str]:
     normalized = _normalize_whitespace(query)
     if not normalized:
         return []
 
     variants: list[str] = [normalized]
+    variants.extend(_build_lexicon_query_variants(normalized, tool_policy))
     if is_product_overview_query(normalized):
         entity_hint = normalized
         variants.extend(
@@ -342,6 +411,12 @@ def build_answerability_assessment(
         if isinstance(item, dict) and _normalize_whitespace(item.get("snippet"))
     ]
 
+    evidence_supported = _has_query_evidence_support(
+        query=query,
+        results=results,
+        rewritten_queries=rewritten_queries,
+    )
+
     if source_status in {
         "search_failed",
         "kb_not_ready",
@@ -350,6 +425,8 @@ def build_answerability_assessment(
     }:
         answerability = "blocked"
     elif not results:
+        answerability = "insufficient"
+    elif not evidence_supported:
         answerability = "insufficient"
     elif is_product_overview_query(query) and len(results) < 2:
         answerability = "partial"
@@ -363,7 +440,85 @@ def build_answerability_assessment(
         "query": query,
         "rewritten_queries": list(rewritten_queries or []),
         "citations": citations,
+        "evidence_supported": evidence_supported,
     }
+
+
+def _normalize_for_query_evidence(value: Any) -> str:
+    return "".join(QUERY_EVIDENCE_RE.findall(str(value or "").lower()))
+
+
+def _strip_query_stop_phrases(value: str) -> str:
+    stripped = value
+    for phrase in QUERY_STOP_PHRASES:
+        stripped = stripped.replace(_normalize_for_query_evidence(phrase), "")
+    return stripped
+
+
+def _collect_query_terms(value: str) -> list[str]:
+    normalized = _strip_query_stop_phrases(_normalize_for_query_evidence(value))
+    if not normalized:
+        return []
+    terms: list[str] = []
+    seen: set[str] = set()
+    if len(normalized) >= 2 and normalized not in GENERIC_QUERY_TERMS:
+        seen.add(normalized)
+        terms.append(normalized)
+    for ngram_size in (4, 3, 2):
+        if len(normalized) < ngram_size:
+            continue
+        for index in range(0, len(normalized) - ngram_size + 1):
+            term = normalized[index : index + ngram_size]
+            if term in seen or term in GENERIC_QUERY_TERMS:
+                continue
+            seen.add(term)
+            terms.append(term)
+    return terms[:16]
+
+
+def _collect_evidence_text(results: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        raw_metadata = item.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        for key in ("snippet", "content", "document_title", "source"):
+            value = str(item.get(key) or "").strip()
+            if value:
+                parts.append(value)
+        for key in ("document_title", "section", "doc_type"):
+            value = str(metadata.get(key) or "").strip()
+            if value:
+                parts.append(value)
+    return _normalize_for_query_evidence(" ".join(parts))
+
+
+def _has_query_evidence_support(
+    *,
+    query: str,
+    results: list[dict[str, Any]],
+    rewritten_queries: list[str] | None = None,
+) -> bool:
+    evidence_text = _collect_evidence_text(results)
+    if not evidence_text:
+        return False
+
+    query_candidates = [query, *(rewritten_queries or [])]
+    has_meaningful_candidate = False
+    for candidate in query_candidates:
+        terms = _collect_query_terms(candidate)
+        if not terms:
+            continue
+        has_meaningful_candidate = True
+        if any(len(term) >= 3 and term in evidence_text for term in terms):
+            return True
+        supported_short_terms = [
+            term for term in terms if len(term) == 2 and term in evidence_text
+        ]
+        if len(supported_short_terms) >= 2:
+            return True
+    return not has_meaningful_candidate
 
 
 def build_knowledge_retrieval_ledger_event(
@@ -372,7 +527,7 @@ def build_knowledge_retrieval_ledger_event(
     status: str,
     result_count: Any,
     retrieval_mode: str | None = None,
-    knowledge_base_ids: list[str] | None = None,
+    knowledge_base_ids: list[Any] | None = None,
     error_message: str | None = None,
     results: list[dict[str, Any]] | None = None,
     attempted_at: str | None = None,

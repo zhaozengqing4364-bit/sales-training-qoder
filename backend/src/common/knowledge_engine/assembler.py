@@ -34,6 +34,7 @@ class KnowledgeAnswerAssembler:
 
         if (
             answerability_result.answerability == "blocked"
+            or answerability_result.answerability == "insufficient"
             or answerability_result.source_status == "blocked"
         ):
             return KnowledgeAnswerResult(
