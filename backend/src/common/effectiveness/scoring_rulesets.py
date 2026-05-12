@@ -12,7 +12,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db.models import ScoringRuleset, SystemLog, User
+from common.db.models import (
+    ConfigBundle,
+    ConfigBundleAuditLog,
+    ConfigVersion,
+    ScoringRuleset,
+    SystemLog,
+    User,
+)
 from common.monitoring.logger import get_logger, get_trace_id
 
 from .canonical import (
@@ -30,6 +37,7 @@ SCORING_RULESET_SCHEMA_VERSION: Literal["scoring_ruleset_schema_v1"] = (
 SCORING_RULESET_SCORE_BASIS = "configured_scoring_ruleset_weighted_canonical_dimensions"
 LEGACY_COMPAT_RULESET_VERSION = "session_evidence_projection_v1"
 LEGACY_COMPAT_SCORE_BASIS = "session_evidence_projection_evaluable_only"
+SCORING_RULESETS_BUNDLE_KEY = "scoring.rulesets"
 
 ScoringRulesetStatus = Literal["draft", "published", "archived"]
 
@@ -429,6 +437,15 @@ class ScoringRulesetService:
             before=before,
             after=self._snapshot(row),
         )
+        version = await self._sync_config_version(row)
+        self._queue_config_bundle_audit_log(
+            action="publish",
+            actor=actor,
+            reason=reason or "publish scoring ruleset",
+            before=before,
+            after=self._snapshot(row),
+            version=version,
+        )
         return self.view_from_model(row)
 
     async def rollback_to_ruleset(
@@ -459,6 +476,15 @@ class ScoringRulesetService:
             reason=reason or "rollback scoring ruleset",
             before=before,
             after=self._snapshot(row),
+        )
+        version = await self._sync_config_version(row)
+        self._queue_config_bundle_audit_log(
+            action="rollback",
+            actor=actor,
+            reason=reason or "rollback scoring ruleset",
+            before=before,
+            after=self._snapshot(row),
+            version=version,
         )
         return self.view_from_model(row)
 
@@ -540,7 +566,8 @@ class ScoringRulesetService:
                 "ruleset_id": ruleset.ruleset_id,
                 "score_basis": ruleset.definition.score_basis,
                 "evaluable": False,
-                "not_evaluable_reason": not_evaluable_reason,
+                "not_evaluable_reason_code": not_evaluable_reason["code"],
+                "not_evaluable_reason": not_evaluable_reason["message"],
                 "overall_score": None,
                 "rollups": {},
                 "dimensions": [],
@@ -591,6 +618,7 @@ class ScoringRulesetService:
             "ruleset_id": ruleset.ruleset_id,
             "score_basis": ruleset.definition.score_basis,
             "evaluable": True,
+            "not_evaluable_reason_code": None,
             "not_evaluable_reason": None,
             "overall_score": _coerce_score(weighted_total),
             "rollups": rollups,
@@ -651,6 +679,13 @@ class ScoringRulesetService:
             "delta": {
                 "overall_score": delta,
                 "dimensions": dimension_deltas,
+            },
+            "old_vs_new": {
+                "old_ruleset_version": baseline.get("ruleset_version"),
+                "new_ruleset_version": candidate.get("ruleset_version"),
+                "old_score": baseline_score,
+                "new_score": candidate_score,
+                "score_delta": delta,
             },
         }
 
@@ -722,6 +757,85 @@ class ScoringRulesetService:
             )
         )
 
+    async def _sync_config_version(self, row: ScoringRuleset) -> ConfigVersion:
+        bundle = await self._config_bundle_row()
+        row_any = cast(Any, row)
+        result = await self.db.execute(
+            select(ConfigVersion).where(
+                ConfigVersion.bundle_id == bundle.bundle_id,
+                ConfigVersion.source_config_id == str(row_any.ruleset_id),
+            )
+        )
+        version = result.scalar_one_or_none()
+        snapshot = self.view_from_model(row).to_dict()
+        if version is None:
+            version = ConfigVersion(
+                bundle_id=str(bundle.bundle_id),
+                source_config_id=str(row_any.ruleset_id),
+                version_number=None,
+                version_label=str(row_any.version),
+                status=str(row_any.status),
+                snapshot_json=snapshot,
+                source_updated_at=row_any.updated_at,
+            )
+            self.db.add(version)
+        else:
+            version.version_label = str(row_any.version)
+            version.status = str(row_any.status)
+            version.snapshot_json = snapshot
+            version.source_updated_at = row_any.updated_at
+        await self.db.flush()
+        return version
+
+    async def _config_bundle_row(self) -> ConfigBundle:
+        result = await self.db.execute(
+            select(ConfigBundle).where(
+                ConfigBundle.bundle_key == SCORING_RULESETS_BUNDLE_KEY
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return row
+        row = ConfigBundle(
+            bundle_key=SCORING_RULESETS_BUNDLE_KEY,
+            domain="scoring",
+            display_name="评分规则集",
+            adapter_key="scoring_rulesets",
+            legacy_domain="evaluation_scoring_rulesets",
+            read_path="/api/v1/evaluation/admin/scoring-rulesets",
+            admin_entry="/admin/scoring-rulesets",
+            enabled=True,
+        )
+        self.db.add(row)
+        await self.db.flush()
+        return row
+
+    def _queue_config_bundle_audit_log(
+        self,
+        *,
+        action: str,
+        actor: User,
+        reason: str,
+        before: dict[str, Any] | None,
+        after: dict[str, Any] | None,
+        version: ConfigVersion,
+    ) -> None:
+        self.db.add(
+            ConfigBundleAuditLog(
+                bundle_key=SCORING_RULESETS_BUNDLE_KEY,
+                version_id=str(version.version_id),
+                action=action,
+                actor_id=str(actor.user_id),
+                before_version=None,
+                after_version=None,
+                before_snapshot_json=before,
+                after_snapshot_json=after,
+                reason=(reason or "").strip() or "not-provided",
+                trace_id=get_trace_id(),
+                created_at=datetime.now(UTC),
+            )
+        )
+
     @staticmethod
     def _dimension_score_map(projection: Any) -> dict[str, float]:
         kernel = getattr(projection, "canonical_evaluation_kernel", None)
@@ -756,22 +870,34 @@ class ScoringRulesetService:
         *,
         completeness: dict[str, Any],
         ruleset: ScoringRulesetView,
-    ) -> str | None:
+    ) -> dict[str, str] | None:
         min_evidence = ruleset.definition.min_evidence
         reasons = ruleset.definition.not_evaluable_reasons
         message_count = int(completeness.get("message_count") or 0)
         if message_count < min_evidence.min_messages:
-            return reasons.get("missing_min_messages", "missing_min_messages")
+            return {
+                "code": "missing_min_messages",
+                "message": reasons.get("missing_min_messages", "missing_min_messages"),
+            }
         if min_evidence.require_score_evidence:
             has_session_scores = bool(completeness.get("session_scores", False))
             has_message_scores = int(completeness.get("message_scores") or 0) > 0
             if not has_session_scores and not has_message_scores:
-                return reasons.get("missing_score_evidence", "missing_score_evidence")
+                return {
+                    "code": "missing_score_evidence",
+                    "message": reasons.get(
+                        "missing_score_evidence",
+                        "missing_score_evidence",
+                    ),
+                }
         if (
             min_evidence.require_stage_evidence
             and int(completeness.get("stage_evidence") or 0) <= 0
         ):
-            return reasons.get("missing_stage_evidence", "missing_stage_evidence")
+            return {
+                "code": "missing_stage_evidence",
+                "message": reasons.get("missing_stage_evidence", "missing_stage_evidence"),
+            }
         return None
 
 
@@ -780,6 +906,7 @@ __all__ = [
     "LEGACY_COMPAT_SCORE_BASIS",
     "SCORING_RULESET_SCHEMA_VERSION",
     "SCORING_RULESET_SCORE_BASIS",
+    "SCORING_RULESETS_BUNDLE_KEY",
     "ScoringDimensionRule",
     "ScoringMinimumEvidence",
     "ScoringRulesetDefinition",

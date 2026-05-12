@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Executable
 
 from common.auth.service import create_access_token
-from common.db.models import BusinessRuleConfig, BusinessRuleConfigAuditLog, User
+from common.db.models import (
+    BusinessRuleConfig,
+    BusinessRuleConfigAuditLog,
+    ConfigBundle,
+    ConfigVersion,
+    EvaluationRun,
+    PracticeSession,
+    Scenario,
+    TrainingReportSnapshot,
+    User,
+)
 
 GENERAL_DEFAULT = {
     "version": "admin_general_settings_v1",
@@ -50,6 +63,131 @@ async def _create_user(test_db: AsyncSession) -> User:
     test_db.add(user)
     await test_db.commit()
     return user
+
+
+async def _seed_explainable_session(
+    test_db: AsyncSession,
+    *,
+    scenario_type: str,
+) -> str:
+    learner = await _create_user(test_db)
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type=scenario_type,
+        name=f"{scenario_type}_explain_{uuid.uuid4().hex[:8]}",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(learner.user_id),
+        scenario_id=scenario.scenario_id,
+        status="completed",
+        report_status="completed",
+        logic_score=82.0,
+        accuracy_score=84.0,
+        completeness_score=86.0,
+    )
+    bundle = ConfigBundle(
+        bundle_id=str(uuid.uuid4()),
+        bundle_key=f"{scenario_type}.explain.{uuid.uuid4().hex[:8]}",
+        domain="scoring",
+        display_name=f"{scenario_type} explain bundle",
+        adapter_key="explainability_contract",
+        read_path="/admin/config-bundles/explain",
+        admin_entry="/admin/config-center",
+        enabled=True,
+    )
+    version = ConfigVersion(
+        version_id=str(uuid.uuid4()),
+        bundle_id=bundle.bundle_id,
+        source_config_id=str(uuid.uuid4()),
+        version_number=3,
+        version_label=f"{scenario_type}-v3",
+        status="published",
+        snapshot_json={
+            "model": {"provider": "stepfun", "name": f"{scenario_type}-model"},
+            "prompt": {"template_id": f"{scenario_type}-prompt"},
+            "rag": {"profile": f"{scenario_type}-rag"},
+            "knowledge": {"sources": [f"{scenario_type}-kb"]},
+            "scoring": {"ruleset": f"{scenario_type}-rules"},
+        },
+        source_updated_at=datetime.now(UTC),
+    )
+    run = EvaluationRun(
+        run_id=str(uuid.uuid4()),
+        session_id=session.session_id,
+        config_bundle_id=bundle.bundle_id,
+        config_version_id=version.version_id,
+        status="succeeded",
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+        input_evidence_reference={
+            "conversation_messages": ["turn-1", "turn-2"],
+            "evidence_sources": [f"{scenario_type}-transcript"],
+        },
+        result_payload={"overall_score": 84, "dimension_scores": {"logic": 82}},
+        result_summary=f"{scenario_type} evaluation succeeded",
+    )
+    snapshot = TrainingReportSnapshot(
+        snapshot_id=str(uuid.uuid4()),
+        session_id=session.session_id,
+        evaluation_run_id=run.run_id,
+        report_payload={
+            "report_id": f"{scenario_type}-report",
+            "summary": f"{scenario_type} report summary",
+            "evidence": {"highlights": ["turn-2"]},
+        },
+        config_bundle_id=bundle.bundle_id,
+        config_bundle_snapshot={
+            "source": "config_version",
+            "config_bundle_id": bundle.bundle_id,
+            "config_version_id": version.version_id,
+            "bundle_key": bundle.bundle_key,
+            "domain": bundle.domain,
+            "version_number": version.version_number,
+            "version_label": version.version_label,
+            "status": version.status,
+            "source_config_id": version.source_config_id,
+            "ruleset_source": f"{scenario_type}_ruleset",
+            "ruleset_version": "2026.05",
+            "score_basis": "persisted_snapshot",
+            "evidence_completeness": {"conversation": True, "knowledge": True},
+            "config_snapshot": version.snapshot_json,
+            "source_updated_at": version.source_updated_at.isoformat(),
+        },
+        ruleset_source=f"{scenario_type}_ruleset",
+        ruleset_version="2026.05",
+        score_basis="persisted_snapshot",
+        evidence_completeness={"conversation": True, "knowledge": True},
+        generated_at=datetime.now(UTC),
+    )
+    test_db.add_all([scenario, session, bundle, version, run, snapshot])
+    await test_db.commit()
+    return str(session.session_id)
+
+
+async def _seed_session_without_lineage(
+    test_db: AsyncSession,
+    *,
+    scenario_type: str = "sales",
+) -> str:
+    learner = await _create_user(test_db)
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type=scenario_type,
+        name=f"{scenario_type}_missing_lineage_{uuid.uuid4().hex[:8]}",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(learner.user_id),
+        scenario_id=scenario.scenario_id,
+        status="completed",
+        report_status="completed",
+    )
+    test_db.add_all([scenario, session])
+    await test_db.commit()
+    return str(session.session_id)
 
 
 def _headers(user: User) -> dict[str, str]:
@@ -220,3 +358,206 @@ async def test_admin_settings_rejects_non_admin_user(
 
     assert response.status_code == 403
     assert response.json()["detail"]["error"] == "[ROLE_REQUIRED]"
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_ai_governance_explain_sales_session_contract(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = await _create_admin(test_db)
+    session_id = await _seed_explainable_session(test_db, scenario_type="sales")
+
+    response = await async_client.get(
+        f"/api/v1/admin/ai-governance/explain/{session_id}",
+        headers=_headers(admin),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["session"]["session_id"] == session_id
+    assert payload["session"]["scenario_type"] == "sales"
+    assert payload["model"] is None
+    assert payload["prompt"] is None
+    assert payload["rag"] is None
+    assert payload["knowledge"] is None
+    assert payload["scoring"] is None
+    assert payload["evidence"]["completeness"] == {
+        "conversation": True,
+        "knowledge": True,
+    }
+    assert payload["evaluation"]["status"] == "succeeded"
+    assert payload["report"]["lineage"]["ruleset_source"] == "sales_ruleset"
+    assert payload["report"]["lineage"]["config_bundle_id"] is None
+    assert payload["report"]["lineage"]["config_version_id"] is None
+    assert payload["report"]["lineage"]["config_bundle_snapshot"] == {}
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_ai_governance_explain_presentation_session_contract(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = await _create_admin(test_db)
+    session_id = await _seed_explainable_session(
+        test_db,
+        scenario_type="presentation",
+    )
+
+    response = await async_client.get(
+        f"/api/v1/admin/ai-governance/explain/{session_id}",
+        headers=_headers(admin),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["session"]["scenario_type"] == "presentation"
+    assert payload["model"] is None
+    assert payload["prompt"] is None
+    assert payload["rag"] is None
+    assert payload["knowledge"] is None
+    assert payload["scoring"] is None
+    assert payload["report"]["payload"]["report_id"] == "presentation-report"
+    assert payload["report"]["lineage"]["ruleset_source"] == "presentation_ruleset"
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_ai_governance_explain_missing_lineage_returns_clear_error(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = await _create_admin(test_db)
+    session_id = await _seed_session_without_lineage(test_db)
+
+    response = await async_client.get(
+        f"/api/v1/admin/ai-governance/explain/{session_id}",
+        headers=_headers(admin),
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"] == "[AI_GOVERNANCE_EXPLAINABILITY_INCOMPLETE]"
+    assert body["data"]["session_id"] == session_id
+    assert "EvaluationRun" in body["data"]["missing"]
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_ai_governance_explain_should_not_select_legacy_session_columns(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = await _create_admin(test_db)
+    session_id = await _seed_explainable_session(test_db, scenario_type="sales")
+    original_execute = AsyncSession.execute
+
+    async def fail_on_missing_dev_column_shape(
+        self: AsyncSession,
+        statement: Executable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        sql = str(statement)
+        if "practice_sessions.report_status_updated_at" in sql:
+            raise AssertionError(
+                "explainability selected legacy-missing session column"
+            )
+        return await original_execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", fail_on_missing_dev_column_shape)
+
+    response = await async_client.get(
+        f"/api/v1/admin/ai-governance/explain/{session_id}",
+        headers=_headers(admin),
+    )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["session"]["scenario_type"] == "sales"
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_ai_governance_explain_should_not_select_legacy_snapshot_columns(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = await _create_admin(test_db)
+    session_id = await _seed_explainable_session(test_db, scenario_type="presentation")
+    original_execute = AsyncSession.execute
+
+    async def fail_on_missing_dev_column_shape(
+        self: AsyncSession,
+        statement: Executable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        sql = str(statement)
+        missing_columns = (
+            "training_report_snapshots.config_bundle_id",
+            "training_report_snapshots.config_bundle_snapshot",
+        )
+        if any(column in sql for column in missing_columns):
+            raise AssertionError(
+                "explainability selected legacy-missing snapshot column"
+            )
+        return await original_execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", fail_on_missing_dev_column_shape)
+
+    response = await async_client.get(
+        f"/api/v1/admin/ai-governance/explain/{session_id}",
+        headers=_headers(admin),
+    )
+
+    assert response.status_code == 200, response.json()
+    lineage = response.json()["data"]["report"]["lineage"]
+    assert lineage["config_bundle_id"] is None
+    assert lineage["config_bundle_snapshot"] == {}
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_ai_governance_explain_should_not_select_legacy_evaluation_columns(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = await _create_admin(test_db)
+    session_id = await _seed_explainable_session(test_db, scenario_type="sales")
+    original_execute = AsyncSession.execute
+
+    async def fail_on_missing_dev_column_shape(
+        self: AsyncSession,
+        statement: Executable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        sql = str(statement)
+        missing_columns = (
+            "evaluation_runs.config_bundle_id",
+            "evaluation_runs.config_version_id",
+        )
+        if any(column in sql for column in missing_columns):
+            raise AssertionError(
+                "explainability selected legacy-missing evaluation column"
+            )
+        return await original_execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", fail_on_missing_dev_column_shape)
+
+    response = await async_client.get(
+        f"/api/v1/admin/ai-governance/explain/{session_id}",
+        headers=_headers(admin),
+    )
+
+    assert response.status_code == 200, response.json()
+    evaluation = response.json()["data"]["evaluation"]
+    assert evaluation["status"] == "succeeded"
+    assert evaluation["config_bundle_id"] is None
+    assert evaluation["config_version_id"] is None

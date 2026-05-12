@@ -12,6 +12,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin.api.permissions import (
+    CONFIG_AUDIT_READ_PERMISSION,
+    SCORING_RULESET_DRY_RUN_PERMISSION,
     SCORING_RULESET_MANAGE_PERMISSION,
     require_admin_permission,
 )
@@ -297,7 +299,7 @@ async def rollback_scoring_ruleset(
 async def dry_run_scoring_ruleset(
     payload: ScoringRulesetDryRunRequest,
     current_user: User = Depends(
-        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+        require_admin_permission(SCORING_RULESET_DRY_RUN_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
 ):
@@ -329,7 +331,7 @@ async def dry_run_scoring_ruleset(
 @router.get("/audit-logs")
 async def list_scoring_ruleset_audit_logs(
     current_user: User = Depends(
-        require_admin_permission(SCORING_RULESET_MANAGE_PERMISSION)
+        require_admin_permission(CONFIG_AUDIT_READ_PERMISSION)
     ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:

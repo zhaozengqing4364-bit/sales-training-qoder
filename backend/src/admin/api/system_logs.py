@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.auth.service import get_current_admin_user
+from admin.api.permissions import CONFIG_AUDIT_READ_PERMISSION, require_admin_permission
 from common.db.models import SystemLog, User
 from common.db.session import get_db
 from common.monitoring.logger import (
@@ -140,7 +140,7 @@ async def list_system_logs(
         None, description="Filter by status (success/failed/warning)"
     ),
     action: str | None = Query(None, description="Filter by action type"),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_admin_permission(CONFIG_AUDIT_READ_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -202,7 +202,7 @@ async def list_system_logs(
 @router.get("/{log_id}", response_model=dict)
 async def get_system_log(
     log_id: str,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_admin_permission(CONFIG_AUDIT_READ_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get system log details by ID"""
