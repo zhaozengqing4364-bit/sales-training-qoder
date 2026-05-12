@@ -7,6 +7,7 @@ const listPracticeTemplatesMock = vi.hoisted(() => vi.fn());
 const createPracticeTemplateMock = vi.hoisted(() => vi.fn());
 const updatePracticeTemplateMock = vi.hoisted(() => vi.fn());
 const publishPracticeTemplateMock = vi.hoisted(() => vi.fn());
+const archivePracticeTemplateMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
@@ -20,6 +21,7 @@ vi.mock("@/lib/api/client", async () => {
                 createPracticeTemplate: createPracticeTemplateMock,
                 updatePracticeTemplate: updatePracticeTemplateMock,
                 publishPracticeTemplate: publishPracticeTemplateMock,
+                archivePracticeTemplate: archivePracticeTemplateMock,
             },
         },
     };
@@ -55,6 +57,7 @@ describe("AdminPracticeTemplatesPage", () => {
         createPracticeTemplateMock.mockReset();
         updatePracticeTemplateMock.mockReset();
         publishPracticeTemplateMock.mockReset();
+        archivePracticeTemplateMock.mockReset();
     });
 
     it("renders PracticeTemplate list from admin API", async () => {
@@ -168,5 +171,43 @@ describe("AdminPracticeTemplatesPage", () => {
             expect(screen.getByText(/发布完成：客户异议处理训练 v1/)).toBeTruthy();
         });
         expect(screen.getByText("published · v1")).toBeTruthy();
+    });
+
+    it("archives a PracticeTemplate from the row action", async () => {
+        archivePracticeTemplateMock.mockResolvedValue({ ...template, status: "archived" });
+
+        render(<AdminPracticeTemplatesPage />);
+        await screen.findByText("客户异议处理训练");
+        fireEvent.click(screen.getByRole("button", { name: "归档模板" }));
+
+        await waitFor(() => {
+            expect(archivePracticeTemplateMock).toHaveBeenCalledWith("template-1");
+        });
+        expect(screen.getByText(/归档完成：客户异议处理训练/)).toBeTruthy();
+        expect(screen.getByText("archived · v1")).toBeTruthy();
+    });
+
+    it("does not offer archive action for archived PracticeTemplates", async () => {
+        listPracticeTemplatesMock.mockResolvedValue({
+            items: [{ ...template, status: "archived" }],
+            total: 1,
+        });
+
+        render(<AdminPracticeTemplatesPage />);
+
+        expect(await screen.findByText("archived · v1")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "归档模板" })).toBeNull();
+    });
+
+    it("shows archive failure feedback", async () => {
+        archivePracticeTemplateMock.mockRejectedValue(new Error("network down"));
+
+        render(<AdminPracticeTemplatesPage />);
+        await screen.findByText("客户异议处理训练");
+        fireEvent.click(screen.getByRole("button", { name: "归档模板" }));
+
+        await waitFor(() => {
+            expect(screen.getByText(/归档失败：network down/)).toBeTruthy();
+        });
     });
 });

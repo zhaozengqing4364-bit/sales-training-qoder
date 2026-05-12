@@ -5,6 +5,7 @@ from hashlib import sha256
 from json import dumps
 from typing import Any, Protocol, runtime_checkable
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Persona
@@ -37,9 +38,22 @@ class ContentAssetPublishError(ValueError):
         self.reason_code = reason_code
 
 
+class ContentAssetNotEditableError(ValueError):
+    pass
+
+
 class ContentAssetService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
+
+    async def list_case_items(self) -> list[CaseItem]:
+        result = await self._db.execute(
+            select(CaseItem).order_by(CaseItem.updated_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def get_case_item(self, case_item_id: str) -> CaseItem | None:
+        return await self._db.get(CaseItem, case_item_id)
 
     async def create_case_item(
         self, payload: CaseItemCreate, *, actor_id: str | None
@@ -50,6 +64,36 @@ class ContentAssetService:
         await self._db.refresh(item)
         return item
 
+    async def update_case_item(
+        self, item: CaseItem, payload: CaseItemCreate, *, actor_id: str | None
+    ) -> CaseItem:
+        if item.status != "draft":
+            raise ContentAssetNotEditableError
+        for field, value in payload.model_dump().items():
+            setattr(item, field, value)
+        item.updated_by = actor_id
+        await self._db.commit()
+        await self._db.refresh(item)
+        return item
+
+    async def archive_case_item(
+        self, item: CaseItem, *, actor_id: str | None
+    ) -> CaseItem:
+        item.status = "archived"
+        item.updated_by = actor_id
+        await self._db.commit()
+        await self._db.refresh(item)
+        return item
+
+    async def list_role_profiles(self) -> list[RoleProfile]:
+        result = await self._db.execute(
+            select(RoleProfile).order_by(RoleProfile.updated_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def get_role_profile(self, role_profile_id: str) -> RoleProfile | None:
+        return await self._db.get(RoleProfile, role_profile_id)
+
     async def create_role_profile(
         self, payload: RoleProfileCreate, *, actor_id: str | None
     ) -> RoleProfile:
@@ -57,6 +101,27 @@ class ContentAssetService:
             **payload.model_dump(), created_by=actor_id, updated_by=actor_id
         )
         self._db.add(item)
+        await self._db.commit()
+        await self._db.refresh(item)
+        return item
+
+    async def update_role_profile(
+        self, item: RoleProfile, payload: RoleProfileCreate, *, actor_id: str | None
+    ) -> RoleProfile:
+        if item.status != "draft":
+            raise ContentAssetNotEditableError
+        for field, value in payload.model_dump().items():
+            setattr(item, field, value)
+        item.updated_by = actor_id
+        await self._db.commit()
+        await self._db.refresh(item)
+        return item
+
+    async def archive_role_profile(
+        self, item: RoleProfile, *, actor_id: str | None
+    ) -> RoleProfile:
+        item.status = "archived"
+        item.updated_by = actor_id
         await self._db.commit()
         await self._db.refresh(item)
         return item

@@ -13,11 +13,23 @@ from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
+from curriculum_practice.models import CaseItem, RoleProfile
 from curriculum_practice.permissions import can_manage_practice_templates
 from curriculum_practice.schemas import (
+    CaseItemCreate,
+    CaseItemListResponse,
+    CaseItemResponse,
     PracticeTemplateCreate,
     PracticeTemplateListResponse,
     PracticeTemplateUpdate,
+    RoleProfileCreate,
+    RoleProfileListResponse,
+    RoleProfileResponse,
+)
+from curriculum_practice.services.content_assets import (
+    ContentAssetNotEditableError,
+    ContentAssetPublishError,
+    ContentAssetService,
 )
 from curriculum_practice.services.practice_templates import (
     PracticeTemplateNotEditableError,
@@ -27,7 +39,7 @@ from curriculum_practice.services.practice_templates import (
 )
 
 router = APIRouter(
-    prefix="/admin/curriculum-practice/templates", tags=["admin-curriculum-practice"]
+    prefix="/admin/curriculum-practice", tags=["admin-curriculum-practice"]
 )
 
 
@@ -60,7 +72,31 @@ def _not_found() -> JSONResponse:
     )
 
 
-@router.get("", response_model=None)
+def _case_item_not_found() -> JSONResponse:
+    return _api_error(
+        "[CASE_ITEM_NOT_FOUND]",
+        status_code=404,
+        message="CaseItem 不存在。",
+    )
+
+
+def _role_profile_not_found() -> JSONResponse:
+    return _api_error(
+        "[ROLE_PROFILE_NOT_FOUND]",
+        status_code=404,
+        message="RoleProfile 不存在。",
+    )
+
+
+def _serialize_case_item(item: CaseItem) -> CaseItemResponse:
+    return CaseItemResponse.model_validate(item)
+
+
+def _serialize_role_profile(item: RoleProfile) -> RoleProfileResponse:
+    return RoleProfileResponse.model_validate(item)
+
+
+@router.get("/templates", response_model=None)
 async def list_practice_templates(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -77,7 +113,7 @@ async def list_practice_templates(
     return _success(payload)
 
 
-@router.post("", response_model=None)
+@router.post("/templates", response_model=None)
 async def create_practice_template(
     payload: PracticeTemplateCreate,
     current_user: User = Depends(get_current_user),
@@ -101,7 +137,7 @@ async def create_practice_template(
         )
 
 
-@router.get("/{template_id}", response_model=None)
+@router.get("/templates/{template_id}", response_model=None)
 async def get_practice_template(
     template_id: str,
     current_user: User = Depends(get_current_user),
@@ -117,7 +153,7 @@ async def get_practice_template(
     return _success(serialize_template(template))
 
 
-@router.put("/{template_id}", response_model=None)
+@router.put("/templates/{template_id}", response_model=None)
 async def update_practice_template(
     template_id: str,
     payload: PracticeTemplateUpdate,
@@ -152,7 +188,7 @@ async def update_practice_template(
         )
 
 
-@router.post("/{template_id}/archive", response_model=None)
+@router.post("/templates/{template_id}/archive", response_model=None)
 async def archive_practice_template(
     template_id: str,
     current_user: User = Depends(get_current_user),
@@ -179,7 +215,7 @@ async def archive_practice_template(
         )
 
 
-@router.post("/{template_id}/publish", response_model=None)
+@router.post("/templates/{template_id}/publish", response_model=None)
 async def publish_practice_template(
     template_id: str,
     current_user: User = Depends(get_current_user),
@@ -219,3 +255,311 @@ async def publish_practice_template(
     data = serialize_template(published).model_dump()
     data["published_ref"] = published_ref(published).model_dump()
     return _success(data)
+
+
+@router.get("/case-items", response_model=None)
+async def list_case_items(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    items = await service.list_case_items()
+    return _success(
+        CaseItemListResponse(
+            items=[_serialize_case_item(item) for item in items], total=len(items)
+        )
+    )
+
+
+@router.post("/case-items", response_model=None)
+async def create_case_item(
+    payload: CaseItemCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    try:
+        item = await service.create_case_item(payload, actor_id=str(current_user.user_id))
+        return _success(_serialize_case_item(item))
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[CASE_ITEM_CREATE_FAILED]",
+            message="CaseItem 创建失败。",
+            exc=exc,
+        )
+
+
+@router.get("/case-items/{case_item_id}", response_model=None)
+async def get_case_item(
+    case_item_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    item = await ContentAssetService(db).get_case_item(case_item_id)
+    if item is None:
+        return _case_item_not_found()
+    return _success(_serialize_case_item(item))
+
+
+@router.put("/case-items/{case_item_id}", response_model=None)
+async def update_case_item(
+    case_item_id: str,
+    payload: CaseItemCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_case_item(case_item_id)
+    if item is None:
+        return _case_item_not_found()
+    try:
+        updated = await service.update_case_item(
+            item, payload, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_case_item(updated))
+    except ContentAssetNotEditableError:
+        await db.rollback()
+        return _api_error(
+            "[CASE_ITEM_NOT_EDITABLE]",
+            status_code=409,
+            message="Only draft CaseItem records can be edited.",
+        )
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[CASE_ITEM_UPDATE_FAILED]",
+            message="CaseItem 更新失败。",
+            exc=exc,
+        )
+
+
+@router.post("/case-items/{case_item_id}/publish", response_model=None)
+async def publish_case_item(
+    case_item_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_case_item(case_item_id)
+    if item is None:
+        return _case_item_not_found()
+    try:
+        published = await service.publish_case_item(
+            item, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_case_item(published))
+    except ContentAssetPublishError as exc:
+        await db.rollback()
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "[CASE_ITEM_PUBLISH_FAILED]",
+                message=str(exc),
+            )
+            | {"details": {"reason_code": exc.reason_code}},
+        )
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[CASE_ITEM_PUBLISH_FAILED]",
+            message="CaseItem 发布失败。",
+            exc=exc,
+        )
+
+
+@router.post("/case-items/{case_item_id}/archive", response_model=None)
+async def archive_case_item(
+    case_item_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_case_item(case_item_id)
+    if item is None:
+        return _case_item_not_found()
+    try:
+        archived = await service.archive_case_item(
+            item, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_case_item(archived))
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[CASE_ITEM_ARCHIVE_FAILED]",
+            message="CaseItem 归档失败。",
+            exc=exc,
+        )
+
+
+@router.get("/role-profiles", response_model=None)
+async def list_role_profiles(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    items = await service.list_role_profiles()
+    return _success(
+        RoleProfileListResponse(
+            items=[_serialize_role_profile(item) for item in items], total=len(items)
+        )
+    )
+
+
+@router.post("/role-profiles", response_model=None)
+async def create_role_profile(
+    payload: RoleProfileCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    try:
+        item = await service.create_role_profile(
+            payload, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_role_profile(item))
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[ROLE_PROFILE_CREATE_FAILED]",
+            message="RoleProfile 创建失败。",
+            exc=exc,
+        )
+
+
+@router.get("/role-profiles/{role_profile_id}", response_model=None)
+async def get_role_profile(
+    role_profile_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    item = await ContentAssetService(db).get_role_profile(role_profile_id)
+    if item is None:
+        return _role_profile_not_found()
+    return _success(_serialize_role_profile(item))
+
+
+@router.put("/role-profiles/{role_profile_id}", response_model=None)
+async def update_role_profile(
+    role_profile_id: str,
+    payload: RoleProfileCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_role_profile(role_profile_id)
+    if item is None:
+        return _role_profile_not_found()
+    try:
+        updated = await service.update_role_profile(
+            item, payload, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_role_profile(updated))
+    except ContentAssetNotEditableError:
+        await db.rollback()
+        return _api_error(
+            "[ROLE_PROFILE_NOT_EDITABLE]",
+            status_code=409,
+            message="Only draft RoleProfile records can be edited.",
+        )
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[ROLE_PROFILE_UPDATE_FAILED]",
+            message="RoleProfile 更新失败。",
+            exc=exc,
+        )
+
+
+@router.post("/role-profiles/{role_profile_id}/publish", response_model=None)
+async def publish_role_profile(
+    role_profile_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_role_profile(role_profile_id)
+    if item is None:
+        return _role_profile_not_found()
+    try:
+        published = await service.publish_role_profile(
+            item, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_role_profile(published))
+    except ContentAssetPublishError as exc:
+        await db.rollback()
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "[ROLE_PROFILE_PUBLISH_FAILED]",
+                message=str(exc),
+            )
+            | {"details": {"reason_code": exc.reason_code}},
+        )
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[ROLE_PROFILE_PUBLISH_FAILED]",
+            message="RoleProfile 发布失败。",
+            exc=exc,
+        )
+
+
+@router.post("/role-profiles/{role_profile_id}/archive", response_model=None)
+async def archive_role_profile(
+    role_profile_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_role_profile(role_profile_id)
+    if item is None:
+        return _role_profile_not_found()
+    try:
+        archived = await service.archive_role_profile(
+            item, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_role_profile(archived))
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[ROLE_PROFILE_ARCHIVE_FAILED]",
+            message="RoleProfile 归档失败。",
+            exc=exc,
+        )

@@ -12,6 +12,10 @@ from common.auth.service import create_access_token
 from common.db.models import Base, ScoringRuleset, User
 from common.db.session import get_db
 from common.knowledge.models import KnowledgeBase
+from curriculum_practice.services.content_assets import (
+    case_item_content_hash,
+    role_profile_content_hash,
+)
 from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -131,6 +135,147 @@ def _template_payload() -> dict[str, object]:
         "scoring_ruleset_id": "ruleset-1",
         "knowledge_base_refs": ["kb-1"],
     }
+
+
+def _case_item_payload() -> dict[str, object]:
+    payload: dict[str, object] = {
+        "industry": "金融科技",
+        "company_profile": "中型支付平台，正在评估企业级销售训练系统。",
+        "customer_role": "CTO",
+        "pain_points": ["销售新人上手慢"],
+        "objections": ["预算紧张"],
+        "hidden_information": "真实预算已批复，但客户不会主动透露。",
+        "success_criteria": ["识别预算状态"],
+        "allowed_disclosure_policy": {
+            "phases": [{"trigger": "询问预算", "keywords": ["预算"], "disclose": "预算范围"}]
+        },
+        "content_hash": "sha256:pending",
+    }
+    payload["content_hash"] = case_item_content_hash(payload)
+    return payload
+
+
+def _role_profile_payload() -> dict[str, object]:
+    payload: dict[str, object] = {
+        "role_type": "customer",
+        "role_name": "谨慎型 CTO",
+        "persona_ref": None,
+        "communication_style": "直接、重视技术细节和风险控制",
+        "pressure_level": "high",
+        "knowledge_boundary": ["了解内部预算流程"],
+        "behavior_rules": ["只回答被直接提问的问题"],
+        "voice_style_hint": "语速偏快，语调克制",
+        "content_hash": "sha256:pending",
+    }
+    payload["content_hash"] = role_profile_content_hash(payload)
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_should_manage_case_item_and_role_profile_assets_lifecycle(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+) -> None:
+    case_payload = _case_item_payload()
+    case_create_response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/case-items",
+        headers=admin_headers,
+        json=case_payload,
+    )
+    assert case_create_response.status_code == 200
+    created_case = case_create_response.json()["data"]
+    assert created_case["status"] == "draft"
+
+    case_list_response = await async_client.get(
+        "/api/v1/admin/curriculum-practice/case-items",
+        headers=admin_headers,
+    )
+    assert case_list_response.status_code == 200
+    assert case_list_response.json()["data"]["total"] == 1
+
+    updated_case_payload = case_payload | {
+        "pain_points": ["销售新人上手慢", "异议处理话术不一致"],
+    }
+    updated_case_payload["content_hash"] = case_item_content_hash(updated_case_payload)
+    case_update_response = await async_client.put(
+        f"/api/v1/admin/curriculum-practice/case-items/{created_case['case_item_id']}",
+        headers=admin_headers,
+        json=updated_case_payload,
+    )
+    assert case_update_response.status_code == 200
+    assert case_update_response.json()["data"]["pain_points"] == [
+        "销售新人上手慢",
+        "异议处理话术不一致",
+    ]
+
+    case_publish_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/case-items/{created_case['case_item_id']}/publish",
+        headers=admin_headers,
+    )
+    assert case_publish_response.status_code == 200
+    assert case_publish_response.json()["data"]["status"] == "published"
+
+    case_read_response = await async_client.get(
+        f"/api/v1/admin/curriculum-practice/case-items/{created_case['case_item_id']}",
+        headers=admin_headers,
+    )
+    assert case_read_response.status_code == 200
+    assert case_read_response.json()["data"]["case_item_id"] == created_case["case_item_id"]
+
+    case_archive_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/case-items/{created_case['case_item_id']}/archive",
+        headers=admin_headers,
+    )
+    assert case_archive_response.status_code == 200
+    assert case_archive_response.json()["data"]["status"] == "archived"
+
+    role_payload = _role_profile_payload()
+    role_create_response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/role-profiles",
+        headers=admin_headers,
+        json=role_payload,
+    )
+    assert role_create_response.status_code == 200
+    created_role = role_create_response.json()["data"]
+    assert created_role["status"] == "draft"
+
+    role_list_response = await async_client.get(
+        "/api/v1/admin/curriculum-practice/role-profiles",
+        headers=admin_headers,
+    )
+    assert role_list_response.status_code == 200
+    assert role_list_response.json()["data"]["total"] == 1
+
+    updated_role_payload = role_payload | {"pressure_level": "medium"}
+    updated_role_payload["content_hash"] = role_profile_content_hash(updated_role_payload)
+    role_update_response = await async_client.put(
+        f"/api/v1/admin/curriculum-practice/role-profiles/{created_role['role_profile_id']}",
+        headers=admin_headers,
+        json=updated_role_payload,
+    )
+    assert role_update_response.status_code == 200
+    assert role_update_response.json()["data"]["pressure_level"] == "medium"
+
+    role_publish_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/role-profiles/{created_role['role_profile_id']}/publish",
+        headers=admin_headers,
+    )
+    assert role_publish_response.status_code == 200
+    assert role_publish_response.json()["data"]["status"] == "published"
+
+    role_read_response = await async_client.get(
+        f"/api/v1/admin/curriculum-practice/role-profiles/{created_role['role_profile_id']}",
+        headers=admin_headers,
+    )
+    assert role_read_response.status_code == 200
+    assert role_read_response.json()["data"]["role_profile_id"] == created_role["role_profile_id"]
+
+    role_archive_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/role-profiles/{created_role['role_profile_id']}/archive",
+        headers=admin_headers,
+    )
+    assert role_archive_response.status_code == 200
+    assert role_archive_response.json()["data"]["status"] == "archived"
 
 
 @pytest.mark.asyncio

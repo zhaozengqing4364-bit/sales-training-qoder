@@ -95,6 +95,23 @@ export default function AdminPracticeTemplatesPage() {
         }
     };
 
+    const handleArchive = async (template: PracticeTemplateRecord) => {
+        setNotice(null);
+        setActionError(null);
+        setGateResults([]);
+        setBusyTemplateId(template.template_id);
+        try {
+            const archived = await api.admin.archivePracticeTemplate(template.template_id);
+            setItems((current) => current.map((item) => (item.template_id === archived.template_id ? archived : item)));
+            setNotice(`归档完成：${archived.name}`);
+        } catch (err) {
+            setActionError(`归档失败：${getApiErrorMessage(err)}`);
+            debug.warn("[AdminPracticeTemplatesPage] failed to archive template", { templateId: template.template_id, error: err });
+        } finally {
+            setBusyTemplateId(null);
+        }
+    };
+
     const handleEdit = (template: PracticeTemplateRecord) => {
         setNotice(null);
         setActionError(null);
@@ -239,6 +256,15 @@ export default function AdminPracticeTemplatesPage() {
                                     >
                                         {busyTemplateId === item.template_id ? "发布中..." : "发布模板"}
                                     </Button>
+                                    {item.status !== "archived" && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => { void handleArchive(item); }}
+                                            disabled={busyTemplateId !== null}
+                                        >
+                                            {busyTemplateId === item.template_id ? "归档中..." : "归档模板"}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         </div>

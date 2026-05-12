@@ -142,6 +142,11 @@ class CaseItemResponse(CaseItemBase):
     updated_at: object
 
 
+class CaseItemListResponse(BaseModel):
+    items: list[CaseItemResponse]
+    total: int
+
+
 class RoleProfileBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -169,6 +174,11 @@ class RoleProfileResponse(RoleProfileBase):
     published_at: object | None = None
     created_at: object
     updated_at: object
+
+
+class RoleProfileListResponse(BaseModel):
+    items: list[RoleProfileResponse]
+    total: int
 
 
 class ReferenceReader(Protocol):
