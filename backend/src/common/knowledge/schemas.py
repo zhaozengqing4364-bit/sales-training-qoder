@@ -265,6 +265,7 @@ class KnowledgeDictionaryEntryBase(BaseModel):
     term_type: str = Field(default="other", max_length=50)
     status: KnowledgeDictionaryEntryStatusType = Field(default="draft")
     confidence: int = Field(default=95, ge=0, le=100)
+    extraction_metadata: dict[str, Any] | None = Field(default=None)
     notes: str | None = Field(default=None, max_length=500)
 
     @field_validator("aliases", mode="before")
@@ -292,6 +293,7 @@ class UpdateKnowledgeDictionaryEntryRequest(BaseModel):
     term_type: str | None = Field(default=None, max_length=50)
     status: KnowledgeDictionaryEntryStatusType | None = None
     confidence: int | None = Field(default=None, ge=0, le=100)
+    extraction_metadata: dict[str, Any] | None = None
     notes: str | None = Field(default=None, max_length=500)
 
     @field_validator("aliases", mode="before")

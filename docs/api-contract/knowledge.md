@@ -86,6 +86,22 @@ interface KnowledgeDictionaryEntryResponse {
   confidence: number; // 0-100
   source: "manual" | "auto_extract" | string;
   evidence_count: number;
+  extraction_metadata?: {
+    method?: "llm" | "fallback_rule" | string;
+    llm_provider?: string;
+    llm_model?: string;
+    generation_rationale?: string;
+    alias_reasons?: Record<string, string>;
+    alias_confidence?: Record<string, number>;
+    risk_markers?: string[];
+    evidence_snippet?: string;
+    chunk_id?: string;
+    document_id?: string;
+    chunk_index?: string | number;
+    is_potential_duplicate?: boolean;
+    duplicate_of_canonical_term?: string;
+    fallback_reason?: string;
+  } | null;
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -104,6 +120,8 @@ interface KnowledgeDictionaryGenerateResponse {
 ```
 
 > 运行时语义：仅 `status = "active"` 且包含 `aliases` 的词条会随绑定知识库注入检索运行时 `transcript_normalization_lexicon`，用于查询归一化和别名扩展；最终回答仍必须由知识库证据命中支撑，词典不会绕过 evidence gate。
+>
+> LLM 辅助抽取语义：`POST .../dictionary-entries/generate` 优先使用全局 LLM 配置生成草稿；LLM 不可用或输出无法校验时回退规则抽取。所有生成结果仍为 `draft`，人工发布为 `active` 后才参与运行时归一化。`extraction_metadata` 仅用于人工审核来源、证据、别名原因、风险和回退原因。
 
 ---
 

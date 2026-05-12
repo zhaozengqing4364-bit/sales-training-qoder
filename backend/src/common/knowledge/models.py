@@ -14,6 +14,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Column,
     DateTime,
@@ -227,6 +228,7 @@ class KnowledgeDictionaryEntry(Base):
     confidence = Column(Integer, nullable=False, default=95)
     source = Column(String(50), nullable=False, default="manual")
     evidence_count = Column(Integer, nullable=False, default=0)
+    extraction_metadata = Column(JSON, nullable=True)
     notes = Column(String(500), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(

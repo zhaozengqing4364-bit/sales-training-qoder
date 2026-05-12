@@ -38,6 +38,10 @@ from common.knowledge.semantic_cache import get_semantic_search_cache
 from common.monitoring.logger import get_logger
 from common.storage import get_document_storage_service
 
+from .dictionary_extractor import (
+    DictionaryExtractionChunk,
+    DictionaryExtractor,
+)
 from .models import (
     DocumentStatus,
     KnowledgeBase,
@@ -739,6 +743,11 @@ class KnowledgeService:
             confidence=int(entry.confidence or 0),
             source=str(entry.source),
             evidence_count=int(entry.evidence_count or 0),
+            extraction_metadata=(
+                entry.extraction_metadata
+                if isinstance(entry.extraction_metadata, dict)
+                else None
+            ),
             notes=entry.notes,
             created_at=entry.created_at,
             updated_at=entry.updated_at,
@@ -786,6 +795,7 @@ class KnowledgeService:
         *,
         source: str = "manual",
         evidence_count: int = 0,
+        extraction_metadata: dict[str, Any] | None = None,
     ) -> Result[KnowledgeDictionaryEntryResponse]:
         kb_result = await self.get_by_id(kb_id)
         if not kb_result.is_success:
@@ -802,6 +812,7 @@ class KnowledgeService:
                 confidence=data.confidence,
                 source=source,
                 evidence_count=max(0, int(evidence_count or 0)),
+                extraction_metadata=extraction_metadata or data.extraction_metadata,
                 notes=data.notes,
             )
             self.db.add(entry)
@@ -835,7 +846,13 @@ class KnowledgeService:
                 if alias != str(entry.canonical_term)
             ]
             entry.aliases_json = json.dumps(aliases, ensure_ascii=False)
-        for field_name in ("term_type", "status", "confidence", "notes"):
+        for field_name in (
+            "term_type",
+            "status",
+            "confidence",
+            "extraction_metadata",
+            "notes",
+        ):
             if field_name in update_data:
                 setattr(entry, field_name, update_data[field_name])
         try:
@@ -914,10 +931,12 @@ class KnowledgeService:
         if not docs:
             return Result.ok(([], 0))
 
+        chunks_by_doc: dict[str, builtins.list[dict[str, Any]]] = {}
         term_counts: Counter[str] = Counter()
         for doc in docs[:20]:
             chunk_result = await self.get_document_chunks(kb_id, str(doc.id), 1, 100)
             chunk_items = chunk_result.value[0] if chunk_result.is_success and chunk_result.value else []
+            chunks_by_doc[str(doc.id)] = chunk_items
             for chunk in chunk_items:
                 term_counts.update(
                     self._extract_dictionary_terms_from_text(str(chunk.get("content") or ""))
@@ -933,16 +952,70 @@ class KnowledgeService:
 
         created: builtins.list[KnowledgeDictionaryEntryResponse] = []
         skipped = 0
+
+        extraction_chunks = self._build_dictionary_extraction_chunks(docs, chunks_by_doc)
+        extractor = DictionaryExtractor(chunk_limit=min(50, max(1, limit * 2)))
+        extraction_result = await extractor.extract(
+            kb_id=kb_id,
+            chunks=extraction_chunks,
+            limit=limit,
+        )
+        if extraction_result.is_success and extraction_result.value:
+            for candidate in extraction_result.value:
+                canonical = candidate.canonical_term.strip()
+                aliases = [item.alias for item in candidate.aliases if item.alias != canonical]
+                duplicate = self._find_dictionary_duplicate(canonical, aliases, existing)
+                if duplicate and duplicate == canonical:
+                    skipped += 1
+                    continue
+                metadata = DictionaryExtractor.candidate_metadata(
+                    candidate,
+                    provider=extractor.llm_service.provider,
+                    model_name=extractor.llm_service.model_name,
+                    is_potential_duplicate=bool(duplicate),
+                    duplicate_of_canonical_term=duplicate if duplicate != canonical else None,
+                )
+                request = CreateKnowledgeDictionaryEntryRequest(
+                    canonical_term=canonical,
+                    aliases=aliases,
+                    term_type=candidate.term_type or "other",
+                    status=KnowledgeDictionaryEntryStatus.DRAFT.value,
+                    confidence=candidate.confidence,
+                    extraction_metadata=metadata,
+                    notes="LLM 从知识库切片生成的词典草稿，需人工审核后发布。",
+                )
+                result = await self.create_dictionary_entry(
+                    kb_id,
+                    request,
+                    source="llm_extract",
+                    evidence_count=1 if candidate.evidence_snippet else 0,
+                    extraction_metadata=metadata,
+                )
+                if result.is_success and result.value is not None:
+                    created.append(result.value)
+                    existing.add(canonical)
+                else:
+                    skipped += 1
+            if created:
+                return Result.ok((created, skipped))
+
+        fallback_reason = extraction_result.fallback if not extraction_result.is_success else None
         for term, count in term_counts.most_common(max(1, min(limit, 100))):
-            if count < 2 or term in existing:
+            if term in existing:
                 skipped += 1
                 continue
+            metadata: dict[str, Any] = {
+                "method": "fallback_rule",
+                "fallback_reason": fallback_reason or "llm_returned_no_candidates",
+                "generation_rationale": "规则兜底：按知识库切片中的词频抽取。",
+            }
             request = CreateKnowledgeDictionaryEntryRequest(
                 canonical_term=term,
                 aliases=[],
                 term_type="auto",
                 status=KnowledgeDictionaryEntryStatus.DRAFT.value,
                 confidence=min(95, 60 + min(count, 7) * 5),
+                extraction_metadata=metadata,
                 notes="从知识库已就绪文档中自动抽取，需人工补充误识别别名后发布。",
             )
             result = await self.create_dictionary_entry(
@@ -950,6 +1023,7 @@ class KnowledgeService:
                 request,
                 source="auto_extract",
                 evidence_count=count,
+                extraction_metadata=metadata,
             )
             if result.is_success and result.value is not None:
                 created.append(result.value)
@@ -957,6 +1031,53 @@ class KnowledgeService:
             else:
                 skipped += 1
         return Result.ok((created, skipped))
+
+    @staticmethod
+    def _build_dictionary_extraction_chunks(
+        docs: builtins.list[KnowledgeDocument],
+        chunks_by_doc: dict[str, builtins.list[dict[str, Any]]],
+    ) -> builtins.list[DictionaryExtractionChunk]:
+        extraction_chunks: builtins.list[DictionaryExtractionChunk] = []
+        for doc in docs:
+            document_id = str(doc.id)
+            for chunk in chunks_by_doc.get(document_id, []):
+                content = str(chunk.get("content") or "").strip()
+                if not content:
+                    continue
+                index = chunk.get("index", len(extraction_chunks))
+                metadata_value = chunk.get("metadata")
+                metadata = (
+                    cast(dict[str, Any], metadata_value)
+                    if isinstance(metadata_value, dict)
+                    else {}
+                )
+                extraction_chunks.append(
+                    DictionaryExtractionChunk(
+                        chunk_id=f"{document_id}:{index}",
+                        document_id=document_id,
+                        document_title=str(doc.title),
+                        chunk_index=index,
+                        content=content,
+                        metadata=metadata,
+                    )
+                )
+        return extraction_chunks
+
+    @staticmethod
+    def _find_dictionary_duplicate(
+        canonical_term: str,
+        aliases: builtins.list[str],
+        existing_terms: set[str],
+    ) -> str | None:
+        if canonical_term in existing_terms:
+            return canonical_term
+        for alias in aliases:
+            if alias in existing_terms:
+                return alias
+        for existing in existing_terms:
+            if SequenceMatcher(None, canonical_term, existing).ratio() >= 0.88:
+                return existing
+        return None
 
     async def delete_document(self, kb_id: str, doc_id: str) -> Result[bool]:
         """Delete document and its vectors"""
