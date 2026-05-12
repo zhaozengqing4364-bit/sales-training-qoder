@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
@@ -218,6 +219,43 @@ async def test_training_task_start_session_uses_bound_published_template(
 
 
 @pytest.mark.asyncio
+async def test_training_task_start_session_rejects_unusable_template_dependency(
+    test_db: AsyncSession,
+    test_user,
+) -> None:
+    agent, persona, runtime_profile, ruleset, knowledge_base = await _seed_sales_runtime(
+        test_db
+    )
+    template = await _create_published_template(
+        test_db,
+        agent=agent,
+        persona=persona,
+        runtime_profile=runtime_profile,
+        ruleset=ruleset,
+        knowledge_base=knowledge_base,
+    )
+    ruleset.status = "draft"
+    task = await _create_training_task(test_db, assignee_id=str(test_user.user_id))
+    task.practice_template_id = template.template_id
+    await test_db.commit()
+
+    with pytest.raises(PracticeServiceError) as exc_info:
+        await start_training_task_session(
+            test_db,
+            task,
+            TrainingTaskStartSessionRequest(
+                agent_id=agent.id,
+                persona_id=persona.id,
+                voice_mode="stepfun_realtime",
+            ),
+            current_user=test_user,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.error_code == "[RUNTIME_SNAPSHOT_RUBRIC_MISSING]"
+
+
+@pytest.mark.asyncio
 async def test_training_task_start_session_rejects_unpublished_template(
     test_db: AsyncSession,
     test_user,
@@ -309,3 +347,43 @@ async def test_training_task_start_session_rejects_invalid_template_id(
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.error_code == "[PRACTICE_TEMPLATE_INVALID]"
+
+
+@pytest.mark.asyncio
+async def test_training_task_status_constraint_excludes_runtime_states(
+    test_db: AsyncSession,
+    test_user,
+) -> None:
+    assignee_id = str(test_user.user_id)
+    allowed_statuses = {"assigned", "in_progress", "completed", "expired", "cancelled"}
+    for status in allowed_statuses:
+        test_db.add(
+            TrainingTask(
+                task_id=str(uuid.uuid4()),
+                title=f"状态约束 {status}",
+                assignee_id=assignee_id,
+                scenario_type="sales",
+                goal="验证 TrainingTask 状态约束",
+                completion_criteria={},
+                source="manual",
+                status=status,
+            )
+        )
+    await test_db.commit()
+
+    for runtime_status in ("preflight", "stage", "reconnect"):
+        test_db.add(
+            TrainingTask(
+                task_id=str(uuid.uuid4()),
+                title=f"非法运行态 {runtime_status}",
+                assignee_id=assignee_id,
+                scenario_type="sales",
+                goal="验证 TrainingTask 不接收运行态",
+                completion_criteria={},
+                source="manual",
+                status=runtime_status,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await test_db.commit()
+        await test_db.rollback()
