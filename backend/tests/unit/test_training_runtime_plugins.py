@@ -5,12 +5,14 @@ import importlib.util
 import pytest
 
 from training_runtime import (
+    LEGACY_SALES_HANDLER_MODULES,
     PresentationScenarioPlugin,
     SalesScenarioPlugin,
     TrainingRuntimeDescriptor,
     build_default_scenario_plugin_registry,
     dispatch_scenario_plugin,
     get_scenario_plugin,
+    legacy_sales_handlers_absent,
 )
 
 REQUIRED_PLUGIN_METHODS = (
@@ -111,10 +113,13 @@ def test_should_keep_sales_plugin_stepfun_only_and_legacy_handlers_absent() -> N
     assert start.service_path == "sales_bot.websocket.stepfun_realtime_handler"
     assert start.method_name == "create_stepfun_realtime_handler"
     assert diagnostics.runtime_family == "stepfun_only"
-    assert diagnostics.details["legacy_handlers_absent"] is True
-    assert importlib.util.find_spec("sales_bot.websocket.base_sales_handler") is None
-    assert importlib.util.find_spec("sales_bot.websocket.enhanced_handler") is None
-    assert importlib.util.find_spec("sales_bot.websocket.simple_handler") is None
+    assert diagnostics.details["legacy_handlers_absent"] == {
+        module: True for module in LEGACY_SALES_HANDLER_MODULES
+    }
+    assert legacy_sales_handlers_absent() == {
+        module: importlib.util.find_spec(module) is None
+        for module in LEGACY_SALES_HANDLER_MODULES
+    }
 
 
 def test_should_keep_presentation_training_flow_entrypoints() -> None:
