@@ -241,3 +241,41 @@ async def test_should_publish_practice_template_when_gate_passes(
         "hash": published["content_hash"],
         "snapshot_label": "published",
     }
+
+
+@pytest.mark.asyncio
+async def test_should_reject_update_when_practice_template_is_not_draft(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    admin_headers: dict[str, str],
+) -> None:
+    await _seed_publishable_references(db_session)
+    create_response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/templates",
+        headers=admin_headers,
+        json=_template_payload(),
+    )
+    template_id = create_response.json()["data"]["template_id"]
+    publish_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/templates/{template_id}/publish",
+        headers=admin_headers,
+    )
+    assert publish_response.status_code == 200
+
+    update_response = await async_client.put(
+        f"/api/v1/admin/curriculum-practice/templates/{template_id}",
+        headers=admin_headers,
+        json={"description": "不应写入的修改"},
+    )
+
+    assert update_response.status_code == 409
+    assert update_response.json()["error"] == "[PRACTICE_TEMPLATE_NOT_EDITABLE]"
+
+    read_response = await async_client.get(
+        f"/api/v1/admin/curriculum-practice/templates/{template_id}",
+        headers=admin_headers,
+    )
+    assert read_response.status_code == 200
+    unchanged = read_response.json()["data"]
+    assert unchanged["status"] == "published"
+    assert unchanged["description"] == "最小 PracticeTemplate 草稿"

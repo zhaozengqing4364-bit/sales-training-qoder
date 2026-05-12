@@ -144,6 +144,19 @@ describe("AdminPracticeTemplatesPage", () => {
         expect(screen.getByText(/保存完成：客户异议处理训练/)).toBeTruthy();
     });
 
+    it("does not offer edit action for published PracticeTemplates", async () => {
+        listPracticeTemplatesMock.mockResolvedValue({
+            items: [{ ...template, status: "published", content_hash: "sha256:ok" }],
+            total: 1,
+        });
+
+        render(<AdminPracticeTemplatesPage />);
+
+        expect(await screen.findByText("published · v1")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "编辑模板" })).toBeNull();
+        expect(screen.getByText("仅 draft 模板可编辑")).toBeTruthy();
+    });
+
     it("updates the row after publishing succeeds", async () => {
         publishPracticeTemplateMock.mockResolvedValue({ ...template, status: "published", content_hash: "sha256:ok" });
 

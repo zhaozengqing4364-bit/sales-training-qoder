@@ -228,7 +228,11 @@ export default function AdminPracticeTemplatesPage() {
                                     {item.description ? <p className="mt-2 text-sm text-slate-600">{item.description}</p> : null}
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="outline" onClick={() => { handleEdit(item); }}>编辑模板</Button>
+                                    {item.status === "draft" ? (
+                                        <Button variant="outline" onClick={() => { handleEdit(item); }}>编辑模板</Button>
+                                    ) : (
+                                        <span className="self-center text-xs text-slate-500">仅 draft 模板可编辑</span>
+                                    )}
                                     <Button
                                         onClick={() => { void handlePublish(item); }}
                                         disabled={item.status === "published" || busyTemplateId !== null}

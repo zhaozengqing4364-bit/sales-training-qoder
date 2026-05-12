@@ -23,6 +23,10 @@ from curriculum_practice.schemas import (
 from curriculum_practice.services.publishing_gates import PublishingGateService
 
 
+class PracticeTemplateNotEditableError(ValueError):
+    pass
+
+
 class PracticeTemplateService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
@@ -54,6 +58,8 @@ class PracticeTemplateService:
         *,
         actor_id: str | None,
     ) -> PracticeTemplate:
+        if template.status != "draft":
+            raise PracticeTemplateNotEditableError
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(template, field, value)
         template.updated_by = actor_id

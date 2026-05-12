@@ -20,6 +20,7 @@ from curriculum_practice.schemas import (
     PracticeTemplateUpdate,
 )
 from curriculum_practice.services.practice_templates import (
+    PracticeTemplateNotEditableError,
     PracticeTemplateService,
     published_ref,
     serialize_template,
@@ -135,6 +136,13 @@ async def update_practice_template(
             template, payload, actor_id=str(current_user.user_id)
         )
         return _success(serialize_template(updated))
+    except PracticeTemplateNotEditableError:
+        await db.rollback()
+        return _api_error(
+            "[PRACTICE_TEMPLATE_NOT_EDITABLE]",
+            status_code=409,
+            message="Only draft PracticeTemplate records can be edited.",
+        )
     except SQLAlchemyError as exc:
         await db.rollback()
         return build_server_error(
