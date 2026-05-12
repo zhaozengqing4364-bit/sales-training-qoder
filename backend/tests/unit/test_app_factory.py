@@ -59,6 +59,8 @@ def test_create_app_does_not_duplicate_method_path_routes() -> None:
 
 def test_create_app_cors_defaults_fail_closed_in_production(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("SECRET_KEY", "production-secret-key-with-32-characters")
+    monkeypatch.setenv("DEBUG", "false")
     monkeypatch.delenv("CORS_ORIGINS", raising=False)
     monkeypatch.delenv("CORS_ALLOW_ORIGIN_REGEX", raising=False)
 
@@ -70,6 +72,26 @@ def test_create_app_cors_defaults_fail_closed_in_production(monkeypatch) -> None
     )
     assert cors_middleware.kwargs["allow_origins"] == []
     assert cors_middleware.kwargs["allow_origin_regex"] is None
+
+
+def test_create_app_rejects_unsafe_production_config(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("DEV_LOGIN_ENABLED", "true")
+    monkeypatch.setenv("SECRET_KEY", "change-me")
+    monkeypatch.setenv("DEBUG", "true")
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+
+    try:
+        create_app()
+    except RuntimeError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("unsafe production config should be rejected")
+
+    assert "PROD_DEV_LOGIN_ENABLED" in message
+    assert "PROD_SECRET_KEY_UNSAFE" in message
+    assert "PROD_DEBUG_TRUE" in message
+    assert "PROD_CORS_WIDE_OPEN" in message
 
 
 def test_create_app_cors_appends_dev_origins_only_in_dev(monkeypatch) -> None:
