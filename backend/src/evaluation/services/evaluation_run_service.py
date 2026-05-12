@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,7 +11,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin.config_bundles.lifecycle import ConfigBundleLifecycleService
 from common.business_rules.defaults import SALES_COMBINATION_RULES_KEY
-from common.db.models import EvaluationRun, EvaluationRunStatus
+from common.db.models import EvaluationRun, EvaluationRunStatus, PracticeSession
+
+CURRICULUM_LINEAGE_KEYS = (
+    "practice_template",
+    "content_assets",
+    "rubric",
+    "llm_suggestions",
+)
+
+
+def extract_curriculum_lineage(
+    curriculum_snapshot: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(curriculum_snapshot, dict):
+        return None
+
+    lineage = {
+        key: deepcopy(curriculum_snapshot[key])
+        for key in CURRICULUM_LINEAGE_KEYS
+        if key in curriculum_snapshot
+    }
+    return lineage or None
 
 
 class EvaluationRunService:
@@ -36,12 +58,17 @@ class EvaluationRunService:
             config_version_id=config_version_id,
         )
 
+        evidence_reference = dict(input_evidence_reference)
+        curriculum_lineage = await self._get_curriculum_lineage_for_session(session_id)
+        if curriculum_lineage is not None:
+            evidence_reference["curriculum_lineage"] = curriculum_lineage
+
         run = EvaluationRun(
             session_id=session_id,
             config_bundle_id=binding["config_bundle_id"],
             config_version_id=binding["config_version_id"],
             status=EvaluationRunStatus.PENDING.value,
-            input_evidence_reference=dict(input_evidence_reference),
+            input_evidence_reference=evidence_reference,
         )
         self.db.add(run)
         await self.db.flush()
@@ -150,6 +177,17 @@ class EvaluationRunService:
             select(EvaluationRun).where(EvaluationRun.session_id == session_id)
         )
         return result.scalar_one_or_none()
+
+    async def _get_curriculum_lineage_for_session(
+        self,
+        session_id: str,
+    ) -> dict[str, Any] | None:
+        result = await self.db.execute(
+            select(PracticeSession.curriculum_snapshot).where(
+                PracticeSession.session_id == session_id
+            )
+        )
+        return extract_curriculum_lineage(result.scalar_one_or_none())
 
     async def _get_run(self, run_id: str) -> EvaluationRun:
         result = await self.db.execute(

@@ -51,7 +51,7 @@ class TrainingReportSnapshotService:
         snapshot = TrainingReportSnapshot(
             session_id=run.session_id,
             evaluation_run_id=run.run_id,
-            report_payload=dict(report_payload),
+            report_payload=self._report_payload_with_lineage(run, report_payload),
             config_bundle_id=run.config_bundle_id,
             config_bundle_snapshot=config_lineage,
             ruleset_source=metadata["ruleset_source"],
@@ -64,6 +64,20 @@ class TrainingReportSnapshotService:
         self.db.add(snapshot)
         await self.db.flush()
         return snapshot
+
+    @staticmethod
+    def _report_payload_with_lineage(
+        run: EvaluationRun,
+        report_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = dict(report_payload)
+        input_evidence = run.input_evidence_reference
+        if not isinstance(input_evidence, dict):
+            return payload
+        curriculum_lineage = input_evidence.get("curriculum_lineage")
+        if isinstance(curriculum_lineage, dict):
+            payload["lineage"] = deepcopy(curriculum_lineage)
+        return payload
 
     @staticmethod
     def _metadata_or_legacy(value: str | None) -> str:
