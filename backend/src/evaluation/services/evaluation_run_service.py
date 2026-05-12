@@ -15,9 +15,7 @@ from common.db.models import EvaluationRun, EvaluationRunStatus, PracticeSession
 
 CURRICULUM_LINEAGE_KEYS = (
     "practice_template",
-    "content_assets",
     "rubric",
-    "llm_suggestions",
 )
 
 
@@ -32,6 +30,12 @@ def extract_curriculum_lineage(
         for key in CURRICULUM_LINEAGE_KEYS
         if key in curriculum_snapshot
     }
+    lineage["content_assets"] = deepcopy(curriculum_snapshot.get("content_assets") or [])
+    lineage["llm_suggestions"] = deepcopy(
+        curriculum_snapshot.get("llm_suggestions")
+        if "llm_suggestions" in curriculum_snapshot
+        else curriculum_snapshot.get("llm_nodes") or []
+    )
     return lineage or None
 
 

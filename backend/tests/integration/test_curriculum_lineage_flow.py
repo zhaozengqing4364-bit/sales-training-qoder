@@ -6,6 +6,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, Scenario, User
+from curriculum_practice.schemas import (
+    CurriculumRuntimeRef,
+    CurriculumRuntimeSnapshot,
+    CurriculumTrainingTaskRef,
+    CurriculumVersionRef,
+)
 from evaluation.services.evaluation_run_service import EvaluationRunService
 from evaluation.services.training_report_snapshot_service import (
     TrainingReportSnapshotService,
@@ -13,42 +19,37 @@ from evaluation.services.training_report_snapshot_service import (
 
 
 def _snapshot() -> dict:
-    return {
-        "practice_template": {
-            "asset_type": "practice_template",
-            "asset_id": "template-flow",
-            "version": 1,
-            "hash": "sha256:template-flow",
-            "snapshot_label": "published",
-        },
-        "content_assets": {
-            "knowledge_bases": [
-                {
-                    "asset_type": "knowledge_base",
-                    "asset_id": "kb-flow",
-                    "version": 1,
-                    "hash": "sha256:kb-flow",
-                    "snapshot_label": "published",
-                }
-            ]
-        },
-        "rubric": {
-            "asset_type": "scoring_ruleset",
-            "asset_id": "ruleset-flow",
-            "version": "sales-v1",
-            "hash": "sha256:ruleset-flow",
-            "snapshot_label": "published",
-        },
-        "llm_suggestions": {
-            "prompt_contract": {
-                "asset_type": "prompt_contract",
-                "asset_id": "prompt-flow",
-                "version": 1,
-                "hash": "sha256:prompt-flow",
-                "snapshot_label": "published",
-            }
-        },
-    }
+    return CurriculumRuntimeSnapshot(
+        snapshot_hash="sha256:snapshot-flow",
+        created_at="2026-05-12T00:00:00+00:00",
+        training_task=CurriculumTrainingTaskRef(
+            id="session-flow",
+            scenario_type="sales",
+        ),
+        practice_template=CurriculumVersionRef(
+            asset_type="practice_template",
+            asset_id="template-flow",
+            version=1,
+            hash="sha256:template-flow",
+            snapshot_label="published",
+        ),
+        content_assets=[],
+        rubric=CurriculumVersionRef(
+            asset_type="scoring_ruleset",
+            asset_id="ruleset-flow",
+            version="sales-v1",
+            hash="sha256:ruleset-flow",
+            snapshot_label="published",
+        ),
+        runtime=CurriculumRuntimeRef(
+            agent_id="agent-flow",
+            persona_id="persona-flow",
+            runtime_profile_id="runtime-flow",
+            voice_policy_snapshot_hash="sha256:voice-policy-flow",
+            instruction_contract_hash="sha256:instruction-flow",
+        ),
+        llm_nodes=[],
+    ).model_dump()
 
 
 @pytest.mark.asyncio
@@ -91,6 +92,8 @@ async def test_curriculum_lineage_flows_from_session_to_run_and_report_snapshot(
     )
 
     assert "curriculum_lineage" in run.input_evidence_reference
+    assert run.input_evidence_reference["curriculum_lineage"]["content_assets"] == []
+    assert run.input_evidence_reference["curriculum_lineage"]["llm_suggestions"] == []
     assert report.report_payload["lineage"] == run.input_evidence_reference[
         "curriculum_lineage"
     ]

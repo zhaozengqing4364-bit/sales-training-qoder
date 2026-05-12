@@ -7,6 +7,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, Scenario, User
+from curriculum_practice.schemas import (
+    CurriculumRuntimeRef,
+    CurriculumRuntimeSnapshot,
+    CurriculumTrainingTaskRef,
+    CurriculumVersionRef,
+)
 from evaluation.services.evaluation_run_service import (
     EvaluationRunService,
     extract_curriculum_lineage,
@@ -17,43 +23,38 @@ from evaluation.services.training_report_snapshot_service import (
 
 
 def _curriculum_snapshot() -> dict:
-    return {
-        "practice_template": {
-            "asset_type": "practice_template",
-            "asset_id": "template-1",
-            "version": 2,
-            "hash": "sha256:template",
-            "snapshot_label": "published",
-        },
-        "content_assets": {
-            "knowledge_bases": [
-                {
-                    "asset_type": "knowledge_base",
-                    "asset_id": "kb-1",
-                    "version": 1,
-                    "hash": "sha256:kb",
-                    "snapshot_label": "published",
-                }
-            ]
-        },
-        "rubric": {
-            "asset_type": "scoring_ruleset",
-            "asset_id": "ruleset-1",
-            "version": "sales-v1",
-            "hash": "sha256:ruleset",
-            "snapshot_label": "published",
-        },
-        "llm_suggestions": {
-            "prompt_contract": {
-                "asset_type": "prompt_contract",
-                "asset_id": "prompt-1",
-                "version": 1,
-                "hash": "sha256:prompt",
-                "snapshot_label": "published",
-            }
-        },
-        "runtime": {"runtime_profile_id": "runtime-1"},
-    }
+    snapshot = CurriculumRuntimeSnapshot(
+        snapshot_hash="sha256:snapshot",
+        created_at="2026-05-12T00:00:00+00:00",
+        training_task=CurriculumTrainingTaskRef(
+            id="session-1",
+            scenario_type="sales",
+        ),
+        practice_template=CurriculumVersionRef(
+            asset_type="practice_template",
+            asset_id="template-1",
+            version=2,
+            hash="sha256:template",
+            snapshot_label="published",
+        ),
+        content_assets=[],
+        rubric=CurriculumVersionRef(
+            asset_type="scoring_ruleset",
+            asset_id="ruleset-1",
+            version="sales-v1",
+            hash="sha256:ruleset",
+            snapshot_label="published",
+        ),
+        runtime=CurriculumRuntimeRef(
+            agent_id="agent-1",
+            persona_id="persona-1",
+            runtime_profile_id="runtime-1",
+            voice_policy_snapshot_hash="sha256:voice-policy",
+            instruction_contract_hash="sha256:instruction",
+        ),
+        llm_nodes=[],
+    )
+    return snapshot.model_dump()
 
 
 async def _create_practice_session(
@@ -94,9 +95,9 @@ def test_should_extract_required_curriculum_lineage_from_snapshot() -> None:
     assert lineage is not None
     assert lineage == {
         "practice_template": snapshot["practice_template"],
-        "content_assets": snapshot["content_assets"],
+        "content_assets": [],
         "rubric": snapshot["rubric"],
-        "llm_suggestions": snapshot["llm_suggestions"],
+        "llm_suggestions": [],
     }
     assert snapshot == original
     assert lineage is not snapshot
