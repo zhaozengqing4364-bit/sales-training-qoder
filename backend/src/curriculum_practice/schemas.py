@@ -16,6 +16,22 @@ PracticeTemplateMode = Literal[
     "mixed_path",
 ]
 GateStatus = Literal["passed", "failed", "warning"]
+CurriculumAssetType = Literal[
+    "practice_template",
+    "curriculum",
+    "lesson",
+    "knowledge_point",
+    "question_bank",
+    "question_item",
+    "case_item",
+    "role_profile",
+    "rubric_set",
+    "scoring_ruleset",
+    "knowledge_base",
+    "prompt_contract",
+    "model_config",
+]
+SnapshotLabel = Literal["published", "superseded", "legacy_unversioned"]
 
 
 class PracticeTemplatePublishCandidate(BaseModel):
@@ -50,6 +66,40 @@ class PublishedTemplateRef(BaseModel):
     version: int
     hash: str
     snapshot_label: Literal["published"] = "published"
+
+
+class CurriculumVersionRef(BaseModel):
+    asset_type: CurriculumAssetType
+    asset_id: str
+    version: int | str
+    hash: str
+    snapshot_label: SnapshotLabel
+
+
+class CurriculumTrainingTaskRef(BaseModel):
+    id: str
+    scenario_type: str
+
+
+class CurriculumRuntimeRef(BaseModel):
+    agent_id: str
+    persona_id: str
+    runtime_profile_id: str
+    voice_policy_snapshot_hash: str
+    instruction_contract_hash: str
+
+
+class CurriculumRuntimeSnapshot(BaseModel):
+    schema_version: int = 1
+    snapshot_hash: str
+    created_at: str
+    trace_id: str | None = None
+    training_task: CurriculumTrainingTaskRef
+    practice_template: CurriculumVersionRef
+    content_assets: list[CurriculumVersionRef] = Field(default_factory=list)
+    rubric: CurriculumVersionRef
+    runtime: CurriculumRuntimeRef
+    llm_nodes: list[dict[str, object]] = Field(default_factory=list)
 
 
 class ReferenceReader(Protocol):
