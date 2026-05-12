@@ -931,7 +931,6 @@ class PracticeSession(Base):
         String(36),
         ForeignKey("practice_templates.template_id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     curriculum_snapshot = Column(JSON, nullable=True)
     runtime_state = Column(JSON, nullable=True)
