@@ -24,8 +24,6 @@ backend/src/sales_bot/
 | Realtime vague-speech detection | `services/vagueness_detector.py` |
 | Voice policy compilation | `services/voice_instruction_compiler.py`, `services/voice_runtime_policy.py` |
 | WebSocket routing | `websocket/router.py` |
-| Base handler (ASR → LLM → TTS pipeline) | `websocket/base_sales_handler.py` |
-| Simple / enhanced handler variants | `websocket/simple_handler.py`, `websocket/enhanced_handler.py` |
 | StepFun realtime integration | `websocket/stepfun_realtime_handler.py` |
 | StepFun helpers / tools / events | `websocket/components/` |
 | Realtime feedback arbiter | `websocket/realtime_feedback_arbiter.py` |
@@ -35,7 +33,7 @@ backend/src/sales_bot/
 **`websocket/` is the dominant complexity hotspot in this subtree.**
 - `websocket/stepfun_realtime_handler.py` is the largest source file in the repo.
 - `websocket/components/` contains a dense concentration of StepFun-specific helpers (message helpers, knowledge helpers, function-call helpers, tool helpers, event payloads, runtime metrics, upstream router, TTS component, capability processor, score processor, objection ledger, message persistence).
-- `websocket/base_sales_handler.py` defines the shared Audio → ASR → LLM → TTS pipeline with backpressure, deduplication, and lifecycle state sync.
+- The removed legacy Sales runtime must stay absent; Sales voice practice uses the StepFun realtime path.
 
 ## Local Cautions
 

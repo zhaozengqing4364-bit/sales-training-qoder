@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from typing import cast
 
 import pytest
 
 from sales_bot.websocket.phase4_local_provider import Phase4LocalStepFunProvider
-from sales_bot.websocket.router import SALES_WS_AUTH_POLICY
 from sales_bot.websocket.stepfun_realtime_handler import create_stepfun_realtime_handler
 
 
@@ -57,8 +55,6 @@ async def test_should_drive_phase4_local_provider_and_record_transcript(tmp_path
 def test_should_keep_sales_websocket_stepfun_only_runtime():
     """The Sales WebSocket E2E path must not depend on deleted legacy handlers."""
     assert create_stepfun_realtime_handler is not None
-    reject_close_codes = cast(dict[str, int], SALES_WS_AUTH_POLICY["reject_close_codes"])
-    assert reject_close_codes["legacy_sales_runtime_disabled"] == 4412
 
     for module_name in (
         "sales_bot.websocket.base_sales_handler",

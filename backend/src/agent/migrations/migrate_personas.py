@@ -1,7 +1,7 @@
 """
 Migrate Hardcoded Personas to Database
 
-Migrates PERSONA_CONFIG from simple_handler.py to the database.
+Migrates the legacy persona config constants to the database.
 Creates a default "销售教练" Agent and links migrated Personas.
 
 This script is idempotent - safe to run multiple times.

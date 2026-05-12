@@ -9,13 +9,58 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
+import types
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db.models import PracticeSession, Scenario, User
 from sales_bot.websocket.components.stepfun_function_call_helpers import (
     build_function_call_output_event,
 )
+
+if "websockets" not in sys.modules:
+    websockets_stub = types.ModuleType("websockets")
+    exceptions_stub = types.ModuleType("websockets.exceptions")
+
+    class ConnectionClosed(Exception):
+        pass
+
+    setattr(exceptions_stub, "ConnectionClosed", ConnectionClosed)
+    setattr(websockets_stub, "exceptions", exceptions_stub)
+    sys.modules["websockets"] = websockets_stub
+    sys.modules["websockets.exceptions"] = exceptions_stub
+
+if "chromadb" not in sys.modules:
+    chromadb_stub = types.ModuleType("chromadb")
+    chromadb_api_stub = types.ModuleType("chromadb.api")
+    chromadb_models_stub = types.ModuleType("chromadb.api.models")
+    chromadb_collection_stub = types.ModuleType("chromadb.api.models.Collection")
+    chromadb_config_stub = types.ModuleType("chromadb.config")
+
+    class ClientAPI:
+        pass
+
+    class Collection:
+        pass
+
+    class Settings:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    setattr(chromadb_stub, "PersistentClient", lambda *_args, **_kwargs: None)
+    setattr(chromadb_api_stub, "ClientAPI", ClientAPI)
+    setattr(chromadb_collection_stub, "Collection", Collection)
+    setattr(chromadb_config_stub, "Settings", Settings)
+    sys.modules["chromadb"] = chromadb_stub
+    sys.modules["chromadb.api"] = chromadb_api_stub
+    sys.modules["chromadb.api.models"] = chromadb_models_stub
+    sys.modules["chromadb.api.models.Collection"] = chromadb_collection_stub
+    sys.modules["chromadb.config"] = chromadb_config_stub
+
+import sales_bot.websocket.stepfun_realtime_handler as stepfun_handler_module
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
 
 
@@ -27,6 +72,17 @@ class CaptureManager:
         self.sent.append(copy.deepcopy(payload))
 
 
+class _SessionContext:
+    def __init__(self, db: AsyncSession) -> None:
+        self._db = db
+
+    async def __aenter__(self) -> AsyncSession:
+        return self._db
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
 def _scrub_dynamic_fields(payload: dict) -> dict:
     scrubbed = copy.deepcopy(payload)
     if "timestamp" in scrubbed:
@@ -36,6 +92,99 @@ def _scrub_dynamic_fields(payload: dict) -> dict:
     if "stream_id" in scrubbed:
         scrubbed["stream_id"] = "<stream_id>"
     return scrubbed
+
+
+@pytest.mark.asyncio
+async def test_prd46_stepfun_loads_runtime_payload_from_session_snapshot_only(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        user_id="user-stepfun-snapshot",
+        wechat_user_id="stepfun_snapshot_user",
+        name="StepFun Snapshot User",
+        role="user",
+    )
+    scenario = Scenario(
+        scenario_id="scenario-stepfun-snapshot",
+        scenario_type="sales",
+        name="stepfun_snapshot_scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id="session-stepfun-snapshot",
+        user_id=user.user_id,
+        scenario_id=scenario.scenario_id,
+        agent_id="agent-v1",
+        persona_id="persona-v1",
+        voice_mode="stepfun_realtime",
+        voice_policy_snapshot={
+            "voice_mode": "stepfun_realtime",
+            "runtime_profile_id": "runtime-v1",
+            "model_name": "step-audio-2",
+            "voice_name": "qingchunshaonv",
+            "temperature": 0.4,
+            "instructions": "snapshot instruction v1",
+            "instruction_contract_hash": "sha256:instruction-v1",
+            "knowledge_base_ids": ["kb-v1"],
+            "tool_policy": {
+                "enable_internal_retrieval": True,
+                "network_access_mode": "off",
+            },
+        },
+        curriculum_snapshot={
+            "practice_template": {
+                "asset_type": "practice_template",
+                "asset_id": "template-latest",
+                "version": 99,
+                "hash": "sha256:latest-template",
+                "snapshot_label": "published",
+            },
+            "latest_practice_content": "must not enter StepFun payload",
+            "runtime": {
+                "runtime_profile_id": "runtime-latest",
+                "instruction_contract_hash": "sha256:latest-instruction",
+            },
+        },
+    )
+    test_db.add_all([user, scenario, session])
+    await test_db.commit()
+
+    async def fail_if_latest_policy_is_resolved(*_args: object, **_kwargs: object) -> dict:
+        raise AssertionError("StepFun must not resolve latest curriculum/practice content")
+
+    monkeypatch.setattr(
+        stepfun_handler_module,
+        "AsyncSessionLocal",
+        lambda: _SessionContext(test_db),
+    )
+    monkeypatch.setattr(
+        stepfun_handler_module.VoiceRuntimePolicyService,
+        "resolve_effective_policy",
+        fail_if_latest_policy_is_resolved,
+    )
+    monkeypatch.setattr(
+        StepFunRealtimeHandler,
+        "_refresh_sales_stage_runtime_config",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        StepFunRealtimeHandler,
+        "_merge_kb_dictionary_into_effective_policy",
+        AsyncMock(return_value=False),
+    )
+
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-stepfun-snapshot"
+
+    await handler._load_effective_policy()
+
+    assert handler._effective_policy["runtime_profile_id"] == "runtime-v1"
+    assert handler._effective_policy["knowledge_base_ids"] == ["kb-v1"]
+    assert handler._stepfun_instructions.startswith("snapshot instruction v1")
+    assert "must not enter StepFun payload" not in handler._stepfun_instructions
+    assert handler._stepfun_model == "step-audio-2"
+    assert "latest_practice_content" not in handler._effective_policy
 
 
 @pytest.mark.asyncio
@@ -68,7 +217,7 @@ async def test_q02_kb_lock_blocked_response_tts_payload_snapshot():
     handler = StepFunRealtimeHandler()
     manager = CaptureManager()
     blocked_text = "当前内部知识库没有足够依据回答这个问题。"
-    handler.manager = manager
+    setattr(handler, "manager", manager)
     handler.websocket = object()
     handler.session_id = "session-1"
     handler._pending_blocked_response_text = blocked_text
@@ -129,7 +278,7 @@ def test_q02_function_call_tool_result_payload_snapshot():
 async def test_q02_realtime_feedback_score_update_payload_snapshot():
     handler = StepFunRealtimeHandler()
     manager = CaptureManager()
-    handler.manager = manager
+    setattr(handler, "manager", manager)
     handler.websocket = object()
     handler.session_id = "session-1"
 

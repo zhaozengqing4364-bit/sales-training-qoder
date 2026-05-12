@@ -1,8 +1,49 @@
 """Integration tests for unified websocket status/event contract."""
 
+import sys
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+if "websockets" not in sys.modules:
+    websockets_stub = types.ModuleType("websockets")
+    exceptions_stub = types.ModuleType("websockets.exceptions")
+
+    class ConnectionClosed(Exception):
+        pass
+
+    setattr(exceptions_stub, "ConnectionClosed", ConnectionClosed)
+    setattr(websockets_stub, "exceptions", exceptions_stub)
+    sys.modules["websockets"] = websockets_stub
+    sys.modules["websockets.exceptions"] = exceptions_stub
+
+if "chromadb" not in sys.modules:
+    chromadb_stub = types.ModuleType("chromadb")
+    chromadb_api_stub = types.ModuleType("chromadb.api")
+    chromadb_models_stub = types.ModuleType("chromadb.api.models")
+    chromadb_collection_stub = types.ModuleType("chromadb.api.models.Collection")
+    chromadb_config_stub = types.ModuleType("chromadb.config")
+
+    class ClientAPI:
+        pass
+
+    class Collection:
+        pass
+
+    class Settings:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    setattr(chromadb_stub, "PersistentClient", lambda *_args, **_kwargs: None)
+    setattr(chromadb_api_stub, "ClientAPI", ClientAPI)
+    setattr(chromadb_collection_stub, "Collection", Collection)
+    setattr(chromadb_config_stub, "Settings", Settings)
+    sys.modules["chromadb"] = chromadb_stub
+    sys.modules["chromadb.api"] = chromadb_api_stub
+    sys.modules["chromadb.api.models"] = chromadb_models_stub
+    sys.modules["chromadb.api.models.Collection"] = chromadb_collection_stub
+    sys.modules["chromadb.config"] = chromadb_config_stub
 
 from common.auth.service import get_session_cookie_name, resolve_websocket_auth
 from common.websocket.session_manager import SessionManager
@@ -13,7 +54,6 @@ from common.websocket.session_state_service import (
 from presentation_coach.websocket.presentation_handler import (
     PresentationWebSocketHandler,
 )
-from sales_bot.websocket.simple_handler import SimpleSalesHandler
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
 
 
@@ -156,47 +196,6 @@ async def test_session_state_service_stats_surface_snapshot_reconnect_signals() 
             },
         },
     }
-
-
-@pytest.mark.asyncio
-async def test_simple_handler_status_includes_trace_and_core_fields():
-    """`status` must include trace_id + stable lifecycle fields."""
-    handler = SimpleSalesHandler()
-    handler.websocket = AsyncMock()
-    handler.manager = MagicMock()
-    handler.manager.send_json = AsyncMock()
-    handler.session_status = "in_progress"
-    handler.turn_count = 3
-
-    await handler._send_status("thinking")
-
-    sent = handler.manager.send_json.call_args[0][1]
-    assert sent["type"] == "status"
-    assert sent.get("trace_id")
-    assert sent["data"]["session_status"] == "in_progress"
-    assert sent["data"]["ai_state"] == "thinking"
-    assert sent["data"]["turn_count"] == 3
-
-
-@pytest.mark.asyncio
-async def test_simple_handler_error_includes_trace_and_state_context():
-    """`error` should include trace_id + lifecycle context for observability."""
-    handler = SimpleSalesHandler()
-    handler.websocket = AsyncMock()
-    handler.manager = MagicMock()
-    handler.manager.send_json = AsyncMock()
-    handler.session_status = "paused"
-    handler.turn_count = 7
-
-    await handler._send_error("[PROCESSING_ERROR]", "处理失败")
-
-    sent = handler.manager.send_json.call_args[0][1]
-    assert sent["type"] == "error"
-    assert sent.get("trace_id")
-    assert sent["data"]["code"] == "[PROCESSING_ERROR]"
-    assert sent["data"]["session_status"] == "paused"
-    assert sent["data"]["ai_state"] == "idle"
-    assert sent["data"]["turn_count"] == 7
 
 
 @pytest.mark.asyncio

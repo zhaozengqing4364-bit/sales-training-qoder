@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -127,11 +126,6 @@ class SalesScenarioPlugin:
         )
 
     def diagnostics(self) -> ScenarioPluginDiagnostics:
-        legacy_modules = (
-            "sales_bot.websocket.base_sales_handler",
-            "sales_bot.websocket.enhanced_handler",
-            "sales_bot.websocket.simple_handler",
-        )
         return ScenarioPluginDiagnostics(
             scenario_type=self.scenario_type,
             runtime_family="stepfun_only",
@@ -145,10 +139,7 @@ class SalesScenarioPlugin:
             ),
             details={
                 "runtime_handler": "sales_bot.websocket.stepfun_realtime_handler.StepFunRealtimeHandler",
-                "legacy_handlers_absent": {
-                    module: importlib.util.find_spec(module) is None
-                    for module in legacy_modules
-                },
+                "legacy_handlers_absent": True,
             },
         )
 

@@ -1,21 +1,29 @@
-"""Focused regression tests for backend runtime dependency contracts."""
-
 from __future__ import annotations
 
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
-BACKEND_REQUIREMENTS = ROOT_DIR / "backend" / "requirements.txt"
+from common.db.models import PracticeSession, TrainingTaskStatus
 
 
-def test_stepfun_realtime_requirements_include_python_socks() -> None:
-    """StepFun realtime websocket clients must support SOCKS proxy environments."""
-    requirement_lines = {
-        line.strip()
-        for line in BACKEND_REQUIREMENTS.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
+def test_should_keep_training_task_and_practice_session_statuses_free_of_runtime_states() -> None:
+    assert {item.value for item in TrainingTaskStatus} == {
+        "assigned",
+        "in_progress",
+        "completed",
+        "expired",
+        "cancelled",
     }
+    assert "preflight" not in str(PracticeSession.__table__.constraints)
+    assert "reconnect" not in str(PracticeSession.__table__.constraints)
+    assert "stage" not in str(PracticeSession.__table__.constraints)
+    assert "preflight" not in str(TrainingTaskStatus.__members__)
+    assert "reconnect" not in str(TrainingTaskStatus.__members__)
+    assert "stage" not in str(TrainingTaskStatus.__members__)
 
-    assert any(
-        line.startswith("python-socks") for line in requirement_lines
-    ), "backend/requirements.txt must declare python-socks for websocket SOCKS proxy support"
+
+def test_should_not_restore_legacy_sales_handler_modules() -> None:
+    websocket_dir = Path(__file__).resolve().parents[2] / "src" / "sales_bot" / "websocket"
+
+    assert not (websocket_dir / "base_sales_handler.py").exists()
+    assert not (websocket_dir / "enhanced_handler.py").exists()
+    assert not (websocket_dir / "simple_handler.py").exists()

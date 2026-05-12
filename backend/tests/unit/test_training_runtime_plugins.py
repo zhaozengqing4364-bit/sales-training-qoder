@@ -111,11 +111,7 @@ def test_should_keep_sales_plugin_stepfun_only_and_legacy_handlers_absent() -> N
     assert start.service_path == "sales_bot.websocket.stepfun_realtime_handler"
     assert start.method_name == "create_stepfun_realtime_handler"
     assert diagnostics.runtime_family == "stepfun_only"
-    assert diagnostics.details["legacy_handlers_absent"] == {
-        "sales_bot.websocket.base_sales_handler": True,
-        "sales_bot.websocket.enhanced_handler": True,
-        "sales_bot.websocket.simple_handler": True,
-    }
+    assert diagnostics.details["legacy_handlers_absent"] is True
     assert importlib.util.find_spec("sales_bot.websocket.base_sales_handler") is None
     assert importlib.util.find_spec("sales_bot.websocket.enhanced_handler") is None
     assert importlib.util.find_spec("sales_bot.websocket.simple_handler") is None
