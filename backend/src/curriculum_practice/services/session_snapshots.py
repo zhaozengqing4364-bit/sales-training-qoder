@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, ScoringRuleset
 from common.knowledge.models import KnowledgeBase
-from curriculum_practice.models import PracticeTemplate
+from curriculum_practice.models import CaseItem, PracticeTemplate, RoleProfile
 from curriculum_practice.services.practice_templates import published_ref
 from curriculum_practice.services.snapshots import (
     RuntimeSnapshotBuildError,
@@ -93,6 +93,8 @@ def _reference_reader(db: AsyncSession):
                 "persona_id": template.persona_id,
                 "knowledge_base_refs": list(template.knowledge_base_refs or []),
                 "scoring_ruleset_id": template.scoring_ruleset_id,
+                "case_item_id": template.case_item_id,
+                "role_profile_id": template.role_profile_id,
             }
         if asset_type == "voice_runtime_profile":
             from agent.models import VoiceRuntimeProfile
@@ -132,6 +134,26 @@ def _reference_reader(db: AsyncSession):
                 "status": knowledge_base.status,
                 "category": knowledge_base.category,
                 "vector_collection": knowledge_base.vector_collection,
+            }
+        if asset_type == "case_item":
+            case_item = await db.get(CaseItem, asset_id)
+            if case_item is None:
+                return None
+            return {
+                "case_item_id": case_item.case_item_id,
+                "status": case_item.status,
+                "version": case_item.version,
+                "content_hash": case_item.content_hash,
+            }
+        if asset_type == "role_profile":
+            role_profile = await db.get(RoleProfile, asset_id)
+            if role_profile is None:
+                return None
+            return {
+                "role_profile_id": role_profile.role_profile_id,
+                "status": role_profile.status,
+                "version": role_profile.version,
+                "content_hash": role_profile.content_hash,
             }
         return None
 

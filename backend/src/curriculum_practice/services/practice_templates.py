@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.models import Agent, Persona, VoiceRuntimeProfile
 from common.db.models import ScoringRuleset
 from common.knowledge.models import KnowledgeBase
-from curriculum_practice.models import PracticeTemplate
+from curriculum_practice.models import CaseItem, PracticeTemplate, RoleProfile
 from curriculum_practice.schemas import (
     PracticeTemplateCreate,
     PracticeTemplatePublishCandidate,
@@ -108,6 +108,12 @@ class PracticeTemplateService:
         if asset_type == "knowledge_base":
             item = await self._db.get(KnowledgeBase, asset_id)
             return item if item is not None and item.status == "active" else None
+        if asset_type == "case_item":
+            item = await self._db.get(CaseItem, asset_id)
+            return item if item is not None and item.status == "published" else None
+        if asset_type == "role_profile":
+            item = await self._db.get(RoleProfile, asset_id)
+            return item if item is not None and item.status == "published" else None
         return None
 
 
@@ -124,6 +130,8 @@ def serialize_template(template: PracticeTemplate) -> PracticeTemplateResponse:
         "voice_mode": template.voice_mode,
         "scoring_ruleset_id": template.scoring_ruleset_id,
         "knowledge_base_refs": list(template.knowledge_base_refs or []),
+        "case_item_id": template.case_item_id,
+        "role_profile_id": template.role_profile_id,
         "status": template.status,
         "version": template.version,
         "content_hash": template.content_hash,
@@ -147,6 +155,8 @@ def _candidate_from_template(
         voice_mode=template.voice_mode,
         scoring_ruleset_id=str(template.scoring_ruleset_id),
         knowledge_base_refs=list(template.knowledge_base_refs or []),
+        case_item_id=template.case_item_id,
+        role_profile_id=template.role_profile_id,
     )
 
 
@@ -162,6 +172,8 @@ def _content_hash(template: PracticeTemplate) -> str:
         "voice_mode": template.voice_mode,
         "scoring_ruleset_id": template.scoring_ruleset_id,
         "knowledge_base_refs": list(template.knowledge_base_refs or []),
+        "case_item_id": template.case_item_id,
+        "role_profile_id": template.role_profile_id,
         "version": template.version,
     }
     return (

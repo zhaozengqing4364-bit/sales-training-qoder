@@ -33,6 +33,18 @@ class PublishingGateService:
             if isawaitable(reference):
                 reference = await reference
             if reference is None:
+                if asset_type in ("case_item", "role_profile"):
+                    results.append(
+                        GateResult(
+                            gate_name="content_asset_reference",
+                            status="failed",
+                            reason_code=f"{asset_type}_unpublished",
+                            message=(
+                                f"{asset_type} reference {asset_id} does not exist or is not published."
+                            ),
+                        )
+                    )
+                    continue
                 if asset_type == "scoring_ruleset":
                     results.append(
                         GateResult(
@@ -76,4 +88,8 @@ class PublishingGateService:
             ("scoring_ruleset", candidate.scoring_ruleset_id),
         ]
         refs.extend(("knowledge_base", item) for item in candidate.knowledge_base_refs)
+        if candidate.case_item_id:
+            refs.append(("case_item", candidate.case_item_id))
+        if candidate.role_profile_id:
+            refs.append(("role_profile", candidate.role_profile_id))
         return refs

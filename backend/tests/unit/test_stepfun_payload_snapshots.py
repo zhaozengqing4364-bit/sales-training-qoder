@@ -137,6 +137,7 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
             },
             "practice_template": "must not enter session.update",
             "content_assets": ["must not enter session.update"],
+            "hidden_information": "隐藏预算不能进入 StepFun 初始输入",
             "rubric": {"must": "not enter session.update"},
             "curriculum_snapshot": {"must": "not enter session.update"},
             "latest_practice_content": "must not enter session.update",
@@ -150,6 +151,15 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
                 "hash": "sha256:latest-template",
                 "snapshot_label": "published",
             },
+            "content_assets": [
+                {
+                    "asset_type": "case_item",
+                    "asset_id": "case-v1",
+                    "version": 1,
+                    "hash": "sha256:case-v1",
+                    "hidden_information": "隐藏预算不能进入 StepFun 初始输入",
+                }
+            ],
             "latest_practice_content": "must not enter StepFun payload",
             "runtime": {
                 "runtime_profile_id": "runtime-latest",
@@ -238,6 +248,8 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
     for forbidden in (
         "practice_template",
         "content_assets",
+        "hidden_information",
+        "隐藏预算不能进入 StepFun 初始输入",
         "rubric",
         "curriculum_snapshot",
         "latest_practice_content",

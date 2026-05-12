@@ -3,9 +3,11 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PracticeTemplateStatus = Literal["draft", "published", "archived"]
+ContentAssetStatus = Literal["draft", "published", "archived"]
+RoleProfilePressureLevel = Literal["low", "medium", "high"]
 PracticeTemplateScenarioType = Literal["sales", "presentation"]
 PracticeTemplateVoiceMode = Literal["legacy", "stepfun_realtime"]
 PracticeTemplateMode = Literal[
@@ -46,6 +48,8 @@ class PracticeTemplatePublishCandidate(BaseModel):
     voice_mode: PracticeTemplateVoiceMode = "stepfun_realtime"
     scoring_ruleset_id: str = Field(..., min_length=1, max_length=36)
     knowledge_base_refs: list[str] = Field(default_factory=list)
+    case_item_id: str | None = Field(None, min_length=1, max_length=36)
+    role_profile_id: str | None = Field(None, min_length=1, max_length=36)
 
 
 class GateResult(BaseModel):
@@ -102,6 +106,71 @@ class CurriculumRuntimeSnapshot(BaseModel):
     llm_nodes: list[dict[str, object]] = Field(default_factory=list)
 
 
+class CaseItemBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    industry: str = Field(..., min_length=1, max_length=120)
+    company_profile: str = Field(..., min_length=1, max_length=4000)
+    customer_role: str = Field(..., min_length=1, max_length=120)
+    pain_points: list[str] = Field(..., min_length=1)
+    objections: list[str] = Field(..., min_length=1)
+    hidden_information: str = Field(..., min_length=1, max_length=4000)
+    success_criteria: list[str] = Field(..., min_length=1)
+    allowed_disclosure_policy: dict[str, object]
+    content_hash: str = Field(..., min_length=1, max_length=80)
+
+    @model_validator(mode="after")
+    def validate_allowed_disclosure_policy(self) -> CaseItemBase:
+        phases = self.allowed_disclosure_policy.get("phases")
+        if not isinstance(phases, list) or not phases:
+            raise ValueError("allowed_disclosure_policy.phases must contain at least one phase")
+        return self
+
+
+class CaseItemCreate(CaseItemBase):
+    pass
+
+
+class CaseItemResponse(CaseItemBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    case_item_id: str
+    version: int
+    status: ContentAssetStatus
+    published_at: object | None = None
+    created_at: object
+    updated_at: object
+
+
+class RoleProfileBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_type: Literal["customer"]
+    role_name: str = Field(..., min_length=1, max_length=160)
+    persona_ref: str | None = Field(None, min_length=1, max_length=36)
+    communication_style: str = Field(..., min_length=1, max_length=2000)
+    pressure_level: RoleProfilePressureLevel
+    knowledge_boundary: list[str] = Field(..., min_length=1)
+    behavior_rules: list[str] = Field(..., min_length=1)
+    voice_style_hint: str = Field(..., min_length=1, max_length=300)
+    content_hash: str = Field(..., min_length=1, max_length=80)
+
+
+class RoleProfileCreate(RoleProfileBase):
+    pass
+
+
+class RoleProfileResponse(RoleProfileBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    role_profile_id: str
+    version: int
+    status: ContentAssetStatus
+    published_at: object | None = None
+    created_at: object
+    updated_at: object
+
+
 class ReferenceReader(Protocol):
     def __call__(
         self, asset_type: str, asset_id: str
@@ -121,6 +190,8 @@ class PracticeTemplateCreate(BaseModel):
     voice_mode: PracticeTemplateVoiceMode = "stepfun_realtime"
     scoring_ruleset_id: str = Field(..., min_length=1, max_length=36)
     knowledge_base_refs: list[str] = Field(default_factory=list)
+    case_item_id: str | None = Field(None, min_length=1, max_length=36)
+    role_profile_id: str | None = Field(None, min_length=1, max_length=36)
 
 
 class PracticeTemplateUpdate(BaseModel):
@@ -136,6 +207,8 @@ class PracticeTemplateUpdate(BaseModel):
     voice_mode: PracticeTemplateVoiceMode | None = None
     scoring_ruleset_id: str | None = Field(None, min_length=1, max_length=36)
     knowledge_base_refs: list[str] | None = None
+    case_item_id: str | None = Field(None, min_length=1, max_length=36)
+    role_profile_id: str | None = Field(None, min_length=1, max_length=36)
 
 
 class PracticeTemplateResponse(BaseModel):
@@ -152,6 +225,8 @@ class PracticeTemplateResponse(BaseModel):
     voice_mode: str
     scoring_ruleset_id: str
     knowledge_base_refs: list[str]
+    case_item_id: str | None = None
+    role_profile_id: str | None = None
     status: str
     version: int
     content_hash: str | None = None

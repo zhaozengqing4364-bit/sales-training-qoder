@@ -88,6 +88,16 @@ class RuntimeSnapshotService:
                 }
             ),
         )
+        content_assets = [
+            await self._knowledge_base_ref(str(asset_id))
+            for asset_id in template_data.get("knowledge_base_refs", [])
+        ]
+        if template_data.get("case_item_id"):
+            content_assets.append(await self._case_item_ref(str(template_data["case_item_id"])))
+        if template_data.get("role_profile_id"):
+            content_assets.append(
+                await self._role_profile_ref(str(template_data["role_profile_id"]))
+            )
         snapshot = CurriculumRuntimeSnapshot(
             snapshot_hash="sha256:pending",
             created_at=created_at or datetime.now(UTC).isoformat(),
@@ -100,10 +110,7 @@ class RuntimeSnapshotService:
                 hash=template_ref.hash,
                 snapshot_label=template_ref.snapshot_label,
             ),
-            content_assets=[
-                await self._knowledge_base_ref(str(asset_id))
-                for asset_id in template_data.get("knowledge_base_refs", [])
-            ],
+            content_assets=content_assets,
             rubric=await self._rubric_ref(str(template_data["scoring_ruleset_id"])),
             runtime=runtime,
         )
@@ -144,6 +151,36 @@ class RuntimeSnapshotService:
             asset_id=asset_id,
             version=ruleset.get("version", 1),
             hash=_stable_hash(ruleset),
+            snapshot_label="published",
+        )
+
+    async def _case_item_ref(self, asset_id: str) -> CurriculumVersionRef:
+        case_item = _as_dict(await self._read_reference("case_item", asset_id))
+        if not case_item or case_item.get("status") != "published":
+            raise RuntimeSnapshotBuildError(
+                "asset_unpublished",
+                "CaseItem reference is missing or unpublished.",
+            )
+        return CurriculumVersionRef(
+            asset_type="case_item",
+            asset_id=asset_id,
+            version=case_item.get("version", 1),
+            hash=str(case_item["content_hash"]),
+            snapshot_label="published",
+        )
+
+    async def _role_profile_ref(self, asset_id: str) -> CurriculumVersionRef:
+        role_profile = _as_dict(await self._read_reference("role_profile", asset_id))
+        if not role_profile or role_profile.get("status") != "published":
+            raise RuntimeSnapshotBuildError(
+                "asset_unpublished",
+                "RoleProfile reference is missing or unpublished.",
+            )
+        return CurriculumVersionRef(
+            asset_type="role_profile",
+            asset_id=asset_id,
+            version=role_profile.get("version", 1),
+            hash=str(role_profile["content_hash"]),
             snapshot_label="published",
         )
 
