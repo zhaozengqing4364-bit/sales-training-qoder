@@ -1255,6 +1255,9 @@ class VerificationRunner:
             # Check 3: Secrets scan (sensitive data leakage)
             security_results.append(await self._run_secrets_scan())
 
+            # Check 4: Phase 5 release readiness checklist
+            security_results.append(await self._run_release_readiness_check())
+
             end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
@@ -1531,6 +1534,44 @@ class VerificationRunner:
                     passed=False,
                     issues_found=1,
                     high_severity=0,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=0,
+                    error_message=str(e)[:200],
+                ),
+            )
+
+    async def _run_release_readiness_check(self) -> tuple[str, SecurityCheckResultT]:
+        """Run Phase 5 release readiness gates without changing release APIs."""
+        try:
+            from common.analytics.release_readiness import run_release_readiness_checks
+
+            report = run_release_readiness_checks(self.repo_root)
+            issues_found = len(report.findings)
+            return (
+                "release_readiness",
+                SecurityCheckResult(
+                    check_type="release_readiness",
+                    passed=report.passed,
+                    issues_found=issues_found,
+                    high_severity=issues_found,
+                    medium_severity=0,
+                    low_severity=0,
+                    duration_ms=0,
+                    details=report.to_dict(),
+                    error_message=None
+                    if report.passed
+                    else "; ".join(finding.code for finding in report.findings),
+                ),
+            )
+        except Exception as e:
+            return (
+                "release_readiness",
+                SecurityCheckResult(
+                    check_type="release_readiness",
+                    passed=False,
+                    issues_found=1,
+                    high_severity=1,
                     medium_severity=0,
                     low_severity=0,
                     duration_ms=0,

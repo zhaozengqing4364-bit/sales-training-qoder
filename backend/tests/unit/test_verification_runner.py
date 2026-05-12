@@ -331,6 +331,9 @@ class TestHealthAndSecurityChecks:
         runner._run_bandit_scan = AsyncMock(return_value=passed_scan("bandit"))
         runner._run_safety_scan = AsyncMock(return_value=passed_scan("safety"))
         runner._run_secrets_scan = AsyncMock(return_value=passed_scan("secrets"))
+        runner._run_release_readiness_check = AsyncMock(
+            return_value=passed_scan("release_readiness")
+        )
         runner._update_verification_record = AsyncMock()
 
         result = await runner._run_security_checks(mock_db, "rc-security")
@@ -341,8 +344,49 @@ class TestHealthAndSecurityChecks:
             "bandit",
             "safety",
             "secrets",
+            "release_readiness",
         ]
         runner._update_verification_record.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_release_readiness_child_failure_blocks_security_gate(self, runner, mock_db):
+        """Phase 5 release readiness failures are blocking security failures."""
+        passed = (
+            "bandit",
+            runner.SecurityCheckResult(
+                check_type="bandit",
+                passed=True,
+                issues_found=0,
+                high_severity=0,
+                medium_severity=0,
+                low_severity=0,
+                duration_ms=1,
+            ),
+        )
+        failed_readiness = (
+            "release_readiness",
+            runner.SecurityCheckResult(
+                check_type="release_readiness",
+                passed=False,
+                issues_found=1,
+                high_severity=1,
+                medium_severity=0,
+                low_severity=0,
+                duration_ms=1,
+                error_message="PHASE4_ISSUE44_MANIFEST_MISSING",
+            ),
+        )
+        runner._run_bandit_scan = AsyncMock(return_value=passed)
+        runner._run_safety_scan = AsyncMock(return_value=passed)
+        runner._run_secrets_scan = AsyncMock(return_value=passed)
+        runner._run_release_readiness_check = AsyncMock(return_value=failed_readiness)
+        runner._update_verification_record = AsyncMock()
+
+        result = await runner._run_security_checks(mock_db, "rc-security")
+
+        assert result.passed is False
+        assert result.high_severity == 1
+        assert result.details["checks"][-1]["check_type"] == "release_readiness"
 
     @pytest.mark.asyncio
     async def test_database_health_uses_session_engine_export(

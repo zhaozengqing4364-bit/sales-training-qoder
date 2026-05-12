@@ -18,8 +18,7 @@ from sqlalchemy import delete, select
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-import agent.models as _agent_models  # noqa: F401 - register Agent/Persona mappers for PracticeSession relationships
-
+from agent.models import Agent, AgentPersona, Persona
 from common.conversation.models import ConversationMessage
 from common.db.models import (
     PracticeSession,
@@ -31,6 +30,8 @@ from common.db.models import (
 from common.db.session import AsyncSessionLocal
 
 SMOKE_SCENARIO_NAME = "Smoke critical report session"
+SMOKE_AGENT_NAME = "Smoke Phase 4 Sales Agent"
+SMOKE_PERSONA_NAME = "Smoke Phase 4 Budget Buyer"
 
 
 def _make_effectiveness_snapshot() -> dict[str, object]:
@@ -129,6 +130,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
             raise RuntimeError(
                 f"Smoke evidence bootstrap requires an existing user for email={normalized_email}"
             )
+        now = datetime.now(UTC)
 
         scenario_result = await db.execute(
             select(Scenario).where(
@@ -147,6 +149,73 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
             db.add(scenario)
             await db.flush()
 
+        agent_result = await db.execute(
+            select(Agent).where(Agent.name == SMOKE_AGENT_NAME)
+        )
+        agent = agent_result.scalar_one_or_none()
+        if agent is None:
+            agent = Agent(
+                id=str(uuid.uuid4()),
+                name=SMOKE_AGENT_NAME,
+                description="Deterministic Sales agent for smoke and Phase 4 E2E flows",
+                category="sales",
+                system_prompt="You are a Sales training coach for deterministic E2E flows.",
+                capabilities_config={
+                    "sales_stage": {"enabled": True},
+                    "fuzzy_detection": {"enabled": True},
+                    "realtime_scoring": {"enabled": True},
+                },
+                status="published",
+                created_by=str(user.user_id),
+                published_at=now,
+            )
+            db.add(agent)
+            await db.flush()
+
+        persona_result = await db.execute(
+            select(Persona).where(Persona.name == SMOKE_PERSONA_NAME)
+        )
+        persona = persona_result.scalar_one_or_none()
+        if persona is None:
+            persona = Persona(
+                id=str(uuid.uuid4()),
+                name=SMOKE_PERSONA_NAME,
+                description="Budget-conscious buyer for deterministic Sales E2E flows",
+                category="customer",
+                difficulty="medium",
+                system_prompt="You care about budget risk, ROI evidence, and a safe pilot scope.",
+                traits={"关注点": "预算、ROI、试点范围"},
+                behavior_config={"sales_stage": {"enabled": True}},
+                scoring_weights=[
+                    {"name": "价值表达", "weight": 0.2},
+                    {"name": "客户收益连接", "weight": 0.2},
+                    {"name": "证据使用", "weight": 0.25},
+                    {"name": "异议处理", "weight": 0.2},
+                    {"name": "推进下一步", "weight": 0.15},
+                ],
+                status="active",
+                created_by=str(user.user_id),
+            )
+            db.add(persona)
+            await db.flush()
+
+        link_result = await db.execute(
+            select(AgentPersona).where(
+                AgentPersona.agent_id == agent.id,
+                AgentPersona.persona_id == persona.id,
+            )
+        )
+        if link_result.scalar_one_or_none() is None:
+            db.add(
+                AgentPersona(
+                    id=str(uuid.uuid4()),
+                    agent_id=agent.id,
+                    persona_id=persona.id,
+                    is_default=True,
+                )
+            )
+            await db.flush()
+
         session_result = await db.execute(
             select(PracticeSession)
             .where(
@@ -157,7 +226,6 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
         )
         session = session_result.scalars().first()
 
-        now = datetime.now(UTC)
         session_start = now - timedelta(minutes=6)
 
         if session is None:

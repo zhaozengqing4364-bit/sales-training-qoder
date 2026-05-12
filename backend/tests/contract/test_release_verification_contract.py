@@ -186,7 +186,7 @@ async def test_release_verification_requires_admin_for_all_contract_endpoints(
         )
         assert response.status_code == 403, f"{method} {path}"
         payload = response.json()
-        assert payload["detail"]["error"] == "[ROLE_REQUIRED]"
+        assert payload["detail"]["error"] == "[PERMISSION_REQUIRED]"
 
 
 @pytest.mark.contract

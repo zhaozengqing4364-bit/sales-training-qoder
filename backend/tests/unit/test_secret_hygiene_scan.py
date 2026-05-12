@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -40,3 +41,22 @@ def test_secret_scan_passes_current_release_facing_files():
 
     assert result.returncode == 0, result.stderr
     assert "Secret hygiene scan passed" in result.stdout
+
+
+def test_secret_scan_writes_report_for_failure(tmp_path):
+    report_path = tmp_path / "secret-report.json"
+    fixture_path = tmp_path / "fixture.env"
+    fixture_path.write_text("SECRET_KEY=super-realistic-secret-value-123456\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path), str(fixture_path)],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert result.returncode == 1
+    assert report["passed"] is False
+    assert report["findings"][0]["pattern_name"] == "jwt-secret-assignment"

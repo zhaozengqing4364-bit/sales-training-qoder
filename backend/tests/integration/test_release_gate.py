@@ -100,6 +100,18 @@ def runner():
         low_severity=0,
         duration_ms=10,
     ))
+    runner._run_release_readiness_check = AsyncMock(return_value=(
+        "release_readiness",
+        SecurityCheckResult(
+            check_type="release_readiness",
+            passed=True,
+            issues_found=0,
+            high_severity=0,
+            medium_severity=0,
+            low_severity=0,
+            duration_ms=10,
+        ),
+    ))
     runner._run_documentation_checks = AsyncMock(return_value=DocumentationCheckResult(
         check_type="documentation",
         passed=True,

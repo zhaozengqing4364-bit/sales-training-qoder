@@ -9,12 +9,12 @@ default; source-code fixture secrets belong in targeted tests.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-
 
 DEFAULT_PATHS = (
     ".env.example",
@@ -99,17 +99,34 @@ def scan_paths(root: Path, paths: tuple[str, ...]) -> list[Finding]:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        findings.extend(scan_text(path.relative_to(root), text))
+        try:
+            display_path = path.relative_to(root)
+        except ValueError:
+            display_path = path
+        findings.extend(scan_text(display_path, text))
     return findings
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--report", help="Write a JSON secret scan report to this path")
     parser.add_argument("paths", nargs="*", default=list(DEFAULT_PATHS))
     args = parser.parse_args(argv)
 
     root = git_root()
     findings = scan_paths(root, tuple(args.paths))
+    scanned_files = iter_files(root, tuple(args.paths))
+    report = {
+        "passed": not findings,
+        "files_scanned": len(scanned_files),
+        "findings": [asdict(finding) | {"path": str(finding.path)} for finding in findings],
+    }
+    if args.report:
+        report_path = Path(args.report)
+        if not report_path.is_absolute():
+            report_path = root / report_path
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     if findings:
         print("Secret hygiene scan failed:", file=sys.stderr)
         for finding in findings:
@@ -120,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(
-        f"Secret hygiene scan passed ({len(iter_files(root, tuple(args.paths)))} files scanned)"
+        f"Secret hygiene scan passed ({len(scanned_files)} files scanned)"
     )
     return 0
 
