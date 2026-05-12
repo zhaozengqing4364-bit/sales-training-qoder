@@ -44,6 +44,12 @@ from common.monitoring.logger import get_logger, get_trace_id
 from common.services.practice_helpers import PracticeRetryEntryAssembler
 from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
+from curriculum_practice.models import PracticeTemplate
+from curriculum_practice.services.practice_templates import published_ref
+from curriculum_practice.services.snapshots import (
+    RuntimeSnapshotBuildError,
+    RuntimeSnapshotService,
+)
 from presentation_coach.services.coach_service import PresentationCoachService
 from sales_bot.services.bot_service import sales_bot_service
 from sales_bot.services.summary_service import summary_service
@@ -230,7 +236,13 @@ class PracticeSessionCreateService:
                 effective_voice_policy=effective_voice_policy,
             )
         elif scenario_type_value == "sales":
+            if agent_id_str is None or persona_id_str is None:
+                raise PracticeServiceError(
+                    "[AGENT_PERSONA_PAIR_REQUIRED]",
+                    status_code=400,
+                )
             session = await self._create_sales_session(
+                session_data=session_data,
                 current_user=current_user,
                 requested_scenario=requested_scenario,
                 agent_id_str=agent_id_str,
@@ -461,6 +473,12 @@ class PracticeSessionCreateService:
             )
 
         session = result.value
+        if session is None:
+            raise PracticeServiceError(
+                "[SESSION_CREATE_FAILED]",
+                status_code=500,
+                message="会话创建失败",
+            )
         if agent_id_str:
             session.agent_id = agent_id_str
         if persona_id_str:
@@ -474,6 +492,12 @@ class PracticeSessionCreateService:
         session.voice_policy_snapshot = deepcopy(session_policy_snapshot)
         if requested_scenario:
             session.scenario_id = requested_scenario.scenario_id
+        await self._apply_curriculum_snapshot(
+            session=session,
+            practice_template_id=session_data.practice_template_id,
+            scenario_type_value="presentation",
+            current_user=current_user,
+        )
         await self.db.commit()
         await self.db.refresh(session)
         return session
@@ -481,6 +505,7 @@ class PracticeSessionCreateService:
     async def _create_sales_session(
         self,
         *,
+        session_data: SessionCreate,
         current_user: User,
         requested_scenario: Scenario | None,
         agent_id_str: str,
@@ -519,10 +544,118 @@ class PracticeSessionCreateService:
             voice_policy_snapshot=deepcopy(session_policy_snapshot),
             status="preparing",
         )
+        await self._apply_curriculum_snapshot(
+            session=session,
+            practice_template_id=session_data.practice_template_id,
+            scenario_type_value="sales",
+            current_user=current_user,
+        )
         self.db.add(session)
         await self.db.commit()
         await self.db.refresh(session)
         return session
+
+    async def _apply_curriculum_snapshot(
+        self,
+        *,
+        session: PracticeSession,
+        practice_template_id: uuid.UUID | None,
+        scenario_type_value: str,
+        current_user: User,
+    ) -> None:
+        if practice_template_id is None:
+            return
+
+        template = await self.db.get(PracticeTemplate, str(practice_template_id))
+        if template is None:
+            raise PracticeServiceError("[PRACTICE_TEMPLATE_NOT_FOUND]", status_code=404)
+        if template.status != "published":
+            raise PracticeServiceError(
+                "[PRACTICE_TEMPLATE_NOT_PUBLISHED]",
+                status_code=400,
+            )
+
+        snapshot_service = RuntimeSnapshotService(self._read_curriculum_reference)
+        try:
+            snapshot = await snapshot_service.build_for_session(
+                published_ref(template),
+                {
+                    "id": str(session.session_id),
+                    "scenario_type": scenario_type_value,
+                },
+                str(current_user.user_id),
+            )
+        except RuntimeSnapshotBuildError as exc:
+            raise PracticeServiceError(
+                f"[RUNTIME_SNAPSHOT_{exc.reason_code.upper()}]",
+                status_code=400,
+                message=str(exc),
+            ) from exc
+
+        session.practice_template_id = str(template.template_id)
+        session.curriculum_snapshot = snapshot.model_dump(mode="json")
+
+    async def _read_curriculum_reference(
+        self, asset_type: str, asset_id: str
+    ) -> dict[str, Any] | None:
+        if asset_type == "practice_template":
+            template = await self.db.get(PracticeTemplate, asset_id)
+            if template is None:
+                return None
+            return {
+                "template_id": template.template_id,
+                "status": template.status,
+                "content_hash": template.content_hash,
+                "runtime_profile_id": template.runtime_profile_id,
+                "agent_id": template.agent_id,
+                "persona_id": template.persona_id,
+                "knowledge_base_refs": list(template.knowledge_base_refs or []),
+                "scoring_ruleset_id": template.scoring_ruleset_id,
+            }
+        if asset_type == "voice_runtime_profile":
+            from agent.models import VoiceRuntimeProfile
+
+            profile = await self.db.get(VoiceRuntimeProfile, asset_id)
+            if profile is None:
+                return None
+            return {
+                "id": profile.id,
+                "is_active": profile.is_active,
+                "voice_mode": profile.voice_mode,
+                "model_name": profile.model_name,
+                "voice_name": profile.voice_name,
+                "system_instruction_template": getattr(
+                    profile,
+                    "system_instruction_template",
+                    None,
+                ),
+            }
+        if asset_type == "scoring_ruleset":
+            from common.db.models import ScoringRuleset
+
+            ruleset = await self.db.get(ScoringRuleset, asset_id)
+            if ruleset is None:
+                return None
+            return {
+                "ruleset_id": ruleset.ruleset_id,
+                "status": ruleset.status,
+                "version": ruleset.version,
+                "definition_json": ruleset.definition_json,
+            }
+        if asset_type == "knowledge_base":
+            from common.knowledge.models import KnowledgeBase
+
+            knowledge_base = await self.db.get(KnowledgeBase, asset_id)
+            if knowledge_base is None:
+                return None
+            return {
+                "id": knowledge_base.id,
+                "name": knowledge_base.name,
+                "status": knowledge_base.status,
+                "category": knowledge_base.category,
+                "vector_collection": knowledge_base.vector_collection,
+            }
+        return None
 
 
 class PracticeSessionLifecycleApplicationService:

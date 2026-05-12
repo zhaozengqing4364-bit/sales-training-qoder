@@ -617,7 +617,7 @@ async def test_knowledge_check_reports_live_coach_health_from_registered_session
             "scenario_type": "sales",
             "agent_id": agent.id,
             "persona_id": persona.id,
-            "voice_mode": "legacy",
+            "voice_mode": "stepfun_realtime",
         },
     )
     assert create_resp.status_code == 201

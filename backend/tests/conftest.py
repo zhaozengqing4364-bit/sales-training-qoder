@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import agent.models  # noqa: F401  # Register agent/voice-runtime tables on shared Base metadata.
+import curriculum_practice.models  # noqa: F401  # Register curriculum tables for FK targets.
 from common.db.models import Base
 
 # Test database URL (SQLite for testing)

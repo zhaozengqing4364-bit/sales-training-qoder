@@ -275,6 +275,9 @@ class SessionCreate(SessionBase):
     runtime_profile_id: UUID | None = Field(
         None, description="Optional runtime profile override"
     )
+    practice_template_id: UUID | None = Field(
+        None, description="Optional published PracticeTemplate backing this session"
+    )
     focus_intent: dict[str, Any] | None = Field(
         default=None,
         description="Optional retry focus intent carried forward from a prior report, including sales issue/goal or presentation page focus.",
@@ -325,6 +328,9 @@ class SessionResponse(BaseModel):
     voice_policy_snapshot: dict[str, Any] | None = None
     voice_policy_snapshot_ref: "VoicePolicySnapshotReference | None" = None
     effectiveness_snapshot: dict[str, Any] | None = None
+    practice_template_id: UUID | None = None
+    curriculum_snapshot: dict[str, Any] | None = None
+    runtime_state: dict[str, Any] | None = None
     status: SessionStatus
     start_time: datetime
     end_time: datetime | None = None

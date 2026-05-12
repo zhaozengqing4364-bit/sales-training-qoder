@@ -927,6 +927,14 @@ class PracticeSession(Base):
     )
     voice_policy_snapshot = Column(JSON, nullable=True)
     effectiveness_snapshot = Column(JSON, nullable=True)
+    practice_template_id = Column(
+        String(36),
+        ForeignKey("practice_templates.template_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    curriculum_snapshot = Column(JSON, nullable=True)
+    runtime_state = Column(JSON, nullable=True)
 
     start_time = Column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
@@ -977,6 +985,7 @@ class PracticeSession(Base):
         Index("idx_sessions_start", "start_time"),
         Index("idx_sessions_agent", "agent_id"),
         Index("idx_sessions_persona", "persona_id"),
+        Index("idx_sessions_practice_template", "practice_template_id"),
         Index("idx_sessions_report_status", "report_status"),
     )
 
