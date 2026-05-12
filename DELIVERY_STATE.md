@@ -11,9 +11,22 @@
 
 - Overall status: phase_3_acceptance_smoke_complete_paused_before_phase_4
 - Current phase: Phase 3 - Evidence-Based Report and Supervisor Calibration
-- Current atomic task: Phase 3 acceptance smoke for evidence and calibration complete; paused before Phase 4
+- Current atomic task: Phase 4 E2E stabilization boundary resolved; ready to implement infrastructure-first Phase 4 plan
 - Last commit: `Phase 3 acceptance smoke for evidence and calibration`
 - Blocker: none for Phase 3 acceptance smoke behavior. Verification caveat: the exact filtered integration command without `--no-cov` runs the selected tests successfully but exits non-zero because the project-level coverage fail-under applies to the partial `-k` selection. Full backend mypy remains tracked as the Phase 1 gray-release debt ceiling, not a Phase 3 zero-error release blocker.
+
+## Phase 4 E2E Stabilization Plan Boundary - 2026-05-10
+
+- Stable code logic planned: Phase 4 is a training-only E2E stabilization slice for the sales and presentation training flows. It must not absorb scoring-ruleset migration, full RBAC, StepFun refactor, admin/support route smoke, or full replay governance.
+- Implementation order: infrastructure first, then flows. Build versioned E2E fixtures, the minimal backend test-provider seam, and run-manifest plumbing before implementing the sales E2E, presentation E2E, corrupted-PPT degraded path, strict three-run signal, and API latency gate.
+- Mock/provider boundary: E2E must exercise the real UI/API/WebSocket/runtime paths while replacing external AI/ASR/TTS variability at a backend local provider seam. Use the smallest test/dev-selectable seam needed: reuse the existing ASR provider contract where possible, add only minimal TTS/StepFun local adapters where required, and do not perform a full runtime-provider rewrite.
+- Provider script scope: local provider scripts are milestone scripts, not full methodology simulations. They should cover login/session creation handshake, scripted user input or audio marker, provider response/feedback, finish/end signal, report trigger, and evidence-bearing report readiness.
+- Fixture authority: provider scripts, expected evidence, and PPT inputs must be versioned repository fixtures. Corrupted PPT fixtures validate graceful degraded behavior: stable error/degraded state, no crash, no fabricated evidence, and visible recovery guidance.
+- E2E acceptance: both sales and presentation flows must exercise real browser-to-backend WebSocket connections with lifecycle markers, then produce visible report evidence chains. Report evidence must link back to transcript/user utterance, AI/customer response where relevant, PPT page/talking-point evidence for presentation, or explicit missing-evidence markers.
+- Supervisor/replay scope: Phase 4 may render existing supervisor calibration state and may perform a light replay evidence check when linked from the report. Supervisor calibration writes, replay sharing, highlight review, and replay governance remain outside the Phase 4 three-run signal.
+- Stability gate: the Phase 4 signal is three consecutive clean E2E runs. Each run starts from a clean local test stack/database seeded only from versioned fixtures. Any test failure, provider-script mismatch, unexpected console/network error, or manual intervention resets the count to zero.
+- Evidence artifacts: each clean run must emit a run manifest including browser artifacts, backend logs, provider-script transcript, fixture versions, API latency summary, and pass/fail outcome.
+- Performance gate: `core API p95 < 500ms` applies only to E2E path APIs exercised by the two training flows, measured by backend-side request timing. Browser timing is supplemental; real external provider latency is excluded because Phase 4 uses local backend providers.
 
 ## Phase 3 Acceptance Smoke for Evidence and Calibration - 2026-05-09
 
