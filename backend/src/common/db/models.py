@@ -59,12 +59,30 @@ class SessionStatus(str, enum.Enum):
     SCORING = "scoring"
 
 
+class TrainingTaskStatus(str, enum.Enum):
+    ASSIGNED = "assigned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+
+
 class ReportGenerationStatus(str, enum.Enum):
     """Status of report generation for a session."""
 
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class EvaluationRunStatus(str, enum.Enum):
+    """Status of one persisted evaluation run."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    NON_EVALUABLE = "non_evaluable"
     FAILED = "failed"
 
 
@@ -94,13 +112,16 @@ class User(Base):
     department = Column(String(100))
     email = Column(String(255), unique=True)
     hashed_password = Column(String(255), nullable=True)
-    role = Column(String(20), default="user", nullable=False)  # user, admin, support
+    role = Column(String(20), default="user", nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     last_login = Column(DateTime(timezone=True))
     is_active = Column(Boolean, default=True)
 
     __table_args__ = (
-        CheckConstraint("role IN ('user', 'admin', 'support')", name="ck_user_role"),
+        CheckConstraint(
+            "role IN ('user', 'admin', 'support', 'content_admin', 'operations', 'readonly_auditor')",
+            name="ck_user_role",
+        ),
     )
 
     # Relationships
@@ -141,6 +162,33 @@ class User(Base):
         "HighlightReview",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    training_tasks = relationship(
+        "TrainingTask",
+        back_populates="assignee",
+        cascade="all, delete-orphan",
+    )
+
+
+class AdminRolePermission(Base):
+    """Persisted role-to-permission mapping for admin action-level RBAC."""
+
+    __tablename__ = "admin_role_permissions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    role = Column(String(20), nullable=False, index=True)
+    permission = Column(String(80), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('admin', 'support', 'content_admin', 'operations', 'readonly_auditor')",
+            name="ck_admin_role_permissions_role",
+        ),
+        UniqueConstraint("role", "permission", name="uq_admin_role_permissions_role_permission"),
+        Index("idx_admin_role_permissions_role_permission", "role", "permission"),
     )
 
 
@@ -525,6 +573,131 @@ class BusinessRuleConfigAuditLog(Base):
     actor = relationship("User", foreign_keys=[actor_id])
 
 
+class ConfigBundle(Base):
+    """Read-only registry row for a business-domain configuration bundle."""
+
+    __tablename__ = "config_bundles"
+
+    bundle_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    bundle_key = Column(String(160), nullable=False, unique=True, index=True)
+    domain = Column(String(80), nullable=False, index=True)
+    display_name = Column(String(160), nullable=False)
+    adapter_key = Column(String(120), nullable=False, index=True)
+    legacy_domain = Column(String(120), nullable=True)
+    read_path = Column(String(255), nullable=False)
+    admin_entry = Column(String(255), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "domain IN ('business_rules', 'scoring', 'model', 'knowledge', 'voice_runtime', 'ai_analysis')",
+            name="ck_config_bundle_domain",
+        ),
+        Index("idx_config_bundles_domain_enabled", "domain", "enabled"),
+    )
+
+    versions = relationship(
+        "ConfigVersion",
+        back_populates="bundle",
+        cascade="all, delete-orphan",
+    )
+
+
+class ConfigVersion(Base):
+    """Read-only version snapshot row for a ConfigBundle."""
+
+    __tablename__ = "config_versions"
+
+    version_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    bundle_id = Column(
+        String(36),
+        ForeignKey("config_bundles.bundle_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_config_id = Column(String(36), nullable=True, index=True)
+    version_number = Column(Integer, nullable=True)
+    version_label = Column(String(120), nullable=False)
+    status = Column(String(32), nullable=False, index=True)
+    snapshot_json = Column("snapshot", _jsonb_compatible_type(), nullable=False, default=dict)
+    source_updated_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'validated', 'published', 'rolled_back', 'archived', 'disabled', 'default')",
+            name="ck_config_version_status",
+        ),
+        UniqueConstraint(
+            "bundle_id",
+            "source_config_id",
+            name="uq_config_versions_bundle_source",
+        ),
+        Index("idx_config_versions_bundle_status", "bundle_id", "status"),
+    )
+
+    bundle = relationship("ConfigBundle", back_populates="versions")
+
+
+class ConfigBundleAuditLog(Base):
+    """Immutable audit trail for ConfigBundle lifecycle changes."""
+
+    __tablename__ = "config_bundle_audit_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    bundle_key = Column(String(160), nullable=False, index=True)
+    version_id = Column(
+        String(36),
+        ForeignKey("config_versions.version_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    action = Column(String(40), nullable=False, index=True)
+    actor_id = Column(String(36), ForeignKey("users.user_id"), nullable=True, index=True)
+    before_version = Column(Integer, nullable=True)
+    after_version = Column(Integer, nullable=True)
+    before_snapshot_json = Column(
+        "before_snapshot",
+        _jsonb_compatible_type(),
+        nullable=True,
+    )
+    after_snapshot_json = Column(
+        "after_snapshot",
+        _jsonb_compatible_type(),
+        nullable=True,
+    )
+    reason = Column(Text, nullable=False, default="not-provided")
+    trace_id = Column(String(120), nullable=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('create_draft', 'validate', 'preview', 'publish', 'rollback', 'disable')",
+            name="ck_config_bundle_audit_action",
+        ),
+        Index("idx_config_bundle_audit_key_created", "bundle_key", "created_at"),
+    )
+
+    version = relationship("ConfigVersion")
+    actor = relationship("User", foreign_keys=[actor_id])
+
+
 class PasswordResetToken(Base):
     """Durable password-reset lifecycle row.
 
@@ -739,7 +912,13 @@ class PracticeSession(Base):
         nullable=True,
         index=True,
     )
-    voice_mode = Column(String(32), nullable=False, default="legacy", index=True)
+    voice_mode = Column(
+        String(32),
+        nullable=False,
+        default="stepfun_realtime",
+        server_default="stepfun_realtime",
+        index=True,
+    )
     voice_runtime_profile_id = Column(
         String(36),
         ForeignKey("voice_runtime_profiles.id", ondelete="SET NULL"),
@@ -771,6 +950,9 @@ class PracticeSession(Base):
     # Report generation status (Story 3.1)
     report_status = Column(String(20), default="pending", index=True)
     report_generated_at = Column(DateTime(timezone=True))
+    report_status_updated_at = Column(DateTime(timezone=True), nullable=True)
+    report_retryable = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    report_trace_id = Column(String(64), nullable=True)
     report_error = Column(Text, nullable=True)
 
     __table_args__ = (
@@ -819,6 +1001,205 @@ class PracticeSession(Base):
     highlight_reviews = relationship(
         "HighlightReview", back_populates="session", cascade="all, delete-orphan"
     )
+    evaluation_runs = relationship(
+        "EvaluationRun", back_populates="session", cascade="all, delete-orphan"
+    )
+    report_snapshots = relationship(
+        "TrainingReportSnapshot",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+
+
+class TrainingTask(Base):
+    """Top-level training assignment, not a runtime subject."""
+
+    __tablename__ = "training_tasks"
+
+    task_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(200), nullable=False)
+    assignee_id = Column(
+        String(36), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    scenario_type = Column(String(32), nullable=False)
+    goal = Column(Text, nullable=False)
+    focus_intent = Column(String(120), nullable=True)
+    due_date = Column(DateTime(timezone=True), nullable=True)
+    completion_criteria = Column(JSON, nullable=False, default=dict)
+    source = Column(String(50), nullable=False, default="manual", server_default="manual")
+    status = Column(
+        String(32),
+        nullable=False,
+        default=TrainingTaskStatus.ASSIGNED.value,
+        server_default=TrainingTaskStatus.ASSIGNED.value,
+        index=True,
+    )
+    resulting_session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    before_after_summary = Column(JSON, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "scenario_type IN ('sales', 'presentation')",
+            name="ck_training_tasks_scenario_type",
+        ),
+        CheckConstraint(
+            "status IN ('assigned', 'in_progress', 'completed', 'expired', 'cancelled')",
+            name="ck_training_tasks_status",
+        ),
+        Index("idx_training_tasks_assignee_status", "assignee_id", "status"),
+        Index("idx_training_tasks_due_date", "due_date"),
+        Index("idx_training_tasks_created_at", "created_at"),
+    )
+
+    assignee = relationship("User", back_populates="training_tasks")
+    resulting_session = relationship("PracticeSession")
+    retraining_tasks = relationship(
+        "RetrainingTask",
+        back_populates="training_task",
+        foreign_keys="RetrainingTask.training_task_id",
+    )
+
+
+class EvaluationRun(Base):
+    """Durable record of one evaluation pass over session evidence."""
+
+    __tablename__ = "evaluation_runs"
+
+    run_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    config_bundle_id = Column(
+        String(36),
+        ForeignKey("config_bundles.bundle_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    config_version_id = Column(
+        String(36),
+        ForeignKey("config_versions.version_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status = Column(
+        String(32),
+        nullable=False,
+        default=EvaluationRunStatus.PENDING.value,
+        server_default=EvaluationRunStatus.PENDING.value,
+        index=True,
+    )
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    input_evidence_reference = Column(JSON, nullable=False, default=dict)
+    result_payload = Column(JSON, nullable=True)
+    result_summary = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    error_trace = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("session_id", name="uq_evaluation_runs_session"),
+        CheckConstraint(
+            "status IN ('pending', 'running', 'succeeded', 'non_evaluable', 'failed')",
+            name="ck_evaluation_run_status",
+        ),
+        Index("idx_evaluation_runs_session_status", "session_id", "status"),
+        Index(
+            "idx_evaluation_runs_config_binding",
+            "config_bundle_id",
+            "config_version_id",
+        ),
+    )
+
+    session = relationship("PracticeSession", back_populates="evaluation_runs")
+    config_bundle = relationship("ConfigBundle")
+    config_version = relationship("ConfigVersion")
+    report_snapshots = relationship(
+        "TrainingReportSnapshot",
+        back_populates="evaluation_run",
+        cascade="all, delete-orphan",
+    )
+
+
+class TrainingReportSnapshot(Base):
+    """Immutable report payload snapshot for one practice session."""
+
+    __tablename__ = "training_report_snapshots"
+
+    snapshot_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    evaluation_run_id = Column(
+        String(36),
+        ForeignKey("evaluation_runs.run_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    report_payload = Column(JSON, nullable=False, default=dict)
+    config_bundle_id = Column(
+        String(36),
+        ForeignKey("config_bundles.bundle_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    config_bundle_snapshot = Column(JSON, nullable=True)
+    ruleset_source = Column(String(80), nullable=False, default="legacy_unversioned")
+    ruleset_version = Column(String(80), nullable=False, default="legacy_unversioned")
+    score_basis = Column(String(120), nullable=False, default="legacy_unversioned")
+    evidence_completeness = Column(JSON, nullable=False, default=dict)
+    non_evaluable_reason = Column(Text, nullable=True)
+    generated_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("session_id", name="uq_training_report_snapshots_session"),
+        UniqueConstraint(
+            "evaluation_run_id",
+            name="uq_training_report_snapshots_evaluation_run",
+        ),
+        Index(
+            "idx_training_report_snapshots_session_generated",
+            "session_id",
+            "generated_at",
+        ),
+    )
+
+    session = relationship("PracticeSession", back_populates="report_snapshots")
+    evaluation_run = relationship("EvaluationRun", back_populates="report_snapshots")
+    config_bundle = relationship("ConfigBundle")
 
 
 class ConversationMessage(Base):
@@ -1481,6 +1862,12 @@ class RetrainingTask(Base):
         nullable=False,
         index=True,
     )
+    training_task_id = Column(
+        String(36),
+        ForeignKey("training_tasks.task_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     skill_dimension = Column(String(120), nullable=False)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
@@ -1516,11 +1903,18 @@ class RetrainingTask(Base):
             name="uq_retraining_task_review_dimension",
         ),
         Index("idx_retraining_tasks_user_status", "user_id", "status"),
+        Index("idx_retraining_tasks_training_status", "training_task_id", "status"),
         Index(
             "idx_retraining_tasks_source_completed",
             "source_session_id",
             "completed_session_id",
         ),
+    )
+
+    training_task = relationship(
+        "TrainingTask",
+        back_populates="retraining_tasks",
+        foreign_keys=[training_task_id],
     )
 
 
