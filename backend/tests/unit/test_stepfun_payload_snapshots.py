@@ -95,10 +95,11 @@ def _scrub_dynamic_fields(payload: dict) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_prd46_stepfun_loads_runtime_payload_from_session_snapshot_only(
+async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only(
     test_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    sent_upstream: list[dict] = []
     user = User(
         user_id="user-stepfun-snapshot",
         wechat_user_id="stepfun_snapshot_user",
@@ -124,6 +125,9 @@ async def test_prd46_stepfun_loads_runtime_payload_from_session_snapshot_only(
             "model_name": "step-audio-2",
             "voice_name": "qingchunshaonv",
             "temperature": 0.4,
+            "input_audio_format": "pcm16",
+            "output_audio_format": "pcm16",
+            "turn_detection": "server_vad",
             "instructions": "snapshot instruction v1",
             "instruction_contract_hash": "sha256:instruction-v1",
             "knowledge_base_ids": ["kb-v1"],
@@ -131,6 +135,12 @@ async def test_prd46_stepfun_loads_runtime_payload_from_session_snapshot_only(
                 "enable_internal_retrieval": True,
                 "network_access_mode": "off",
             },
+            "practice_template": "must not enter session.update",
+            "content_assets": ["must not enter session.update"],
+            "rubric": {"must": "not enter session.update"},
+            "curriculum_snapshot": {"must": "not enter session.update"},
+            "latest_practice_content": "must not enter session.update",
+            "raw_template_content": "must not enter session.update",
         },
         curriculum_snapshot={
             "practice_template": {
@@ -173,18 +183,73 @@ async def test_prd46_stepfun_loads_runtime_payload_from_session_snapshot_only(
         "_merge_kb_dictionary_into_effective_policy",
         AsyncMock(return_value=False),
     )
+    monkeypatch.setattr(
+        stepfun_handler_module.websockets,
+        "connect",
+        AsyncMock(return_value=object()),
+        raising=False,
+    )
 
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-stepfun-snapshot"
+    handler._send_upstream = AsyncMock(
+        side_effect=lambda payload: sent_upstream.append(copy.deepcopy(payload))
+    )
+    handler._ensure_upstream_keepalive_task = MagicMock()
+    handler._maybe_start_kb_lock_warmup = AsyncMock()
 
     await handler._load_effective_policy()
+    await handler._connect_upstream()
 
     assert handler._effective_policy["runtime_profile_id"] == "runtime-v1"
     assert handler._effective_policy["knowledge_base_ids"] == ["kb-v1"]
     assert handler._stepfun_instructions.startswith("snapshot instruction v1")
     assert "must not enter StepFun payload" not in handler._stepfun_instructions
     assert handler._stepfun_model == "step-audio-2"
-    assert "latest_practice_content" not in handler._effective_policy
+    assert len(sent_upstream) == 1
+
+    session_update = sent_upstream[0]
+    assert set(session_update) == {"type", "session"}
+    assert session_update["type"] == "session.update"
+
+    session_payload = session_update["session"]
+    assert set(session_payload).issubset(
+        {
+            "voice",
+            "temperature",
+            "input_audio_format",
+            "output_audio_format",
+            "turn_detection",
+            "input_audio_transcription",
+            "instructions",
+            "tools",
+        }
+    )
+    assert session_payload["voice"] == "qingchunshaonv"
+    assert session_payload["temperature"] == 0.4
+    assert session_payload["input_audio_format"] == "pcm16"
+    assert session_payload["output_audio_format"] == "pcm16"
+    assert "turn_detection" in session_payload
+    assert session_payload["input_audio_transcription"] == {"language": "zh"}
+    assert session_payload["instructions"].startswith("snapshot instruction v1")
+    assert session_payload["tools"][0]["type"] == "function"
+
+    serialized_payload = json.dumps(session_update, ensure_ascii=False, sort_keys=True)
+    for forbidden in (
+        "practice_template",
+        "content_assets",
+        "rubric",
+        "curriculum_snapshot",
+        "latest_practice_content",
+        "raw_template_content",
+        "template-latest",
+        "sha256:latest-template",
+        "runtime-latest",
+        "sha256:latest-instruction",
+        "must not enter session.update",
+        "must not enter StepFun payload",
+    ):
+        assert forbidden not in serialized_payload
 
 
 @pytest.mark.asyncio
