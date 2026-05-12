@@ -307,8 +307,8 @@ class ComprehensiveReportService:
         """Get conversation transcript for a session.
 
         Tries two sources in order:
-        1. Database conversation_messages table (used by EnhancedSalesHandler)
-        2. In-memory context_manager (used by SimpleSalesHandler)
+1. Database conversation_messages table (primary persisted runtime path)
+2. In-memory context_manager (legacy compatibility fallback)
 
         Args:
             session_id: Session ID
@@ -316,7 +316,7 @@ class ComprehensiveReportService:
         Returns:
             Formatted conversation string or empty string
         """
-        # 1. Try database conversation_messages first (EnhancedSalesHandler path)
+        # 1. Try database conversation_messages first (persisted runtime path)
         try:
             from common.conversation.models import ConversationMessage
 
@@ -342,7 +342,7 @@ class ComprehensiveReportService:
 
             get_logger(__name__).debug(f"DB conversation query failed: {e}")
 
-        # 2. Fallback to in-memory context_manager (SimpleSalesHandler path)
+        # 2. Fallback to in-memory context_manager (legacy compatibility path)
         try:
             import uuid as uuid_mod
 

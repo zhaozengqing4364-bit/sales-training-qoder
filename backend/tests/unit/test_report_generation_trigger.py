@@ -275,6 +275,39 @@ class TestReportGenerationTrigger:
         assert not result.is_success
         assert result.fallback == "[SESSION_NOT_FOUND]"
 
+    def test_phase4_local_report_payload_marks_presentation_evidence_source(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        """The #44 local seam must not label Presentation report evidence as Sales."""
+        transcript_path = tmp_path / "provider.jsonl"
+        transcript_path.write_text(
+            '{"fixture_version":"presentation-provider-script.v1",'
+            '"provider":"phase4_local_stepfun",'
+            '"direction":"provider_event",'
+            '"payload":{"transcript":"业务目标"}}\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("PHASE4_E2E_PROVIDER_TRANSCRIPT", str(transcript_path))
+
+        payload = ReportGenerationTrigger._build_phase4_local_report_payload(
+            SimpleNamespace(
+                session_id="presentation-session-1",
+                scenario_type="presentation",
+                overall_score=88.0,
+                ruleset_version="presentation_review_v1",
+                score_basis="presentation_review",
+                evidence_completeness={"message_count": 1, "complete": True},
+            )
+        )
+
+        assert payload["evidence"]["source"] == "phase4_local_presentation_e2e"
+        assert payload["evidence"]["scenario_type"] == "presentation"
+        assert payload["evidence"]["provider_transcript"]["fixture_version"] == (
+            "presentation-provider-script.v1"
+        )
+
 
 class TestTriggerReportGeneration:
     """Test fire-and-forget trigger function."""
