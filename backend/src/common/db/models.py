@@ -1039,7 +1039,6 @@ class TrainingTask(Base):
         String(36),
         ForeignKey("practice_templates.template_id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     source = Column(String(50), nullable=False, default="manual", server_default="manual")
     status = Column(
