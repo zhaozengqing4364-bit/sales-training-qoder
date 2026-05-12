@@ -382,6 +382,114 @@ export interface ScoringRulesetAuditLogResponse {
     total: number;
 }
 
+export interface ConfigBundleListItem {
+    bundle_key: string;
+    domain: string;
+    name: string;
+    description?: string | null;
+    active_version_id?: string | null;
+    active_version_label?: string | null;
+    active_version_number?: number | null;
+    latest_version_number?: number | null;
+    version_count: number;
+    created_at?: string | null;
+}
+
+export interface ConfigBundleListResponse {
+    items: ConfigBundleListItem[];
+}
+
+export interface ConfigBundleVersionItem {
+    version_id: string;
+    bundle_key: string;
+    version_number: number;
+    version_label?: string | null;
+    status: string;
+    source_config_id?: string | null;
+    snapshot_json?: Record<string, unknown> | null;
+    created_at?: string | null;
+}
+
+export interface ConfigBundleVersionListResponse {
+    items: ConfigBundleVersionItem[];
+}
+
+export interface ConfigBundleValueMutationRequest {
+    config_value: Record<string, unknown>;
+}
+
+export interface ConfigBundleLifecycleMutationResponse {
+    version_id: string;
+    bundle_key: string;
+    version_number: number;
+    version_label?: string | null;
+    status: string;
+    audit_id?: string | null;
+    audit_summary?: Record<string, unknown> | null;
+}
+
+export interface ConfigBundleValidationResponse {
+    valid: boolean;
+    errors: Array<{ field: string; message: string }>;
+    version_id?: string | null;
+}
+
+export interface ConfigBundlePreviewResponse {
+    version_id?: string | null;
+    bundle_key: string;
+    preview_summary: Record<string, unknown>;
+    active_version_number?: number | null;
+}
+
+export interface ConfigBundlePublishRequest {
+    reason?: string | null;
+}
+
+export interface ConfigBundleRollbackRequest {
+    reason?: string | null;
+}
+
+export interface ConfigBundleDisableRequest {
+    reason?: string | null;
+}
+
+export interface ConfigCenterDomainItem {
+    domain: string;
+    name: string;
+    description?: string | null;
+    migration_status: string;
+    legacy_pages: string[];
+    bundles: ConfigBundleListItem[];
+    active_version_summary?: Record<string, unknown> | null;
+}
+
+export interface ConfigCenterDomainsResponse {
+    items: ConfigCenterDomainItem[];
+}
+
+export interface AdminAuditTrailItem {
+    audit_id: string;
+    source: string;
+    timestamp: string;
+    actor: string;
+    action: string;
+    domain?: string;
+    config_key?: string;
+    version?: number | null;
+    before?: Record<string, unknown> | null;
+    after?: Record<string, unknown> | null;
+    reason?: string | null;
+    trace_id?: string | null;
+}
+
+export interface AdminAuditTrailListResponse {
+    items: AdminAuditTrailItem[];
+    total: number;
+    page: number;
+    page_size: number;
+    has_more: boolean;
+}
+
 export interface AdminPermissionMatrixEntry {
     route_family: string;
     auth_surface: string;
@@ -420,6 +528,68 @@ export interface AdminGovernanceSettingsBacklogResponse {
     items: AdminGovernanceSettingsBacklogItem[];
     total: number;
     policy: string;
+}
+
+export interface AdminAiGovernanceExplainabilitySession {
+    session_id: string;
+    scenario_id: string;
+    scenario_type: string | null;
+    user_id: string;
+    status: string | null;
+    report_status: string | null;
+    report_generated_at: string | null;
+}
+
+export interface AdminAiGovernanceExplainabilityEvidence {
+    input_reference: Record<string, unknown>;
+    completeness: Record<string, unknown>;
+    report_evidence: Record<string, unknown> | null;
+}
+
+export interface AdminAiGovernanceExplainabilityEvaluation {
+    run_id: string;
+    status: string;
+    started_at: string | null;
+    finished_at: string | null;
+    input_evidence_reference: Record<string, unknown>;
+    result_payload: Record<string, unknown>;
+    result_summary: string | null;
+    error_message: string | null;
+    config_bundle_id: string | null;
+    config_version_id: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface AdminAiGovernanceExplainabilityReportLineage {
+    snapshot_id: string;
+    evaluation_run_id: string;
+    generated_at: string | null;
+    ruleset_source: string | null;
+    ruleset_version: string | null;
+    score_basis: string | null;
+    non_evaluable_reason: string | null;
+    config_bundle_id: string | null;
+    config_version_id: string | null;
+    bundle_key: string | null;
+    source: string | null;
+    config_bundle_snapshot: Record<string, unknown>;
+    created_at: string | null;
+}
+
+export interface AdminAiGovernanceExplainabilityResponse {
+    session: AdminAiGovernanceExplainabilitySession;
+    model: Record<string, unknown> | null;
+    prompt: Record<string, unknown> | null;
+    rag: Record<string, unknown> | null;
+    knowledge: Record<string, unknown> | null;
+    scoring: Record<string, unknown> | null;
+    evidence: AdminAiGovernanceExplainabilityEvidence;
+    evaluation: AdminAiGovernanceExplainabilityEvaluation;
+    report: {
+        payload: Record<string, unknown>;
+        lineage: AdminAiGovernanceExplainabilityReportLineage;
+    };
 }
 
 export type AdminSettingsSurface = "general" | "security" | "notifications";
@@ -1127,6 +1297,7 @@ export interface AdminKnowledgeDictionaryEntry {
     source: string;
     evidence_count: number;
     notes?: string | null;
+    extraction_metadata?: Record<string, unknown> | null;
     created_at: string;
     updated_at: string;
 }
@@ -2824,6 +2995,151 @@ export interface TrainingReportViewModel {
     supervisor_review?: SupervisorReview | null;
     retraining_tasks: RetrainingTask[];
     before_after?: BeforeAfterComparison | null;
+}
+
+export interface TeamInsightsCompletion {
+    total_tasks: number;
+    completed_tasks: number;
+    completion_rate: number;
+    by_status: Record<string, number>;
+}
+
+export interface TeamInsightsWeakness {
+    dimension: string;
+    count: number;
+    average_score: number | null;
+    learner_ids: string[];
+}
+
+export interface TeamInsightsCommonIssue {
+    issue: string;
+    dimension: string | null;
+    count: number;
+    learner_ids: string[];
+}
+
+export interface TeamInsightsReadinessLearner {
+    learner_id: string;
+    learner_name: string | null;
+    readiness_status: ReadinessStatus;
+    latest_review_id: string;
+    session_id: string;
+}
+
+export interface TeamInsightsReadiness {
+    by_status: Record<string, number>;
+    learners: TeamInsightsReadinessLearner[];
+}
+
+export interface TeamInsightsRetrainingCandidate {
+    learner_id: string;
+    learner_name: string | null;
+    session_id: string;
+    review_id: string;
+    retraining_task_id: string | null;
+    training_task_id: string | null;
+    skill_dimension: string | null;
+    readiness_status: ReadinessStatus;
+    reason: string | null;
+}
+
+export interface TeamInsightsLearnerSummary {
+    learner_id: string;
+    learner_name: string | null;
+    completion: TeamInsightsCompletion;
+    latest_score: number | null;
+    readiness_status: ReadinessStatus | null;
+    top_weaknesses: TeamInsightsWeakness[];
+    config_metadata: Record<string, unknown>;
+}
+
+export interface TeamInsightsResponse {
+    completion: TeamInsightsCompletion;
+    top_weaknesses: TeamInsightsWeakness[];
+    top3_common_issues: TeamInsightsCommonIssue[];
+    readiness: TeamInsightsReadiness;
+    retraining_candidates: TeamInsightsRetrainingCandidate[];
+    learners: TeamInsightsLearnerSummary[];
+}
+
+export interface TeamInsightsLearnerDetail extends TeamInsightsLearnerSummary {
+    learner_email: string | null;
+    training_tasks: TrainingTaskSummary[];
+    latest_review: SupervisorReview | null;
+    common_issues: TeamInsightsCommonIssue[];
+    retraining_candidates: TeamInsightsRetrainingCandidate[];
+}
+
+export interface TrainingTaskSummary {
+    task_id: string;
+    title: string;
+    scenario_type: string;
+    status: string;
+    goal: string;
+}
+
+export type TrainingTaskStatus = "assigned" | "in_progress" | "completed" | "expired" | "cancelled";
+
+export interface TrainingTask {
+    task_id: string;
+    title: string;
+    goal: string;
+    scenario_type: string;
+    status: TrainingTaskStatus;
+    assignee_id: string;
+    assignee_name?: string | null;
+    due_date?: string | null;
+    completion_criteria: Record<string, unknown>;
+    resulting_session_id?: string | null;
+    before_after_summary?: TrainingTaskBeforeAfterSummary | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+}
+
+export interface TrainingTaskBeforeAfterSummary {
+    source_session_id: string;
+    completed_session_id?: string | null;
+    score_delta?: number | null;
+    weak_dimension_changes?: Array<{ name: string; delta: number | null }>;
+}
+
+export interface TrainingTaskCreateRequest {
+    title: string;
+    goal: string;
+    scenario_type: string;
+    assignee_id: string;
+    due_date?: string | null;
+    completion_criteria?: Record<string, unknown>;
+}
+
+export interface TrainingTaskUpdateRequest {
+    title?: string;
+    goal?: string;
+    due_date?: string | null;
+    status?: TrainingTaskStatus;
+    completion_criteria?: Record<string, unknown>;
+}
+
+export interface TrainingTaskListResponse {
+    items: TrainingTask[];
+    total: number;
+    page: number;
+    page_size: number;
+    has_more: boolean;
+}
+
+export interface TrainingTaskStartSessionRequest {
+    voice_mode?: string;
+    runtime_profile_id?: string;
+}
+
+export interface TrainingTaskStartSessionResponse {
+    task: TrainingTask;
+    session: {
+        session_id: string;
+        scenario_type: string;
+        status: string;
+    };
 }
 
 export interface SessionStats {

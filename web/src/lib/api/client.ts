@@ -47,6 +47,7 @@ import {
     AdminKnowledgeDebugTriggerResponse,
     AdminSystemLog,
     AdminSystemLogListResponse,
+    AdminAuditTrailListResponse,
     AdminVoiceRuntimeProfile,
     AdminPresentationListItem,
     AdminPresentationDetailItem,
@@ -76,6 +77,7 @@ import {
     BusinessRuleValidationResponse,
     AdminGovernancePermissionsResponse,
     AdminGovernanceSettingsBacklogResponse,
+    AdminAiGovernanceExplainabilityResponse,
     AdminSettingsConfigRecord,
     AdminSettingsPreviewResponse,
     AdminSettingsSurface,
@@ -87,6 +89,16 @@ import {
     ScoringRulesetRecord,
     ScoringRulesetScenarioType,
     ScoringRulesetUpdateRequest,
+    ConfigBundleListResponse,
+    ConfigBundleDisableRequest,
+    ConfigBundleLifecycleMutationResponse,
+    ConfigBundlePreviewResponse,
+    ConfigBundlePublishRequest,
+    ConfigBundleRollbackRequest,
+    ConfigBundleValidationResponse,
+    ConfigBundleVersionListResponse,
+    ConfigBundleValueMutationRequest,
+    ConfigCenterDomainsResponse,
     SalesCombinationPreviewResponse,
     SalesCombinationRuleMutationResponse,
     SalesCombinationRuleSet,
@@ -141,6 +153,8 @@ import {
     SupervisorScoreCalibration,
     SupervisorScoreCalibrationUpsertRequest,
     SupervisorTeamReport,
+    TeamInsightsResponse,
+    TeamInsightsLearnerDetail,
     TrainingReportViewModel,
     RetrainingTask,
     RetrainingTaskCreateRequest,
@@ -157,6 +171,7 @@ import {
     createPracticeDomain,
     createPresentationsDomain,
     createSessionsDomain,
+    createTrainingTasksDomain,
 } from "./client-domains";
 
 const LOOPBACK_HOST_FALLBACK_MAP: Record<string, string> = {
@@ -731,6 +746,10 @@ function normalizeAdminKnowledgeDictionaryEntry(input: unknown): AdminKnowledgeD
         confidence: toNumberValue(raw.confidence, 95),
         source: toStringValue(raw.source, "manual"),
         evidence_count: toNumberValue(raw.evidence_count, 0),
+        extraction_metadata:
+            raw.extraction_metadata && typeof raw.extraction_metadata === "object" && !Array.isArray(raw.extraction_metadata)
+                ? toRecord(raw.extraction_metadata)
+                : null,
         notes: toNullableStringValue(raw.notes),
         created_at: toStringValue(raw.created_at),
         updated_at: toStringValue(raw.updated_at),
@@ -1588,6 +1607,7 @@ async function apiFetchBlob(
  */
 const authDomain = createAuthDomain({ request: apiFetch });
 const practiceDomain = createPracticeDomain({ request: apiFetch });
+const trainingTasksDomain = createTrainingTasksDomain({ request: apiFetch });
 const sessionsDomain = createSessionsDomain({
     request: apiFetch,
     resolveApiBaseUrl,
@@ -1655,6 +1675,8 @@ export interface AudioSegmentFailureRequest {
 export const api = {
     // Authentication
     auth: authDomain,
+
+    trainingTasks: trainingTasksDomain,
 
     // User
     user: {
@@ -1999,6 +2021,35 @@ export const api = {
             if (params?.limit) searchParams.set("limit", String(params.limit));
             const query = searchParams.toString();
             return apiFetch<SupervisorTeamReport[]>(`/supervisor/team/reports${query ? `?${query}` : ""}`);
+        },
+
+        getTeamInsights: async (params?: {
+            scenario_type?: string;
+            learner_id?: string;
+            date_from?: string;
+            date_to?: string;
+        }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.scenario_type) searchParams.set("scenario_type", params.scenario_type);
+            if (params?.learner_id) searchParams.set("learner_id", params.learner_id);
+            if (params?.date_from) searchParams.set("date_from", params.date_from);
+            if (params?.date_to) searchParams.set("date_to", params.date_to);
+            const query = searchParams.toString();
+            return apiFetch<TeamInsightsResponse>(`/supervisor/team/insights${query ? `?${query}` : ""}`);
+        },
+
+        getLearnerDetail: async (
+            learnerId: string,
+            params?: { scenario_type?: string; date_from?: string; date_to?: string },
+        ) => {
+            const searchParams = new URLSearchParams();
+            if (params?.scenario_type) searchParams.set("scenario_type", params.scenario_type);
+            if (params?.date_from) searchParams.set("date_from", params.date_from);
+            if (params?.date_to) searchParams.set("date_to", params.date_to);
+            const query = searchParams.toString();
+            return apiFetch<TeamInsightsLearnerDetail>(
+                `/supervisor/team/insights/${encodeURIComponent(learnerId)}/details${query ? `?${query}` : ""}`,
+            );
         },
 
         listReviews: async (params?: { session_id?: string }) => {
@@ -2516,12 +2567,110 @@ export const api = {
             );
         },
 
+        listConfigBundles: async () => {
+            return apiFetch<ConfigBundleListResponse>("/admin/config-bundles");
+        },
+
+        listConfigBundleVersions: async (bundleKey: string) => {
+            return apiFetch<ConfigBundleVersionListResponse>(
+                `/admin/config-bundles/${encodeURIComponent(bundleKey)}/versions`,
+            );
+        },
+
+        createConfigBundleDraft: async (
+            bundleKey: string,
+            payload: ConfigBundleValueMutationRequest,
+        ) => {
+            return apiFetch<ConfigBundleLifecycleMutationResponse>(
+                `/admin/config-bundles/${encodeURIComponent(bundleKey)}/drafts`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        validateConfigBundle: async (
+            bundleKey: string,
+            payload: ConfigBundleValueMutationRequest,
+        ) => {
+            return apiFetch<ConfigBundleValidationResponse>(
+                `/admin/config-bundles/${encodeURIComponent(bundleKey)}/validate`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        previewConfigBundle: async (
+            bundleKey: string,
+            payload: ConfigBundleValueMutationRequest,
+        ) => {
+            return apiFetch<ConfigBundlePreviewResponse>(
+                `/admin/config-bundles/${encodeURIComponent(bundleKey)}/preview`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        publishConfigBundle: async (
+            bundleKey: string,
+            payload: ConfigBundlePublishRequest,
+        ) => {
+            return apiFetch<ConfigBundleLifecycleMutationResponse>(
+                `/admin/config-bundles/${encodeURIComponent(bundleKey)}/publish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        rollbackConfigBundle: async (
+            bundleKey: string,
+            payload: ConfigBundleRollbackRequest,
+        ) => {
+            return apiFetch<ConfigBundleLifecycleMutationResponse>(
+                `/admin/config-bundles/${encodeURIComponent(bundleKey)}/rollback`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        disableConfigBundle: async (
+            bundleKey: string,
+            payload: ConfigBundleDisableRequest,
+        ) => {
+            return apiFetch<ConfigBundleLifecycleMutationResponse>(
+                `/admin/config-bundles/${encodeURIComponent(bundleKey)}/disable`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listConfigCenterDomains: async () => {
+            return apiFetch<ConfigCenterDomainsResponse>("/admin/config-center/domains");
+        },
+
         getGovernancePermissionsMatrix: async () => {
             return apiFetch<AdminGovernancePermissionsResponse>("/admin/governance/permissions-matrix");
         },
 
         getGovernanceSettingsBacklog: async () => {
             return apiFetch<AdminGovernanceSettingsBacklogResponse>("/admin/governance/settings-backlog");
+        },
+
+        getAiGovernanceExplainability: async (sessionId: string) => {
+            return apiFetch<AdminAiGovernanceExplainabilityResponse>(
+                `/admin/ai-governance/explain/${encodeURIComponent(sessionId)}`,
+            );
         },
 
         getAdminSettingsSurface: async (surface: AdminSettingsSurface) => {
@@ -3620,6 +3769,26 @@ export const api = {
 
         getSystemLog: async (logId: string) => {
             return apiFetch<AdminSystemLog>(`/admin/system-logs/${logId}`);
+        },
+
+        getAuditTrail: async (params?: {
+            domain?: string;
+            action?: string;
+            actor?: string;
+            from_date?: string;
+            to_date?: string;
+            page?: number;
+            page_size?: number;
+        }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.domain) searchParams.set("domain", params.domain);
+            if (params?.action) searchParams.set("action", params.action);
+            if (params?.actor) searchParams.set("actor", params.actor);
+            if (params?.from_date) searchParams.set("from_date", params.from_date);
+            if (params?.to_date) searchParams.set("to_date", params.to_date);
+            if (params?.page) searchParams.set("page", String(params.page));
+            if (params?.page_size) searchParams.set("page_size", String(params.page_size));
+            return apiFetch<AdminAuditTrailListResponse>(`/admin/audit-trail?${searchParams}`);
         },
 
         duplicatePersona: async (personaId: string, name?: string) => {

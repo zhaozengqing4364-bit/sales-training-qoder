@@ -7,7 +7,11 @@ from fastapi.routing import APIRoute
 
 from admin.api.admin import router as admin_presentations_router
 from admin.api.analytics import router as admin_analytics_router
+from admin.api.audit_trail import router as audit_trail_router
 from admin.api.business_rules import router as business_rules_router
+from admin.api.config_bundles import router as config_bundles_router
+from admin.api.config_center import router as config_center_router
+from admin.api.governance import ai_governance_router
 from admin.api.governance import router as admin_governance_router
 from admin.api.interventions import router as admin_interventions_router
 from admin.api.knowledge_answer_config import router as knowledge_answer_config_router
@@ -31,6 +35,7 @@ from common.api import (
     growth,
     practice,
     training,
+    training_tasks,
     users,
 )
 from common.api.knowledge_debug import router as knowledge_debug_router
@@ -105,6 +110,12 @@ def register_routers(app: FastAPI) -> None:
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(
+        training_tasks.router,
+        prefix="/api/v1",
+        tags=["training-tasks"],
+        dependencies=[Depends(require_role(["admin", "support", "user"]))],
+    )
+    app.include_router(
         business_rules.router,
         prefix="/api/v1",
         tags=["business-rules"],
@@ -169,6 +180,21 @@ def register_routers(app: FastAPI) -> None:
         tags=["admin-business-rules"],
     )
     app.include_router(
+        config_bundles_router,
+        prefix="/api/v1/admin",
+        tags=["admin-config-bundles"],
+    )
+    app.include_router(
+        config_center_router,
+        prefix="/api/v1/admin",
+        tags=["admin-config-center"],
+    )
+    app.include_router(
+        audit_trail_router,
+        prefix="/api/v1/admin",
+        tags=["admin-audit-trail"],
+    )
+    app.include_router(
         admin_analytics_router,
         prefix="/api/v1",
         tags=["admin-analytics"],
@@ -178,6 +204,12 @@ def register_routers(app: FastAPI) -> None:
         admin_governance_router,
         prefix="/api/v1/admin",
         tags=["admin-governance"],
+        dependencies=[Depends(get_current_admin_user)],
+    )
+    app.include_router(
+        ai_governance_router,
+        prefix="/api/v1/admin",
+        tags=["admin-ai-governance"],
         dependencies=[Depends(get_current_admin_user)],
     )
     app.include_router(
@@ -195,7 +227,6 @@ def register_routers(app: FastAPI) -> None:
         admin_system_logs_router,
         prefix="/api/v1",
         tags=["admin-system-logs"],
-        dependencies=[Depends(get_current_admin_user)],
     )
     app.include_router(
         knowledge_answer_config_router,

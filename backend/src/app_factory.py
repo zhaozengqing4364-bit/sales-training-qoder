@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app_lifespan import lifespan
+from common.analytics.release_readiness import validate_production_config
 from common.api.response import error_response
 from common.error_handling.middleware import (
     ErrorHandlerMiddleware,
@@ -148,6 +149,13 @@ def _configure_middleware(app: FastAPI) -> None:
     app.exception_handler(Exception)(global_exception_handler)
 
 
+def _validate_production_readiness_config() -> None:
+    findings = validate_production_config(dict(os.environ))
+    if findings:
+        codes = ", ".join(finding.code for finding in findings)
+        raise RuntimeError(f"Production configuration rejected: {codes}")
+
+
 async def _request_validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
@@ -170,6 +178,7 @@ async def _request_validation_exception_handler(
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    _validate_production_readiness_config()
     app = FastAPI(
         title=APP_TITLE,
         description=APP_DESCRIPTION,

@@ -39,6 +39,13 @@ import type {
     AdminPresentationPage,
     PresentationProgress,
     Recommendation,
+    TrainingTask,
+    TrainingTaskCreateRequest,
+    TrainingTaskListResponse,
+    TrainingTaskStartSessionRequest,
+    TrainingTaskStartSessionResponse,
+    TrainingTaskStatus,
+    TrainingTaskUpdateRequest,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -105,6 +112,10 @@ type PracticeDomainDependencies = {
 };
 
 type AdminReportDomainDependencies = {
+    request: ApiRequest;
+};
+
+type TrainingTasksDomainDependencies = {
     request: ApiRequest;
 };
 
@@ -516,6 +527,44 @@ export function createAdminReportDomain({ request }: AdminReportDomainDependenci
         generateComprehensiveReport: async (sessionId: string) => {
             return request<ComprehensiveReport>(`/evaluation/sessions/${sessionId}/report`, {
                 method: "POST",
+            });
+        },
+    };
+}
+
+export function createTrainingTasksDomain({ request }: TrainingTasksDomainDependencies) {
+    return {
+        create: async (data: TrainingTaskCreateRequest) => {
+            return request<TrainingTask>("/training-tasks", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        list: async (params?: { page?: number; page_size?: number; status?: TrainingTaskStatus }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.page) searchParams.set("page", String(params.page));
+            if (params?.page_size) searchParams.set("page_size", String(params.page_size));
+            if (params?.status) searchParams.set("status", params.status);
+            const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+            return request<TrainingTaskListResponse>(`/training-tasks${query}`);
+        },
+
+        get: async (taskId: string) => {
+            return request<TrainingTask>(`/training-tasks/${taskId}`);
+        },
+
+        update: async (taskId: string, data: TrainingTaskUpdateRequest) => {
+            return request<TrainingTask>(`/training-tasks/${taskId}`, {
+                method: "PATCH",
+                body: JSON.stringify(data),
+            });
+        },
+
+        startSession: async (taskId: string, payload?: TrainingTaskStartSessionRequest) => {
+            return request<TrainingTaskStartSessionResponse>(`/training-tasks/${taskId}/start-session`, {
+                method: "POST",
+                body: JSON.stringify(payload ?? {}),
             });
         },
     };

@@ -263,7 +263,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Delete Presentation Api V1 Presentations  Presentation
+                  Id  Delete
         '422':
           description: Validation Error
           content:
@@ -299,7 +301,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Presentation Progress Api V1 Presentations  Presentation
+                  Id  Progress Get
         '422':
           description: Validation Error
           content:
@@ -342,7 +346,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Save Presentation Progress Api V1 Presentations  Presentation
+                  Id  Progress Put
         '422':
           description: Validation Error
           content:
@@ -378,7 +384,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Presentation Pages Api V1 Presentations  Presentation
+                  Id  Pages Get
         '422':
           description: Validation Error
           content:
@@ -419,7 +427,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Presentation Page Thumbnail Api V1 Presentations  Presentation
+                  Id  Pages  Page Number  Thumbnail Get
         '422':
           description: Validation Error
           content:
@@ -461,7 +471,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Talking Points Api V1 Presentations  Presentation
+                  Id  Pages  Page Number  Talking Points Get
         '422':
           description: Validation Error
           content:
@@ -508,7 +520,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Add Talking Point Api V1 Presentations  Presentation
+                  Id  Pages  Page Number  Talking Points Post
         '422':
           description: Validation Error
           content:
@@ -544,7 +558,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Forbidden Words Api V1 Presentations  Presentation
+                  Id  Forbidden Words Get
         '422':
           description: Validation Error
           content:
@@ -585,7 +601,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Add Forbidden Word Api V1 Presentations  Presentation
+                  Id  Forbidden Words Post
         '422':
           description: Validation Error
           content:
@@ -621,7 +639,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Start Session Api V1 Practice Sessions Post
         '422':
           description: Validation Error
           content:
@@ -657,7 +676,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Session Api V1 Practice Sessions  Session Id  Get
         '422':
           description: Validation Error
           content:
@@ -698,7 +718,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Update Session Api V1 Practice Sessions  Session Id  Patch
         '422':
           description: Validation Error
           content:
@@ -733,7 +754,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response End Session Api V1 Practice Sessions  Session Id  Delete
         '422':
           description: Validation Error
           content:
@@ -776,7 +798,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Control Session Lifecycle Api V1 Practice Sessions  Session
+                  Id  Lifecycle Post
         '422':
           description: Validation Error
           content:
@@ -821,7 +845,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Session Report Trends Api V1 Practice Sessions  Session
+                  Id  Report Trends Get
         '422':
           description: Validation Error
           content:
@@ -858,7 +884,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Session Next Recommendation Api V1 Practice Sessions  Session
+                  Id  Next Recommendation Get
         '422':
           description: Validation Error
           content:
@@ -894,7 +922,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Session Report Api V1 Practice Sessions  Session
+                  Id  Report Get
         '422':
           description: Validation Error
           content:
@@ -935,7 +965,47 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Session Knowledge Check Api V1 Practice Sessions  Session
+                  Id  Knowledge Check Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/practice/sessions/{session_id}/diagnostics:
+    get:
+      tags:
+      - practice
+      summary: Get Session Diagnostics
+      description: Read-only diagnostics for the StepFun report evidence chain.
+      operationId: get_session_diagnostics_api_v1_practice_sessions__session_id__diagnostics_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Get Session Diagnostics Api V1 Practice Sessions  Session
+                  Id  Diagnostics Get
         '422':
           description: Validation Error
           content:
@@ -956,7 +1026,9 @@ paths:
         in: query
         required: false
         schema:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Scenario Type
       - name: page
         in: query
@@ -988,7 +1060,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Practice History Api V1 Practice History Get
         '422':
           description: Validation Error
           content:
@@ -1031,7 +1104,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Session Stats Api V1 Sessions Stats Get
         '422':
           description: Validation Error
           content:
@@ -1078,7 +1152,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Enhanced Session Report Api V1 Sessions  Session
+                  Id  Enhanced Report Get
         '422':
           description: Validation Error
           content:
@@ -1119,7 +1195,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Comprehensive Report Api V1 Practice Sessions  Session
+                  Id  Comprehensive Report Get
         '422':
           description: Validation Error
           content:
@@ -1166,7 +1244,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Get Report Generation Status Api V1 Practice Sessions  Session
+                  Id  Report Status Get
         '422':
           description: Validation Error
           content:
@@ -1210,7 +1290,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Generate Audio Upload Url Api V1 Practice Sessions  Session
+                  Id  Audio Upload Urls Post
         '422':
           description: Validation Error
           content:
@@ -1254,7 +1336,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Register Audio Segment Api V1 Practice Sessions  Session
+                  Id  Audio Segments Post
         '422':
           description: Validation Error
           content:
@@ -1289,7 +1373,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response List Audio Segments Api V1 Practice Sessions  Session
+                  Id  Audio Segments Get
         '422':
           description: Validation Error
           content:
@@ -1333,7 +1419,9 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                title: Response Register Audio Segment Failure Api V1 Practice Sessions  Session
+                  Id  Audio Segments Failure Post
         '422':
           description: Validation Error
           content:
@@ -1880,7 +1968,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Dashboard Stats Api V1 Dashboard Stats Get
         '422':
           description: Validation Error
           content:
@@ -1927,7 +2018,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Recommendation Api V1 Recommendations Latest Get
         '422':
           description: Validation Error
           content:
@@ -1957,7 +2051,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Growth Dashboard Api V1 Growth Dashboard Get
         '422':
           description: Validation Error
           content:
@@ -1994,7 +2091,11 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Adaptive Difficulty Dry Run Api V1 Growth Adaptive
+                  Difficulty Dry Run Get
         '422':
           description: Validation Error
           content:
@@ -2031,7 +2132,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Notifications Api V1 Growth Notifications Get
         '422':
           description: Validation Error
           content:
@@ -2067,7 +2171,11 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Mark Notification Read Api V1 Growth Notifications  Notification
+                  Id  Read Post
         '422':
           description: Validation Error
           content:
@@ -2103,7 +2211,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Upsert Current Goal Api V1 Growth Goals Current Put
         '422':
           description: Validation Error
           content:
@@ -2139,7 +2250,11 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Training Categories Api V1 Training Categories
+                  Get
         '422':
           description: Validation Error
           content:
@@ -2230,7 +2345,357 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Sessions Api V1 Sessions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-tasks:
+    post:
+      tags:
+      - training-tasks
+      summary: Create Training Task Endpoint
+      operationId: create_training_task_endpoint_api_v1_training_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingTaskCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Training Task Endpoint Api V1 Training Tasks
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - training-tasks
+      summary: List Training Tasks Endpoint
+      operationId: list_training_tasks_endpoint_api_v1_training_tasks_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Page Size
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/TrainingTaskStatus'
+          - type: 'null'
+          title: Status
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Training Tasks Endpoint Api V1 Training Tasks
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-tasks/{task_id}/complete:
+    post:
+      tags:
+      - training-tasks
+      summary: Complete Training Task Endpoint
+      operationId: complete_training_task_endpoint_api_v1_training_tasks__task_id__complete_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingTaskCompleteRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Complete Training Task Endpoint Api V1 Training Tasks  Task
+                  Id  Complete Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-tasks/{task_id}/cancel:
+    post:
+      tags:
+      - training-tasks
+      summary: Cancel Training Task Endpoint
+      operationId: cancel_training_task_endpoint_api_v1_training_tasks__task_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Training Task Endpoint Api V1 Training Tasks  Task
+                  Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-tasks/{task_id}/expire:
+    post:
+      tags:
+      - training-tasks
+      summary: Expire Training Task Endpoint
+      operationId: expire_training_task_endpoint_api_v1_training_tasks__task_id__expire_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Expire Training Task Endpoint Api V1 Training Tasks  Task
+                  Id  Expire Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-tasks/{task_id}:
+    get:
+      tags:
+      - training-tasks
+      summary: Get Training Task Endpoint
+      operationId: get_training_task_endpoint_api_v1_training_tasks__task_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Training Task Endpoint Api V1 Training Tasks  Task
+                  Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - training-tasks
+      summary: Update Training Task Endpoint
+      operationId: update_training_task_endpoint_api_v1_training_tasks__task_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingTaskUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Update Training Task Endpoint Api V1 Training Tasks  Task
+                  Id  Patch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-tasks/{task_id}/start-session:
+    post:
+      tags:
+      - training-tasks
+      summary: Start Training Task Session Endpoint
+      operationId: start_training_task_session_endpoint_api_v1_training_tasks__task_id__start_session_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingTaskStartSessionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Start Training Task Session Endpoint Api V1 Training
+                  Tasks  Task Id  Start Session Post
         '422':
           description: Validation Error
           content:
@@ -3300,7 +3765,10 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Get Auth Providers Api V1 Auth Providers Get
   /api/v1/auth/wecom/start:
     get:
       tags:
@@ -4772,6 +5240,245 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/knowledge/{kb_id}/dictionary-entries:
+    get:
+      tags:
+      - admin-knowledge
+      - admin-knowledge
+      summary: List Dictionary Entries
+      operationId: list_dictionary_entries_api_v1_admin_knowledge__kb_id__dictionary_entries_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Dictionary Entries Api V1 Admin Knowledge  Kb
+                  Id  Dictionary Entries Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-knowledge
+      - admin-knowledge
+      summary: Create Dictionary Entry
+      operationId: create_dictionary_entry_api_v1_admin_knowledge__kb_id__dictionary_entries_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKnowledgeDictionaryEntryRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Dictionary Entry Api V1 Admin Knowledge  Kb
+                  Id  Dictionary Entries Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/knowledge/{kb_id}/dictionary-entries/{entry_id}:
+    put:
+      tags:
+      - admin-knowledge
+      - admin-knowledge
+      summary: Update Dictionary Entry
+      operationId: update_dictionary_entry_api_v1_admin_knowledge__kb_id__dictionary_entries__entry_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKnowledgeDictionaryEntryRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Update Dictionary Entry Api V1 Admin Knowledge  Kb
+                  Id  Dictionary Entries  Entry Id  Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - admin-knowledge
+      - admin-knowledge
+      summary: Delete Dictionary Entry
+      operationId: delete_dictionary_entry_api_v1_admin_knowledge__kb_id__dictionary_entries__entry_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Delete Dictionary Entry Api V1 Admin Knowledge  Kb
+                  Id  Dictionary Entries  Entry Id  Delete
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/knowledge/{kb_id}/dictionary-entries/generate:
+    post:
+      tags:
+      - admin-knowledge
+      - admin-knowledge
+      summary: Generate Dictionary Entries
+      operationId: generate_dictionary_entries_api_v1_admin_knowledge__kb_id__dictionary_entries_generate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 30
+          title: Limit
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Generate Dictionary Entries Api V1 Admin Knowledge  Kb
+                  Id  Dictionary Entries Generate Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/admin/knowledge/{kb_id}/documents:
     post:
       tags:
@@ -5444,6 +6151,245 @@ paths:
                 additionalProperties: true
                 title: Response Assign Rag Profile Api V1 Admin Knowledge Bases  Kb
                   Id  Rag Profile Patch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/knowledge-bases/{kb_id}/dictionary-entries:
+    get:
+      tags:
+      - admin-knowledge-bases
+      - admin-knowledge-bases
+      summary: List Dictionary Entries
+      operationId: list_dictionary_entries_api_v1_admin_knowledge_bases__kb_id__dictionary_entries_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Dictionary Entries Api V1 Admin Knowledge Bases  Kb
+                  Id  Dictionary Entries Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-knowledge-bases
+      - admin-knowledge-bases
+      summary: Create Dictionary Entry
+      operationId: create_dictionary_entry_api_v1_admin_knowledge_bases__kb_id__dictionary_entries_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKnowledgeDictionaryEntryRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Dictionary Entry Api V1 Admin Knowledge Bases  Kb
+                  Id  Dictionary Entries Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/knowledge-bases/{kb_id}/dictionary-entries/{entry_id}:
+    put:
+      tags:
+      - admin-knowledge-bases
+      - admin-knowledge-bases
+      summary: Update Dictionary Entry
+      operationId: update_dictionary_entry_api_v1_admin_knowledge_bases__kb_id__dictionary_entries__entry_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKnowledgeDictionaryEntryRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Update Dictionary Entry Api V1 Admin Knowledge Bases  Kb
+                  Id  Dictionary Entries  Entry Id  Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - admin-knowledge-bases
+      - admin-knowledge-bases
+      summary: Delete Dictionary Entry
+      operationId: delete_dictionary_entry_api_v1_admin_knowledge_bases__kb_id__dictionary_entries__entry_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Delete Dictionary Entry Api V1 Admin Knowledge Bases  Kb
+                  Id  Dictionary Entries  Entry Id  Delete
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/knowledge-bases/{kb_id}/dictionary-entries/generate:
+    post:
+      tags:
+      - admin-knowledge-bases
+      - admin-knowledge-bases
+      summary: Generate Dictionary Entries
+      operationId: generate_dictionary_entries_api_v1_admin_knowledge_bases__kb_id__dictionary_entries_generate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 30
+          title: Limit
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Generate Dictionary Entries Api V1 Admin Knowledge
+                  Bases  Kb Id  Dictionary Entries Generate Post
         '422':
           description: Validation Error
           content:
@@ -8009,6 +8955,458 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-bundles:
+    get:
+      tags:
+      - admin-config-bundles
+      - admin-config-bundles
+      summary: List Config Bundles
+      operationId: list_config_bundles_api_v1_admin_config_bundles_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Config Bundles Api V1 Admin Config Bundles Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-bundles/{bundle_key}/versions:
+    get:
+      tags:
+      - admin-config-bundles
+      - admin-config-bundles
+      summary: List Config Bundle Versions
+      operationId: list_config_bundle_versions_api_v1_admin_config_bundles__bundle_key__versions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bundle_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bundle Key
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-bundles/{bundle_key}/drafts:
+    post:
+      tags:
+      - admin-config-bundles
+      - admin-config-bundles
+      summary: Create Config Bundle Draft
+      operationId: create_config_bundle_draft_api_v1_admin_config_bundles__bundle_key__drafts_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bundle_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bundle Key
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigBundleValueRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-bundles/{bundle_key}/validate:
+    post:
+      tags:
+      - admin-config-bundles
+      - admin-config-bundles
+      summary: Validate Config Bundle Value
+      operationId: validate_config_bundle_value_api_v1_admin_config_bundles__bundle_key__validate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bundle_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bundle Key
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigBundleValueRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-bundles/{bundle_key}/preview:
+    post:
+      tags:
+      - admin-config-bundles
+      - admin-config-bundles
+      summary: Preview Config Bundle Value
+      operationId: preview_config_bundle_value_api_v1_admin_config_bundles__bundle_key__preview_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bundle_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bundle Key
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigBundleValueRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-bundles/{bundle_key}/publish:
+    post:
+      tags:
+      - admin-config-bundles
+      - admin-config-bundles
+      summary: Publish Config Bundle Version
+      operationId: publish_config_bundle_version_api_v1_admin_config_bundles__bundle_key__publish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bundle_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bundle Key
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigBundlePublishRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-bundles/{bundle_key}/rollback:
+    post:
+      tags:
+      - admin-config-bundles
+      - admin-config-bundles
+      summary: Rollback Config Bundle Version
+      operationId: rollback_config_bundle_version_api_v1_admin_config_bundles__bundle_key__rollback_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bundle_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bundle Key
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigBundleRollbackRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-bundles/{bundle_key}/disable:
+    post:
+      tags:
+      - admin-config-bundles
+      - admin-config-bundles
+      summary: Disable Config Bundle Version
+      operationId: disable_config_bundle_version_api_v1_admin_config_bundles__bundle_key__disable_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bundle_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bundle Key
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigBundleDisableRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/config-center/domains:
+    get:
+      tags:
+      - admin-config-center
+      - admin-config-center
+      summary: List Config Center Domains
+      operationId: list_config_center_domains_api_v1_admin_config_center_domains_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Config Center Domains Api V1 Admin Config Center
+                  Domains Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/audit-trail:
+    get:
+      tags:
+      - admin-audit-trail
+      - admin-audit-trail
+      summary: List Audit Trail
+      operationId: list_audit_trail_api_v1_admin_audit_trail_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Page Size
+      - name: domain
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by domain
+          title: Domain
+        description: Filter by domain
+      - name: action
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by action
+          title: Action
+        description: Filter by action
+      - name: actor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by actor user_id
+          title: Actor
+        description: Filter by actor user_id
+      - name: from_date
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: ISO date filter start
+          title: From Date
+        description: ISO date filter start
+      - name: to_date
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: ISO date filter end
+          title: To Date
+        description: ISO date filter end
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/admin/analytics/overview:
     get:
       tags:
@@ -8730,6 +10128,42 @@ paths:
                 additionalProperties: true
                 title: Response Get Settings Governance Backlog Api V1 Admin Governance
                   Settings Backlog Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/ai-governance/explain/{session_id}:
+    get:
+      tags:
+      - admin-ai-governance
+      - admin-ai-governance
+      summary: Get Ai Governance Explainability
+      operationId: get_ai_governance_explainability_api_v1_admin_ai_governance_explain__session_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -14135,7 +15569,546 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RealtimeEvaluationFeedback'
+                title: Response Get Realtime Feedback Api V1 Evaluation Sessions  Session
+                  Id  Feedback Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/supervisor/team/reports:
+    get:
+      tags:
+      - supervisor
+      summary: List Team Reports
+      description: List completed team reports for supervisor review.
+      operationId: list_team_reports_api_v1_supervisor_team_reports_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response List Team Reports Api V1 Supervisor Team Reports Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/supervisor/team/insights:
+    get:
+      tags:
+      - supervisor
+      summary: Get Team Insights
+      description: Return supervisor team training management read model.
+      operationId: get_team_insights_api_v1_supervisor_team_insights_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: scenario_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Scenario Type
+      - name: learner_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Learner Id
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Date To
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Get Team Insights Api V1 Supervisor Team Insights
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/supervisor/team/insights/{learner_id}/details:
+    get:
+      tags:
+      - supervisor
+      summary: Get Team Insights Detail
+      description: Return one learner's supervisor training management detail.
+      operationId: get_team_insights_detail_api_v1_supervisor_team_insights__learner_id__details_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: learner_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Learner Id
+      - name: scenario_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Scenario Type
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Date To
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Get Team Insights Detail Api V1 Supervisor Team Insights  Learner
+                  Id  Details Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/supervisor/reviews:
+    get:
+      tags:
+      - supervisor
+      summary: List Supervisor Reviews
+      description: List supervisor reviews; employees only see reviews for their own
+        sessions.
+      operationId: list_supervisor_reviews_api_v1_supervisor_reviews_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response List Supervisor Reviews Api V1 Supervisor Reviews
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - supervisor
+      summary: Create Supervisor Review
+      description: Create or update the supervisor review for one session report.
+      operationId: create_supervisor_review_api_v1_supervisor_reviews_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupervisorReviewCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Create Supervisor Review Api V1 Supervisor Reviews
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/supervisor/report-view/{session_id}:
+    get:
+      tags:
+      - supervisor
+      summary: Get Training Report View
+      description: Read the unified report view used for evidence-based supervisor
+        review.
+      operationId: get_training_report_view_api_v1_supervisor_report_view__session_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Get Training Report View Api V1 Supervisor Report
+                  View  Session Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/supervisor/reviews/{review_id}/decision:
+    patch:
+      tags:
+      - supervisor
+      summary: Update Supervisor Review Decision
+      description: Update supervisor decision and create a retraining task when required.
+      operationId: update_supervisor_review_decision_api_v1_supervisor_reviews__review_id__decision_patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: review_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Review Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupervisorReviewDecisionUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Update Supervisor Review Decision Api V1 Supervisor
+                  Reviews  Review Id  Decision Patch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/supervisor/reviews/{review_id}/score-calibrations:
+    post:
+      tags:
+      - supervisor
+      summary: Upsert Supervisor Score Calibration
+      description: Save a supervisor score calibration without changing the original
+        AI score.
+      operationId: upsert_supervisor_score_calibration_api_v1_supervisor_reviews__review_id__score_calibrations_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: review_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Review Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupervisorScoreCalibrationUpsert'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Upsert Supervisor Score Calibration Api V1 Supervisor
+                  Reviews  Review Id  Score Calibrations Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/retraining/tasks:
+    get:
+      tags:
+      - supervisor
+      summary: List Retraining Tasks
+      description: List retraining tasks for the current employee, or all tasks for
+        admins.
+      operationId: list_retraining_tasks_api_v1_retraining_tasks_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response List Retraining Tasks Api V1 Retraining Tasks Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - supervisor
+      summary: Create Retraining Task
+      description: Create a retraining task from a supervisor review.
+      operationId: create_retraining_task_api_v1_retraining_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrainingTaskCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Create Retraining Task Api V1 Retraining Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/retraining/tasks/{task_id}/start-session:
+    post:
+      tags:
+      - supervisor
+      summary: Start Retraining Session
+      description: Create a new practice session seeded from the source session runtime.
+      operationId: start_retraining_session_api_v1_retraining_tasks__task_id__start_session_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Start Retraining Session Api V1 Retraining Tasks  Task
+                  Id  Start Session Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/retraining/tasks/{task_id}/complete-with-session:
+    post:
+      tags:
+      - supervisor
+      summary: Complete Retraining Task With Session
+      description: Mark a retraining task completed and attach the completed session.
+      operationId: complete_retraining_task_with_session_api_v1_retraining_tasks__task_id__complete_with_session_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrainingTaskCompleteRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Complete Retraining Task With Session Api V1 Retraining
+                  Tasks  Task Id  Complete With Session Post
         '422':
           description: Validation Error
           content:
@@ -14991,6 +16964,73 @@ components:
       - stage_number
       title: ComprehensiveReportStageSummary
       description: Stage summary in comprehensive report response.
+    ConfigBundleDisableRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      title: ConfigBundleDisableRequest
+    ConfigBundlePublishRequest:
+      properties:
+        config_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Config Id
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      title: ConfigBundlePublishRequest
+    ConfigBundleRollbackRequest:
+      properties:
+        target_config_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Config Id
+        target_version:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Target Version
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      title: ConfigBundleRollbackRequest
+    ConfigBundleValueRequest:
+      properties:
+        value:
+          additionalProperties: true
+          type: object
+          title: Value
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Reason
+      additionalProperties: false
+      type: object
+      title: ConfigBundleValueRequest
     ConfigVersionCreateRequest:
       properties:
         version_name:
@@ -15456,6 +17496,54 @@ components:
       - category
       title: CreateKnowledgeBaseRequest
       description: Request schema for creating a KnowledgeBase - R5.1
+    CreateKnowledgeDictionaryEntryRequest:
+      properties:
+        canonical_term:
+          type: string
+          maxLength: 255
+          minLength: 2
+          title: Canonical Term
+        aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Aliases
+        term_type:
+          type: string
+          maxLength: 50
+          title: Term Type
+          default: other
+        status:
+          type: string
+          enum:
+          - draft
+          - active
+          - archived
+          title: Status
+          default: draft
+        confidence:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Confidence
+          default: 95
+        extraction_metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Extraction Metadata
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - canonical_term
+      title: CreateKnowledgeDictionaryEntryRequest
     CreateModelConfigRequest:
       properties:
         name:
@@ -17944,6 +20032,40 @@ components:
           title: Enabled
       type: object
       title: RankingProfileUpdateRequest
+    RealtimeEvaluationFeedback:
+      properties:
+        stage_number:
+          type: integer
+          title: Stage Number
+        timestamp:
+          type: string
+          title: Timestamp
+        scores:
+          additionalProperties:
+            type: number
+          type: object
+          title: Scores
+        feedback:
+          type: string
+          title: Feedback
+          description: Stage summary
+          default: ''
+        suggestions:
+          items:
+            type: string
+          type: array
+          title: Suggestions
+          description: Improvement suggestions
+        trigger_type:
+          type: string
+          title: Trigger Type
+          description: 'Trigger type: turn_count, time_interval, keyword, or stage_transition'
+          default: turn_count
+      type: object
+      required:
+      - stage_number
+      - timestamp
+      title: RealtimeEvaluationFeedback
     ReplayContextMessageSchema:
       properties:
         id:
@@ -18304,6 +20426,62 @@ components:
       - new_password
       title: ResetPasswordRequest
       description: Reset password request schema
+    RetrainingTaskCompleteRequest:
+      properties:
+        completed_session_id:
+          type: string
+          maxLength: 36
+          title: Completed Session Id
+      additionalProperties: false
+      type: object
+      required:
+      - completed_session_id
+      title: RetrainingTaskCompleteRequest
+    RetrainingTaskCreate:
+      properties:
+        user_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: User Id
+        source_session_id:
+          type: string
+          maxLength: 36
+          title: Source Session Id
+        source_review_id:
+          type: string
+          maxLength: 36
+          title: Source Review Id
+        training_task_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Training Task Id
+        skill_dimension:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Skill Dimension
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+      additionalProperties: false
+      type: object
+      required:
+      - source_session_id
+      - source_review_id
+      - skill_dimension
+      - title
+      title: RetrainingTaskCreate
     RulesetRollupContribution:
       properties:
         rollup_id:
@@ -19170,6 +21348,150 @@ components:
       - score
       title: StageSummarySchema
       description: Summary for a sales stage - R10
+    SupervisorReviewCreate:
+      properties:
+        session_id:
+          type: string
+          maxLength: 36
+          title: Session Id
+        decision:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - needs_retraining
+          title: Decision
+          default: pending
+        readiness_status:
+          type: string
+          enum:
+          - not_ready
+          - shadow_only
+          - ready_for_trial
+          - approved
+          title: Readiness Status
+          default: not_ready
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comment
+        required_retraining:
+          type: boolean
+          title: Required Retraining
+          default: false
+        skill_dimension:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Skill Dimension
+        audit_metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Audit Metadata
+      additionalProperties: false
+      type: object
+      required:
+      - session_id
+      title: SupervisorReviewCreate
+    SupervisorReviewDecisionUpdate:
+      properties:
+        decision:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - needs_retraining
+          title: Decision
+        readiness_status:
+          anyOf:
+          - type: string
+            enum:
+            - not_ready
+            - shadow_only
+            - ready_for_trial
+            - approved
+          - type: 'null'
+          title: Readiness Status
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comment
+        required_retraining:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Required Retraining
+        skill_dimension:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Skill Dimension
+        audit_metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Audit Metadata
+      additionalProperties: false
+      type: object
+      required:
+      - decision
+      title: SupervisorReviewDecisionUpdate
+    SupervisorScoreCalibrationUpsert:
+      properties:
+        session_id:
+          type: string
+          maxLength: 36
+          title: Session Id
+        dimension:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Dimension
+        ai_score:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: 'null'
+          title: Ai Score
+        supervisor_score:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: 'null'
+          title: Supervisor Score
+        calibration_label:
+          type: string
+          enum:
+          - accurate
+          - too_high
+          - too_low
+          - wrong_reason
+          - missing_evidence
+          title: Calibration Label
+        comment:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Comment
+      additionalProperties: false
+      type: object
+      required:
+      - session_id
+      - dimension
+      - calibration_label
+      title: SupervisorScoreCalibrationUpsert
     SupportRuntimeAnomalySummary:
       properties:
         blocking:
@@ -19595,6 +21917,200 @@ components:
       - message_id
       title: TimelineMarkerSchema
       description: Timeline marker for replay visualization - R10
+    TrainingTaskCompleteRequest:
+      properties:
+        session_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Session Id
+      additionalProperties: false
+      type: object
+      required:
+      - session_id
+      title: TrainingTaskCompleteRequest
+    TrainingTaskCreate:
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        assignee_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Assignee Id
+        scenario_type:
+          $ref: '#/components/schemas/TrainingTaskScenarioType'
+        goal:
+          type: string
+          minLength: 1
+          title: Goal
+        focus_intent:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Focus Intent
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        completion_criteria:
+          additionalProperties: true
+          type: object
+          title: Completion Criteria
+        source:
+          type: string
+          maxLength: 50
+          minLength: 1
+          title: Source
+          default: manual
+        status:
+          $ref: '#/components/schemas/TrainingTaskStatus'
+          default: assigned
+        resulting_session_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Resulting Session Id
+        before_after_summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Before After Summary
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      - assignee_id
+      - scenario_type
+      - goal
+      title: TrainingTaskCreate
+    TrainingTaskScenarioType:
+      type: string
+      enum:
+      - sales
+      - presentation
+      title: TrainingTaskScenarioType
+    TrainingTaskStartSessionRequest:
+      properties:
+        agent_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Agent Id
+        persona_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Persona Id
+        presentation_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Presentation Id
+        scenario_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Scenario Id
+        voice_mode:
+          anyOf:
+          - type: string
+            pattern: ^(legacy|stepfun_realtime)$
+          - type: 'null'
+          title: Voice Mode
+        runtime_profile_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Runtime Profile Id
+      additionalProperties: false
+      type: object
+      title: TrainingTaskStartSessionRequest
+    TrainingTaskStatus:
+      type: string
+      enum:
+      - assigned
+      - in_progress
+      - completed
+      - expired
+      - cancelled
+      title: TrainingTaskStatus
+    TrainingTaskUpdate:
+      properties:
+        title:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Title
+        scenario_type:
+          anyOf:
+          - $ref: '#/components/schemas/TrainingTaskScenarioType'
+          - type: 'null'
+        goal:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Goal
+        focus_intent:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Focus Intent
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        completion_criteria:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Completion Criteria
+        source:
+          anyOf:
+          - type: string
+            maxLength: 50
+            minLength: 1
+          - type: 'null'
+          title: Source
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/TrainingTaskStatus'
+          - type: 'null'
+        resulting_session_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Resulting Session Id
+        before_after_summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Before After Summary
+      additionalProperties: false
+      type: object
+      title: TrainingTaskUpdate
     UpdateAgentPersonaRequest:
       properties:
         display_order:
@@ -19733,6 +22249,59 @@ components:
       type: object
       title: UpdateKnowledgeBaseRequest
       description: Request schema for updating a KnowledgeBase - R5.3 (partial update)
+    UpdateKnowledgeDictionaryEntryRequest:
+      properties:
+        canonical_term:
+          anyOf:
+          - type: string
+            maxLength: 255
+            minLength: 2
+          - type: 'null'
+          title: Canonical Term
+        aliases:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            maxItems: 20
+          - type: 'null'
+          title: Aliases
+        term_type:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Term Type
+        status:
+          anyOf:
+          - type: string
+            enum:
+            - draft
+            - active
+            - archived
+          - type: 'null'
+          title: Status
+        confidence:
+          anyOf:
+          - type: integer
+            maximum: 100.0
+            minimum: 0.0
+          - type: 'null'
+          title: Confidence
+        extraction_metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Extraction Metadata
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Notes
+      type: object
+      title: UpdateKnowledgeDictionaryEntryRequest
     UpdateModelConfigRequest:
       properties:
         name:
