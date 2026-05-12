@@ -9,12 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
-from common.db.models import PracticeSession, ScoringRuleset
+from common.db.models import PracticeSession, Presentation, Scenario, ScoringRuleset
 from common.knowledge.models import KnowledgeBase
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import CurriculumRuntimeSnapshot
 from curriculum_practice.services.practice_templates import PracticeTemplateService
-from curriculum_practice.services.snapshots import RuntimeSnapshotService
+from curriculum_practice.services.snapshots import (
+    RuntimeSnapshotBuildError,
+    RuntimeSnapshotService,
+)
 
 
 async def _seed_runtime_entities(
@@ -83,11 +86,12 @@ async def _create_published_template(
     runtime_profile: VoiceRuntimeProfile,
     ruleset: ScoringRuleset,
     knowledge_base: KnowledgeBase,
+    scenario_type: str = "sales",
 ) -> PracticeTemplate:
     template = PracticeTemplate(
         name="课程化客户异议训练",
         description="用于 session snapshot 持久化测试",
-        scenario_type="sales",
+        scenario_type=scenario_type,
         mode="customer_roleplay",
         agent_id=agent.id,
         persona_id=persona.id,
@@ -223,6 +227,77 @@ async def test_template_backed_session_persists_runtime_snapshot(
     assert session.practice_template_id == template.template_id
     assert session.curriculum_snapshot == data["curriculum_snapshot"]
     assert session.status == "preparing"
+
+
+@pytest.mark.asyncio
+async def test_presentation_snapshot_failure_rolls_back_created_session(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fail_build_for_session(
+        self: RuntimeSnapshotService,
+        *args: Any,
+        **kwargs: Any,
+    ) -> CurriculumRuntimeSnapshot:
+        raise RuntimeSnapshotBuildError("rubric_missing", "rubric unavailable")
+
+    monkeypatch.setattr(
+        RuntimeSnapshotService,
+        "build_for_session",
+        fail_build_for_session,
+    )
+    agent, persona, runtime_profile, ruleset, knowledge_base = await _seed_runtime_entities(
+        test_db
+    )
+    template = await _create_published_template(
+        test_db,
+        agent=agent,
+        persona=persona,
+        runtime_profile=runtime_profile,
+        ruleset=ruleset,
+        knowledge_base=knowledge_base,
+        scenario_type="presentation",
+    )
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="presentation",
+        name="curriculum_presentation",
+        is_active=True,
+    )
+    presentation = Presentation(
+        presentation_id=str(uuid.uuid4()),
+        title="Curriculum Presentation",
+        file_url="https://example.com/curriculum.pptx",
+        status="ready",
+    )
+    test_db.add_all([scenario, presentation])
+    await test_db.commit()
+
+    response = await async_client.post(
+        "/api/v1/practice/sessions",
+        headers=auth_headers,
+        json={
+            "scenario_type": "presentation",
+            "presentation_id": presentation.presentation_id,
+            "agent_id": agent.id,
+            "persona_id": persona.id,
+            "voice_mode": "stepfun_realtime",
+            "practice_template_id": template.template_id,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "[RUNTIME_SNAPSHOT_RUBRIC_MISSING]"
+    residual_sessions = (
+        await test_db.execute(
+            select(PracticeSession).where(
+                PracticeSession.presentation_id == presentation.presentation_id
+            )
+        )
+    ).scalars().all()
+    assert residual_sessions == []
 
 
 @pytest.mark.asyncio
