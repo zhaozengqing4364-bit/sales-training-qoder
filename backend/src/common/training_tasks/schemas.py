@@ -32,6 +32,7 @@ class TrainingTaskCreate(BaseModel):
     focus_intent: str | None = Field(None, max_length=120)
     due_date: datetime | None = None
     completion_criteria: dict[str, Any] = Field(default_factory=dict)
+    practice_template_id: str | None = Field(None, max_length=36)
     source: str = Field(default="manual", min_length=1, max_length=50)
     status: TrainingTaskStatus = TrainingTaskStatus.ASSIGNED
     resulting_session_id: str | None = Field(None, max_length=36)
@@ -47,6 +48,7 @@ class TrainingTaskUpdate(BaseModel):
     focus_intent: str | None = Field(None, max_length=120)
     due_date: datetime | None = None
     completion_criteria: dict[str, Any] | None = None
+    practice_template_id: str | None = Field(None, max_length=36)
     source: str | None = Field(None, min_length=1, max_length=50)
     status: TrainingTaskStatus | None = None
     resulting_session_id: str | None = Field(None, max_length=36)
@@ -64,6 +66,7 @@ class TrainingTaskResponse(BaseModel):
     focus_intent: str | None = None
     due_date: datetime | None = None
     completion_criteria: dict[str, Any]
+    practice_template_id: str | None = None
     source: str
     status: str
     resulting_session_id: str | None = None

@@ -52,7 +52,14 @@ async def create_training_task_endpoint(
 ) -> dict[str, Any]:
     if not can_manage_training_tasks(current_user):
         raise HTTPException(status_code=403, detail="[ROLE_REQUIRED]")
-    task = await create_training_task(db, payload)
+    try:
+        task = await create_training_task(db, payload)
+    except LookupError as exc:
+        await db.rollback()
+        raise _error(404, str(exc)) from exc
+    except ValueError as exc:
+        await db.rollback()
+        raise _error(400, str(exc)) from exc
     return _success(TrainingTaskResponse.model_validate(task).model_dump(mode="json"))
 
 
@@ -170,7 +177,14 @@ async def update_training_task_endpoint(
     task = await get_training_task(db, task_id, current_user)
     if task is None:
         raise HTTPException(status_code=404, detail="[TRAINING_TASK_NOT_FOUND]")
-    updated = await update_training_task(db, task, payload)
+    try:
+        updated = await update_training_task(db, task, payload)
+    except LookupError as exc:
+        await db.rollback()
+        raise _error(404, str(exc)) from exc
+    except ValueError as exc:
+        await db.rollback()
+        raise _error(400, str(exc)) from exc
     return _success(TrainingTaskResponse.model_validate(updated).model_dump(mode="json"))
 
 

@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from common.training_tasks.schemas import (
+    TrainingTaskCreate,
+    TrainingTaskResponse,
+    TrainingTaskScenarioType,
+)
+
+
+@pytest.mark.contract
+def test_training_task_contract_accepts_optional_practice_template_id() -> None:
+    payload = TrainingTaskCreate(
+        title="客户异议训练",
+        assignee_id="user-1",
+        scenario_type=TrainingTaskScenarioType.SALES,
+        goal="练习处理价格异议",
+        practice_template_id="template-1",
+    )
+
+    assert payload.practice_template_id == "template-1"
+
+
+@pytest.mark.contract
+def test_training_task_contract_rejects_runtime_state_fields() -> None:
+    base_payload = {
+        "task_id": "task-1",
+        "title": "客户异议训练",
+        "assignee_id": "user-1",
+        "scenario_type": "sales",
+        "goal": "练习处理价格异议",
+        "completion_criteria": {},
+        "practice_template_id": "template-1",
+        "source": "manual",
+        "status": "assigned",
+        "created_at": "2026-05-12T00:00:00Z",
+        "updated_at": "2026-05-12T00:00:00Z",
+    }
+
+    response = TrainingTaskResponse.model_validate(base_payload)
+
+    assert response.practice_template_id == "template-1"
+    assert not hasattr(response, "preflight")
+    assert not hasattr(response, "stage")
+    assert not hasattr(response, "reconnect")
+
+
+@pytest.mark.contract
+def test_training_task_create_rejects_runtime_state_fields() -> None:
+    with pytest.raises(ValidationError):
+        TrainingTaskCreate(
+            title="客户异议训练",
+            assignee_id="user-1",
+            scenario_type=TrainingTaskScenarioType.SALES,
+            goal="练习处理价格异议",
+            stage="preflight",
+        )

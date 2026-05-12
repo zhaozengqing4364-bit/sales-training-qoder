@@ -19,9 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
 from common.conversation.score_snapshot import normalize_score_snapshot
-from common.conversation.session_evidence import (
-    ensure_effectiveness_snapshot as ensure_session_evidence_snapshot,
-)
 from common.db.models import PracticeSession, Scenario, User
 from common.db.schemas import (
     ScenarioType,
@@ -827,6 +824,10 @@ class PracticeSessionLifecycleApplicationService:
 
 def ensure_effectiveness_snapshot(session: PracticeSession) -> dict[str, Any]:
     """Compatibility wrapper for the canonical session evidence snapshot path."""
+    from common.conversation.session_evidence import (
+        ensure_effectiveness_snapshot as ensure_session_evidence_snapshot,
+    )
+
     return ensure_session_evidence_snapshot(session)
 
 

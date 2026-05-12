@@ -2,19 +2,24 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, TrainingTask, User
 from common.db.schemas import ScenarioType, SessionCreate
-from common.services.practice_session_service import PracticeSessionCreateService
+from common.services.practice_session_service import (
+    PracticeServiceError,
+    PracticeSessionCreateService,
+)
 from common.training_tasks.schemas import (
     TrainingTaskCompleteRequest,
     TrainingTaskCreate,
     TrainingTaskStartSessionRequest,
     TrainingTaskUpdate,
 )
+from curriculum_practice.models import PracticeTemplate
 
 MANAGER_ROLES = {"admin", "support"}
 
@@ -70,7 +75,12 @@ async def create_training_task(
     db: AsyncSession,
     payload: TrainingTaskCreate,
 ) -> TrainingTask:
-    task = TrainingTask(**payload.model_dump())
+    data = payload.model_dump()
+    data["practice_template_id"] = await _validated_practice_template_id(
+        db,
+        data.get("practice_template_id"),
+    )
+    task = TrainingTask(**data)
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -83,6 +93,11 @@ async def update_training_task(
     payload: TrainingTaskUpdate,
 ) -> TrainingTask:
     update_data = payload.model_dump(exclude_unset=True)
+    if "practice_template_id" in update_data:
+        update_data["practice_template_id"] = await _validated_practice_template_id(
+            db,
+            update_data.get("practice_template_id"),
+        )
     for field, value in update_data.items():
         setattr(task, field, value)
     await db.commit()
@@ -113,6 +128,36 @@ def _training_task_context(task: TrainingTask) -> dict[str, str]:
     return context
 
 
+async def _validated_practice_template_id(
+    db: AsyncSession,
+    practice_template_id: Any,
+) -> str | None:
+    if not practice_template_id:
+        return None
+    try:
+        template_id = str(UUID(str(practice_template_id)))
+    except ValueError as exc:
+        raise ValueError("[PRACTICE_TEMPLATE_INVALID]") from exc
+    template = await db.get(PracticeTemplate, template_id)
+    if template is None:
+        raise LookupError("[PRACTICE_TEMPLATE_NOT_FOUND]")
+    if template.status != "published":
+        raise ValueError("[PRACTICE_TEMPLATE_NOT_PUBLISHED]")
+    return template_id
+
+
+def _practice_template_id_for_session(task: TrainingTask) -> UUID | None:
+    if not task.practice_template_id:
+        return None
+    try:
+        return UUID(str(task.practice_template_id))
+    except ValueError as exc:
+        raise PracticeServiceError(
+            "[PRACTICE_TEMPLATE_INVALID]",
+            status_code=400,
+        ) from exc
+
+
 async def start_training_task_session(
     db: AsyncSession,
     task: TrainingTask,
@@ -131,6 +176,7 @@ async def start_training_task_session(
         persona_id=payload.persona_id,
         voice_mode=payload.voice_mode,
         runtime_profile_id=payload.runtime_profile_id,
+        practice_template_id=_practice_template_id_for_session(task),
         focus_intent=_training_task_focus_payload(task),
     )
     create_result = await PracticeSessionCreateService(db).create_session(

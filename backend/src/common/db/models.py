@@ -1035,6 +1035,12 @@ class TrainingTask(Base):
     focus_intent = Column(String(120), nullable=True)
     due_date = Column(DateTime(timezone=True), nullable=True)
     completion_criteria = Column(JSON, nullable=False, default=dict)
+    practice_template_id = Column(
+        String(36),
+        ForeignKey("practice_templates.template_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     source = Column(String(50), nullable=False, default="manual", server_default="manual")
     status = Column(
         String(32),
@@ -1070,6 +1076,7 @@ class TrainingTask(Base):
             name="ck_training_tasks_status",
         ),
         Index("idx_training_tasks_assignee_status", "assignee_id", "status"),
+        Index("idx_training_tasks_practice_template", "practice_template_id"),
         Index("idx_training_tasks_due_date", "due_date"),
         Index("idx_training_tasks_created_at", "created_at"),
     )
