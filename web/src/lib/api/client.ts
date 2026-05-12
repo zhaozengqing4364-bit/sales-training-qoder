@@ -89,6 +89,9 @@ import {
     ScoringRulesetRecord,
     ScoringRulesetScenarioType,
     ScoringRulesetUpdateRequest,
+    PracticeTemplateListResponse,
+    PracticeTemplateMutationRequest,
+    PracticeTemplateRecord,
     ConfigBundleListResponse,
     ConfigBundleDisableRequest,
     ConfigBundleLifecycleMutationResponse,
@@ -2491,6 +2494,41 @@ export const api = {
                     method: "POST",
                     body: JSON.stringify({ target_config_id: targetConfigId, reason }),
                 },
+            );
+        },
+
+
+
+        listPracticeTemplates: async () => {
+            return apiFetch<PracticeTemplateListResponse>(
+                "/admin/curriculum-practice/templates",
+            );
+        },
+
+        createPracticeTemplate: async (payload: Required<PracticeTemplateMutationRequest>) => {
+            return apiFetch<PracticeTemplateRecord>(
+                "/admin/curriculum-practice/templates",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        updatePracticeTemplate: async (templateId: string, payload: PracticeTemplateMutationRequest) => {
+            return apiFetch<PracticeTemplateRecord>(
+                `/admin/curriculum-practice/templates/${encodeURIComponent(templateId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        publishPracticeTemplate: async (templateId: string) => {
+            return apiFetch<PracticeTemplateRecord>(
+                `/admin/curriculum-practice/templates/${encodeURIComponent(templateId)}/publish`,
+                { method: "POST" },
             );
         },
 

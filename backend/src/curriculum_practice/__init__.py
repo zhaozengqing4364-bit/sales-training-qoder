@@ -1,0 +1,1 @@
+"""Curriculum practice domain package."""

@@ -115,6 +115,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
             { label: "知识库管理", icon: Database, href: "/admin/knowledge" },
             { label: "检索策略", icon: Settings, href: "/admin/retrieval-strategies" },
             { label: "PPT 演练管理", icon: Presentation, href: "/admin/presentations" },
+            { label: "课程训练模板", icon: Target, href: "/admin/curriculum-practice/templates" },
         ],
     },
     {

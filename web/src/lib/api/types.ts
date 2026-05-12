@@ -317,6 +317,58 @@ export interface BusinessRulePreviewResponse {
 
 export type ScoringRulesetScenarioType = "sales" | "presentation";
 
+export type PracticeTemplateStatus = "draft" | "published" | "archived" | string;
+export type PracticeTemplateScenarioType = "sales" | "presentation";
+export type PracticeTemplateMode = "learning" | "expert_qa" | "examiner" | "customer_roleplay" | "mixed_path" | string;
+export type PracticeTemplateVoiceMode = "legacy" | "stepfun_realtime";
+
+export interface PublishedPracticeTemplateRef {
+    asset_type: "practice_template";
+    asset_id: string;
+    version: number;
+    hash: string;
+    snapshot_label: "published";
+}
+
+export interface PracticeTemplateRecord {
+    template_id: string;
+    name: string;
+    description?: string | null;
+    scenario_type: PracticeTemplateScenarioType | string;
+    mode: PracticeTemplateMode;
+    agent_id: string;
+    persona_id: string;
+    runtime_profile_id: string;
+    voice_mode: PracticeTemplateVoiceMode | string;
+    scoring_ruleset_id: string;
+    knowledge_base_refs: string[];
+    status: PracticeTemplateStatus;
+    version: number;
+    content_hash?: string | null;
+    published_at?: string | null;
+    created_at: string;
+    updated_at: string;
+    published_ref?: PublishedPracticeTemplateRef;
+}
+
+export interface PracticeTemplateListResponse {
+    items: PracticeTemplateRecord[];
+    total: number;
+}
+
+export interface PracticeTemplateMutationRequest {
+    name?: string;
+    description?: string | null;
+    scenario_type?: PracticeTemplateScenarioType;
+    mode?: PracticeTemplateMode;
+    agent_id?: string;
+    persona_id?: string;
+    runtime_profile_id?: string;
+    voice_mode?: PracticeTemplateVoiceMode;
+    scoring_ruleset_id?: string;
+    knowledge_base_refs?: string[];
+}
+
 export type ScoringRulesetStatus = "draft" | "published" | "archived" | string;
 
 export interface ScoringRulesetRecord {
