@@ -61,6 +61,15 @@ class PracticeTemplateService:
         await self._db.refresh(template)
         return template
 
+    async def archive_template(
+        self, template: PracticeTemplate, *, actor_id: str | None
+    ) -> PracticeTemplate:
+        template.status = "archived"
+        template.updated_by = actor_id
+        await self._db.commit()
+        await self._db.refresh(template)
+        return template
+
     async def publish_template(
         self, template: PracticeTemplate, *, actor_id: str | None
     ) -> tuple[PracticeTemplate | None, PublishGateDecision]:

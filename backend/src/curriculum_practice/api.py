@@ -51,6 +51,14 @@ def _require_admin(current_user: User) -> JSONResponse | None:
     )
 
 
+def _not_found() -> JSONResponse:
+    return _api_error(
+        "[PRACTICE_TEMPLATE_NOT_FOUND]",
+        status_code=404,
+        message="PracticeTemplate 不存在。",
+    )
+
+
 @router.get("", response_model=None)
 async def list_practice_templates(
     current_user: User = Depends(get_current_user),
@@ -92,6 +100,22 @@ async def create_practice_template(
         )
 
 
+@router.get("/{template_id}", response_model=None)
+async def get_practice_template(
+    template_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = PracticeTemplateService(db)
+    template = await service.get_template(template_id)
+    if template is None:
+        return _not_found()
+    return _success(serialize_template(template))
+
+
 @router.put("/{template_id}", response_model=None)
 async def update_practice_template(
     template_id: str,
@@ -105,11 +129,7 @@ async def update_practice_template(
     service = PracticeTemplateService(db)
     template = await service.get_template(template_id)
     if template is None:
-        return _api_error(
-            "[PRACTICE_TEMPLATE_NOT_FOUND]",
-            status_code=404,
-            message="PracticeTemplate 不存在。",
-        )
+        return _not_found()
     try:
         updated = await service.update_template(
             template, payload, actor_id=str(current_user.user_id)
@@ -120,6 +140,33 @@ async def update_practice_template(
         return build_server_error(
             "[PRACTICE_TEMPLATE_UPDATE_FAILED]",
             message="PracticeTemplate 更新失败。",
+            exc=exc,
+        )
+
+
+@router.post("/{template_id}/archive", response_model=None)
+async def archive_practice_template(
+    template_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = PracticeTemplateService(db)
+    template = await service.get_template(template_id)
+    if template is None:
+        return _not_found()
+    try:
+        archived = await service.archive_template(
+            template, actor_id=str(current_user.user_id)
+        )
+        return _success(serialize_template(archived))
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[PRACTICE_TEMPLATE_ARCHIVE_FAILED]",
+            message="PracticeTemplate 归档失败。",
             exc=exc,
         )
 
@@ -136,11 +183,7 @@ async def publish_practice_template(
     service = PracticeTemplateService(db)
     template = await service.get_template(template_id)
     if template is None:
-        return _api_error(
-            "[PRACTICE_TEMPLATE_NOT_FOUND]",
-            status_code=404,
-            message="PracticeTemplate 不存在。",
-        )
+        return _not_found()
     try:
         published, decision = await service.publish_template(
             template, actor_id=str(current_user.user_id)

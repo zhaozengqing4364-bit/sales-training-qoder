@@ -157,6 +157,13 @@ async def test_should_create_list_and_update_practice_template_draft(
     assert list_response.status_code == 200
     assert list_response.json()["data"]["total"] == 1
 
+    read_response = await async_client.get(
+        f"/api/v1/admin/curriculum-practice/templates/{created['template_id']}",
+        headers=admin_headers,
+    )
+    assert read_response.status_code == 200
+    assert read_response.json()["data"]["template_id"] == created["template_id"]
+
     update_response = await async_client.put(
         f"/api/v1/admin/curriculum-practice/templates/{created['template_id']}",
         headers=admin_headers,
@@ -167,6 +174,13 @@ async def test_should_create_list_and_update_practice_template_draft(
     updated = update_response.json()["data"]
     assert updated["template_id"] == created["template_id"]
     assert updated["description"] == "更新后的草稿说明"
+
+    archive_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/templates/{created['template_id']}/archive",
+        headers=admin_headers,
+    )
+    assert archive_response.status_code == 200
+    assert archive_response.json()["data"]["status"] == "archived"
 
 
 @pytest.mark.asyncio
@@ -189,7 +203,13 @@ async def test_should_return_publish_gate_failure_when_template_reference_is_mis
     assert publish_response.status_code == 400
     payload = publish_response.json()
     assert payload["error"] == "[PRACTICE_TEMPLATE_PUBLISH_GATE_FAILED]"
-    assert payload["details"]["gate_results"][0]["reason_code"] == "reference_missing"
+    assert [item["reason_code"] for item in payload["details"]["gate_results"]] == [
+        "reference_missing",
+        "reference_missing",
+        "reference_missing",
+        "scoring_rubric_missing",
+        "reference_missing",
+    ]
 
 
 @pytest.mark.asyncio

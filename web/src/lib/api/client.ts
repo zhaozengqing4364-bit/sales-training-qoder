@@ -92,6 +92,7 @@ import {
     PracticeTemplateListResponse,
     PracticeTemplateMutationRequest,
     PracticeTemplateRecord,
+    PracticeTemplateErrorDetails,
     ConfigBundleListResponse,
     ConfigBundleDisableRequest,
     ConfigBundleLifecycleMutationResponse,
@@ -313,6 +314,7 @@ type NormalizedApiErrorPayload = {
     errorCode: string;
     message: string;
     traceId?: string;
+    details?: unknown;
 };
 
 /**
@@ -363,7 +365,7 @@ function normalizeApiErrorPayload(status: number, payload: unknown): NormalizedA
         ? rawTraceId.trim()
         : undefined;
 
-    return { status, errorCode, message, traceId };
+    return { status, errorCode, message, traceId, details: raw.details };
 }
 
 function buildApiErrorDisplayMessage(payload: NormalizedApiErrorPayload): string {
@@ -377,6 +379,7 @@ export class ApiRequestError extends Error {
     readonly errorCode: string;
     readonly traceId?: string;
     readonly rawMessage: string;
+    readonly details?: unknown;
 
     constructor(payload: NormalizedApiErrorPayload) {
         super(buildApiErrorDisplayMessage(payload));
@@ -385,7 +388,18 @@ export class ApiRequestError extends Error {
         this.errorCode = payload.errorCode;
         this.traceId = payload.traceId;
         this.rawMessage = payload.message;
+        this.details = payload.details;
     }
+}
+
+export function getPracticeTemplateErrorDetails(error: unknown): PracticeTemplateErrorDetails | null {
+    if (!(error instanceof ApiRequestError)) {
+        return null;
+    }
+    if (!error.details || typeof error.details !== "object" || Array.isArray(error.details)) {
+        return null;
+    }
+    return error.details as PracticeTemplateErrorDetails;
 }
 
 export function getApiErrorMessage(error: unknown): string {
@@ -2505,6 +2519,12 @@ export const api = {
             );
         },
 
+        getPracticeTemplate: async (templateId: string) => {
+            return apiFetch<PracticeTemplateRecord>(
+                `/admin/curriculum-practice/templates/${encodeURIComponent(templateId)}`,
+            );
+        },
+
         createPracticeTemplate: async (payload: Required<PracticeTemplateMutationRequest>) => {
             return apiFetch<PracticeTemplateRecord>(
                 "/admin/curriculum-practice/templates",
@@ -2528,6 +2548,13 @@ export const api = {
         publishPracticeTemplate: async (templateId: string) => {
             return apiFetch<PracticeTemplateRecord>(
                 `/admin/curriculum-practice/templates/${encodeURIComponent(templateId)}/publish`,
+                { method: "POST" },
+            );
+        },
+
+        archivePracticeTemplate: async (templateId: string) => {
+            return apiFetch<PracticeTemplateRecord>(
+                `/admin/curriculum-practice/templates/${encodeURIComponent(templateId)}/archive`,
                 { method: "POST" },
             );
         },

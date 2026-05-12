@@ -330,6 +330,13 @@ export interface PublishedPracticeTemplateRef {
     snapshot_label: "published";
 }
 
+export interface PracticeTemplateGateResult {
+    gate_name: string;
+    status: "passed" | "failed" | "warning" | string;
+    reason_code: string;
+    message: string;
+}
+
 export interface PracticeTemplateRecord {
     template_id: string;
     name: string;
@@ -354,6 +361,10 @@ export interface PracticeTemplateRecord {
 export interface PracticeTemplateListResponse {
     items: PracticeTemplateRecord[];
     total: number;
+}
+
+export interface PracticeTemplateErrorDetails {
+    gate_results?: PracticeTemplateGateResult[];
 }
 
 export interface PracticeTemplateMutationRequest {
