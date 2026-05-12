@@ -113,12 +113,21 @@ class BeforeAfterComparison(BaseModel):
     retraining_completed: bool = False
 
 
+class TrainingTaskSummary(BaseModel):
+    task_id: str
+    title: str
+    scenario_type: str
+    status: str
+    goal: str
+
+
 class RetrainingTaskCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_id: str | None = Field(default=None, max_length=36)
     source_session_id: str = Field(..., max_length=36)
     source_review_id: str = Field(..., max_length=36)
+    training_task_id: str | None = Field(default=None, max_length=36)
     skill_dimension: str = Field(..., min_length=1, max_length=120)
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = None
@@ -135,6 +144,8 @@ class RetrainingTaskResponse(BaseModel):
     user_id: str
     source_session_id: str
     source_review_id: str
+    training_task_id: str | None = None
+    training_task: TrainingTaskSummary | None = None
     skill_dimension: str
     title: str
     description: str | None = None
@@ -204,6 +215,79 @@ class SupervisorTeamReport(BaseModel):
     before_after: BeforeAfterComparison | None = None
 
 
+class TeamInsightsCompletion(BaseModel):
+    total_tasks: int = 0
+    completed_tasks: int = 0
+    completion_rate: float = 0.0
+    by_status: dict[str, int] = Field(default_factory=dict)
+
+
+class TeamInsightsWeakness(BaseModel):
+    dimension: str
+    count: int
+    average_score: float | None = None
+    learner_ids: list[str] = Field(default_factory=list)
+
+
+class TeamInsightsCommonIssue(BaseModel):
+    issue: str
+    dimension: str | None = None
+    count: int
+    learner_ids: list[str] = Field(default_factory=list)
+
+
+class TeamInsightsReadinessLearner(BaseModel):
+    learner_id: str
+    learner_name: str | None = None
+    readiness_status: ReadinessStatus
+    latest_review_id: str
+    session_id: str
+
+
+class TeamInsightsReadiness(BaseModel):
+    by_status: dict[str, int] = Field(default_factory=dict)
+    learners: list[TeamInsightsReadinessLearner] = Field(default_factory=list)
+
+
+class TeamInsightsRetrainingCandidate(BaseModel):
+    learner_id: str
+    learner_name: str | None = None
+    session_id: str
+    review_id: str
+    retraining_task_id: str | None = None
+    training_task_id: str | None = None
+    skill_dimension: str | None = None
+    readiness_status: ReadinessStatus
+    reason: str | None = None
+
+
+class TeamInsightsLearnerSummary(BaseModel):
+    learner_id: str
+    learner_name: str | None = None
+    completion: TeamInsightsCompletion
+    latest_score: float | None = None
+    readiness_status: ReadinessStatus | None = None
+    top_weaknesses: list[TeamInsightsWeakness] = Field(default_factory=list)
+    config_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TeamInsightsResponse(BaseModel):
+    completion: TeamInsightsCompletion = Field(default_factory=TeamInsightsCompletion)
+    top_weaknesses: list[TeamInsightsWeakness] = Field(default_factory=list)
+    top3_common_issues: list[TeamInsightsCommonIssue] = Field(default_factory=list)
+    readiness: TeamInsightsReadiness = Field(default_factory=TeamInsightsReadiness)
+    retraining_candidates: list[TeamInsightsRetrainingCandidate] = Field(default_factory=list)
+    learners: list[TeamInsightsLearnerSummary] = Field(default_factory=list)
+
+
+class TeamInsightsLearnerDetail(TeamInsightsLearnerSummary):
+    learner_email: str | None = None
+    training_tasks: list[TrainingTaskSummary] = Field(default_factory=list)
+    latest_review: SupervisorReviewResponse | None = None
+    common_issues: list[TeamInsightsCommonIssue] = Field(default_factory=list)
+    retraining_candidates: list[TeamInsightsRetrainingCandidate] = Field(default_factory=list)
+
+
 class TrainingReportViewModel(BaseModel):
     session_id: str
     scenario_type: str
@@ -215,6 +299,7 @@ class TrainingReportViewModel(BaseModel):
     key_issues: list[TrainingReportIssue] = Field(default_factory=list)
     evidence_items: list[TrainingReportEvidenceItem] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
+    config_metadata: dict[str, Any] = Field(default_factory=dict)
     risk_flags: list[TrainingReportRiskFlag] = Field(default_factory=list)
     next_actions: list[TrainingReportNextAction] = Field(default_factory=list)
     supervisor_review: SupervisorReviewResponse | None = None

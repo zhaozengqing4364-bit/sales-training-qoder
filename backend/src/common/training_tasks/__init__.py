@@ -1,0 +1,1 @@
+"""TrainingTask foundation domain."""

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +21,8 @@ from common.db.models import (
     Scenario,
     SupervisorReview,
     SupervisorScoreCalibration,
+    TrainingReportSnapshot,
+    TrainingTask,
     User,
 )
 from common.db.schemas import ScenarioType, SessionCreate
@@ -40,6 +44,15 @@ from supervisor.schemas import (
     SupervisorScoreCalibrationResponse,
     SupervisorScoreCalibrationUpsert,
     SupervisorTeamReport,
+    TeamInsightsCommonIssue,
+    TeamInsightsCompletion,
+    TeamInsightsLearnerDetail,
+    TeamInsightsLearnerSummary,
+    TeamInsightsReadiness,
+    TeamInsightsReadinessLearner,
+    TeamInsightsResponse,
+    TeamInsightsRetrainingCandidate,
+    TeamInsightsWeakness,
     TrainingReportDimensionScore,
     TrainingReportEvidenceItem,
     TrainingReportIssue,
@@ -47,6 +60,7 @@ from supervisor.schemas import (
     TrainingReportRiskFlag,
     TrainingReportTrainee,
     TrainingReportViewModel,
+    TrainingTaskSummary,
 )
 
 DEFAULT_RETRAINING_DIMENSION = "综合表现"
@@ -92,6 +106,27 @@ def _as_float(value: Any) -> float | None:
         return round(float(value), 1)
     except (TypeError, ValueError):
         return None
+
+
+def _is_within_date_range(
+    value: datetime | None,
+    *,
+    date_from: datetime | None,
+    date_to: datetime | None,
+) -> bool:
+    if value is None:
+        return date_from is None and date_to is None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    if date_from is not None and date_from.tzinfo is None:
+        date_from = date_from.replace(tzinfo=UTC)
+    if date_to is not None and date_to.tzinfo is None:
+        date_to = date_to.replace(tzinfo=UTC)
+    if date_from is not None and value < date_from:
+        return False
+    if date_to is not None and value > date_to:
+        return False
+    return True
 
 
 def _uuid_or_none(value: Any) -> uuid.UUID | None:
@@ -149,6 +184,7 @@ class SupervisorReviewService:
             scenario_type=scenario_type,
         )
         stored_report = await self._get_report(session_id)
+        report_snapshot = await self._get_report_snapshot(session_id)
         messages = await self._get_messages_for_session(session_id)
         pages_by_number = await self._get_pages_by_number(session)
 
@@ -201,6 +237,7 @@ class SupervisorReviewService:
             key_issues=key_issues,
             evidence_items=evidence_items,
             recommendations=self._report_recommendations(report, stored_report),
+            config_metadata=self._report_config_metadata(report_snapshot),
             risk_flags=risk_flags,
             next_actions=self._build_next_actions(
                 report=report,
@@ -255,6 +292,150 @@ class SupervisorReviewService:
             )
         return reports
 
+    async def get_team_insights(
+        self,
+        *,
+        current_user: User,
+        scenario_type: str | None = None,
+        learner_id: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> TeamInsightsResponse:
+        self._require_admin(current_user)
+        tasks = await self._filtered_training_tasks(
+            scenario_type=scenario_type,
+            learner_id=learner_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        sessions = await self._filtered_sessions(
+            scenario_type=scenario_type,
+            learner_id=learner_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        session_ids = {_as_str(session.session_id) for session in sessions}
+        reviews = await self._reviews_for_sessions(session_ids)
+        retraining_tasks = await self._retraining_tasks_for_reviews(
+            {_as_str(review.review_id) for review in reviews}
+        )
+        reports = await self._reports_for_sessions(session_ids)
+        snapshots = await self._snapshots_for_sessions(session_ids)
+        users = await self._users_by_id(
+            {
+                _as_str(task.assignee_id)
+                for task in tasks
+            }
+            | {_as_str(session.user_id) for session in sessions}
+        )
+
+        top_weaknesses = self._top_weaknesses(reports, sessions)
+        if not top_weaknesses:
+            top_weaknesses = self._retraining_weaknesses(retraining_tasks)
+        return TeamInsightsResponse(
+            completion=self._completion_for_tasks(tasks),
+            top_weaknesses=top_weaknesses,
+            top3_common_issues=self._common_issues(
+                reports,
+                sessions,
+                reviews=reviews,
+                limit=3,
+            ),
+            readiness=self._readiness(reviews, users),
+            retraining_candidates=self._retraining_candidates(
+                reviews=reviews,
+                tasks=retraining_tasks,
+                users=users,
+            ),
+            learners=await self._learner_summaries(
+                users=users,
+                tasks=tasks,
+                sessions=sessions,
+                reviews=reviews,
+                reports=reports,
+                snapshots=snapshots,
+            ),
+        )
+
+    async def get_team_insights_detail(
+        self,
+        *,
+        current_user: User,
+        learner_id: str,
+        scenario_type: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> TeamInsightsLearnerDetail:
+        self._require_admin(current_user)
+        user = await self._get_user(learner_id)
+        if user is None:
+            raise SupervisorServiceError(
+                "[LEARNER_NOT_FOUND]",
+                status_code=404,
+                message="学员不存在。",
+            )
+        tasks = await self._filtered_training_tasks(
+            scenario_type=scenario_type,
+            learner_id=learner_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        sessions = await self._filtered_sessions(
+            scenario_type=scenario_type,
+            learner_id=learner_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        session_ids = {_as_str(session.session_id) for session in sessions}
+        reviews = await self._reviews_for_sessions(session_ids)
+        reports = await self._reports_for_sessions(session_ids)
+        snapshots = await self._snapshots_for_sessions(session_ids)
+        retraining_tasks = await self._retraining_tasks_for_reviews(
+            {_as_str(review.review_id) for review in reviews}
+        )
+        summary = await self._learner_summary(
+            learner_id=learner_id,
+            user=user,
+            tasks=tasks,
+            sessions=sessions,
+            reviews=reviews,
+            reports=reports,
+            snapshots=snapshots,
+        )
+        latest_review = self._latest_review(reviews)
+        return TeamInsightsLearnerDetail(
+            **summary.model_dump(),
+            learner_email=cast(str | None, getattr(user, "email", None)),
+            training_tasks=[
+                TrainingTaskSummary(
+                    task_id=_as_str(task.task_id),
+                    title=_as_str(task.title),
+                    scenario_type=_as_str(task.scenario_type),
+                    status=_as_str(task.status),
+                    goal=_as_str(task.goal),
+                )
+                for task in sorted(
+                    tasks,
+                    key=lambda item: getattr(item, "created_at", None) or datetime.min,
+                    reverse=True,
+                )
+            ],
+            latest_review=await self._serialize_review(latest_review)
+            if latest_review is not None
+            else None,
+            common_issues=self._common_issues(
+                reports,
+                sessions,
+                reviews=reviews,
+                limit=10,
+            ),
+            retraining_candidates=self._retraining_candidates(
+                reviews=reviews,
+                tasks=retraining_tasks,
+                users={learner_id: user},
+            ),
+        )
+
     async def list_reviews(
         self,
         *,
@@ -270,6 +451,416 @@ class SupervisorReviewService:
         rows = await self.db.execute(query)
         reviews = list(rows.scalars().all())
         return [await self._serialize_review(review) for review in reviews]
+
+    async def _filtered_training_tasks(
+        self,
+        *,
+        scenario_type: str | None,
+        learner_id: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> list[Any]:
+        stmt = select(
+            TrainingTask.task_id,
+            TrainingTask.title,
+            TrainingTask.assignee_id,
+            TrainingTask.scenario_type,
+            TrainingTask.goal,
+            TrainingTask.status,
+            TrainingTask.created_at,
+        )
+        if scenario_type:
+            stmt = stmt.where(TrainingTask.scenario_type == scenario_type)
+        if learner_id:
+            stmt = stmt.where(TrainingTask.assignee_id == learner_id)
+        result = await self.db.execute(stmt)
+        return [
+            task
+            for task in result.all()
+            if _is_within_date_range(
+                cast(datetime | None, getattr(task, "created_at", None)),
+                date_from=date_from,
+                date_to=date_to,
+            )
+        ]
+
+    async def _filtered_sessions(
+        self,
+        *,
+        scenario_type: str | None,
+        learner_id: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> list[Any]:
+        stmt = (
+            select(
+                PracticeSession.session_id,
+                PracticeSession.user_id,
+                PracticeSession.start_time,
+                PracticeSession.logic_score,
+                PracticeSession.accuracy_score,
+                PracticeSession.completeness_score,
+            )
+            .join(Scenario, Scenario.scenario_id == PracticeSession.scenario_id)
+            .where(PracticeSession.status.in_(("completed", "scoring")))
+        )
+        if scenario_type:
+            stmt = stmt.where(Scenario.scenario_type == scenario_type)
+        if learner_id:
+            stmt = stmt.where(PracticeSession.user_id == learner_id)
+        result = await self.db.execute(stmt)
+        return [
+            session
+            for session in result.all()
+            if _is_within_date_range(
+                cast(datetime | None, getattr(session, "start_time", None)),
+                date_from=date_from,
+                date_to=date_to,
+            )
+        ]
+
+    async def _reviews_for_sessions(
+        self,
+        session_ids: set[str],
+    ) -> list[SupervisorReview]:
+        if not session_ids:
+            return []
+        result = await self.db.execute(
+            select(SupervisorReview)
+            .where(SupervisorReview.session_id.in_(list(session_ids)))
+            .order_by(SupervisorReview.updated_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def _retraining_tasks_for_reviews(
+        self,
+        review_ids: set[str],
+    ) -> list[Any]:
+        if not review_ids:
+            return []
+        columns = [
+            RetrainingTask.task_id,
+            RetrainingTask.user_id,
+            RetrainingTask.source_review_id,
+            RetrainingTask.skill_dimension,
+        ]
+        if await self._column_exists("retraining_tasks", "training_task_id"):
+            columns.append(RetrainingTask.training_task_id)
+        result = await self.db.execute(
+            select(*columns).where(RetrainingTask.source_review_id.in_(list(review_ids)))
+        )
+        return list(result.all())
+
+    async def _column_exists(self, table_name: str, column_name: str) -> bool:
+        def check(sync_session: Any) -> bool:
+            bind = sync_session.get_bind()
+            return column_name in {
+                column["name"] for column in inspect(bind).get_columns(table_name)
+            }
+
+        return bool(await self.db.run_sync(check))
+
+    async def _reports_for_sessions(
+        self,
+        session_ids: set[str],
+    ) -> dict[str, ComprehensiveReport]:
+        if not session_ids:
+            return {}
+        result = await self.db.execute(
+            select(ComprehensiveReport).where(
+                ComprehensiveReport.session_id.in_(list(session_ids))
+            )
+        )
+        return {_as_str(report.session_id): report for report in result.scalars().all()}
+
+    async def _snapshots_for_sessions(
+        self,
+        session_ids: set[str],
+    ) -> dict[str, Any]:
+        if not session_ids:
+            return {}
+        columns = [TrainingReportSnapshot.session_id]
+        if await self._column_exists(
+            "training_report_snapshots",
+            "config_bundle_snapshot",
+        ):
+            columns.append(TrainingReportSnapshot.config_bundle_snapshot)
+        result = await self.db.execute(
+            select(*columns).where(
+                TrainingReportSnapshot.session_id.in_(list(session_ids))
+            )
+        )
+        return {_as_str(snapshot.session_id): snapshot for snapshot in result.all()}
+
+    async def _users_by_id(self, user_ids: set[str]) -> dict[str, User]:
+        clean_ids = {user_id for user_id in user_ids if user_id}
+        if not clean_ids:
+            return {}
+        result = await self.db.execute(select(User).where(User.user_id.in_(list(clean_ids))))
+        return {_as_str(user.user_id): user for user in result.scalars().all()}
+
+    def _completion_for_tasks(self, tasks: list[TrainingTask]) -> TeamInsightsCompletion:
+        by_status = Counter(_as_str(task.status) for task in tasks)
+        total = len(tasks)
+        completed = by_status.get("completed", 0)
+        return TeamInsightsCompletion(
+            total_tasks=total,
+            completed_tasks=completed,
+            completion_rate=round((completed / total) * 100, 1) if total else 0.0,
+            by_status=dict(by_status),
+        )
+
+    def _top_weaknesses(
+        self,
+        reports: dict[str, ComprehensiveReport],
+        sessions: list[PracticeSession],
+    ) -> list[TeamInsightsWeakness]:
+        session_users = {_as_str(session.session_id): _as_str(session.user_id) for session in sessions}
+        scores: dict[str, list[float]] = defaultdict(list)
+        learners: dict[str, set[str]] = defaultdict(set)
+        for session_id, report in reports.items():
+            for item in self._report_dimension_score_items(report):
+                score = item[1]
+                if score is None or score > 70:
+                    continue
+                dimension = item[0]
+                scores[dimension].append(score)
+                learners[dimension].add(session_users.get(session_id, ""))
+        weaknesses = [
+            TeamInsightsWeakness(
+                dimension=dimension,
+                count=len(values),
+                average_score=round(sum(values) / len(values), 1) if values else None,
+                learner_ids=sorted(user_id for user_id in learners[dimension] if user_id),
+            )
+            for dimension, values in scores.items()
+        ]
+        return sorted(
+            weaknesses,
+            key=lambda item: (-(item.count), item.average_score or 101, item.dimension),
+        )[:5]
+
+    def _common_issues(
+        self,
+        reports: dict[str, ComprehensiveReport],
+        sessions: list[PracticeSession],
+        *,
+        reviews: list[SupervisorReview] | None = None,
+        limit: int,
+    ) -> list[TeamInsightsCommonIssue]:
+        session_users = {_as_str(session.session_id): _as_str(session.user_id) for session in sessions}
+        counts: Counter[tuple[str, str | None]] = Counter()
+        learners: dict[tuple[str, str | None], set[str]] = defaultdict(set)
+        for session_id, report in reports.items():
+            user_id = session_users.get(session_id, "")
+            for issue in self._as_string_list(getattr(report, "key_improvements", None)):
+                key = (issue, None)
+                counts[key] += 1
+                learners[key].add(user_id)
+        for review in reviews or []:
+            issue = _short_text(getattr(review, "comment", None))
+            if not issue:
+                continue
+            key = (issue, None)
+            counts[key] += 1
+            learners[key].add(_as_str(review.trainee_user_id))
+        return [
+            TeamInsightsCommonIssue(
+                issue=issue,
+                dimension=dimension,
+                count=count,
+                learner_ids=sorted(user_id for user_id in learners[(issue, dimension)] if user_id),
+            )
+            for (issue, dimension), count in counts.most_common(limit)
+        ]
+
+    def _retraining_weaknesses(
+        self,
+        tasks: list[RetrainingTask],
+    ) -> list[TeamInsightsWeakness]:
+        counts: Counter[str] = Counter()
+        learners: dict[str, set[str]] = defaultdict(set)
+        for task in tasks:
+            dimension = _as_str(task.skill_dimension)
+            if not dimension:
+                continue
+            counts[dimension] += 1
+            learners[dimension].add(_as_str(task.user_id))
+        return [
+            TeamInsightsWeakness(
+                dimension=dimension,
+                count=count,
+                average_score=None,
+                learner_ids=sorted(user_id for user_id in learners[dimension] if user_id),
+            )
+            for dimension, count in counts.most_common(5)
+        ]
+
+    def _readiness(
+        self,
+        reviews: list[SupervisorReview],
+        users: dict[str, User],
+    ) -> TeamInsightsReadiness:
+        latest = self._latest_reviews_by_learner(reviews)
+        by_status = Counter(_as_str(review.readiness_status) for review in latest.values())
+        return TeamInsightsReadiness(
+            by_status=dict(by_status),
+            learners=[
+                TeamInsightsReadinessLearner(
+                    learner_id=learner_id,
+                    learner_name=cast(str | None, getattr(users.get(learner_id), "name", None)),
+                    readiness_status=cast(Any, review.readiness_status),
+                    latest_review_id=_as_str(review.review_id),
+                    session_id=_as_str(review.session_id),
+                )
+                for learner_id, review in latest.items()
+            ],
+        )
+
+    def _retraining_candidates(
+        self,
+        *,
+        reviews: list[SupervisorReview],
+        tasks: list[RetrainingTask],
+        users: dict[str, User],
+    ) -> list[TeamInsightsRetrainingCandidate]:
+        tasks_by_review: dict[str, list[RetrainingTask]] = defaultdict(list)
+        for task in tasks:
+            tasks_by_review[_as_str(task.source_review_id)].append(task)
+        candidates: list[TeamInsightsRetrainingCandidate] = []
+        for review in reviews:
+            if not bool(review.required_retraining) and review.decision != "needs_retraining":
+                continue
+            learner_id = _as_str(review.trainee_user_id)
+            linked_tasks = tasks_by_review.get(_as_str(review.review_id)) or [None]
+            for task in linked_tasks:
+                candidates.append(
+                    TeamInsightsRetrainingCandidate(
+                        learner_id=learner_id,
+                        learner_name=cast(str | None, getattr(users.get(learner_id), "name", None)),
+                        session_id=_as_str(review.session_id),
+                        review_id=_as_str(review.review_id),
+                        retraining_task_id=_as_str(getattr(task, "task_id", None)) or None,
+                        training_task_id=_as_str(getattr(task, "training_task_id", None)) or None,
+                        skill_dimension=cast(str | None, getattr(task, "skill_dimension", None)),
+                        readiness_status=cast(Any, review.readiness_status),
+                        reason=cast(str | None, review.comment),
+                    )
+                )
+        return candidates
+
+    async def _learner_summaries(
+        self,
+        *,
+        users: dict[str, User],
+        tasks: list[TrainingTask],
+        sessions: list[PracticeSession],
+        reviews: list[SupervisorReview],
+        reports: dict[str, ComprehensiveReport],
+        snapshots: dict[str, TrainingReportSnapshot],
+    ) -> list[TeamInsightsLearnerSummary]:
+        learner_ids = sorted(
+            set(users.keys())
+            | {_as_str(task.assignee_id) for task in tasks}
+            | {_as_str(session.user_id) for session in sessions}
+        )
+        return [
+            await self._learner_summary(
+                learner_id=item,
+                user=users.get(item),
+                tasks=[task for task in tasks if _as_str(task.assignee_id) == item],
+                sessions=[session for session in sessions if _as_str(session.user_id) == item],
+                reviews=[review for review in reviews if _as_str(review.trainee_user_id) == item],
+                reports=reports,
+                snapshots=snapshots,
+            )
+            for item in learner_ids
+            if item
+        ]
+
+    async def _learner_summary(
+        self,
+        *,
+        learner_id: str,
+        user: User | None,
+        tasks: list[TrainingTask],
+        sessions: list[PracticeSession],
+        reviews: list[SupervisorReview],
+        reports: dict[str, ComprehensiveReport],
+        snapshots: dict[str, TrainingReportSnapshot],
+    ) -> TeamInsightsLearnerSummary:
+        latest_review = self._latest_review(reviews)
+        latest_session = max(
+            sessions,
+            key=lambda item: getattr(item, "start_time", None) or datetime.min,
+        ) if sessions else None
+        latest_session_id = _as_str(getattr(latest_session, "session_id", None))
+        latest_score = None
+        if latest_session_id:
+            latest_score = await self._session_overall_score(
+                latest_session_id,
+                session=latest_session,
+            )
+        learner_reports = {
+            _as_str(session.session_id): reports[_as_str(session.session_id)]
+            for session in sessions
+            if _as_str(session.session_id) in reports
+        }
+        return TeamInsightsLearnerSummary(
+            learner_id=learner_id,
+            learner_name=cast(str | None, getattr(user, "name", None)),
+            completion=self._completion_for_tasks(tasks),
+            latest_score=latest_score,
+            readiness_status=cast(Any, latest_review.readiness_status)
+            if latest_review is not None
+            else None,
+            top_weaknesses=self._top_weaknesses(learner_reports, sessions),
+            config_metadata=self._report_config_metadata(
+                snapshots.get(latest_session_id)
+            ) if latest_session_id else {},
+        )
+
+    @staticmethod
+    def _latest_review(reviews: list[SupervisorReview]) -> SupervisorReview | None:
+        if not reviews:
+            return None
+        return max(
+            reviews,
+            key=lambda item: getattr(item, "updated_at", None) or datetime.min,
+        )
+
+    def _latest_reviews_by_learner(
+        self,
+        reviews: list[SupervisorReview],
+    ) -> dict[str, SupervisorReview]:
+        latest: dict[str, SupervisorReview] = {}
+        for review in reviews:
+            learner_id = _as_str(review.trainee_user_id)
+            current = latest.get(learner_id)
+            if current is None or self._latest_review([review, current]) is review:
+                latest[learner_id] = review
+        return latest
+
+    def _report_dimension_score_items(
+        self,
+        report: ComprehensiveReport,
+    ) -> list[tuple[str, float | None]]:
+        raw_dimensions = getattr(report, "dimension_scores", None)
+        if isinstance(raw_dimensions, str):
+            try:
+                raw_dimensions = json.loads(raw_dimensions)
+            except json.JSONDecodeError:
+                return []
+        if not isinstance(raw_dimensions, list):
+            return []
+        items: list[tuple[str, float | None]] = []
+        for item in raw_dimensions:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or item.get("dimension") or "").strip()
+            if name:
+                items.append((name, _as_float(item.get("score"))))
+        return items
 
     async def create_review(
         self,
@@ -442,6 +1033,10 @@ class SupervisorReviewService:
             user_id=user_id,
             source_session_id=payload.source_session_id,
             source_review_id=payload.source_review_id,
+            training_task_id=await self._resolve_training_task_id(
+                source_session_id=payload.source_session_id,
+                explicit_training_task_id=payload.training_task_id,
+            ),
             skill_dimension=payload.skill_dimension.strip(),
             title=payload.title.strip(),
             description=payload.description,
@@ -647,6 +1242,55 @@ class SupervisorReviewService:
         )
         return result.scalar_one_or_none()
 
+    async def _resolve_training_task_id(
+        self,
+        *,
+        source_session_id: str,
+        explicit_training_task_id: str | None,
+    ) -> str | None:
+        if explicit_training_task_id:
+            task = await self.db.get(TrainingTask, explicit_training_task_id)
+            return _as_str(task.task_id) if task is not None else None
+
+        result = await self.db.execute(
+            select(TrainingTask).where(
+                TrainingTask.resulting_session_id == source_session_id
+            )
+        )
+        task = result.scalar_one_or_none()
+        if task is not None:
+            return _as_str(task.task_id)
+
+        session = await self._get_session(source_session_id)
+        snapshot = getattr(session, "voice_policy_snapshot", None) if session else None
+        if not isinstance(snapshot, dict):
+            return None
+        context = snapshot.get("training_task_context")
+        if not isinstance(context, dict):
+            return None
+        task_id = context.get("task_id")
+        if not isinstance(task_id, str) or not task_id:
+            return None
+        task = await self.db.get(TrainingTask, task_id)
+        return _as_str(task.task_id) if task is not None else None
+
+    async def _training_task_summary(
+        self,
+        training_task_id: str | None,
+    ) -> TrainingTaskSummary | None:
+        if not training_task_id:
+            return None
+        task = await self.db.get(TrainingTask, training_task_id)
+        if task is None:
+            return None
+        return TrainingTaskSummary(
+            task_id=_as_str(task.task_id),
+            title=_as_str(task.title),
+            scenario_type=_as_str(task.scenario_type),
+            status=_as_str(task.status),
+            goal=_as_str(task.goal),
+        )
+
     async def _get_tasks_for_review(self, review_id: str) -> list[RetrainingTask]:
         result = await self.db.execute(
             select(RetrainingTask)
@@ -712,12 +1356,26 @@ class SupervisorReviewService:
         )
         task = result.scalar_one_or_none()
         if task is not None:
+            if getattr(task, "training_task_id", None) is None:
+                task.training_task_id = await self._resolve_training_task_id(
+                    source_session_id=_as_str(review.session_id),
+                    explicit_training_task_id=None,
+                )
+                if task.training_task_id is not None:
+                    self.db.add(task)
+                    await self.db.commit()
+                    await self.db.refresh(task)
             return task
+        training_task_id = await self._resolve_training_task_id(
+            source_session_id=_as_str(review.session_id),
+            explicit_training_task_id=None,
+        )
         task = RetrainingTask(
             task_id=str(uuid.uuid4()),
             user_id=_as_str(review.trainee_user_id),
             source_session_id=_as_str(review.session_id),
             source_review_id=_as_str(review.review_id),
+            training_task_id=training_task_id,
             skill_dimension=dimension,
             title=f"{DEFAULT_RETRAINING_TITLE_PREFIX}：{dimension}",
             description=cast(str | None, review.comment),
@@ -791,6 +1449,10 @@ class SupervisorReviewService:
             user_id=_as_str(task.user_id),
             source_session_id=_as_str(task.source_session_id),
             source_review_id=_as_str(task.source_review_id),
+            training_task_id=cast(str | None, task.training_task_id),
+            training_task=await self._training_task_summary(
+                cast(str | None, task.training_task_id)
+            ),
             skill_dimension=_as_str(task.skill_dimension),
             title=_as_str(task.title),
             description=cast(str | None, task.description),
@@ -1208,6 +1870,12 @@ class SupervisorReviewService:
 
     @staticmethod
     def _as_string_list(value: Any) -> list[str]:
+        if isinstance(value, str):
+            text = _short_text(value)
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                return [text] if text else []
         if not isinstance(value, list):
             return []
         return [text for text in (_short_text(item) for item in value) if text]
@@ -1311,7 +1979,13 @@ class SupervisorReviewService:
         report = await self._get_report(session_id)
         if report is not None:
             return _as_float(report.overall_score)
-        session = session or await self._get_session(session_id)
+        if session is None:
+            session = await self._get_session(session_id)
+            if session is None:
+                return None
+            await self.db.refresh(session)
+        elif isinstance(session, PracticeSession):
+            await self.db.refresh(session)
         if session is None:
             return None
         values = [
@@ -1343,6 +2017,7 @@ class SupervisorReviewService:
         session = await self._get_session(session_id)
         if session is None:
             return {}
+        await self.db.refresh(session)
         values = {
             "逻辑结构": _as_float(getattr(session, "logic_score", None)),
             "准确表达": _as_float(getattr(session, "accuracy_score", None)),
@@ -1361,3 +2036,23 @@ class SupervisorReviewService:
             select(ComprehensiveReport).where(ComprehensiveReport.session_id == session_id)
         )
         return result.scalar_one_or_none()
+
+    async def _get_report_snapshot(
+        self,
+        session_id: str,
+    ) -> TrainingReportSnapshot | None:
+        result = await self.db.execute(
+            select(TrainingReportSnapshot).where(
+                TrainingReportSnapshot.session_id == session_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    def _report_config_metadata(
+        snapshot: Any | None,
+    ) -> dict[str, Any]:
+        if snapshot is None:
+            return {"source": "legacy_unversioned"}
+        lineage = getattr(snapshot, "config_bundle_snapshot", None)
+        return dict(lineage) if isinstance(lineage, dict) else {"source": "legacy_unversioned"}

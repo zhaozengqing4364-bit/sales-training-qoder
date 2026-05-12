@@ -1,20 +1,26 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Executable
 
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import (
+    ComprehensiveReport,
     Page,
     PracticeSession,
     Presentation,
     RequiredTalkingPoint,
+    RetrainingTask,
     Scenario,
+    SupervisorReview,
+    TrainingTask,
     User,
 )
 
@@ -439,6 +445,338 @@ async def test_training_report_view_marks_missing_evidence_without_fabrication(
     assert missing_items
     assert all(item["quote"] is None for item in missing_items)
     assert any(flag["code"] == "evidence_missing" for flag in view["risk_flags"])
+
+
+@pytest.mark.asyncio
+async def test_team_insights_should_return_empty_structures(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    supervisor = await _create_user(
+        test_db, role="admin", email_prefix="insights-empty-supervisor"
+    )
+
+    response = await async_client.get(
+        "/api/v1/supervisor/team/insights",
+        headers=_auth_headers(supervisor),
+    )
+
+    assert response.status_code == 200, response.json()
+    insights = response.json()["data"]
+    assert insights["completion"] == {
+        "total_tasks": 0,
+        "completed_tasks": 0,
+        "completion_rate": 0.0,
+        "by_status": {},
+    }
+    assert insights["top_weaknesses"] == []
+    assert insights["top3_common_issues"] == []
+    assert insights["readiness"] == {"by_status": {}, "learners": []}
+    assert insights["retraining_candidates"] == []
+    assert insights["learners"] == []
+
+
+@pytest.mark.asyncio
+async def test_team_insights_should_not_select_training_task_before_after_column(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supervisor = await _create_user(
+        test_db, role="admin", email_prefix="insights-legacy-supervisor"
+    )
+    learner = await _create_user(
+        test_db, role="user", email_prefix="insights-legacy-learner"
+    )
+    task = TrainingTask(
+        task_id=str(uuid.uuid4()),
+        title="旧库兼容训练任务",
+        assignee_id=str(learner.user_id),
+        scenario_type="sales",
+        goal="验证缺失 before_after_summary 列时不崩溃",
+        focus_intent="legacy_schema",
+        completion_criteria={"minimum_sessions": 1},
+        source="manual",
+        status="completed",
+    )
+    test_db.add(task)
+    await test_db.commit()
+
+    original_execute = AsyncSession.execute
+
+    async def fail_on_missing_dev_column_shape(
+        self: AsyncSession,
+        statement: Executable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        sql = str(statement)
+        if "training_tasks.before_after_summary" in sql:
+            raise AssertionError("team insights selected legacy-missing column")
+        return await original_execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", fail_on_missing_dev_column_shape)
+
+    response = await async_client.get(
+        "/api/v1/supervisor/team/insights",
+        headers=_auth_headers(supervisor),
+    )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["completion"]["completion_rate"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_team_insights_should_not_select_practice_session_report_status_updated_at(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supervisor = await _create_user(
+        test_db, role="admin", email_prefix="insights-session-legacy-supervisor"
+    )
+    learner = await _create_user(
+        test_db, role="user", email_prefix="insights-session-legacy-learner"
+    )
+    await _create_sales_session_without_evidence(test_db, user=learner)
+
+    original_execute = AsyncSession.execute
+
+    async def fail_on_missing_dev_column_shape(
+        self: AsyncSession,
+        statement: Executable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        sql = str(statement)
+        if "practice_sessions.report_status_updated_at" in sql:
+            raise AssertionError("team insights selected legacy-missing session column")
+        return await original_execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", fail_on_missing_dev_column_shape)
+
+    response = await async_client.get(
+        "/api/v1/supervisor/team/insights",
+        headers=_auth_headers(supervisor),
+    )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["learners"][0]["learner_id"] == str(learner.user_id)
+
+
+@pytest.mark.asyncio
+async def test_team_insights_should_not_select_snapshot_config_bundle_id(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supervisor = await _create_user(
+        test_db, role="admin", email_prefix="insights-snapshot-legacy-supervisor"
+    )
+    learner = await _create_user(
+        test_db, role="user", email_prefix="insights-snapshot-legacy-learner"
+    )
+    await _create_sales_session_without_evidence(test_db, user=learner)
+
+    original_execute = AsyncSession.execute
+
+    async def fail_on_missing_dev_column_shape(
+        self: AsyncSession,
+        statement: Executable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        sql = str(statement)
+        if "training_report_snapshots.config_bundle_id" in sql:
+            raise AssertionError("team insights selected legacy-missing snapshot column")
+        return await original_execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", fail_on_missing_dev_column_shape)
+
+    response = await async_client.get(
+        "/api/v1/supervisor/team/insights",
+        headers=_auth_headers(supervisor),
+    )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["learners"][0]["config_metadata"] == {
+        "source": "legacy_unversioned"
+    }
+
+
+@pytest.mark.asyncio
+async def test_team_insights_should_aggregate_training_data_and_filters(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    supervisor = await _create_user(
+        test_db, role="admin", email_prefix="insights-supervisor"
+    )
+    sales_learner = await _create_user(
+        test_db, role="user", email_prefix="insights-sales-learner"
+    )
+    presentation_learner = await _create_user(
+        test_db, role="user", email_prefix="insights-ppt-learner"
+    )
+    sales_session = await _create_sales_session_without_evidence(
+        test_db, user=sales_learner
+    )
+    await _create_presentation_session(
+        test_db, user=presentation_learner, logic_score=82.0, accuracy_score=84.0
+    )
+    sales_task = TrainingTask(
+        task_id=str(uuid.uuid4()),
+        title="补强价值证明",
+        assignee_id=str(sales_learner.user_id),
+        scenario_type="sales",
+        goal="用 ROI 案例证明价值",
+        focus_intent="roi_proof",
+        completion_criteria={"minimum_sessions": 1},
+        source="manual",
+        status="completed",
+        resulting_session_id=str(sales_session.session_id),
+    )
+    ppt_task = TrainingTask(
+        task_id=str(uuid.uuid4()),
+        title="PPT 结构演练",
+        assignee_id=str(presentation_learner.user_id),
+        scenario_type="presentation",
+        goal="完善演讲结构",
+        focus_intent="presentation_structure",
+        completion_criteria={"minimum_sessions": 1},
+        source="manual",
+        status="assigned",
+    )
+    report = ComprehensiveReport(
+        session_id=str(sales_session.session_id),
+        overall_score=60.0,
+        dimension_scores=[
+            {"name": "价值证明", "score": 58.0},
+            {"name": "逻辑结构", "score": 76.0},
+        ],
+        key_strengths=["能保持客户对话"],
+        key_improvements=["需要补充 ROI 证据"],
+        recommendations=["补充客户案例"],
+    )
+    review = SupervisorReview(
+        review_id=str(uuid.uuid4()),
+        session_id=str(sales_session.session_id),
+        trainee_user_id=str(sales_learner.user_id),
+        supervisor_user_id=str(supervisor.user_id),
+        decision="needs_retraining",
+        readiness_status="shadow_only",
+        comment="复训候选：价值证明证据不足",
+        required_retraining=True,
+    )
+    retraining_task = RetrainingTask(
+        task_id=str(uuid.uuid4()),
+        user_id=str(sales_learner.user_id),
+        source_session_id=str(sales_session.session_id),
+        source_review_id=str(review.review_id),
+        training_task_id=str(sales_task.task_id),
+        skill_dimension="价值证明",
+        title="复训：价值证明",
+        status="todo",
+    )
+    test_db.add_all([sales_task, ppt_task, report, review, retraining_task])
+    await test_db.commit()
+
+    response = await async_client.get(
+        "/api/v1/supervisor/team/insights",
+        params={
+            "scenario_type": "sales",
+            "date_from": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            "date_to": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+        headers=_auth_headers(supervisor),
+    )
+
+    assert response.status_code == 200, response.json()
+    insights = response.json()["data"]
+    assert insights["completion"]["total_tasks"] == 1
+    assert insights["completion"]["completed_tasks"] == 1
+    assert insights["completion"]["completion_rate"] == 100.0
+    assert insights["completion"]["by_status"] == {"completed": 1}
+    assert insights["top_weaknesses"][0]["dimension"] == "价值证明"
+    assert insights["top_weaknesses"][0]["average_score"] == 58.0
+    assert insights["top3_common_issues"][0]["issue"] == "需要补充 ROI 证据"
+    assert insights["readiness"]["by_status"] == {"shadow_only": 1}
+    assert insights["readiness"]["learners"][0]["learner_id"] == str(
+        sales_learner.user_id
+    )
+    assert insights["retraining_candidates"][0]["training_task_id"] == str(
+        sales_task.task_id
+    )
+    assert insights["learners"][0]["learner_id"] == str(sales_learner.user_id)
+    assert insights["learners"][0]["latest_score"] == 60.0
+    assert insights["learners"][0]["completion"]["completion_rate"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_team_insights_detail_should_return_learner_drilldown(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    supervisor = await _create_user(
+        test_db, role="admin", email_prefix="insights-detail-supervisor"
+    )
+    learner = await _create_user(
+        test_db, role="user", email_prefix="insights-detail-learner"
+    )
+    session = await _create_sales_session_without_evidence(test_db, user=learner)
+    task = TrainingTask(
+        task_id=str(uuid.uuid4()),
+        title="详情页训练任务",
+        assignee_id=str(learner.user_id),
+        scenario_type="sales",
+        goal="补强报价确认",
+        focus_intent="price_confirm",
+        completion_criteria={"minimum_sessions": 1},
+        source="manual",
+        status="assigned",
+    )
+    report = ComprehensiveReport(
+        session_id=str(session.session_id),
+        overall_score=62.0,
+        dimension_scores=[{"name": "报价确认", "score": 55.0}],
+        key_strengths=[],
+        key_improvements=["报价确认缺少下一步动作"],
+        recommendations=["练习确认预算"],
+    )
+    review = SupervisorReview(
+        review_id=str(uuid.uuid4()),
+        session_id=str(session.session_id),
+        trainee_user_id=str(learner.user_id),
+        supervisor_user_id=str(supervisor.user_id),
+        decision="pending",
+        readiness_status="not_ready",
+        comment="报价确认需要复盘",
+        required_retraining=False,
+    )
+    test_db.add_all([task, report, review])
+    await test_db.commit()
+
+    response = await async_client.get(
+        f"/api/v1/supervisor/team/insights/{learner.user_id}/details",
+        headers=_auth_headers(supervisor),
+    )
+
+    assert response.status_code == 200, response.json()
+    detail = response.json()["data"]
+    assert detail["learner_id"] == str(learner.user_id)
+    assert detail["learner_email"] == learner.email
+    assert detail["training_tasks"] == [
+        {
+            "task_id": str(task.task_id),
+            "title": "详情页训练任务",
+            "scenario_type": "sales",
+            "status": "assigned",
+            "goal": "补强报价确认",
+        }
+    ]
+    assert detail["latest_review"]["review_id"] == str(review.review_id)
+    assert detail["common_issues"][0]["issue"] == "报价确认缺少下一步动作"
+    assert detail["top_weaknesses"][0]["dimension"] == "报价确认"
 
 
 @pytest.mark.asyncio

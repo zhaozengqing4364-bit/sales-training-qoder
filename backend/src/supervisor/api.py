@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -56,6 +57,64 @@ async def list_team_reports(
         return build_server_error(
             "[SUPERVISOR_TEAM_REPORTS_FAILED]",
             message="主管报告列表暂时无法读取。",
+            exc=exc,
+        )
+
+
+@router.get("/supervisor/team/insights")
+async def get_team_insights(
+    scenario_type: str | None = Query(default=None),
+    learner_id: str | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Return supervisor team training management read model."""
+    try:
+        insights = await SupervisorReviewService(db).get_team_insights(
+            current_user=current_user,
+            scenario_type=scenario_type,
+            learner_id=learner_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return success_response(insights.model_dump(mode="json"))
+    except SupervisorServiceError as exc:
+        return _service_error(exc)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[SUPERVISOR_TEAM_INSIGHTS_FAILED]",
+            message="主管团队训练洞察暂时无法读取。",
+            exc=exc,
+        )
+
+
+@router.get("/supervisor/team/insights/{learner_id}/details")
+async def get_team_insights_detail(
+    learner_id: str,
+    scenario_type: str | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Return one learner's supervisor training management detail."""
+    try:
+        detail = await SupervisorReviewService(db).get_team_insights_detail(
+            current_user=current_user,
+            learner_id=learner_id,
+            scenario_type=scenario_type,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return success_response(detail.model_dump(mode="json"))
+    except SupervisorServiceError as exc:
+        return _service_error(exc)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[SUPERVISOR_TEAM_INSIGHTS_DETAIL_FAILED]",
+            message="主管学员训练详情暂时无法读取。",
             exc=exc,
         )
 
