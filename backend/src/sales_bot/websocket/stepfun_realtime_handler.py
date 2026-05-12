@@ -9,7 +9,7 @@ StepFun Realtime API, enabling a dual-mode runtime:
 
 from __future__ import annotations
 
-# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportGeneralTypeIssues=false
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportGeneralTypeIssues=false, reportMissingImports=false
 # ruff: noqa: F401, I001, E402
 
 import asyncio
@@ -142,6 +142,10 @@ from sales_bot.websocket.components.stepfun_upstream_router import (
     extract_error_message,
     extract_function_call_from_item_created,
     extract_response_done_function_calls,
+)
+from sales_bot.websocket.phase4_local_provider import (
+    Phase4LocalStepFunProvider,
+    should_use_phase4_local_provider,
 )
 from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
@@ -1879,6 +1883,24 @@ class StepFunRealtimeHandler(
 
     async def _connect_upstream(self) -> None:
         """Connect to StepFun realtime WebSocket and initialize session."""
+        if should_use_phase4_local_provider():
+            self.upstream_ws = Phase4LocalStepFunProvider.from_env()
+            now = asyncio.get_running_loop().time()
+            self._upstream_connected_at = now
+            self._upstream_last_activity_at = now
+            self._last_upstream_event_type = ""
+            await self._send_upstream(
+                {
+                    "type": "session.update",
+                    "session": {
+                        "provider": "phase4_local",
+                        "model": self._stepfun_model,
+                    },
+                }
+            )
+            logger.info("Phase 4 local StepFun provider attached")
+            return
+
         query = urlencode({"model": self._stepfun_model})
         endpoint = f"{self._stepfun_url}?{query}"
         headers = {"Authorization": f"Bearer {self._stepfun_api_key}"}

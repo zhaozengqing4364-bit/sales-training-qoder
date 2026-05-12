@@ -1,0 +1,10 @@
+{
+  "fixture_version": "sales-provider-script.v1",
+  "provider": "phase4_local_stepfun",
+  "script": [
+    {
+      "user_transcript": "客户担心预算紧张，我先用六个月回本案例说明 ROI，再提出小范围试点作为下一步。",
+      "assistant_response": "很好，请继续把 ROI 证据和试点范围说清楚，并确认客户愿意安排下一次评审。"
+    }
+  ]
+}

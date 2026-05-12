@@ -38,14 +38,17 @@ from common.conversation.runtime_diagnostics import (
     build_session_runtime_diagnostics,
     extract_voice_policy_snapshot,
 )
+from common.conversation.score_snapshot import normalize_score_snapshot
 from common.conversation.session_evidence import (
     ensure_effectiveness_snapshot as ensure_session_evidence_snapshot,
 )
 from common.db.models import (
+    EvaluationRun,
     PracticeSession,
     Scenario,
     SessionAudioSegment,
     SessionStatus,
+    TrainingReportSnapshot,
     User,
 )
 from common.db.schemas import (
@@ -82,9 +85,6 @@ from common.websocket.session_manager import get_session_manager
 from presentation_coach.services.coach_service import PresentationCoachService
 from sales_bot.services.bot_service import sales_bot_service
 from sales_bot.services.summary_service import ConversationSummary, summary_service
-from sales_bot.websocket.components.stepfun_message_helpers import (
-    normalize_score_snapshot,
-)
 
 if TYPE_CHECKING:
     from common.db.schemas import AudioAuditPayloadSchema
@@ -170,6 +170,98 @@ def _is_admin_user(user: User) -> bool:
 
 def _can_read_session(session: PracticeSession, user: User) -> bool:
     return _is_admin_user(user) or str(session.user_id) == str(user.user_id)
+
+
+def _iso_datetime(value: Any) -> str | None:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return None
+
+
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return deepcopy(value)
+    return {}
+
+
+def _build_missing_evidence(evidence_completeness: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    for key, value in evidence_completeness.items():
+        if value is False or value is None:
+            missing.append(str(key))
+    return missing
+
+
+def _build_diagnostics_config_binding(run: EvaluationRun) -> dict[str, Any]:
+    bundle = getattr(run, "config_bundle", None)
+    version = getattr(run, "config_version", None)
+    return {
+        "config_bundle_id": str(run.config_bundle_id) if run.config_bundle_id else None,
+        "config_version_id": str(run.config_version_id) if run.config_version_id else None,
+        "bundle_key": getattr(bundle, "bundle_key", None),
+        "version_number": getattr(version, "version_number", None),
+        "version_label": getattr(version, "version_label", None),
+        "source_config_id": getattr(version, "source_config_id", None),
+    }
+
+
+def _build_diagnostics_evaluation_run(
+    run: EvaluationRun | None,
+) -> dict[str, Any]:
+    if run is None:
+        return {"exists": False, "status": None}
+
+    return {
+        "exists": True,
+        "run_id": str(run.run_id),
+        "status": run.status,
+        "started_at": _iso_datetime(run.started_at),
+        "finished_at": _iso_datetime(run.finished_at),
+        "input_evidence_reference": _dict_or_empty(run.input_evidence_reference),
+        "config_binding": _build_diagnostics_config_binding(run),
+        "result_payload": _dict_or_empty(run.result_payload),
+        "result_summary": run.result_summary,
+        "error_message": run.error_message,
+        "error_trace": run.error_trace,
+        "created_at": _iso_datetime(run.created_at),
+        "updated_at": _iso_datetime(run.updated_at),
+    }
+
+
+def _build_diagnostics_report_snapshot(
+    snapshot: TrainingReportSnapshot | None,
+) -> dict[str, Any]:
+    if snapshot is None:
+        return {"exists": False}
+
+    return {
+        "exists": True,
+        "snapshot_id": str(snapshot.snapshot_id),
+        "evaluation_run_id": str(snapshot.evaluation_run_id),
+        "generated_at": _iso_datetime(snapshot.generated_at),
+        "config_bundle_id": snapshot.config_bundle_id,
+        "config_bundle_snapshot": _dict_or_empty(snapshot.config_bundle_snapshot),
+        "ruleset_source": snapshot.ruleset_source,
+        "ruleset_version": snapshot.ruleset_version,
+        "score_basis": snapshot.score_basis,
+        "evidence_completeness": _dict_or_empty(snapshot.evidence_completeness),
+        "non_evaluable_reason": snapshot.non_evaluable_reason,
+        "report_payload": _dict_or_empty(snapshot.report_payload),
+    }
+
+
+def _build_diagnostics_failure_details(
+    session: PracticeSession,
+    run: EvaluationRun | None,
+) -> dict[str, Any] | None:
+    if not session.report_error and not (run and (run.error_message or run.error_trace)):
+        return None
+
+    return {
+        "report_error": session.report_error,
+        "evaluation_run_error_message": run.error_message if run else None,
+        "evaluation_run_error_trace": run.error_trace if run else None,
+    }
 
 
 async def build_session_audio_audit(
@@ -1155,6 +1247,117 @@ async def get_session_knowledge_check(
     )
 
     return success_response(diagnostics)
+
+
+@router.get("/practice/sessions/{session_id}/diagnostics")
+async def get_session_diagnostics(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Read-only diagnostics for the StepFun report evidence chain."""
+    result = await db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        return error_response("[SESSION_NOT_FOUND]", status_code=404)
+
+    if not _can_read_session(session, current_user):
+        return error_response("[ACCESS_DENIED]", status_code=403)
+
+    evidence_service = _practice_services(db).evidence
+    resolved_scenario_type = evidence_service.resolve_scenario_type(session)
+    projection_result = await evidence_service.get_projection(
+        session_id=session_id,
+        session=session,
+        require_completed=False,
+        scenario_type=resolved_scenario_type,
+    )
+    projection = projection_result.value if projection_result.is_success else None
+    evidence_completeness = (
+        _dict_or_empty(getattr(projection, "evidence_completeness", None))
+        if projection is not None
+        else {}
+    )
+
+    run_result = await db.execute(
+        select(EvaluationRun)
+        .options(
+            selectinload(EvaluationRun.config_bundle),
+            selectinload(EvaluationRun.config_version),
+        )
+        .where(EvaluationRun.session_id == session_id)
+    )
+    evaluation_run = run_result.scalar_one_or_none()
+
+    snapshot_result = await db.execute(
+        select(TrainingReportSnapshot).where(
+            TrainingReportSnapshot.session_id == session_id
+        )
+    )
+    report_snapshot = snapshot_result.scalar_one_or_none()
+
+    retryable = bool(session.report_retryable) or (
+        evaluation_run is not None and evaluation_run.status == "failed"
+    )
+    failure_details = _build_diagnostics_failure_details(session, evaluation_run)
+
+    return success_response(
+        {
+            "session_id": session_id,
+            "scenario_type": resolved_scenario_type,
+            "session_status": session.status,
+            "report_status": {
+                "status": session.report_status,
+                "generated_at": _iso_datetime(session.report_generated_at),
+                "updated_at": _iso_datetime(session.report_status_updated_at),
+                "retryable": bool(session.report_retryable),
+                "trace_id": session.report_trace_id,
+                "error": session.report_error,
+            },
+            "evidence": {
+                "available": projection is not None,
+                "error": None if projection_result.is_success else projection_result.fallback,
+                "evaluable": getattr(projection, "evaluable", None)
+                if projection is not None
+                else None,
+                "not_evaluable_reason": getattr(
+                    projection,
+                    "not_evaluable_reason",
+                    None,
+                )
+                if projection is not None
+                else None,
+                "evidence_completeness": evidence_completeness,
+                "evidence_degradation": _dict_or_empty(
+                    getattr(projection, "evidence_degradation", None)
+                )
+                if projection is not None
+                else {},
+                "conclusion_evidence": _dict_or_empty(
+                    getattr(projection, "conclusion_evidence", None)
+                )
+                if projection is not None
+                else {},
+            },
+            "evaluation_run": _build_diagnostics_evaluation_run(evaluation_run),
+            "report_snapshot": _build_diagnostics_report_snapshot(report_snapshot),
+            "trace": {
+                "report_trace_id": session.report_trace_id,
+                "evaluation_run_error_trace": evaluation_run.error_trace
+                if evaluation_run is not None
+                else None,
+            },
+            "failure_details": failure_details,
+            "missing_evidence": _build_missing_evidence(evidence_completeness),
+            "retryability": {
+                "retryable": retryable,
+                "reason": "report_or_evaluation_failed" if retryable else None,
+            },
+        }
+    )
 
 
 @router.get("/practice/history")

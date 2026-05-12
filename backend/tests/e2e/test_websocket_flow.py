@@ -1,130 +1,68 @@
-"""E2E Tests for WebSocket Flow."""
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+"""E2E-adjacent proofs for the StepFun-only Sales WebSocket flow."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+from typing import cast
 
 import pytest
 
-from sales_bot.websocket.simple_handler import SimpleSalesHandler
+from sales_bot.websocket.phase4_local_provider import Phase4LocalStepFunProvider
+from sales_bot.websocket.router import SALES_WS_AUTH_POLICY
+from sales_bot.websocket.stepfun_realtime_handler import create_stepfun_realtime_handler
 
 
-class TestWebSocketFlow:
-    """E2E tests for WebSocket conversation flow."""
+@pytest.mark.asyncio
+async def test_should_drive_phase4_local_provider_and_record_transcript(tmp_path):
+    """Local provider should produce scripted ASR/assistant events and transcript evidence."""
+    transcript_path = tmp_path / "provider-transcript.jsonl"
+    provider = Phase4LocalStepFunProvider(
+        {
+            "fixture_version": "sales-provider-script.test",
+            "provider": "phase4_local_stepfun",
+            "script": {
+                "user_transcript": "客户担心预算紧张，我用 ROI 案例回应。",
+                "assistant_response": "继续确认试点范围和下一步评审。",
+            },
+        },
+        transcript_path,
+    )
 
-    @pytest.fixture
-    def session_id(self):
-        return str(uuid.uuid4())
+    await provider.send(json.dumps({"type": "input_audio_buffer.commit"}))
+    transcript_event = json.loads(await provider.recv())
+    await provider.send(json.dumps({"type": "response.create"}))
+    response_created = json.loads(await provider.recv())
+    response_delta = json.loads(await provider.recv())
+    response_done = json.loads(await provider.recv())
+    await provider.close()
 
-    @pytest.fixture
-    def handler(self):
-        return SimpleSalesHandler()
+    assert transcript_event == {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "transcript": "客户担心预算紧张，我用 ROI 案例回应。",
+    }
+    assert response_created["type"] == "response.created"
+    assert response_delta == {
+        "type": "response.text.delta",
+        "delta": "继续确认试点范围和下一步评审。",
+    }
+    assert response_done["type"] == "response.done"
 
-    @pytest.mark.asyncio
-    async def test_should_handle_text_message(self, handler, session_id):
-        """Test handling of text message type."""
-        handler.websocket = AsyncMock()
-        handler.session_id = session_id
-        handler.session_status = "in_progress"
-        handler.manager = MagicMock()
-        handler.manager.send_json = AsyncMock()
+    transcript_lines = transcript_path.read_text(encoding="utf-8").splitlines()
+    assert any("client_send" in line for line in transcript_lines)
+    assert any("provider_event" in line for line in transcript_lines)
+    assert any("provider_close" in line for line in transcript_lines)
 
-        with patch.object(handler, "_launch_response_task", new=AsyncMock()) as mock_launch:
-            mock_launch.return_value = True
-            await handler.handle_message({
-                "type": "text",
-                "data": {"text": "Hello"},
-            })
-            mock_launch.assert_awaited_once_with("Hello", source="text")
 
-    @pytest.mark.asyncio
-    async def test_should_handle_pause_message(self, handler, session_id):
-        """Test handling of pause control message."""
-        handler.websocket = AsyncMock()
-        handler.session_id = session_id
-        handler.session_status = "in_progress"
-        handler.manager = MagicMock()
-        handler.manager.send_json = AsyncMock()
-        handler._stop_streaming_asr = AsyncMock()
+def test_should_keep_sales_websocket_stepfun_only_runtime():
+    """The Sales WebSocket E2E path must not depend on deleted legacy handlers."""
+    assert create_stepfun_realtime_handler is not None
+    reject_close_codes = cast(dict[str, int], SALES_WS_AUTH_POLICY["reject_close_codes"])
+    assert reject_close_codes["legacy_sales_runtime_disabled"] == 4412
 
-        with patch.object(
-            handler,
-            "_apply_lifecycle_action",
-            new=AsyncMock(return_value=MagicMock(to_status="paused")),
-        ):
-            await handler.handle_message({"type": "pause", "data": {}})
-
-        handler.manager.send_json.assert_called()
-        call_args = handler.manager.send_json.call_args[0]
-        assert call_args[1]["type"] == "status"
-        assert call_args[1]["data"]["ai_state"] == "idle"
-
-    @pytest.mark.asyncio
-    async def test_should_handle_resume_message(self, handler, session_id):
-        """Test handling of resume control message."""
-        handler.websocket = AsyncMock()
-        handler.session_id = session_id
-        handler.session_status = "paused"
-        handler.manager = MagicMock()
-        handler.manager.send_json = AsyncMock()
-        with patch.object(
-            handler,
-            "_apply_lifecycle_action",
-            new=AsyncMock(return_value=MagicMock(to_status="in_progress")),
-        ):
-            await handler.handle_message({"type": "resume", "data": {}})
-
-        handler.manager.send_json.assert_called()
-        call_args = handler.manager.send_json.call_args[0]
-        assert call_args[1]["type"] == "status"
-        assert call_args[1]["data"]["ai_state"] == "listening"
-
-    @pytest.mark.asyncio
-    async def test_should_set_persona(self, handler):
-        """Test persona can be set."""
-        await handler.set_persona("skeptical_buyer")
-        assert handler.persona_id == "skeptical_buyer"
-
-    @pytest.mark.asyncio
-    async def test_should_send_status_message(self, handler, session_id):
-        """Test status message format."""
-        handler.websocket = AsyncMock()
-        handler.session_id = session_id
-        handler.turn_count = 5
-        handler.manager = MagicMock()
-        handler.manager.send_json = AsyncMock()
-
-        await handler._send_status("thinking")
-
-        call_args = handler.manager.send_json.call_args[0]
-        msg = call_args[1]
-        assert msg["type"] == "status"
-        assert msg["data"]["ai_state"] == "thinking"
-        assert msg["data"]["turn_count"] == 5
-
-    @pytest.mark.asyncio
-    async def test_should_send_error_message(self, handler, session_id):
-        """Test error message format."""
-        handler.websocket = AsyncMock()
-        handler.session_id = session_id
-        handler.manager = MagicMock()
-        handler.manager.send_json = AsyncMock()
-
-        await handler._send_error("[PROCESSING_ERROR]", "error")
-
-        call_args = handler.manager.send_json.call_args[0]
-        msg = call_args[1]
-        assert msg["type"] == "error"
-        assert msg["data"]["code"] == "[PROCESSING_ERROR]"
-
-    @pytest.mark.asyncio
-    async def test_should_send_heartbeat_message(self, handler, session_id):
-        """Test heartbeat message format."""
-        handler.websocket = AsyncMock()
-        handler.session_id = session_id
-        handler.manager = MagicMock()
-        handler.manager.send_json = AsyncMock()
-
-        await handler._send_heartbeat()
-
-        call_args = handler.manager.send_json.call_args[0]
-        msg = call_args[1]
-        assert msg["type"] == "heartbeat"
+    for module_name in (
+        "sales_bot.websocket.base_sales_handler",
+        "sales_bot.websocket.enhanced_handler",
+        "sales_bot.websocket.simple_handler",
+    ):
+        assert importlib.util.find_spec(module_name) is None

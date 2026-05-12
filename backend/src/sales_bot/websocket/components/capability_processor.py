@@ -1,5 +1,5 @@
 """
-v1-8: Capability Processor — Extracted from EnhancedSalesHandler.
+v1-8: Capability Processor — extracted from the legacy sales websocket monolith.
 
 Handles:
 - Running capability modules (fuzzy detection, sales stage, scoring, knowledge retrieval)

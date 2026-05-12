@@ -1,5 +1,5 @@
 """
-v1-8: TTS Component — Extracted from EnhancedSalesHandler.
+v1-8: TTS Component — extracted from the legacy sales websocket monolith.
 
 Handles all TTS response generation:
 - Single-shot TTS (edge_tts)

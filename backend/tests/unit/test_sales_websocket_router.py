@@ -4,6 +4,7 @@ Unit tests for sales websocket router behavior.
 
 from __future__ import annotations
 
+import importlib.util
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,43 +23,14 @@ def test_sales_websocket_auth_policy_marks_query_token_as_compatibility_only() -
         "owner_mismatch": 4003,
         "kb_lock_unbound": 4410,
         "agent_persona_required": 4411,
+        "legacy_sales_runtime_disabled": 4412,
     }
 
 
-@pytest.mark.asyncio
-async def test_enhanced_connection_init_failure_does_not_fallback_to_simple(monkeypatch):
-    websocket = MagicMock()
-    websocket.accept = AsyncMock()
-    websocket.close = AsyncMock()
-
-    handler = MagicMock()
-    handler.initialize = AsyncMock(return_value=False)
-
-    monkeypatch.setattr(sales_router, "create_enhanced_sales_handler", lambda: handler)
-    monkeypatch.setattr(sales_router, "_extract_user_id_from_token", lambda _token: "user-1")
-
-    import common.db.session as db_session
-
-    class DummyDbSessionContext:
-        async def __aenter__(self):
-            return MagicMock()
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    monkeypatch.setattr(db_session, "AsyncSessionLocal", lambda: DummyDbSessionContext())
-
-    await sales_router._handle_enhanced_connection(
-        websocket=websocket,
-        session_id="session-1",
-        token="token",
-        agent_id="agent-1",
-        persona_id="persona-1",
-    )
-
-    handler.initialize.assert_awaited_once()
-    websocket.accept.assert_awaited_once()
-    websocket.close.assert_awaited_once_with(code=4502, reason="ENHANCED_INIT_FAILED")
+def test_sales_legacy_handler_modules_stay_deleted() -> None:
+    assert importlib.util.find_spec("sales_bot.websocket.base_sales_handler") is None
+    assert importlib.util.find_spec("sales_bot.websocket.enhanced_handler") is None
+    assert importlib.util.find_spec("sales_bot.websocket.simple_handler") is None
 
 
 @pytest.mark.asyncio
@@ -202,7 +174,7 @@ async def test_handle_sales_websocket_rejects_invalid_token_before_runtime_conne
 
 
 @pytest.mark.asyncio
-async def test_handle_sales_websocket_rejects_non_owner_before_enhanced_connect(
+async def test_handle_sales_websocket_rejects_legacy_mode_before_runtime_connect(
     monkeypatch,
 ):
     websocket = MagicMock()
@@ -219,17 +191,8 @@ async def test_handle_sales_websocket_rejects_non_owner_before_enhanced_connect(
         "_is_kb_lock_unbound_session",
         AsyncMock(return_value=False),
     )
-    monkeypatch.setattr(sales_router, "_resolve_ws_token", lambda *_args, **_kwargs: "valid-token")
-    monkeypatch.setattr(sales_router, "_extract_user_id_from_token", lambda _token: "outsider-user")
-    monkeypatch.setattr(
-        sales_router,
-        "_resolve_session_owner_id",
-        AsyncMock(return_value="owner-user"),
-        raising=False,
-    )
-
-    handle_enhanced = AsyncMock()
-    monkeypatch.setattr(sales_router, "_handle_enhanced_connection", handle_enhanced)
+    handle_stepfun = AsyncMock()
+    monkeypatch.setattr(sales_router, "_handle_stepfun_realtime_connection", handle_stepfun)
 
     await sales_router._handle_sales_websocket(
         websocket=websocket,
@@ -242,5 +205,54 @@ async def test_handle_sales_websocket_rejects_non_owner_before_enhanced_connect(
     )
 
     websocket.accept.assert_awaited_once()
+    websocket.close.assert_awaited_once_with(
+        code=4412,
+        reason="LEGACY_SALES_RUNTIME_DISABLED",
+    )
+    handle_stepfun.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handle_sales_websocket_rejects_non_owner_before_stepfun_connect(
+    monkeypatch,
+):
+    websocket = MagicMock()
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+
+    monkeypatch.setattr(
+        sales_router,
+        "_resolve_session_runtime",
+        AsyncMock(return_value=("sales", "stepfun_realtime", "agent-1", "persona-1")),
+    )
+    monkeypatch.setattr(
+        sales_router,
+        "_is_kb_lock_unbound_session",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(sales_router, "_resolve_ws_token", lambda *_args, **_kwargs: "valid-token")
+    monkeypatch.setattr(sales_router, "_extract_user_id_from_token", lambda _token: "outsider-user")
+    monkeypatch.setattr(
+        sales_router,
+        "_resolve_session_owner_id",
+        AsyncMock(return_value="owner-user"),
+        raising=False,
+    )
+    monkeypatch.setattr(sales_router, "_is_admin_user_id", AsyncMock(return_value=False))
+
+    handle_stepfun = AsyncMock()
+    monkeypatch.setattr(sales_router, "_handle_stepfun_realtime_connection", handle_stepfun)
+
+    await sales_router._handle_sales_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="",
+        agent_id=None,
+        persona_id=None,
+        voice_mode="stepfun_realtime",
+        trace_id="",
+    )
+
+    websocket.accept.assert_awaited_once()
     websocket.close.assert_awaited_once_with(code=4003, reason="ACCESS_DENIED")
-    handle_enhanced.assert_not_awaited()
+    handle_stepfun.assert_not_awaited()

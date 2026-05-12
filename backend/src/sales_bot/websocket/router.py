@@ -23,7 +23,6 @@ from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.session_manager import get_session_manager
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 
-from .enhanced_handler import create_enhanced_sales_handler
 from .stepfun_realtime_handler import create_stepfun_realtime_handler
 
 logger = get_logger(__name__)
@@ -41,6 +40,7 @@ SALES_WS_AUTH_POLICY: dict[str, list[str] | dict[str, int] | str] = {
         "owner_mismatch": 4003,
         "kb_lock_unbound": 4410,
         "agent_persona_required": 4411,
+        "legacy_sales_runtime_disabled": 4412,
     },
 }
 
@@ -139,9 +139,8 @@ async def _handle_sales_websocket(
     """
     WebSocket endpoint for sales practice.
 
-    Supports:
-    1. Realtime mode: With persisted session voice_mode = stepfun_realtime
-    2. Enhanced mode: With persisted Agent + Persona runtime lock
+    Supports StepFun realtime mode only when the persisted session voice_mode is
+    stepfun_realtime. Legacy Sales handlers are disabled on this path.
 
     Query Parameters:
         session_id: Practice session UUID (path parameter)
@@ -194,6 +193,16 @@ async def _handle_sales_websocket(
             persisted=persisted_voice_mode,
         )
     normalized_voice_mode = persisted_voice_mode
+    if normalized_voice_mode != "stepfun_realtime":
+        await _reject_sales_websocket(
+            websocket,
+            code=4412,
+            reason="LEGACY_SALES_RUNTIME_DISABLED",
+            log_message="Rejected /ws/sales connection because legacy sales runtime is disabled",
+            session_id=resolved_session_id,
+            persisted_voice_mode=persisted_voice_mode,
+        )
+        return
 
     if agent_id and persisted_agent_id and agent_id != persisted_agent_id:
         logger.warning(
@@ -253,22 +262,12 @@ async def _handle_sales_websocket(
         await websocket.close(code=4411, reason="AGENT_PERSONA_REQUIRED")
         return
 
-    if normalized_voice_mode == "stepfun_realtime":
-        await _handle_stepfun_realtime_connection(
-            websocket=websocket,
-            session_id=resolved_session_id,
-            token=auth_token,
-            trace_id=normalize_trace_id(trace_id),
-        )
-    else:
-        await _handle_enhanced_connection(
-            websocket=websocket,
-            session_id=resolved_session_id,
-            token=auth_token,
-            agent_id=resolved_agent_id,
-            persona_id=resolved_persona_id,
-            trace_id=normalize_trace_id(trace_id),
-        )
+    await _handle_stepfun_realtime_connection(
+        websocket=websocket,
+        session_id=resolved_session_id,
+        token=auth_token,
+        trace_id=normalize_trace_id(trace_id),
+    )
 
 
 def _resolve_ws_token(websocket: WebSocket, query_token: str) -> str:
@@ -294,9 +293,9 @@ def _normalize_requested_voice_mode(voice_mode: str | None) -> str | None:
 
 
 def _default_voice_mode() -> str:
-    default_mode = os.getenv("DEFAULT_VOICE_MODE", "legacy").strip().lower()
+    default_mode = os.getenv("DEFAULT_VOICE_MODE", "stepfun_realtime").strip().lower()
     if default_mode not in {"legacy", "stepfun_realtime"}:
-        default_mode = "legacy"
+        default_mode = "stepfun_realtime"
     return default_mode
 
 
@@ -454,75 +453,6 @@ async def _handle_stepfun_realtime_connection(
     session_manager = get_session_manager()
     await session_manager.register_session(session_id, handler)
     try:
-        await handler.handle_connection(
-            websocket,
-            session_id,
-            token,
-            trace_id=trace_id,
-        )
-    finally:
-        await session_manager.unregister_session(session_id)
-
-
-async def _handle_enhanced_connection(
-    websocket: WebSocket,
-    session_id: str,
-    token: str,
-    agent_id: str,
-    persona_id: str,
-    trace_id: str | None = None,
-) -> None:
-    """Handle connection with EnhancedSalesHandler (Agent Platform integration)."""
-    logger.info(
-        f"Using EnhancedSalesHandler for session {session_id}",
-        session_id=session_id,
-        agent_id=agent_id,
-        persona_id=persona_id,
-    )
-
-    handler = create_enhanced_sales_handler()
-
-    # Extract user_id from token
-    user_id = _extract_user_id_from_token(token)
-    if user_id is None:
-        logger.warning(
-            f"WebSocket auth rejected: invalid token for session {session_id}"
-        )
-        await websocket.accept()
-        await websocket.close(code=4001, reason="Unauthorized")
-        return
-
-    # NEW-5 Fix: Use short-lived DB session ONLY for initialization (loading config).
-    # The WebSocket handler will create its own short-lived sessions for runtime DB ops.
-    from common.db.session import AsyncSessionLocal
-
-    async with AsyncSessionLocal() as db:
-        init_success = await handler.initialize(
-            session_id=session_id,
-            agent_id=agent_id,
-            persona_id=persona_id,
-            user_id=user_id,
-            db=db,
-        )
-
-    if not init_success:
-        logger.error(
-            "Failed to initialize EnhancedSalesHandler",
-            session_id=session_id,
-            agent_id=agent_id,
-            persona_id=persona_id,
-        )
-        # Do NOT fallback to simple handler here. Simple mode has no Agent/Persona
-        # capability pipeline and may silently skip knowledge retrieval.
-        await websocket.accept()
-        await websocket.close(code=4502, reason="ENHANCED_INIT_FAILED")
-        return
-
-    # Register with SessionManager for timeout/heartbeat tracking
-    session_manager = get_session_manager()
-    await session_manager.register_session(session_id, handler, user_id=user_id)
-    try:
-        # Handle the WebSocket connection (DB session already released)
         await handler.handle_connection(
             websocket,
             session_id,

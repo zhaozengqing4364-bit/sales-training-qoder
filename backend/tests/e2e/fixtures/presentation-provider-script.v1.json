@@ -1,0 +1,10 @@
+{
+  "fixture_version": "presentation-provider-script.v1",
+  "provider": "phase4_local_stepfun",
+  "script": [
+    {
+      "user_transcript": "第一页我先讲业务目标：用 AI 训练销售团队，提高演练频次。第二页补充 ROI 结果，六个月回本，并引用 A 公司客户案例。",
+      "assistant_response": "收到。你已经覆盖业务目标、ROI 结果和客户案例，请继续保持逐页证据链。"
+    }
+  ]
+}

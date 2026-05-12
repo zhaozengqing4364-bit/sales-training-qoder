@@ -92,6 +92,14 @@ def _extract_runtime_focus_intent(
     if not isinstance(focus_intent, dict):
         return None
 
+    if focus_intent.get("version") == "training_task_focus_v1":
+        training_task_focus: dict[str, Any] = {"version": "training_task_focus_v1"}
+        for key in ("training_task_id", "goal", "focus_intent"):
+            value = _sanitize_text(focus_intent.get(key), max_length=500)
+            if value is not None:
+                training_task_focus[key] = value
+        return deepcopy(training_task_focus) if len(training_task_focus) > 1 else None
+
     main_issue = _filter_retry_focus_fields(
         focus_intent.get("main_issue"),
         allowed_keys=("issue_type", "issue_text", "recovery_rule"),
@@ -134,6 +142,10 @@ def build_training_runtime_descriptor(
         or "sales"
     ).lower()
 
+    focus_intent = _extract_runtime_focus_intent(
+        session,
+        scenario_type=resolved_scenario_type,
+    )
     return TrainingRuntimeDescriptor(
         session_id=str(session.session_id),
         scenario_type=resolved_scenario_type,
@@ -152,8 +164,10 @@ def build_training_runtime_descriptor(
             if getattr(session, "voice_runtime_profile_id", None)
             else None
         ),
-        focus_intent=_extract_runtime_focus_intent(
-            session,
-            scenario_type=resolved_scenario_type,
+        focus_intent=focus_intent,
+        training_task_id=(
+            str(focus_intent.get("training_task_id"))
+            if isinstance(focus_intent, dict) and focus_intent.get("training_task_id")
+            else None
         ),
     )

@@ -26,3 +26,4 @@ class TrainingRuntimeDescriptor(BaseModel):
     voice_mode: str | None = None
     runtime_profile_id: str | None = None
     focus_intent: dict[str, Any] | None = None
+    training_task_id: str | None = None

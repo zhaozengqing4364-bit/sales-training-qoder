@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
+from common.conversation.score_snapshot import normalize_score_snapshot
 from common.conversation.session_evidence import (
     ensure_effectiveness_snapshot as ensure_session_evidence_snapshot,
 )
@@ -47,9 +48,6 @@ from presentation_coach.services.coach_service import PresentationCoachService
 from sales_bot.services.bot_service import sales_bot_service
 from sales_bot.services.summary_service import summary_service
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
-from sales_bot.websocket.components.stepfun_message_helpers import (
-    normalize_score_snapshot,
-)
 from training_runtime.service import build_training_runtime_descriptor
 
 logger = get_logger(__name__)
@@ -206,6 +204,12 @@ class PracticeSessionCreateService:
         if focus_intent is not None:
             session_policy_snapshot["focus_intent"] = deepcopy(focus_intent)
 
+        self._enforce_sales_stepfun_only(
+            scenario_type_value=scenario_type_value,
+            requested_voice_mode=session_data.voice_mode,
+            effective_voice_policy=effective_voice_policy,
+        )
+
         self._log_voice_policy_resolution(
             current_user=current_user,
             scenario_type_value=scenario_type_value,
@@ -248,6 +252,28 @@ class PracticeSessionCreateService:
             session_data.scenario_type.value
             if hasattr(session_data.scenario_type, "value")
             else str(session_data.scenario_type)
+        )
+
+    @staticmethod
+    def _enforce_sales_stepfun_only(
+        *,
+        scenario_type_value: str,
+        requested_voice_mode: str | None,
+        effective_voice_policy: dict[str, Any],
+    ) -> None:
+        if scenario_type_value != "sales":
+            return
+        if effective_voice_policy.get("voice_mode") == "stepfun_realtime":
+            return
+
+        raise PracticeServiceError(
+            "[LEGACY_SALES_VOICE_MODE_DISABLED]",
+            status_code=400,
+            message="新建销售训练会话仅支持 StepFun Realtime，请使用 voice_mode=stepfun_realtime。",
+            details={
+                "requested_voice_mode": requested_voice_mode,
+                "resolved_voice_mode": effective_voice_policy.get("voice_mode"),
+            },
         )
 
     async def _resolve_requested_scenario(
@@ -439,7 +465,9 @@ class PracticeSessionCreateService:
             session.agent_id = agent_id_str
         if persona_id_str:
             session.persona_id = persona_id_str
-        session.voice_mode = effective_voice_policy.get("voice_mode", "legacy")
+        session.voice_mode = effective_voice_policy.get(
+            "voice_mode", "stepfun_realtime"
+        )
         session.voice_runtime_profile_id = effective_voice_policy.get(
             "runtime_profile_id"
         )
@@ -486,7 +514,7 @@ class PracticeSessionCreateService:
             scenario_id=scenario.scenario_id,
             agent_id=agent_id_str,
             persona_id=persona_id_str,
-            voice_mode=effective_voice_policy.get("voice_mode", "legacy"),
+            voice_mode=effective_voice_policy.get("voice_mode", "stepfun_realtime"),
             voice_runtime_profile_id=effective_voice_policy.get("runtime_profile_id"),
             voice_policy_snapshot=deepcopy(session_policy_snapshot),
             status="preparing",

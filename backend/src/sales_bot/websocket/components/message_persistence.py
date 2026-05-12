@@ -1,5 +1,5 @@
 """
-v1-8: Message Persistence — Extracted from EnhancedSalesHandler.
+v1-8: Message Persistence — extracted from the legacy sales websocket monolith.
 
 Handles all database operations for conversation message storage:
 - Save user/assistant messages

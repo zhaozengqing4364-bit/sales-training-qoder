@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
 from common.conversation.runtime_diagnostics import build_retrieval_facts
+from common.conversation.score_snapshot import normalize_score_snapshot
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession, SessionStatus
 from common.effectiveness import (
@@ -25,9 +26,6 @@ from common.effectiveness import (
 )
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
-from sales_bot.websocket.components.stepfun_message_helpers import (
-    normalize_score_snapshot,
-)
 
 logger = get_logger(__name__)
 
