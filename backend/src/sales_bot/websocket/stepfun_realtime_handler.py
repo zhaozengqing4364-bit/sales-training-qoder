@@ -95,6 +95,10 @@ from sales_bot.websocket.components.objection_ledger_helpers import (
     merge_arbiter_context_with_objection_ledger,
     resolve_turn_objection_ledger,
 )
+from sales_bot.websocket.components.curriculum_stage_runtime import (
+    CurriculumStageRuntime,
+    CurriculumStageRuntimeResult,
+)
 from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
@@ -350,6 +354,7 @@ class StepFunRealtimeHandler(
         self._latest_claim_truth: dict[str, Any] | None = None
         self._latest_action_card: ActionCard | None = None
         self._latest_knowledge_answer_diagnostics: dict[str, Any] | None = None
+        self._curriculum_stage_runtime: CurriculumStageRuntime | None = None
         self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_pacing_state = RealtimeFeedbackPacingState()
@@ -922,6 +927,10 @@ class StepFunRealtimeHandler(
             )
         if self._coach_health != "healthy" or self._coach_health_reason is not None:
             runtime_state["coach_health"] = self._coach_health_payload()
+        if self._curriculum_stage_runtime is not None:
+            curriculum_patch = self._curriculum_stage_runtime.runtime_state_patch()
+            if curriculum_patch:
+                runtime_state.update(copy.deepcopy(curriculum_patch))
         runtime_state["reconnect_state"] = self._build_reconnect_state_payload()
 
         return SessionStateSnapshot(
@@ -937,6 +946,99 @@ class StepFunRealtimeHandler(
     async def _restore_session_state(self, state: SessionStateSnapshot) -> None:
         """Restore reconnect state using the StepFun connection mixin authority."""
         await super()._restore_session_state(state)
+        runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        if self._curriculum_stage_runtime is not None:
+            self._curriculum_stage_runtime.restore_runtime_state(runtime_state)
+
+    def _curriculum_runtime_payload(self) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        runtime_snapshot = self._effective_policy.get("runtime_snapshot")
+        curriculum_plan = self._effective_policy.get("curriculum_plan")
+        stage_snapshots = self._effective_policy.get("stage_snapshots")
+        if isinstance(runtime_snapshot, dict):
+            curriculum_plan = runtime_snapshot.get("curriculum_plan") or curriculum_plan
+            stage_snapshots = runtime_snapshot.get("stage_snapshots") or stage_snapshots
+        if not isinstance(stage_snapshots, dict):
+            return None, {}
+        return curriculum_plan if isinstance(curriculum_plan, dict) else None, stage_snapshots
+
+    async def _initialize_curriculum_stage_runtime(
+        self, runtime_state: dict[str, Any] | None = None
+    ) -> None:
+        curriculum_plan, stage_snapshots = self._curriculum_runtime_payload()
+        if not stage_snapshots:
+            self._curriculum_stage_runtime = None
+            return
+        self._curriculum_stage_runtime = CurriculumStageRuntime(
+            curriculum_plan=curriculum_plan,
+            stage_snapshots=stage_snapshots,
+            runtime_state=runtime_state,
+        )
+        result = self._curriculum_stage_runtime.initialize(
+            now_seconds=asyncio.get_running_loop().time()
+        )
+        await self._apply_curriculum_stage_runtime_result(result)
+
+    async def _apply_curriculum_stage_runtime_result(
+        self, result: CurriculumStageRuntimeResult
+    ) -> None:
+        if not result.runtime_state_patch and not result.websocket_events:
+            return
+        if result.runtime_state_patch:
+            await self._persist_curriculum_stage_runtime_state(result.runtime_state_patch)
+        for event in result.websocket_events:
+            await self._send_curriculum_stage_event(event)
+
+    async def _persist_curriculum_stage_runtime_state(
+        self, runtime_state_patch: dict[str, Any]
+    ) -> None:
+        if not self.session_id:
+            return
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(PracticeSession).where(PracticeSession.session_id == self.session_id)
+            )
+            session = result.scalar_one_or_none()
+            if not session:
+                return
+            existing_state = session.runtime_state if isinstance(session.runtime_state, dict) else {}
+            session.runtime_state = {
+                **copy.deepcopy(existing_state),
+                **copy.deepcopy(runtime_state_patch),
+            }
+            await db.commit()
+
+    async def _send_curriculum_stage_event(self, event: dict[str, Any]) -> None:
+        websocket = self._get_active_websocket()
+        if not websocket:
+            return
+        outbound = copy.deepcopy(event)
+        outbound.setdefault("timestamp", datetime.now(UTC).isoformat())
+        outbound.setdefault("trace_id", get_trace_id())
+        data = outbound.get("data")
+        outbound["data"] = data if isinstance(data, dict) else {}
+        outbound["data"].setdefault("session_id", self.session_id)
+        await self.manager.send_json(websocket, outbound)
+
+    async def _handle_curriculum_stage_turn(self, *, turn_number: int) -> None:
+        if self._curriculum_stage_runtime is None:
+            return
+        score = None
+        if isinstance(self._latest_score_snapshot, dict):
+            score = self._latest_score_snapshot.get("overall_score")
+        result = self._curriculum_stage_runtime.handle_turn(
+            turn_number=turn_number,
+            template_stage_score=score,
+            now_seconds=asyncio.get_running_loop().time(),
+        )
+        await self._apply_curriculum_stage_runtime_result(result)
+
+    async def _handle_curriculum_stage_timing(self) -> None:
+        if self._curriculum_stage_runtime is None:
+            return
+        result = self._curriculum_stage_runtime.handle_timing(
+            now_seconds=asyncio.get_running_loop().time()
+        )
+        await self._apply_curriculum_stage_runtime_result(result)
 
     async def _save_session_state(self) -> None:
         """Persist reconnectable state, or clear dirty snapshots after terminal exits."""
@@ -1066,6 +1168,12 @@ class StepFunRealtimeHandler(
 
         try:
             await self._load_effective_policy()
+            existing_runtime_state = (
+                existing_state.runtime_state
+                if existing_state is not None and isinstance(existing_state.runtime_state, dict)
+                else None
+            )
+            await self._initialize_curriculum_stage_runtime(existing_runtime_state)
             await self._sync_session_state()
             if existing_state and self.session_status in TERMINAL_SESSION_STATUSES:
                 await self.state_service.delete_state(session_id)
@@ -1096,6 +1204,7 @@ class StepFunRealtimeHandler(
                         await self._touch_session_activity()
                         await self._handle_binary_frame(raw["bytes"])
                 except TimeoutError:
+                    await self._handle_curriculum_stage_timing()
                     await self._send_heartbeat()
 
         except WebSocketDisconnect:
@@ -3675,6 +3784,7 @@ class StepFunRealtimeHandler(
                         normalization_result,
                     ),
                 }
+            await self._handle_curriculum_stage_turn(turn_number=turn_number)
             await self._persist_message(
                 turn_number=turn_number,
                 role="user",
