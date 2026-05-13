@@ -58,6 +58,7 @@ from supervisor.schemas import (
     TrainingReportIssue,
     TrainingReportNextAction,
     TrainingReportRiskFlag,
+    TrainingReportThinkingEvidence,
     TrainingReportTrainee,
     TrainingReportViewModel,
     TrainingTaskSummary,
@@ -85,6 +86,10 @@ class SupervisorServiceError(Exception):
 
 def _is_admin(user: User) -> bool:
     return str(getattr(user, "role", "user")).lower() == "admin"
+
+
+def _can_access_thinking_evidence(user: User) -> bool:
+    return _is_admin(user)
 
 
 def _now() -> datetime:
@@ -236,6 +241,10 @@ class SupervisorReviewService:
             key_strengths=self._report_key_strengths(report, stored_report),
             key_issues=key_issues,
             evidence_items=evidence_items,
+            thinking_evidence=self._thinking_evidence_from_session(
+                session,
+                current_user,
+            ),
             recommendations=self._report_recommendations(report, stored_report),
             config_metadata=self._report_config_metadata(report_snapshot),
             risk_flags=risk_flags,
@@ -1183,6 +1192,36 @@ class SupervisorReviewService:
                 status_code=403,
                 message="你没有权限访问该训练报告。",
             )
+
+    def _thinking_evidence_from_session(
+        self,
+        session: PracticeSession,
+        user: User,
+    ) -> list[TrainingReportThinkingEvidence]:
+        if not _can_access_thinking_evidence(user):
+            return []
+        runtime_state = session.runtime_state if isinstance(session.runtime_state, dict) else {}
+        thinking_log = runtime_state.get("thinking_log")
+        if not isinstance(thinking_log, list):
+            return []
+        entries: list[TrainingReportThinkingEvidence] = []
+        for item in thinking_log:
+            if not isinstance(item, dict):
+                continue
+            thinking_text = _short_text(item.get("thinking_text"), max_length=50_000)
+            response_id = _as_str(item.get("response_id"))
+            if not thinking_text or not response_id:
+                continue
+            entries.append(
+                TrainingReportThinkingEvidence(
+                    turn_index=int(item.get("turn_index") or 0),
+                    template_stage_key=cast(str | None, item.get("template_stage_key")),
+                    response_id=response_id,
+                    thinking_text=thinking_text,
+                    captured_at=_as_str(item.get("captured_at")),
+                )
+            )
+        return entries
 
     async def _get_user(self, user_id: str) -> User | None:
         result = await self.db.execute(select(User).where(User.user_id == user_id))

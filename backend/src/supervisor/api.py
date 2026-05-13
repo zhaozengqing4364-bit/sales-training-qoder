@@ -154,7 +154,10 @@ async def get_training_report_view(
             session_id=session_id,
             current_user=current_user,
         )
-        return success_response(view.model_dump(mode="json"))
+        payload = view.model_dump(mode="json")
+        if str(getattr(current_user, "role", "user")).lower() != "admin":
+            payload.pop("thinking_evidence", None)
+        return success_response(payload)
     except SupervisorServiceError as exc:
         return _service_error(exc)
     except SQLAlchemyError as exc:

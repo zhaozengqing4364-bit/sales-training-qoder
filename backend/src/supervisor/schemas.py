@@ -46,6 +46,14 @@ class TrainingReportEvidenceItem(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
 
 
+class TrainingReportThinkingEvidence(BaseModel):
+    turn_index: int
+    template_stage_key: str | None = None
+    response_id: str
+    thinking_text: str
+    captured_at: str
+
+
 class TrainingReportDimensionScore(BaseModel):
     name: str
     score: float | None = Field(default=None, ge=0, le=100)
@@ -298,6 +306,7 @@ class TrainingReportViewModel(BaseModel):
     key_strengths: list[str] = Field(default_factory=list)
     key_issues: list[TrainingReportIssue] = Field(default_factory=list)
     evidence_items: list[TrainingReportEvidenceItem] = Field(default_factory=list)
+    thinking_evidence: list[TrainingReportThinkingEvidence] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     config_metadata: dict[str, Any] = Field(default_factory=dict)
     risk_flags: list[TrainingReportRiskFlag] = Field(default_factory=list)
