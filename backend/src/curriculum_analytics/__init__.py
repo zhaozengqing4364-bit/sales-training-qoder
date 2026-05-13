@@ -1,0 +1,1 @@
+"""Curriculum analytics read models."""
