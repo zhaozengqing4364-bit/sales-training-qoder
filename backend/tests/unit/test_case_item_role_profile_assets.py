@@ -135,6 +135,43 @@ async def test_should_validate_and_publish_case_item_asset(
 
 
 @pytest.mark.asyncio
+async def test_should_filter_case_items_by_status_and_query(test_db: AsyncSession) -> None:
+    service = ContentAssetService(test_db)
+    manufacturing_payload = _case_item_payload()
+    manufacturing_payload["industry"] = "制造业"
+    manufacturing_payload["content_hash"] = case_item_content_hash(manufacturing_payload)
+    finance_payload = _case_item_payload()
+    finance_payload["industry"] = "金融科技"
+    finance_payload["customer_role"] = "CFO"
+    finance_payload["content_hash"] = case_item_content_hash(finance_payload)
+    manufacturing = await service.create_case_item(CaseItemCreate.model_validate(manufacturing_payload), actor_id="admin-1")
+    await service.create_case_item(CaseItemCreate.model_validate(finance_payload), actor_id="admin-1")
+    await service.publish_case_item(manufacturing, actor_id="admin-1")
+
+    results = await service.list_case_items(status="published", query="制造")
+
+    assert [item.industry for item in results] == ["制造业"]
+
+
+@pytest.mark.asyncio
+async def test_should_filter_role_profiles_by_status_and_query(test_db: AsyncSession) -> None:
+    service = ContentAssetService(test_db)
+    careful_payload = _role_profile_payload()
+    careful_payload["role_name"] = "谨慎采购总监"
+    careful_payload["content_hash"] = role_profile_content_hash(careful_payload)
+    direct_payload = _role_profile_payload()
+    direct_payload["role_name"] = "强势运营经理"
+    direct_payload["content_hash"] = role_profile_content_hash(direct_payload)
+    careful = await service.create_role_profile(RoleProfileCreate.model_validate(careful_payload), actor_id="admin-1")
+    await service.create_role_profile(RoleProfileCreate.model_validate(direct_payload), actor_id="admin-1")
+    await service.publish_role_profile(careful, actor_id="admin-1")
+
+    results = await service.list_role_profiles(status="published", query="谨慎")
+
+    assert [item.role_name for item in results] == ["谨慎采购总监"]
+
+
+@pytest.mark.asyncio
 async def test_should_reject_case_item_publish_when_hash_is_stale(
     test_db: AsyncSession,
 ) -> None:

@@ -5,7 +5,7 @@ from hashlib import sha256
 from json import dumps
 from typing import Any, Protocol, runtime_checkable
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Persona
@@ -47,9 +47,23 @@ class ContentAssetService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def list_case_items(self) -> list[CaseItem]:
+    async def list_case_items(
+        self, *, status: str | None = None, query: str | None = None
+    ) -> list[CaseItem]:
+        stmt = select(CaseItem)
+        if status:
+            stmt = stmt.where(CaseItem.status == status)
+        if query:
+            pattern = f"%{query.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    CaseItem.industry.ilike(pattern),
+                    CaseItem.customer_role.ilike(pattern),
+                    CaseItem.company_profile.ilike(pattern),
+                )
+            )
         result = await self._db.execute(
-            select(CaseItem).order_by(CaseItem.updated_at.desc())
+            stmt.order_by(CaseItem.updated_at.desc())
         )
         return list(result.scalars().all())
 
@@ -86,9 +100,23 @@ class ContentAssetService:
         await self._db.refresh(item)
         return item
 
-    async def list_role_profiles(self) -> list[RoleProfile]:
+    async def list_role_profiles(
+        self, *, status: str | None = None, query: str | None = None
+    ) -> list[RoleProfile]:
+        stmt = select(RoleProfile)
+        if status:
+            stmt = stmt.where(RoleProfile.status == status)
+        if query:
+            pattern = f"%{query.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    RoleProfile.role_name.ilike(pattern),
+                    RoleProfile.role_type.ilike(pattern),
+                    RoleProfile.communication_style.ilike(pattern),
+                )
+            )
         result = await self._db.execute(
-            select(RoleProfile).order_by(RoleProfile.updated_at.desc())
+            stmt.order_by(RoleProfile.updated_at.desc())
         )
         return list(result.scalars().all())
 

@@ -5,7 +5,7 @@ import binascii
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -369,6 +369,8 @@ async def publish_practice_template(
 
 @router.get("/case-items", response_model=None)
 async def list_case_items(
+    status: str | None = Query(default=None, pattern="^(draft|published|archived)$"),
+    query: str | None = Query(default=None, max_length=120),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
@@ -376,7 +378,7 @@ async def list_case_items(
     if admin_error is not None:
         return admin_error
     service = ContentAssetService(db)
-    items = await service.list_case_items()
+    items = await service.list_case_items(status=status, query=query)
     return _success(
         CaseItemListResponse(
             items=[_serialize_case_item(item) for item in items], total=len(items)
@@ -522,6 +524,8 @@ async def archive_case_item(
 
 @router.get("/role-profiles", response_model=None)
 async def list_role_profiles(
+    status: str | None = Query(default=None, pattern="^(draft|published|archived)$"),
+    query: str | None = Query(default=None, max_length=120),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
@@ -529,7 +533,7 @@ async def list_role_profiles(
     if admin_error is not None:
         return admin_error
     service = ContentAssetService(db)
-    items = await service.list_role_profiles()
+    items = await service.list_role_profiles(status=status, query=query)
     return _success(
         RoleProfileListResponse(
             items=[_serialize_role_profile(item) for item in items], total=len(items)
