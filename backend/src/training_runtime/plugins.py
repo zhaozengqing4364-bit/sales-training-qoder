@@ -10,9 +10,10 @@ from .models import TrainingRuntimeDescriptor
 
 PluginAction = str
 LEGACY_SALES_HANDLER_MODULES = (
-    "sales_bot.websocket." + "base_sales" + "_handler",
-    "sales_bot.websocket." + "enhanced" + "_handler",
-    "sales_bot.websocket." + "simple" + "_handler",
+    # Explicit allowlist of removed Sales websocket modules that must stay absent.
+    "sales_bot.websocket.base_sales_handler",
+    "sales_bot.websocket.enhanced_handler",
+    "sales_bot.websocket.simple_handler",
 )
 
 

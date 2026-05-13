@@ -127,7 +127,7 @@ def _response_id(event: dict[str, object]) -> str:
 def _thinking_delta(event: dict[str, object]) -> str:
     value = event.get("delta")
     if isinstance(value, str):
-        return value.strip()
+        return value
     return ""
 
 

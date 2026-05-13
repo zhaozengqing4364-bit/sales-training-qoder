@@ -48,6 +48,17 @@ def test_should_ignore_empty_delta_without_crashing() -> None:
     assert capture.on_done({"response_id": "resp_empty"}) is None
 
 
+def test_should_preserve_delta_chunk_whitespace_until_final_entry() -> None:
+    capture = StepFunThinkingCapture(turn_index=lambda: 1, clock=lambda: 50.0)
+
+    capture.on_delta({"response_id": "resp_space", "delta": "  first\n"})
+    capture.on_delta({"response_id": "resp_space", "delta": "  second  "})
+    entry = capture.on_done({"response_id": "resp_space"})
+
+    assert entry is not None
+    assert entry.thinking_text == "first\n  second"
+
+
 def test_should_flush_bounded_per_turn_thinking_entry() -> None:
     capture = StepFunThinkingCapture(
         turn_index=lambda: 2,
