@@ -7,6 +7,7 @@ from fastapi.routing import APIRoute
 
 from admin.api.admin import router as admin_presentations_router
 from admin.api.analytics import router as admin_analytics_router
+from admin.api.analytics_curriculum import router as admin_curriculum_analytics_router
 from admin.api.audit_trail import router as audit_trail_router
 from admin.api.business_rules import router as business_rules_router
 from admin.api.config_bundles import router as config_bundles_router
@@ -200,6 +201,12 @@ def register_routers(app: FastAPI) -> None:
         admin_analytics_router,
         prefix="/api/v1",
         tags=["admin-analytics"],
+        dependencies=[Depends(get_current_admin_user_for_app_routes)],
+    )
+    app.include_router(
+        admin_curriculum_analytics_router,
+        prefix="/api/v1",
+        tags=["admin-curriculum-analytics"],
         dependencies=[Depends(get_current_admin_user_for_app_routes)],
     )
     app.include_router(

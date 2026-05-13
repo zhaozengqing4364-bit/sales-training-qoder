@@ -230,3 +230,88 @@ Content-Type: application/json
   "trace_id": "trace-xxx"
 }
 ```
+
+---
+
+## 管理端课程分析仪表盘
+
+> 后端实现: `backend/src/admin/api/analytics_curriculum.py`
+>
+> 路径前缀: `/api/v1/admin/analytics`
+>
+> 认证: 当前实现为管理员权限（`admin`）。计划中的 supervisor/team action-level scope 依赖后续团队授权域模型，不在本接口中伪造。
+
+### 获取课程分析仪表盘
+
+```http
+GET /api/v1/admin/analytics/curriculum?time_range=30d
+```
+
+#### Query 参数
+
+- `time_range` (可选): `7d | 30d | 90d | all_time`，默认 `30d`
+
+#### 响应结构（该接口使用 `{ success, data }` 包裹）
+
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "assigned_count": 25,
+      "completed_count": 23,
+      "completion_rate": 0.92,
+      "top_weak_dimension": "异议处理",
+      "average_score_delta": 2.6
+    },
+    "heatmap": [
+      {
+        "template_id": "template-uuid",
+        "template_name": "新人异议处理训练",
+        "dimension": "异议处理",
+        "average_score": 62.4,
+        "sample_count": 8
+      }
+    ],
+    "score_trend": [
+      {
+        "date": "2026-05-13",
+        "average_score": 78.5,
+        "sample_count": 3
+      }
+    ],
+    "review_outcomes": {
+      "approved": 12,
+      "rejected": 2,
+      "calibrated": 4,
+      "retraining_required": 5
+    },
+    "retraining_conversion": {
+      "created": 5,
+      "started": 3,
+      "completed": 2
+    },
+    "cache": {
+      "enabled": false,
+      "hit": false,
+      "ttl_seconds": null
+    }
+  },
+  "trace_id": "trace-xxx"
+}
+```
+
+#### 指标口径
+
+- `assigned_count`: 指定 `time_range` 内创建、且关联 `practice_template_id` 的课程训练任务数。
+- `completed_count`: 指定 `time_range` 内开始、状态为 `completed`、且关联 `practice_template_id` 的课程会话数。
+- `completion_rate`: `completed_count / assigned_count`；没有分配任务时为 `0`。
+- `top_weak_dimension` / `heatmap`: 优先使用 `TrainingReportSnapshot.report_payload.dimension_scores`；缺失时使用冻结 `TrainingReportSnapshot.report_payload.lineage.stage_snapshots[*].dimension_scores`，不读取 latest `PracticeTemplate` 内容。
+- `template_name`: 来自 `PracticeSession.curriculum_snapshot.practice_template.name`，用于保持历史课程名称不可变。
+- `review_outcomes.calibrated`: 以 `SupervisorScoreCalibration` 记录作为主管校准权威来源，不依赖 review metadata。
+- `cache`: 当前不新增缓存基础设施，返回 `enabled=false`；服务端用 `time_range` 与查询上限保护首版聚合。
+
+#### 错误响应
+
+- 非管理员: `401 Unauthorized` 或 `403 Forbidden`
+- 服务异常: `{ "success": false, "error": "[CURRICULUM_ANALYTICS_FAILED]", "message": "Failed to load curriculum analytics dashboard" }`
