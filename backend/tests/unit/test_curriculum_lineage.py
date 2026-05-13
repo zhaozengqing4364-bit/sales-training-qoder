@@ -52,6 +52,33 @@ def _curriculum_snapshot() -> dict:
             voice_policy_snapshot_hash="sha256:voice-policy",
             instruction_contract_hash="sha256:instruction",
         ),
+        stage_snapshots={
+            "template_stage_opening": {
+                "template_ref": {
+                    "asset_type": "practice_template",
+                    "asset_id": "child-template-1",
+                    "version": 1,
+                    "hash": "sha256:child-template",
+                    "snapshot_label": "published",
+                },
+                "runtime_payload": {"template_id": "child-template-1"},
+                "content_assets": [],
+                "rubric": {
+                    "asset_type": "scoring_ruleset",
+                    "asset_id": "ruleset-1",
+                    "version": "sales-v1",
+                    "hash": "sha256:ruleset",
+                    "snapshot_label": "published",
+                },
+                "runtime": {
+                    "agent_id": "agent-1",
+                    "persona_id": "persona-1",
+                    "runtime_profile_id": "runtime-1",
+                    "voice_policy_snapshot_hash": "sha256:voice-policy",
+                    "instruction_contract_hash": "sha256:instruction",
+                },
+            }
+        },
         llm_nodes=[],
     )
     return snapshot.model_dump()
@@ -97,6 +124,7 @@ def test_should_extract_required_curriculum_lineage_from_snapshot() -> None:
         "practice_template": snapshot["practice_template"],
         "content_assets": [],
         "rubric": snapshot["rubric"],
+        "stage_snapshots": snapshot["stage_snapshots"],
         "llm_suggestions": [],
     }
     assert snapshot == original

@@ -16,6 +16,7 @@ from common.db.models import EvaluationRun, EvaluationRunStatus, PracticeSession
 CURRICULUM_LINEAGE_KEYS = (
     "practice_template",
     "rubric",
+    "stage_snapshots",
 )
 
 
