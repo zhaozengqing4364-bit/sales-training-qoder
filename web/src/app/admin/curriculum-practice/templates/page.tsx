@@ -10,8 +10,8 @@ import type { CurriculumPlanStage, PracticeTemplateGateResult, PracticeTemplateM
 import { debug } from "@/lib/debug";
 
 type FormState = Omit<Required<PracticeTemplateMutationRequest>, "curriculum_plan" | "max_stage_duration_seconds"> & {
-    curriculum_plan: NonNullable<PracticeTemplateMutationRequest["curriculum_plan"]>;
-    max_stage_duration_seconds: number;
+    curriculum_plan: PracticeTemplateMutationRequest["curriculum_plan"];
+    max_stage_duration_seconds: number | null;
 };
 
 function emptyStage(order: number): CurriculumPlanStage {
@@ -36,6 +36,15 @@ function emptyStage(order: number): CurriculumPlanStage {
     };
 }
 
+function createDefaultCurriculumPlan(): NonNullable<FormState["curriculum_plan"]> {
+    return {
+        name: "",
+        description: "",
+        max_stage_duration_seconds: 600,
+        stages: [emptyStage(1)],
+    };
+}
+
 function createEmptyForm(): FormState {
     return {
         name: "",
@@ -48,13 +57,8 @@ function createEmptyForm(): FormState {
         voice_mode: "stepfun_realtime",
         scoring_ruleset_id: "",
         knowledge_base_refs: [],
-        curriculum_plan: {
-            name: "",
-            description: "",
-            max_stage_duration_seconds: 600,
-            stages: [emptyStage(1)],
-        },
-        max_stage_duration_seconds: 600,
+        curriculum_plan: null,
+        max_stage_duration_seconds: null,
     };
 }
 
@@ -65,7 +69,6 @@ function statusVariant(status: string): "green" | "orange" | "gray" {
 }
 
 function formFromTemplate(template: PracticeTemplateRecord): FormState {
-    const emptyForm = createEmptyForm();
     return {
         name: template.name,
         description: template.description ?? "",
@@ -77,8 +80,8 @@ function formFromTemplate(template: PracticeTemplateRecord): FormState {
         voice_mode: template.voice_mode === "legacy" ? "legacy" : "stepfun_realtime",
         scoring_ruleset_id: template.scoring_ruleset_id,
         knowledge_base_refs: [...template.knowledge_base_refs],
-        curriculum_plan: template.curriculum_plan ?? emptyForm.curriculum_plan,
-        max_stage_duration_seconds: template.max_stage_duration_seconds ?? emptyForm.max_stage_duration_seconds,
+        curriculum_plan: template.curriculum_plan ?? null,
+        max_stage_duration_seconds: template.max_stage_duration_seconds ?? null,
     };
 }
 
@@ -173,9 +176,12 @@ export default function AdminPracticeTemplatesPage() {
         setNotice(null);
         setActionError(null);
         setGateResults([]);
+        const payload: PracticeTemplateMutationRequest = form.curriculum_plan
+            ? form
+            : { ...form, curriculum_plan: null, max_stage_duration_seconds: null };
         try {
             if (editingTemplateId) {
-                const updated = await api.admin.updatePracticeTemplate(editingTemplateId, form);
+                const updated = await api.admin.updatePracticeTemplate(editingTemplateId, payload);
                 setItems((current) => current.map((item) => (item.template_id === updated.template_id ? updated : item)));
                 setNotice(`保存完成：${updated.name}`);
                 setEditingTemplateId(null);
@@ -183,7 +189,7 @@ export default function AdminPracticeTemplatesPage() {
                 return;
             }
 
-            const created = await api.admin.createPracticeTemplate(form);
+            const created = await api.admin.createPracticeTemplate(payload as Required<PracticeTemplateMutationRequest>);
             setItems((current) => [created, ...current]);
             setNotice(`创建完成：${created.name}`);
             setForm(createEmptyForm());
@@ -197,7 +203,7 @@ export default function AdminPracticeTemplatesPage() {
         setForm((current) => ({
             ...current,
             curriculum_plan: {
-                ...(current.curriculum_plan ?? createEmptyForm().curriculum_plan),
+                ...(current.curriculum_plan ?? createDefaultCurriculumPlan()),
                 ...patch,
             },
         }));
@@ -205,7 +211,7 @@ export default function AdminPracticeTemplatesPage() {
 
     const updateStage = (stageIndex: number, patch: Partial<CurriculumPlanStage>) => {
         setForm((current) => {
-            const curriculumPlan = current.curriculum_plan ?? createEmptyForm().curriculum_plan;
+            const curriculumPlan = current.curriculum_plan ?? createDefaultCurriculumPlan();
             return {
                 ...current,
                 curriculum_plan: {
@@ -223,7 +229,7 @@ export default function AdminPracticeTemplatesPage() {
         patch: Partial<CurriculumPlanStage["completion_policy"]>,
     ) => {
         setForm((current) => {
-            const curriculumPlan = current.curriculum_plan ?? createEmptyForm().curriculum_plan;
+            const curriculumPlan = current.curriculum_plan ?? createDefaultCurriculumPlan();
             return {
                 ...current,
                 curriculum_plan: {
@@ -243,7 +249,7 @@ export default function AdminPracticeTemplatesPage() {
         patch: Partial<CurriculumPlanStage["template_ref"]>,
     ) => {
         setForm((current) => {
-            const curriculumPlan = current.curriculum_plan ?? createEmptyForm().curriculum_plan;
+            const curriculumPlan = current.curriculum_plan ?? createDefaultCurriculumPlan();
             return {
                 ...current,
                 curriculum_plan: {
@@ -260,7 +266,7 @@ export default function AdminPracticeTemplatesPage() {
 
     const addStage = () => {
         setForm((current) => {
-            const curriculumPlan = current.curriculum_plan ?? createEmptyForm().curriculum_plan;
+            const curriculumPlan = current.curriculum_plan ?? createDefaultCurriculumPlan();
             return {
                 ...current,
                 curriculum_plan: {
@@ -273,7 +279,7 @@ export default function AdminPracticeTemplatesPage() {
 
     const removeStage = (stageIndex: number) => {
         setForm((current) => {
-            const curriculumPlan = current.curriculum_plan ?? createEmptyForm().curriculum_plan;
+            const curriculumPlan = current.curriculum_plan ?? createDefaultCurriculumPlan();
             const nextStages = curriculumPlan.stages.filter((_, index) => index !== stageIndex);
             return {
                 ...current,
@@ -371,29 +377,35 @@ export default function AdminPracticeTemplatesPage() {
                             <h3 className="text-lg font-black text-slate-900">CurriculumPlan</h3>
                             <p className="text-xs text-slate-500">配置多阶段模板图、完成策略和失败策略。</p>
                         </div>
-                        <Button variant="outline" onClick={addStage}>添加 Stage</Button>
+                        {form.curriculum_plan ? (
+                            <Button variant="outline" onClick={addStage}>添加 Stage</Button>
+                        ) : (
+                            <Button variant="outline" onClick={() => { setForm((current) => ({ ...current, curriculum_plan: createDefaultCurriculumPlan(), max_stage_duration_seconds: 600 })); }}>启用 CurriculumPlan</Button>
+                        )}
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <label className="space-y-1 text-sm font-medium text-slate-700">
-                            <span>CurriculumPlan Name</span>
-                            <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.curriculum_plan?.name ?? ""} onChange={(event) => updateCurriculumPlan({ name: event.target.value })} />
-                        </label>
-                        <label className="space-y-1 text-sm font-medium text-slate-700">
-                            <span>Max Stage Duration Seconds</span>
-                            <input
-                                type="number"
-                                className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                                value={form.max_stage_duration_seconds ?? 0}
-                                onChange={(event) => {
-                                    const duration = Number(event.target.value);
-                                    setForm((current) => ({ ...current, max_stage_duration_seconds: duration }));
-                                    updateCurriculumPlan({ max_stage_duration_seconds: duration });
-                                }}
-                            />
-                        </label>
-                    </div>
-                    <div className="space-y-3">
-                        {(form.curriculum_plan?.stages ?? []).map((stage, index) => (
+                    {form.curriculum_plan ? (
+                        <>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <label className="space-y-1 text-sm font-medium text-slate-700">
+                                    <span>CurriculumPlan Name</span>
+                                    <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.curriculum_plan.name} onChange={(event) => updateCurriculumPlan({ name: event.target.value })} />
+                                </label>
+                                <label className="space-y-1 text-sm font-medium text-slate-700">
+                                    <span>Max Stage Duration Seconds</span>
+                                    <input
+                                        type="number"
+                                        className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                                        value={form.max_stage_duration_seconds ?? 0}
+                                        onChange={(event) => {
+                                            const duration = Number(event.target.value);
+                                            setForm((current) => ({ ...current, max_stage_duration_seconds: duration }));
+                                            updateCurriculumPlan({ max_stage_duration_seconds: duration });
+                                        }}
+                                    />
+                                </label>
+                            </div>
+                            <div className="space-y-3">
+                                {form.curriculum_plan.stages.map((stage, index) => (
                             <div key={`${stage.template_stage_key}-${index}`} className="space-y-3 rounded-2xl border border-white bg-white/80 p-4">
                                 <div className="flex items-center justify-between gap-3">
                                     <Badge variant="blue">Stage {index + 1}</Badge>
@@ -442,8 +454,12 @@ export default function AdminPracticeTemplatesPage() {
                                     </label>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+                                ))}
+                            </div>
+                        </>
+                    ) : (
+                        <p className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-3 text-sm text-slate-500">未启用 CurriculumPlan；普通模板保存时不会提交默认阶段配置。</p>
+                    )}
                 </div>
                 <div className="flex gap-3">
                     <Button onClick={() => { void handleSubmit(); }}>{editingTemplateId ? "保存模板" : "创建模板"}</Button>

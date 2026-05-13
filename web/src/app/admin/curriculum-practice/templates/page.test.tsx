@@ -74,6 +74,7 @@ describe("AdminPracticeTemplatesPage", () => {
 
         expect(await screen.findByText("客户异议处理训练")).toBeTruthy();
         expect(screen.getByRole("heading", { name: "CurriculumPlan" })).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "启用 CurriculumPlan" }));
         expect(screen.getByLabelText("Max Stage Duration Seconds")).toBeTruthy();
         expect(screen.getByLabelText("Stage Key 1")).toBeTruthy();
         expect(screen.getByLabelText("Stage Min Score 1")).toBeTruthy();
@@ -168,6 +169,7 @@ describe("AdminPracticeTemplatesPage", () => {
                 knowledge_base_refs: ["kb-2", "kb-3"],
             }));
         });
+        expect(createPracticeTemplateMock.mock.calls[0][0].curriculum_plan).toBeNull();
         expect(screen.getByText(/创建完成：新模板/)).toBeTruthy();
     });
 
@@ -181,6 +183,7 @@ describe("AdminPracticeTemplatesPage", () => {
         fireEvent.change(screen.getByLabelText("Persona ID"), { target: { value: "persona-2" } });
         fireEvent.change(screen.getByLabelText("Runtime Profile ID"), { target: { value: "runtime-2" } });
         fireEvent.change(screen.getByLabelText("Scoring Ruleset ID"), { target: { value: "ruleset-2" } });
+        fireEvent.click(screen.getByRole("button", { name: "启用 CurriculumPlan" }));
         fireEvent.change(screen.getByLabelText("CurriculumPlan Name"), { target: { value: "异议处理课程" } });
         fireEvent.change(screen.getByLabelText("Max Stage Duration Seconds"), { target: { value: "900" } });
         fireEvent.change(screen.getByLabelText("Stage Key 1"), { target: { value: "template_stage_opening" } });
@@ -244,6 +247,7 @@ describe("AdminPracticeTemplatesPage", () => {
                 description: "编辑后说明",
             }));
         });
+        expect(updatePracticeTemplateMock.mock.calls[0][1].curriculum_plan).toBeNull();
         expect(screen.getByText(/保存完成：客户异议处理训练/)).toBeTruthy();
     });
 
