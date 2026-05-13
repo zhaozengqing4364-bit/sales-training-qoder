@@ -34,12 +34,13 @@ class StepFunEmotionAnalyzer:
 
     def on_speech_started(self, event: dict[str, object]) -> list[EmotionSignal]:
         event_ms = _event_timestamp_ms(event, self._clock)
-        if self._last_ai_stop_ms is None:
+        turn_id = _turn_id(event)
+        if self._last_ai_stop_ms is None or not turn_id:
             return []
         latency_ms = max(0.0, event_ms - self._last_ai_stop_ms)
         return [
             EmotionSignal(
-                turn_id=_turn_id(event),
+                turn_id=turn_id,
                 signal_type="response_done_to_user_start_ms",
                 value=round(latency_ms, 3),
                 source_event_ids=(self._last_ai_stop_event_id, _event_id(event)),

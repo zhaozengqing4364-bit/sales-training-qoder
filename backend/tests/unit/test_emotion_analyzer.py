@@ -30,6 +30,21 @@ def test_should_measure_response_done_to_user_start_ms() -> None:
     assert signals[0].source_event_ids == ("ai-stop", "user-start")
 
 
+def test_should_ignore_response_done_to_user_start_when_turn_id_missing() -> None:
+    analyzer = StepFunEmotionAnalyzer(clock=lambda: 10.0)
+
+    analyzer.on_speech_stopped({"type": "response.done", "event_id": "ai-stop"})
+    signals = analyzer.on_speech_started(
+        {
+            "type": "input_audio_buffer.speech_started",
+            "event_id": "user-start",
+            "timestamp_ms": 10820,
+        }
+    )
+
+    assert signals == []
+
+
 def test_should_merge_emotion_signals_by_turn_id() -> None:
     runtime_state = apply_emotion_signals_to_runtime_state(
         {"emotion_log": []},
