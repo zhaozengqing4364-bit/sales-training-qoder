@@ -1134,6 +1134,56 @@ export interface AnalyticsLeaderboard {
     leaderboard: LeaderboardEntry[];
 }
 
+export interface CurriculumAnalyticsSummary {
+    assigned_count: number;
+    completed_count: number;
+    completion_rate: number;
+    top_weak_dimension: string | null;
+    average_score_delta: number;
+}
+
+export interface CurriculumAnalyticsHeatmapCell {
+    template_id: string;
+    template_name: string;
+    dimension: string;
+    average_score: number;
+    sample_count: number;
+}
+
+export interface CurriculumAnalyticsScoreTrendPoint {
+    date: string;
+    average_score: number;
+    sample_count: number;
+}
+
+export interface CurriculumAnalyticsReviewOutcomes {
+    approved: number;
+    rejected: number;
+    calibrated: number;
+    retraining_required: number;
+}
+
+export interface CurriculumAnalyticsRetrainingConversion {
+    created: number;
+    started: number;
+    completed: number;
+}
+
+export interface CurriculumAnalyticsCacheInfo {
+    enabled: boolean;
+    hit: boolean;
+    ttl_seconds: number | null;
+}
+
+export interface CurriculumAnalyticsResponse {
+    summary: CurriculumAnalyticsSummary;
+    heatmap: CurriculumAnalyticsHeatmapCell[];
+    score_trend: CurriculumAnalyticsScoreTrendPoint[];
+    review_outcomes: CurriculumAnalyticsReviewOutcomes;
+    retraining_conversion: CurriculumAnalyticsRetrainingConversion;
+    cache: CurriculumAnalyticsCacheInfo;
+}
+
 export type SupportRuntimeReleaseHealthStatus = "healthy" | "warning" | "blocking";
 
 export type SupportRuntimeFaultSeverity = "blocking" | "warning";

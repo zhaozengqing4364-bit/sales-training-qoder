@@ -16,6 +16,7 @@ import {
     AnalyticsTrends,
     AnalyticsAgents,
     AnalyticsLeaderboard,
+    CurriculumAnalyticsResponse,
     User,
     AdminUser,
     AdminAgent,
@@ -1163,6 +1164,61 @@ function normalizeAnalyticsLeaderboard(input: unknown): AnalyticsLeaderboard {
                 };
             })
             : [],
+    };
+}
+
+function normalizeCurriculumAnalytics(input: unknown): CurriculumAnalyticsResponse {
+    const raw = toRecord(input);
+    const summary = toRecord(raw.summary);
+    const reviewOutcomes = toRecord(raw.review_outcomes);
+    const retrainingConversion = toRecord(raw.retraining_conversion);
+    const cache = toRecord(raw.cache);
+    return {
+        summary: {
+            assigned_count: toNumberValue(summary.assigned_count, 0),
+            completed_count: toNumberValue(summary.completed_count, 0),
+            completion_rate: toNumberValue(summary.completion_rate, 0),
+            top_weak_dimension: typeof summary.top_weak_dimension === "string" ? summary.top_weak_dimension : null,
+            average_score_delta: toNumberValue(summary.average_score_delta, 0),
+        },
+        heatmap: Array.isArray(raw.heatmap)
+            ? raw.heatmap.map((item) => {
+                const cell = toRecord(item);
+                return {
+                    template_id: toStringValue(cell.template_id),
+                    template_name: toStringValue(cell.template_name),
+                    dimension: toStringValue(cell.dimension),
+                    average_score: toNumberValue(cell.average_score, 0),
+                    sample_count: toNumberValue(cell.sample_count, 0),
+                };
+            })
+            : [],
+        score_trend: Array.isArray(raw.score_trend)
+            ? raw.score_trend.map((item) => {
+                const point = toRecord(item);
+                return {
+                    date: toStringValue(point.date),
+                    average_score: toNumberValue(point.average_score, 0),
+                    sample_count: toNumberValue(point.sample_count, 0),
+                };
+            })
+            : [],
+        review_outcomes: {
+            approved: toNumberValue(reviewOutcomes.approved, 0),
+            rejected: toNumberValue(reviewOutcomes.rejected, 0),
+            calibrated: toNumberValue(reviewOutcomes.calibrated, 0),
+            retraining_required: toNumberValue(reviewOutcomes.retraining_required, 0),
+        },
+        retraining_conversion: {
+            created: toNumberValue(retrainingConversion.created, 0),
+            started: toNumberValue(retrainingConversion.started, 0),
+            completed: toNumberValue(retrainingConversion.completed, 0),
+        },
+        cache: {
+            enabled: cache.enabled === true,
+            hit: cache.hit === true,
+            ttl_seconds: typeof cache.ttl_seconds === "number" ? cache.ttl_seconds : null,
+        },
     };
 }
 
@@ -2355,6 +2411,14 @@ export const api = {
 
             const payload = await apiFetch<AnalyticsLeaderboard>(`/admin/analytics/leaderboard?${searchParams}`);
             return normalizeAnalyticsLeaderboard(payload);
+        },
+
+        getCurriculumAnalytics: async (params?: { time_range?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.time_range) searchParams.set("time_range", params.time_range);
+
+            const payload = await apiFetch<CurriculumAnalyticsResponse>(`/admin/analytics/curriculum?${searchParams}`);
+            return normalizeCurriculumAnalytics(payload);
         },
 
         exportReport: async (params?: { time_range?: string; format?: string }) => {
