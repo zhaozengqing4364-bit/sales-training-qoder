@@ -63,9 +63,17 @@ class VoiceCloneService:
             )
         except TimeoutError:
             return self._failure("voice_clone_timeout", retryable=True)
+        except Exception:
+            return self._failure("voice_clone_transport_error", retryable=True)
 
         if 200 <= response.status_code < 300:
-            voice_id = response.json().get("voice_id")
+            try:
+                payload = response.json()
+            except (TypeError, ValueError):
+                return self._failure("voice_clone_bad_response", retryable=True)
+            if not isinstance(payload, Mapping):
+                return self._failure("voice_clone_bad_response", retryable=True)
+            voice_id = payload.get("voice_id")
             if isinstance(voice_id, str) and voice_id:
                 return VoiceCloneResult(
                     ok=True,

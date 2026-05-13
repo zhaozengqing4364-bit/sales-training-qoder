@@ -6,11 +6,13 @@ from curriculum_practice.services.voice_clone import VoiceCloneService
 
 
 class _MockResponse:
-    def __init__(self, status_code: int, payload: dict[str, object]) -> None:
+    def __init__(self, status_code: int, payload: object) -> None:
         self.status_code = status_code
         self._payload = payload
 
-    def json(self) -> dict[str, object]:
+    def json(self) -> object:
+        if isinstance(self._payload, BaseException):
+            raise self._payload
         return self._payload
 
 
@@ -130,3 +132,63 @@ async def test_should_fallback_to_default_voice_when_clone_unavailable() -> None
     assert result.retryable is False
     assert result.fallback_voice == "default_voice"
     assert result.reason_code == "voice_clone_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_should_return_retryable_failure_on_transport_error() -> None:
+    service = VoiceCloneService(
+        transport=_MockTransport(ConnectionError("network down")),
+        endpoint_url="https://stepfun.example/voices",
+        fallback_voice="default_voice",
+    )
+
+    result = await service.create_voice(
+        voice_name="谨慎型 CTO",
+        audio_bytes=b"voice-bytes",
+        content_type="audio/wav",
+    )
+
+    assert result.ok is False
+    assert result.retryable is True
+    assert result.fallback_voice == "default_voice"
+    assert result.reason_code == "voice_clone_transport_error"
+
+
+@pytest.mark.asyncio
+async def test_should_return_retryable_failure_on_json_parse_error() -> None:
+    service = VoiceCloneService(
+        transport=_MockTransport(_MockResponse(200, ValueError("bad json"))),
+        endpoint_url="https://stepfun.example/voices",
+        fallback_voice="default_voice",
+    )
+
+    result = await service.create_voice(
+        voice_name="谨慎型 CTO",
+        audio_bytes=b"voice-bytes",
+        content_type="audio/wav",
+    )
+
+    assert result.ok is False
+    assert result.retryable is True
+    assert result.fallback_voice == "default_voice"
+    assert result.reason_code == "voice_clone_bad_response"
+
+
+@pytest.mark.asyncio
+async def test_should_return_retryable_failure_on_non_dict_json() -> None:
+    service = VoiceCloneService(
+        transport=_MockTransport(_MockResponse(200, ["not", "a", "dict"])),
+        endpoint_url="https://stepfun.example/voices",
+        fallback_voice="default_voice",
+    )
+
+    result = await service.create_voice(
+        voice_name="谨慎型 CTO",
+        audio_bytes=b"voice-bytes",
+        content_type="audio/wav",
+    )
+
+    assert result.ok is False
+    assert result.retryable is True
+    assert result.fallback_voice == "default_voice"
+    assert result.reason_code == "voice_clone_bad_response"
