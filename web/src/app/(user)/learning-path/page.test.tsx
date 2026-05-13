@@ -136,4 +136,42 @@ describe("LearningPathPage", () => {
 
         expect(await screen.findByText("认证路径已进入等待主管复核占位状态。")).toBeTruthy();
     });
+
+    it("renders retraining required message for rejected certification path", async () => {
+        getMineMock.mockResolvedValueOnce({
+            user_id: "learner-1",
+            path_type: "weakness_driven",
+            recommended_template_ids: ["template-review"],
+            recommendation_reasons: [],
+            next_task: {
+                title: "主管认证复训",
+                state: "retraining_required",
+                primary_cta: "开始复训",
+                reason: "主管要求补强认证证据。",
+                estimated_duration_minutes: 10,
+                failure_reason: "认证未通过，需要复训价值逻辑。",
+                retry_action: "retry_current",
+            },
+            stages: [
+                {
+                    template_stage_key: "template_stage_certification_review",
+                    name: "主管认证复核",
+                    state: "retraining_required",
+                    prerequisites: [],
+                    completion_policy: { min_score: 8 },
+                    report_url: "/practice/session-cert/report",
+                    failure_reason: "认证未通过，需要复训价值逻辑。",
+                    retry_action: "retry_current",
+                },
+            ],
+            generated_at: "2026-05-13T00:00:00Z",
+        });
+
+        render(<LearningPathPage />);
+
+        expect(await screen.findByText("主管认证复训")).toBeTruthy();
+        expect(screen.getByText("主管已要求复训，请完成复训后再回到认证路径。"))
+            .toBeTruthy();
+        expect(screen.getAllByText("复训动作：retry_current").length).toBeGreaterThan(0);
+    });
 });

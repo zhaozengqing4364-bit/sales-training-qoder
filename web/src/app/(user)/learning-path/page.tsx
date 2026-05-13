@@ -173,11 +173,14 @@ export default function LearningPathPage() {
                                         {stage.retry_action && (
                                             <p className="text-sm text-blue-600 mt-2">复训动作：{stage.retry_action}</p>
                                         )}
-                                        {stage.state === "pending_review" && (
-                                            <p className="text-sm text-amber-700 mt-2">认证路径已进入等待主管复核占位状态。</p>
+                                         {stage.state === "pending_review" && (
+                                             <p className="text-sm text-amber-700 mt-2">认证路径已进入等待主管复核占位状态。</p>
+                                         )}
+                                        {stage.state === "retraining_required" && (
+                                            <p className="text-sm text-red-700 mt-2">主管已要求复训，请完成复训后再回到认证路径。</p>
                                         )}
-                                    </div>
-                                </div>
+                                     </div>
+                                 </div>
                                 <div className="flex flex-col items-start gap-2 md:items-end">
                                     <span className={cn("rounded-full px-3 py-1 text-xs font-bold", stageClassName(stage))}>
                                         {stateCopy[stage.state]}
