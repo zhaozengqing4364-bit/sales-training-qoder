@@ -113,6 +113,15 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
+def _as_non_negative_int(value: Any, *, default: int = 0) -> int:
+    if value is None:
+        return default
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
 def _is_within_date_range(
     value: datetime | None,
     *,
@@ -1214,7 +1223,7 @@ class SupervisorReviewService:
                 continue
             entries.append(
                 TrainingReportThinkingEvidence(
-                    turn_index=int(item.get("turn_index") or 0),
+                    turn_index=_as_non_negative_int(item.get("turn_index")),
                     template_stage_key=cast(str | None, item.get("template_stage_key")),
                     response_id=response_id,
                     thinking_text=thinking_text,

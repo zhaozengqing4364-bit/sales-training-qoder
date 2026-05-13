@@ -63,7 +63,8 @@ if "oss2" not in sys.modules:
     setattr(oss2_stub, "Bucket", Bucket)
     sys.modules["oss2"] = oss2_stub
 
-from common.db.models import PracticeSession, Scenario, User
+from common.api.practice import _build_diagnostics_evaluation_run
+from common.db.models import EvaluationRun, PracticeSession, Scenario, User
 from supervisor.service import SupervisorReviewService, SupervisorServiceError
 
 
@@ -158,6 +159,68 @@ async def test_reviewer_contract_should_include_thinking_evidence_when_authorize
             "captured_at": "2026-05-13T10:00:00Z",
         }
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.contract
+async def test_learner_diagnostics_contract_should_not_include_raw_thinking(
+    test_db: AsyncSession,
+) -> None:
+    learner = await _create_user(test_db, role="user", email_prefix="thinking-diag")
+    session = await _create_thinking_session(test_db, learner=learner)
+    evaluation_run = EvaluationRun(
+        session_id=str(session.session_id),
+        status="pending",
+        input_evidence_reference={
+            "turn_count": 1,
+            "thinking_context": [
+                {
+                    "response_id": "resp_contract",
+                    "thinking_text": "Reviewer-only hidden reasoning",
+                }
+            ],
+        },
+        result_payload={"nested": {"thinking_text": "Reviewer-only hidden reasoning"}},
+    )
+    test_db.add(evaluation_run)
+    await test_db.commit()
+
+    payload = _build_diagnostics_evaluation_run(evaluation_run)
+
+    assert "thinking_context" not in str(payload)
+    assert "thinking_text" not in str(payload)
+    assert "Reviewer-only hidden reasoning" not in str(payload)
+
+
+@pytest.mark.asyncio
+@pytest.mark.contract
+async def test_reviewer_contract_should_default_malformed_turn_index_safely(
+    test_db: AsyncSession,
+) -> None:
+    learner = await _create_user(test_db, role="user", email_prefix="thinking-owner-bad")
+    reviewer = await _create_user(test_db, role="admin", email_prefix="thinking-admin-bad")
+    session = await _create_thinking_session(test_db, learner=learner)
+    session.runtime_state = {
+        "thinking_log": [
+            {
+                "turn_index": "not-a-number",
+                "template_stage_key": "standard_roleplay",
+                "response_id": "resp_bad_turn",
+                "thinking_text": "Reviewer-only hidden reasoning",
+                "captured_at": "2026-05-13T10:00:00Z",
+            }
+        ]
+    }
+    await test_db.commit()
+
+    view = await SupervisorReviewService(test_db).get_training_report_view(
+        session_id=str(session.session_id),
+        current_user=reviewer,
+    )
+
+    payload = view.model_dump(mode="json")
+    assert payload["thinking_evidence"][0]["turn_index"] == 0
+    assert payload["thinking_evidence"][0]["response_id"] == "resp_bad_turn"
 
 
 @pytest.mark.asyncio

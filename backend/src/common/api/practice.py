@@ -184,6 +184,18 @@ def _dict_or_empty(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _omit_raw_thinking_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _omit_raw_thinking_fields(item)
+            for key, item in value.items()
+            if key not in {"thinking_context", "thinking_text"}
+        }
+    if isinstance(value, list):
+        return [_omit_raw_thinking_fields(item) for item in value]
+    return value
+
+
 def _build_missing_evidence(evidence_completeness: dict[str, Any]) -> list[str]:
     missing: list[str] = []
     for key, value in evidence_completeness.items():
@@ -217,9 +229,11 @@ def _build_diagnostics_evaluation_run(
         "status": run.status,
         "started_at": _iso_datetime(run.started_at),
         "finished_at": _iso_datetime(run.finished_at),
-        "input_evidence_reference": _dict_or_empty(run.input_evidence_reference),
+        "input_evidence_reference": _omit_raw_thinking_fields(
+            _dict_or_empty(run.input_evidence_reference)
+        ),
         "config_binding": _build_diagnostics_config_binding(run),
-        "result_payload": _dict_or_empty(run.result_payload),
+        "result_payload": _omit_raw_thinking_fields(_dict_or_empty(run.result_payload)),
         "result_summary": run.result_summary,
         "error_message": run.error_message,
         "error_trace": run.error_trace,
