@@ -146,6 +146,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         items: [
             { label: "训练记录", icon: FileText, href: "/admin/records" },
             { label: "数据分析", icon: BarChart3, href: "/admin/analytics" },
+            { label: "课程分析", icon: Target, href: "/admin/analytics/curriculum" },
             { label: "主管训练", icon: Target, href: "/admin/supervisor-training" },
         ],
     },
