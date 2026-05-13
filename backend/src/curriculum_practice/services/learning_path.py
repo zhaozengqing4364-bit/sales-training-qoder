@@ -8,7 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from common.db.models import PracticeSession, SessionStatus, TrainingReportSnapshot
+from common.db.models import (
+    PracticeSession,
+    RetrainingTask,
+    SessionStatus,
+    SupervisorReview,
+    TrainingReportSnapshot,
+)
 from common.recommendations.next_practice import NextPracticeRecommendationService
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import CurriculumPlanSchema
@@ -110,7 +116,12 @@ class LearningPathService:
 
         reasons = sorted(reasons_by_template.values(), key=lambda item: item.score)
         recommended_template_ids = [reason.recommended_template_id for reason in reasons]
-        stages = self._build_stages(templates=templates, completed_sessions=recent_sessions)
+        review_outcomes = await self._review_outcomes_for_sessions(recent_sessions)
+        stages = self._build_stages(
+            templates=templates,
+            completed_sessions=recent_sessions,
+            review_outcomes=review_outcomes,
+        )
         next_template = self._template_by_id(templates, recommended_template_ids[0])
         next_payload = recommendation_payloads[0] if recommendation_payloads else {}
         next_task = self._next_task_payload(
@@ -160,8 +171,55 @@ class LearningPathService:
         )
         return list(result.scalars().all())
 
+    async def _review_outcomes_for_sessions(
+        self,
+        sessions: list[PracticeSession],
+    ) -> dict[str, str]:
+        if self.db is None:
+            return {}
+        session_ids = [str(session.session_id) for session in sessions if session.session_id]
+        if not session_ids:
+            return {}
+        reviews_result = await self.db.execute(
+            select(SupervisorReview).where(SupervisorReview.session_id.in_(session_ids))
+        )
+        reviews = list(reviews_result.scalars().all())
+        if not reviews:
+            return {}
+        retraining_result = await self.db.execute(
+            select(RetrainingTask.source_review_id).where(
+                RetrainingTask.source_review_id.in_(
+                    [str(review.review_id) for review in reviews]
+                ),
+                RetrainingTask.status.in_(("todo", "in_progress")),
+            )
+        )
+        open_retraining_review_ids = {
+            str(review_id) for review_id in retraining_result.scalars().all()
+        }
+        outcomes: dict[str, str] = {}
+        for review in reviews:
+            session_id = str(review.session_id)
+            if (
+                str(review.review_id) in open_retraining_review_ids
+                or str(review.decision) == "needs_retraining"
+                or bool(review.required_retraining)
+            ):
+                outcomes[session_id] = "retraining_required"
+            elif str(review.decision) == "rejected":
+                outcomes[session_id] = "failed"
+            elif str(review.decision) == "approved":
+                outcomes[session_id] = "completed"
+            else:
+                outcomes[session_id] = "pending_review"
+        return outcomes
+
     def _role_default_path(self, *, user_id: str, templates: list[PracticeTemplate]) -> dict[str, Any]:
-        stages = self._build_stages(templates=templates, completed_sessions=[])
+        stages = self._build_stages(
+            templates=templates,
+            completed_sessions=[],
+            review_outcomes={},
+        )
         template = templates[0] if templates else None
         template_id = str(template.template_id) if template is not None else "role-default-sales"
         return {
@@ -261,6 +319,8 @@ class LearningPathService:
                 raw_score = value.get("score")
             else:
                 raw_score = value
+            if raw_score is None:
+                continue
             try:
                 score = float(raw_score)
             except (TypeError, ValueError):
@@ -287,7 +347,8 @@ class LearningPathService:
         for name, value in scores.items():
             if value is None:
                 continue
-            parsed[name] = float(value) / 10 if float(value) > 10 else float(value)
+            numeric_score = float(value)
+            parsed[name] = numeric_score / 10 if numeric_score > 10 else numeric_score
         if not parsed:
             return None
         return min(parsed.items(), key=lambda item: item[1])
@@ -306,6 +367,7 @@ class LearningPathService:
         *,
         templates: list[PracticeTemplate],
         completed_sessions: list[PracticeSession],
+        review_outcomes: dict[str, str],
     ) -> list[dict[str, Any]]:
         completed_template_ids = {
             str(session.practice_template_id)
@@ -329,8 +391,13 @@ class LearningPathService:
                     for key in prerequisite_keys
                 )
                 state = "completed" if template_id in completed_template_ids else "available" if prereqs_met else "locked"
-                if state != "completed" and "review" in stage.template_stage_key.lower():
-                    state = "pending_review"
+                if "review" in stage.template_stage_key.lower():
+                    state = self._review_stage_state(
+                        default_state=state,
+                        template_id=template_id,
+                        sessions=completed_sessions,
+                        review_outcomes=review_outcomes,
+                    )
                 stages.append(
                     {
                         "template_stage_key": stage.template_stage_key,
@@ -376,6 +443,26 @@ class LearningPathService:
             "result": None,
             "template_id": template_id,
         }
+
+    @staticmethod
+    def _review_stage_state(
+        *,
+        default_state: str,
+        template_id: str,
+        sessions: list[PracticeSession],
+        review_outcomes: dict[str, str],
+    ) -> str:
+        for session in sessions:
+            if str(session.practice_template_id) != template_id:
+                continue
+            outcome = review_outcomes.get(str(session.session_id))
+            if outcome:
+                return outcome
+            if default_state == "completed":
+                return "pending_review"
+        if default_state == "locked":
+            return "locked"
+        return "pending_review"
 
     @staticmethod
     def _stage_completed(*, prerequisite_key: str, stages: list[dict[str, Any]]) -> bool:
