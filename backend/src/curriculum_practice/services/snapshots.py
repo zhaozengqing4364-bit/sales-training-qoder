@@ -11,6 +11,7 @@ from curriculum_practice.schemas import (
     CurriculumRuntimeSnapshot,
     CurriculumTrainingTaskRef,
     CurriculumVersionRef,
+    TemplateStageSnapshot,
     PublishedTemplateRef,
     ReferenceReader,
 )
@@ -113,6 +114,7 @@ class RuntimeSnapshotService:
             content_assets=content_assets,
             rubric=await self._rubric_ref(str(template_data["scoring_ruleset_id"])),
             runtime=runtime,
+            stage_snapshots=await self._stage_snapshots(template_data),
         )
         payload = snapshot.model_dump()
         payload["actor_id"] = actor_id
@@ -123,6 +125,94 @@ class RuntimeSnapshotService:
         if isawaitable(reference):
             return await reference
         return reference
+
+    async def _stage_snapshots(
+        self, template_data: dict[str, Any]
+    ) -> dict[str, TemplateStageSnapshot]:
+        curriculum_plan = template_data.get("curriculum_plan")
+        if not isinstance(curriculum_plan, dict):
+            return {}
+        stages = curriculum_plan.get("stages")
+        if not isinstance(stages, list):
+            return {}
+
+        snapshots: dict[str, TemplateStageSnapshot] = {}
+        for stage in stages:
+            if not isinstance(stage, dict):
+                continue
+            stage_key = str(stage["template_stage_key"])
+            template_ref_data = _as_dict(stage.get("template_ref"))
+            child_template_id = str(template_ref_data["asset_id"])
+            child_template = _as_dict(
+                await self._read_reference("practice_template", child_template_id)
+            )
+            if child_template.get("status") != "published":
+                raise RuntimeSnapshotBuildError(
+                    "template_unpublished",
+                    "CurriculumPlan child template must be published.",
+                )
+            if str(child_template.get("content_hash")) != str(template_ref_data["hash"]):
+                raise RuntimeSnapshotBuildError(
+                    "asset_hash_mismatch",
+                    "CurriculumPlan child template hash does not match stage ref.",
+                )
+            child_runtime = await self._runtime_ref(child_template)
+            child_content_assets = [
+                await self._knowledge_base_ref(str(asset_id))
+                for asset_id in child_template.get("knowledge_base_refs", [])
+            ]
+            if child_template.get("case_item_id"):
+                child_content_assets.append(
+                    await self._case_item_ref(str(child_template["case_item_id"]))
+                )
+            if child_template.get("role_profile_id"):
+                child_content_assets.append(
+                    await self._role_profile_ref(str(child_template["role_profile_id"]))
+                )
+            snapshots[stage_key] = TemplateStageSnapshot(
+                template_ref=CurriculumVersionRef(
+                    asset_type="practice_template",
+                    asset_id=child_template_id,
+                    version=template_ref_data["version"],
+                    hash=str(template_ref_data["hash"]),
+                    snapshot_label=template_ref_data["snapshot_label"],
+                ),
+                runtime_payload=_minimal_template_runtime_payload(child_template),
+                content_assets=child_content_assets,
+                rubric=await self._rubric_ref(str(child_template["scoring_ruleset_id"])),
+                runtime=child_runtime,
+            )
+        return snapshots
+
+    async def _runtime_ref(self, template_data: dict[str, Any]) -> CurriculumRuntimeRef:
+        runtime_profile_id = str(template_data["runtime_profile_id"])
+        runtime_profile = _as_dict(
+            await self._read_reference("voice_runtime_profile", runtime_profile_id)
+        )
+        if not runtime_profile or not bool(runtime_profile.get("is_active")):
+            raise RuntimeSnapshotBuildError(
+                "voice_policy_unavailable",
+                "Voice runtime policy is missing or unavailable.",
+            )
+        if runtime_profile.get("voice_mode") != "stepfun_realtime":
+            raise RuntimeSnapshotBuildError(
+                "voice_policy_unavailable",
+                "Voice runtime policy must use stepfun_realtime mode.",
+            )
+        return CurriculumRuntimeRef(
+            agent_id=str(template_data["agent_id"]),
+            persona_id=str(template_data["persona_id"]),
+            runtime_profile_id=runtime_profile_id,
+            voice_policy_snapshot_hash=_stable_hash(runtime_profile),
+            instruction_contract_hash=_stable_hash(
+                {
+                    "runtime_profile_id": runtime_profile_id,
+                    "system_instruction_template": runtime_profile.get(
+                        "system_instruction_template"
+                    ),
+                }
+            ),
+        )
 
     async def _knowledge_base_ref(self, asset_id: str) -> CurriculumVersionRef:
         knowledge_base = _as_dict(await self._read_reference("knowledge_base", asset_id))
@@ -222,3 +312,18 @@ def _without_volatile_fields(payload: object) -> object:
     if isinstance(payload, list):
         return [_without_volatile_fields(item) for item in payload]
     return payload
+
+
+def _minimal_template_runtime_payload(template_data: dict[str, Any]) -> dict[str, object]:
+    return {
+        "template_id": str(template_data["template_id"]),
+        "version": template_data.get("version", 1),
+        "content_hash": str(template_data["content_hash"]),
+        "mode": str(template_data["mode"]),
+        "scenario_type": str(template_data["scenario_type"]),
+        "agent_id": str(template_data["agent_id"]),
+        "persona_id": str(template_data["persona_id"]),
+        "runtime_profile_id": str(template_data["runtime_profile_id"]),
+        "voice_mode": str(template_data["voice_mode"]),
+        "scoring_ruleset_id": str(template_data["scoring_ruleset_id"]),
+    }

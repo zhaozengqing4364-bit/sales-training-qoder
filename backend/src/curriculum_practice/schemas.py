@@ -181,6 +181,14 @@ class CurriculumPlanSchema(BaseModel):
         return self
 
 
+class TemplateStageSnapshot(BaseModel):
+    template_ref: CurriculumVersionRef
+    runtime_payload: dict[str, object]
+    content_assets: list[CurriculumVersionRef] = Field(default_factory=list)
+    rubric: CurriculumVersionRef
+    runtime: CurriculumRuntimeRef
+
+
 class CurriculumRuntimeSnapshot(BaseModel):
     schema_version: int = 1
     snapshot_hash: str
@@ -191,6 +199,7 @@ class CurriculumRuntimeSnapshot(BaseModel):
     content_assets: list[CurriculumVersionRef] = Field(default_factory=list)
     rubric: CurriculumVersionRef
     runtime: CurriculumRuntimeRef
+    stage_snapshots: dict[str, TemplateStageSnapshot] = Field(default_factory=dict)
     llm_nodes: list[dict[str, object]] = Field(default_factory=list)
 
 
