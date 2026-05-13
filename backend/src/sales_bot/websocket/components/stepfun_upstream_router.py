@@ -19,6 +19,8 @@ class UpstreamEventRoute(StrEnum):
     FUNCTION_ARGUMENTS_DONE = "function_arguments_done"
     RESPONSE_AUDIO_DELTA = "response_audio_delta"
     RESPONSE_DONE = "response_done"
+    SPEECH_STARTED = "speech_started"
+    SPEECH_STOPPED = "speech_stopped"
     ERROR = "error"
     UNHANDLED = "unhandled"
 
@@ -67,6 +69,10 @@ def classify_upstream_event(event_type: str) -> UpstreamEventRoute:
         return UpstreamEventRoute.TRANSCRIPTION_DELTA
     if event_type in _TRANSCRIPTION_COMPLETED_EVENT_TYPES:
         return UpstreamEventRoute.TRANSCRIPTION_COMPLETED
+    if event_type == "input_audio_buffer.speech_started":
+        return UpstreamEventRoute.SPEECH_STARTED
+    if event_type == "input_audio_buffer.speech_stopped":
+        return UpstreamEventRoute.SPEECH_STOPPED
     if event_type == "response.created":
         return UpstreamEventRoute.RESPONSE_CREATED
     if event_type in _RESPONSE_TEXT_DELTA_EVENT_TYPES:

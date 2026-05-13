@@ -20,6 +20,13 @@ MAX_SCORE_HISTORY_SIZE = 100
 WEIGHT_TOLERANCE = 0.001
 
 
+def _safe_float(value: Any, *, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @CapabilityRegistry.register
 class RealtimeScoringCapability(BaseCapability):
     """实时销售评分能力。"""
@@ -155,6 +162,7 @@ class RealtimeScoringCapability(BaseCapability):
             self.config.get("dimensions", self.DEFAULT_DIMENSIONS)
         )
         self._trend_threshold = self.config.get("trend_threshold", 2)
+        self._emotion_scoring = self.config.get("emotion_scoring")
 
     def _validate_dimensions(
         self, dimensions: list[dict[str, Any]]
@@ -240,6 +248,16 @@ class RealtimeScoringCapability(BaseCapability):
                 canonical_scores[dim_name] = float(score)
                 context.state[prev_key] = score
 
+            emotion_dimension_scores = self._evaluate_emotion_dimensions(context)
+            for dim_name, score in emotion_dimension_scores.items():
+                display_name = (
+                    "表达信心" if dim_name == "response_confidence" else "表达流畅度"
+                )
+                dimension_scores.append(
+                    {"name": display_name, "score": score, "trend": "stable", "delta": 0}
+                )
+                canonical_scores[display_name] = float(score)
+
             overall_score = round(
                 sum(
                     canonical_scores[dim["name"]] * float(dim["weight"])
@@ -292,6 +310,7 @@ class RealtimeScoringCapability(BaseCapability):
                     "canonical_evaluation_kernel": canonical_kernel,
                     "compatibility_readers": compatibility_readers,
                     "feedback": feedback,
+                    "emotion_dimension_scores": emotion_dimension_scores,
                 },
                 feedback=feedback,
             )
@@ -411,6 +430,33 @@ class RealtimeScoringCapability(BaseCapability):
             "推进下一步": "明确试点、会议、报价或责任人，推动下一步落地。",
         }
         return feedback_map.get(lowest_name, "继续围绕客户价值推进对话。")
+
+    def _evaluate_emotion_dimensions(self, context: AgentContext) -> dict[str, float]:
+        config = self._emotion_scoring if isinstance(self._emotion_scoring, dict) else {}
+        if not config.get("enabled", False):
+            return {}
+        dimensions = config.get("dimensions")
+        if not isinstance(dimensions, dict):
+            return {}
+        emotion_log = context.state.get("emotion_log")
+        entries = [item for item in emotion_log or [] if isinstance(item, dict)]
+        if not entries:
+            return {}
+        latest = entries[-1]
+        scores: dict[str, float] = {}
+        if dimensions.get("response_confidence"):
+            latency = _safe_float(latest.get("response_latency_ms"), default=1500.0)
+            hesitation = _safe_float(latest.get("hesitation_count"), default=0.0)
+            scores["response_confidence"] = max(
+                0.0,
+                min(100.0, 100.0 - max(0.0, latency - 500.0) / 25.0 - hesitation * 8.0),
+            )
+        if dimensions.get("fluency"):
+            speaking_rate = _safe_float(latest.get("speaking_rate"), default=0.0)
+            hesitation = _safe_float(latest.get("hesitation_count"), default=0.0)
+            rate_penalty = abs(speaking_rate - 3.0) * 12.0
+            scores["fluency"] = max(0.0, min(100.0, 100.0 - rate_penalty - hesitation * 10.0))
+        return {name: round(score, 2) for name, score in scores.items()}
 
     async def on_session_start(self, context: AgentContext) -> None:
         await super().on_session_start(context)

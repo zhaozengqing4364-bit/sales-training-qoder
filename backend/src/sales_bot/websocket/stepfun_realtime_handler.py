@@ -100,6 +100,11 @@ from sales_bot.websocket.components.curriculum_stage_runtime import (
     CurriculumStageRuntime,
     CurriculumStageRuntimeResult,
 )
+from sales_bot.websocket.components.stepfun_emotion_analyzer import (
+    EmotionSignal,
+    StepFunEmotionAnalyzer,
+    apply_emotion_signals_to_runtime_state,
+)
 from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
@@ -357,6 +362,7 @@ class StepFunRealtimeHandler(
         self._latest_knowledge_answer_diagnostics: dict[str, Any] | None = None
         self._curriculum_snapshot: dict[str, Any] | None = None
         self._curriculum_stage_runtime: CurriculumStageRuntime | None = None
+        self._emotion_analyzer = StepFunEmotionAnalyzer()
         self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_pacing_state = RealtimeFeedbackPacingState()
@@ -906,6 +912,10 @@ class StepFunRealtimeHandler(
             runtime_state["latest_score_snapshot"] = copy.deepcopy(
                 normalized_score_snapshot
             )
+        if self._feedback_context is not None:
+            emotion_log = self._feedback_context.state.get("emotion_log")
+            if isinstance(emotion_log, list) and emotion_log:
+                runtime_state["emotion_log"] = copy.deepcopy(emotion_log)
         normalized_live_session_summary = coerce_live_session_conclusion_summary(
             self._latest_live_session_summary
         )
@@ -2375,7 +2385,7 @@ class StepFunRealtimeHandler(
             agent_id=self._session_agent_id or "unknown-agent",
             persona_id=self._session_persona_id or "unknown-persona",
             user_id=self._session_user_id or "unknown-user",
-            state={},
+            state={"emotion_log": []},
             conversation_history=[],
             agent_config={
                 "capabilities_config": self._agent_capabilities_config,
@@ -2453,6 +2463,23 @@ class StepFunRealtimeHandler(
                 "data": payload_data,
             },
         )
+
+    async def _load_emotion_log_into_feedback_context(self) -> None:
+        if self._feedback_context is None or not self.session_id:
+            return
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(PracticeSession.runtime_state).where(
+                    PracticeSession.session_id == self.session_id
+                )
+            )
+            runtime_state = result.scalar_one_or_none()
+        if not isinstance(runtime_state, dict):
+            return
+        emotion_log = runtime_state.get("emotion_log")
+        self._feedback_context.state["emotion_log"] = [
+            item for item in emotion_log or [] if isinstance(item, dict)
+        ]
 
     async def _send_action_card(self, card: ActionCard) -> None:
         """Send one actionable card for the next turn."""
@@ -2588,6 +2615,7 @@ class StepFunRealtimeHandler(
         self._feedback_context.turn_count = max(
             self._feedback_context.turn_count, turn_number
         )
+        await self._load_emotion_log_into_feedback_context()
 
         capability_pipeline_degraded = False
 
@@ -3597,6 +3625,7 @@ class StepFunRealtimeHandler(
         """Map selected StepFun events to existing frontend contract."""
         event_type = str(event.get("type", ""))
         self._last_upstream_event_type = event_type
+        await self._handle_emotion_event(event)
         route = classify_upstream_event(event_type)
 
         if route == UpstreamEventRoute.IGNORE:
@@ -3609,6 +3638,11 @@ class StepFunRealtimeHandler(
             return
         if route == UpstreamEventRoute.TRANSCRIPTION_COMPLETED:
             await self._handle_upstream_transcription_completed(event)
+            return
+        if route in {
+            UpstreamEventRoute.SPEECH_STARTED,
+            UpstreamEventRoute.SPEECH_STOPPED,
+        }:
             return
         if route == UpstreamEventRoute.RESPONSE_CREATED:
             await self._handle_upstream_response_created(event)
@@ -3631,6 +3665,56 @@ class StepFunRealtimeHandler(
         if route == UpstreamEventRoute.ERROR:
             await self._handle_upstream_error(event)
             return
+
+    async def _handle_emotion_event(self, event: dict[str, Any]) -> None:
+        """Forward StepFun speech/transcript events to the emotion analyzer."""
+        event_type = str(event.get("type") or "")
+        signals: list[EmotionSignal] = []
+        if event_type.endswith("speech_started"):
+            signals = self._emotion_analyzer.on_speech_started(event)
+        elif event_type.endswith("speech_stopped") or event_type == "response.done":
+            signals = self._emotion_analyzer.on_speech_stopped(event)
+        elif "transcription" in event_type or "transcript" in event_type:
+            if event_type.endswith(("completed", "done", "final")):
+                signals = self._emotion_analyzer.on_audio_transcript_done(event)
+        if signals:
+            await self._persist_emotion_signals(
+                signals,
+                template_stage_key=self._current_template_stage_key(),
+            )
+
+    def _current_template_stage_key(self) -> str | None:
+        if self._curriculum_stage_runtime is None:
+            return None
+        patch = self._curriculum_stage_runtime.runtime_state_patch()
+        context = patch.get("template_stage_context")
+        if not isinstance(context, dict):
+            return None
+        stage_key = context.get("template_stage_key")
+        return str(stage_key) if stage_key else None
+
+    async def _persist_emotion_signals(
+        self,
+        signals: list[EmotionSignal],
+        *,
+        template_stage_key: str | None = None,
+    ) -> None:
+        if not self.session_id or not signals:
+            return
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(PracticeSession).where(PracticeSession.session_id == self.session_id)
+            )
+            session = result.scalar_one_or_none()
+            if not session:
+                return
+            existing_state = session.runtime_state if isinstance(session.runtime_state, dict) else {}
+            session.runtime_state = apply_emotion_signals_to_runtime_state(
+                existing_state,
+                signals,
+                template_stage_key=template_stage_key,
+            )
+            await db.commit()
 
     async def _handle_upstream_conversation_item_created(self, event: dict) -> None:
         """Track function-call state created by upstream model."""
