@@ -6,7 +6,11 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Persona
-from curriculum_practice.schemas import CaseItemCreate, RoleProfileCreate
+from curriculum_practice.schemas import (
+    CaseItemCreate,
+    RoleProfileCreate,
+    RoleProfileResponse,
+)
 from curriculum_practice.services.content_assets import (
     ContentAssetPublishError,
     ContentAssetService,
@@ -49,8 +53,54 @@ def _role_profile_payload(
         "knowledge_boundary": ["了解内部预算流程", "不知道最终采购时间"],
         "behavior_rules": ["只回答被直接提问的问题", "价格问题上先反驳再让步"],
         "voice_style_hint": "语速偏快，语调克制",
+        "voice_id": None,
+        "voice_sample_url": None,
         "content_hash": content_hash,
     }
+
+
+def test_should_accept_role_profile_voice_id_and_voice_sample_url() -> None:
+    payload = _role_profile_payload()
+    payload["voice_id"] = "custom_voice_cto"
+    payload["voice_sample_url"] = "oss://role-voices/cto.wav"
+    payload["content_hash"] = role_profile_content_hash(payload)
+
+    schema = RoleProfileCreate.model_validate(payload)
+
+    assert schema.voice_id == "custom_voice_cto"
+    assert schema.voice_sample_url == "oss://role-voices/cto.wav"
+
+
+def test_should_include_voice_fields_in_role_profile_hash_payload() -> None:
+    payload_without_voice = _role_profile_payload()
+    payload_without_voice["content_hash"] = role_profile_content_hash(payload_without_voice)
+    payload_with_voice = dict(payload_without_voice)
+    payload_with_voice["voice_id"] = "custom_voice_cto"
+    payload_with_voice["voice_sample_url"] = "oss://role-voices/cto.wav"
+    payload_with_voice["content_hash"] = role_profile_content_hash(payload_with_voice)
+
+    assert payload_with_voice["content_hash"] != payload_without_voice["content_hash"]
+
+
+def test_should_include_voice_fields_in_role_profile_response() -> None:
+    payload = _role_profile_payload()
+    payload["voice_id"] = "custom_voice_cto"
+    payload["voice_sample_url"] = "oss://role-voices/cto.wav"
+    payload["content_hash"] = role_profile_content_hash(payload)
+    response_payload = {
+        **payload,
+        "role_profile_id": str(uuid.uuid4()),
+        "version": 1,
+        "status": "draft",
+        "published_at": None,
+        "created_at": "2026-05-13T00:00:00Z",
+        "updated_at": "2026-05-13T00:00:00Z",
+    }
+
+    response = RoleProfileResponse.model_validate(response_payload)
+
+    assert response.voice_id == "custom_voice_cto"
+    assert response.voice_sample_url == "oss://role-voices/cto.wav"
 
 
 @pytest.mark.asyncio

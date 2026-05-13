@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.models import Persona
 from curriculum_practice.models import CaseItem, RoleProfile
 from curriculum_practice.schemas import CaseItemCreate, RoleProfileCreate
+from curriculum_practice.services.voice_clone import VoiceCloneResult, VoiceCloneService
 
 HASH_EXCLUDED_FIELDS = {
     "case_item_id",
@@ -126,6 +127,32 @@ class ContentAssetService:
         await self._db.refresh(item)
         return item
 
+    async def register_role_profile_voice(
+        self,
+        item: RoleProfile,
+        *,
+        voice_service: VoiceCloneService,
+        voice_name: str,
+        audio_bytes: bytes,
+        content_type: str,
+        voice_sample_url: str,
+        actor_id: str | None,
+    ) -> VoiceCloneResult:
+        result = await voice_service.create_voice(
+            voice_name=voice_name,
+            audio_bytes=audio_bytes,
+            content_type=content_type,
+        )
+        if not result.ok or not result.voice_id:
+            return result
+        item.voice_id = result.voice_id
+        item.voice_sample_url = voice_sample_url
+        item.content_hash = role_profile_content_hash(_role_profile_payload(item))
+        item.updated_by = actor_id
+        await self._db.commit()
+        await self._db.refresh(item)
+        return result
+
     async def publish_case_item(
         self, item: CaseItem, *, actor_id: str | None
     ) -> CaseItem:
@@ -229,6 +256,8 @@ def _role_profile_payload(item: RoleProfile) -> dict[str, object]:
         "knowledge_boundary": list(item.knowledge_boundary or []),
         "behavior_rules": list(item.behavior_rules or []),
         "voice_style_hint": item.voice_style_hint,
+        "voice_id": item.voice_id,
+        "voice_sample_url": item.voice_sample_url,
     }
 
 

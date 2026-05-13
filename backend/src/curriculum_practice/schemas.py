@@ -199,6 +199,7 @@ class CurriculumRuntimeSnapshot(BaseModel):
     content_assets: list[CurriculumVersionRef] = Field(default_factory=list)
     rubric: CurriculumVersionRef
     runtime: CurriculumRuntimeRef
+    role_profile_voice_id: str | None = None
     stage_snapshots: dict[str, TemplateStageSnapshot] = Field(default_factory=dict)
     llm_nodes: list[dict[str, object]] = Field(default_factory=list)
 
@@ -255,6 +256,8 @@ class RoleProfileBase(BaseModel):
     knowledge_boundary: list[str] = Field(..., min_length=1)
     behavior_rules: list[str] = Field(..., min_length=1)
     voice_style_hint: str = Field(..., min_length=1, max_length=300)
+    voice_id: str | None = Field(None, min_length=1, max_length=64)
+    voice_sample_url: str | None = Field(None, min_length=1, max_length=512)
     content_hash: str = Field(..., min_length=1, max_length=80)
 
 
@@ -276,6 +279,23 @@ class RoleProfileResponse(RoleProfileBase):
 class RoleProfileListResponse(BaseModel):
     items: list[RoleProfileResponse]
     total: int
+
+
+class RoleProfileVoiceCloneRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    voice_name: str = Field(..., min_length=1, max_length=160)
+    audio_base64: str = Field(..., min_length=1)
+    content_type: str = Field(..., min_length=1, max_length=120)
+    voice_sample_url: str = Field(..., min_length=1, max_length=512)
+
+
+class RoleProfileVoiceCloneResponse(BaseModel):
+    voice_id: str | None = None
+    voice_sample_url: str | None = None
+    fallback_voice: str | None = None
+    reason_code: str | None = None
+    retryable: bool = False
 
 
 class ReferenceReader(Protocol):

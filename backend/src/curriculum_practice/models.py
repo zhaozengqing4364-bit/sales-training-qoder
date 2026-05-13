@@ -127,6 +127,8 @@ class RoleProfile(Base):
     knowledge_boundary = Column(JSON, nullable=False, default=list)
     behavior_rules = Column(JSON, nullable=False, default=list)
     voice_style_hint = Column(String(300), nullable=False)
+    voice_id = Column(String(64), nullable=True)
+    voice_sample_url = Column(String(512), nullable=True)
     version = Column(Integer, nullable=False, default=1)
     content_hash = Column(String(80), nullable=False)
     status = Column(String(20), nullable=False, default="draft", index=True)
