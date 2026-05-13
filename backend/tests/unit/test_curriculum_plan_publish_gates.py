@@ -142,6 +142,24 @@ async def test_should_fail_publish_when_adjacent_stages_switch_runtime_voice() -
     ]
 
 
+@pytest.mark.asyncio
+async def test_should_fail_publish_when_adjacent_stages_switch_role_voice_id() -> None:
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        if asset_type == "practice_template" and asset_id == "child-template-2":
+            return _child_template(asset_id, role_profile_voice_id="custom_voice_b")
+        return _child_template(asset_id, role_profile_voice_id="custom_voice_a")
+
+    service = PublishingGateService(reference_reader=reference_reader)
+    candidate = _candidate_with_plan(two_stage=True)
+
+    decision = await service.validate(candidate)
+
+    assert decision.can_publish is False
+    assert "cross_stage_voice_hot_switch_unsupported" in [
+        result.reason_code for result in decision.results
+    ]
+
+
 def _candidate_with_plan(
     *, max_stage_duration_seconds: int = 900, two_stage: bool = False
 ) -> PracticeTemplatePublishCandidate:
@@ -217,6 +235,7 @@ def _child_template(
     voice_mode: str = "stepfun_realtime",
     runtime_profile_id: str = "runtime-1",
     scoring_ruleset_id: str = "ruleset-1",
+    role_profile_voice_id: str | None = None,
 ) -> dict[str, object]:
     return {
         "template_id": asset_id,
@@ -224,4 +243,5 @@ def _child_template(
         "voice_mode": voice_mode,
         "runtime_profile_id": runtime_profile_id,
         "scoring_ruleset_id": scoring_ruleset_id,
+        "role_profile_voice_id": role_profile_voice_id,
     }

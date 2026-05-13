@@ -79,6 +79,7 @@ class PublishingGateService:
         if candidate.curriculum_plan is not None:
             results.extend(self._validate_curriculum_graph(candidate))
             runtime_profile_ids: list[str] = []
+            role_profile_voice_ids: list[str] = []
             for stage in candidate.curriculum_plan.stages:
                 if (
                     candidate.max_stage_duration_seconds is not None
@@ -124,6 +125,13 @@ class PublishingGateService:
                 if isinstance(child_template, dict):
                     child_voice_mode = child_template.get("voice_mode")
                     child_runtime_profile_id = child_template.get("runtime_profile_id")
+                    child_role_profile_voice_id = child_template.get(
+                        "role_profile_voice_id"
+                    )
+                else:
+                    child_role_profile_voice_id = getattr(
+                        child_template, "role_profile_voice_id", None
+                    )
                 if child_voice_mode != "stepfun_realtime":
                     results.append(
                         GateResult(
@@ -166,6 +174,10 @@ class PublishingGateService:
                         )
                 if child_runtime_profile_id is not None:
                     runtime_profile_ids.append(str(child_runtime_profile_id))
+                if child_role_profile_voice_id is not None:
+                    normalized_voice_id = str(child_role_profile_voice_id).strip()
+                    if normalized_voice_id:
+                        role_profile_voice_ids.append(normalized_voice_id)
             if len(set(runtime_profile_ids)) > 1:
                 results.append(
                     GateResult(
@@ -173,6 +185,15 @@ class PublishingGateService:
                         status="failed",
                         reason_code="cross_stage_voice_hot_switch_unsupported",
                         message="CurriculumPlan cannot hot-switch runtime voices across stages.",
+                    )
+                )
+            if len(set(role_profile_voice_ids)) > 1:
+                results.append(
+                    GateResult(
+                        gate_name="curriculum_plan_voice_switch",
+                        status="failed",
+                        reason_code="cross_stage_voice_hot_switch_unsupported",
+                        message="CurriculumPlan cannot hot-switch role profile voices across stages.",
                     )
                 )
 
