@@ -3055,6 +3055,14 @@ export interface TrainingReportEvidenceItem {
     confidence?: number | null;
 }
 
+export interface ThinkingEvidenceEntry {
+    turn_index: number;
+    template_stage_key?: string | null;
+    response_id: string;
+    thinking_text: string;
+    captured_at: string;
+}
+
 export interface TrainingReportDimensionScore {
     name: string;
     score?: number | null;
@@ -3092,6 +3100,7 @@ export interface TrainingReportViewModel {
     key_strengths: string[];
     key_issues: TrainingReportIssue[];
     evidence_items: TrainingReportEvidenceItem[];
+    thinking_evidence?: ThinkingEvidenceEntry[];
     recommendations: string[];
     risk_flags: TrainingReportRiskFlag[];
     next_actions: TrainingReportNextAction[];

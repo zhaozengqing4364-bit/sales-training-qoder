@@ -787,6 +787,45 @@ describe("ReportPage", () => {
         expect(await screen.findByText("主管评分校准已保存，AI 原始分已保留。")).toBeTruthy();
     });
 
+    it("renders reviewer-only thinking evidence for admins", async () => {
+        useCurrentUserMock.mockReturnValue({
+            data: {
+                id: "admin-2",
+                user_id: "admin-2",
+                display_name: "主管",
+                name: "主管",
+                email: "manager2@example.com",
+                role: "admin",
+                is_active: true,
+                created_at: "2026-04-01T00:00:00Z",
+            },
+        });
+        getReportMock.mockResolvedValue(baseReport);
+        getTrainingReportViewMock.mockResolvedValue({
+            ...baseTrainingReportView,
+            thinking_evidence: [
+                {
+                    turn_index: 3,
+                    template_stage_key: "standard_roleplay",
+                    response_id: "resp_001",
+                    thinking_text: "Reviewer-only hidden reasoning",
+                    captured_at: "2026-05-13T10:00:00Z",
+                },
+            ],
+        });
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("AI 评审思维链")).toBeTruthy();
+        expect(screen.getByText("Reviewer-only hidden reasoning")).toBeTruthy();
+    });
+
     it("shows learner-facing supervisor feedback and before-after comparison", async () => {
         getReportMock.mockResolvedValue(baseReport);
         getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({

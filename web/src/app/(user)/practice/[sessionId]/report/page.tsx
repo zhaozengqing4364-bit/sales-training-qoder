@@ -2090,6 +2090,30 @@ export default function ComprehensiveReportPage() {
                 </GlassCard>
             ) : null}
 
+            {isSupervisor && trainingReportView?.thinking_evidence?.length ? (
+                <GlassCard className="p-6 mb-6 border border-purple-100 bg-purple-50/40">
+                    <div>
+                        <h2 className="text-lg font-semibold text-zinc-900">AI 评审思维链</h2>
+                        <p className="mt-1 text-sm text-zinc-600">
+                            仅管理员审查报告时可见，学习者报告不会返回原始思考文本。
+                        </p>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                        {trainingReportView.thinking_evidence.map((entry) => (
+                            <div key={entry.response_id} className="rounded-xl border border-purple-100 bg-white/85 p-4">
+                                <div className="text-xs font-semibold text-purple-700">
+                                    轮次 {entry.turn_index}
+                                    {entry.template_stage_key ? ` · ${entry.template_stage_key}` : ""}
+                                </div>
+                                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                                    {entry.thinking_text}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </GlassCard>
+            ) : null}
+
             <EvidenceBasedIssuesPanel view={trainingReportView} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
