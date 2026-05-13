@@ -35,6 +35,8 @@ class PracticeTemplate(Base):
     knowledge_base_refs = Column(JSON, nullable=False, default=list)
     case_item_id = Column(String(36), nullable=True, index=True)
     role_profile_id = Column(String(36), nullable=True, index=True)
+    curriculum_plan = Column(JSON, nullable=True)
+    max_stage_duration_seconds = Column(Integer, nullable=True)
     status = Column(String(20), nullable=False, default="draft", index=True)
     version = Column(Integer, nullable=False, default=1)
     content_hash = Column(String(80), nullable=True)
