@@ -69,6 +69,17 @@ describe("AdminPracticeTemplatesPage", () => {
         expect(screen.getByText("draft · v1")).toBeTruthy();
     });
 
+    it("renders CurriculumPlan editor", async () => {
+        render(<AdminPracticeTemplatesPage />);
+
+        expect(await screen.findByText("客户异议处理训练")).toBeTruthy();
+        expect(screen.getByRole("heading", { name: "CurriculumPlan" })).toBeTruthy();
+        expect(screen.getByLabelText("Max Stage Duration Seconds")).toBeTruthy();
+        expect(screen.getByLabelText("Stage Key 1")).toBeTruthy();
+        expect(screen.getByLabelText("Stage Min Score 1")).toBeTruthy();
+        expect(screen.getByLabelText("Stage Failure Policy 1")).toBeTruthy();
+    });
+
     it("shows publish gate failure reasons", async () => {
         publishPracticeTemplateMock.mockRejectedValue(
             new (await import("@/lib/api/client")).ApiRequestError({
@@ -99,6 +110,36 @@ describe("AdminPracticeTemplatesPage", () => {
         expect(screen.getByText(/ruleset-1/)).toBeTruthy();
     });
 
+    it("shows stage-level validation errors returned by publish gates", async () => {
+        publishPracticeTemplateMock.mockRejectedValue(
+            new (await import("@/lib/api/client")).ApiRequestError({
+                status: 400,
+                errorCode: "[PRACTICE_TEMPLATE_PUBLISH_GATE_FAILED]",
+                message: "PracticeTemplate 发布门禁未通过。",
+                details: {
+                    gate_results: [
+                        {
+                            gate_name: "curriculum_plan_stage_duration",
+                            status: "failed",
+                            reason_code: "stage_duration_exceeds_limit",
+                            message: "template_stage_opening exceeds the template stage duration limit.",
+                        },
+                    ],
+                },
+            }),
+        );
+
+        render(<AdminPracticeTemplatesPage />);
+        await screen.findByText("客户异议处理训练");
+        fireEvent.click(screen.getByRole("button", { name: "发布模板" }));
+
+        await waitFor(() => {
+            expect(screen.getByText(/Stage validation errors/)).toBeTruthy();
+        });
+        expect(screen.getByText(/stage_duration_exceeds_limit/)).toBeTruthy();
+        expect(screen.getByText(/template_stage_opening/)).toBeTruthy();
+    });
+
     it("creates a minimal PracticeTemplate from the admin form", async () => {
         createPracticeTemplateMock.mockResolvedValue({ ...template, template_id: "template-2", name: "新模板" });
 
@@ -114,7 +155,7 @@ describe("AdminPracticeTemplatesPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "创建模板" }));
 
         await waitFor(() => {
-            expect(createPracticeTemplateMock).toHaveBeenCalledWith({
+            expect(createPracticeTemplateMock).toHaveBeenCalledWith(expect.objectContaining({
                 name: "新模板",
                 description: "新模板说明",
                 scenario_type: "sales",
@@ -125,9 +166,68 @@ describe("AdminPracticeTemplatesPage", () => {
                 voice_mode: "stepfun_realtime",
                 scoring_ruleset_id: "ruleset-2",
                 knowledge_base_refs: ["kb-2", "kb-3"],
-            });
+            }));
         });
         expect(screen.getByText(/创建完成：新模板/)).toBeTruthy();
+    });
+
+    it("serializes template_stage_key prerequisites and completion policy", async () => {
+        createPracticeTemplateMock.mockResolvedValue({ ...template, template_id: "template-2", name: "新模板" });
+
+        render(<AdminPracticeTemplatesPage />);
+        await screen.findByText("客户异议处理训练");
+        fireEvent.change(screen.getByLabelText("模板名称"), { target: { value: "新模板" } });
+        fireEvent.change(screen.getByLabelText("Agent ID"), { target: { value: "agent-2" } });
+        fireEvent.change(screen.getByLabelText("Persona ID"), { target: { value: "persona-2" } });
+        fireEvent.change(screen.getByLabelText("Runtime Profile ID"), { target: { value: "runtime-2" } });
+        fireEvent.change(screen.getByLabelText("Scoring Ruleset ID"), { target: { value: "ruleset-2" } });
+        fireEvent.change(screen.getByLabelText("CurriculumPlan Name"), { target: { value: "异议处理课程" } });
+        fireEvent.change(screen.getByLabelText("Max Stage Duration Seconds"), { target: { value: "900" } });
+        fireEvent.change(screen.getByLabelText("Stage Key 1"), { target: { value: "template_stage_opening" } });
+        fireEvent.change(screen.getByLabelText("Stage Name 1"), { target: { value: "开场" } });
+        fireEvent.change(screen.getByLabelText("Stage Template Asset ID 1"), { target: { value: "child-template-1" } });
+        fireEvent.change(screen.getByLabelText("Stage Template Hash 1"), { target: { value: "sha256:child" } });
+        fireEvent.change(screen.getByLabelText("Stage Min Score 1"), { target: { value: "8" } });
+        fireEvent.change(screen.getByLabelText("Stage Min Rounds 1"), { target: { value: "2" } });
+        fireEvent.change(screen.getByLabelText("Stage Max Duration Seconds 1"), { target: { value: "600" } });
+        fireEvent.change(screen.getByLabelText("Stage Failure Policy 1"), { target: { value: "allow_skip" } });
+        fireEvent.change(screen.getByLabelText("Stage Prerequisites 1"), { target: { value: "template_stage_intro,template_stage_probe" } });
+        fireEvent.click(screen.getByRole("button", { name: "创建模板" }));
+
+        await waitFor(() => {
+            expect(createPracticeTemplateMock).toHaveBeenCalledWith(expect.objectContaining({
+                max_stage_duration_seconds: 900,
+                curriculum_plan: {
+                    name: "异议处理课程",
+                    description: "",
+                    max_stage_duration_seconds: 900,
+                    stages: [
+                        {
+                            template_stage_key: "template_stage_opening",
+                            order: 1,
+                            name: "开场",
+                            template_ref: {
+                                asset_type: "practice_template",
+                                asset_id: "child-template-1",
+                                version: 1,
+                                hash: "sha256:child",
+                                snapshot_label: "published",
+                            },
+                            completion_policy: {
+                                min_score: 8,
+                                min_rounds: 2,
+                                max_duration_seconds: 600,
+                            },
+                            failure_policy: "allow_skip",
+                            prerequisites: [
+                                { template_stage_key: "template_stage_intro", required_result: "completed" },
+                                { template_stage_key: "template_stage_probe", required_result: "completed" },
+                            ],
+                        },
+                    ],
+                },
+            }));
+        });
     });
 
     it("edits an existing PracticeTemplate from the admin form", async () => {

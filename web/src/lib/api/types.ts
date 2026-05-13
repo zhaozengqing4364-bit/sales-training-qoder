@@ -349,6 +349,8 @@ export interface PracticeTemplateRecord {
     voice_mode: PracticeTemplateVoiceMode | string;
     scoring_ruleset_id: string;
     knowledge_base_refs: string[];
+    curriculum_plan?: CurriculumPlanSchema | null;
+    max_stage_duration_seconds?: number | null;
     status: PracticeTemplateStatus;
     version: number;
     content_hash?: string | null;
@@ -378,6 +380,44 @@ export interface PracticeTemplateMutationRequest {
     voice_mode?: PracticeTemplateVoiceMode;
     scoring_ruleset_id?: string;
     knowledge_base_refs?: string[];
+    curriculum_plan?: CurriculumPlanSchema | null;
+    max_stage_duration_seconds?: number | null;
+}
+
+export interface CurriculumVersionRef {
+    asset_type: string;
+    asset_id: string;
+    version: number | string;
+    hash: string;
+    snapshot_label: string;
+}
+
+export interface CurriculumStagePrerequisite {
+    template_stage_key: string;
+    required_result?: "completed";
+}
+
+export interface CurriculumCompletionPolicy {
+    min_score: number;
+    min_rounds: number;
+    max_duration_seconds: number;
+}
+
+export interface CurriculumPlanStage {
+    template_stage_key: string;
+    order: number;
+    name: string;
+    template_ref: CurriculumVersionRef;
+    completion_policy: CurriculumCompletionPolicy;
+    failure_policy?: "retry_current" | "fallback_to_previous" | "allow_skip";
+    prerequisites?: CurriculumStagePrerequisite[];
+}
+
+export interface CurriculumPlanSchema {
+    name: string;
+    description?: string | null;
+    max_stage_duration_seconds?: number | null;
+    stages: CurriculumPlanStage[];
 }
 
 export type ScoringRulesetStatus = "draft" | "published" | "archived" | string;

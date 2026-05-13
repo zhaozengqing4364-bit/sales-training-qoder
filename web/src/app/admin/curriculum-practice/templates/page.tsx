@@ -6,10 +6,35 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage, getPracticeTemplateErrorDetails } from "@/lib/api/client";
-import type { PracticeTemplateGateResult, PracticeTemplateMutationRequest, PracticeTemplateRecord } from "@/lib/api/types";
+import type { CurriculumPlanStage, PracticeTemplateGateResult, PracticeTemplateMutationRequest, PracticeTemplateRecord } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 
-type FormState = Required<PracticeTemplateMutationRequest>;
+type FormState = Omit<Required<PracticeTemplateMutationRequest>, "curriculum_plan" | "max_stage_duration_seconds"> & {
+    curriculum_plan: NonNullable<PracticeTemplateMutationRequest["curriculum_plan"]>;
+    max_stage_duration_seconds: number;
+};
+
+function emptyStage(order: number): CurriculumPlanStage {
+    return {
+        template_stage_key: `template_stage_${order}`,
+        order,
+        name: `阶段 ${order}`,
+        template_ref: {
+            asset_type: "practice_template",
+            asset_id: "",
+            version: 1,
+            hash: "",
+            snapshot_label: "published",
+        },
+        completion_policy: {
+            min_score: 7,
+            min_rounds: 1,
+            max_duration_seconds: 600,
+        },
+        failure_policy: "retry_current",
+        prerequisites: [],
+    };
+}
 
 const EMPTY_FORM: FormState = {
     name: "",
@@ -22,6 +47,13 @@ const EMPTY_FORM: FormState = {
     voice_mode: "stepfun_realtime",
     scoring_ruleset_id: "",
     knowledge_base_refs: [],
+    curriculum_plan: {
+        name: "",
+        description: "",
+        max_stage_duration_seconds: 600,
+        stages: [emptyStage(1)],
+    },
+    max_stage_duration_seconds: 600,
 };
 
 function statusVariant(status: string): "green" | "orange" | "gray" {
@@ -42,11 +74,25 @@ function formFromTemplate(template: PracticeTemplateRecord): FormState {
         voice_mode: template.voice_mode === "legacy" ? "legacy" : "stepfun_realtime",
         scoring_ruleset_id: template.scoring_ruleset_id,
         knowledge_base_refs: template.knowledge_base_refs,
+        curriculum_plan: template.curriculum_plan ?? EMPTY_FORM.curriculum_plan,
+        max_stage_duration_seconds: template.max_stage_duration_seconds ?? EMPTY_FORM.max_stage_duration_seconds,
     };
 }
 
 function refsFromText(value: string): string[] {
     return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function prerequisitesFromText(value: string) {
+    return refsFromText(value).map((templateStageKey) => ({
+        template_stage_key: templateStageKey,
+        required_result: "completed" as const,
+    }));
+}
+
+function failurePolicyFromValue(value: string): CurriculumPlanStage["failure_policy"] {
+    if (value === "fallback_to_previous" || value === "allow_skip") return value;
+    return "retry_current";
 }
 
 export default function AdminPracticeTemplatesPage() {
@@ -144,6 +190,98 @@ export default function AdminPracticeTemplatesPage() {
         }
     };
 
+    const updateCurriculumPlan = (patch: Partial<NonNullable<FormState["curriculum_plan"]>>) => {
+        setForm((current) => ({
+            ...current,
+            curriculum_plan: {
+                ...(current.curriculum_plan ?? EMPTY_FORM.curriculum_plan),
+                ...patch,
+            },
+        }));
+    };
+
+    const updateStage = (stageIndex: number, patch: Partial<CurriculumPlanStage>) => {
+        setForm((current) => {
+            const curriculumPlan = current.curriculum_plan ?? EMPTY_FORM.curriculum_plan;
+            return {
+                ...current,
+                curriculum_plan: {
+                    ...curriculumPlan,
+                    stages: curriculumPlan.stages.map((stage, index) => (
+                        index === stageIndex ? { ...stage, ...patch } : stage
+                    )),
+                },
+            };
+        });
+    };
+
+    const updateStageCompletionPolicy = (
+        stageIndex: number,
+        patch: Partial<CurriculumPlanStage["completion_policy"]>,
+    ) => {
+        setForm((current) => {
+            const curriculumPlan = current.curriculum_plan ?? EMPTY_FORM.curriculum_plan;
+            return {
+                ...current,
+                curriculum_plan: {
+                    ...curriculumPlan,
+                    stages: curriculumPlan.stages.map((stage, index) => (
+                        index === stageIndex
+                            ? { ...stage, completion_policy: { ...stage.completion_policy, ...patch } }
+                            : stage
+                    )),
+                },
+            };
+        });
+    };
+
+    const updateStageTemplateRef = (
+        stageIndex: number,
+        patch: Partial<CurriculumPlanStage["template_ref"]>,
+    ) => {
+        setForm((current) => {
+            const curriculumPlan = current.curriculum_plan ?? EMPTY_FORM.curriculum_plan;
+            return {
+                ...current,
+                curriculum_plan: {
+                    ...curriculumPlan,
+                    stages: curriculumPlan.stages.map((stage, index) => (
+                        index === stageIndex
+                            ? { ...stage, template_ref: { ...stage.template_ref, ...patch } }
+                            : stage
+                    )),
+                },
+            };
+        });
+    };
+
+    const addStage = () => {
+        setForm((current) => {
+            const curriculumPlan = current.curriculum_plan ?? EMPTY_FORM.curriculum_plan;
+            return {
+                ...current,
+                curriculum_plan: {
+                    ...curriculumPlan,
+                    stages: [...curriculumPlan.stages, emptyStage(curriculumPlan.stages.length + 1)],
+                },
+            };
+        });
+    };
+
+    const removeStage = (stageIndex: number) => {
+        setForm((current) => {
+            const curriculumPlan = current.curriculum_plan ?? EMPTY_FORM.curriculum_plan;
+            const nextStages = curriculumPlan.stages.filter((_, index) => index !== stageIndex);
+            return {
+                ...current,
+                curriculum_plan: {
+                    ...curriculumPlan,
+                    stages: nextStages.length > 0 ? nextStages : [emptyStage(1)],
+                },
+            };
+        });
+    };
+
     if (loading) {
         return <div className="rounded-2xl border border-slate-100 bg-white/80 p-8 text-slate-600">正在加载课程训练模板...</div>;
     }
@@ -175,13 +313,18 @@ export default function AdminPracticeTemplatesPage() {
                 <div className="space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                     <p>{actionError}</p>
                     {gateResults.length > 0 && (
-                        <ul className="list-disc space-y-1 pl-5">
-                            {gateResults.map((result) => (
-                                <li key={`${result.gate_name}-${result.reason_code}-${result.message}`}>
-                                    <span className="font-semibold">{result.reason_code}</span>：{result.message}
-                                </li>
-                            ))}
-                        </ul>
+                        <div className="space-y-2">
+                            {gateResults.some((result) => result.gate_name.startsWith("curriculum_plan")) && (
+                                <Badge variant="red">Stage validation errors</Badge>
+                            )}
+                            <ul className="list-disc space-y-1 pl-5">
+                                {gateResults.map((result) => (
+                                    <li key={`${result.gate_name}-${result.reason_code}-${result.message}`}>
+                                        <span className="font-semibold">{result.reason_code}</span>：{result.message}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     )}
                 </div>
             )}
@@ -217,6 +360,87 @@ export default function AdminPracticeTemplatesPage() {
                         <span>Knowledge Base Refs</span>
                         <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.knowledge_base_refs.join(",")} onChange={(event) => setForm((current) => ({ ...current, knowledge_base_refs: refsFromText(event.target.value) }))} />
                     </label>
+                </div>
+
+                <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h3 className="text-lg font-black text-slate-900">CurriculumPlan</h3>
+                            <p className="text-xs text-slate-500">配置多阶段模板图、完成策略和失败策略。</p>
+                        </div>
+                        <Button variant="outline" onClick={addStage}>添加 Stage</Button>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <label className="space-y-1 text-sm font-medium text-slate-700">
+                            <span>CurriculumPlan Name</span>
+                            <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.curriculum_plan?.name ?? ""} onChange={(event) => updateCurriculumPlan({ name: event.target.value })} />
+                        </label>
+                        <label className="space-y-1 text-sm font-medium text-slate-700">
+                            <span>Max Stage Duration Seconds</span>
+                            <input
+                                type="number"
+                                className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                                value={form.max_stage_duration_seconds ?? 0}
+                                onChange={(event) => {
+                                    const duration = Number(event.target.value);
+                                    setForm((current) => ({ ...current, max_stage_duration_seconds: duration }));
+                                    updateCurriculumPlan({ max_stage_duration_seconds: duration });
+                                }}
+                            />
+                        </label>
+                    </div>
+                    <div className="space-y-3">
+                        {(form.curriculum_plan?.stages ?? []).map((stage, index) => (
+                            <div key={`${stage.template_stage_key}-${index}`} className="space-y-3 rounded-2xl border border-white bg-white/80 p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <Badge variant="blue">Stage {index + 1}</Badge>
+                                    <Button variant="outline" onClick={() => { removeStage(index); }}>移除 Stage</Button>
+                                </div>
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                                        <span>{`Stage Key ${index + 1}`}</span>
+                                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={stage.template_stage_key} onChange={(event) => updateStage(index, { template_stage_key: event.target.value })} />
+                                    </label>
+                                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                                        <span>{`Stage Name ${index + 1}`}</span>
+                                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={stage.name} onChange={(event) => updateStage(index, { name: event.target.value })} />
+                                    </label>
+                                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                                        <span>{`Stage Template Asset ID ${index + 1}`}</span>
+                                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={stage.template_ref.asset_id} onChange={(event) => updateStageTemplateRef(index, { asset_id: event.target.value })} />
+                                    </label>
+                                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                                        <span>{`Stage Template Hash ${index + 1}`}</span>
+                                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={stage.template_ref.hash} onChange={(event) => updateStageTemplateRef(index, { hash: event.target.value })} />
+                                    </label>
+                                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                                        <span>{`Stage Min Score ${index + 1}`}</span>
+                                        <input type="number" className="w-full rounded-xl border border-slate-200 px-3 py-2" value={stage.completion_policy.min_score} onChange={(event) => updateStageCompletionPolicy(index, { min_score: Number(event.target.value) })} />
+                                    </label>
+                                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                                        <span>{`Stage Min Rounds ${index + 1}`}</span>
+                                        <input type="number" className="w-full rounded-xl border border-slate-200 px-3 py-2" value={stage.completion_policy.min_rounds} onChange={(event) => updateStageCompletionPolicy(index, { min_rounds: Number(event.target.value) })} />
+                                    </label>
+                                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                                        <span>{`Stage Max Duration Seconds ${index + 1}`}</span>
+                                        <input type="number" className="w-full rounded-xl border border-slate-200 px-3 py-2" value={stage.completion_policy.max_duration_seconds} onChange={(event) => updateStageCompletionPolicy(index, { max_duration_seconds: Number(event.target.value) })} />
+                                    </label>
+                                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                                        <span>{`Stage Failure Policy ${index + 1}`}</span>
+                                        <select className="w-full rounded-xl border border-slate-200 px-3 py-2" value={stage.failure_policy ?? "retry_current"} onChange={(event) => updateStage(index, { failure_policy: failurePolicyFromValue(event.target.value) })}>
+                                            <option value="retry_current">retry_current</option>
+                                            <option value="fallback_to_previous">fallback_to_previous</option>
+                                            <option value="allow_skip">allow_skip</option>
+                                        </select>
+                                    </label>
+                                    <label className="space-y-1 text-sm font-medium text-slate-700 md:col-span-2">
+                                        <span>{`Stage Prerequisites ${index + 1}`}</span>
+                                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={(stage.prerequisites ?? []).map((item) => item.template_stage_key).join(",")} onChange={(event) => updateStage(index, { prerequisites: prerequisitesFromText(event.target.value) })} />
+                                    </label>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
                 <div className="flex gap-3">
                     <Button onClick={() => { void handleSubmit(); }}>{editingTemplateId ? "保存模板" : "创建模板"}</Button>
