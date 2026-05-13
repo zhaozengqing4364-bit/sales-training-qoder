@@ -127,6 +127,7 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
     apply_knowledge_runtime_metric,
     persist_runtime_metrics_to_session,
 )
+from sales_bot.websocket.components.stepfun_voice_selection import resolve_session_voice
 from sales_bot.websocket.components.stepfun_tool_helpers import (
     build_stepfun_tools_from_policy,
 )
@@ -649,10 +650,14 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
         if self._effective_policy.get("turn_detection") == "server_vad":
             turn_detection_value = {"type": "server_vad"}
 
+        selected_voice = resolve_session_voice(
+            default_voice=self._stepfun_voice,
+            runtime_snapshot=self._curriculum_snapshot,
+        )
         session_payload: dict = {
             "type": "session.update",
             "session": {
-                "voice": self._stepfun_voice,
+                "voice": selected_voice,
                 "temperature": self._stepfun_temperature,
                 "input_audio_format": self._stepfun_input_audio_format,
                 "output_audio_format": self._stepfun_output_audio_format,

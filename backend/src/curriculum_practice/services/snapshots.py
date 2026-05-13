@@ -11,9 +11,9 @@ from curriculum_practice.schemas import (
     CurriculumRuntimeSnapshot,
     CurriculumTrainingTaskRef,
     CurriculumVersionRef,
-    TemplateStageSnapshot,
     PublishedTemplateRef,
     ReferenceReader,
+    TemplateStageSnapshot,
 )
 
 VOLATILE_HASH_FIELDS = {
@@ -95,10 +95,14 @@ class RuntimeSnapshotService:
         ]
         if template_data.get("case_item_id"):
             content_assets.append(await self._case_item_ref(str(template_data["case_item_id"])))
+        role_profile_data = None
         if template_data.get("role_profile_id"):
-            content_assets.append(
-                await self._role_profile_ref(str(template_data["role_profile_id"]))
+            role_profile_data = _as_dict(
+                await self._read_reference(
+                    "role_profile", str(template_data["role_profile_id"])
+                )
             )
+            content_assets.append(_role_profile_ref_from_data(role_profile_data))
         snapshot = CurriculumRuntimeSnapshot(
             snapshot_hash="sha256:pending",
             created_at=created_at or datetime.now(UTC).isoformat(),
@@ -114,6 +118,7 @@ class RuntimeSnapshotService:
             content_assets=content_assets,
             rubric=await self._rubric_ref(str(template_data["scoring_ruleset_id"])),
             runtime=runtime,
+            role_profile_voice_id=_voice_id_from_role_profile(role_profile_data),
             stage_snapshots=await self._stage_snapshots(template_data),
         )
         payload = snapshot.model_dump()
@@ -165,9 +170,15 @@ class RuntimeSnapshotService:
                 child_content_assets.append(
                     await self._case_item_ref(str(child_template["case_item_id"]))
                 )
+            child_role_profile_data = None
             if child_template.get("role_profile_id"):
+                child_role_profile_data = _as_dict(
+                    await self._read_reference(
+                        "role_profile", str(child_template["role_profile_id"])
+                    )
+                )
                 child_content_assets.append(
-                    await self._role_profile_ref(str(child_template["role_profile_id"]))
+                    _role_profile_ref_from_data(child_role_profile_data)
                 )
             snapshots[stage_key] = TemplateStageSnapshot(
                 template_ref=CurriculumVersionRef(
@@ -177,7 +188,9 @@ class RuntimeSnapshotService:
                     hash=str(template_ref_data["hash"]),
                     snapshot_label=template_ref_data["snapshot_label"],
                 ),
-                runtime_payload=_minimal_template_runtime_payload(child_template),
+                runtime_payload=_minimal_template_runtime_payload(
+                    child_template, role_profile_data=child_role_profile_data
+                ),
                 content_assets=child_content_assets,
                 rubric=await self._rubric_ref(str(child_template["scoring_ruleset_id"])),
                 runtime=child_runtime,
@@ -314,7 +327,9 @@ def _without_volatile_fields(payload: object) -> object:
     return payload
 
 
-def _minimal_template_runtime_payload(template_data: dict[str, Any]) -> dict[str, object]:
+def _minimal_template_runtime_payload(
+    template_data: dict[str, Any], *, role_profile_data: dict[str, Any] | None = None
+) -> dict[str, object]:
     return {
         "template_id": str(template_data["template_id"]),
         "version": template_data.get("version", 1),
@@ -325,5 +340,30 @@ def _minimal_template_runtime_payload(template_data: dict[str, Any]) -> dict[str
         "persona_id": str(template_data["persona_id"]),
         "runtime_profile_id": str(template_data["runtime_profile_id"]),
         "voice_mode": str(template_data["voice_mode"]),
+        "role_profile_voice_id": _voice_id_from_role_profile(role_profile_data),
         "scoring_ruleset_id": str(template_data["scoring_ruleset_id"]),
     }
+
+
+def _role_profile_ref_from_data(role_profile: dict[str, Any]) -> CurriculumVersionRef:
+    if not role_profile or role_profile.get("status") != "published":
+        raise RuntimeSnapshotBuildError(
+            "role_profile_unpublished",
+            "RoleProfile reference is missing or unpublished.",
+        )
+    return CurriculumVersionRef(
+        asset_type="role_profile",
+        asset_id=str(role_profile["role_profile_id"]),
+        version=role_profile.get("version", 1),
+        hash=str(role_profile["content_hash"]),
+        snapshot_label="published",
+    )
+
+
+def _voice_id_from_role_profile(role_profile: dict[str, Any] | None) -> str | None:
+    if not role_profile:
+        return None
+    voice_id = role_profile.get("voice_id")
+    if isinstance(voice_id, str) and voice_id.strip():
+        return voice_id.strip()
+    return None

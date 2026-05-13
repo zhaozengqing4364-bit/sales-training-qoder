@@ -160,6 +160,7 @@ def _reference_reader(db: AsyncSession):
                 "status": role_profile.status,
                 "version": role_profile.version,
                 "content_hash": role_profile.content_hash,
+                "voice_id": role_profile.voice_id,
             }
         return None
 
