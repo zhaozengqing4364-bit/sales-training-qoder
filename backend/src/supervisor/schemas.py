@@ -223,6 +223,18 @@ class SupervisorTeamReport(BaseModel):
     before_after: BeforeAfterComparison | None = None
 
 
+class CertificationReviewQueueItem(BaseModel):
+    review_id: str
+    session_id: str
+    report_id: str
+    learner: dict[str, Any]
+    curriculum: dict[str, Any]
+    score: float | None = None
+    evidence: dict[str, Any]
+    submitted_at: datetime | None = None
+    outcome: SupervisorDecision
+
+
 class TeamInsightsCompletion(BaseModel):
     total_tasks: int = 0
     completed_tasks: int = 0

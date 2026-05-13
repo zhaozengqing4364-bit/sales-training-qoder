@@ -33,6 +33,7 @@ from common.services.practice_session_service import (
 )
 from supervisor.schemas import (
     BeforeAfterComparison,
+    CertificationReviewQueueItem,
     RetrainingTaskCompleteRequest,
     RetrainingTaskCreate,
     RetrainingTaskResponse,
@@ -309,6 +310,74 @@ class SupervisorReviewService:
                 )
             )
         return reports
+
+    async def list_certification_review_queue(
+        self,
+        *,
+        current_user: User,
+        limit: int = 50,
+    ) -> list[CertificationReviewQueueItem]:
+        self._require_admin(current_user)
+        rows = await self.db.execute(
+            select(PracticeSession, User, Scenario.scenario_type)
+            .join(User, User.user_id == PracticeSession.user_id)
+            .join(Scenario, Scenario.scenario_id == PracticeSession.scenario_id)
+            .where(PracticeSession.status == "completed")
+            .where(PracticeSession.report_status == "completed")
+            .where(PracticeSession.practice_template_id.is_not(None))
+            .order_by(PracticeSession.end_time.desc(), PracticeSession.start_time.desc())
+            .limit(max(1, min(limit, 100)))
+        )
+        items: list[CertificationReviewQueueItem] = []
+        for session, trainee, scenario_type in rows.all():
+            curriculum = await self._certification_curriculum_payload(session)
+            if curriculum is None:
+                continue
+            review = await self._ensure_pending_review_for_session(
+                session=session,
+                supervisor=current_user,
+                audit_metadata={
+                    "source": "certification_review_queue",
+                    "scenario_type": str(scenario_type or "sales"),
+                },
+            )
+            if str(review.decision) != "pending":
+                continue
+            view = await self.get_training_report_view(
+                session_id=_as_str(session.session_id),
+                current_user=current_user,
+            )
+            items.append(
+                CertificationReviewQueueItem(
+                    review_id=_as_str(review.review_id),
+                    session_id=_as_str(session.session_id),
+                    report_id=_as_str(session.session_id),
+                    learner={
+                        "user_id": _as_str(trainee.user_id),
+                        "name": cast(str | None, getattr(trainee, "name", None)),
+                        "email": cast(str | None, getattr(trainee, "email", None)),
+                    },
+                    curriculum=curriculum,
+                    score=view.overall_score,
+                    evidence={
+                        "transcript_anchors": [
+                            item.model_dump(mode="json") for item in view.evidence_items
+                        ],
+                        "stage_snapshots": curriculum["stage_snapshots"],
+                        "thinking_evidence": [
+                            item.model_dump(mode="json")
+                            for item in view.thinking_evidence
+                        ],
+                    },
+                    submitted_at=cast(
+                        datetime | None,
+                        getattr(session, "end_time", None)
+                        or getattr(session, "start_time", None),
+                    ),
+                    outcome=cast(Any, review.decision),
+                )
+            )
+        return items
 
     async def get_team_insights(
         self,
@@ -880,6 +949,99 @@ class SupervisorReviewService:
                 items.append((name, _as_float(item.get("score"))))
         return items
 
+    async def _ensure_pending_review_for_session(
+        self,
+        *,
+        session: PracticeSession,
+        supervisor: User,
+        audit_metadata: dict[str, Any],
+    ) -> SupervisorReview:
+        review = await self._get_review_for_session(_as_str(session.session_id))
+        if review is not None:
+            return review
+        review = SupervisorReview(
+            review_id=str(uuid.uuid4()),
+            session_id=_as_str(session.session_id),
+            trainee_user_id=_as_str(session.user_id),
+            supervisor_user_id=_as_str(supervisor.user_id),
+            decision="pending",
+            readiness_status="not_ready",
+            required_retraining=False,
+            audit_metadata=audit_metadata,
+        )
+        self.db.add(review)
+        await self._commit_with_unique_handling()
+        await self.db.refresh(review)
+        return review
+
+    async def _certification_curriculum_payload(
+        self,
+        session: PracticeSession,
+    ) -> dict[str, Any] | None:
+        template = await self._practice_template_for_session(session)
+        if template is None:
+            return None
+        stage_snapshots = self._stage_snapshots_from_session(session)
+        review_stage_keys = self._review_stage_keys(
+            curriculum_plan=cast(dict[str, Any] | None, getattr(template, "curriculum_plan", None)),
+            stage_snapshots=stage_snapshots,
+        )
+        if not review_stage_keys:
+            return None
+        return {
+            "practice_template": {
+                "template_id": _as_str(getattr(template, "template_id", None)),
+                "name": _as_str(getattr(template, "name", None)),
+                "scenario_type": _as_str(getattr(template, "scenario_type", None)),
+                "mode": _as_str(getattr(template, "mode", None)),
+                "version": getattr(template, "version", None),
+            },
+            "stage_keys": review_stage_keys,
+            "stage_snapshots": {
+                key: stage_snapshots.get(key, {}) for key in review_stage_keys
+            },
+        }
+
+    async def _practice_template_for_session(self, session: PracticeSession) -> Any | None:
+        template_id = getattr(session, "practice_template_id", None)
+        if not template_id:
+            return None
+        from curriculum_practice.models import PracticeTemplate
+
+        return await self.db.get(PracticeTemplate, _as_str(template_id))
+
+    @staticmethod
+    def _stage_snapshots_from_session(session: PracticeSession) -> dict[str, Any]:
+        snapshot = getattr(session, "curriculum_snapshot", None)
+        if not isinstance(snapshot, dict):
+            return {}
+        raw_snapshots = snapshot.get("stage_snapshots")
+        return raw_snapshots if isinstance(raw_snapshots, dict) else {}
+
+    @staticmethod
+    def _review_stage_keys(
+        *,
+        curriculum_plan: dict[str, Any] | None,
+        stage_snapshots: dict[str, Any],
+    ) -> list[str]:
+        keywords = ("review", "certification", "onboarding", "复核", "认证", "入职")
+        keys: list[str] = []
+        stages = curriculum_plan.get("stages") if isinstance(curriculum_plan, dict) else None
+        if isinstance(stages, list):
+            for stage in stages:
+                if not isinstance(stage, dict):
+                    continue
+                stage_key = _as_str(stage.get("template_stage_key"))
+                stage_name = _as_str(stage.get("name"))
+                haystack = f"{stage_key} {stage_name}".lower()
+                if stage_key and any(keyword in haystack for keyword in keywords):
+                    keys.append(stage_key)
+        for stage_key in stage_snapshots:
+            haystack = _as_str(stage_key).lower()
+            if any(keyword in haystack for keyword in keywords) and stage_key not in keys:
+                keys.append(stage_key)
+        return keys
+
     async def create_review(
         self,
         *,
@@ -1382,7 +1544,11 @@ class SupervisorReviewService:
         setattr(review, "comment", comment)
         setattr(review, "required_retraining", required)
         setattr(review, "supervisor_user_id", _as_str(supervisor.user_id))
-        setattr(review, "audit_metadata", audit_metadata or {})
+        metadata = dict(audit_metadata or {})
+        metadata["reviewer_id"] = _as_str(supervisor.user_id)
+        metadata.setdefault("reviewed_at", _now().isoformat())
+        metadata.setdefault("report_id", _as_str(review.session_id))
+        setattr(review, "audit_metadata", metadata)
         setattr(review, "updated_at", _now())
 
     async def _ensure_retraining_task(
@@ -1408,7 +1574,7 @@ class SupervisorReviewService:
                 task.training_task_id = await self._resolve_training_task_id(
                     source_session_id=_as_str(review.session_id),
                     explicit_training_task_id=None,
-                )
+                ) or await self._ensure_followup_training_task(review, dimension)
                 if task.training_task_id is not None:
                     self.db.add(task)
                     await self.db.commit()
@@ -1417,7 +1583,7 @@ class SupervisorReviewService:
         training_task_id = await self._resolve_training_task_id(
             source_session_id=_as_str(review.session_id),
             explicit_training_task_id=None,
-        )
+        ) or await self._ensure_followup_training_task(review, dimension)
         task = RetrainingTask(
             task_id=str(uuid.uuid4()),
             user_id=_as_str(review.trainee_user_id),
@@ -1433,6 +1599,46 @@ class SupervisorReviewService:
         await self._commit_with_unique_handling()
         await self.db.refresh(task)
         return task
+
+    async def _ensure_followup_training_task(
+        self,
+        review: SupervisorReview,
+        skill_dimension: str,
+    ) -> str | None:
+        session = await self._get_session(_as_str(review.session_id))
+        if session is None:
+            return None
+        result = await self.db.execute(
+            select(TrainingTask).where(
+                TrainingTask.assignee_id == _as_str(review.trainee_user_id),
+                TrainingTask.resulting_session_id == _as_str(review.session_id),
+                TrainingTask.source == "supervisor_certification_retrain",
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing is not None:
+            return _as_str(existing.task_id)
+        scenario_type = await self._get_session_scenario_type(session)
+        task = TrainingTask(
+            task_id=str(uuid.uuid4()),
+            title=f"{DEFAULT_RETRAINING_TITLE_PREFIX}：{skill_dimension}",
+            assignee_id=_as_str(review.trainee_user_id),
+            scenario_type=scenario_type,
+            goal=_as_str(review.comment) or f"围绕{skill_dimension}完成认证复训。",
+            focus_intent=f"supervisor_retraining:{skill_dimension}",
+            completion_criteria={
+                "minimum_sessions": 1,
+                "source_review_id": _as_str(review.review_id),
+            },
+            practice_template_id=cast(str | None, session.practice_template_id),
+            source="supervisor_certification_retrain",
+            status="assigned",
+            resulting_session_id=_as_str(review.session_id),
+        )
+        self.db.add(task)
+        await self._commit_with_unique_handling()
+        await self.db.refresh(task)
+        return _as_str(task.task_id)
 
     async def _commit_with_unique_handling(self) -> None:
         try:

@@ -61,6 +61,29 @@ async def list_team_reports(
         )
 
 
+@router.get("/supervisor/certification-review-queue")
+async def list_certification_review_queue(
+    limit: int = Query(default=50, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """List high-stakes certification/onboarding sessions awaiting review."""
+    try:
+        items = await SupervisorReviewService(db).list_certification_review_queue(
+            current_user=current_user,
+            limit=limit,
+        )
+        return success_response([item.model_dump(mode="json") for item in items])
+    except SupervisorServiceError as exc:
+        return _service_error(exc)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[CERTIFICATION_REVIEW_QUEUE_FAILED]",
+            message="认证复核队列暂时无法读取。",
+            exc=exc,
+        )
+
+
 @router.get("/supervisor/team/insights")
 async def get_team_insights(
     scenario_type: str | None = Query(default=None),
