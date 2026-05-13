@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from curriculum_practice.api import _build_default_voice_clone_service
 from curriculum_practice.services.voice_clone import VoiceCloneService
 
 
@@ -132,6 +133,19 @@ async def test_should_fallback_to_default_voice_when_clone_unavailable() -> None
     assert result.retryable is False
     assert result.fallback_voice == "default_voice"
     assert result.reason_code == "voice_clone_unavailable"
+
+
+def test_should_build_production_transport_when_endpoint_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("STEPFUN_VOICE_CLONE_ENDPOINT", "https://stepfun.example/voices")
+    monkeypatch.setenv("STEPFUN_DEFAULT_VOICE", "fallback_voice")
+
+    service = _build_default_voice_clone_service()
+
+    assert service._endpoint_url == "https://stepfun.example/voices"
+    assert service._fallback_voice == "fallback_voice"
+    assert service._transport is not None
 
 
 @pytest.mark.asyncio

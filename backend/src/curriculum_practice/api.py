@@ -42,7 +42,10 @@ from curriculum_practice.services.practice_templates import (
     published_ref,
     serialize_template,
 )
-from curriculum_practice.services.voice_clone import VoiceCloneService
+from curriculum_practice.services.voice_clone import (
+    VoiceCloneHTTPTransport,
+    VoiceCloneService,
+)
 
 ALLOWED_VOICE_AUDIO_CONTENT_TYPES = frozenset(
     {"audio/wav", "audio/mpeg", "audio/webm", "audio/mp4"}
@@ -153,6 +156,16 @@ def _looks_like_audio(audio_bytes: bytes, content_type: str) -> bool:
     if content_type in {"audio/webm", "audio/mp4"}:
         return bool(audio_bytes)
     return False
+
+
+def _build_default_voice_clone_service() -> VoiceCloneService:
+    endpoint_url = os.getenv("STEPFUN_VOICE_CLONE_ENDPOINT")
+    transport = VoiceCloneHTTPTransport() if endpoint_url else None
+    return VoiceCloneService(
+        transport=transport,
+        endpoint_url=endpoint_url,
+        fallback_voice=os.getenv("STEPFUN_DEFAULT_VOICE", "default_voice"),
+    )
 
 
 @router.get("/templates", response_model=None)
@@ -618,11 +631,7 @@ async def clone_role_profile_voice(
     audio_bytes = audio_bytes_or_error
     voice_service = getattr(request.app.state, "voice_clone_service", None)
     if voice_service is None:
-        voice_service = VoiceCloneService(
-            transport=None,
-            endpoint_url=os.getenv("STEPFUN_VOICE_CLONE_ENDPOINT"),
-            fallback_voice=os.getenv("STEPFUN_DEFAULT_VOICE", "default_voice"),
-        )
+        voice_service = _build_default_voice_clone_service()
     try:
         result = await service.register_role_profile_voice(
             item,

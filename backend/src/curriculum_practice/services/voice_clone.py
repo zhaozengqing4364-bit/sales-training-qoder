@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+import httpx
+
 
 @dataclass(frozen=True)
 class VoiceCloneResult:
@@ -29,6 +31,19 @@ class VoiceCloneTransport(Protocol):
         data: dict[str, str],
         timeout: float,
     ) -> VoiceCloneResponse: ...
+
+
+class VoiceCloneHTTPTransport:
+    async def post(
+        self,
+        url: str,
+        *,
+        files: dict[str, tuple[str, bytes, str]],
+        data: dict[str, str],
+        timeout: float,
+    ) -> VoiceCloneResponse:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            return await client.post(url, files=files, data=data)
 
 
 class VoiceCloneService:
