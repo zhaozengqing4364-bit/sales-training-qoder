@@ -16,13 +16,14 @@ import {
     Presentation,
     Trophy,
     Flame,
+    Route,
 } from "lucide-react";
 import Link from "next/link";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { dashboardConfig } from "@/lib/dashboard-config";
 import { debug } from "@/lib/debug";
 import { normalizeInternalRecommendationPath } from "@/lib/recommendation-routing";
-import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, RetrainingTask, SessionItem } from "@/lib/api/types";
+import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, RetrainingTask, SessionItem, LearningPathNextTask } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { persistRetrainingTaskSessionLink } from "@/lib/retraining-task-session";
 import {
@@ -319,6 +320,8 @@ export default function HomePage() {
     const [retrainingTaskHint, setRetrainingTaskHint] = useState<string | null>(null);
     const [startingRetrainingTaskId, setStartingRetrainingTaskId] = useState<string | null>(null);
     const [momentumSessions, setMomentumSessions] = useState<MomentumSessionSource[]>([]);
+    const [learningPathNextTask, setLearningPathNextTask] = useState<LearningPathNextTask | null>(null);
+    const [isLearningPathLoading, setIsLearningPathLoading] = useState(true);
     const [dashboardReloadVersion, setDashboardReloadVersion] = useState(0);
 
     useEffect(() => {
@@ -340,6 +343,7 @@ export default function HomePage() {
             setIsStatsLoading(true);
             setIsRecommendationLoading(true);
             setIsHistoryLoading(true);
+            setIsLearningPathLoading(true);
 
             void api.dashboard.getStats()
                 .then((value) => {
@@ -422,6 +426,21 @@ export default function HomePage() {
                 .catch(() => {
                     if (!cancelled) setMomentumSessions([]);
                 });
+
+            void api.learningPath.getNextTask()
+                .then((value) => {
+                    if (cancelled) return;
+                    setLearningPathNextTask(value);
+                    markSection("学习路径", false);
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setLearningPathNextTask(null);
+                    markSection("学习路径", true);
+                })
+                .finally(() => {
+                    if (!cancelled) setIsLearningPathLoading(false);
+                });
         };
 
         void loadDashboardData();
@@ -456,6 +475,7 @@ export default function HomePage() {
     const isStatsDegraded = dashboardDegradedSections.includes("训练统计");
     const isRecommendationDegraded = dashboardDegradedSections.includes("推荐入口");
     const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
+    const isLearningPathDegraded = dashboardDegradedSections.includes("学习路径");
     const hasHistory = historyItems.length > 0;
     const isStatsUnavailable = isStatsLoading || isStatsDegraded;
     const isRecommendationUnavailable = isRecommendationLoading || isRecommendationDegraded;
@@ -872,6 +892,38 @@ export default function HomePage() {
                                 {displayRecommendation.action_label} <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
                         </Link>
+                    </div>
+                </GlassCard>
+
+                <GlassCard className="col-span-1 md:col-span-3 p-6 border border-blue-100 bg-blue-50/70">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                                <Route className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-wider text-blue-500">学习路径下一步</p>
+                                <h2 className="text-xl font-black text-slate-900 mt-1">
+                                    {isLearningPathLoading ? "学习路径加载中" : learningPathNextTask?.title ?? "学习路径暂不可用"}
+                                </h2>
+                                <p className="text-sm text-slate-600 mt-2">
+                                    {isLearningPathDegraded
+                                        ? "学习路径接口暂时无法读取；可先进入完整路径页稍后重试。"
+                                        : learningPathNextTask?.failure_reason
+                                            ? `失败原因：${learningPathNextTask.failure_reason}`
+                                            : learningPathNextTask?.reason
+                                                ? learningPathNextTask.reason
+                                            : learningPathNextTask?.estimated_duration_minutes
+                                                ? `建议时长：${learningPathNextTask.estimated_duration_minutes} 分钟，状态：${learningPathNextTask.state}`
+                                                : "根据最近报告弱项生成；冷启动用户会看到默认训练路径。"}
+                                </p>
+                            </div>
+                        </div>
+                        <Button asChild className="rounded-full bg-slate-900 text-white hover:bg-slate-800">
+                            <Link href="/learning-path">
+                                {learningPathNextTask?.primary_cta ?? "查看学习路径"} <ArrowRight className="ml-2 w-4 h-4" />
+                            </Link>
+                        </Button>
                     </div>
                 </GlassCard>
 

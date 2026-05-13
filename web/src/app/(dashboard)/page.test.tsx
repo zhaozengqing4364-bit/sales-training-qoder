@@ -13,6 +13,7 @@ const {
     getHistoryMock,
     getOpenInterventionMock,
     getMyHistoryMock,
+    getLearningPathNextTaskMock,
     listRetrainingTasksMock,
     startRetrainingTaskSessionMock,
     useCurrentUserMock,
@@ -24,6 +25,7 @@ const {
     getHistoryMock: vi.fn(),
     getOpenInterventionMock: vi.fn(),
     getMyHistoryMock: vi.fn(),
+    getLearningPathNextTaskMock: vi.fn(),
     listRetrainingTasksMock: vi.fn(),
     startRetrainingTaskSessionMock: vi.fn(),
     useCurrentUserMock: vi.fn(),
@@ -110,6 +112,10 @@ vi.mock("@/lib/api/client", async () => {
                 listTasks: listRetrainingTasksMock,
                 startTaskSession: startRetrainingTaskSessionMock,
             },
+            learningPath: {
+                ...actual.api.learningPath,
+                getNextTask: getLearningPathNextTaskMock,
+            },
         },
     };
 });
@@ -135,6 +141,7 @@ describe("HomePage dashboard header", () => {
         getHistoryMock.mockReset();
         getOpenInterventionMock.mockReset();
         getMyHistoryMock.mockReset();
+        getLearningPathNextTaskMock.mockReset();
         listRetrainingTasksMock.mockReset();
         startRetrainingTaskSessionMock.mockReset();
         useCurrentUserMock.mockReset();
@@ -167,6 +174,15 @@ describe("HomePage dashboard header", () => {
         });
         getOpenInterventionMock.mockResolvedValue(null);
         getMyHistoryMock.mockResolvedValue({ sessions: [], total: 0, page: 1, page_size: 50, total_pages: 0 });
+        getLearningPathNextTaskMock.mockResolvedValue({
+            title: "产品知识专项",
+            state: "available",
+            primary_cta: "查看学习路径",
+            reason: "产品知识得分偏低，建议专项练习。",
+            estimated_duration_minutes: 10,
+            failure_reason: null,
+            retry_action: null,
+        });
         listRetrainingTasksMock.mockResolvedValue([]);
         startRetrainingTaskSessionMock.mockResolvedValue({
             session_id: "retraining-session-1",
