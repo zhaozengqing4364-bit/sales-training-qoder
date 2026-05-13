@@ -29,6 +29,7 @@ from urllib.parse import urlencode
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from websockets.exceptions import ConnectionClosed
 
@@ -2467,13 +2468,21 @@ class StepFunRealtimeHandler(
     async def _load_emotion_log_into_feedback_context(self) -> None:
         if self._feedback_context is None or not self.session_id:
             return
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(PracticeSession.runtime_state).where(
-                    PracticeSession.session_id == self.session_id
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(PracticeSession.runtime_state).where(
+                        PracticeSession.session_id == self.session_id
+                    )
                 )
+                runtime_state = result.scalar_one_or_none()
+        except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
+            logger.warning(
+                "StepFun emotion log loading degraded",
+                session_id=self.session_id,
+                error=str(exc),
             )
-            runtime_state = result.scalar_one_or_none()
+            return
         if not isinstance(runtime_state, dict):
             return
         emotion_log = runtime_state.get("emotion_log")
@@ -3723,7 +3732,7 @@ class StepFunRealtimeHandler(
                         template_stage_key=template_stage_key,
                     )
                     await db.commit()
-        except (RuntimeError, ValueError, OSError) as exc:
+        except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
             logger.warning(
                 "StepFun emotion signal persistence degraded",
                 session_id=self.session_id,

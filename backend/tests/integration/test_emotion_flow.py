@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.capabilities.realtime_scoring import RealtimeScoringCapability
@@ -394,3 +395,91 @@ async def test_stepfun_handler_treats_emotion_persistence_failure_as_non_critica
 
     assert warnings
     assert warnings[0]["message"] == "StepFun emotion signal persistence degraded"
+
+
+@pytest.mark.asyncio
+async def test_stepfun_handler_treats_emotion_persistence_sqlalchemy_failure_as_non_critical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingDb:
+        async def execute(self, *_args: object, **_kwargs: object) -> object:
+            raise SQLAlchemyError("emotion query failed")
+
+    class FailingSessionContext:
+        async def __aenter__(self) -> FailingDb:
+            return FailingDb()
+
+        async def __aexit__(self, *_exc: object) -> None:
+            return None
+
+    warnings: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "sales_bot.websocket.stepfun_realtime_handler.AsyncSessionLocal",
+        lambda: FailingSessionContext(),
+    )
+    monkeypatch.setattr(
+        "sales_bot.websocket.stepfun_realtime_handler.logger.warning",
+        lambda message, **kwargs: warnings.append({"message": message, **kwargs}),
+    )
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "emotion-sqlalchemy-failure-session"
+
+    await handler._persist_emotion_signals(
+        [
+            EmotionSignal(
+                turn_id="turn-1",
+                signal_type="speaking_rate",
+                value=2.0,
+                source_event_ids=("event-1",),
+                captured_at="2026-05-13T10:00:00Z",
+            )
+        ]
+    )
+
+    assert warnings
+    assert warnings[0]["message"] == "StepFun emotion signal persistence degraded"
+
+
+@pytest.mark.asyncio
+async def test_stepfun_handler_treats_emotion_log_load_sqlalchemy_failure_as_non_critical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingDb:
+        async def execute(self, *_args: object, **_kwargs: object) -> object:
+            raise SQLAlchemyError("emotion log query failed")
+
+    class FailingSessionContext:
+        async def __aenter__(self) -> FailingDb:
+            return FailingDb()
+
+        async def __aexit__(self, *_exc: object) -> None:
+            return None
+
+    warnings: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "sales_bot.websocket.stepfun_realtime_handler.AsyncSessionLocal",
+        lambda: FailingSessionContext(),
+    )
+    monkeypatch.setattr(
+        "sales_bot.websocket.stepfun_realtime_handler.logger.warning",
+        lambda message, **kwargs: warnings.append({"message": message, **kwargs}),
+    )
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "emotion-log-load-failure-session"
+    handler._feedback_context = AgentContext(
+        session_id=handler.session_id,
+        agent_id="agent-1",
+        persona_id="persona-1",
+        user_id="user-1",
+        state={},
+        conversation_history=[],
+        agent_config={},
+        persona_config={},
+        turn_count=1,
+    )
+
+    await handler._load_emotion_log_into_feedback_context()
+
+    assert handler._feedback_context.state == {}
+    assert warnings
+    assert warnings[0]["message"] == "StepFun emotion log loading degraded"
