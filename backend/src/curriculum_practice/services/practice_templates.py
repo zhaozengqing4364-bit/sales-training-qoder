@@ -116,7 +116,21 @@ class PracticeTemplateService:
             return item if item is not None and item.status == "published" else None
         if asset_type == "practice_template":
             item = await self._db.get(PracticeTemplate, asset_id)
-            return item if item is not None and item.status == "published" else None
+            if item is None or item.status != "published":
+                return None
+            role_profile_voice_id = None
+            if item.role_profile_id:
+                role_profile = await self._db.get(RoleProfile, item.role_profile_id)
+                if role_profile is not None and role_profile.status == "published":
+                    role_profile_voice_id = role_profile.voice_id
+            return {
+                "template_id": item.template_id,
+                "status": item.status,
+                "voice_mode": item.voice_mode,
+                "runtime_profile_id": item.runtime_profile_id,
+                "scoring_ruleset_id": item.scoring_ruleset_id,
+                "role_profile_voice_id": role_profile_voice_id,
+            }
         return None
 
 
