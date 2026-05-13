@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from sales_bot.websocket.components.stepfun_emotion_analyzer import (
+    EmotionSignal,
     StepFunEmotionAnalyzer,
+    apply_emotion_signals_to_runtime_state,
 )
 
 
-def test_should_measure_response_latency_between_ai_stop_and_user_start() -> None:
+def test_should_measure_response_done_to_user_start_ms() -> None:
     analyzer = StepFunEmotionAnalyzer(clock=lambda: 10.0)
 
     analyzer.on_speech_stopped(
@@ -20,10 +22,85 @@ def test_should_measure_response_latency_between_ai_stop_and_user_start() -> Non
         }
     )
 
-    assert [signal.signal_type for signal in signals] == ["response_latency_ms"]
+    assert [signal.signal_type for signal in signals] == [
+        "response_done_to_user_start_ms"
+    ]
     assert signals[0].turn_id == "turn-1"
     assert signals[0].value == 820
     assert signals[0].source_event_ids == ("ai-stop", "user-start")
+
+
+def test_should_merge_emotion_signals_by_turn_id() -> None:
+    runtime_state = apply_emotion_signals_to_runtime_state(
+        {"emotion_log": []},
+        [
+            EmotionSignal(
+                turn_id="turn-1",
+                signal_type="response_done_to_user_start_ms",
+                value=820,
+                source_event_ids=("done", "start"),
+                captured_at="2026-05-13T10:00:00Z",
+            )
+        ],
+    )
+
+    runtime_state = apply_emotion_signals_to_runtime_state(
+        runtime_state,
+        [
+            EmotionSignal(
+                turn_id="turn-1",
+                signal_type="speaking_rate",
+                value=3.2,
+                source_event_ids=("transcript",),
+                captured_at="2026-05-13T10:00:01Z",
+            ),
+            EmotionSignal(
+                turn_id="turn-1",
+                signal_type="hesitation_count",
+                value=1,
+                source_event_ids=("transcript",),
+                captured_at="2026-05-13T10:00:01Z",
+            ),
+        ],
+        template_stage_key="standard_roleplay",
+    )
+
+    assert runtime_state["emotion_log"] == [
+        {
+            "turn_id": "turn-1",
+            "template_stage_key": "standard_roleplay",
+            "response_done_to_user_start_ms": 820,
+            "speaking_rate": 3.2,
+            "hesitation_count": 1,
+            "captured_at": "2026-05-13T10:00:01Z",
+            "source_event_ids": ["done", "start", "transcript"],
+        }
+    ]
+
+
+def test_should_bound_emotion_log_to_max_entries() -> None:
+    signals = [
+        EmotionSignal(
+            turn_id=f"turn-{index}",
+            signal_type="speaking_rate",
+            value=float(index),
+            source_event_ids=(f"event-{index}",),
+            captured_at=f"2026-05-13T10:00:{index:02d}Z",
+        )
+        for index in range(5)
+    ]
+
+    runtime_state = apply_emotion_signals_to_runtime_state(
+        {"emotion_log": []},
+        signals,
+        max_entries=3,
+    )
+
+    assert [entry["turn_id"] for entry in runtime_state["emotion_log"]] == [
+        "turn-2",
+        "turn-3",
+        "turn-4",
+    ]
 
 
 def test_should_measure_speaking_rate_from_transcript_words_and_duration() -> None:

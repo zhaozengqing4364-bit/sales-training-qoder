@@ -15,7 +15,7 @@ MAX_EMOTION_LOG_ENTRIES = 50
 class EmotionSignal:
     turn_id: str
     signal_type: Literal[
-        "response_latency_ms",
+        "response_done_to_user_start_ms",
         "speaking_rate",
         "hesitation_count",
     ]
@@ -40,7 +40,7 @@ class StepFunEmotionAnalyzer:
         return [
             EmotionSignal(
                 turn_id=_turn_id(event),
-                signal_type="response_latency_ms",
+                signal_type="response_done_to_user_start_ms",
                 value=round(latency_ms, 3),
                 source_event_ids=(self._last_ai_stop_event_id, _event_id(event)),
                 captured_at=_captured_at(self._clock),
@@ -156,18 +156,18 @@ def apply_emotion_signals_to_runtime_state(
 ) -> dict[str, Any]:
     next_state = dict(runtime_state) if isinstance(runtime_state, dict) else {}
     existing_log = next_state.get("emotion_log")
-    emotion_log = [item for item in existing_log or [] if isinstance(item, dict)]
+    emotion_log = [dict(item) for item in existing_log or [] if isinstance(item, dict)]
+    entry_by_turn_id = {
+        str(item.get("turn_id") or ""): item
+        for item in emotion_log
+        if str(item.get("turn_id") or "")
+    }
 
     grouped: dict[str, dict[str, Any]] = {}
     for signal in signals:
-        entry = grouped.setdefault(
-            signal.turn_id,
-            {
-                "turn_id": signal.turn_id,
-                "captured_at": signal.captured_at,
-                "source_event_ids": [],
-            },
-        )
+        entry = grouped.setdefault(signal.turn_id, entry_by_turn_id.get(signal.turn_id, {}))
+        entry.setdefault("turn_id", signal.turn_id)
+        entry.setdefault("source_event_ids", [])
         if template_stage_key:
             entry["template_stage_key"] = template_stage_key
         entry[signal.signal_type] = signal.value
@@ -178,7 +178,10 @@ def apply_emotion_signals_to_runtime_state(
                     source_event_ids.append(event_id)
         entry["captured_at"] = signal.captured_at
 
-    emotion_log.extend(grouped.values())
+    for turn_id, entry in grouped.items():
+        if turn_id not in entry_by_turn_id:
+            emotion_log.append(entry)
+            entry_by_turn_id[turn_id] = entry
     if max_entries > 0 and len(emotion_log) > max_entries:
         emotion_log = emotion_log[-max_entries:]
     next_state["emotion_log"] = emotion_log

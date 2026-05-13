@@ -258,12 +258,16 @@ class RealtimeScoringCapability(BaseCapability):
                 )
                 canonical_scores[display_name] = float(score)
 
-            overall_score = round(
+            standard_overall_score = round(
                 sum(
                     canonical_scores[dim["name"]] * float(dim["weight"])
                     for dim in dimensions
                 ),
                 2,
+            )
+            overall_score = self._blend_emotion_overall(
+                standard_overall_score,
+                emotion_dimension_scores,
             )
             canonical_kernel, compatibility_readers = build_canonical_views(
                 scenario_type="sales",
@@ -445,7 +449,10 @@ class RealtimeScoringCapability(BaseCapability):
         latest = entries[-1]
         scores: dict[str, float] = {}
         if dimensions.get("response_confidence"):
-            latency = _safe_float(latest.get("response_latency_ms"), default=1500.0)
+            latency = _safe_float(
+                latest.get("response_done_to_user_start_ms"),
+                default=1500.0,
+            )
             hesitation = _safe_float(latest.get("hesitation_count"), default=0.0)
             scores["response_confidence"] = max(
                 0.0,
@@ -457,6 +464,20 @@ class RealtimeScoringCapability(BaseCapability):
             rate_penalty = abs(speaking_rate - 3.0) * 12.0
             scores["fluency"] = max(0.0, min(100.0, 100.0 - rate_penalty - hesitation * 10.0))
         return {name: round(score, 2) for name, score in scores.items()}
+
+    def _blend_emotion_overall(
+        self,
+        standard_overall_score: float,
+        emotion_dimension_scores: dict[str, float],
+    ) -> float:
+        config = self._emotion_scoring if isinstance(self._emotion_scoring, dict) else {}
+        if not config.get("enabled", False) or not emotion_dimension_scores:
+            return standard_overall_score
+        weight = max(0.0, min(0.5, _safe_float(config.get("weight"), default=0.0)))
+        if weight <= 0.0:
+            return standard_overall_score
+        emotion_overall = sum(emotion_dimension_scores.values()) / len(emotion_dimension_scores)
+        return round(standard_overall_score * (1.0 - weight) + emotion_overall * weight, 2)
 
     async def on_session_start(self, context: AgentContext) -> None:
         await super().on_session_start(context)

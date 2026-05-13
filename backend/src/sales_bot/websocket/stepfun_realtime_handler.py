@@ -3701,20 +3701,34 @@ class StepFunRealtimeHandler(
     ) -> None:
         if not self.session_id or not signals:
             return
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(PracticeSession).where(PracticeSession.session_id == self.session_id)
+        try:
+            async with self._db_lock:
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(
+                        select(PracticeSession).where(
+                            PracticeSession.session_id == self.session_id
+                        )
+                    )
+                    session = result.scalar_one_or_none()
+                    if not session:
+                        return
+                    existing_state = (
+                        session.runtime_state
+                        if isinstance(session.runtime_state, dict)
+                        else {}
+                    )
+                    session.runtime_state = apply_emotion_signals_to_runtime_state(
+                        existing_state,
+                        signals,
+                        template_stage_key=template_stage_key,
+                    )
+                    await db.commit()
+        except (RuntimeError, ValueError, OSError) as exc:
+            logger.warning(
+                "StepFun emotion signal persistence degraded",
+                session_id=self.session_id,
+                error=str(exc),
             )
-            session = result.scalar_one_or_none()
-            if not session:
-                return
-            existing_state = session.runtime_state if isinstance(session.runtime_state, dict) else {}
-            session.runtime_state = apply_emotion_signals_to_runtime_state(
-                existing_state,
-                signals,
-                template_stage_key=template_stage_key,
-            )
-            await db.commit()
 
     async def _handle_upstream_conversation_item_created(self, event: dict) -> None:
         """Track function-call state created by upstream model."""
