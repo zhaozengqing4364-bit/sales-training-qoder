@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage, getPracticeTemplateErrorDetails } from "@/lib/api/client";
-import type { CurriculumPlanStage, PracticeTemplateGateResult, PracticeTemplateMutationRequest, PracticeTemplateRecord } from "@/lib/api/types";
+import type { CaseItemRecord, CurriculumPlanStage, PracticeTemplateGateResult, PracticeTemplateMutationRequest, PracticeTemplateRecord, RoleProfileRecord } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 
 type FormState = Omit<Required<PracticeTemplateMutationRequest>, "curriculum_plan" | "max_stage_duration_seconds"> & {
@@ -57,6 +57,8 @@ function createEmptyForm(): FormState {
         voice_mode: "stepfun_realtime",
         scoring_ruleset_id: "",
         knowledge_base_refs: [],
+        case_item_id: null,
+        role_profile_id: null,
         curriculum_plan: null,
         max_stage_duration_seconds: null,
     };
@@ -80,6 +82,8 @@ function formFromTemplate(template: PracticeTemplateRecord): FormState {
         voice_mode: template.voice_mode === "legacy" ? "legacy" : "stepfun_realtime",
         scoring_ruleset_id: template.scoring_ruleset_id,
         knowledge_base_refs: [...template.knowledge_base_refs],
+        case_item_id: template.case_item_id ?? null,
+        role_profile_id: template.role_profile_id ?? null,
         curriculum_plan: template.curriculum_plan ?? null,
         max_stage_duration_seconds: template.max_stage_duration_seconds ?? null,
     };
@@ -111,6 +115,10 @@ export default function AdminPracticeTemplatesPage() {
     const [busyTemplateId, setBusyTemplateId] = useState<string | null>(null);
     const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
     const [form, setForm] = useState<FormState>(() => createEmptyForm());
+    const [caseItems, setCaseItems] = useState<CaseItemRecord[]>([]);
+    const [roleProfiles, setRoleProfiles] = useState<RoleProfileRecord[]>([]);
+    const [caseItemSearch, setCaseItemSearch] = useState("");
+    const [roleProfileSearch, setRoleProfileSearch] = useState("");
 
     const loadTemplates = useCallback(async () => {
         setLoading(true);
@@ -118,6 +126,12 @@ export default function AdminPracticeTemplatesPage() {
         try {
             const response = await api.admin.listPracticeTemplates();
             setItems(response.items);
+            const [caseItemResponse, roleProfileResponse] = await Promise.all([
+                api.admin.listCaseItems(),
+                api.admin.listRoleProfiles(),
+            ]);
+            setCaseItems(caseItemResponse.items.filter((item) => item.status === "published"));
+            setRoleProfiles(roleProfileResponse.items.filter((item) => item.status === "published"));
         } catch (err) {
             setError(`课程训练模板加载失败：${getApiErrorMessage(err)}`);
             debug.warn("[AdminPracticeTemplatesPage] failed to load templates", { error: err });
@@ -129,6 +143,24 @@ export default function AdminPracticeTemplatesPage() {
     useEffect(() => {
         void Promise.resolve().then(loadTemplates);
     }, [loadTemplates]);
+
+    const filteredCaseItems = caseItems.filter((item) => {
+        const query = caseItemSearch.trim().toLowerCase();
+        if (!query) return true;
+        return [item.industry, item.customer_role, item.company_profile, item.case_item_id]
+            .join(" ")
+            .toLowerCase()
+            .includes(query);
+    });
+
+    const filteredRoleProfiles = roleProfiles.filter((item) => {
+        const query = roleProfileSearch.trim().toLowerCase();
+        if (!query) return true;
+        return [item.role_name, item.pressure_level, item.persona_ref ?? "", item.role_profile_id]
+            .join(" ")
+            .toLowerCase()
+            .includes(query);
+    });
 
     const handlePublish = async (template: PracticeTemplateRecord) => {
         setNotice(null);
@@ -369,6 +401,32 @@ export default function AdminPracticeTemplatesPage() {
                         <span>Knowledge Base Refs</span>
                         <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.knowledge_base_refs.join(",")} onChange={(event) => setForm((current) => ({ ...current, knowledge_base_refs: refsFromText(event.target.value) }))} />
                     </label>
+                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                        <span>搜索 CaseItem</span>
+                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={caseItemSearch} onChange={(event) => setCaseItemSearch(event.target.value)} placeholder="按行业、客户角色或 ID 搜索" />
+                    </label>
+                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                        <span>绑定 CaseItem</span>
+                        <select className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.case_item_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, case_item_id: event.target.value || null }))}>
+                            <option value="">不绑定</option>
+                            {filteredCaseItems.map((item) => (
+                                <option key={item.case_item_id} value={item.case_item_id}>{item.industry} · {item.customer_role}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                        <span>搜索 RoleProfile</span>
+                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={roleProfileSearch} onChange={(event) => setRoleProfileSearch(event.target.value)} placeholder="按角色、压力等级、Persona 或 ID 搜索" />
+                    </label>
+                    <label className="space-y-1 text-sm font-medium text-slate-700">
+                        <span>绑定 RoleProfile</span>
+                        <select className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.role_profile_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, role_profile_id: event.target.value || null }))}>
+                            <option value="">不绑定</option>
+                            {filteredRoleProfiles.map((item) => (
+                                <option key={item.role_profile_id} value={item.role_profile_id}>{item.role_name} · {item.pressure_level}</option>
+                            ))}
+                        </select>
+                    </label>
                 </div>
 
                 <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
@@ -485,6 +543,9 @@ export default function AdminPracticeTemplatesPage() {
                                     <p className="mt-1 text-xs text-slate-500">
                                         agent: {item.agent_id} · persona: {item.persona_id} · runtime: {item.runtime_profile_id}
                                     </p>
+                                    {(item.case_item_id || item.role_profile_id) && (
+                                        <p className="mt-1 text-xs text-slate-500">case: {item.case_item_id ?? "未绑定"} · role: {item.role_profile_id ?? "未绑定"}</p>
+                                    )}
                                     {item.description ? <p className="mt-2 text-sm text-slate-600">{item.description}</p> : null}
                                 </div>
                                 <div className="flex gap-2">

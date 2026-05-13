@@ -8,6 +8,8 @@ const createPracticeTemplateMock = vi.hoisted(() => vi.fn());
 const updatePracticeTemplateMock = vi.hoisted(() => vi.fn());
 const publishPracticeTemplateMock = vi.hoisted(() => vi.fn());
 const archivePracticeTemplateMock = vi.hoisted(() => vi.fn());
+const listCaseItemsMock = vi.hoisted(() => vi.fn());
+const listRoleProfilesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
@@ -22,6 +24,8 @@ vi.mock("@/lib/api/client", async () => {
                 updatePracticeTemplate: updatePracticeTemplateMock,
                 publishPracticeTemplate: publishPracticeTemplateMock,
                 archivePracticeTemplate: archivePracticeTemplateMock,
+                listCaseItems: listCaseItemsMock,
+                listRoleProfiles: listRoleProfilesMock,
             },
         },
     };
@@ -49,6 +53,44 @@ const template = {
     published_at: null,
     created_at: "2026-05-12T00:00:00Z",
     updated_at: "2026-05-12T00:00:00Z",
+    case_item_id: null,
+    role_profile_id: null,
+};
+
+const publishedCaseItem = {
+    case_item_id: "case-1",
+    industry: "制造业",
+    customer_role: "采购总监",
+    company_profile: "大型制造客户",
+    pain_points: ["成本高"],
+    objections: ["预算不足"],
+    hidden_information: "竞品报价",
+    success_criteria: ["试点"],
+    allowed_disclosure_policy: { phases: ["discovery"] },
+    content_hash: "sha256:case",
+    status: "published",
+    version: 1,
+    published_at: "2026-05-12T00:00:00Z",
+    created_at: "2026-05-12T00:00:00Z",
+    updated_at: "2026-05-12T00:00:00Z",
+};
+
+const publishedRoleProfile = {
+    role_profile_id: "role-1",
+    role_type: "customer" as const,
+    role_name: "谨慎采购总监",
+    persona_ref: "persona-1",
+    communication_style: "谨慎",
+    pressure_level: "high" as const,
+    knowledge_boundary: ["价格"],
+    behavior_rules: ["追问 ROI"],
+    voice_style_hint: "低沉",
+    content_hash: "sha256:role",
+    status: "published",
+    version: 1,
+    published_at: "2026-05-12T00:00:00Z",
+    created_at: "2026-05-12T00:00:00Z",
+    updated_at: "2026-05-12T00:00:00Z",
 };
 
 describe("AdminPracticeTemplatesPage", () => {
@@ -58,6 +100,8 @@ describe("AdminPracticeTemplatesPage", () => {
         updatePracticeTemplateMock.mockReset();
         publishPracticeTemplateMock.mockReset();
         archivePracticeTemplateMock.mockReset();
+        listCaseItemsMock.mockResolvedValue({ items: [publishedCaseItem], total: 1 });
+        listRoleProfilesMock.mockResolvedValue({ items: [publishedRoleProfile], total: 1 });
     });
 
     it("renders PracticeTemplate list from admin API", async () => {
@@ -153,6 +197,8 @@ describe("AdminPracticeTemplatesPage", () => {
         fireEvent.change(screen.getByLabelText("Runtime Profile ID"), { target: { value: "runtime-2" } });
         fireEvent.change(screen.getByLabelText("Scoring Ruleset ID"), { target: { value: "ruleset-2" } });
         fireEvent.change(screen.getByLabelText("Knowledge Base Refs"), { target: { value: "kb-2,kb-3" } });
+        fireEvent.change(screen.getByLabelText("绑定 CaseItem"), { target: { value: "case-1" } });
+        fireEvent.change(screen.getByLabelText("绑定 RoleProfile"), { target: { value: "role-1" } });
         fireEvent.click(screen.getByRole("button", { name: "创建模板" }));
 
         await waitFor(() => {
@@ -167,10 +213,38 @@ describe("AdminPracticeTemplatesPage", () => {
                 voice_mode: "stepfun_realtime",
                 scoring_ruleset_id: "ruleset-2",
                 knowledge_base_refs: ["kb-2", "kb-3"],
+                case_item_id: "case-1",
+                role_profile_id: "role-1",
             }));
         });
         expect(createPracticeTemplateMock.mock.calls[0][0].curriculum_plan).toBeNull();
         expect(screen.getByText(/创建完成：新模板/)).toBeTruthy();
+    });
+
+    it("searches published CaseItems and RoleProfiles before attaching them", async () => {
+        listCaseItemsMock.mockResolvedValue({
+            items: [
+                publishedCaseItem,
+                { ...publishedCaseItem, case_item_id: "case-2", industry: "金融业", customer_role: "CFO" },
+            ],
+            total: 2,
+        });
+        listRoleProfilesMock.mockResolvedValue({
+            items: [
+                publishedRoleProfile,
+                { ...publishedRoleProfile, role_profile_id: "role-2", role_name: "温和门店经理", pressure_level: "low" },
+            ],
+            total: 2,
+        });
+
+        render(<AdminPracticeTemplatesPage />);
+        await screen.findByText("客户异议处理训练");
+        fireEvent.change(screen.getByLabelText("搜索 CaseItem"), { target: { value: "金融" } });
+        expect(screen.queryByRole("option", { name: "制造业 · 采购总监" })).toBeNull();
+        expect(screen.getByRole("option", { name: "金融业 · CFO" })).toBeTruthy();
+        fireEvent.change(screen.getByLabelText("搜索 RoleProfile"), { target: { value: "温和" } });
+        expect(screen.queryByRole("option", { name: "谨慎采购总监 · high" })).toBeNull();
+        expect(screen.getByRole("option", { name: "温和门店经理 · low" })).toBeTruthy();
     });
 
     it("serializes template_stage_key prerequisites and completion policy", async () => {
