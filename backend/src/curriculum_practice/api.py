@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import os
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +28,8 @@ from curriculum_practice.schemas import (
     RoleProfileCreate,
     RoleProfileListResponse,
     RoleProfileResponse,
+    RoleProfileVoiceCloneRequest,
+    RoleProfileVoiceCloneResponse,
 )
 from curriculum_practice.services.content_assets import (
     ContentAssetNotEditableError,
@@ -37,6 +42,7 @@ from curriculum_practice.services.practice_templates import (
     published_ref,
     serialize_template,
 )
+from curriculum_practice.services.voice_clone import VoiceCloneService
 
 router = APIRouter(
     prefix="/admin/curriculum-practice", tags=["admin-curriculum-practice"]
@@ -536,6 +542,63 @@ async def publish_role_profile(
             message="RoleProfile 发布失败。",
             exc=exc,
         )
+
+
+@router.post("/role-profiles/{role_profile_id}/voice-clone", response_model=None)
+async def clone_role_profile_voice(
+    role_profile_id: str,
+    payload: RoleProfileVoiceCloneRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_role_profile(role_profile_id)
+    if item is None:
+        return _role_profile_not_found()
+    try:
+        audio_bytes = base64.b64decode(payload.audio_base64, validate=True)
+    except (binascii.Error, ValueError):
+        return _api_error(
+            "[ROLE_PROFILE_VOICE_AUDIO_INVALID]",
+            status_code=400,
+            message="Voice sample must be valid base64 audio.",
+        )
+    voice_service = getattr(request.app.state, "voice_clone_service", None)
+    if voice_service is None:
+        voice_service = VoiceCloneService(
+            transport=None,
+            endpoint_url=os.getenv("STEPFUN_VOICE_CLONE_ENDPOINT"),
+            fallback_voice=os.getenv("STEPFUN_DEFAULT_VOICE", "default_voice"),
+        )
+    try:
+        result = await service.register_role_profile_voice(
+            item,
+            voice_service=voice_service,
+            voice_name=payload.voice_name,
+            audio_bytes=audio_bytes,
+            content_type=payload.content_type,
+            voice_sample_url=payload.voice_sample_url,
+            actor_id=str(current_user.user_id),
+        )
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[ROLE_PROFILE_VOICE_CLONE_FAILED]",
+            message="RoleProfile voice clone failed.",
+            exc=exc,
+        )
+    response = RoleProfileVoiceCloneResponse(
+        voice_id=result.voice_id,
+        voice_sample_url=payload.voice_sample_url if result.ok else None,
+        fallback_voice=result.fallback_voice,
+        reason_code=result.reason_code,
+        retryable=result.retryable,
+    )
+    return _success(response)
 
 
 @router.post("/role-profiles/{role_profile_id}/archive", response_model=None)
