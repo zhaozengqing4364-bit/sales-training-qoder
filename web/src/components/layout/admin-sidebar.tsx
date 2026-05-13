@@ -23,6 +23,8 @@ import {
     Database,
     ChevronDown,
     Target,
+    BriefcaseBusiness,
+    UserRoundCog,
     type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -115,6 +117,8 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
             { label: "知识库管理", icon: Database, href: "/admin/knowledge" },
             { label: "检索策略", icon: Settings, href: "/admin/retrieval-strategies" },
             { label: "PPT 演练管理", icon: Presentation, href: "/admin/presentations" },
+            { label: "训练案例库", icon: BriefcaseBusiness, href: "/admin/curriculum-practice/case-items" },
+            { label: "客户角色库", icon: UserRoundCog, href: "/admin/curriculum-practice/role-profiles" },
             { label: "课程训练模板", icon: Target, href: "/admin/curriculum-practice/templates" },
         ],
     },
