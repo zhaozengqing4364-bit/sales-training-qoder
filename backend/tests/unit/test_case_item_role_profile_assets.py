@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Persona
@@ -53,22 +54,18 @@ def _role_profile_payload(
         "knowledge_boundary": ["了解内部预算流程", "不知道最终采购时间"],
         "behavior_rules": ["只回答被直接提问的问题", "价格问题上先反驳再让步"],
         "voice_style_hint": "语速偏快，语调克制",
-        "voice_id": None,
-        "voice_sample_url": None,
         "content_hash": content_hash,
     }
 
 
-def test_should_accept_role_profile_voice_id_and_voice_sample_url() -> None:
+def test_should_reject_role_profile_input_voice_id_and_voice_sample_url() -> None:
     payload = _role_profile_payload()
     payload["voice_id"] = "custom_voice_cto"
     payload["voice_sample_url"] = "oss://role-voices/cto.wav"
     payload["content_hash"] = role_profile_content_hash(payload)
 
-    schema = RoleProfileCreate.model_validate(payload)
-
-    assert schema.voice_id == "custom_voice_cto"
-    assert schema.voice_sample_url == "oss://role-voices/cto.wav"
+    with pytest.raises(ValidationError):
+        RoleProfileCreate.model_validate(payload)
 
 
 def test_should_include_voice_fields_in_role_profile_hash_payload() -> None:
@@ -80,6 +77,22 @@ def test_should_include_voice_fields_in_role_profile_hash_payload() -> None:
     payload_with_voice["content_hash"] = role_profile_content_hash(payload_with_voice)
 
     assert payload_with_voice["content_hash"] != payload_without_voice["content_hash"]
+
+
+def test_should_keep_historical_role_profile_hash_when_voice_fields_absent() -> None:
+    legacy_payload = {
+        key: value
+        for key, value in _role_profile_payload().items()
+        if key not in {"voice_id", "voice_sample_url"}
+    }
+    payload_with_absent_voice = _role_profile_payload() | {
+        "voice_id": None,
+        "voice_sample_url": None,
+    }
+
+    assert role_profile_content_hash(payload_with_absent_voice) == role_profile_content_hash(
+        legacy_payload
+    )
 
 
 def test_should_include_voice_fields_in_role_profile_response() -> None:

@@ -44,6 +44,11 @@ from curriculum_practice.services.practice_templates import (
 )
 from curriculum_practice.services.voice_clone import VoiceCloneService
 
+ALLOWED_VOICE_AUDIO_CONTENT_TYPES = frozenset(
+    {"audio/wav", "audio/mpeg", "audio/webm", "audio/mp4"}
+)
+MAX_VOICE_AUDIO_BYTES = 10 * 1024 * 1024
+
 router = APIRouter(
     prefix="/admin/curriculum-practice", tags=["admin-curriculum-practice"]
 )
@@ -100,6 +105,54 @@ def _serialize_case_item(item: CaseItem) -> CaseItemResponse:
 
 def _serialize_role_profile(item: RoleProfile) -> RoleProfileResponse:
     return RoleProfileResponse.model_validate(item)
+
+
+def _decode_voice_audio(payload: RoleProfileVoiceCloneRequest) -> bytes | JSONResponse:
+    content_type = payload.content_type.strip().lower()
+    if content_type not in ALLOWED_VOICE_AUDIO_CONTENT_TYPES:
+        return _api_error(
+            "[ROLE_PROFILE_VOICE_CONTENT_TYPE_UNSUPPORTED]",
+            status_code=400,
+            message="Voice sample content_type must be a supported audio format.",
+        )
+    encoded_size_limit = ((MAX_VOICE_AUDIO_BYTES + 2) // 3) * 4
+    if len(payload.audio_base64) > encoded_size_limit:
+        return _api_error(
+            "[ROLE_PROFILE_VOICE_AUDIO_TOO_LARGE]",
+            status_code=400,
+            message="Voice sample is too large.",
+        )
+    try:
+        audio_bytes = base64.b64decode(payload.audio_base64, validate=True)
+    except (binascii.Error, ValueError):
+        return _api_error(
+            "[ROLE_PROFILE_VOICE_AUDIO_INVALID]",
+            status_code=400,
+            message="Voice sample must be valid base64 audio.",
+        )
+    if len(audio_bytes) > MAX_VOICE_AUDIO_BYTES:
+        return _api_error(
+            "[ROLE_PROFILE_VOICE_AUDIO_TOO_LARGE]",
+            status_code=400,
+            message="Voice sample is too large.",
+        )
+    if not _looks_like_audio(audio_bytes, content_type):
+        return _api_error(
+            "[ROLE_PROFILE_VOICE_AUDIO_INVALID]",
+            status_code=400,
+            message="Voice sample does not look like supported audio content.",
+        )
+    return audio_bytes
+
+
+def _looks_like_audio(audio_bytes: bytes, content_type: str) -> bool:
+    if content_type == "audio/wav":
+        return audio_bytes.startswith(b"RIFF") and b"WAVE" in audio_bytes[:16]
+    if content_type == "audio/mpeg":
+        return audio_bytes.startswith(b"ID3") or audio_bytes.startswith((b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"))
+    if content_type in {"audio/webm", "audio/mp4"}:
+        return bool(audio_bytes)
+    return False
 
 
 @router.get("/templates", response_model=None)
@@ -559,14 +612,10 @@ async def clone_role_profile_voice(
     item = await service.get_role_profile(role_profile_id)
     if item is None:
         return _role_profile_not_found()
-    try:
-        audio_bytes = base64.b64decode(payload.audio_base64, validate=True)
-    except (binascii.Error, ValueError):
-        return _api_error(
-            "[ROLE_PROFILE_VOICE_AUDIO_INVALID]",
-            status_code=400,
-            message="Voice sample must be valid base64 audio.",
-        )
+    audio_bytes_or_error = _decode_voice_audio(payload)
+    if isinstance(audio_bytes_or_error, JSONResponse):
+        return audio_bytes_or_error
+    audio_bytes = audio_bytes_or_error
     voice_service = getattr(request.app.state, "voice_clone_service", None)
     if voice_service is None:
         voice_service = VoiceCloneService(
@@ -590,6 +639,13 @@ async def clone_role_profile_voice(
             "[ROLE_PROFILE_VOICE_CLONE_FAILED]",
             message="RoleProfile voice clone failed.",
             exc=exc,
+        )
+    except ContentAssetNotEditableError:
+        await db.rollback()
+        return _api_error(
+            "[ROLE_PROFILE_NOT_EDITABLE]",
+            status_code=409,
+            message="Only draft RoleProfile records can be edited.",
         )
     response = RoleProfileVoiceCloneResponse(
         voice_id=result.voice_id,

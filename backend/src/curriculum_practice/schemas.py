@@ -256,8 +256,6 @@ class RoleProfileBase(BaseModel):
     knowledge_boundary: list[str] = Field(..., min_length=1)
     behavior_rules: list[str] = Field(..., min_length=1)
     voice_style_hint: str = Field(..., min_length=1, max_length=300)
-    voice_id: str | None = Field(None, min_length=1, max_length=64)
-    voice_sample_url: str | None = Field(None, min_length=1, max_length=512)
     content_hash: str = Field(..., min_length=1, max_length=80)
 
 
@@ -269,6 +267,8 @@ class RoleProfileResponse(RoleProfileBase):
     model_config = ConfigDict(from_attributes=True)
 
     role_profile_id: str
+    voice_id: str | None = Field(None, min_length=1, max_length=64)
+    voice_sample_url: str | None = Field(None, min_length=1, max_length=512)
     version: int
     status: ContentAssetStatus
     published_at: object | None = None

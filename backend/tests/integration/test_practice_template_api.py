@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import uuid
 
 import pytest
@@ -305,6 +306,67 @@ async def test_should_manage_case_item_and_role_profile_assets_lifecycle(
     )
     assert role_archive_response.status_code == 200
     assert role_archive_response.json()["data"]["status"] == "archived"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_role_profile_create_with_direct_voice_fields(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+) -> None:
+    payload = _role_profile_payload() | {
+        "voice_id": "custom_voice_cto",
+        "voice_sample_url": "oss://role-voices/cto.wav",
+    }
+
+    response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/role-profiles",
+        headers=admin_headers,
+        json=payload,
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_should_reject_role_profile_voice_clone_invalid_inputs(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+) -> None:
+    role_create_response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/role-profiles",
+        headers=admin_headers,
+        json=_role_profile_payload(),
+    )
+    assert role_create_response.status_code == 200
+    role_id = role_create_response.json()["data"]["role_profile_id"]
+    valid_wav = base64.b64encode(b"RIFF\x24\x00\x00\x00WAVEfmt ").decode("ascii")
+
+    for payload in (
+        {
+            "voice_name": "bad type",
+            "audio_base64": valid_wav,
+            "content_type": "text/plain",
+            "voice_sample_url": "oss://role-voices/bad.txt",
+        },
+        {
+            "voice_name": "bad audio",
+            "audio_base64": base64.b64encode(b"not-audio").decode("ascii"),
+            "content_type": "audio/wav",
+            "voice_sample_url": "oss://role-voices/bad.wav",
+        },
+        {
+            "voice_name": "too large encoded",
+            "audio_base64": "A" * (14 * 1024 * 1024 + 8),
+            "content_type": "audio/wav",
+            "voice_sample_url": "oss://role-voices/large.wav",
+        },
+    ):
+        response = await async_client.post(
+            f"/api/v1/admin/curriculum-practice/role-profiles/{role_id}/voice-clone",
+            headers=admin_headers,
+            json=payload,
+        )
+        assert response.status_code == 400
 
 
 @pytest.mark.asyncio

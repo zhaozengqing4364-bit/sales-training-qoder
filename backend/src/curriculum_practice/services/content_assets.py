@@ -138,6 +138,8 @@ class ContentAssetService:
         voice_sample_url: str,
         actor_id: str | None,
     ) -> VoiceCloneResult:
+        if item.status != "draft":
+            raise ContentAssetNotEditableError
         result = await voice_service.create_voice(
             voice_name=voice_name,
             audio_bytes=audio_bytes,
@@ -247,7 +249,7 @@ def _case_item_payload(item: CaseItem) -> dict[str, object]:
 
 
 def _role_profile_payload(item: RoleProfile) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "role_type": item.role_type,
         "role_name": item.role_name,
         "persona_ref": item.persona_ref,
@@ -256,9 +258,12 @@ def _role_profile_payload(item: RoleProfile) -> dict[str, object]:
         "knowledge_boundary": list(item.knowledge_boundary or []),
         "behavior_rules": list(item.behavior_rules or []),
         "voice_style_hint": item.voice_style_hint,
-        "voice_id": item.voice_id,
-        "voice_sample_url": item.voice_sample_url,
     }
+    if item.voice_id:
+        payload["voice_id"] = item.voice_id
+    if item.voice_sample_url:
+        payload["voice_sample_url"] = item.voice_sample_url
+    return payload
 
 
 def _has_disclosure_phase(policy: object) -> bool:
@@ -286,6 +291,7 @@ def _without_hash_excluded_fields(payload: object) -> object:
             key: _without_hash_excluded_fields(value)
             for key, value in payload.items()
             if key not in HASH_EXCLUDED_FIELDS
+            and not (key in {"voice_id", "voice_sample_url"} and value in (None, ""))
         }
     if isinstance(payload, list):
         return [_without_hash_excluded_fields(item) for item in payload]
