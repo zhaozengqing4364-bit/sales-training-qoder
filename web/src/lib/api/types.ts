@@ -3096,6 +3096,8 @@ export interface RetrainingTask {
     user_id: string;
     source_session_id: string;
     source_review_id: string;
+    training_task_id?: string | null;
+    training_task?: TrainingTaskSummary | null;
     skill_dimension: string;
     title: string;
     description?: string | null;
