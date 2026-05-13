@@ -48,6 +48,7 @@ from common.auth.service import (
 from common.conversation.api import router as replay_router
 from common.knowledge.api import admin_router as knowledge_admin_router
 from common.knowledge.api import internal_router as knowledge_internal_router
+from curriculum_practice.api import learner_router as curriculum_learning_path_router
 from curriculum_practice.api import router as curriculum_practice_router
 from evaluation.api import router as evaluation_router
 from presentation_coach.api import presentations
@@ -224,6 +225,12 @@ def register_routers(app: FastAPI) -> None:
         prefix="/api/v1",
         tags=["admin-curriculum-practice"],
         dependencies=[Depends(get_current_admin_user)],
+    )
+    app.include_router(
+        curriculum_learning_path_router,
+        prefix="/api/v1",
+        tags=["curriculum-practice-learning-path"],
+        dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(
         admin_interventions_router,

@@ -36,6 +36,7 @@ from curriculum_practice.services.content_assets import (
     ContentAssetPublishError,
     ContentAssetService,
 )
+from curriculum_practice.services.learning_path import LearningPathService
 from curriculum_practice.services.practice_templates import (
     PracticeTemplateNotEditableError,
     PracticeTemplateService,
@@ -55,10 +56,47 @@ MAX_VOICE_AUDIO_BYTES = 10 * 1024 * 1024
 router = APIRouter(
     prefix="/admin/curriculum-practice", tags=["admin-curriculum-practice"]
 )
+learner_router = APIRouter(
+    prefix="/curriculum-practice/learning-path", tags=["curriculum-practice-learning-path"]
+)
 
 
 def _success(data: Any) -> dict[str, Any]:
     return {"success": True, "data": data, "trace_id": get_trace_id()}
+
+
+@learner_router.get("/me", response_model=None)
+async def get_my_learning_path(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    try:
+        path = await LearningPathService(db).build_for_user(str(current_user.user_id))
+        return _success(path)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[LEARNING_PATH_FETCH_FAILED]",
+            message="学习路径暂时无法读取。",
+            exc=exc,
+        )
+
+
+@learner_router.get("/me/next-task", response_model=None)
+async def get_my_learning_path_next_task(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    try:
+        next_task = await LearningPathService(db).next_task_for_user(
+            str(current_user.user_id)
+        )
+        return _success(next_task)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[LEARNING_PATH_NEXT_TASK_FETCH_FAILED]",
+            message="下一步训练暂时无法读取。",
+            exc=exc,
+        )
 
 
 def _api_error(
