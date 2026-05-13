@@ -5,14 +5,17 @@ import {
     BarChart3,
     Clock,
     Filter,
+    ShieldCheck,
     RefreshCw,
     Target,
     X,
 } from "lucide-react";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
+    CertificationReviewQueueItem,
     TeamInsightsResponse,
     TeamInsightsLearnerDetail,
+    SupervisorDecision,
 } from "@/lib/api/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +35,13 @@ const READINESS_COLORS: Record<string, string> = {
     ready_for_trial: "bg-blue-100 text-blue-800",
     shadow_only: "bg-amber-100 text-amber-800",
     not_ready: "bg-red-100 text-red-800",
+};
+
+const QUEUE_OUTCOME_LABELS: Record<string, string> = {
+    pending: "待复核",
+    approved: "已批准",
+    rejected: "已驳回",
+    needs_retraining: "要求复训",
 };
 
 function formatScore(score: number | null): string {
@@ -59,6 +69,10 @@ export default function SupervisorTrainingPage() {
     const [detailLoading, setDetailLoading] = useState(false);
     const [detailError, setDetailError] = useState<string | null>(null);
 
+    const [queueItems, setQueueItems] = useState<CertificationReviewQueueItem[]>([]);
+    const [queueError, setQueueError] = useState<string | null>(null);
+    const [queueActionLoading, setQueueActionLoading] = useState<string | null>(null);
+
     function buildParams() {
         const params: Record<string, string> = {};
         if (scenarioFilter.trim()) params.scenario_type = scenarioFilter.trim();
@@ -75,7 +89,10 @@ export default function SupervisorTrainingPage() {
             const result = await api.supervisor.getTeamInsights(
                 Object.keys(params).length > 0 ? params : undefined,
             );
+            const queue = await api.supervisor.listCertificationReviewQueue({ limit: 50 });
             setData(result);
+            setQueueItems(queue);
+            setQueueError(null);
         } catch (err) {
             setError(getApiErrorMessage(err));
             debug.warn("[SupervisorTrainingPage] failed to load", { error: err });
@@ -121,6 +138,63 @@ export default function SupervisorTrainingPage() {
         setSelectedLearner(null);
         setDetailData(null);
         setDetailError(null);
+    }
+
+    async function submitQueueDecision(
+        item: CertificationReviewQueueItem,
+        decision: SupervisorDecision,
+    ) {
+        setQueueActionLoading(`${item.review_id}:${decision}`);
+        setQueueError(null);
+        try {
+            const readiness_status = decision === "approved"
+                ? "approved"
+                : decision === "needs_retraining"
+                    ? "shadow_only"
+                    : "not_ready";
+            await api.supervisor.updateReviewDecision(item.review_id, {
+                decision,
+                readiness_status,
+                required_retraining: decision === "needs_retraining",
+                skill_dimension: item.curriculum.stage_keys[0] ?? null,
+                comment: `认证复核：${QUEUE_OUTCOME_LABELS[decision] ?? decision}`,
+                audit_metadata: {
+                    reason: `认证复核：${QUEUE_OUTCOME_LABELS[decision] ?? decision}`,
+                    report_id: item.report_id,
+                    submitted_at: item.submitted_at ?? null,
+                },
+            });
+            const queue = await api.supervisor.listCertificationReviewQueue({ limit: 50 });
+            setQueueItems(queue);
+        } catch (err) {
+            setQueueError(getApiErrorMessage(err));
+            debug.warn("[SupervisorTrainingPage] failed to submit queue decision", { error: err });
+        } finally {
+            setQueueActionLoading(null);
+        }
+    }
+
+    async function submitQueueCalibration(item: CertificationReviewQueueItem) {
+        const dimension = item.curriculum.stage_keys[0] ?? "认证复核";
+        setQueueActionLoading(`${item.review_id}:calibrate`);
+        setQueueError(null);
+        try {
+            await api.supervisor.upsertScoreCalibration(item.review_id, {
+                session_id: item.session_id,
+                dimension,
+                ai_score: item.score ?? null,
+                supervisor_score: item.score ?? null,
+                calibration_label: "accurate",
+                comment: "认证复核：校准",
+            });
+            const queue = await api.supervisor.listCertificationReviewQueue({ limit: 50 });
+            setQueueItems(queue);
+        } catch (err) {
+            setQueueError(getApiErrorMessage(err));
+            debug.warn("[SupervisorTrainingPage] failed to submit queue calibration", { error: err });
+        } finally {
+            setQueueActionLoading(null);
+        }
     }
 
     return (
@@ -178,6 +252,14 @@ export default function SupervisorTrainingPage() {
                     </Button>
                 </div>
             </GlassCard>
+
+            <CertificationReviewQueue
+                items={queueItems}
+                error={queueError}
+                actionLoading={queueActionLoading}
+                onDecision={(item, decision) => void submitQueueDecision(item, decision)}
+                onCalibrate={(item) => void submitQueueCalibration(item)}
+            />
 
             {loading && (
                 <div className="rounded-2xl border border-slate-100 bg-white/80 p-8 text-center text-slate-600">
@@ -254,6 +336,135 @@ function CompletionCard({ completion }: { completion: TeamInsightsResponse["comp
             </div>
         </GlassCard>
     );
+}
+
+function CertificationReviewQueue({
+    items,
+    error,
+    actionLoading,
+    onDecision,
+    onCalibrate,
+}: {
+    items: CertificationReviewQueueItem[];
+    error: string | null;
+    actionLoading: string | null;
+    onDecision: (item: CertificationReviewQueueItem, decision: SupervisorDecision) => void;
+    onCalibrate: (item: CertificationReviewQueueItem) => void;
+}) {
+    return (
+        <GlassCard className="space-y-4 p-5">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-slate-600">
+                    <ShieldCheck className="h-5 w-5 text-blue-600" />
+                    <div>
+                        <h2 className="text-lg font-black text-slate-900">认证复核队列</h2>
+                        <p className="text-xs text-slate-500">
+                            只展示认证/入职/复核等高风险训练，普通训练仍由 AI 自动出报告。
+                        </p>
+                    </div>
+                </div>
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    {items.length} 个待处理
+                </Badge>
+            </div>
+
+            {error && (
+                <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                    {error}
+                </div>
+            )}
+
+            {items.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-5 text-center text-sm text-slate-500">
+                    暂无认证复核任务
+                </div>
+            )}
+
+            <div className="space-y-3">
+                {items.map((item) => (
+                    <div
+                        key={item.review_id}
+                        className="rounded-2xl border border-slate-100 bg-white/80 p-4 shadow-sm"
+                    >
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-base font-black text-slate-900">
+                                        {item.learner.name ?? item.learner.user_id}
+                                    </span>
+                                    <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                                        {QUEUE_OUTCOME_LABELS[item.outcome] ?? item.outcome}
+                                    </Badge>
+                                    <span className="text-sm font-semibold text-blue-700">
+                                        {String(item.curriculum.practice_template.name ?? "未命名认证路径")}
+                                    </span>
+                                </div>
+                                <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                                    <span>分数：{formatScore(item.score ?? null)}</span>
+                                    <span>提交：{formatDateTime(item.submitted_at)}</span>
+                                    <span>阶段：{item.curriculum.stage_keys.join(" / ")}</span>
+                                </div>
+                                <div className="space-y-1 text-sm text-slate-700">
+                                    {item.evidence.transcript_anchors.slice(0, 2).map((anchor) => (
+                                        <p key={anchor.evidence_id} className="rounded-lg bg-slate-50 p-2">
+                                            {anchor.quote ?? anchor.reason ?? "暂无证据摘录"}
+                                        </p>
+                                    ))}
+                                    {item.evidence.thinking_evidence.slice(0, 1).map((evidence) => (
+                                        <p key={evidence.response_id} className="rounded-lg bg-blue-50 p-2 text-blue-800">
+                                            {evidence.thinking_text}
+                                        </p>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap gap-2">
+                                <Button
+                                    size="sm"
+                                    onClick={() => onDecision(item, "approved")}
+                                    disabled={actionLoading !== null}
+                                >
+                                    批准
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => onDecision(item, "rejected")}
+                                    disabled={actionLoading !== null}
+                                >
+                                    驳回
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => onCalibrate(item)}
+                                    disabled={actionLoading !== null}
+                                >
+                                    校准
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => onDecision(item, "needs_retraining")}
+                                    disabled={actionLoading !== null}
+                                >
+                                    要求复训
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </GlassCard>
+    );
+}
+
+function formatDateTime(value?: string | null): string {
+    if (!value) return "暂无数据";
+    try {
+        return new Date(value).toLocaleString("zh-CN", { hour12: false });
+    } catch {
+        return value;
+    }
 }
 
 function WeaknessCard({ weaknesses }: { weaknesses: TeamInsightsResponse["top_weaknesses"] }) {

@@ -3174,6 +3174,30 @@ export interface SupervisorTeamReport {
     before_after?: BeforeAfterComparison | null;
 }
 
+export interface CertificationReviewQueueItem {
+    review_id: string;
+    session_id: string;
+    report_id: string;
+    learner: {
+        user_id: string;
+        name?: string | null;
+        email?: string | null;
+    };
+    curriculum: {
+        practice_template: Record<string, unknown>;
+        stage_keys: string[];
+        stage_snapshots: Record<string, unknown>;
+    };
+    score?: number | null;
+    evidence: {
+        transcript_anchors: TrainingReportEvidenceItem[];
+        stage_snapshots: Record<string, unknown>;
+        thinking_evidence: ThinkingEvidenceEntry[];
+    };
+    submitted_at?: string | null;
+    outcome: SupervisorDecision;
+}
+
 export interface TrainingReportTrainee {
     user_id: string;
     name?: string | null;

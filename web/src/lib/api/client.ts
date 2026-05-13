@@ -165,6 +165,7 @@ import {
     SupervisorScoreCalibration,
     SupervisorScoreCalibrationUpsertRequest,
     SupervisorTeamReport,
+    CertificationReviewQueueItem,
     TeamInsightsResponse,
     TeamInsightsLearnerDetail,
     TrainingReportViewModel,
@@ -2049,6 +2050,15 @@ export const api = {
             if (params?.limit) searchParams.set("limit", String(params.limit));
             const query = searchParams.toString();
             return apiFetch<SupervisorTeamReport[]>(`/supervisor/team/reports${query ? `?${query}` : ""}`);
+        },
+
+        listCertificationReviewQueue: async (params?: { limit?: number }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.limit) searchParams.set("limit", String(params.limit));
+            const query = searchParams.toString();
+            return apiFetch<CertificationReviewQueueItem[]>(
+                `/supervisor/certification-review-queue${query ? `?${query}` : ""}`,
+            );
         },
 
         getTeamInsights: async (params?: {

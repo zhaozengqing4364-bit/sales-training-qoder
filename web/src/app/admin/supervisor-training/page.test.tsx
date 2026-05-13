@@ -3,13 +3,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import SupervisorTrainingPage from "./page";
 import { api } from "@/lib/api/client";
-import type { TeamInsightsResponse, TeamInsightsLearnerDetail } from "@/lib/api/types";
+import type {
+    CertificationReviewQueueItem,
+    TeamInsightsResponse,
+    TeamInsightsLearnerDetail,
+} from "@/lib/api/types";
 
 vi.mock("@/lib/api/client", () => ({
     api: {
         supervisor: {
             getTeamInsights: vi.fn(),
             getLearnerDetail: vi.fn(),
+            listCertificationReviewQueue: vi.fn(),
+            updateReviewDecision: vi.fn(),
+            upsertScoreCalibration: vi.fn(),
         },
     },
     getApiErrorMessage: vi.fn((err: unknown) => {
@@ -92,9 +99,71 @@ function makeLearnerDetail(overrides: Partial<TeamInsightsLearnerDetail> = {}): 
     };
 }
 
+function makeCertificationQueueItem(
+    overrides: Partial<CertificationReviewQueueItem> = {},
+): CertificationReviewQueueItem {
+    return {
+        review_id: "review-cert-1",
+        session_id: "session-cert-1",
+        report_id: "report-cert-1",
+        learner: { user_id: "u-cert", name: "赵六", email: "zhaoliu@example.com" },
+        curriculum: {
+            practice_template: { template_id: "tpl-cert", name: "新人认证路径" },
+            stage_keys: ["template_stage_onboarding_certification_review"],
+            stage_snapshots: {
+                template_stage_onboarding_certification_review: {
+                    runtime_payload: { mode: "customer_roleplay" },
+                },
+            },
+        },
+        score: 72,
+        evidence: {
+            transcript_anchors: [{ evidence_id: "ev-1", evidence_type: "transcript", quote: "认证关键证据" }],
+            stage_snapshots: {
+                template_stage_onboarding_certification_review: {
+                    runtime_payload: { mode: "customer_roleplay" },
+                },
+            },
+            thinking_evidence: [
+                {
+                    turn_index: 2,
+                    template_stage_key: "template_stage_onboarding_certification_review",
+                    response_id: "resp-cert",
+                    thinking_text: "Reviewer-only certification reasoning",
+                    captured_at: "2026-05-13T10:00:00Z",
+                },
+            ],
+        },
+        submitted_at: "2026-05-13T10:00:00Z",
+        outcome: "pending",
+        ...overrides,
+    };
+}
+
 describe("SupervisorTrainingPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(api.supervisor.listCertificationReviewQueue).mockResolvedValue([]);
+        vi.mocked(api.supervisor.updateReviewDecision).mockResolvedValue({
+            review_id: "review-cert-1",
+            session_id: "session-cert-1",
+            trainee_user_id: "u-cert",
+            supervisor_user_id: "admin-1",
+            decision: "approved",
+            readiness_status: "approved",
+            required_retraining: false,
+            retraining_tasks: [],
+            calibrations: [],
+        });
+        vi.mocked(api.supervisor.upsertScoreCalibration).mockResolvedValue({
+            review_id: "review-cert-1",
+            session_id: "session-cert-1",
+            dimension: "template_stage_onboarding_certification_review",
+            ai_score: 72,
+            supervisor_score: 72,
+            calibration_label: "accurate",
+            comment: "认证复核：校准",
+        });
     });
 
     it("should show loading state initially", async () => {
@@ -241,5 +310,76 @@ describe("SupervisorTrainingPage", () => {
         await waitFor(() => { expect(screen.getByText(/刷新/)).toBeDefined(); });
         fireEvent.click(screen.getByText(/刷新/));
         await waitFor(() => { expect(api.supervisor.getTeamInsights).toHaveBeenCalledTimes(2); });
+    });
+
+    it("should render certification review queue with curriculum evidence and thinking", async () => {
+        vi.mocked(api.supervisor.getTeamInsights).mockResolvedValue(makeFullResponse());
+        vi.mocked(api.supervisor.listCertificationReviewQueue).mockResolvedValue([
+            makeCertificationQueueItem(),
+        ]);
+
+        render(<SupervisorTrainingPage />);
+
+        await waitFor(() => { expect(screen.getByText(/认证复核队列/)).toBeDefined(); });
+        expect(screen.getByText("赵六")).toBeDefined();
+        expect(screen.getByText("新人认证路径")).toBeDefined();
+        expect(screen.getByText(/72/)).toBeDefined();
+        expect(screen.getByText("认证关键证据")).toBeDefined();
+        expect(screen.getByText("Reviewer-only certification reasoning")).toBeDefined();
+    });
+
+    it("should submit approve reject calibrate and retrain actions from certification queue", async () => {
+        vi.mocked(api.supervisor.getTeamInsights).mockResolvedValue(makeFullResponse());
+        vi.mocked(api.supervisor.listCertificationReviewQueue).mockResolvedValue([
+            makeCertificationQueueItem(),
+        ]);
+
+        render(<SupervisorTrainingPage />);
+
+        await waitFor(() => { expect(screen.getByText("赵六")).toBeDefined(); });
+        fireEvent.click(screen.getByRole("button", { name: "批准" }));
+        await waitFor(() => {
+            expect(api.supervisor.updateReviewDecision).toHaveBeenCalledTimes(1);
+        });
+        fireEvent.click(screen.getByRole("button", { name: "驳回" }));
+        await waitFor(() => {
+            expect(api.supervisor.updateReviewDecision).toHaveBeenCalledTimes(2);
+        });
+        fireEvent.click(screen.getByRole("button", { name: "要求复训" }));
+
+        await waitFor(() => {
+            expect(api.supervisor.updateReviewDecision).toHaveBeenCalledTimes(3);
+            expect(api.supervisor.updateReviewDecision).toHaveBeenCalledWith(
+                "review-cert-1",
+                expect.objectContaining({ decision: "approved", readiness_status: "approved" }),
+            );
+        });
+        expect(api.supervisor.updateReviewDecision).toHaveBeenCalledWith(
+            "review-cert-1",
+            expect.objectContaining({ decision: "rejected", readiness_status: "not_ready" }),
+        );
+        expect(api.supervisor.updateReviewDecision).toHaveBeenCalledWith(
+            "review-cert-1",
+            expect.objectContaining({
+                decision: "needs_retraining",
+                readiness_status: "shadow_only",
+                required_retraining: true,
+            }),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "校准" }));
+        await waitFor(() => {
+            expect(api.supervisor.upsertScoreCalibration).toHaveBeenCalledWith(
+                "review-cert-1",
+                expect.objectContaining({
+                    session_id: "session-cert-1",
+                    dimension: "template_stage_onboarding_certification_review",
+                    ai_score: 72,
+                    supervisor_score: 72,
+                    calibration_label: "accurate",
+                    comment: "认证复核：校准",
+                }),
+            );
+        });
     });
 });
