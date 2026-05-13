@@ -115,6 +115,16 @@ async def _create_sales_session(
     return session
 
 
+def _curriculum_snapshot() -> dict:
+    return {
+        "stage_snapshots": {
+            "template_stage_opening": {
+                "runtime_payload": {"template_id": "child-template-1"},
+            }
+        }
+    }
+
+
 async def _hold_upstream_forever() -> None:
     try:
         await asyncio.Future()
@@ -146,6 +156,57 @@ def _prepare_handler(
     handler._analyze_and_emit_sales_stage = AsyncMock(return_value="discovery")  # type: ignore[name-defined,method-assign]
     handler._run_realtime_feedback = AsyncMock(return_value={})  # type: ignore[name-defined,method-assign]
     return handler
+
+
+@pytest.mark.asyncio
+async def test_stepfun_curriculum_runtime_reads_session_curriculum_snapshot(
+    test_db: AsyncSession,
+    test_engine,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = await _create_sales_session(test_db, user=test_user)
+    session.curriculum_snapshot = _curriculum_snapshot()
+    session.voice_policy_snapshot = {"tool_policy": {}, "knowledge_base_ids": []}
+    await test_db.commit()
+    session_factory = sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    monkeypatch.setattr(stepfun_module, "AsyncSessionLocal", session_factory)
+    handler = StepFunRealtimeHandler()
+    handler.session_id = str(session.session_id)
+
+    await handler._load_effective_policy()
+
+    curriculum_plan, stage_snapshots = handler._curriculum_runtime_payload()
+    assert curriculum_plan is None
+    assert stage_snapshots == session.curriculum_snapshot["stage_snapshots"]
+
+
+@pytest.mark.asyncio
+async def test_stepfun_curriculum_runtime_does_not_emit_initial_transition_on_reconnect() -> None:
+    first_handler = StepFunRealtimeHandler()
+    first_handler.session_id = "session-1"
+    first_handler._curriculum_snapshot = _curriculum_snapshot()
+    first_handler._send_curriculum_stage_event = AsyncMock()  # type: ignore[method-assign]
+    first_handler._persist_curriculum_stage_runtime_state = AsyncMock()  # type: ignore[method-assign]
+
+    await first_handler._initialize_curriculum_stage_runtime()
+    assert first_handler._send_curriculum_stage_event.await_count == 1
+    assert first_handler._curriculum_stage_runtime is not None
+    runtime_state = first_handler._curriculum_stage_runtime.runtime_state_patch()
+
+    reconnect_handler = StepFunRealtimeHandler()
+    reconnect_handler.session_id = "session-1"
+    reconnect_handler._curriculum_snapshot = _curriculum_snapshot()
+    reconnect_handler._send_curriculum_stage_event = AsyncMock()  # type: ignore[method-assign]
+    reconnect_handler._persist_curriculum_stage_runtime_state = AsyncMock()  # type: ignore[method-assign]
+
+    await reconnect_handler._initialize_curriculum_stage_runtime(runtime_state)
+
+    assert reconnect_handler._send_curriculum_stage_event.await_count == 0
 
 
 async def _finish_assistant_turn(handler: StepFunRealtimeHandler, text: str) -> None:

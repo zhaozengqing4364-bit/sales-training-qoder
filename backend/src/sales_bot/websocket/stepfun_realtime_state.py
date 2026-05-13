@@ -88,6 +88,7 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     _latest_claim_truth: dict[str, Any] | None
     _latest_action_card: ActionCard | None
     _latest_knowledge_answer_diagnostics: dict[str, Any] | None
+    _curriculum_snapshot: dict[str, Any] | None
     _curriculum_stage_runtime: Any | None
     _objection_ledger: dict[str, Any] | None
     _feedback_arbiter: Any

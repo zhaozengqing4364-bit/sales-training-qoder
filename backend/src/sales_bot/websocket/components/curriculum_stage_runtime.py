@@ -256,9 +256,6 @@ class CurriculumStageRuntime:
             index=next_index,
             now_seconds=now_seconds,
             previous_key=previous_key,
-            template_stage_version=int(
-                self._template_stage_context.get("template_stage_version") or 1
-            ),
         )
         return CurriculumStageRuntimeResult(
             runtime_state_patch=self._build_patch(),
@@ -294,15 +291,11 @@ class CurriculumStageRuntime:
             index=target_index,
             now_seconds=now_seconds,
             previous_key=previous_key,
-            template_stage_version=int(
-                self._template_stage_context.get("template_stage_version") or 1
-            ),
         )
         return CurriculumStageRuntimeResult(
             runtime_state_patch=self._build_patch(),
             websocket_events=[self._transition_event(previous_key=previous_key)],
         )
-        return CurriculumStageRuntimeResult(runtime_state_patch=self._build_patch())
 
     def _build_patch(self) -> dict[str, Any]:
         if self._template_stage_context is None:

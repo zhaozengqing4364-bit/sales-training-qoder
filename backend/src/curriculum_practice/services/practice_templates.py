@@ -114,6 +114,9 @@ class PracticeTemplateService:
         if asset_type == "role_profile":
             item = await self._db.get(RoleProfile, asset_id)
             return item if item is not None and item.status == "published" else None
+        if asset_type == "practice_template":
+            item = await self._db.get(PracticeTemplate, asset_id)
+            return item if item is not None and item.status == "published" else None
         return None
 
 

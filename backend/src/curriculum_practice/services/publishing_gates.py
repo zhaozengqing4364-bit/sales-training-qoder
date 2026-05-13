@@ -96,18 +96,6 @@ class PublishingGateService:
                             ),
                         )
                     )
-                if stage.completion_policy.min_score > 10.0:
-                    results.append(
-                        GateResult(
-                            gate_name="curriculum_plan_completion_policy",
-                            status="failed",
-                            reason_code="completion_policy_impossible",
-                            message=(
-                                "CurriculumPlan stage "
-                                f"{stage.template_stage_key} has an impossible completion policy."
-                            ),
-                        )
-                    )
                 child_template = self._reference_reader(
                     "practice_template", stage.template_ref.asset_id
                 )

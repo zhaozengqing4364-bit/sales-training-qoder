@@ -137,6 +137,35 @@ def _template_payload() -> dict[str, object]:
     }
 
 
+def _curriculum_plan_payload(child_template: dict[str, object]) -> dict[str, object]:
+    return {
+        "name": "多阶段课程训练",
+        "description": None,
+        "max_stage_duration_seconds": 900,
+        "stages": [
+            {
+                "template_stage_key": "template_stage_opening",
+                "order": 1,
+                "name": "开场",
+                "template_ref": {
+                    "asset_type": "practice_template",
+                    "asset_id": child_template["template_id"],
+                    "version": child_template["version"],
+                    "hash": child_template["content_hash"],
+                    "snapshot_label": "published",
+                },
+                "completion_policy": {
+                    "min_score": 7.0,
+                    "min_rounds": 1,
+                    "max_duration_seconds": 600,
+                },
+                "failure_policy": "retry_current",
+                "prerequisites": [],
+            }
+        ],
+    }
+
+
 def _case_item_payload() -> dict[str, object]:
     payload: dict[str, object] = {
         "industry": "金融科技",
@@ -386,6 +415,76 @@ async def test_should_publish_practice_template_when_gate_passes(
         "hash": published["content_hash"],
         "snapshot_label": "published",
     }
+
+
+@pytest.mark.asyncio
+async def test_should_roundtrip_curriculum_plan_and_publish_parent_template(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    admin_headers: dict[str, str],
+) -> None:
+    await _seed_publishable_references(db_session)
+    child_response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/templates",
+        headers=admin_headers,
+        json=_template_payload() | {"name": "子阶段模板"},
+    )
+    assert child_response.status_code == 200
+    child_template_id = child_response.json()["data"]["template_id"]
+    child_publish_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/templates/{child_template_id}/publish",
+        headers=admin_headers,
+    )
+    assert child_publish_response.status_code == 200
+    child = child_publish_response.json()["data"]
+    curriculum_plan = _curriculum_plan_payload(child)
+
+    create_response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/templates",
+        headers=admin_headers,
+        json=_template_payload()
+        | {
+            "name": "父课程模板",
+            "curriculum_plan": curriculum_plan,
+            "max_stage_duration_seconds": 900,
+        },
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()["data"]
+    assert created["curriculum_plan"] == curriculum_plan
+    assert created["max_stage_duration_seconds"] == 900
+
+    list_response = await async_client.get(
+        "/api/v1/admin/curriculum-practice/templates",
+        headers=admin_headers,
+    )
+    assert list_response.status_code == 200
+    listed = next(
+        item
+        for item in list_response.json()["data"]["items"]
+        if item["template_id"] == created["template_id"]
+    )
+    assert listed["curriculum_plan"] == curriculum_plan
+    assert listed["max_stage_duration_seconds"] == 900
+
+    updated_plan = curriculum_plan | {"name": "更新后的课程训练"}
+    update_response = await async_client.put(
+        f"/api/v1/admin/curriculum-practice/templates/{created['template_id']}",
+        headers=admin_headers,
+        json={"curriculum_plan": updated_plan, "max_stage_duration_seconds": 800},
+    )
+    assert update_response.status_code == 200
+    updated = update_response.json()["data"]
+    assert updated["curriculum_plan"] == updated_plan
+    assert updated["max_stage_duration_seconds"] == 800
+
+    publish_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/templates/{created['template_id']}/publish",
+        headers=admin_headers,
+    )
+    assert publish_response.status_code == 200
+    assert publish_response.json()["data"]["status"] == "published"
 
 
 @pytest.mark.asyncio

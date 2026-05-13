@@ -81,6 +81,7 @@ from common.websocket.base_handler import (
 )
 from common.websocket.session_manager import get_session_manager
 from common.websocket.session_state_service import SessionStateSnapshot
+from curriculum_practice.models import PracticeTemplate
 from sales_bot.services.transcript_normalization import (
     TranscriptNormalizationResult,
     TranscriptNormalizationService,
@@ -354,6 +355,7 @@ class StepFunRealtimeHandler(
         self._latest_claim_truth: dict[str, Any] | None = None
         self._latest_action_card: ActionCard | None = None
         self._latest_knowledge_answer_diagnostics: dict[str, Any] | None = None
+        self._curriculum_snapshot: dict[str, Any] | None = None
         self._curriculum_stage_runtime: CurriculumStageRuntime | None = None
         self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
@@ -951,6 +953,15 @@ class StepFunRealtimeHandler(
             self._curriculum_stage_runtime.restore_runtime_state(runtime_state)
 
     def _curriculum_runtime_payload(self) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        curriculum_snapshot = self._curriculum_snapshot
+        if isinstance(curriculum_snapshot, dict):
+            stage_snapshots = curriculum_snapshot.get("stage_snapshots")
+            curriculum_plan = curriculum_snapshot.get("curriculum_plan")
+            if isinstance(stage_snapshots, dict):
+                return (
+                    curriculum_plan if isinstance(curriculum_plan, dict) else None,
+                    stage_snapshots,
+                )
         runtime_snapshot = self._effective_policy.get("runtime_snapshot")
         curriculum_plan = self._effective_policy.get("curriculum_plan")
         stage_snapshots = self._effective_policy.get("stage_snapshots")
@@ -1256,6 +1267,23 @@ class StepFunRealtimeHandler(
                 return
 
             session_any = cast(Any, session)
+            curriculum_snapshot = getattr(session, "curriculum_snapshot", None)
+            self._curriculum_snapshot = (
+                copy.deepcopy(curriculum_snapshot)
+                if isinstance(curriculum_snapshot, dict)
+                else None
+            )
+            if self._curriculum_snapshot is not None:
+                practice_template_id = _optional_runtime_text(
+                    getattr(session, "practice_template_id", None)
+                )
+                if practice_template_id:
+                    template = await db.get(PracticeTemplate, practice_template_id)
+                    curriculum_plan = getattr(template, "curriculum_plan", None)
+                    if isinstance(curriculum_plan, dict):
+                        self._curriculum_snapshot["curriculum_plan"] = copy.deepcopy(
+                            curriculum_plan
+                        )
             self._session_agent_id = _optional_runtime_text(
                 getattr(session, "agent_id", None)
             )

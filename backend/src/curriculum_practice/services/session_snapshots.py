@@ -87,7 +87,11 @@ def _reference_reader(db: AsyncSession):
             return {
                 "template_id": template.template_id,
                 "status": template.status,
+                "version": template.version,
                 "content_hash": template.content_hash,
+                "scenario_type": template.scenario_type,
+                "mode": template.mode,
+                "voice_mode": template.voice_mode,
                 "runtime_profile_id": template.runtime_profile_id,
                 "agent_id": template.agent_id,
                 "persona_id": template.persona_id,
@@ -95,6 +99,8 @@ def _reference_reader(db: AsyncSession):
                 "scoring_ruleset_id": template.scoring_ruleset_id,
                 "case_item_id": template.case_item_id,
                 "role_profile_id": template.role_profile_id,
+                "curriculum_plan": template.curriculum_plan,
+                "max_stage_duration_seconds": template.max_stage_duration_seconds,
             }
         if asset_type == "voice_runtime_profile":
             from agent.models import VoiceRuntimeProfile

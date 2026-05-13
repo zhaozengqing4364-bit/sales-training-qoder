@@ -87,7 +87,7 @@ def test_completion_policy_transitions_when_score_and_rounds_are_satisfied() -> 
 
     assert first_turn.websocket_events == []
     assert second_turn.runtime_state_patch["template_stage_context"]["template_stage_key"] == "template_stage_close"
-    assert second_turn.runtime_state_patch["template_stage_context"]["template_stage_version"] == 3
+    assert second_turn.runtime_state_patch["template_stage_context"]["template_stage_version"] == 4
     assert second_turn.websocket_events == [
         {
             "type": "template_stage_transition",
@@ -95,7 +95,7 @@ def test_completion_policy_transitions_when_score_and_rounds_are_satisfied() -> 
                 "template_stage_key": "template_stage_close",
                 "template_stage_status": "active",
                 "template_stage_previous_key": "template_stage_opening",
-                "template_stage_version": 3,
+                "template_stage_version": 4,
             },
         }
     ]
@@ -133,7 +133,7 @@ def test_failure_policy_allow_skip_advances_to_next_stage() -> None:
 
     context = result.runtime_state_patch["template_stage_context"]
     assert context["template_stage_key"] == "template_stage_close"
-    assert context["template_stage_version"] == 2
+    assert context["template_stage_version"] == 3
     assert result.websocket_events[0]["data"]["template_stage_previous_key"] == "template_stage_opening"
 
 
@@ -157,7 +157,7 @@ def test_failure_policy_fallback_to_previous_returns_to_prior_stage() -> None:
 
     context = result.runtime_state_patch["template_stage_context"]
     assert context["template_stage_key"] == "template_stage_opening"
-    assert context["template_stage_version"] == 3
+    assert context["template_stage_version"] == 5
     assert result.websocket_events[0]["data"]["template_stage_previous_key"] == "template_stage_close"
 
 
@@ -197,7 +197,7 @@ def test_timeout_uses_bounded_grace_period_before_transition() -> None:
     assert grace_started.runtime_state_patch["template_stage_context"]["template_stage_grace_started_at"] == 160.0
     assert before_grace_expires.websocket_events == []
     assert transitioned.runtime_state_patch["template_stage_context"]["template_stage_key"] == "template_stage_close"
-    assert transitioned.runtime_state_patch["template_stage_context"]["template_stage_version"] == 3
+    assert transitioned.runtime_state_patch["template_stage_context"]["template_stage_version"] == 4
     assert transitioned.websocket_events == [
         {
             "type": "template_stage_transition",
@@ -205,7 +205,7 @@ def test_timeout_uses_bounded_grace_period_before_transition() -> None:
                 "template_stage_key": "template_stage_close",
                 "template_stage_status": "active",
                 "template_stage_previous_key": "template_stage_opening",
-                "template_stage_version": 3,
+                "template_stage_version": 4,
             },
         }
     ]
@@ -226,7 +226,7 @@ def test_final_stage_completion_marks_curriculum_complete() -> None:
     context = result.runtime_state_patch["template_stage_context"]
     assert context["template_stage_key"] == "template_stage_close"
     assert context["template_stage_status"] == "completed"
-    assert context["template_stage_version"] == 5
+    assert context["template_stage_version"] == 6
     assert result.websocket_events == [
         {
             "type": "template_stage_transition",
@@ -234,7 +234,7 @@ def test_final_stage_completion_marks_curriculum_complete() -> None:
                 "template_stage_key": "template_stage_close",
                 "template_stage_status": "completed",
                 "template_stage_previous_key": "template_stage_close",
-                "template_stage_version": 5,
+                "template_stage_version": 6,
             },
         }
     ]

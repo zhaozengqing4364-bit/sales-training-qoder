@@ -44,27 +44,6 @@ async def test_should_fail_publish_when_stage_duration_exceeds_limit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_should_fail_publish_when_completion_policy_min_score_is_impossible() -> None:
-    service = PublishingGateService(
-        reference_reader=lambda asset_type, asset_id: {
-            "id": asset_id,
-            "status": "published",
-            "voice_mode": "stepfun_realtime",
-        }
-    )
-    candidate = _candidate_with_plan()
-    assert candidate.curriculum_plan is not None
-    candidate.curriculum_plan.stages[0].completion_policy.min_score = 10.5
-
-    decision = await service.validate(candidate)
-
-    assert decision.can_publish is False
-    assert "completion_policy_impossible" in [
-        result.reason_code for result in decision.results
-    ]
-
-
-@pytest.mark.asyncio
 async def test_should_fail_publish_when_curriculum_plan_has_cycle() -> None:
     service = PublishingGateService(
         reference_reader=lambda asset_type, asset_id: _child_template(asset_id)

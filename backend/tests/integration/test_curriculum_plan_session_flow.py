@@ -12,12 +12,9 @@ from common.db.models import PracticeSession, ScoringRuleset
 from common.knowledge.models import KnowledgeBase
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import (
-    CurriculumRuntimeSnapshot,
-    CurriculumVersionRef,
-    TemplateStageSnapshot,
+    CurriculumPlanSchema,
 )
 from curriculum_practice.services.practice_templates import PracticeTemplateService
-from curriculum_practice.services.snapshots import RuntimeSnapshotService
 
 
 async def _seed_template_runtime(
@@ -68,7 +65,27 @@ async def _seed_template_runtime(
     db.add_all([agent, persona, runtime_profile, ruleset, knowledge_base])
     await db.flush()
     db.add(AgentPersona(agent_id=agent.id, persona_id=persona.id, is_default=True))
-    template = PracticeTemplate(
+    child_template = PracticeTemplate(
+        name="课程化子阶段训练",
+        description="child stage template",
+        scenario_type="sales",
+        mode="customer_roleplay",
+        agent_id=agent.id,
+        persona_id=persona.id,
+        runtime_profile_id=runtime_profile.id,
+        voice_mode="stepfun_realtime",
+        scoring_ruleset_id=ruleset.ruleset_id,
+        knowledge_base_refs=[knowledge_base.id],
+    )
+    db.add(child_template)
+    await db.commit()
+    child_published, child_decision = await PracticeTemplateService(db).publish_template(
+        child_template,
+        actor_id=None,
+    )
+    assert child_decision.can_publish is True
+    assert child_published is not None
+    parent_template = PracticeTemplate(
         name="课程化多阶段训练",
         description="session flow stage snapshots test",
         scenario_type="sales",
@@ -79,11 +96,37 @@ async def _seed_template_runtime(
         voice_mode="stepfun_realtime",
         scoring_ruleset_id=ruleset.ruleset_id,
         knowledge_base_refs=[knowledge_base.id],
+        curriculum_plan=CurriculumPlanSchema(
+            name="课程化多阶段训练",
+            max_stage_duration_seconds=900,
+            stages=[
+                {
+                    "template_stage_key": "template_stage_opening",
+                    "order": 1,
+                    "name": "开场",
+                    "template_ref": {
+                        "asset_type": "practice_template",
+                        "asset_id": str(child_published.template_id),
+                        "version": int(child_published.version),
+                        "hash": str(child_published.content_hash),
+                        "snapshot_label": "published",
+                    },
+                    "completion_policy": {
+                        "min_score": 7.0,
+                        "min_rounds": 1,
+                        "max_duration_seconds": 600,
+                    },
+                    "failure_policy": "retry_current",
+                    "prerequisites": [],
+                }
+            ],
+        ).model_dump(mode="json"),
+        max_stage_duration_seconds=900,
     )
-    db.add(template)
+    db.add(parent_template)
     await db.commit()
     published, decision = await PracticeTemplateService(db).publish_template(
-        template,
+        parent_template,
         actor_id=None,
     )
     assert decision.can_publish is True
@@ -96,86 +139,10 @@ async def test_should_create_session_with_curriculum_stage_snapshots(
     async_client: AsyncClient,
     auth_headers: dict,
     test_db: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    agent, persona, runtime_profile, ruleset, knowledge_base, template = (
+    agent, persona, runtime_profile, _ruleset, _knowledge_base, template = (
         await _seed_template_runtime(test_db)
     )
-
-    async def build_snapshot(
-        self: RuntimeSnapshotService,
-        template_ref,
-        training_task_ref: dict[str, object],
-        actor_id: str,
-        *,
-        trace_id: str | None = None,
-        created_at: str | None = None,
-    ) -> CurriculumRuntimeSnapshot:
-        stage_template_ref = CurriculumVersionRef(
-            asset_type="practice_template",
-            asset_id=template.template_id,
-            version=1,
-            hash=str(template.content_hash),
-            snapshot_label="published",
-        )
-        rubric_ref = CurriculumVersionRef(
-            asset_type="scoring_ruleset",
-            asset_id=ruleset.ruleset_id,
-            version=ruleset.version,
-            hash="sha256:ruleset",
-            snapshot_label="published",
-        )
-        return CurriculumRuntimeSnapshot(
-            snapshot_hash="sha256:flow",
-            created_at=created_at or "2026-05-13T00:00:00+00:00",
-            trace_id=trace_id,
-            training_task={"id": str(training_task_ref["id"]), "scenario_type": "sales"},
-            practice_template={
-                "asset_type": template_ref.asset_type,
-                "asset_id": template_ref.asset_id,
-                "version": template_ref.version,
-                "hash": template_ref.hash,
-                "snapshot_label": template_ref.snapshot_label,
-            },
-            content_assets=[
-                {
-                    "asset_type": "knowledge_base",
-                    "asset_id": knowledge_base.id,
-                    "version": 1,
-                    "hash": "sha256:kb",
-                    "snapshot_label": "legacy_unversioned",
-                }
-            ],
-            rubric=rubric_ref,
-            runtime={
-                "agent_id": agent.id,
-                "persona_id": persona.id,
-                "runtime_profile_id": runtime_profile.id,
-                "voice_policy_snapshot_hash": "sha256:voice",
-                "instruction_contract_hash": "sha256:instruction",
-            },
-            stage_snapshots={
-                "template_stage_opening": TemplateStageSnapshot(
-                    template_ref=stage_template_ref,
-                    runtime_payload={
-                        "template_id": template.template_id,
-                        "mode": "customer_roleplay",
-                        "voice_mode": "stepfun_realtime",
-                    },
-                    content_assets=[],
-                    rubric=rubric_ref,
-                    runtime={
-                        "agent_id": agent.id,
-                        "persona_id": persona.id,
-                        "runtime_profile_id": runtime_profile.id,
-                        "voice_policy_snapshot_hash": "sha256:voice",
-                        "instruction_contract_hash": "sha256:instruction",
-                    },
-                )
-            },
-        )
-
-    monkeypatch.setattr(RuntimeSnapshotService, "build_for_session", build_snapshot)
 
     response = await async_client.post(
         "/api/v1/practice/sessions",
@@ -193,7 +160,16 @@ async def test_should_create_session_with_curriculum_stage_snapshots(
     data = response.json()["data"]
     assert data["curriculum_snapshot"]["stage_snapshots"]["template_stage_opening"][
         "runtime_payload"
-    ]["template_id"] == template.template_id
+    ]["voice_mode"] == "stepfun_realtime"
+    assert data["curriculum_snapshot"]["stage_snapshots"]["template_stage_opening"][
+        "runtime"
+    ]["agent_id"] == agent.id
+    assert data["curriculum_snapshot"]["stage_snapshots"]["template_stage_opening"][
+        "runtime"
+    ]["persona_id"] == persona.id
+    assert data["curriculum_snapshot"]["stage_snapshots"]["template_stage_opening"][
+        "runtime"
+    ]["runtime_profile_id"] == runtime_profile.id
 
     session = (
         await test_db.execute(
