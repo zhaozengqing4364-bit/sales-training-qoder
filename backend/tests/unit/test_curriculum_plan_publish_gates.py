@@ -44,6 +44,34 @@ async def test_should_fail_publish_when_stage_duration_exceeds_limit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_should_fail_publish_when_completion_policy_min_score_is_impossible() -> None:
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        if asset_type == "practice_template":
+            return _child_template(asset_id, scoring_ruleset_id="child-ruleset-1")
+        if asset_type == "scoring_ruleset" and asset_id == "child-ruleset-1":
+            return {
+                "ruleset_id": asset_id,
+                "status": "published",
+                "definition_json": {"score_scale": {"max_score": 5.0}},
+            }
+        return {
+            "id": asset_id,
+            "status": "published",
+            "voice_mode": "stepfun_realtime",
+        }
+
+    service = PublishingGateService(reference_reader=reference_reader)
+    candidate = _candidate_with_plan()
+
+    decision = await service.validate(candidate)
+
+    assert decision.can_publish is False
+    assert "completion_policy_impossible" in [
+        result.reason_code for result in decision.results
+    ]
+
+
+@pytest.mark.asyncio
 async def test_should_fail_publish_when_curriculum_plan_has_cycle() -> None:
     service = PublishingGateService(
         reference_reader=lambda asset_type, asset_id: _child_template(asset_id)
@@ -188,10 +216,12 @@ def _child_template(
     *,
     voice_mode: str = "stepfun_realtime",
     runtime_profile_id: str = "runtime-1",
+    scoring_ruleset_id: str = "ruleset-1",
 ) -> dict[str, object]:
     return {
         "template_id": asset_id,
         "status": "published",
         "voice_mode": voice_mode,
         "runtime_profile_id": runtime_profile_id,
+        "scoring_ruleset_id": scoring_ruleset_id,
     }

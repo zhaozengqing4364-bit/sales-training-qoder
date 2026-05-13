@@ -136,6 +136,34 @@ class PublishingGateService:
                             ),
                         )
                     )
+                child_scoring_ruleset_id = getattr(
+                    child_template, "scoring_ruleset_id", None
+                )
+                if isinstance(child_template, dict):
+                    child_scoring_ruleset_id = child_template.get("scoring_ruleset_id")
+                if child_scoring_ruleset_id is not None:
+                    child_ruleset = self._reference_reader(
+                        "scoring_ruleset", str(child_scoring_ruleset_id)
+                    )
+                    if isawaitable(child_ruleset):
+                        child_ruleset = await child_ruleset
+                    max_score = _scoring_ruleset_max_score(child_ruleset)
+                    if (
+                        max_score is not None
+                        and stage.completion_policy.min_score > max_score
+                    ):
+                        results.append(
+                            GateResult(
+                                gate_name="curriculum_plan_completion_policy",
+                                status="failed",
+                                reason_code="completion_policy_impossible",
+                                message=(
+                                    "CurriculumPlan stage "
+                                    f"{stage.template_stage_key} requires min_score "
+                                    "above the child template scoring capability."
+                                ),
+                            )
+                        )
                 if child_runtime_profile_id is not None:
                     runtime_profile_ids.append(str(child_runtime_profile_id))
             if len(set(runtime_profile_ids)) > 1:
@@ -221,3 +249,31 @@ def _template_stage_key(prerequisite: object) -> str:
     if isinstance(prerequisite, dict):
         return str(prerequisite["template_stage_key"])
     return str(getattr(prerequisite, "template_stage_key"))
+
+
+def _scoring_ruleset_max_score(ruleset: object | None) -> float | None:
+    """Return declared scoring max score when the ruleset exposes one.
+
+    Absence of this metadata means the gate cannot prove impossibility, so publish
+    validation stays permissive for legacy scoring rulesets.
+    """
+    if ruleset is None:
+        return None
+    definition = getattr(ruleset, "definition_json", None)
+    if isinstance(ruleset, dict):
+        definition = ruleset.get("definition_json")
+    if not isinstance(definition, dict):
+        return None
+
+    candidates = [definition.get("max_score"), definition.get("score_max")]
+    score_scale = definition.get("score_scale")
+    if isinstance(score_scale, dict):
+        candidates.extend([score_scale.get("max_score"), score_scale.get("max")])
+
+    for candidate in candidates:
+        try:
+            if candidate is not None:
+                return float(candidate)
+        except (TypeError, ValueError):
+            continue
+    return None
