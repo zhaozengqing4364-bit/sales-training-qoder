@@ -132,6 +132,8 @@ def serialize_template(template: PracticeTemplate) -> PracticeTemplateResponse:
         "knowledge_base_refs": list(template.knowledge_base_refs or []),
         "case_item_id": template.case_item_id,
         "role_profile_id": template.role_profile_id,
+        "curriculum_plan": template.curriculum_plan,
+        "max_stage_duration_seconds": template.max_stage_duration_seconds,
         "status": template.status,
         "version": template.version,
         "content_hash": template.content_hash,
@@ -157,6 +159,8 @@ def _candidate_from_template(
         knowledge_base_refs=list(template.knowledge_base_refs or []),
         case_item_id=template.case_item_id,
         role_profile_id=template.role_profile_id,
+        curriculum_plan=template.curriculum_plan,
+        max_stage_duration_seconds=template.max_stage_duration_seconds,
     )
 
 
@@ -174,6 +178,8 @@ def _content_hash(template: PracticeTemplate) -> str:
         "knowledge_base_refs": list(template.knowledge_base_refs or []),
         "case_item_id": template.case_item_id,
         "role_profile_id": template.role_profile_id,
+        "curriculum_plan": template.curriculum_plan,
+        "max_stage_duration_seconds": template.max_stage_duration_seconds,
         "version": template.version,
     }
     return (
