@@ -46,6 +46,8 @@ import type {
     TrainingTaskStartSessionResponse,
     TrainingTaskStatus,
     TrainingTaskUpdateRequest,
+    LearningPathResponse,
+    LearningPathNextTask,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -116,6 +118,10 @@ type AdminReportDomainDependencies = {
 };
 
 type TrainingTasksDomainDependencies = {
+    request: ApiRequest;
+};
+
+type LearningPathDomainDependencies = {
     request: ApiRequest;
 };
 
@@ -253,6 +259,13 @@ export function createPracticeDomain({ request }: PracticeDomainDependencies) {
                 });
             },
         },
+    };
+}
+
+export function createLearningPathDomain({ request }: LearningPathDomainDependencies) {
+    return {
+        getMine: async () => request<LearningPathResponse>("/curriculum-practice/learning-path/me"),
+        getNextTask: async () => request<LearningPathNextTask>("/curriculum-practice/learning-path/me/next-task"),
     };
 }
 

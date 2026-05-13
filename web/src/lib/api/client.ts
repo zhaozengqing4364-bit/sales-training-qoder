@@ -172,6 +172,7 @@ import {
     createAdminReportDomain,
     createAgentsDomain,
     createAuthDomain,
+    createLearningPathDomain,
     createPracticeDomain,
     createPresentationsDomain,
     createSessionsDomain,
@@ -1625,6 +1626,7 @@ async function apiFetchBlob(
 const authDomain = createAuthDomain({ request: apiFetch });
 const practiceDomain = createPracticeDomain({ request: apiFetch });
 const trainingTasksDomain = createTrainingTasksDomain({ request: apiFetch });
+const learningPathDomain = createLearningPathDomain({ request: apiFetch });
 const sessionsDomain = createSessionsDomain({
     request: apiFetch,
     resolveApiBaseUrl,
@@ -1694,6 +1696,7 @@ export const api = {
     auth: authDomain,
 
     trainingTasks: trainingTasksDomain,
+    learningPath: learningPathDomain,
 
     // User
     user: {

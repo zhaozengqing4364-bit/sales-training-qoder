@@ -420,6 +420,54 @@ export interface CurriculumPlanSchema {
     stages: CurriculumPlanStage[];
 }
 
+export type LearningPathStageState =
+    | "locked"
+    | "available"
+    | "in_progress"
+    | "completed"
+    | "failed"
+    | "pending_review"
+    | "retraining_required";
+
+export interface LearningPathStage {
+    template_stage_key: string;
+    name: string;
+    state: LearningPathStageState;
+    prerequisites: Array<{ template_stage_key: string; required_result: "completed" }>;
+    completion_policy: Record<string, unknown>;
+    result?: Record<string, unknown> | null;
+    report_url?: string | null;
+    failure_reason?: string | null;
+    retry_action?: string | null;
+}
+
+export interface LearningPathRecommendationReason {
+    dimension_name: string;
+    score: number;
+    source_report_id: string;
+    recommended_template_id: string;
+}
+
+export interface LearningPathNextTask {
+    title: string;
+    state: LearningPathStageState;
+    primary_cta: string;
+    reason: string;
+    estimated_duration_minutes?: number | null;
+    failure_reason?: string | null;
+    retry_action?: string | null;
+}
+
+export interface LearningPathResponse {
+    user_id: string;
+    path_type: "weakness_driven" | "role_default";
+    recommended_template_ids: string[];
+    recommendation_reasons: LearningPathRecommendationReason[];
+    next_task: LearningPathNextTask;
+    stages: LearningPathStage[];
+    generated_at: string;
+}
+
 export type ScoringRulesetStatus = "draft" | "published" | "archived" | string;
 
 export interface ScoringRulesetRecord {
