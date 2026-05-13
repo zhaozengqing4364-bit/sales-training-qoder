@@ -154,6 +154,7 @@ from sales_bot.websocket.components.stepfun_upstream_router import (
     extract_function_call_from_item_created,
     extract_response_done_function_calls,
 )
+from sales_bot.websocket.components.stepfun_voice_selection import resolve_session_voice
 from sales_bot.websocket.phase4_local_provider import (
     Phase4LocalStepFunProvider,
     should_use_phase4_local_provider,
@@ -455,6 +456,8 @@ class StepFunRealtimeHandler(
         self._last_disconnect_reason: str | None = None
         self._last_runtime_error: dict[str, str] | None = None
         self._transcript_normalization_service = TranscriptNormalizationService()
+        self._unavailable_voice_ids: set[str] = set()
+        self._selected_stepfun_voice: str | None = None
 
     @staticmethod
     def _normalize_connection_epoch(value: Any) -> int:
@@ -2066,10 +2069,16 @@ class StepFunRealtimeHandler(
         if self._effective_policy.get("turn_detection") == "server_vad":
             turn_detection_value = {"type": "server_vad"}
 
+        selected_voice = resolve_session_voice(
+            default_voice=self._stepfun_voice,
+            runtime_snapshot=self._curriculum_snapshot,
+            unavailable_voice_ids=self._unavailable_voice_ids,
+        )
+        self._selected_stepfun_voice = selected_voice
         session_payload: dict = {
             "type": "session.update",
             "session": {
-                "voice": self._stepfun_voice,
+                "voice": selected_voice,
                 "temperature": self._stepfun_temperature,
                 "input_audio_format": self._stepfun_input_audio_format,
                 "output_audio_format": self._stepfun_output_audio_format,

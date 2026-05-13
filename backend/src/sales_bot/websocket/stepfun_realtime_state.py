@@ -135,6 +135,8 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     _last_disconnect_reason: str | None
     _last_runtime_error: dict[str, str] | None
     _transcript_normalization_service: TranscriptNormalizationService
+    _unavailable_voice_ids: set[str]
+    _selected_stepfun_voice: str | None
 
     @abstractmethod
     async def _create_response(self, *, count_turn: bool = False) -> bool:

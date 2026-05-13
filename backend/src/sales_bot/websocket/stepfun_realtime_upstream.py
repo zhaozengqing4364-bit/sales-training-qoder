@@ -140,6 +140,7 @@ from sales_bot.websocket.components.stepfun_upstream_router import (
     extract_function_call_from_item_created,
     extract_response_done_function_calls,
 )
+from sales_bot.websocket.components.stepfun_voice_errors import is_voice_unavailable_error
 from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
@@ -862,6 +863,15 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             await self._send_error(
                 ASR_FALLBACK_REQUIRED_ERROR_CODE,
                 DEFAULT_ASR_FALLBACK_POLICY.user_message,
+            )
+            return
+        if is_voice_unavailable_error(event):
+            selected_voice = getattr(self, "_selected_stepfun_voice", None)
+            if isinstance(selected_voice, str) and selected_voice:
+                self._unavailable_voice_ids.add(selected_voice)
+            await self._send_error(
+                "[STEPFUN_VOICE_UNAVAILABLE]",
+                "当前角色音色不可用，将在下次初始化时回退到默认音色。",
             )
             return
         await self._send_error("[STEPFUN_API_ERROR]", extract_error_message(event))
