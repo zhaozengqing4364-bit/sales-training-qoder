@@ -93,6 +93,14 @@ import {
     PracticeTemplateMutationRequest,
     PracticeTemplateRecord,
     PracticeTemplateErrorDetails,
+    CaseItemListResponse,
+    CaseItemMutationRequest,
+    CaseItemRecord,
+    RoleProfileListResponse,
+    RoleProfileMutationRequest,
+    RoleProfileRecord,
+    RoleProfileVoiceCloneRequest,
+    RoleProfileVoiceCloneResponse,
     ConfigBundleListResponse,
     ConfigBundleDisableRequest,
     ConfigBundleLifecycleMutationResponse,
@@ -2559,6 +2567,94 @@ export const api = {
             return apiFetch<PracticeTemplateRecord>(
                 `/admin/curriculum-practice/templates/${encodeURIComponent(templateId)}/archive`,
                 { method: "POST" },
+            );
+        },
+
+        listCaseItems: async (filters?: { status?: string; query?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (filters?.status && filters.status !== "all") searchParams.set("status", filters.status);
+            if (filters?.query) searchParams.set("query", filters.query);
+            const query = searchParams.toString();
+            return apiFetch<CaseItemListResponse>(`/admin/curriculum-practice/case-items${query ? `?${query}` : ""}`);
+        },
+
+        createCaseItem: async (payload: CaseItemMutationRequest) => {
+            return apiFetch<CaseItemRecord>("/admin/curriculum-practice/case-items", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        updateCaseItem: async (caseItemId: string, payload: CaseItemMutationRequest) => {
+            return apiFetch<CaseItemRecord>(
+                `/admin/curriculum-practice/case-items/${encodeURIComponent(caseItemId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        publishCaseItem: async (caseItemId: string) => {
+            return apiFetch<CaseItemRecord>(
+                `/admin/curriculum-practice/case-items/${encodeURIComponent(caseItemId)}/publish`,
+                { method: "POST" },
+            );
+        },
+
+        archiveCaseItem: async (caseItemId: string) => {
+            return apiFetch<CaseItemRecord>(
+                `/admin/curriculum-practice/case-items/${encodeURIComponent(caseItemId)}/archive`,
+                { method: "POST" },
+            );
+        },
+
+        listRoleProfiles: async (filters?: { status?: string; query?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (filters?.status && filters.status !== "all") searchParams.set("status", filters.status);
+            if (filters?.query) searchParams.set("query", filters.query);
+            const query = searchParams.toString();
+            return apiFetch<RoleProfileListResponse>(`/admin/curriculum-practice/role-profiles${query ? `?${query}` : ""}`);
+        },
+
+        createRoleProfile: async (payload: RoleProfileMutationRequest) => {
+            return apiFetch<RoleProfileRecord>("/admin/curriculum-practice/role-profiles", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        updateRoleProfile: async (roleProfileId: string, payload: RoleProfileMutationRequest) => {
+            return apiFetch<RoleProfileRecord>(
+                `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        publishRoleProfile: async (roleProfileId: string) => {
+            return apiFetch<RoleProfileRecord>(
+                `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}/publish`,
+                { method: "POST" },
+            );
+        },
+
+        archiveRoleProfile: async (roleProfileId: string) => {
+            return apiFetch<RoleProfileRecord>(
+                `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}/archive`,
+                { method: "POST" },
+            );
+        },
+
+        cloneRoleProfileVoice: async (roleProfileId: string, payload: RoleProfileVoiceCloneRequest) => {
+            return apiFetch<RoleProfileVoiceCloneResponse>(
+                `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}/voice-clone`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
             );
         },
 

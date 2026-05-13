@@ -318,9 +318,11 @@ export interface BusinessRulePreviewResponse {
 export type ScoringRulesetScenarioType = "sales" | "presentation";
 
 export type PracticeTemplateStatus = "draft" | "published" | "archived" | string;
+export type ContentAssetStatus = "draft" | "published" | "archived" | string;
 export type PracticeTemplateScenarioType = "sales" | "presentation";
 export type PracticeTemplateMode = "learning" | "expert_qa" | "examiner" | "customer_roleplay" | "mixed_path" | string;
 export type PracticeTemplateVoiceMode = "legacy" | "stepfun_realtime";
+export type RoleProfilePressureLevel = "low" | "medium" | "high";
 
 export interface PublishedPracticeTemplateRef {
     asset_type: "practice_template";
@@ -349,6 +351,8 @@ export interface PracticeTemplateRecord {
     voice_mode: PracticeTemplateVoiceMode | string;
     scoring_ruleset_id: string;
     knowledge_base_refs: string[];
+    case_item_id?: string | null;
+    role_profile_id?: string | null;
     curriculum_plan?: CurriculumPlanSchema | null;
     max_stage_duration_seconds?: number | null;
     status: PracticeTemplateStatus;
@@ -380,8 +384,97 @@ export interface PracticeTemplateMutationRequest {
     voice_mode?: PracticeTemplateVoiceMode;
     scoring_ruleset_id?: string;
     knowledge_base_refs?: string[];
+    case_item_id?: string | null;
+    role_profile_id?: string | null;
     curriculum_plan?: CurriculumPlanSchema | null;
     max_stage_duration_seconds?: number | null;
+}
+
+export interface CaseItemRecord {
+    case_item_id: string;
+    industry: string;
+    company_profile: string;
+    customer_role: string;
+    pain_points: string[];
+    objections: string[];
+    hidden_information: string;
+    success_criteria: string[];
+    allowed_disclosure_policy: Record<string, unknown>;
+    content_hash: string;
+    version: number;
+    status: ContentAssetStatus;
+    published_at?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface CaseItemListResponse {
+    items: CaseItemRecord[];
+    total: number;
+}
+
+export interface CaseItemMutationRequest {
+    industry: string;
+    company_profile: string;
+    customer_role: string;
+    pain_points: string[];
+    objections: string[];
+    hidden_information: string;
+    success_criteria: string[];
+    allowed_disclosure_policy: Record<string, unknown>;
+    content_hash: string;
+}
+
+export interface RoleProfileRecord {
+    role_profile_id: string;
+    role_type: "customer";
+    role_name: string;
+    persona_ref?: string | null;
+    communication_style: string;
+    pressure_level: RoleProfilePressureLevel;
+    knowledge_boundary: string[];
+    behavior_rules: string[];
+    voice_style_hint: string;
+    voice_id?: string | null;
+    voice_sample_url?: string | null;
+    content_hash: string;
+    version: number;
+    status: ContentAssetStatus;
+    published_at?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface RoleProfileListResponse {
+    items: RoleProfileRecord[];
+    total: number;
+}
+
+export interface RoleProfileMutationRequest {
+    role_type: "customer";
+    role_name: string;
+    persona_ref?: string | null;
+    communication_style: string;
+    pressure_level: RoleProfilePressureLevel;
+    knowledge_boundary: string[];
+    behavior_rules: string[];
+    voice_style_hint: string;
+    content_hash: string;
+}
+
+export interface RoleProfileVoiceCloneRequest {
+    voice_name: string;
+    audio_base64: string;
+    content_type: string;
+    voice_sample_url: string;
+}
+
+export interface RoleProfileVoiceCloneResponse {
+    voice_id?: string | null;
+    voice_sample_url?: string | null;
+    fallback_voice?: string | null;
+    reason_code?: string | null;
+    retryable: boolean;
 }
 
 export interface CurriculumVersionRef {
