@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-import importlib.util
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from .models import TrainingRuntimeDescriptor
 
 PluginAction = str
-LEGACY_SALES_HANDLER_MODULES = (
-    "sales_bot.websocket.base_sales_handler",
-    "sales_bot.websocket.enhanced_handler",
-    "sales_bot.websocket.simple_handler",
-)
 
 
 @dataclass(frozen=True)
@@ -70,13 +64,6 @@ class ScenarioTrainingPlugin(Protocol):
     ) -> ScenarioPluginEntrypoint: ...
 
     def diagnostics(self) -> ScenarioPluginDiagnostics: ...
-
-
-def legacy_sales_handlers_absent() -> dict[str, bool]:
-    return {
-        module: importlib.util.find_spec(module) is None
-        for module in LEGACY_SALES_HANDLER_MODULES
-    }
 
 
 class SalesScenarioPlugin:
@@ -152,7 +139,6 @@ class SalesScenarioPlugin:
             ),
             details={
                 "runtime_handler": "sales_bot.websocket.stepfun_realtime_handler.StepFunRealtimeHandler",
-                "legacy_handlers_absent": legacy_sales_handlers_absent(),
             },
         )
 
