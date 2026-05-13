@@ -106,6 +106,11 @@ from sales_bot.websocket.components.stepfun_emotion_analyzer import (
     StepFunEmotionAnalyzer,
     apply_emotion_signals_to_runtime_state,
 )
+from sales_bot.websocket.components.stepfun_thinking_capture import (
+    StepFunThinkingCapture,
+    ThinkingEntry,
+    apply_thinking_entry_to_runtime_state,
+)
 from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
@@ -365,6 +370,10 @@ class StepFunRealtimeHandler(
         self._curriculum_snapshot: dict[str, Any] | None = None
         self._curriculum_stage_runtime: CurriculumStageRuntime | None = None
         self._emotion_analyzer = StepFunEmotionAnalyzer()
+        self._thinking_capture = StepFunThinkingCapture(
+            turn_index=lambda: int(self.turn_count or 0),
+            template_stage_key=self._current_template_stage_key,
+        )
         self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_pacing_state = RealtimeFeedbackPacingState()
@@ -514,6 +523,7 @@ class StepFunRealtimeHandler(
         self._active_response = None
         self._function_call_states.clear()
         self._executed_call_ids.clear()
+        self._thinking_capture.clear()
 
     async def _clear_upstream_generation(self) -> None:
         """Abort any active upstream response and clear buffered audio input."""
@@ -3644,6 +3654,7 @@ class StepFunRealtimeHandler(
         event_type = str(event.get("type", ""))
         self._last_upstream_event_type = event_type
         await self._handle_emotion_event(event)
+        await self._handle_thinking_event(event)
         route = classify_upstream_event(event_type)
 
         if route == UpstreamEventRoute.IGNORE:
@@ -3683,6 +3694,17 @@ class StepFunRealtimeHandler(
         if route == UpstreamEventRoute.ERROR:
             await self._handle_upstream_error(event)
             return
+
+    async def _handle_thinking_event(self, event: dict[str, Any]) -> None:
+        """Forward StepFun thinking events to the reviewer-only capture component."""
+        event_type = str(event.get("type") or "")
+        entry: ThinkingEntry | None = None
+        if event_type == "response.thinking.delta":
+            self._thinking_capture.on_delta(event)
+        elif event_type == "response.thinking.done":
+            entry = self._thinking_capture.on_done(event)
+        if entry is not None:
+            await self._persist_thinking_entry(entry)
 
     async def _handle_emotion_event(self, event: dict[str, Any]) -> None:
         """Forward StepFun speech/transcript events to the emotion analyzer."""
@@ -3744,6 +3766,37 @@ class StepFunRealtimeHandler(
         except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
             logger.warning(
                 "StepFun emotion signal persistence degraded",
+                session_id=self.session_id,
+                error=str(exc),
+            )
+
+    async def _persist_thinking_entry(self, entry: ThinkingEntry) -> None:
+        if not self.session_id:
+            return
+        try:
+            async with self._db_lock:
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(
+                        select(PracticeSession).where(
+                            PracticeSession.session_id == self.session_id
+                        )
+                    )
+                    session = result.scalar_one_or_none()
+                    if not session:
+                        return
+                    existing_state = (
+                        session.runtime_state
+                        if isinstance(session.runtime_state, dict)
+                        else {}
+                    )
+                    session.runtime_state = apply_thinking_entry_to_runtime_state(
+                        existing_state,
+                        entry,
+                    )
+                    await db.commit()
+        except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
+            logger.warning(
+                "StepFun thinking persistence degraded",
                 session_id=self.session_id,
                 error=str(exc),
             )

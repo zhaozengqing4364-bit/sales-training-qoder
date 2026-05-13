@@ -67,6 +67,9 @@ class EvaluationRunService:
         curriculum_lineage = await self._get_curriculum_lineage_for_session(session_id)
         if curriculum_lineage is not None:
             evidence_reference["curriculum_lineage"] = curriculum_lineage
+        thinking_context = await self._get_thinking_context_for_session(session_id)
+        if thinking_context:
+            evidence_reference["thinking_context"] = thinking_context
 
         run = EvaluationRun(
             session_id=session_id,
@@ -193,6 +196,23 @@ class EvaluationRunService:
             )
         )
         return extract_curriculum_lineage(result.scalar_one_or_none())
+
+    async def _get_thinking_context_for_session(
+        self,
+        session_id: str,
+    ) -> list[dict[str, Any]]:
+        result = await self.db.execute(
+            select(PracticeSession.runtime_state).where(
+                PracticeSession.session_id == session_id
+            )
+        )
+        runtime_state = result.scalar_one_or_none()
+        if not isinstance(runtime_state, dict):
+            return []
+        thinking_log = runtime_state.get("thinking_log")
+        if not isinstance(thinking_log, list):
+            return []
+        return [dict(item) for item in thinking_log if isinstance(item, dict)]
 
     async def _get_run(self, run_id: str) -> EvaluationRun:
         result = await self.db.execute(
