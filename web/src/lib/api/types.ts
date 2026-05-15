@@ -3956,12 +3956,14 @@ export interface CreateCategoryRequest {
     name: string;
     description?: string;
     parent_id?: string | null;
+    order_index?: number;
 }
 
 export interface UpdateCategoryRequest {
     name?: string;
     description?: string;
     parent_id?: string | null;
+    order_index?: number;
 }
 
 export interface CreateQuestionRequest {

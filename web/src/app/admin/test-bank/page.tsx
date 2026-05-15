@@ -176,8 +176,9 @@ export default function TestBankPage() {
                 description: editCatDescription.trim() || undefined,
                 parent_id: editCatParentId || null,
             };
-            if (editCatOrderIndex) {
-                (payload as Record<string, unknown>).order_index = parseInt(editCatOrderIndex, 10) || 0;
+            const orderIndex = parseInt(editCatOrderIndex, 10);
+            if (!isNaN(orderIndex)) {
+                payload.order_index = orderIndex;
             }
             await api.testBank.updateCategory(editingCategoryId, payload);
             toast.success("分类已更新");
