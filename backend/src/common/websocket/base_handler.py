@@ -164,6 +164,10 @@ class BaseWebSocketHandler:
         )
         return DEFAULT_MESSAGE_QUEUE_SIZE
 
+    async def on_connect(self) -> None:
+        """Hook for subclasses that need to send server-driven messages on connect."""
+        pass
+
     async def _enqueue_received_message(
         self, websocket: WebSocket, data: dict[str, Any]
     ) -> None:
@@ -254,6 +258,8 @@ class BaseWebSocketHandler:
         if existing_state.value is not None and is_reconnection:
             logger.info(f"Reconnection detected for session: {session_id}")
             await self._restore_session_state(existing_state.value)
+
+        await self.on_connect()
 
         # Start message processing task
         processing_task = asyncio.create_task(self._process_messages())

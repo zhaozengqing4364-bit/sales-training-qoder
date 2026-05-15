@@ -8,6 +8,12 @@ export interface ApiResponse<T> {
     trace_id?: string;
 }
 
+export interface FeatureFlags {
+    curriculum: {
+        examiner: boolean;
+    };
+}
+
 // Dashboard types
 export interface DashboardStats {
     weekly_activity: {

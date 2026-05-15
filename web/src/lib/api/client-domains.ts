@@ -48,6 +48,7 @@ import type {
     TrainingTaskUpdateRequest,
     LearningPathResponse,
     LearningPathNextTask,
+    FeatureFlags,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -122,6 +123,10 @@ type TrainingTasksDomainDependencies = {
 };
 
 type LearningPathDomainDependencies = {
+    request: ApiRequest;
+};
+
+type FeatureFlagsDomainDependencies = {
     request: ApiRequest;
 };
 
@@ -266,6 +271,12 @@ export function createLearningPathDomain({ request }: LearningPathDomainDependen
     return {
         getMine: async () => request<LearningPathResponse>("/curriculum-practice/learning-path/me"),
         getNextTask: async () => request<LearningPathNextTask>("/curriculum-practice/learning-path/me/next-task"),
+    };
+}
+
+export function createFeatureFlagsDomain({ request }: FeatureFlagsDomainDependencies) {
+    return {
+        get: async () => request<FeatureFlags>("/feature-flags"),
     };
 }
 

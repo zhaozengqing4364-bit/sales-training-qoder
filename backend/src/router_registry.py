@@ -33,6 +33,7 @@ from common.api import (
     analytics,
     business_rules,
     dashboard,
+    feature_flags,
     growth,
     practice,
     training,
@@ -100,6 +101,7 @@ def register_routers(app: FastAPI) -> None:
     )
     app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
     app.include_router(dashboard.router, prefix="/api/v1", tags=["dashboard"])
+    app.include_router(feature_flags.router, prefix="/api/v1", tags=["feature-flags"])
     app.include_router(
         growth.router,
         prefix="/api/v1",

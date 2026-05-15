@@ -27,8 +27,20 @@ def _env_choice(name: str, default: str, allowed: set[str]) -> str:
     return value if value in allowed else default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    """Read a boolean env config."""
+    fallback = "true" if default else "false"
+    return os.getenv(name, fallback).lower() == "true"
+
+
 class Settings:
     """Application settings"""
+
+    def __init__(self) -> None:
+        self.CURRICULUM_EXAMINER_ENABLED = _env_bool(
+            "CURRICULUM_EXAMINER_ENABLED",
+            False,
+        )
 
     # Environment
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
@@ -214,6 +226,10 @@ class Settings:
     )
     ENABLE_ANALYTICS: bool = os.getenv("ENABLE_ANALYTICS", "true").lower() == "true"
     ENABLE_LEADERBOARD: bool = os.getenv("ENABLE_LEADERBOARD", "true").lower() == "true"
+    CURRICULUM_EXAMINER_ENABLED: bool = _env_bool(
+        "CURRICULUM_EXAMINER_ENABLED",
+        False,
+    )
 
 
 settings = Settings()
