@@ -1,12 +1,12 @@
 {
   "updated": "2026-05-16T00:00:00Z",
   "phase": "1A",
-  "completed": ["#66", "#67", "#68"],
-  "current": "#69",
-  "remaining": ["#69", "#70", "#71", "#72", "#73", "#74", "#75", "#76", "#77"],
-  "last_commit": "c7e871c5",
-  "migration_head": "20260515_1000_061",
-  "baseline_test_count": 2086,
+  "completed": ["#66", "#67", "#68", "#69"],
+  "current": "#70",
+  "remaining": ["#70", "#71", "#72", "#73", "#74", "#75", "#76", "#77"],
+  "last_commit": "c0484452",
+  "migration_head": "20260515_1100_062",
+  "baseline_test_count": 2095,
   "blockers": [],
-  "notes": "A1/Phase 1A complete (#66-#68). #68 commits: 36672b45 feat(curriculum): add learner study progress backend, c7e871c5 feat(curriculum): add learner study page and API client. Validation: backend related tests passed, backend collect 2086 tests, alembic head 20260515_1000_061, frontend learner-study/study tests passed, TypeScript passed, lint passed, build passed, Playwright mobile smoke passed. #69 is the next global remaining issue (not started in A1)."
+  "notes": "#69 TestBank 完成。Commits: 56640eba feat(test-bank): 后端 TestBank 基础建设（query models + API router）, ebfa8ea1 feat(test-bank): 前端 API client 对接, f0d8725c fix(test-bank): 前端 API contract 字段名修正, 087c949c feat(test-bank): 管理后台 UI（题库列表+筛选+分页）, 2e1df01f fix(test-bank): 管理后台编辑流程修复, c0484452 fix(test-bank): type category order index。验证证据：后端 target 9 passed，collect 2095 tests，ruff passed，alembic head 20260515_1100_062；前端 test-bank 26 passed，typecheck passed，lint passed，build passed，HTTP smoke 200。进入 #70。"
 }
