@@ -1,0 +1,12 @@
+{
+  "updated": "2026-05-16T00:00:00Z",
+  "phase": "1A",
+  "completed": ["#66", "#67", "#68"],
+  "current": "#69",
+  "remaining": ["#69", "#70", "#71", "#72", "#73", "#74", "#75", "#76", "#77"],
+  "last_commit": "c7e871c5",
+  "migration_head": "20260515_1000_061",
+  "baseline_test_count": 2086,
+  "blockers": [],
+  "notes": "A1/Phase 1A complete (#66-#68). #68 commits: 36672b45 feat(curriculum): add learner study progress backend, c7e871c5 feat(curriculum): add learner study page and API client. Validation: backend related tests passed, backend collect 2086 tests, alembic head 20260515_1000_061, frontend learner-study/study tests passed, TypeScript passed, lint passed, build passed, Playwright mobile smoke passed. #69 is the next global remaining issue (not started in A1)."
+}
