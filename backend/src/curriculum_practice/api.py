@@ -5,7 +5,7 @@ import binascii
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,8 +76,10 @@ from curriculum_practice.services.test_bank import (
 from curriculum_practice.services.test_bank import (
     TestBankService,
     serialize_category,
+    serialize_import_job,
     serialize_question,
 )
+from curriculum_practice.services.test_bank_importer import IMPORT_MAX_BYTES
 from curriculum_practice.services.voice_clone import (
     VoiceCloneHTTPTransport,
     VoiceCloneService,
@@ -391,6 +393,75 @@ async def list_question_categories(
             total=len(items),
         )
     )
+
+
+@test_bank_router.post("/imports", response_model=None)
+async def create_test_bank_import(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    raw = await file.read()
+    if len(raw) > IMPORT_MAX_BYTES:
+        return _api_error(
+            "[TEST_BANK_IMPORT_FILE_TOO_LARGE]",
+            status_code=413,
+            message="TestBank import file must be 10MB or smaller.",
+        )
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return _api_error(
+            "[TEST_BANK_IMPORT_ENCODING_INVALID]",
+            status_code=400,
+            message="TestBank import file must be UTF-8 encoded.",
+        )
+
+    service = TestBankService(db)
+    job_result = await service.create_import_job(
+        filename=file.filename or "questions.jsonl",
+        actor_id=str(current_user.user_id),
+    )
+    if not job_result.is_success or job_result.value is None:
+        return _test_bank_result_error(
+            job_result.fallback,
+            server_error_code="[TEST_BANK_IMPORT_CREATE_FAILED]",
+            server_message="TestBank import job 创建失败。",
+        )
+    run_result = await service.run_import_job(
+        job_result.value,
+        raw=raw,
+        actor_id=str(current_user.user_id),
+    )
+    if not run_result.is_success or run_result.value is None:
+        return _test_bank_result_error(
+            run_result.fallback,
+            server_error_code="[TEST_BANK_IMPORT_RUN_FAILED]",
+            server_message="TestBank import job 执行失败。",
+        )
+    return _success(serialize_import_job(run_result.value))
+
+
+@test_bank_router.get("/imports/{task_id}", response_model=None)
+async def get_test_bank_import(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await TestBankService(db).get_import_job(task_id)
+    if not result.is_success or result.value is None:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[TEST_BANK_IMPORT_FETCH_FAILED]",
+            server_message="TestBank import job 读取失败。",
+        )
+    return _success(serialize_import_job(result.value))
 
 
 @test_bank_router.post("/categories", response_model=None)

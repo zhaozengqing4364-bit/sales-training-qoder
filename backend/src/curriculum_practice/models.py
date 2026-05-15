@@ -320,6 +320,35 @@ class QuestionItem(Base):
     )
 
 
+class TestBankImportJob(Base):
+    __tablename__ = "test_bank_import_jobs"
+
+    task_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    filename = Column(String(255), nullable=False)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    imported = Column(Integer, nullable=False, default=0)
+    failed = Column(Integer, nullable=False, default=0)
+    errors = Column(JSON, nullable=False, default=list)
+    created_by = Column(String(36), nullable=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'completed', 'failed')",
+            name="ck_test_bank_import_job_status",
+        ),
+        Index("idx_test_bank_import_jobs_created", "created_by", "created_at"),
+    )
+
+
 class LearningProgress(Base):
     __tablename__ = "learning_progress"
 

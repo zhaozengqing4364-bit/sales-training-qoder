@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.error_handling.result import Result
-from curriculum_practice.models import QuestionCategory, QuestionItem
+from curriculum_practice.models import QuestionCategory, QuestionItem, TestBankImportJob
 from curriculum_practice.schemas import (
     GateResult,
     PublishGateDecision,
@@ -20,6 +20,12 @@ from curriculum_practice.schemas import (
     QuestionItemCreate,
     QuestionItemResponse,
     QuestionItemUpdate,
+    TestBankImportJobResponse,
+    TestBankImportResultResponse,
+)
+from curriculum_practice.services.test_bank_importer import (
+    ImportRowError,
+    TestBankImporter,
 )
 
 SERVER_ERROR = "[TEST_BANK_SERVICE_FAILED]"
@@ -230,6 +236,71 @@ class TestBankService:
             return Result.fail(SERVER_ERROR)
         return Result.ok(question)
 
+    async def create_import_job(
+        self,
+        *,
+        filename: str,
+        actor_id: str | None,
+    ) -> Result[TestBankImportJob]:
+        job = TestBankImportJob(filename=filename, created_by=actor_id)
+        self._db.add(job)
+        try:
+            await self._db.commit()
+            await self._db.refresh(job)
+        except SQLAlchemyError:
+            await self._db.rollback()
+            return Result.fail(SERVER_ERROR)
+        return Result.ok(job)
+
+    async def get_import_job(self, task_id: str) -> Result[TestBankImportJob]:
+        try:
+            job = await self._db.get(TestBankImportJob, task_id)
+        except SQLAlchemyError:
+            return Result.fail(SERVER_ERROR)
+        if job is None:
+            return Result.fail("[TEST_BANK_IMPORT_JOB_NOT_FOUND]")
+        return Result.ok(job)
+
+    async def run_import_job(
+        self,
+        job: TestBankImportJob,
+        *,
+        raw: bytes,
+        actor_id: str | None,
+    ) -> Result[TestBankImportJob]:
+        categories = await self.list_categories()
+        if not categories.is_success:
+            return Result.fail(categories.fallback or SERVER_ERROR)
+        job.status = "processing"
+        await self._persist_job(job)
+
+        importer = TestBankImporter(
+            known_category_ids={category.category_id for category in categories.value or []}
+        )
+        parsed = importer.parse(raw, filename=job.filename)
+        imported_count = 0
+        errors: list[ImportRowError] = list(parsed.errors)
+        for item in parsed.items:
+            create_result = await self.create_question(item, actor_id=actor_id)
+            if create_result.is_success:
+                imported_count += 1
+            else:
+                errors.append(
+                    ImportRowError(
+                        row=0,
+                        field="file",
+                        message=create_result.fallback or "question import failed",
+                    )
+                )
+        job.status = "completed"
+        job.imported = imported_count
+        job.failed = len({error.row for error in errors})
+        job.errors = [
+            {"row": error.row, "field": error.field, "message": error.message}
+            for error in errors
+        ]
+        return await self._persist_job(job)
+
     async def _count_categories(self, *, parent_id: str) -> int | None:
         try:
             result = await self._db.execute(
@@ -252,6 +323,15 @@ class TestBankService:
             return None
         return int(result.scalar_one())
 
+    async def _persist_job(self, job: TestBankImportJob) -> Result[TestBankImportJob]:
+        try:
+            await self._db.commit()
+            await self._db.refresh(job)
+        except SQLAlchemyError:
+            await self._db.rollback()
+            return Result.fail(SERVER_ERROR)
+        return Result.ok(job)
+
 
 def serialize_category(category: QuestionCategory) -> QuestionCategoryResponse:
     return QuestionCategoryResponse.model_validate(category)
@@ -259,6 +339,18 @@ def serialize_category(category: QuestionCategory) -> QuestionCategoryResponse:
 
 def serialize_question(question: QuestionItem) -> QuestionItemResponse:
     return QuestionItemResponse.model_validate(question)
+
+
+def serialize_import_job(job: TestBankImportJob) -> TestBankImportJobResponse:
+    return TestBankImportJobResponse(
+        task_id=job.task_id,
+        status=job.status,
+        result=TestBankImportResultResponse(
+            imported=job.imported,
+            failed=job.failed,
+            errors=job.errors or [],
+        ),
+    )
 
 
 def _publish_decision(question: QuestionItem) -> PublishGateDecision:

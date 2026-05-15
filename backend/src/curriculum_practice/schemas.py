@@ -10,6 +10,7 @@ ContentAssetStatus = Literal["draft", "published", "archived"]
 LearningContentStatus = Literal["draft", "published", "archived"]
 QuestionDifficulty = Literal["easy", "medium", "hard"]
 QuestionLifecycleStatus = Literal["draft", "published", "archived"]
+TestBankImportStatus = Literal["pending", "processing", "completed", "failed"]
 RoleProfilePressureLevel = Literal["low", "medium", "high"]
 PracticeTemplateScenarioType = Literal["sales", "presentation"]
 PracticeTemplateVoiceMode = Literal["legacy", "stepfun_realtime"]
@@ -490,6 +491,24 @@ class QuestionItemResponse(BaseModel):
 class QuestionItemListResponse(BaseModel):
     items: list[QuestionItemResponse]
     total: int
+
+
+class TestBankImportErrorResponse(BaseModel):
+    row: int
+    field: str
+    message: str
+
+
+class TestBankImportResultResponse(BaseModel):
+    imported: int
+    failed: int
+    errors: list[TestBankImportErrorResponse]
+
+
+class TestBankImportJobResponse(BaseModel):
+    task_id: str
+    status: TestBankImportStatus
+    result: TestBankImportResultResponse
 
 
 class LearningProgressResponse(BaseModel):
