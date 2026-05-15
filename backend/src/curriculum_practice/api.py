@@ -32,6 +32,12 @@ from curriculum_practice.schemas import (
     PracticeTemplateListResponse,
     PracticeTemplateUpdate,
     PublishGateDecision,
+    QuestionCategoryCreate,
+    QuestionCategoryListResponse,
+    QuestionCategoryUpdate,
+    QuestionItemCreate,
+    QuestionItemListResponse,
+    QuestionItemUpdate,
     RoleProfileCreate,
     RoleProfileListResponse,
     RoleProfileResponse,
@@ -64,6 +70,14 @@ from curriculum_practice.services.practice_templates import (
     published_ref,
     serialize_template,
 )
+from curriculum_practice.services.test_bank import (
+    SERVER_ERROR as TEST_BANK_SERVICE_FAILED,
+)
+from curriculum_practice.services.test_bank import (
+    TestBankService,
+    serialize_category,
+    serialize_question,
+)
 from curriculum_practice.services.voice_clone import (
     VoiceCloneHTTPTransport,
     VoiceCloneService,
@@ -85,6 +99,9 @@ study_router = APIRouter(
 )
 learning_content_router = APIRouter(
     prefix="/curriculum/learning-contents", tags=["admin-learning-contents"]
+)
+test_bank_router = APIRouter(
+    prefix="/curriculum/test-bank", tags=["admin-test-bank"]
 )
 
 
@@ -195,6 +212,26 @@ def _learning_progress_result_error(fallback: str | None) -> JSONResponse:
             message="学习进度暂时无法读取。",
         )
     return _api_error(fallback or "[LEARNING_PROGRESS_FAILED]", status_code=400)
+
+
+def _test_bank_result_error(
+    fallback: str | None,
+    *,
+    server_error_code: str,
+    server_message: str,
+) -> JSONResponse:
+    error_code = fallback or server_error_code
+    if error_code in {"[QUESTION_CATEGORY_NOT_FOUND]", "[QUESTION_ITEM_NOT_FOUND]"}:
+        return _api_error(error_code, status_code=404, message=error_code)
+    if error_code in {
+        "[QUESTION_CATEGORY_HAS_CHILDREN]",
+        "[QUESTION_CATEGORY_HAS_QUESTIONS]",
+        "[QUESTION_ITEM_NOT_EDITABLE]",
+    }:
+        return _api_error(error_code, status_code=409, message=error_code)
+    if error_code == TEST_BANK_SERVICE_FAILED:
+        return _api_error(server_error_code, status_code=500, message=server_message)
+    return _api_error(error_code, status_code=400)
 
 
 @study_router.get("/learning-contents/{content_id}", response_model=None)
@@ -329,6 +366,294 @@ def _build_default_voice_clone_service() -> VoiceCloneService:
         endpoint_url=endpoint_url,
         fallback_voice=os.getenv("STEPFUN_DEFAULT_VOICE", "default_voice"),
     )
+
+
+@test_bank_router.get("/categories", response_model=None)
+async def list_question_categories(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = TestBankService(db)
+    result = await service.list_categories()
+    if not result.is_success:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_CATEGORY_LIST_FAILED]",
+            server_message="QuestionCategory 列表读取失败。",
+        )
+    items = result.value or []
+    return _success(
+        QuestionCategoryListResponse(
+            items=[serialize_category(item) for item in items],
+            total=len(items),
+        )
+    )
+
+
+@test_bank_router.post("/categories", response_model=None)
+async def create_question_category(
+    payload: QuestionCategoryCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await TestBankService(db).create_category(
+        payload, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_CATEGORY_CREATE_FAILED]",
+            server_message="QuestionCategory 创建失败。",
+        )
+    return _success(serialize_category(result.value))
+
+
+@test_bank_router.put("/categories/{category_id}", response_model=None)
+async def update_question_category(
+    category_id: str,
+    payload: QuestionCategoryUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = TestBankService(db)
+    category_result = await service.get_category(category_id)
+    if not category_result.is_success or category_result.value is None:
+        return _test_bank_result_error(
+            category_result.fallback,
+            server_error_code="[QUESTION_CATEGORY_UPDATE_FAILED]",
+            server_message="QuestionCategory 更新失败。",
+        )
+    result = await service.update_category(
+        category_result.value, payload, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_CATEGORY_UPDATE_FAILED]",
+            server_message="QuestionCategory 更新失败。",
+        )
+    return _success(serialize_category(result.value))
+
+
+@test_bank_router.delete("/categories/{category_id}", response_model=None)
+async def delete_question_category(
+    category_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = TestBankService(db)
+    category_result = await service.get_category(category_id)
+    if not category_result.is_success or category_result.value is None:
+        return _test_bank_result_error(
+            category_result.fallback,
+            server_error_code="[QUESTION_CATEGORY_DELETE_FAILED]",
+            server_message="QuestionCategory 删除失败。",
+        )
+    result = await service.delete_category(category_result.value)
+    if not result.is_success:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_CATEGORY_DELETE_FAILED]",
+            server_message="QuestionCategory 删除失败。",
+        )
+    return _success({"deleted": True})
+
+
+@test_bank_router.get("/questions", response_model=None)
+async def list_questions(
+    category_id: str | None = None,
+    difficulty: str | None = Query(default=None, pattern="^(easy|medium|hard)$"),
+    status: str | None = Query(default=None, pattern="^(draft|published|archived)$"),
+    tag: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await TestBankService(db).list_questions(
+        category_id=category_id,
+        difficulty=difficulty,
+        status=status,
+        tag=tag,
+    )
+    if not result.is_success:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_ITEM_LIST_FAILED]",
+            server_message="QuestionItem 列表读取失败。",
+        )
+    items = result.value or []
+    return _success(
+        QuestionItemListResponse(
+            items=[serialize_question(item) for item in items],
+            total=len(items),
+        )
+    )
+
+
+@test_bank_router.post("/questions", response_model=None)
+async def create_question(
+    payload: QuestionItemCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await TestBankService(db).create_question(
+        payload, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_ITEM_CREATE_FAILED]",
+            server_message="QuestionItem 创建失败。",
+        )
+    return _success(serialize_question(result.value))
+
+
+@test_bank_router.get("/questions/{question_id}", response_model=None)
+async def get_question(
+    question_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await TestBankService(db).get_question(question_id)
+    if not result.is_success or result.value is None:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_ITEM_FETCH_FAILED]",
+            server_message="QuestionItem 读取失败。",
+        )
+    return _success(serialize_question(result.value))
+
+
+@test_bank_router.put("/questions/{question_id}", response_model=None)
+async def update_question(
+    question_id: str,
+    payload: QuestionItemUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = TestBankService(db)
+    question_result = await service.get_question(question_id)
+    if not question_result.is_success or question_result.value is None:
+        return _test_bank_result_error(
+            question_result.fallback,
+            server_error_code="[QUESTION_ITEM_UPDATE_FAILED]",
+            server_message="QuestionItem 更新失败。",
+        )
+    result = await service.update_question(
+        question_result.value, payload, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_ITEM_UPDATE_FAILED]",
+            server_message="QuestionItem 更新失败。",
+        )
+    return _success(serialize_question(result.value))
+
+
+@test_bank_router.post("/questions/{question_id}/publish", response_model=None)
+async def publish_question(
+    question_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = TestBankService(db)
+    question_result = await service.get_question(question_id)
+    if not question_result.is_success or question_result.value is None:
+        return _test_bank_result_error(
+            question_result.fallback,
+            server_error_code="[QUESTION_ITEM_PUBLISH_FAILED]",
+            server_message="QuestionItem 发布失败。",
+        )
+    result = await service.publish_question(
+        question_result.value, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success:
+        if result.fallback == "[QUESTION_ITEM_PUBLISH_GATE_FAILED]":
+            decision = result.value
+            if not isinstance(decision, PublishGateDecision):
+                decision = PublishGateDecision(can_publish=False, results=[])
+            return JSONResponse(
+                status_code=400,
+                content=error_response(
+                    "[QUESTION_ITEM_PUBLISH_GATE_FAILED]",
+                    message="QuestionItem 发布门禁未通过。",
+                )
+                | {
+                    "details": {
+                        "gate_results": [
+                            item.model_dump() for item in decision.results
+                        ]
+                    }
+                },
+            )
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_ITEM_PUBLISH_FAILED]",
+            server_message="QuestionItem 发布失败。",
+        )
+    if result.value is None:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_ITEM_PUBLISH_FAILED]",
+            server_message="QuestionItem 发布失败。",
+        )
+    return _success(serialize_question(result.value))
+
+
+@test_bank_router.post("/questions/{question_id}/archive", response_model=None)
+async def archive_question(
+    question_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = TestBankService(db)
+    question_result = await service.get_question(question_id)
+    if not question_result.is_success or question_result.value is None:
+        return _test_bank_result_error(
+            question_result.fallback,
+            server_error_code="[QUESTION_ITEM_ARCHIVE_FAILED]",
+            server_message="QuestionItem 归档失败。",
+        )
+    result = await service.archive_question(
+        question_result.value, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _test_bank_result_error(
+            result.fallback,
+            server_error_code="[QUESTION_ITEM_ARCHIVE_FAILED]",
+            server_message="QuestionItem 归档失败。",
+        )
+    return _success(serialize_question(result.value))
 
 
 @learning_content_router.get("", response_model=None)

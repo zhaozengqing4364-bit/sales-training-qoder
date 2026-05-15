@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import Literal, Protocol
+from typing import Generic, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PracticeTemplateStatus = Literal["draft", "published", "archived"]
 ContentAssetStatus = Literal["draft", "published", "archived"]
 LearningContentStatus = Literal["draft", "published", "archived"]
+QuestionDifficulty = Literal["easy", "medium", "hard"]
+QuestionLifecycleStatus = Literal["draft", "published", "archived"]
 RoleProfilePressureLevel = Literal["low", "medium", "high"]
 PracticeTemplateScenarioType = Literal["sales", "presentation"]
 PracticeTemplateVoiceMode = Literal["legacy", "stepfun_realtime"]
@@ -35,6 +37,9 @@ CurriculumAssetType = Literal[
     "model_config",
 ]
 SnapshotLabel = Literal["published", "superseded", "legacy_unversioned"]
+AssetTypeT = TypeVar("AssetTypeT", bound=str)
+AssetVersionT = TypeVar("AssetVersionT", int, str, int | str)
+SnapshotLabelT = TypeVar("SnapshotLabelT", bound=str)
 
 
 class PracticeTemplatePublishCandidate(BaseModel):
@@ -67,20 +72,39 @@ class PublishGateDecision(BaseModel):
     results: list[GateResult]
 
 
-class PublishedTemplateRef(BaseModel):
-    asset_type: Literal["practice_template"] = "practice_template"
+class AssetRef(BaseModel, Generic[AssetTypeT, AssetVersionT, SnapshotLabelT]):
+    asset_type: AssetTypeT
     asset_id: str
-    version: int
+    version: AssetVersionT
     hash: str
+    snapshot_label: SnapshotLabelT
+
+
+class PublishedTemplateRef(
+    AssetRef[Literal["practice_template"], int, Literal["published"]]
+):
+    asset_type: Literal["practice_template"] = "practice_template"
+    version: int
     snapshot_label: Literal["published"] = "published"
 
 
-class CurriculumVersionRef(BaseModel):
+class CurriculumVersionRef(AssetRef[CurriculumAssetType, int | str, SnapshotLabel]):
     asset_type: CurriculumAssetType
-    asset_id: str
-    version: int | str
-    hash: str
     snapshot_label: SnapshotLabel
+
+
+class LearningContentRef(
+    AssetRef[Literal["learning_content"], int, Literal["published"]]
+):
+    asset_type: Literal["learning_content"] = "learning_content"
+    version: int
+    snapshot_label: Literal["published"] = "published"
+
+
+class TestBankRef(AssetRef[Literal["question_item"], int, Literal["published"]]):
+    asset_type: Literal["question_item"] = "question_item"
+    version: int
+    snapshot_label: Literal["published"] = "published"
 
 
 class CurriculumTrainingTaskRef(BaseModel):
@@ -373,6 +397,98 @@ class LearningContentResponse(BaseModel):
 
 class LearningContentListResponse(BaseModel):
     items: list[LearningContentResponse]
+    total: int
+
+
+class QuestionCategoryCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=160)
+    parent_id: str | None = Field(None, min_length=1, max_length=36)
+    description: str | None = Field(None, max_length=2000)
+    order_index: int = Field(1, ge=1)
+
+
+class QuestionCategoryUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(None, min_length=1, max_length=160)
+    parent_id: str | None = Field(None, min_length=1, max_length=36)
+    description: str | None = Field(None, max_length=2000)
+    order_index: int | None = Field(None, ge=1)
+
+
+class QuestionCategoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    category_id: str
+    parent_id: str | None = None
+    name: str
+    description: str | None = None
+    order_index: int
+    created_at: object
+    updated_at: object
+
+
+class QuestionCategoryListResponse(BaseModel):
+    items: list[QuestionCategoryResponse]
+    total: int
+
+
+class QuestionItemCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str = Field(..., min_length=1, max_length=36)
+    title: str = Field(..., min_length=1, max_length=200)
+    stem: str = Field(..., min_length=1)
+    reference_answer: str | None = Field(None, max_length=8000)
+    scoring_criteria: dict[str, object] = Field(default_factory=dict)
+    scoring_dimensions: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    difficulty: QuestionDifficulty = "medium"
+    safety_flagged: bool = False
+    department: str | None = Field(None, min_length=1, max_length=120)
+
+
+class QuestionItemUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str | None = Field(None, min_length=1, max_length=36)
+    title: str | None = Field(None, min_length=1, max_length=200)
+    stem: str | None = Field(None, min_length=1)
+    reference_answer: str | None = Field(None, max_length=8000)
+    scoring_criteria: dict[str, object] | None = None
+    scoring_dimensions: list[str] | None = None
+    tags: list[str] | None = None
+    difficulty: QuestionDifficulty | None = None
+    safety_flagged: bool | None = None
+    department: str | None = Field(None, min_length=1, max_length=120)
+
+
+class QuestionItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    question_id: str
+    category_id: str
+    title: str
+    stem: str
+    reference_answer: str | None = None
+    scoring_criteria: dict[str, object]
+    scoring_dimensions: list[str]
+    tags: list[str]
+    difficulty: QuestionDifficulty
+    status: QuestionLifecycleStatus
+    safety_flagged: bool
+    department: str | None = None
+    version: int
+    content_hash: str | None = None
+    published_at: object | None = None
+    created_at: object
+    updated_at: object
+
+
+class QuestionItemListResponse(BaseModel):
+    items: list[QuestionItemResponse]
     total: int
 
 

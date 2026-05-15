@@ -239,6 +239,87 @@ class LearningChapter(Base):
     )
 
 
+class QuestionCategory(Base):
+    __tablename__ = "question_categories"
+
+    category_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    parent_id = Column(
+        String(36),
+        ForeignKey("question_categories.category_id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    name = Column(String(160), nullable=False)
+    description = Column(Text, nullable=True)
+    order_index = Column(Integer, nullable=False, default=1)
+    created_by = Column(String(36), nullable=True)
+    updated_by = Column(String(36), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint("order_index >= 1", name="ck_question_category_order_index"),
+        Index("idx_question_categories_parent_order", "parent_id", "order_index"),
+    )
+
+
+class QuestionItem(Base):
+    __tablename__ = "question_items"
+
+    question_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    category_id = Column(
+        String(36),
+        ForeignKey("question_categories.category_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    title = Column(String(200), nullable=False)
+    stem = Column(Text, nullable=False)
+    reference_answer = Column(Text, nullable=True)
+    scoring_criteria = Column(JSON, nullable=False, default=dict)
+    scoring_dimensions = Column(JSON, nullable=False, default=list)
+    tags = Column(JSON, nullable=False, default=list)
+    difficulty = Column(String(20), nullable=False, default="medium", index=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    safety_flagged = Column(Boolean, nullable=False, default=False)
+    department = Column(String(120), nullable=True, index=True)
+    version = Column(Integer, nullable=False, default=1)
+    content_hash = Column(String(80), nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    published_by = Column(String(36), nullable=True)
+    created_by = Column(String(36), nullable=True)
+    updated_by = Column(String(36), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "difficulty IN ('easy', 'medium', 'hard')",
+            name="ck_question_item_difficulty",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_question_item_status",
+        ),
+        Index("idx_question_items_status_updated", "status", "updated_at"),
+        Index("idx_question_items_category_status", "category_id", "status"),
+    )
+
+
 class LearningProgress(Base):
     __tablename__ = "learning_progress"
 
