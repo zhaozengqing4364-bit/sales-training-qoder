@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -421,7 +422,10 @@ class LearningPathService:
     def _plan_for_template(template: PracticeTemplate) -> CurriculumPlanSchema | None:
         if not isinstance(template.curriculum_plan, dict):
             return None
-        return CurriculumPlanSchema.model_validate(template.curriculum_plan)
+        try:
+            return CurriculumPlanSchema.model_validate(template.curriculum_plan)
+        except (TypeError, ValueError, ValidationError):
+            return None
 
     @staticmethod
     def _fallback_stage(

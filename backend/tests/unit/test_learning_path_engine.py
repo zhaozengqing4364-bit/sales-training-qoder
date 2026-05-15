@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -335,9 +335,68 @@ async def test_should_return_role_default_path_for_cold_start_user() -> None:
 
 
 @pytest.mark.asyncio
+async def test_should_fallback_when_published_template_has_invalid_curriculum_plan() -> None:
+    service = LearningPathService(recommendation_service=_SpyRecommendationService())
+    template = _template("template-invalid-plan", stage_key="template_stage_invalid", name="坏计划模板")
+    template.curriculum_plan = {
+        "name": "坏计划",
+        "stages": [
+            {
+                "template_stage_key": "template_stage_invalid",
+                "order": 1,
+                "name": "坏阶段",
+                "template_ref": {
+                    "asset_type": "practice_template",
+                    "asset_id": "template-invalid-plan",
+                    "version": 1,
+                    "hash": "hash-template-invalid-plan",
+                    "snapshot_label": "published",
+                },
+                "completion_policy": {
+                    "min_score": 7,
+                    "min_rounds": 1,
+                    "max_duration_seconds": 600,
+                },
+                "prerequisites": [{"template_stage_key": "missing_stage", "required_result": "completed"}],
+            }
+        ],
+    }
+
+    result = await service.build_from_evidence(
+        user_id="learner-1",
+        sessions=[],
+        templates=[template],
+    )
+
+    assert result["path_type"] == "role_default"
+    assert result["next_task"]["title"] == "坏计划模板"
+    assert result["stages"] == [
+        {
+            "template_stage_key": "template_stage_template-invalid-plan",
+            "name": "坏计划模板",
+            "state": "available",
+            "prerequisites": [],
+            "completion_policy": {
+                "min_score": 7,
+                "min_rounds": 1,
+                "max_duration_seconds": 600,
+            },
+            "report_url": None,
+            "failure_reason": None,
+            "result": None,
+            "template_id": "template-invalid-plan",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_should_refresh_database_ruleset_when_db_is_available() -> None:
     spy = _SpyRecommendationService()
-    service = LearningPathService(db=Mock(spec=AsyncSession), recommendation_service=spy)
+    db = Mock(spec=AsyncSession)
+    empty_result = Mock()
+    empty_result.scalars.return_value.all.return_value = []
+    db.execute = AsyncMock(return_value=empty_result)
+    service = LearningPathService(db=db, recommendation_service=spy)
     session = _session("session-db")
     session.report_snapshots = [
         _report_snapshot("report-db", session=session, dimensions={"product_knowledge": 4.8})
