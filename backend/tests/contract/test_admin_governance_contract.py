@@ -357,7 +357,7 @@ async def test_admin_settings_rejects_non_admin_user(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"]["error"] == "[ROLE_REQUIRED]"
+    assert response.json()["detail"]["error"] == "[PERMISSION_REQUIRED]"
 
 
 @pytest.mark.contract

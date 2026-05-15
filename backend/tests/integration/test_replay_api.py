@@ -783,7 +783,7 @@ class TestReplayAPI:
             user_id=test_user.user_id,
             scenario_id=scenario.scenario_id,
             status=SessionStatus.SCORING.value,
-            report_status="processing",
+            report_status="pending",
             start_time=datetime.now(UTC),
             end_time=datetime.now(UTC),
             logic_score=84.0,

@@ -291,7 +291,8 @@ async def get_dashboard_stats(
     Requirements: 2.1, 2.2, 2.3
     """
     try:
-        user_id = uuid.UUID(str(current_user.user_id))
+        user_id = str(current_user.user_id)
+        user_uuid = uuid.UUID(user_id)
         now = datetime.now(UTC)
 
         # Calculate week boundaries
@@ -357,7 +358,7 @@ async def get_dashboard_stats(
         # ========== Projection-backed score summary ==========
         history_result = await history_service.get_user_history(
             db=db,
-            user_id=user_id,
+            user_id=user_uuid,
             limit=100,
             offset=0,
         )
@@ -513,7 +514,7 @@ async def get_recommendation(
     Requirements: 2.4, 2.5
     """
     try:
-        user_id = uuid.UUID(str(current_user.user_id))
+        user_id = str(current_user.user_id)
         now = datetime.now(UTC)
         week_ago = now - timedelta(days=7)
 

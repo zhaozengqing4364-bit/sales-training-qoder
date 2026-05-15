@@ -429,3 +429,55 @@ async def test_curriculum_dashboard_uses_report_lineage_stage_snapshots_for_dime
     dashboard = result.unwrap()
     assert dashboard.summary.top_weak_dimension == "异议处理"
     assert dashboard.heatmap[0].average_score == 42.0
+
+
+@pytest.mark.asyncio
+async def test_curriculum_dashboard_ignores_sessions_without_practice_template(
+    db_session: AsyncSession,
+) -> None:
+    learner = await _create_user(db_session, name="template filter learner")
+    scenario = await _create_sales_scenario(db_session)
+    template = await _create_template(
+        db_session,
+        template_id="99999999-9999-9999-9999-999999999999",
+        name="模板过滤训练",
+    )
+    now = datetime.now(UTC)
+
+    await _create_completed_session_with_snapshot(
+        db_session,
+        user=learner,
+        scenario=scenario,
+        template=template,
+        session_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        started_at=now - timedelta(days=1),
+        logic_score=80,
+        accuracy_score=80,
+        completeness_score=80,
+        dimension_scores=[{"name": "有效课程", "score": 80}],
+    )
+    legacy_session = PracticeSession(
+        session_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        user_id=str(learner.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        report_status="completed",
+        logic_score=20,
+        accuracy_score=20,
+        completeness_score=20,
+        start_time=now,
+        end_time=now + timedelta(minutes=3),
+    )
+    db_session.add(legacy_session)
+    await db_session.commit()
+
+    result = await curriculum_analytics_service.get_dashboard(
+        db=db_session,
+        time_range="30d",
+    )
+
+    assert result.is_success, result.fallback
+    dashboard = result.unwrap()
+    assert dashboard.summary.completed_count == 1
+    assert [point.sample_count for point in dashboard.score_trend] == [1]
+    assert dashboard.heatmap[0].template_name == "模板过滤训练"
