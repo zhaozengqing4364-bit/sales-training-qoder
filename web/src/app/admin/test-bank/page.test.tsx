@@ -5,17 +5,21 @@ import TestBankPage from "./page";
 const {
     listCategoriesMock,
     createCategoryMock,
+    updateCategoryMock,
     deleteCategoryMock,
     listQuestionsMock,
     createQuestionMock,
+    updateQuestionMock,
     publishQuestionMock,
     archiveQuestionMock,
 } = vi.hoisted(() => ({
     listCategoriesMock: vi.fn(),
     createCategoryMock: vi.fn(),
+    updateCategoryMock: vi.fn(),
     deleteCategoryMock: vi.fn(),
     listQuestionsMock: vi.fn(),
     createQuestionMock: vi.fn(),
+    updateQuestionMock: vi.fn(),
     publishQuestionMock: vi.fn(),
     archiveQuestionMock: vi.fn(),
 }));
@@ -81,6 +85,7 @@ vi.mock("lucide-react", () => ({
     Filter: () => <span>filter</span>,
     Eye: () => <span>eye</span>,
     Archive: () => <span>archive</span>,
+    X: () => <span>x</span>,
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -92,12 +97,12 @@ vi.mock("@/lib/api/client", async () => {
             testBank: {
                 listCategories: listCategoriesMock,
                 createCategory: createCategoryMock,
-                updateCategory: vi.fn(),
+                updateCategory: updateCategoryMock,
                 deleteCategory: deleteCategoryMock,
                 listQuestions: listQuestionsMock,
                 createQuestion: createQuestionMock,
                 getQuestion: vi.fn(),
-                updateQuestion: vi.fn(),
+                updateQuestion: updateQuestionMock,
                 publishQuestion: publishQuestionMock,
                 archiveQuestion: archiveQuestionMock,
             },
@@ -258,6 +263,162 @@ describe("TestBankPage", () => {
 
         await waitFor(() => {
             expect(screen.getByText(/缺少参考答案/)).toBeTruthy();
+        });
+    });
+
+    it("edits a category", async () => {
+        updateCategoryMock.mockResolvedValue({
+            category_id: "cat-1",
+            name: "销售技巧(更新)",
+            description: "新描述",
+            parent_id: null,
+            order_index: 0,
+        });
+        render(<TestBankPage />);
+        await waitFor(() => {
+            expect(listCategoriesMock).toHaveBeenCalled();
+        });
+
+        const editButtons = screen.getAllByRole("button", { name: "edit" });
+        fireEvent.click(editButtons[0]);
+
+        await waitFor(() => {
+            const inputs = screen.getAllByPlaceholderText("分类名称");
+            expect(inputs.length).toBeGreaterThan(0);
+        });
+
+        const editInput = screen.getAllByPlaceholderText("分类名称")[1];
+        fireEvent.change(editInput, {
+            target: { value: "销售技巧(更新)" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+
+        await waitFor(() => {
+            expect(updateCategoryMock).toHaveBeenCalledWith(
+                "cat-1",
+                expect.objectContaining({ name: "销售技巧(更新)" }),
+            );
+        });
+    });
+
+    it("edits a question and submits update payload", async () => {
+        updateQuestionMock.mockResolvedValue({
+            question_id: "q-1",
+            title: "更新后的题目",
+            stem: "stem",
+            reference_answer: "新参考答案",
+            category_id: "cat-1",
+            difficulty: "hard",
+            status: "draft",
+            tags: ["异议处理"],
+            scoring_dimensions: ["逻辑性"],
+            scoring_criteria: {},
+            safety_flagged: false,
+            department: null,
+            version: 2,
+        });
+        render(<TestBankPage />);
+        await screen.findByText("如何应对客户异议");
+
+        const editButtons = screen.getAllByRole("button", { name: /edit/ });
+        fireEvent.click(editButtons[1]);
+
+        await waitFor(() => {
+            expect(screen.getByDisplayValue("如何应对客户异议")).toBeTruthy();
+        });
+
+        fireEvent.change(screen.getByPlaceholderText("题目标题 *"), {
+            target: { value: "更新后的题目" },
+        });
+        fireEvent.change(screen.getByLabelText("题目难度"), {
+            target: { value: "hard" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /更新/ }));
+
+        await waitFor(() => {
+            expect(updateQuestionMock).toHaveBeenCalledWith(
+                "q-1",
+                expect.objectContaining({
+                    title: "更新后的题目",
+                    difficulty: "hard",
+                }),
+            );
+        });
+    });
+
+    it("rejects invalid JSON in scoring criteria", async () => {
+        render(<TestBankPage />);
+        await screen.findByText("如何应对客户异议");
+
+        fireEvent.click(screen.getByRole("button", { name: /新建题目/ }));
+
+        await waitFor(() => {
+            expect(screen.getByPlaceholderText("题目标题 *")).toBeTruthy();
+        });
+
+        fireEvent.change(screen.getByPlaceholderText("题目标题 *"), {
+            target: { value: "新题目" },
+        });
+        fireEvent.change(screen.getByPlaceholderText("题干 *"), {
+            target: { value: "题干内容" },
+        });
+        const formCatSelect = screen.getByTestId("form-category");
+        fireEvent.change(formCatSelect, { target: { value: "cat-1" } });
+        fireEvent.change(screen.getByPlaceholderText("评分标准 JSON"), {
+            target: { value: "not-json" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /创建/ }));
+
+        await waitFor(() => {
+            expect(screen.getByText(/评分标准格式无效/)).toBeTruthy();
+        });
+        expect(createQuestionMock).not.toHaveBeenCalled();
+    });
+
+    it("submits valid scoring criteria as object", async () => {
+        createQuestionMock.mockResolvedValue({
+            question_id: "q-new",
+            title: "新题目",
+            stem: "题干内容",
+            reference_answer: null,
+            category_id: "cat-1",
+            difficulty: "medium",
+            status: "draft",
+            tags: [],
+            scoring_dimensions: ["clarity"],
+            scoring_criteria: { dimensions: ["clarity"] },
+            safety_flagged: false,
+            department: null,
+            version: 1,
+        });
+        render(<TestBankPage />);
+        await screen.findByText("如何应对客户异议");
+
+        fireEvent.click(screen.getByRole("button", { name: /新建题目/ }));
+
+        await waitFor(() => {
+            expect(screen.getByPlaceholderText("题目标题 *")).toBeTruthy();
+        });
+
+        fireEvent.change(screen.getByPlaceholderText("题目标题 *"), {
+            target: { value: "新题目" },
+        });
+        fireEvent.change(screen.getByPlaceholderText("题干 *"), {
+            target: { value: "题干内容" },
+        });
+        const formCatSelect = screen.getByTestId("form-category");
+        fireEvent.change(formCatSelect, { target: { value: "cat-1" } });
+        fireEvent.change(screen.getByPlaceholderText("评分标准 JSON"), {
+            target: { value: '{"dimensions":["clarity"]}' },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /创建/ }));
+
+        await waitFor(() => {
+            expect(createQuestionMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scoring_criteria: { dimensions: ["clarity"] },
+                }),
+            );
         });
     });
 });

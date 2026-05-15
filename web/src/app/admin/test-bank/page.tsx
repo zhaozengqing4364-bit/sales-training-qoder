@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCcw, Plus, Edit2, Trash2, Search, AlertCircle, BookOpen, Filter, Archive } from "lucide-react";
+import { RefreshCcw, Plus, Edit2, Trash2, BookOpen, Filter, Archive, X } from "lucide-react";
 
 import { api } from "@/lib/api/client";
-import type { QuestionCategory, QuestionItem, CreateCategoryRequest, CreateQuestionRequest } from "@/lib/api/types";
+import type { QuestionCategory, QuestionItem, CreateCategoryRequest, UpdateCategoryRequest } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,20 @@ const DIFFICULTY_LABELS: Record<string, string> = {
     hard: "困难",
 };
 
+function parseScoringCriteria(raw: string): Record<string, unknown> | null {
+    const trimmed = raw.trim();
+    if (!trimmed) return {};
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
+            return null;
+        }
+        return parsed as Record<string, unknown>;
+    } catch {
+        return null;
+    }
+}
+
 export default function TestBankPage() {
     const toast = useToast();
 
@@ -43,11 +57,18 @@ export default function TestBankPage() {
     const [catDeleting, setCatDeleting] = useState(false);
     const [catDeleteError, setCatDeleteError] = useState<string | null>(null);
 
+    // ── Category Edit ──
+    const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+    const [editCatName, setEditCatName] = useState("");
+    const [editCatDescription, setEditCatDescription] = useState("");
+    const [editCatParentId, setEditCatParentId] = useState("");
+    const [editCatOrderIndex, setEditCatOrderIndex] = useState("0");
+    const [catSaving, setCatSaving] = useState(false);
+
     // ── Questions ──
     const [questions, setQuestions] = useState<QuestionItem[]>([]);
     const [qLoading, setQLoading] = useState(true);
     const [qError, setQError] = useState<string | null>(null);
-    const [qTotal, setQTotal] = useState(0);
     const [filterCategoryId, setFilterCategoryId] = useState("");
     const [filterDifficulty, setFilterDifficulty] = useState("");
     const [filterStatus, setFilterStatus] = useState("");
@@ -64,6 +85,7 @@ export default function TestBankPage() {
     const [formDifficulty, setFormDifficulty] = useState<"easy" | "medium" | "hard">("medium");
     const [formTags, setFormTags] = useState("");
     const [formScoringDimensions, setFormScoringDimensions] = useState("");
+    const [formScoringCriteria, setFormScoringCriteria] = useState("");
     const [formSafetyFlagged, setFormSafetyFlagged] = useState(false);
     const [formDepartment, setFormDepartment] = useState("");
     const [formSubmitting, setFormSubmitting] = useState(false);
@@ -96,7 +118,6 @@ export default function TestBankPage() {
                 Object.keys(filters).length > 0 ? filters : undefined,
             );
             setQuestions(result.items || []);
-            setQTotal(result.total || 0);
         } catch (err) {
             setQError(err instanceof Error ? err.message : "加载题目失败");
             setQuestions([]);
@@ -133,6 +154,42 @@ export default function TestBankPage() {
         }
     };
 
+    const startEditCategory = (cat: QuestionCategory) => {
+        setEditingCategoryId(cat.category_id);
+        setEditCatName(cat.name);
+        setEditCatDescription(cat.description || "");
+        setEditCatParentId(cat.parent_id || "");
+        setEditCatOrderIndex(String(cat.order_index));
+    };
+
+    const cancelEditCategory = () => {
+        setEditingCategoryId(null);
+    };
+
+    const handleUpdateCategory = async () => {
+        if (!editingCategoryId || !editCatName.trim()) return;
+        setCatSaving(true);
+        setCatError(null);
+        try {
+            const payload: UpdateCategoryRequest = {
+                name: editCatName.trim(),
+                description: editCatDescription.trim() || undefined,
+                parent_id: editCatParentId || null,
+            };
+            if (editCatOrderIndex) {
+                (payload as Record<string, unknown>).order_index = parseInt(editCatOrderIndex, 10) || 0;
+            }
+            await api.testBank.updateCategory(editingCategoryId, payload);
+            toast.success("分类已更新");
+            setEditingCategoryId(null);
+            void loadCategories();
+        } catch (err) {
+            setCatError(err instanceof Error ? err.message : "更新分类失败");
+        } finally {
+            setCatSaving(false);
+        }
+    };
+
     const handleDeleteCategory = async () => {
         if (!deleteTarget) return;
         setCatDeleting(true);
@@ -150,6 +207,22 @@ export default function TestBankPage() {
         }
     };
 
+    const startEditQuestion = (q: QuestionItem) => {
+        setEditingQuestion(q);
+        setFormTitle(q.title);
+        setFormStem(q.stem);
+        setFormReferenceAnswer(q.reference_answer || "");
+        setFormCategoryId(q.category_id);
+        setFormDifficulty(q.difficulty);
+        setFormTags(q.tags.join(", "));
+        setFormScoringDimensions(q.scoring_dimensions.join(", "));
+        setFormScoringCriteria(JSON.stringify(q.scoring_criteria));
+        setFormSafetyFlagged(q.safety_flagged);
+        setFormDepartment(q.department || "");
+        setFormError(null);
+        setShowForm(true);
+    };
+
     const resetForm = () => {
         setFormTitle("");
         setFormStem("");
@@ -158,6 +231,7 @@ export default function TestBankPage() {
         setFormDifficulty("medium");
         setFormTags("");
         setFormScoringDimensions("");
+        setFormScoringCriteria("");
         setFormSafetyFlagged(false);
         setFormDepartment("");
         setFormError(null);
@@ -170,10 +244,17 @@ export default function TestBankPage() {
             setFormError("标题、题干和分类为必填项");
             return;
         }
+
+        const criteria = parseScoringCriteria(formScoringCriteria);
+        if (criteria === null) {
+            setFormError("评分标准格式无效，请输入有效的 JSON 对象");
+            return;
+        }
+
         setFormSubmitting(true);
         setFormError(null);
         try {
-            const payload: CreateQuestionRequest = {
+            const payload = {
                 title: formTitle.trim(),
                 stem: formStem.trim(),
                 reference_answer: formReferenceAnswer.trim() || null,
@@ -184,6 +265,7 @@ export default function TestBankPage() {
                     .split(",")
                     .map((d) => d.trim())
                     .filter(Boolean),
+                scoring_criteria: criteria,
                 safety_flagged: formSafetyFlagged,
                 department: formDepartment.trim() || null,
             };
@@ -328,20 +410,96 @@ export default function TestBankPage() {
                                 <tbody className="divide-y divide-slate-100">
                                     {categories.map((cat) => (
                                         <tr key={cat.category_id} className="transition-colors hover:bg-slate-50/50">
-                                            <td className="px-4 py-3 font-medium text-slate-900">{getCategoryPath(cat)}</td>
-                                            <td className="px-4 py-3 text-slate-500">{cat.description || "-"}</td>
-                                            <td className="px-4 py-3 text-slate-500">{cat.parent_id ? getCategoryName(cat.parent_id) : "-"}</td>
-                                            <td className="px-4 py-3 text-slate-500">{cat.order_index}</td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="rounded-full text-slate-400 hover:text-red-500"
-                                                    onClick={() => setDeleteTarget(cat)}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </td>
+                                            {editingCategoryId === cat.category_id ? (
+                                                <>
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="分类名称"
+                                                            className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm focus:border-blue-500 focus:outline-none"
+                                                            value={editCatName}
+                                                            onChange={(e) => setEditCatName(e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="描述"
+                                                            className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm focus:border-blue-500 focus:outline-none"
+                                                            value={editCatDescription}
+                                                            onChange={(e) => setEditCatDescription(e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <select
+                                                            className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm focus:border-blue-500 focus:outline-none"
+                                                            value={editCatParentId}
+                                                            onChange={(e) => setEditCatParentId(e.target.value)}
+                                                        >
+                                                            <option value="">无</option>
+                                                            {categories.filter((c) => c.category_id !== cat.category_id).map((c) => (
+                                                                <option key={c.category_id} value={c.category_id}>{c.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="number"
+                                                            className="h-9 w-16 rounded border border-slate-200 bg-white px-2 text-sm focus:border-blue-500 focus:outline-none"
+                                                            value={editCatOrderIndex}
+                                                            onChange={(e) => setEditCatOrderIndex(e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <div className="flex justify-end gap-1">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="rounded-full text-xs text-blue-600 hover:text-blue-800"
+                                                                onClick={handleUpdateCategory}
+                                                                disabled={catSaving}
+                                                            >
+                                                                保存
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="rounded-full text-slate-400 hover:text-slate-600"
+                                                                onClick={cancelEditCategory}
+                                                            >
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </td>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td className="px-4 py-3 font-medium text-slate-900">{getCategoryPath(cat)}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{cat.description || "-"}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{cat.parent_id ? getCategoryName(cat.parent_id) : "-"}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{cat.order_index}</td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <div className="flex justify-end gap-1">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="rounded-full text-slate-400 hover:text-blue-500"
+                                                                onClick={() => startEditCategory(cat)}
+                                                            >
+                                                                <Edit2 className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="rounded-full text-slate-400 hover:text-red-500"
+                                                                onClick={() => setDeleteTarget(cat)}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </td>
+                                                </>
+                                            )}
                                         </tr>
                                     ))}
                                 </tbody>
@@ -441,6 +599,7 @@ export default function TestBankPage() {
                                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none"
                                 value={formCategoryId}
                                 onChange={(e) => setFormCategoryId(e.target.value)}
+                                data-testid="form-category"
                             >
                                 <option value="">选择分类 *</option>
                                 {categories.map((c) => (
@@ -463,6 +622,7 @@ export default function TestBankPage() {
                                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none"
                                 value={formDifficulty}
                                 onChange={(e) => setFormDifficulty(e.target.value as "easy" | "medium" | "hard")}
+                                aria-label="题目难度"
                             >
                                 <option value="easy">简单</option>
                                 <option value="medium">中等</option>
@@ -498,6 +658,12 @@ export default function TestBankPage() {
                                 />
                                 安全标记
                             </label>
+                            <textarea
+                                placeholder="评分标准 JSON"
+                                className="h-16 rounded-lg border border-slate-200 bg-white p-3 text-sm font-mono focus:border-blue-500 focus:outline-none md:col-span-2"
+                                value={formScoringCriteria}
+                                onChange={(e) => setFormScoringCriteria(e.target.value)}
+                            />
                         </div>
                         <div className="mt-3 flex gap-2">
                             <Button className="rounded-full" onClick={handleSubmitQuestion} disabled={formSubmitting}>
@@ -555,6 +721,16 @@ export default function TestBankPage() {
                                             <td className="px-4 py-3 text-slate-500">v{q.version}</td>
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex justify-end gap-1">
+                                                    {q.status === "draft" && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="rounded-full text-slate-400 hover:text-blue-500"
+                                                            onClick={() => startEditQuestion(q)}
+                                                        >
+                                                            <Edit2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
                                                     {q.status !== "published" && (
                                                         <Button
                                                             variant="ghost"
