@@ -3913,14 +3913,15 @@ export interface LearningContentRef extends AssetRef {
 }
 
 export interface TestBankRef extends AssetRef {
-    asset_type: "test_bank_question";
+    asset_type: "question_item";
 }
 
 export interface QuestionCategory {
-    id: string;
+    category_id: string;
     name: string;
-    description: string;
+    description: string | null;
     parent_id: string | null;
+    order_index: number;
     children?: QuestionCategory[];
     created_at: string;
     updated_at: string;
@@ -3929,25 +3930,18 @@ export interface QuestionCategory {
 export type QuestionDifficulty = "easy" | "medium" | "hard";
 export type QuestionLifecycleStatus = "draft" | "published" | "archived";
 
-export interface ScoringDimension {
-    name: string;
-    description: string;
-    weight: number;
-    criteria: string[];
-}
-
 export interface QuestionItem {
-    id: string;
+    question_id: string;
     title: string;
     stem: string;
-    reference_answer: string;
+    reference_answer: string | null;
     category_id: string;
     difficulty: QuestionDifficulty;
     status: QuestionLifecycleStatus;
     tags: string[];
-    scoring_dimensions: ScoringDimension[];
-    scoring_criteria: string[];
-    safety_flag: boolean;
+    scoring_dimensions: string[];
+    scoring_criteria: Record<string, unknown>;
+    safety_flagged: boolean;
     department: string | null;
     version: number;
     content_hash: string | null;
@@ -3973,26 +3967,26 @@ export interface UpdateCategoryRequest {
 export interface CreateQuestionRequest {
     title: string;
     stem: string;
-    reference_answer: string;
+    reference_answer?: string | null;
     category_id: string;
     difficulty: QuestionDifficulty;
     tags?: string[];
-    scoring_dimensions?: ScoringDimension[];
-    scoring_criteria?: string[];
-    safety_flag?: boolean;
+    scoring_dimensions?: string[];
+    scoring_criteria?: Record<string, unknown>;
+    safety_flagged?: boolean;
     department?: string | null;
 }
 
 export interface UpdateQuestionRequest {
     title?: string;
     stem?: string;
-    reference_answer?: string;
+    reference_answer?: string | null;
     category_id?: string;
     difficulty?: QuestionDifficulty;
     tags?: string[];
-    scoring_dimensions?: ScoringDimension[];
-    scoring_criteria?: string[];
-    safety_flag?: boolean;
+    scoring_dimensions?: string[];
+    scoring_criteria?: Record<string, unknown>;
+    safety_flagged?: boolean;
     department?: string | null;
 }
 

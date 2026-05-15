@@ -181,7 +181,6 @@ import {
     QuestionItem,
     QuestionDifficulty,
     QuestionLifecycleStatus,
-    ScoringDimension,
     CreateCategoryRequest,
     UpdateCategoryRequest,
     CreateQuestionRequest,
@@ -926,35 +925,26 @@ function normalizeStringList(value: unknown): string[] {
 
 function normalizeQuestionCategory(input: unknown): QuestionCategory {
     const raw = toRecord(input);
+    const categoryId = toStringValue(raw.category_id) || toStringValue(raw.id);
     return {
-        id: toStringValue(raw.id),
+        category_id: categoryId,
         name: toStringValue(raw.name),
-        description: toStringValue(raw.description),
+        description: typeof raw.description === "string" ? raw.description : null,
         parent_id: typeof raw.parent_id === "string" ? raw.parent_id : null,
+        order_index: toNumberValue(raw.order_index, 0),
         created_at: toStringValue(raw.created_at),
         updated_at: toStringValue(raw.updated_at),
     };
 }
 
-function normalizeScoringDimension(input: unknown): ScoringDimension {
-    const raw = toRecord(input);
-    return {
-        name: toStringValue(raw.name),
-        description: toStringValue(raw.description),
-        weight: toNumberValue(raw.weight, 0),
-        criteria: Array.isArray(raw.criteria)
-            ? raw.criteria.map((c: unknown) => toStringValue(c))
-            : [],
-    };
-}
-
 function normalizeQuestionItem(input: unknown): QuestionItem {
     const raw = toRecord(input);
+    const questionId = toStringValue(raw.question_id) || toStringValue(raw.id);
     return {
-        id: toStringValue(raw.id),
+        question_id: questionId,
         title: toStringValue(raw.title),
         stem: toStringValue(raw.stem),
-        reference_answer: toStringValue(raw.reference_answer),
+        reference_answer: typeof raw.reference_answer === "string" ? raw.reference_answer : null,
         category_id: toStringValue(raw.category_id),
         difficulty: (["easy", "medium", "hard"].includes(toStringValue(raw.difficulty))
             ? toStringValue(raw.difficulty)
@@ -964,12 +954,12 @@ function normalizeQuestionItem(input: unknown): QuestionItem {
             : "draft") as QuestionLifecycleStatus,
         tags: normalizeStringList(raw.tags),
         scoring_dimensions: Array.isArray(raw.scoring_dimensions)
-            ? raw.scoring_dimensions.map(normalizeScoringDimension)
+            ? (raw.scoring_dimensions as unknown[]).map((d: unknown) => toStringValue(d)).filter(Boolean)
             : [],
-        scoring_criteria: Array.isArray(raw.scoring_criteria)
-            ? raw.scoring_criteria.map((c: unknown) => toStringValue(c))
-            : [],
-        safety_flag: Boolean(raw.safety_flag),
+        scoring_criteria: (raw.scoring_criteria && typeof raw.scoring_criteria === "object" && !Array.isArray(raw.scoring_criteria))
+            ? raw.scoring_criteria as Record<string, unknown>
+            : {},
+        safety_flagged: Boolean(raw.safety_flagged ?? raw.safety_flag),
         department: typeof raw.department === "string" ? raw.department : null,
         version: toNumberValue(raw.version, 1),
         content_hash: typeof raw.content_hash === "string" ? raw.content_hash : null,
@@ -1851,12 +1841,9 @@ export const api = {
     featureFlags: featureFlagsDomain,
 
     testBank: {
-        listCategories: async (params?: { parent_id?: string }) => {
-            const searchParams = new URLSearchParams();
-            if (params?.parent_id) searchParams.set("parent_id", params.parent_id);
-            const query = searchParams.toString();
+        listCategories: async () => {
             const result = await apiFetch<{ items?: unknown[]; total?: unknown }>(
-                `/curriculum/test-bank/categories${query ? `?${query}` : ""}`,
+                "/curriculum/test-bank/categories",
             );
             const items = Array.isArray(result.items) ? result.items : [];
             return {
