@@ -56,6 +56,8 @@ import type {
     LearningChapterCreateRequest,
     LearningChapterUpdateRequest,
     FeatureFlags,
+    LearnerStudyContent,
+    LearnerStudyChapterCompletionResponse,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -138,6 +140,10 @@ type LearningContentsDomainDependencies = {
 };
 
 type FeatureFlagsDomainDependencies = {
+    request: ApiRequest;
+};
+
+type LearnerStudyDomainDependencies = {
     request: ApiRequest;
 };
 
@@ -361,6 +367,23 @@ export function createLearningContentsDomain({ request }: LearningContentsDomain
 export function createFeatureFlagsDomain({ request }: FeatureFlagsDomainDependencies) {
     return {
         get: async () => request<FeatureFlags>("/feature-flags"),
+    };
+}
+
+export function createLearnerStudyDomain({ request }: LearnerStudyDomainDependencies) {
+    return {
+        getContent: async (contentId: string) => {
+            return request<LearnerStudyContent>(
+                `/curriculum-practice/study/learning-contents/${encodeURIComponent(contentId)}`,
+            );
+        },
+
+        completeChapter: async (contentId: string, chapterId: string) => {
+            return request<LearnerStudyChapterCompletionResponse>(
+                `/curriculum-practice/study/learning-contents/${encodeURIComponent(contentId)}/chapters/${encodeURIComponent(chapterId)}/complete`,
+                { method: "POST" },
+            );
+        },
     };
 }
 

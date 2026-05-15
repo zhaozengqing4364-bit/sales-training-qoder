@@ -183,6 +183,7 @@ import {
     createAgentsDomain,
     createAuthDomain,
     createFeatureFlagsDomain,
+    createLearnerStudyDomain,
     createLearningContentsDomain,
     createLearningPathDomain,
     createPracticeDomain,
@@ -1703,6 +1704,7 @@ const practiceDomain = createPracticeDomain({ request: apiFetch });
 const trainingTasksDomain = createTrainingTasksDomain({ request: apiFetch });
 const learningPathDomain = createLearningPathDomain({ request: apiFetch });
 const learningContentsDomain = createLearningContentsDomain({ request: apiFetch });
+const learnerStudyDomain = createLearnerStudyDomain({ request: apiFetch });
 const featureFlagsDomain = createFeatureFlagsDomain({ request: apiFetch });
 const sessionsDomain = createSessionsDomain({
     request: apiFetch,
@@ -1775,6 +1777,7 @@ export const api = {
     trainingTasks: trainingTasksDomain,
     learningPath: learningPathDomain,
     learningContents: learningContentsDomain,
+    learnerStudy: learnerStudyDomain,
     featureFlags: featureFlagsDomain,
 
     // User

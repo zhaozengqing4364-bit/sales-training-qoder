@@ -3870,3 +3870,31 @@ export interface OpenScoreDistribution {
         poor: number;
     };
 }
+
+// Learner Study types (Issue #68)
+export type LearnerStudyState = "not_started" | "in_progress" | "completed";
+
+export interface LearnerStudyProgress {
+    completed_chapter_ids: string[];
+    completed_count: number;
+    total_chapters: number;
+    is_completed: boolean;
+    state: LearnerStudyState;
+    primary_cta: string;
+}
+
+export interface LearnerStudyContent {
+    learning_content_id: string;
+    title: string;
+    summary: string | null;
+    owner: string | null;
+    source: string | null;
+    chapters: LearningChapter[];
+    progress: LearnerStudyProgress;
+}
+
+export interface LearnerStudyChapterCompletionResponse {
+    chapter_id: string;
+    already_completed: boolean;
+    progress: LearnerStudyProgress;
+}
