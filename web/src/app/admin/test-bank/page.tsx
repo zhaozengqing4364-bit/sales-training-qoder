@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCcw, Plus, Edit2, Trash2, BookOpen, Filter, Archive, X } from "lucide-react";
+import { RefreshCcw, Plus, Edit2, Trash2, BookOpen, Filter, Archive, X, Upload } from "lucide-react";
 
 import { api } from "@/lib/api/client";
-import type { QuestionCategory, QuestionItem, CreateCategoryRequest, UpdateCategoryRequest } from "@/lib/api/types";
+import type { QuestionCategory, QuestionItem, CreateCategoryRequest, UpdateCategoryRequest, ImportJob, ImportResult, ImportError } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +90,11 @@ export default function TestBankPage() {
     const [formDepartment, setFormDepartment] = useState("");
     const [formSubmitting, setFormSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+
+    // ── Import ──
+    const [importResult, setImportResult] = useState<ImportResult | null>(null);
+    const [importError, setImportError] = useState<string | null>(null);
+    const [importSubmitting, setImportSubmitting] = useState(false);
 
     const loadCategories = async () => {
         setCatLoading(true);
@@ -284,6 +289,51 @@ export default function TestBankPage() {
             setFormError(err instanceof Error ? err.message : "保存失败");
         } finally {
             setFormSubmitting(false);
+        }
+    };
+
+    const handleImport = async (file: File) => {
+        setImportError(null);
+        setImportResult(null);
+
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        if (ext !== "csv" && ext !== "jsonl") {
+            setImportError("仅支持 .csv 和 .jsonl 格式的文件");
+            return;
+        }
+
+        if (file.size === 0) {
+            setImportError("文件为空，请选择有效的文件");
+            return;
+        }
+
+        const MAX_SIZE = 10 * 1024 * 1024;
+        if (file.size > MAX_SIZE) {
+            setImportError("文件大小不能超过 10MB");
+            return;
+        }
+
+        setImportSubmitting(true);
+        try {
+            let job: ImportJob = await api.testBank.importQuestions(file);
+
+            while (job.status === "pending" || job.status === "processing") {
+                await new Promise((r) => setTimeout(r, 800));
+                job = await api.testBank.getImportJob(job.task_id);
+            }
+
+            if (job.status === "failed") {
+                setImportError("导入任务执行失败");
+                return;
+            }
+
+            setImportResult(job.result);
+            toast.success(`成功导入 ${job.result.imported} 道题目`);
+            void loadQuestions();
+        } catch (err) {
+            setImportError(err instanceof Error ? err.message : "导入失败");
+        } finally {
+            setImportSubmitting(false);
         }
     };
 
@@ -505,6 +555,84 @@ export default function TestBankPage() {
                                     ))}
                                 </tbody>
                             </table>
+                        )}
+                    </div>
+                )}
+            </GlassCard>
+
+            {/* ── Import Section ── */}
+            <GlassCard className="p-6">
+                <h2 className="mb-4 text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <Upload className="h-5 w-5" /> 批量导入
+                </h2>
+
+                <div className="flex flex-wrap items-end gap-3">
+                    <input
+                        type="file"
+                        accept=".csv,.jsonl"
+                        className="h-10 rounded-full border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 file:mr-2 file:rounded-full file:border-0 file:bg-blue-100 file:px-3 file:py-1 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                                void handleImport(file);
+                            }
+                            e.target.value = "";
+                        }}
+                        data-testid="import-file-input"
+                        disabled={importSubmitting}
+                    />
+                    {importSubmitting && (
+                        <span className="text-sm text-slate-500">导入中...</span>
+                    )}
+                </div>
+
+                {importError && (
+                    <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">{importError}</div>
+                )}
+
+                {importResult && (
+                    <div className="mt-4">
+                        <div className="mb-3 flex gap-4 text-sm">
+                            <span className="rounded-full bg-green-50 px-3 py-1 text-green-700">
+                                <span className="font-bold">导入完成</span>
+                            </span>
+                            <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                                成功 <span className="font-bold">{importResult.imported}</span> 道
+                            </span>
+                            {importResult.failed > 0 && (
+                                <span className="rounded-full bg-red-50 px-3 py-1 text-red-700">
+                                    失败 <span className="font-bold">{importResult.failed}</span> 道
+                                </span>
+                            )}
+                        </div>
+
+                        {importResult.errors.length > 0 && (
+                            <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase text-slate-400">
+                                        <tr>
+                                            <th className="px-4 py-2 w-16">行号</th>
+                                            <th className="px-4 py-2 w-32">字段</th>
+                                            <th className="px-4 py-2">错误信息</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {importResult.errors.map((err, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50/50">
+                                                <td className="px-4 py-2 font-mono text-slate-700">
+                                                    {err.row}
+                                                </td>
+                                                <td className="px-4 py-2 font-mono text-xs text-slate-500">
+                                                    {err.field}
+                                                </td>
+                                                <td className="px-4 py-2 text-slate-600">
+                                                    {err.message}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </div>
                 )}

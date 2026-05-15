@@ -4001,3 +4001,23 @@ export interface QuestionListResponse {
     items: QuestionItem[];
     total: number;
 }
+
+export type ImportJobStatus = "pending" | "processing" | "completed" | "failed";
+
+export interface ImportError {
+    row: number;
+    field: string;
+    message: string;
+}
+
+export interface ImportResult {
+    imported: number;
+    failed: number;
+    errors: ImportError[];
+}
+
+export interface ImportJob {
+    task_id: string;
+    status: ImportJobStatus;
+    result: ImportResult;
+}

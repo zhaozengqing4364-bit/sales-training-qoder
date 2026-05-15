@@ -86,6 +86,7 @@ vi.mock("lucide-react", () => ({
     Eye: () => <span>eye</span>,
     Archive: () => <span>archive</span>,
     X: () => <span>x</span>,
+    Upload: () => <span>upload</span>,
 }));
 
 vi.mock("@/lib/api/client", async () => {

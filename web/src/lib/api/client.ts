@@ -187,6 +187,10 @@ import {
     UpdateQuestionRequest,
     CategoryListResponse,
     QuestionListResponse,
+    ImportJob,
+    ImportResult,
+    ImportError,
+    ImportJobStatus,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -967,6 +971,41 @@ function normalizeQuestionItem(input: unknown): QuestionItem {
         created_at: toStringValue(raw.created_at),
         updated_at: toStringValue(raw.updated_at),
         category_name: typeof raw.category_name === "string" ? raw.category_name : undefined,
+    };
+}
+
+function normalizeImportError(input: unknown): ImportError {
+    const raw = toRecord(input);
+    return {
+        row: toNumberValue(raw.row, 0),
+        field: toStringValue(raw.field),
+        message: toStringValue(raw.message),
+    };
+}
+
+function normalizeImportResult(input: unknown): ImportResult {
+    const raw = toRecord(input);
+    const errors = Array.isArray(raw.errors)
+        ? raw.errors.map(normalizeImportError)
+        : [];
+    return {
+        imported: toNumberValue(raw.imported, 0),
+        failed: toNumberValue(raw.failed, 0),
+        errors,
+    };
+}
+
+function normalizeImportJob(input: unknown): ImportJob {
+    const raw = toRecord(input);
+    const status = toStringValue(raw.status, "pending");
+    return {
+        task_id: toStringValue(raw.task_id),
+        status: (
+            ["pending", "processing", "completed", "failed"].includes(status)
+                ? status
+                : "pending"
+        ) as ImportJobStatus,
+        result: normalizeImportResult(raw.result),
     };
 }
 
@@ -1925,6 +1964,18 @@ export const api = {
                 { method: "POST" },
             );
             return normalizeQuestionItem(result);
+        },
+        importQuestions: async (file: File) => {
+            const formData = new FormData();
+            formData.append("file", file);
+            const result = await apiUpload<unknown>("/curriculum/test-bank/imports", formData);
+            return normalizeImportJob(result);
+        },
+        getImportJob: async (taskId: string) => {
+            const result = await apiFetch<unknown>(
+                `/curriculum/test-bank/imports/${encodeURIComponent(taskId)}`,
+            );
+            return normalizeImportJob(result);
         },
     },
 
