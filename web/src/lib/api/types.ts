@@ -325,10 +325,69 @@ export type ScoringRulesetScenarioType = "sales" | "presentation";
 
 export type PracticeTemplateStatus = "draft" | "published" | "archived" | string;
 export type ContentAssetStatus = "draft" | "published" | "archived" | string;
+export type LearningContentStatus = "draft" | "published" | "archived" | string;
 export type PracticeTemplateScenarioType = "sales" | "presentation";
 export type PracticeTemplateMode = "learning" | "expert_qa" | "examiner" | "customer_roleplay" | "mixed_path" | string;
 export type PracticeTemplateVoiceMode = "legacy" | "stepfun_realtime";
 export type RoleProfilePressureLevel = "low" | "medium" | "high";
+
+export interface LearningChapter {
+    chapter_id: string;
+    learning_content_id: string;
+    title: string;
+    content: string;
+    order_index: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface LearningContent {
+    learning_content_id: string;
+    title: string;
+    summary?: string | null;
+    owner?: string | null;
+    source?: string | null;
+    status: LearningContentStatus;
+    safety_flagged: boolean;
+    version: number;
+    content_hash?: string | null;
+    published_at?: string | null;
+    created_at: string;
+    updated_at: string;
+    chapters: LearningChapter[];
+}
+
+export interface LearningContentListResponse {
+    items: LearningContent[];
+    total: number;
+}
+
+export interface LearningContentCreateRequest {
+    title: string;
+    summary?: string | null;
+    owner?: string | null;
+    source?: string | null;
+    safety_flagged?: boolean;
+}
+
+export interface LearningContentUpdateRequest {
+    title?: string;
+    summary?: string | null;
+    owner?: string | null;
+    source?: string | null;
+    safety_flagged?: boolean;
+}
+
+export interface LearningChapterCreateRequest {
+    title: string;
+    content: string;
+}
+
+export interface LearningChapterUpdateRequest {
+    title?: string;
+    content?: string;
+    order_index?: number;
+}
 
 export interface PublishedPracticeTemplateRef {
     asset_type: "practice_template";

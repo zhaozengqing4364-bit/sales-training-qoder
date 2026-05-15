@@ -48,6 +48,13 @@ import type {
     TrainingTaskUpdateRequest,
     LearningPathResponse,
     LearningPathNextTask,
+    LearningContentCreateRequest,
+    LearningContentListResponse,
+    LearningContent,
+    LearningContentUpdateRequest,
+    LearningChapter,
+    LearningChapterCreateRequest,
+    LearningChapterUpdateRequest,
     FeatureFlags,
 } from "./types";
 
@@ -123,6 +130,10 @@ type TrainingTasksDomainDependencies = {
 };
 
 type LearningPathDomainDependencies = {
+    request: ApiRequest;
+};
+
+type LearningContentsDomainDependencies = {
     request: ApiRequest;
 };
 
@@ -271,6 +282,79 @@ export function createLearningPathDomain({ request }: LearningPathDomainDependen
     return {
         getMine: async () => request<LearningPathResponse>("/curriculum-practice/learning-path/me"),
         getNextTask: async () => request<LearningPathNextTask>("/curriculum-practice/learning-path/me/next-task"),
+    };
+}
+
+export function createLearningContentsDomain({ request }: LearningContentsDomainDependencies) {
+    return {
+        list: async (filters?: { status?: string; query?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (filters?.status && filters.status !== "all") searchParams.set("status", filters.status);
+            if (filters?.query) searchParams.set("query", filters.query);
+            const query = searchParams.toString();
+            return request<LearningContentListResponse>(`/curriculum/learning-contents${query ? `?${query}` : ""}`);
+        },
+
+        create: async (payload: LearningContentCreateRequest) => {
+            return request<LearningContent>("/curriculum/learning-contents", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        get: async (contentId: string) => {
+            return request<LearningContent>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}`);
+        },
+
+        update: async (contentId: string, payload: LearningContentUpdateRequest) => {
+            return request<LearningContent>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}`, {
+                method: "PUT",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        addChapter: async (contentId: string, payload: LearningChapterCreateRequest) => {
+            return request<LearningChapter>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}/chapters`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        updateChapter: async (contentId: string, chapterId: string, payload: LearningChapterUpdateRequest) => {
+            return request<LearningChapter>(
+                `/curriculum/learning-contents/${encodeURIComponent(contentId)}/chapters/${encodeURIComponent(chapterId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        deleteChapter: async (contentId: string, chapterId: string) => {
+            return request<void>(
+                `/curriculum/learning-contents/${encodeURIComponent(contentId)}/chapters/${encodeURIComponent(chapterId)}`,
+                { method: "DELETE" },
+            );
+        },
+
+        reorderChapters: async (contentId: string, chapterIds: string[]) => {
+            return request<void>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}/chapters/reorder`, {
+                method: "PUT",
+                body: JSON.stringify({ chapter_ids: chapterIds }),
+            });
+        },
+
+        publish: async (contentId: string) => {
+            return request<LearningContent>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}/publish`, {
+                method: "POST",
+            });
+        },
+
+        archive: async (contentId: string) => {
+            return request<LearningContent>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}/archive`, {
+                method: "POST",
+            });
+        },
     };
 }
 
