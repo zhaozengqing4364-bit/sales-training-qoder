@@ -4,7 +4,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from curriculum_practice.models import PracticeTemplate
+from curriculum_practice.models import LearningChapter, LearningContent, LearningProgress, PracticeTemplate
 
 
 @pytest.mark.asyncio
@@ -184,3 +184,83 @@ async def test_learning_path_api_contract_returns_pending_review_placeholder(
     assert response.status_code == 200
     states = {stage["state"] for stage in response.json()["data"]["stages"]}
     assert "pending_review" in states
+
+
+@pytest.mark.asyncio
+async def test_next_task_api_contract_returns_study_cta_when_lecture_is_incomplete(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+) -> None:
+    content = LearningContent(
+        title="销售讲义学习",
+        status="published",
+        safety_flagged=False,
+        version=1,
+    )
+    test_db.add(content)
+    await test_db.flush()
+    test_db.add(
+        LearningChapter(
+            learning_content_id=content.learning_content_id,
+            title="第一章",
+            content="学习内容",
+            order_index=1,
+        )
+    )
+    await test_db.commit()
+
+    response = await async_client.get(
+        "/api/v1/curriculum-practice/learning-path/me/next-task",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["title"] == "销售讲义学习"
+    assert data["state"] == "not_started"
+    assert data["primary_cta"] == "continue learning"
+    assert data["learning_content_id"] == content.learning_content_id
+
+
+@pytest.mark.asyncio
+async def test_next_task_api_contract_returns_exam_cta_after_all_chapters_completed(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+    test_user,
+) -> None:
+    content = LearningContent(
+        title="销售讲义学习",
+        status="published",
+        safety_flagged=False,
+        version=1,
+    )
+    test_db.add(content)
+    await test_db.flush()
+    chapter = LearningChapter(
+        learning_content_id=content.learning_content_id,
+        title="第一章",
+        content="学习内容",
+        order_index=1,
+    )
+    test_db.add(chapter)
+    await test_db.flush()
+    test_db.add(
+        LearningProgress(
+            user_id=str(test_user.user_id),
+            learning_content_id=content.learning_content_id,
+            chapter_id=chapter.chapter_id,
+        )
+    )
+    await test_db.commit()
+
+    response = await async_client.get(
+        "/api/v1/curriculum-practice/learning-path/me/next-task",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["state"] == "completed"
+    assert data["primary_cta"] == "start exam"

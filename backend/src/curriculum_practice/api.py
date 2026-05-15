@@ -52,6 +52,12 @@ from curriculum_practice.services.learning_contents import (
     serialize_learning_content,
 )
 from curriculum_practice.services.learning_path import LearningPathService
+from curriculum_practice.services.learning_progress_service import (
+    SERVER_ERROR as LEARNING_PROGRESS_SERVICE_FAILED,
+)
+from curriculum_practice.services.learning_progress_service import (
+    LearningProgressService,
+)
 from curriculum_practice.services.practice_templates import (
     PracticeTemplateNotEditableError,
     PracticeTemplateService,
@@ -73,6 +79,9 @@ router = APIRouter(
 )
 learner_router = APIRouter(
     prefix="/curriculum-practice/learning-path", tags=["curriculum-practice-learning-path"]
+)
+study_router = APIRouter(
+    prefix="/curriculum-practice/study", tags=["curriculum-practice-study"]
 )
 learning_content_router = APIRouter(
     prefix="/curriculum/learning-contents", tags=["admin-learning-contents"]
@@ -172,6 +181,56 @@ def _learning_chapter_not_found() -> JSONResponse:
         status_code=404,
         message="LearningChapter 不存在。",
     )
+
+
+def _learning_progress_result_error(fallback: str | None) -> JSONResponse:
+    if fallback == "[LEARNING_CONTENT_NOT_FOUND]":
+        return _learning_content_not_found()
+    if fallback == "[LEARNING_CHAPTER_NOT_FOUND]":
+        return _learning_chapter_not_found()
+    if fallback == LEARNING_PROGRESS_SERVICE_FAILED:
+        return _api_error(
+            "[LEARNING_PROGRESS_FAILED]",
+            status_code=500,
+            message="学习进度暂时无法读取。",
+        )
+    return _api_error(fallback or "[LEARNING_PROGRESS_FAILED]", status_code=400)
+
+
+@study_router.get("/learning-contents/{content_id}", response_model=None)
+async def get_my_study_content(
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    service = LearningProgressService(db)
+    result = await service.get_study_content(
+        user_id=str(current_user.user_id), content_id=content_id
+    )
+    if not result.is_success or result.value is None:
+        return _learning_progress_result_error(result.fallback)
+    return _success(result.value)
+
+
+@study_router.post(
+    "/learning-contents/{content_id}/chapters/{chapter_id}/complete",
+    response_model=None,
+)
+async def complete_my_study_chapter(
+    content_id: str,
+    chapter_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    service = LearningProgressService(db)
+    result = await service.complete_chapter(
+        user_id=str(current_user.user_id),
+        content_id=content_id,
+        chapter_id=chapter_id,
+    )
+    if not result.is_success or result.value is None:
+        return _learning_progress_result_error(result.fallback)
+    return _success(result.value)
 
 
 def _learning_content_result_error(

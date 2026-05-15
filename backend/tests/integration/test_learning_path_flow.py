@@ -12,7 +12,7 @@ from common.db.models import (
     SessionStatus,
     SupervisorReview,
 )
-from curriculum_practice.models import PracticeTemplate
+from curriculum_practice.models import LearningChapter, LearningContent, LearningProgress, PracticeTemplate
 from curriculum_practice.services.learning_path import LearningPathService
 
 
@@ -172,3 +172,56 @@ async def test_should_mark_certification_stage_retraining_required_after_supervi
     assert stage["template_stage_key"] == "template_stage_certification_review"
     assert stage["state"] == "retraining_required"
     assert result["next_task"]["state"] == "retraining_required"
+
+
+@pytest.mark.asyncio
+async def test_should_reflect_learning_content_progress_in_next_cta(
+    test_db: AsyncSession,
+    test_user,
+) -> None:
+    content = LearningContent(
+        title="销售入门讲义",
+        status="published",
+        safety_flagged=False,
+        version=1,
+    )
+    test_db.add(content)
+    await test_db.flush()
+    first = LearningChapter(
+        learning_content_id=content.learning_content_id,
+        title="第一章",
+        content="建立信任",
+        order_index=1,
+    )
+    second = LearningChapter(
+        learning_content_id=content.learning_content_id,
+        title="第二章",
+        content="需求澄清",
+        order_index=2,
+    )
+    test_db.add_all([first, second])
+    await test_db.commit()
+
+    partial = await LearningPathService(test_db).build_for_user(str(test_user.user_id))
+    assert partial["next_task"]["state"] == "not_started"
+    assert partial["next_task"]["primary_cta"] == "continue learning"
+
+    test_db.add_all(
+        [
+            LearningProgress(
+                user_id=str(test_user.user_id),
+                learning_content_id=content.learning_content_id,
+                chapter_id=first.chapter_id,
+            ),
+            LearningProgress(
+                user_id=str(test_user.user_id),
+                learning_content_id=content.learning_content_id,
+                chapter_id=second.chapter_id,
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    completed = await LearningPathService(test_db).build_for_user(str(test_user.user_id))
+    assert completed["next_task"]["state"] == "completed"
+    assert completed["next_task"]["primary_cta"] == "start exam"

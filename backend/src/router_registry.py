@@ -53,6 +53,7 @@ from common.knowledge.api import internal_router as knowledge_internal_router
 from curriculum_practice.api import learner_router as curriculum_learning_path_router
 from curriculum_practice.api import learning_content_router
 from curriculum_practice.api import router as curriculum_practice_router
+from curriculum_practice.api import study_router as curriculum_study_router
 from evaluation.api import router as evaluation_router
 from presentation_coach.api import presentations
 from prompt_templates.api.routes import router as prompt_templates_router
@@ -246,6 +247,12 @@ def register_routers(app: FastAPI) -> None:
         curriculum_learning_path_router,
         prefix="/api/v1",
         tags=["curriculum-practice-learning-path"],
+        dependencies=[Depends(require_role(["admin", "user"]))],
+    )
+    app.include_router(
+        curriculum_study_router,
+        prefix="/api/v1",
+        tags=["curriculum-practice-study"],
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(

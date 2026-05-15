@@ -376,6 +376,31 @@ class LearningContentListResponse(BaseModel):
     total: int
 
 
+class LearningProgressResponse(BaseModel):
+    completed_chapter_ids: list[str]
+    completed_count: int
+    total_chapters: int
+    is_completed: bool
+    state: Literal["not_started", "in_progress", "completed"]
+    primary_cta: Literal["continue learning", "start exam"]
+
+
+class LearnerStudyContentResponse(BaseModel):
+    learning_content_id: str
+    title: str
+    summary: str | None = None
+    owner: str | None = None
+    source: str | None = None
+    chapters: list[LearningChapterResponse]
+    progress: LearningProgressResponse
+
+
+class ChapterCompleteResponse(BaseModel):
+    chapter_id: str
+    already_completed: bool
+    progress: LearningProgressResponse
+
+
 class ReferenceReader(Protocol):
     def __call__(
         self, asset_type: str, asset_id: str

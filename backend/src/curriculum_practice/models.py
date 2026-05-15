@@ -237,3 +237,44 @@ class LearningChapter(Base):
         ),
         Index("idx_learning_chapters_content_order", "learning_content_id", "order_index"),
     )
+
+
+class LearningProgress(Base):
+    __tablename__ = "learning_progress"
+
+    progress_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    learning_content_id = Column(
+        String(36),
+        ForeignKey("learning_contents.learning_content_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chapter_id = Column(
+        String(36),
+        ForeignKey("learning_chapters.chapter_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    completed_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "learning_content_id",
+            "chapter_id",
+            name="uq_learning_progress_user_content_chapter",
+        ),
+        Index("idx_learning_progress_user_content", "user_id", "learning_content_id"),
+    )

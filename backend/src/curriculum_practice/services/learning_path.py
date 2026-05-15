@@ -19,6 +19,9 @@ from common.db.models import (
 from common.recommendations.next_practice import NextPracticeRecommendationService
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import CurriculumPlanSchema
+from curriculum_practice.services.learning_progress_service import (
+    LearningProgressService,
+)
 
 
 @dataclass(frozen=True)
@@ -52,12 +55,16 @@ class LearningPathService:
             raise RuntimeError("LearningPathService.build_for_user requires db")
         sessions = await self._recent_sessions(user_id=user_id, lookback=lookback)
         templates = await self._published_templates()
-        return await self.build_from_evidence(
+        path = await self.build_from_evidence(
             user_id=user_id,
             sessions=sessions,
             templates=templates,
             lookback=lookback,
         )
+        study_task = await self._study_next_task(user_id=user_id)
+        if study_task is not None:
+            path["next_task"] = study_task
+        return path
 
     async def next_task_for_user(self, user_id: str, *, lookback: int = 3) -> dict[str, Any]:
         path = await self.build_for_user(user_id, lookback=lookback)
@@ -171,6 +178,25 @@ class LearningPathService:
             .order_by(PracticeTemplate.updated_at.desc())
         )
         return list(result.scalars().all())
+
+    async def _study_next_task(self, *, user_id: str) -> dict[str, Any] | None:
+        assert self.db is not None
+        result = await LearningProgressService(self.db).first_published_content_progress(
+            user_id=user_id
+        )
+        if not result.is_success or result.value is None:
+            return None
+        content, progress = result.value
+        return {
+            "title": content.title,
+            "state": progress.state,
+            "primary_cta": progress.primary_cta,
+            "reason": "继续完成讲义学习，完成后可进入考试。",
+            "estimated_duration_minutes": None,
+            "failure_reason": None,
+            "retry_action": None,
+            "learning_content_id": content.learning_content_id,
+        }
 
     async def _review_outcomes_for_sessions(
         self,
