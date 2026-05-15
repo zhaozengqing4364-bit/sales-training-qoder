@@ -1,11 +1,19 @@
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentRankingChart } from "./AgentRankingChart";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { ScoreDistributionChart } from "./ScoreDistributionChart";
 import { TrendsChart } from "./TrendsChart";
+
+const { responsiveContainerProps } = vi.hoisted(() => ({
+    responsiveContainerProps: [] as Array<{
+        initialDimension?: { width: number; height: number };
+        width?: string | number;
+        height?: string | number;
+    }>,
+}));
 
 vi.mock("next/link", () => ({
     default: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => (
@@ -13,7 +21,44 @@ vi.mock("next/link", () => ({
     ),
 }));
 
+vi.mock("recharts", () => {
+    const ChartWrapper = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+
+    return {
+        ResponsiveContainer: ({
+            children,
+            initialDimension,
+            width,
+            height,
+        }: {
+            children?: ReactNode;
+            initialDimension?: { width: number; height: number };
+            width?: string | number;
+            height?: string | number;
+        }) => {
+            responsiveContainerProps.push({ initialDimension, width, height });
+            return <div data-testid="responsive-container">{children}</div>;
+        },
+        LineChart: ChartWrapper,
+        Line: () => null,
+        XAxis: () => null,
+        YAxis: () => null,
+        CartesianGrid: () => null,
+        Tooltip: () => null,
+        Legend: () => null,
+        PieChart: ChartWrapper,
+        Pie: ChartWrapper,
+        Cell: () => null,
+        BarChart: ChartWrapper,
+        Bar: ChartWrapper,
+    };
+});
+
 describe("analytics empty states", () => {
+    beforeEach(() => {
+        responsiveContainerProps.length = 0;
+    });
+
     it("explains the trends trigger and links learners to training", () => {
         render(<TrendsChart data={[]} />);
 
@@ -52,5 +97,60 @@ describe("analytics empty states", () => {
         expect(screen.getByText("暂无 Agent 使用数据")).toBeTruthy();
         expect(screen.getByText(/还没有已完成且可评估的训练使用到智能体或客户角色/)).toBeTruthy();
         expect(screen.getByRole("link", { name: /查看训练记录/ }).getAttribute("href")).toBe("/admin/records");
+    });
+
+    it("passes initial dimensions to Recharts containers before ResizeObserver measures", () => {
+        render(
+            <>
+                <TrendsChart
+                    data={[
+                        {
+                            date: "2026-05-15T00:00:00Z",
+                            sessions_count: 2,
+                            average_score: 78,
+                            active_users: 1,
+                        },
+                    ]}
+                />
+                <ScoreDistributionChart data={{ excellent: 1, good: 1, fair: 0, poor: 0 }} />
+                <AgentRankingChart
+                    data={{
+                        agent_stats: [
+                            {
+                                agent_id: "agent-1",
+                                agent_name: "销售教练",
+                                category: "sales",
+                                usage_count: 3,
+                                average_score: 82,
+                                completion_rate: 100,
+                            },
+                        ],
+                        persona_stats: [],
+                        scenario_distribution: { sales: 3 },
+                    }}
+                />
+            </>,
+        );
+
+        expect(responsiveContainerProps).toHaveLength(3);
+        expect(responsiveContainerProps).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    width: "100%",
+                    height: "100%",
+                    initialDimension: { width: 320, height: 288 },
+                }),
+                expect.objectContaining({
+                    width: "100%",
+                    height: "100%",
+                    initialDimension: { width: 320, height: 288 },
+                }),
+                expect.objectContaining({
+                    width: "100%",
+                    height: "100%",
+                    initialDimension: { width: 320, height: 288 },
+                }),
+            ]),
+        );
     });
 });

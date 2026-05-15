@@ -50,7 +50,11 @@ export function TrendsChart({ data }: TrendsChartProps) {
 
     return (
         <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer
+                width="100%"
+                height="100%"
+                initialDimension={{ width: 320, height: 288 }}
+            >
                 <LineChart
                     data={formattedData}
                     margin={{ top: 5, right: 20, left: 0, bottom: 5 }}

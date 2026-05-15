@@ -63,7 +63,11 @@ export function AgentRankingChart({ data }: AgentRankingChartProps) {
 
     return (
         <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer
+                width="100%"
+                height="100%"
+                initialDimension={{ width: 320, height: 288 }}
+            >
                 <BarChart
                     data={combinedData}
                     layout="vertical"

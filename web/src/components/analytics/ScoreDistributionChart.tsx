@@ -56,7 +56,11 @@ export function ScoreDistributionChart({ data }: ScoreDistributionChartProps) {
 
     return (
         <div className="h-72 relative">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer
+                width="100%"
+                height="100%"
+                initialDimension={{ width: 320, height: 288 }}
+            >
                 <PieChart>
                     <Pie
                         data={chartData}
