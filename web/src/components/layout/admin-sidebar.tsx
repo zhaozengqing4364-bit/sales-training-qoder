@@ -120,6 +120,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
             { label: "训练案例库", icon: BriefcaseBusiness, href: "/admin/curriculum-practice/case-items" },
             { label: "客户角色库", icon: UserRoundCog, href: "/admin/curriculum-practice/role-profiles" },
             { label: "课程训练模板", icon: Target, href: "/admin/curriculum-practice/templates" },
+            { label: "题库管理", icon: FileText, href: "/admin/test-bank" },
         ],
     },
     {
