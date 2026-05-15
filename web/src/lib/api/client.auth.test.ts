@@ -238,46 +238,53 @@ describe("API client 401 handling", () => {
         });
     });
 
-    it("retries login request with loopback hostname fallback", async () => {
+    it("does not retry cookie-backed login request against another loopback host", async () => {
+        const fetchMock = vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+        const sessionExpiredSpy = vi.spyOn(authHandler, "sessionExpired").mockImplementation(() => {});
+
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(
+            api.auth.login({ email: "admin@test.com", password: "password" }),
+        ).rejects.toMatchObject({
+            name: "ApiRequestError",
+            errorCode: "[NETWORK_ERROR]",
+        });
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
+        expect(sessionExpiredSpy).not.toHaveBeenCalled();
+    });
+
+    it("does not retry cookie-backed authenticated requests against another loopback host", async () => {
         const fetchMock = vi
             .fn()
             .mockRejectedValueOnce(new TypeError("Failed to fetch"))
             .mockResolvedValueOnce(
                 new Response(
                     JSON.stringify({
-                        success: true,
-                        data: {
-                            token: "token-1",
-                            user: {
-                                id: "user-1",
-                                name: "Admin",
-                                email: "admin@test.com",
-                                role: "admin",
-                            },
-                        },
+                        success: false,
+                        error: "[AUTHENTICATION_REQUIRED]",
+                        message: "missing cookie on fallback host",
                     }),
-                    {
-                        status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    },
+                    { status: 401, headers: { "Content-Type": "application/json" } },
                 ),
             );
+        const sessionExpiredSpy = vi.spyOn(authHandler, "sessionExpired").mockImplementation(() => {});
 
         vi.stubGlobal("fetch", fetchMock);
 
-        const result = await api.auth.login({ email: "admin@test.com", password: "password" });
+        await expect(api.learningPath.getNextTask()).rejects.toMatchObject({
+            name: "ApiRequestError",
+            errorCode: "[NETWORK_ERROR]",
+        });
 
-        expect(result.token).toBe("token-1");
-        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
-        expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ credentials: "include" });
-
-        const firstUrl = String(fetchMock.mock.calls[0]?.[0] ?? "");
-        const secondUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
-
-        expect(firstUrl).toContain("/api/v1/auth/login");
-        expect(secondUrl).toContain("/api/v1/auth/login");
-        expect(secondUrl).not.toBe(firstUrl);
+        expect(sessionExpiredSpy).not.toHaveBeenCalled();
     });
 
     it("normalizes structured segment playback errors into ApiRequestError", async () => {

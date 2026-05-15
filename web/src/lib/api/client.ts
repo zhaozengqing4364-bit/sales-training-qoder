@@ -228,7 +228,15 @@ function resolveApiBaseUrl(): string {
     }
 }
 
-function getLoopbackFallbackUrl(url: string): string | null {
+function requestIncludesCredentials(options: RequestInit): boolean {
+    return options.credentials === "include";
+}
+
+function getLoopbackFallbackUrl(url: string, options: RequestInit = {}): string | null {
+    if (requestIncludesCredentials(options)) {
+        return null;
+    }
+
     try {
         const parsed = new URL(url);
         const fallbackHost = LOOPBACK_HOST_FALLBACK_MAP[parsed.hostname];
@@ -251,7 +259,7 @@ async function fetchWithLoopbackRetry(url: string, options: RequestInit): Promis
             throw error;
         }
 
-        const fallbackUrl = getLoopbackFallbackUrl(url);
+        const fallbackUrl = getLoopbackFallbackUrl(url, options);
         if (!fallbackUrl) {
             throw error;
         }
