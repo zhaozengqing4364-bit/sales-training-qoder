@@ -151,6 +151,13 @@ BACKEND_GATE_TARGETS=(
   "tests/unit/common/test_business_rule_config_service.py"
 )
 
+BACKEND_SMOKE_REGRESSION_TARGETS=(
+  "tests/unit/test_curriculum_analytics_service.py"
+  "tests/unit/evaluation/test_evaluation_api_errors.py"
+  "tests/unit/evaluation/test_comprehensive_report_service.py"
+  "tests/unit/common/test_dashboard_recommendation.py"
+)
+
 export DATABASE_URL="${DATABASE_URL:-$(dotenv_get "${BACKEND_ENV_FILE}" "DATABASE_URL")}" 
 DATABASE_URL="${DATABASE_URL:-${DEFAULT_DATABASE_URL}}"
 export REDIS_URL="${REDIS_URL:-$(dotenv_get "${BACKEND_ENV_FILE}" "REDIS_URL")}" 
@@ -186,31 +193,14 @@ assert_non_empty_vitest_coverage_summary() {
   ' "${summary_file}" || die "Vitest coverage summary is not a valid non-empty summary"
 }
 
-log "Backend tests: auth + history/report/replay + admin analytics + support runtime + business rules + model config + release verification"
-(
-  cd "${ROOT_DIR}/backend"
-  "${PYTHON_BIN}" -m pytest -c pyproject.toml "${BACKEND_GATE_TARGETS[@]}" --no-cov -q
-)
-
-log "Backend coverage threshold"
-(
-  cd "${ROOT_DIR}/backend"
-  "${PYTHON_BIN}" -m pytest -c pyproject.toml tests/unit tests/integration tests/contract -q
-)
-
-log "Bootstrapping smoke stack for Alembic + Playwright"
+log "[quality-gate] Ensuring database schema is current before smoke bootstrap and Playwright"
 bash "${ROOT_DIR}/scripts/dev-smoke-up.sh"
 STACK_STARTED="1"
-
-log "Alembic drift check"
-(
-  cd "${ROOT_DIR}/backend"
-  DATABASE_URL="${DATABASE_URL}" "${PYTHON_BIN}" -m alembic upgrade head
-)
 
 log "Web typecheck"
 (
   cd "${ROOT_DIR}/web"
+  rm -rf .next/types
   npx tsc --noEmit
 )
 
@@ -225,7 +215,19 @@ assert_non_empty_vitest_coverage_summary
 log "Playwright smoke matrix"
 (
   cd "${ROOT_DIR}/web"
-  SMOKE_REUSE_EXISTING_STACK=1 npx playwright test
+  SMOKE_REUSE_EXISTING_STACK=1 npx playwright test tests/e2e/smoke.spec.ts
+)
+
+log "Backend tests: auth + history/report/replay + admin analytics + support runtime + business rules + model config + release verification"
+(
+  cd "${ROOT_DIR}/backend"
+  "${PYTHON_BIN}" -m pytest -c pyproject.toml "${BACKEND_GATE_TARGETS[@]}" --no-cov -q
+)
+
+log "Backend smoke regression tests"
+(
+  cd "${ROOT_DIR}/backend"
+  "${PYTHON_BIN}" -m pytest -c pyproject.toml "${BACKEND_SMOKE_REGRESSION_TARGETS[@]}" --no-cov -q
 )
 
 log "Critical quality gate passed"

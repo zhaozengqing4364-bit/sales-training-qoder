@@ -11,6 +11,13 @@ BACKEND_PORT="${BACKEND_PORT:-3444}"
 FRONTEND_PORT="${FRONTEND_PORT:-3445}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 REDIS_PORT="${REDIS_PORT:-6379}"
+POSTGRES_USER="${POSTGRES_USER:-dev}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-dev}"
+POSTGRES_DB="${POSTGRES_DB:-sales_training}"
+
+BACKEND_ENV_FILE="${ROOT_DIR}/backend/.env"
+DEFAULT_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
+EFFECTIVE_DATABASE_URL=""
 
 SMOKE_ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-admin@qoder.ai}"
 SMOKE_ADMIN_NAME="${SMOKE_ADMIN_NAME:-管理员}"
@@ -31,6 +38,44 @@ die() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "缺少命令: $1"
+}
+
+strip_surrounding_quotes() {
+  local value="$1"
+  if [[ ${#value} -ge 2 ]]; then
+    local first_char="${value:0:1}"
+    local last_char="${value: -1}"
+    if [[ "${first_char}" == '"' && "${last_char}" == '"' ]]; then
+      value="${value:1:-1}"
+    elif [[ "${first_char}" == "'" && "${last_char}" == "'" ]]; then
+      value="${value:1:-1}"
+    fi
+  fi
+  printf '%s' "${value}"
+}
+
+dotenv_get() {
+  local file="$1"
+  local key="$2"
+
+  if [[ ! -f "${file}" ]]; then
+    return 0
+  fi
+
+  local line
+  line="$(grep -E "^[[:space:]]*${key}=" "${file}" | tail -n 1 || true)"
+  if [[ -z "${line}" ]]; then
+    return 0
+  fi
+
+  local value="${line#*=}"
+  strip_surrounding_quotes "${value}"
+}
+
+resolve_effective_database_url() {
+  local backend_db_env
+  backend_db_env="$(dotenv_get "${BACKEND_ENV_FILE}" "DATABASE_URL")"
+  EFFECTIVE_DATABASE_URL="${DATABASE_URL:-${backend_db_env:-${DEFAULT_DATABASE_URL}}}"
 }
 
 port_pids() {
@@ -146,6 +191,17 @@ bootstrap_smoke_practice_evidence() {
   done <<< "${seed_output}"
 }
 
+run_alembic_upgrade_head() {
+  local python_bin
+  python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，无法执行 Alembic 迁移"
+
+  log "[smoke] Running alembic upgrade head before bootstrap..."
+  (
+    cd "${ROOT_DIR}/backend"
+    DATABASE_URL="${EFFECTIVE_DATABASE_URL}" "${python_bin}" -m alembic upgrade head
+  )
+}
+
 main() {
   require_cmd curl
   require_cmd lsof
@@ -156,10 +212,15 @@ main() {
   export AUTH_SHARED_PASSWORD="${AUTH_SHARED_PASSWORD:-${SMOKE_ADMIN_PASSWORD}}"
   export AUTH_USER_PASSWORDS_JSON="${AUTH_USER_PASSWORDS_JSON:-${default_auth_user_passwords_json}}"
 
+  resolve_effective_database_url
+  export DATABASE_URL="${EFFECTIVE_DATABASE_URL}"
+
   record_prior_state
 
   log "使用 smoke 启动约定拉起本地全栈环境"
   bash "${ROOT_DIR}/scripts/dev-up.sh"
+
+  run_alembic_upgrade_head
 
   wait_for_url "http://localhost:${BACKEND_PORT}/health" 45 || die "Backend health 检查失败"
   wait_for_url "http://localhost:${FRONTEND_PORT}/login" 60 || die "Frontend login 页面未就绪"

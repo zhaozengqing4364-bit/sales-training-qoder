@@ -213,3 +213,4 @@ vendor/
 symphony-workspaces/
 symphony-log/
 symphony-logs/
+.gstack/

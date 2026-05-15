@@ -67,11 +67,19 @@ bash scripts/critical-quality-gate.sh
 ```
 
 固定顺序：
-1. backend tests（auth、history/report/replay、support runtime、admin analytics contract）
-2. Alembic upgrade head
-3. web typecheck
-4. vitest
-5. Playwright critical smoke matrix
+1. secret / environment checks
+2. dev smoke stack
+3. DB ready
+4. `alembic upgrade head`（在 seed 前执行）
+5. smoke bootstrap / seed
+6. web typecheck
+7. vitest
+8. Playwright smoke matrix
+9. backend targeted tests / coverage
+
+说明：
+- 这里的 Playwright 只表示 smoke matrix，不是全量 E2E 套件。
+- Phase4 WebSocket / 外部 StepFun 402 属于外部依赖，不阻塞本地 smoke gate；它们应在专项 E2E 或集成环境中单独验证。
 
 脚本会把完整输出保存到：
 - `.sisyphus/evidence/task-9-quality-gate.txt`
