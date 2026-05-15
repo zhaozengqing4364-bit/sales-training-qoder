@@ -30,6 +30,9 @@ from prompt_templates.service import PromptTemplateService
 router = APIRouter(prefix="/evaluation", tags=["evaluation"])
 router.include_router(admin_scoring_rulesets_router)
 
+REPORT_GENERATION_GENERIC_MESSAGE = "报告生成失败，请稍后重试。"
+REPORT_STORAGE_GENERIC_MESSAGE = "报告生成失败，存储服务暂时不可用，请稍后重试。"
+
 
 def _evaluation_error_response(
     *,
@@ -120,6 +123,39 @@ def _build_response(report: Any) -> ComprehensiveReportResponse:
     )
 
 
+def _report_generation_error_response(
+    *,
+    detail: str,
+    session_id: str,
+) -> JSONResponse:
+    if "NO_STAGE_RESULTS" in detail:
+        return _evaluation_error_response(
+            status_code=422,
+            error_code="[NO_STAGE_RESULTS]",
+            message="缺少阶段评估结果，无法生成综合报告。",
+        )
+    if "DATABASE_ERROR" in detail:
+        return build_server_error(
+            "[DATABASE_ERROR]",
+            message=REPORT_GENERATION_GENERIC_MESSAGE,
+            exc=ValueError(detail),
+            session_id=session_id,
+        )
+    if "STORAGE_ERROR" in detail:
+        return build_server_error(
+            "[STORAGE_ERROR]",
+            message=REPORT_STORAGE_GENERIC_MESSAGE,
+            exc=ValueError(detail),
+            session_id=session_id,
+        )
+    return build_server_error(
+        "[REPORT_GENERATION_FAILED]",
+        message=REPORT_GENERATION_GENERIC_MESSAGE,
+        exc=ValueError(detail),
+        session_id=session_id,
+    )
+
+
 @router.get("/sessions/{session_id}/report", response_model=ComprehensiveReportResponse)
 async def get_comprehensive_report(
     session_id: str,
@@ -177,11 +213,7 @@ async def generate_comprehensive_report(
 
     if not result.is_success:
         message = result.fallback or "Report generation failed"
-        return build_server_error(
-            "[REPORT_GENERATION_FAILED]",
-            message=message,
-            session_id=session_id,
-        )
+        return _report_generation_error_response(detail=message, session_id=session_id)
 
     if result.value is None:
         return build_server_error(
