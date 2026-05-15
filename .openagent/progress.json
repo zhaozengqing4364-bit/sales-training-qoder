@@ -1,12 +1,12 @@
 {
   "updated": "2026-05-16T00:00:00Z",
   "phase": "1A",
-  "completed": ["#66", "#67", "#68", "#69"],
-  "current": "#70",
-  "remaining": ["#70", "#71", "#72", "#73", "#74", "#75", "#76", "#77"],
-  "last_commit": "c0484452",
-  "migration_head": "20260515_1100_062",
-  "baseline_test_count": 2095,
+  "completed": ["#66", "#67", "#68", "#69", "#70"],
+  "current": "#71",
+  "remaining": ["#71", "#72", "#73", "#74", "#75", "#76", "#77"],
+  "last_commit": "6db10396",
+  "migration_head": "20260516_0900_063",
+  "baseline_test_count": 2107,
   "blockers": [],
-  "notes": "#69 TestBank 完成。Commits: 56640eba feat(test-bank): 后端 TestBank 基础建设（query models + API router）, ebfa8ea1 feat(test-bank): 前端 API client 对接, f0d8725c fix(test-bank): 前端 API contract 字段名修正, 087c949c feat(test-bank): 管理后台 UI（题库列表+筛选+分页）, 2e1df01f fix(test-bank): 管理后台编辑流程修复, c0484452 fix(test-bank): type category order index。验证证据：后端 target 9 passed，collect 2095 tests，ruff passed，alembic head 20260515_1100_062；前端 test-bank 26 passed，typecheck passed，lint passed，build passed，HTTP smoke 200。进入 #70。"
+  "notes": "#70 CSV/JSONL 导入完成。Commits: eec41395 feat(test-bank): 后端 CSV/JSONL 导入（API/importer/migration 063）, 6db10396 feat(test-bank): 前端导入 UI/API client。验证证据：后端 importer 单元测试通过，后端导入 API 集成测试通过，ruff passed，alembic head 20260516_0900_063，collect 2107（注意：实现 agent 尝试 alembic upgrade head 时被历史遗留 migration/本地 DB 问题阻塞——table agents already exists / scratch historical no such table practice_sessions——非 063 head 导致；已知环境 migration 注意事项）；前端 test-bank-import 6 passed，test-bank 38 passed，typecheck passed，lint passed，build passed，Playwright 导航重定向至登录页 0 console errors，HTTP smoke 200。进入 #71。"
 }
