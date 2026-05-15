@@ -35,6 +35,10 @@ from curriculum_practice.schemas import (
     QuestionCategoryCreate,
     QuestionCategoryListResponse,
     QuestionCategoryUpdate,
+    QuestionGenerationConfirmRequest,
+    QuestionGenerationConfirmResponse,
+    QuestionGenerationPreviewRequest,
+    QuestionGenerationPreviewResponse,
     QuestionItemCreate,
     QuestionItemListResponse,
     QuestionItemUpdate,
@@ -70,6 +74,7 @@ from curriculum_practice.services.practice_templates import (
     published_ref,
     serialize_template,
 )
+from curriculum_practice.services.question_generation import QuestionGenerationService
 from curriculum_practice.services.test_bank import (
     SERVER_ERROR as TEST_BANK_SERVICE_FAILED,
 )
@@ -236,6 +241,20 @@ def _test_bank_result_error(
     return _api_error(error_code, status_code=400)
 
 
+def _question_generation_result_error(fallback: str | None) -> JSONResponse:
+    error_code = fallback or "[QUESTION_GENERATION_FAILED]"
+    if error_code == "[LEARNING_CHAPTER_NOT_FOUND]":
+        return _learning_chapter_not_found()
+    return _api_error(error_code, status_code=400, message=error_code)
+
+
+def _question_generation_service(
+    request: Request, db: AsyncSession
+) -> QuestionGenerationService:
+    generator = getattr(request.app.state, "question_generation_generator", None)
+    return QuestionGenerationService(db, generator=generator)
+
+
 @study_router.get("/learning-contents/{content_id}", response_model=None)
 async def get_my_study_content(
     content_id: str,
@@ -393,6 +412,46 @@ async def list_question_categories(
             total=len(items),
         )
     )
+
+
+@test_bank_router.post("/generation/preview", response_model=None)
+async def preview_question_generation(
+    payload: QuestionGenerationPreviewRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await _question_generation_service(request, db).preview_from_chapter(
+        learning_content_id=payload.learning_content_id,
+        chapter_id=payload.chapter_id,
+    )
+    if not result.is_success or result.value is None:
+        return _question_generation_result_error(result.fallback)
+    return _success(QuestionGenerationPreviewResponse(drafts=result.value))
+
+
+@test_bank_router.post("/generation/confirm", response_model=None)
+async def confirm_question_generation(
+    payload: QuestionGenerationConfirmRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await _question_generation_service(request, db).save_drafts(
+        payload.drafts,
+        category_id=payload.category_id,
+        actor_id=str(current_user.user_id),
+    )
+    if not result.is_success or result.value is None:
+        return _question_generation_result_error(result.fallback)
+    items = [serialize_question(item) for item in result.value]
+    return _success(QuestionGenerationConfirmResponse(items=items, total=len(items)))
 
 
 @test_bank_router.post("/imports", response_model=None)

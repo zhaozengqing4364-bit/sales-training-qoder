@@ -493,6 +493,43 @@ class QuestionItemListResponse(BaseModel):
     total: int
 
 
+class QuestionGenerationPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    learning_content_id: str = Field(..., min_length=1, max_length=36)
+    chapter_id: str = Field(..., min_length=1, max_length=36)
+
+
+class QuestionGenerationDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(..., min_length=1, max_length=200)
+    stem: str = Field(..., min_length=1)
+    reference_answer: str = Field(..., min_length=1, max_length=8000)
+    scoring_criteria: dict[str, object]
+    scoring_dimensions: list[str] = Field(..., min_length=1)
+    tags: list[str] = Field(default_factory=list)
+    difficulty: QuestionDifficulty = "medium"
+    source_learning_content_id: str = Field(..., min_length=1, max_length=36)
+    source_chapter_id: str = Field(..., min_length=1, max_length=36)
+
+
+class QuestionGenerationPreviewResponse(BaseModel):
+    drafts: list[QuestionGenerationDraft]
+
+
+class QuestionGenerationConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str = Field(..., min_length=1, max_length=36)
+    drafts: list[QuestionGenerationDraft] = Field(..., min_length=1, max_length=5)
+
+
+class QuestionGenerationConfirmResponse(BaseModel):
+    items: list[QuestionItemResponse]
+    total: int
+
+
 class TestBankImportErrorResponse(BaseModel):
     row: int
     field: str
