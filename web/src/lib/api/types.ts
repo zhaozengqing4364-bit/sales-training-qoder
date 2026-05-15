@@ -3898,3 +3898,110 @@ export interface LearnerStudyChapterCompletionResponse {
     already_completed: boolean;
     progress: LearnerStudyProgress;
 }
+
+// TestBank types (Issue #69)
+export interface AssetRef {
+    asset_type: string;
+    asset_id: string;
+    version: number;
+    hash: string;
+    snapshot_label: string;
+}
+
+export interface LearningContentRef extends AssetRef {
+    asset_type: "learning_content";
+}
+
+export interface TestBankRef extends AssetRef {
+    asset_type: "test_bank_question";
+}
+
+export interface QuestionCategory {
+    id: string;
+    name: string;
+    description: string;
+    parent_id: string | null;
+    children?: QuestionCategory[];
+    created_at: string;
+    updated_at: string;
+}
+
+export type QuestionDifficulty = "easy" | "medium" | "hard";
+export type QuestionLifecycleStatus = "draft" | "published" | "archived";
+
+export interface ScoringDimension {
+    name: string;
+    description: string;
+    weight: number;
+    criteria: string[];
+}
+
+export interface QuestionItem {
+    id: string;
+    title: string;
+    stem: string;
+    reference_answer: string;
+    category_id: string;
+    difficulty: QuestionDifficulty;
+    status: QuestionLifecycleStatus;
+    tags: string[];
+    scoring_dimensions: ScoringDimension[];
+    scoring_criteria: string[];
+    safety_flag: boolean;
+    department: string | null;
+    version: number;
+    content_hash: string | null;
+    published_at: string | null;
+    created_at: string;
+    updated_at: string;
+    category_name?: string;
+    test_bank_ref?: TestBankRef;
+}
+
+export interface CreateCategoryRequest {
+    name: string;
+    description?: string;
+    parent_id?: string | null;
+}
+
+export interface UpdateCategoryRequest {
+    name?: string;
+    description?: string;
+    parent_id?: string | null;
+}
+
+export interface CreateQuestionRequest {
+    title: string;
+    stem: string;
+    reference_answer: string;
+    category_id: string;
+    difficulty: QuestionDifficulty;
+    tags?: string[];
+    scoring_dimensions?: ScoringDimension[];
+    scoring_criteria?: string[];
+    safety_flag?: boolean;
+    department?: string | null;
+}
+
+export interface UpdateQuestionRequest {
+    title?: string;
+    stem?: string;
+    reference_answer?: string;
+    category_id?: string;
+    difficulty?: QuestionDifficulty;
+    tags?: string[];
+    scoring_dimensions?: ScoringDimension[];
+    scoring_criteria?: string[];
+    safety_flag?: boolean;
+    department?: string | null;
+}
+
+export interface CategoryListResponse {
+    items: QuestionCategory[];
+    total: number;
+}
+
+export interface QuestionListResponse {
+    items: QuestionItem[];
+    total: number;
+}

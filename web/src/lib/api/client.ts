@@ -174,6 +174,20 @@ import {
     RetrainingTaskCreateRequest,
     RetrainingTaskCompleteRequest,
     RetrainingTaskStartResponse,
+    AssetRef,
+    LearningContentRef,
+    TestBankRef,
+    QuestionCategory,
+    QuestionItem,
+    QuestionDifficulty,
+    QuestionLifecycleStatus,
+    ScoringDimension,
+    CreateCategoryRequest,
+    UpdateCategoryRequest,
+    CreateQuestionRequest,
+    UpdateQuestionRequest,
+    CategoryListResponse,
+    QuestionListResponse,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -908,6 +922,62 @@ function normalizeStringList(value: unknown): string[] {
         normalized.push(text);
     }
     return normalized;
+}
+
+function normalizeQuestionCategory(input: unknown): QuestionCategory {
+    const raw = toRecord(input);
+    return {
+        id: toStringValue(raw.id),
+        name: toStringValue(raw.name),
+        description: toStringValue(raw.description),
+        parent_id: typeof raw.parent_id === "string" ? raw.parent_id : null,
+        created_at: toStringValue(raw.created_at),
+        updated_at: toStringValue(raw.updated_at),
+    };
+}
+
+function normalizeScoringDimension(input: unknown): ScoringDimension {
+    const raw = toRecord(input);
+    return {
+        name: toStringValue(raw.name),
+        description: toStringValue(raw.description),
+        weight: toNumberValue(raw.weight, 0),
+        criteria: Array.isArray(raw.criteria)
+            ? raw.criteria.map((c: unknown) => toStringValue(c))
+            : [],
+    };
+}
+
+function normalizeQuestionItem(input: unknown): QuestionItem {
+    const raw = toRecord(input);
+    return {
+        id: toStringValue(raw.id),
+        title: toStringValue(raw.title),
+        stem: toStringValue(raw.stem),
+        reference_answer: toStringValue(raw.reference_answer),
+        category_id: toStringValue(raw.category_id),
+        difficulty: (["easy", "medium", "hard"].includes(toStringValue(raw.difficulty))
+            ? toStringValue(raw.difficulty)
+            : "medium") as QuestionDifficulty,
+        status: (["draft", "published", "archived"].includes(toStringValue(raw.status))
+            ? toStringValue(raw.status)
+            : "draft") as QuestionLifecycleStatus,
+        tags: normalizeStringList(raw.tags),
+        scoring_dimensions: Array.isArray(raw.scoring_dimensions)
+            ? raw.scoring_dimensions.map(normalizeScoringDimension)
+            : [],
+        scoring_criteria: Array.isArray(raw.scoring_criteria)
+            ? raw.scoring_criteria.map((c: unknown) => toStringValue(c))
+            : [],
+        safety_flag: Boolean(raw.safety_flag),
+        department: typeof raw.department === "string" ? raw.department : null,
+        version: toNumberValue(raw.version, 1),
+        content_hash: typeof raw.content_hash === "string" ? raw.content_hash : null,
+        published_at: typeof raw.published_at === "string" ? raw.published_at : null,
+        created_at: toStringValue(raw.created_at),
+        updated_at: toStringValue(raw.updated_at),
+        category_name: typeof raw.category_name === "string" ? raw.category_name : undefined,
+    };
 }
 
 function normalizeAdminPersonaCustomerPressure(value: unknown): AdminPersonaCustomerPressure | undefined {
@@ -1779,6 +1849,97 @@ export const api = {
     learningContents: learningContentsDomain,
     learnerStudy: learnerStudyDomain,
     featureFlags: featureFlagsDomain,
+
+    testBank: {
+        listCategories: async (params?: { parent_id?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.parent_id) searchParams.set("parent_id", params.parent_id);
+            const query = searchParams.toString();
+            const result = await apiFetch<{ items?: unknown[]; total?: unknown }>(
+                `/curriculum/test-bank/categories${query ? `?${query}` : ""}`,
+            );
+            const items = Array.isArray(result.items) ? result.items : [];
+            return {
+                items: items.map(normalizeQuestionCategory),
+                total: toNumberValue(result.total, 0),
+            };
+        },
+        createCategory: async (data: CreateCategoryRequest) => {
+            const result = await apiFetch<unknown>("/curriculum/test-bank/categories", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+            return normalizeQuestionCategory(result);
+        },
+        updateCategory: async (categoryId: string, data: UpdateCategoryRequest) => {
+            const result = await apiFetch<unknown>(
+                `/curriculum/test-bank/categories/${encodeURIComponent(categoryId)}`,
+                { method: "PUT", body: JSON.stringify(data) },
+            );
+            return normalizeQuestionCategory(result);
+        },
+        deleteCategory: async (categoryId: string) => {
+            return apiFetch<{ deleted: boolean }>(
+                `/curriculum/test-bank/categories/${encodeURIComponent(categoryId)}`,
+                { method: "DELETE" },
+            );
+        },
+        listQuestions: async (filters?: {
+            category_id?: string;
+            difficulty?: QuestionDifficulty;
+            status?: QuestionLifecycleStatus;
+            tag?: string;
+        }) => {
+            const searchParams = new URLSearchParams();
+            if (filters?.category_id) searchParams.set("category_id", filters.category_id);
+            if (filters?.difficulty) searchParams.set("difficulty", filters.difficulty);
+            if (filters?.status) searchParams.set("status", filters.status);
+            if (filters?.tag) searchParams.set("tag", filters.tag);
+            const query = searchParams.toString();
+            const result = await apiFetch<{ items?: unknown[]; total?: unknown }>(
+                `/curriculum/test-bank/questions${query ? `?${query}` : ""}`,
+            );
+            const items = Array.isArray(result.items) ? result.items : [];
+            return {
+                items: items.map(normalizeQuestionItem),
+                total: toNumberValue(result.total, 0),
+            };
+        },
+        createQuestion: async (data: CreateQuestionRequest) => {
+            const result = await apiFetch<unknown>("/curriculum/test-bank/questions", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+            return normalizeQuestionItem(result);
+        },
+        getQuestion: async (questionId: string) => {
+            const result = await apiFetch<unknown>(
+                `/curriculum/test-bank/questions/${encodeURIComponent(questionId)}`,
+            );
+            return normalizeQuestionItem(result);
+        },
+        updateQuestion: async (questionId: string, data: UpdateQuestionRequest) => {
+            const result = await apiFetch<unknown>(
+                `/curriculum/test-bank/questions/${encodeURIComponent(questionId)}`,
+                { method: "PUT", body: JSON.stringify(data) },
+            );
+            return normalizeQuestionItem(result);
+        },
+        publishQuestion: async (questionId: string) => {
+            const result = await apiFetch<unknown>(
+                `/curriculum/test-bank/questions/${encodeURIComponent(questionId)}/publish`,
+                { method: "POST" },
+            );
+            return normalizeQuestionItem(result);
+        },
+        archiveQuestion: async (questionId: string) => {
+            const result = await apiFetch<unknown>(
+                `/curriculum/test-bank/questions/${encodeURIComponent(questionId)}/archive`,
+                { method: "POST" },
+            );
+            return normalizeQuestionItem(result);
+        },
+    },
 
     // User
     user: {
