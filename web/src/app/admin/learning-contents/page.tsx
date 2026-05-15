@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { BookOpen, RefreshCcw } from "lucide-react";
 
 import { api } from "@/lib/api/client";
@@ -101,12 +102,15 @@ export default function AdminLearningContentsPage() {
                                     {items.map((item) => (
                                         <tr key={item.learning_content_id} className="transition-colors hover:bg-slate-50/50">
                                             <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
+                                                <Link
+                                                    href={`/admin/learning-contents/${item.learning_content_id}`}
+                                                    className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                                                >
                                                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                                                         <BookOpen className="h-5 w-5" />
                                                     </div>
                                                     <div className="font-bold text-slate-900">{item.title}</div>
-                                                </div>
+                                                </Link>
                                             </td>
                                             <td className="max-w-xs truncate px-6 py-4 text-slate-500">{item.summary || "-"}</td>
                                             <td className="px-6 py-4 font-medium text-slate-700">{item.owner || "-"}</td>

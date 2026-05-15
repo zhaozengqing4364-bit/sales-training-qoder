@@ -4,6 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AdminLearningContentsPage from "./page";
 import type { LearningContent } from "@/lib/api/types";
 
+vi.mock("next/link", () => ({
+    default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
+}));
+
 const {
     listMock,
 } = vi.hoisted(() => ({
@@ -124,5 +132,27 @@ describe("AdminLearningContentsPage", () => {
         expect(screen.getByText(/sales-team/)).toBeTruthy();
         expect(screen.getByText(/manual/)).toBeTruthy();
         expect(screen.getByText(/imported/)).toBeTruthy();
+    });
+
+    it("renders title as link to detail page", async () => {
+        listMock.mockResolvedValue({
+            items: [
+                makeLearningContent({
+                    learning_content_id: "content-1",
+                    title: "销售异议处理",
+                    status: "draft",
+                }),
+            ],
+            total: 1,
+        });
+        render(<AdminLearningContentsPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("销售异议处理")).toBeTruthy();
+        });
+
+        const link = screen.getByRole("link", { name: /销售异议处理/ });
+        expect(link).toBeTruthy();
+        expect(link.getAttribute("href")).toBe("/admin/learning-contents/content-1");
     });
 });
