@@ -22,9 +22,16 @@ from curriculum_practice.schemas import (
     CaseItemCreate,
     CaseItemListResponse,
     CaseItemResponse,
+    LearningChapterCreate,
+    LearningChapterReorderRequest,
+    LearningChapterUpdate,
+    LearningContentCreate,
+    LearningContentListResponse,
+    LearningContentUpdate,
     PracticeTemplateCreate,
     PracticeTemplateListResponse,
     PracticeTemplateUpdate,
+    PublishGateDecision,
     RoleProfileCreate,
     RoleProfileListResponse,
     RoleProfileResponse,
@@ -35,6 +42,14 @@ from curriculum_practice.services.content_assets import (
     ContentAssetNotEditableError,
     ContentAssetPublishError,
     ContentAssetService,
+)
+from curriculum_practice.services.learning_contents import (
+    SERVER_ERROR as LEARNING_CONTENT_SERVICE_FAILED,
+)
+from curriculum_practice.services.learning_contents import (
+    LearningContentService,
+    serialize_chapter,
+    serialize_learning_content,
 )
 from curriculum_practice.services.learning_path import LearningPathService
 from curriculum_practice.services.practice_templates import (
@@ -58,6 +73,9 @@ router = APIRouter(
 )
 learner_router = APIRouter(
     prefix="/curriculum-practice/learning-path", tags=["curriculum-practice-learning-path"]
+)
+learning_content_router = APIRouter(
+    prefix="/curriculum/learning-contents", tags=["admin-learning-contents"]
 )
 
 
@@ -140,6 +158,54 @@ def _role_profile_not_found() -> JSONResponse:
     )
 
 
+def _learning_content_not_found() -> JSONResponse:
+    return _api_error(
+        "[LEARNING_CONTENT_NOT_FOUND]",
+        status_code=404,
+        message="LearningContent 不存在。",
+    )
+
+
+def _learning_chapter_not_found() -> JSONResponse:
+    return _api_error(
+        "[LEARNING_CHAPTER_NOT_FOUND]",
+        status_code=404,
+        message="LearningChapter 不存在。",
+    )
+
+
+def _learning_content_result_error(
+    fallback: str | None,
+    *,
+    server_error_code: str,
+    server_message: str,
+) -> JSONResponse:
+    error_code = fallback or server_error_code
+    if error_code == "[LEARNING_CONTENT_NOT_FOUND]":
+        return _learning_content_not_found()
+    if error_code == "[LEARNING_CHAPTER_NOT_FOUND]":
+        return _learning_chapter_not_found()
+    if error_code == "[LEARNING_CONTENT_NOT_EDITABLE]":
+        return _api_error(
+            "[LEARNING_CONTENT_NOT_EDITABLE]",
+            status_code=409,
+            message="Archived LearningContent records cannot be changed.",
+        )
+    if error_code == "[LEARNING_CHAPTER_REORDER_INVALID]":
+        return _api_error(
+            "[LEARNING_CHAPTER_REORDER_INVALID]",
+            status_code=400,
+            message="chapter_ids must include every chapter exactly once.",
+        )
+    if error_code == LEARNING_CONTENT_SERVICE_FAILED:
+        return _api_error(
+            server_error_code,
+            status_code=500,
+            message=server_message,
+        )
+    return _api_error(error_code, status_code=400)
+
+
 def _serialize_case_item(item: CaseItem) -> CaseItemResponse:
     return CaseItemResponse.model_validate(item)
 
@@ -204,6 +270,368 @@ def _build_default_voice_clone_service() -> VoiceCloneService:
         endpoint_url=endpoint_url,
         fallback_voice=os.getenv("STEPFUN_DEFAULT_VOICE", "default_voice"),
     )
+
+
+@learning_content_router.get("", response_model=None)
+async def list_learning_contents(
+    status: str | None = Query(default=None, pattern="^(draft|published|archived)$"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    items_result = await service.list_contents(status=status)
+    if not items_result.is_success:
+        return _learning_content_result_error(
+            items_result.fallback,
+            server_error_code="[LEARNING_CONTENT_LIST_FAILED]",
+            server_message="LearningContent 列表读取失败。",
+        )
+    items = items_result.value or []
+    serialized_items = []
+    for item in items:
+        serialized_result = await serialize_learning_content(service, item)
+        if not serialized_result.is_success or serialized_result.value is None:
+            return _learning_content_result_error(
+                serialized_result.fallback,
+                server_error_code="[LEARNING_CONTENT_LIST_FAILED]",
+                server_message="LearningContent 列表读取失败。",
+            )
+        serialized_items.append(serialized_result.value)
+    payload = LearningContentListResponse(
+        items=serialized_items,
+        total=len(items),
+    )
+    return _success(payload)
+
+
+@learning_content_router.post("", response_model=None)
+async def create_learning_content(
+    payload: LearningContentCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.create_content(
+        payload, actor_id=str(current_user.user_id)
+    )
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CONTENT_CREATE_FAILED]",
+            server_message="LearningContent 创建失败。",
+        )
+    serialized_result = await serialize_learning_content(service, content_result.value)
+    if not serialized_result.is_success or serialized_result.value is None:
+        return _learning_content_result_error(
+            serialized_result.fallback,
+            server_error_code="[LEARNING_CONTENT_CREATE_FAILED]",
+            server_message="LearningContent 创建失败。",
+        )
+    return _success(serialized_result.value)
+
+
+@learning_content_router.get("/{content_id}", response_model=None)
+async def get_learning_content(
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CONTENT_FETCH_FAILED]",
+            server_message="LearningContent 读取失败。",
+        )
+    serialized_result = await serialize_learning_content(service, content_result.value)
+    if not serialized_result.is_success or serialized_result.value is None:
+        return _learning_content_result_error(
+            serialized_result.fallback,
+            server_error_code="[LEARNING_CONTENT_FETCH_FAILED]",
+            server_message="LearningContent 读取失败。",
+        )
+    return _success(serialized_result.value)
+
+
+@learning_content_router.put("/{content_id}", response_model=None)
+async def update_learning_content(
+    content_id: str,
+    payload: LearningContentUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CONTENT_UPDATE_FAILED]",
+            server_message="LearningContent 更新失败。",
+        )
+    updated_result = await service.update_content(
+        content_result.value, payload, actor_id=str(current_user.user_id)
+    )
+    if not updated_result.is_success or updated_result.value is None:
+        return _learning_content_result_error(
+            updated_result.fallback,
+            server_error_code="[LEARNING_CONTENT_UPDATE_FAILED]",
+            server_message="LearningContent 更新失败。",
+        )
+    serialized_result = await serialize_learning_content(service, updated_result.value)
+    if not serialized_result.is_success or serialized_result.value is None:
+        return _learning_content_result_error(
+            serialized_result.fallback,
+            server_error_code="[LEARNING_CONTENT_UPDATE_FAILED]",
+            server_message="LearningContent 更新失败。",
+        )
+    return _success(serialized_result.value)
+
+
+@learning_content_router.post("/{content_id}/chapters", response_model=None)
+async def add_learning_chapter(
+    content_id: str,
+    payload: LearningChapterCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_CREATE_FAILED]",
+            server_message="LearningChapter 创建失败。",
+        )
+    chapter_result = await service.add_chapter(
+        content_result.value, payload, actor_id=str(current_user.user_id)
+    )
+    if not chapter_result.is_success or chapter_result.value is None:
+        return _learning_content_result_error(
+            chapter_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_CREATE_FAILED]",
+            server_message="LearningChapter 创建失败。",
+        )
+    return _success(serialize_chapter(chapter_result.value))
+
+
+@learning_content_router.put("/{content_id}/chapters/reorder", response_model=None)
+async def reorder_learning_chapters(
+    content_id: str,
+    payload: LearningChapterReorderRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_REORDER_FAILED]",
+            server_message="LearningChapter 排序失败。",
+        )
+    chapters_result = await service.reorder_chapters(
+        content_result.value, payload.chapter_ids, actor_id=str(current_user.user_id)
+    )
+    if not chapters_result.is_success or chapters_result.value is None:
+        return _learning_content_result_error(
+            chapters_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_REORDER_FAILED]",
+            server_message="LearningChapter 排序失败。",
+        )
+    return _success([serialize_chapter(chapter) for chapter in chapters_result.value])
+
+
+@learning_content_router.put("/{content_id}/chapters/{chapter_id}", response_model=None)
+async def update_learning_chapter(
+    content_id: str,
+    chapter_id: str,
+    payload: LearningChapterUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_UPDATE_FAILED]",
+            server_message="LearningChapter 更新失败。",
+        )
+    chapter_result = await service.get_chapter(content_id, chapter_id)
+    if not chapter_result.is_success or chapter_result.value is None:
+        return _learning_content_result_error(
+            chapter_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_UPDATE_FAILED]",
+            server_message="LearningChapter 更新失败。",
+        )
+    updated_result = await service.update_chapter(
+        content_result.value,
+        chapter_result.value,
+        payload,
+        actor_id=str(current_user.user_id),
+    )
+    if not updated_result.is_success or updated_result.value is None:
+        return _learning_content_result_error(
+            updated_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_UPDATE_FAILED]",
+            server_message="LearningChapter 更新失败。",
+        )
+    return _success(serialize_chapter(updated_result.value))
+
+
+@learning_content_router.delete("/{content_id}/chapters/{chapter_id}", response_model=None)
+async def delete_learning_chapter(
+    content_id: str,
+    chapter_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_DELETE_FAILED]",
+            server_message="LearningChapter 删除失败。",
+        )
+    chapter_result = await service.get_chapter(content_id, chapter_id)
+    if not chapter_result.is_success or chapter_result.value is None:
+        return _learning_content_result_error(
+            chapter_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_DELETE_FAILED]",
+            server_message="LearningChapter 删除失败。",
+        )
+    delete_result = await service.delete_chapter(
+        content_result.value, chapter_result.value
+    )
+    if not delete_result.is_success:
+        return _learning_content_result_error(
+            delete_result.fallback,
+            server_error_code="[LEARNING_CHAPTER_DELETE_FAILED]",
+            server_message="LearningChapter 删除失败。",
+        )
+    return _success({"deleted": True})
+
+
+@learning_content_router.post("/{content_id}/publish", response_model=None)
+async def publish_learning_content(
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CONTENT_PUBLISH_FAILED]",
+            server_message="LearningContent 发布失败。",
+        )
+    publish_result = await service.publish_content(
+        content_result.value, actor_id=str(current_user.user_id)
+    )
+    if not publish_result.is_success:
+        if publish_result.fallback == "[LEARNING_CONTENT_PUBLISH_GATE_FAILED]":
+            decision = publish_result.value
+            if not isinstance(decision, PublishGateDecision):
+                decision = PublishGateDecision(can_publish=False, results=[])
+            return JSONResponse(
+                status_code=400,
+                content=error_response(
+                    "[LEARNING_CONTENT_PUBLISH_GATE_FAILED]",
+                    message="LearningContent 发布门禁未通过。",
+                )
+                | {
+                    "details": {
+                        "gate_results": [
+                            item.model_dump() for item in decision.results
+                        ]
+                    }
+                },
+            )
+        return _learning_content_result_error(
+            publish_result.fallback,
+            server_error_code="[LEARNING_CONTENT_PUBLISH_FAILED]",
+            server_message="LearningContent 发布失败。",
+        )
+    if publish_result.value is None:
+        return _learning_content_result_error(
+            publish_result.fallback,
+            server_error_code="[LEARNING_CONTENT_PUBLISH_FAILED]",
+            server_message="LearningContent 发布失败。",
+        )
+    serialized_result = await serialize_learning_content(service, publish_result.value)
+    if not serialized_result.is_success or serialized_result.value is None:
+        return _learning_content_result_error(
+            serialized_result.fallback,
+            server_error_code="[LEARNING_CONTENT_PUBLISH_FAILED]",
+            server_message="LearningContent 发布失败。",
+        )
+    return _success(serialized_result.value)
+
+
+@learning_content_router.post("/{content_id}/archive", response_model=None)
+async def archive_learning_content(
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CONTENT_ARCHIVE_FAILED]",
+            server_message="LearningContent 归档失败。",
+        )
+    archive_result = await service.archive_content(
+        content_result.value, actor_id=str(current_user.user_id)
+    )
+    if not archive_result.is_success or archive_result.value is None:
+        return _learning_content_result_error(
+            archive_result.fallback,
+            server_error_code="[LEARNING_CONTENT_ARCHIVE_FAILED]",
+            server_message="LearningContent 归档失败。",
+        )
+    serialized_result = await serialize_learning_content(service, archive_result.value)
+    if not serialized_result.is_success or serialized_result.value is None:
+        return _learning_content_result_error(
+            serialized_result.fallback,
+            server_error_code="[LEARNING_CONTENT_ARCHIVE_FAILED]",
+            server_message="LearningContent 归档失败。",
+        )
+    return _success(serialized_result.value)
 
 
 @router.get("/templates", response_model=None)

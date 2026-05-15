@@ -5,13 +5,16 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 
 from common.db.models import Base
@@ -160,4 +163,77 @@ class RoleProfile(Base):
             name="ck_role_profile_status",
         ),
         Index("idx_role_profiles_status_updated", "status", "updated_at"),
+    )
+
+
+class LearningContent(Base):
+    __tablename__ = "learning_contents"
+
+    learning_content_id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    title = Column(String(200), nullable=False)
+    summary = Column(Text, nullable=True)
+    owner = Column(String(120), nullable=True)
+    source = Column(String(300), nullable=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    safety_flagged = Column(Boolean, nullable=False, default=False)
+    version = Column(Integer, nullable=False, default=1)
+    content_hash = Column(String(80), nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    published_by = Column(String(36), nullable=True)
+    created_by = Column(String(36), nullable=True)
+    updated_by = Column(String(36), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_learning_content_status",
+        ),
+        Index("idx_learning_contents_status_updated", "status", "updated_at"),
+    )
+
+
+class LearningChapter(Base):
+    __tablename__ = "learning_chapters"
+
+    chapter_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    learning_content_id = Column(
+        String(36),
+        ForeignKey("learning_contents.learning_content_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    order_index = Column(Integer, nullable=False)
+    created_by = Column(String(36), nullable=True)
+    updated_by = Column(String(36), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint("order_index >= 1", name="ck_learning_chapter_order_index"),
+        UniqueConstraint(
+            "learning_content_id",
+            "order_index",
+            name="uq_learning_chapters_content_order",
+        ),
+        Index("idx_learning_chapters_content_order", "learning_content_id", "order_index"),
     )
