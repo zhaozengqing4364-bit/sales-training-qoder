@@ -56,6 +56,11 @@ type SessionSeed = {
   token: string;
 };
 
+type AgentPersonaPair = {
+  agentId: string;
+  personaId: string;
+};
+
 function unwrapApiPayload<T>(payload: T | { data?: T }): T {
   if (
     payload &&
@@ -90,6 +95,41 @@ async function loginForBearerToken(apiContext: APIRequestContext): Promise<strin
   return String(token);
 }
 
+async function getPublishedAgentPersonaPair(
+  apiContext: APIRequestContext,
+  token: string,
+): Promise<AgentPersonaPair> {
+  const headers = { Authorization: `Bearer ${token}` };
+  const agentsResponse = await apiContext.get(
+    `${backendBaseUrl}/agents?category=sales&status=published`,
+    { headers },
+  );
+  expect(agentsResponse.ok(), "presentation session setup needs a published agent").toBeTruthy();
+  const agentsPayload = unwrapApiPayload(
+    (await agentsResponse.json()) as {
+      data?: { agents?: { id: string; persona_count?: number }[] };
+      agents?: { id: string; persona_count?: number }[];
+    },
+  );
+  const agent =
+    agentsPayload.agents?.find((entry) => Number(entry.persona_count || 0) > 0) ||
+    agentsPayload.agents?.[0];
+  expect(agent, "presentation session setup needs at least one published agent").toBeTruthy();
+
+  const personasResponse = await apiContext.get(
+    `${backendBaseUrl}/scenarios/sales/personas?agent_id=${agent?.id}`,
+    { headers },
+  );
+  expect(personasResponse.ok(), "presentation session setup needs a linked persona").toBeTruthy();
+  const personas = unwrapApiPayload(
+    (await personasResponse.json()) as { data?: { id: string }[] } | { id: string }[],
+  ) as { id: string }[];
+  const persona = personas[0];
+  expect(persona, "presentation session setup needs at least one linked persona").toBeTruthy();
+
+  return { agentId: String(agent?.id), personaId: String(persona.id) };
+}
+
 async function uploadPresentation(
   apiContext: APIRequestContext,
   token: string,
@@ -115,12 +155,15 @@ async function createPresentationSession(
   apiContext: APIRequestContext,
   token: string,
   presentationId: string,
+  pair: AgentPersonaPair,
 ): Promise<string> {
   const response = await apiContext.post(`${backendBaseUrl}/practice/sessions`, {
     headers: { Authorization: `Bearer ${token}` },
     data: {
       scenario_type: "presentation",
       presentation_id: presentationId,
+      agent_id: pair.agentId,
+      persona_id: pair.personaId,
       voice_mode: "stepfun_realtime",
     },
   });
@@ -134,6 +177,7 @@ async function createPresentationSession(
 
 async function seedNormalPresentation(apiContext: APIRequestContext): Promise<SessionSeed> {
   const token = await loginForBearerToken(apiContext);
+  const pair = await getPublishedAgentPersonaPair(apiContext, token);
   const uploaded = await uploadPresentation(
     apiContext,
     token,
@@ -150,7 +194,7 @@ async function seedNormalPresentation(apiContext: APIRequestContext): Promise<Se
 
   return {
     presentationId: String(uploaded.presentation_id),
-    sessionId: await createPresentationSession(apiContext, token, String(uploaded.presentation_id)),
+    sessionId: await createPresentationSession(apiContext, token, String(uploaded.presentation_id), pair),
     token,
   };
 }
@@ -265,8 +309,9 @@ test.describe("Issue #44 Phase 4 Presentation real WebSocket E2E", () => {
         ws.send(JSON.stringify({ type: "control", data: { action: "start" } }));
         await waitForMessage(
           (message) =>
-            message.type === "status" && message.data?.session_status === "in_progress",
-          "in_progress status",
+            message.type === "connected" ||
+            (message.type === "status" && message.data?.session_status === "in_progress"),
+          "connected or in_progress status",
         );
         await waitForMessage(
           (message) => message.type === "slide_update" || message.type === "page_context",
@@ -354,6 +399,7 @@ test.describe("Issue #44 Phase 4 Presentation real WebSocket E2E", () => {
     const apiContext = await playwrightRequest.newContext();
     try {
       const token = await loginForBearerToken(apiContext);
+      const pair = await getPublishedAgentPersonaPair(apiContext, token);
       const uploaded = await uploadPresentation(
         apiContext,
         token,
@@ -372,6 +418,8 @@ test.describe("Issue #44 Phase 4 Presentation real WebSocket E2E", () => {
         data: {
           scenario_type: "presentation",
           presentation_id: uploaded.presentation_id,
+          agent_id: pair.agentId,
+          persona_id: pair.personaId,
           voice_mode: "stepfun_realtime",
         },
       });

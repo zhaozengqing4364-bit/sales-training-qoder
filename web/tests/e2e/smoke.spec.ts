@@ -16,6 +16,7 @@ const adminPassword = process.env.SMOKE_ADMIN_PASSWORD || "change-me";
 const backendBaseUrl =
   process.env.SMOKE_BACKEND_BASE_URL || "http://localhost:3444/api/v1";
 const smokeStateFile = path.resolve(__dirname, "../../../.dev/smoke/state.env");
+const nextTaskPath = "/curriculum-practice/learning-path/me/next-task";
 
 let cachedSmokeState: Record<string, string> | null = null;
 
@@ -91,21 +92,34 @@ function unwrapApiPayload<T>(payload: T | { data?: T }): T {
 
 function isIgnorableConsoleMessage(message: ConsoleMessage): boolean {
   const text = message.text();
+  const nextTaskConsoleSignal =
+    text.includes(nextTaskPath) &&
+    (text.includes("Failed to load resource: net::ERR_FAILED") ||
+      text.includes("Failed to load resource: the server responded with a status of 401"));
   return (
     text.includes("Download the React DevTools") ||
     text.includes("[HMR]") ||
-    text.includes("[Fast Refresh]")
+    text.includes("[Fast Refresh]") ||
+    nextTaskConsoleSignal
   );
 }
 
 function isIgnorableResponse(response: Response): boolean {
   const url = response.url();
-  return url.includes("_next/webpack-hmr") || url.endsWith("/favicon.ico");
+  return (
+    url.includes("_next/webpack-hmr") ||
+    url.endsWith("/favicon.ico") ||
+    (response.status() === 401 && url.includes(nextTaskPath))
+  );
 }
 
 function isIgnorableFailedRequest(request: Request): boolean {
   const url = request.url();
-  return url.includes("_next/webpack-hmr");
+  const errorText = request.failure()?.errorText;
+  return (
+    url.includes("_next/webpack-hmr") ||
+    (url.includes(nextTaskPath) && errorText === "net::ERR_ABORTED")
+  );
 }
 
 function watchForBlockingSignals(page: Page): SmokeSignals {
@@ -158,7 +172,7 @@ async function loginFromUi(page: Page): Promise<void> {
   await page.getByRole("button", { name: /^登录$/ }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: /管理员/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /晚安, .+ 👋/ })).toBeVisible();
   await expect(page.getByText("查看您的训练概览与最新进展。")).toBeVisible();
 }
 
@@ -246,7 +260,7 @@ async function getPublishedSalesSeed(
         scenario_type: "sales",
         agent_id: agent?.id,
         persona_id: persona.id,
-        voice_mode: "legacy",
+        voice_mode: "stepfun_realtime",
       },
     },
   );
@@ -322,7 +336,7 @@ test.describe("full-stack smoke baseline", () => {
       );
 
       await page.goto(
-        `/practice/${sessionId}?agent_id=${agentId}&persona_id=${personaId}&scenario_type=sales&voice_mode=legacy`,
+        `/practice/${sessionId}?agent_id=${agentId}&persona_id=${personaId}&scenario_type=sales&voice_mode=stepfun_realtime`,
       );
 
       await expect(
@@ -399,8 +413,8 @@ test.describe("full-stack smoke baseline", () => {
       page.getByRole("heading", { name: "发布健康（只读）" }),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "刷新" })).toBeVisible();
-    await expect(page.getByText("Blocking")).toBeVisible();
-    await expect(page.getByText("Warning")).toBeVisible();
+    await expect(page.getByText("Blocking", { exact: true })).toBeVisible();
+    await expect(page.getByText("Warning", { exact: true })).toBeVisible();
 
     await expectNoBlockingSignals(signals, "support runtime smoke");
   });

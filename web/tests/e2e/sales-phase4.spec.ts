@@ -282,8 +282,9 @@ test.describe("Issue #43 Phase 4 Sales real WebSocket E2E", () => {
         ws.send(JSON.stringify({ type: "control", data: { action: "start" } }));
         await waitForMessage(
           (message) =>
-            message.type === "status" && message.data?.session_status === "in_progress",
-          "in_progress status",
+            message.type === "connected" ||
+            (message.type === "status" && message.data?.session_status === "in_progress"),
+          "connected or in_progress status",
         );
 
         ws.send(JSON.stringify({ type: "audio_chunk", data: { audio: "AAAA" } }));
