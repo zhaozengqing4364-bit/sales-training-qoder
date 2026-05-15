@@ -133,6 +133,8 @@ def _validate_cors_origins(origins: list[str]) -> None:
 
 
 def _configure_middleware(app: FastAPI) -> None:
+    app.add_middleware(ErrorHandlerMiddleware)
+    app.add_middleware(MetricsMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_resolve_cors_origins(),
@@ -141,8 +143,6 @@ def _configure_middleware(app: FastAPI) -> None:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(ErrorHandlerMiddleware)
-    app.add_middleware(MetricsMiddleware)
 
     app.exception_handler(HTTPException)(http_exception_handler)
     app.exception_handler(RequestValidationError)(_request_validation_exception_handler)
