@@ -4,7 +4,7 @@
   "completed": ["#66", "#67", "#68", "#69", "#70", "#71", "#72", "#73", "#74", "#75", "#76", "#77"],
   "current": null,
   "remaining": [],
-  "last_commit": "73a3d61b",
+  "last_commit": "3f71cfdb",
   "migration_head": "20260516_1200_066",
   "baseline_test_count": 2159,
   "blockers": [],
