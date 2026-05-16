@@ -67,8 +67,54 @@ describe("useExaminerWebSocket", () => {
     expect(result.current.featureFlag).toBe("disabled");
   });
 
+  it("does not create WebSocket when feature flag is disabled", () => {
+    renderHook(() => useExaminerWebSocket("session-1"));
+
+    // ISSUE-003: No WebSocket should be created when the examiner feature is disabled.
+    // This avoids 403 errors and wasted connections.
+    expect(MockWebSocket.instances).toHaveLength(0);
+  });
+
+  it("creates WebSocket when feature flag becomes enabled", async () => {
+    const { result } = renderHook(() => useExaminerWebSocket("session-1"));
+
+    // Initially disabled — no WebSocket
+    expect(MockWebSocket.instances).toHaveLength(0);
+
+    // Enable the feature flag — should trigger WebSocket creation
+    await act(async () => {
+      result.current.setFeatureFlag("enabled");
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0].url).toContain("session-1");
+  });
+
+  it("disconnects WebSocket when feature flag becomes disabled", async () => {
+    const { result } = renderHook(() => useExaminerWebSocket("session-1"));
+
+    // Enable → WebSocket created
+    await act(async () => {
+      result.current.setFeatureFlag("enabled");
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    const ws = MockWebSocket.instances[0];
+    await act(async () => { openConnection(ws); });
+
+    // Disable → WebSocket disconnected, connection state reset
+    await act(async () => {
+      result.current.setFeatureFlag("disabled");
+    });
+
+    expect(ws.readyState).toBe(MockWebSocket.CLOSED);
+  });
+
   it("transitions to connected on session.init", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
+
+    await act(async () => {
+      result.current.setFeatureFlag("enabled");
+    });
 
     const ws = MockWebSocket.instances[0];
     await act(async () => {
@@ -92,6 +138,7 @@ describe("useExaminerWebSocket", () => {
   it("transitions to answering on exam.question", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     await act(async () => {
       openConnection(ws);
@@ -122,6 +169,7 @@ describe("useExaminerWebSocket", () => {
   it("transitions to feedback on exam.feedback", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     await act(async () => {
       openConnection(ws);
@@ -161,6 +209,7 @@ describe("useExaminerWebSocket", () => {
   it("transitions to completed on exam.completed", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     await act(async () => {
       openConnection(ws);
@@ -192,6 +241,7 @@ describe("useExaminerWebSocket", () => {
   it("handles exam.completed without optional report_path", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     await act(async () => {
       openConnection(ws);
@@ -220,6 +270,7 @@ describe("useExaminerWebSocket", () => {
   it("sends exam.answer message", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     const sendSpy = vi.spyOn(ws, "send");
 
@@ -256,6 +307,7 @@ describe("useExaminerWebSocket", () => {
   it("handles reconnection state on close", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     await act(async () => {
       openConnection(ws);
@@ -276,6 +328,8 @@ describe("useExaminerWebSocket", () => {
 
   it("shows failed state after max reconnects", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
+
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
 
     for (let i = 0; i < 6; i++) {
       const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
@@ -306,6 +360,7 @@ describe("useExaminerWebSocket", () => {
   it("counts down remaining time from session.init", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     await act(async () => {
       openConnection(ws);
@@ -331,6 +386,7 @@ describe("useExaminerWebSocket", () => {
   it("shows timeout warning when time is low", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     await act(async () => {
       openConnection(ws);
@@ -384,6 +440,7 @@ describe("useExaminerWebSocket", () => {
   it("tracks graded questions across multiple questions", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
+    await act(async () => { result.current.setFeatureFlag("enabled"); });
     const ws = MockWebSocket.instances[0];
     await act(async () => {
       openConnection(ws);

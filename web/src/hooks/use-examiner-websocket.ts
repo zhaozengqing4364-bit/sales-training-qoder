@@ -417,12 +417,20 @@ export function useExaminerWebSocket(sessionId: string) {
   }, []);
 
   useEffect(() => {
+    // Do not start WebSocket when the examiner feature is disabled.
+    // This avoids 403 errors and wasted connections when the page
+    // renders the "即将上线" fallback.
+    if (state.featureFlag === "disabled") {
+      disconnect();
+      return;
+    }
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
     connect();
     return () => {
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [state.featureFlag, connect, disconnect]);
 
   const isTimedOut =
     state.remainingTimeSeconds !== null && state.remainingTimeSeconds <= 0;
