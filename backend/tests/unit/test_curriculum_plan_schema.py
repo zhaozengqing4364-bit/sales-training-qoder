@@ -202,6 +202,49 @@ def test_should_define_curriculum_plan_columns_on_practice_template_model() -> N
     assert "max_stage_duration_seconds" in column_names
 
 
+def test_should_accept_template_runtime_bindings_on_create_schema() -> None:
+    payload = PracticeTemplateCreate(
+        name="分层学习模板",
+        scenario_type="sales",
+        mode="examiner",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        runtime_profile_id="runtime-1",
+        voice_mode="stepfun_realtime",
+        scoring_ruleset_id="ruleset-1",
+        learning_content_id="learning-1",
+        examiner_agent_id="examiner-1",
+        target_learner_level="beginner",
+        timeout_config={"study_seconds": 300, "exam_seconds": 600},
+    )
+
+    assert payload.learning_content_id == "learning-1"
+    assert payload.examiner_agent_id == "examiner-1"
+    assert payload.target_learner_level == "beginner"
+    assert payload.timeout_config == {"study_seconds": 300, "exam_seconds": 600}
+
+
+def test_should_accept_curriculum_stage_types_for_learning_exam_practice_report() -> None:
+    plan = CurriculumPlanSchema.model_validate(
+        {
+            "name": "学习考试闭环",
+            "stages": [
+                _stage_payload("study_stage", 1) | {"stage_type": "study"},
+                _stage_payload("exam_stage", 2) | {"stage_type": "exam"},
+                _stage_payload("practice_stage", 3) | {"stage_type": "practice"},
+                _stage_payload("report_stage", 4) | {"stage_type": "report"},
+            ],
+        }
+    )
+
+    assert [stage.stage_type for stage in plan.stages] == [
+        "study",
+        "exam",
+        "practice",
+        "report",
+    ]
+
+
 def _stage_payload(
     template_stage_key: str,
     order: int,

@@ -8,12 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 PracticeTemplateStatus = Literal["draft", "published", "archived"]
 ContentAssetStatus = Literal["draft", "published", "archived"]
 LearningContentStatus = Literal["draft", "published", "archived"]
+CurriculumStageType = Literal["study", "exam", "practice", "report"]
 QuestionDifficulty = Literal["easy", "medium", "hard"]
 QuestionLifecycleStatus = Literal["draft", "published", "archived"]
 TestBankImportStatus = Literal["pending", "processing", "completed", "failed"]
 RoleProfilePressureLevel = Literal["low", "medium", "high"]
 PracticeTemplateScenarioType = Literal["sales", "presentation"]
 PracticeTemplateVoiceMode = Literal["legacy", "stepfun_realtime"]
+LearnerLevel = Literal["conservative", "beginner", "intermediate", "advanced"]
 PracticeTemplateMode = Literal[
     "learning",
     "expert_qa",
@@ -36,7 +38,8 @@ CurriculumAssetType = Literal[
     "knowledge_base",
     "prompt_contract",
     "model_config",
-]
+    "learning_content",
+    ]
 SnapshotLabel = Literal["published", "superseded", "legacy_unversioned"]
 AssetTypeT = TypeVar("AssetTypeT", bound=str)
 AssetVersionT = TypeVar("AssetVersionT", int, str, int | str)
@@ -57,6 +60,10 @@ class PracticeTemplatePublishCandidate(BaseModel):
     knowledge_base_refs: list[str] = Field(default_factory=list)
     case_item_id: str | None = Field(None, min_length=1, max_length=36)
     role_profile_id: str | None = Field(None, min_length=1, max_length=36)
+    learning_content_id: str | None = Field(None, min_length=1, max_length=36)
+    examiner_agent_id: str | None = Field(None, min_length=1, max_length=36)
+    target_learner_level: LearnerLevel | None = None
+    timeout_config: dict[str, object] | None = None
     curriculum_plan: CurriculumPlanSchema | None = None
     max_stage_duration_seconds: int | None = Field(None, ge=1, le=1500)
 
@@ -140,6 +147,7 @@ class CurriculumPlanStage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     template_stage_key: str = Field(..., min_length=1, max_length=80)
+    stage_type: CurriculumStageType = "practice"
     order: int = Field(..., ge=1)
     name: str = Field(..., min_length=1, max_length=200)
     template_ref: CurriculumVersionRef
@@ -211,8 +219,8 @@ class TemplateStageSnapshot(BaseModel):
     template_ref: CurriculumVersionRef
     runtime_payload: dict[str, object]
     content_assets: list[CurriculumVersionRef] = Field(default_factory=list)
-    rubric: CurriculumVersionRef
-    runtime: CurriculumRuntimeRef
+    rubric: CurriculumVersionRef | None = None
+    runtime: CurriculumRuntimeRef | None = None
 
 
 class CurriculumRuntimeSnapshot(BaseModel):
@@ -226,6 +234,7 @@ class CurriculumRuntimeSnapshot(BaseModel):
     rubric: CurriculumVersionRef
     runtime: CurriculumRuntimeRef
     role_profile_voice_id: str | None = None
+    learner_level: LearnerLevel = "conservative"
     stage_snapshots: dict[str, TemplateStageSnapshot] = Field(default_factory=dict)
     llm_nodes: list[dict[str, object]] = Field(default_factory=list)
 
@@ -573,6 +582,30 @@ class ChapterCompleteResponse(BaseModel):
     progress: LearningProgressResponse
 
 
+class LearnerProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: str
+    self_assessed_level: LearnerLevel | None = None
+    admin_overridden_level: LearnerLevel | None = None
+    effective_level: LearnerLevel
+    self_assessed_at: object | None = None
+    overridden_by: str | None = None
+    overridden_at: object | None = None
+
+
+class LearnerSelfAssessmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: LearnerLevel
+
+
+class LearnerAdminOverrideRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: LearnerLevel
+
+
 class ReferenceReader(Protocol):
     def __call__(
         self, asset_type: str, asset_id: str
@@ -594,6 +627,10 @@ class PracticeTemplateCreate(BaseModel):
     knowledge_base_refs: list[str] = Field(default_factory=list)
     case_item_id: str | None = Field(None, min_length=1, max_length=36)
     role_profile_id: str | None = Field(None, min_length=1, max_length=36)
+    learning_content_id: str | None = Field(None, min_length=1, max_length=36)
+    examiner_agent_id: str | None = Field(None, min_length=1, max_length=36)
+    target_learner_level: LearnerLevel | None = None
+    timeout_config: dict[str, object] | None = None
     curriculum_plan: CurriculumPlanSchema | None = None
     max_stage_duration_seconds: int | None = Field(None, ge=1, le=1500)
 
@@ -613,6 +650,10 @@ class PracticeTemplateUpdate(BaseModel):
     knowledge_base_refs: list[str] | None = None
     case_item_id: str | None = Field(None, min_length=1, max_length=36)
     role_profile_id: str | None = Field(None, min_length=1, max_length=36)
+    learning_content_id: str | None = Field(None, min_length=1, max_length=36)
+    examiner_agent_id: str | None = Field(None, min_length=1, max_length=36)
+    target_learner_level: LearnerLevel | None = None
+    timeout_config: dict[str, object] | None = None
     curriculum_plan: CurriculumPlanSchema | None = None
     max_stage_duration_seconds: int | None = Field(None, ge=1, le=1500)
 
@@ -633,6 +674,10 @@ class PracticeTemplateResponse(BaseModel):
     knowledge_base_refs: list[str]
     case_item_id: str | None = None
     role_profile_id: str | None = None
+    learning_content_id: str | None = None
+    examiner_agent_id: str | None = None
+    target_learner_level: str | None = None
+    timeout_config: dict[str, object] | None = None
     curriculum_plan: CurriculumPlanSchema | None = None
     max_stage_duration_seconds: int | None = None
     status: str
