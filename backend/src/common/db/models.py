@@ -1039,6 +1039,7 @@ class TrainingTask(Base):
         ForeignKey("practice_templates.template_id", ondelete="SET NULL"),
         nullable=True,
     )
+    curriculum_plan_id = Column(String(36), nullable=True)
     source = Column(String(50), nullable=False, default="manual", server_default="manual")
     status = Column(
         String(32),
@@ -1075,6 +1076,7 @@ class TrainingTask(Base):
         ),
         Index("idx_training_tasks_assignee_status", "assignee_id", "status"),
         Index("idx_training_tasks_practice_template", "practice_template_id"),
+        Index("idx_training_tasks_curriculum_plan", "curriculum_plan_id"),
         Index("idx_training_tasks_due_date", "due_date"),
         Index("idx_training_tasks_created_at", "created_at"),
     )
