@@ -44,6 +44,7 @@ class RuntimeSnapshotService:
         *,
         trace_id: str | None = None,
         created_at: str | None = None,
+        learner_level: str = "conservative",
     ) -> CurriculumRuntimeSnapshot:
         template = await self._read_reference("practice_template", template_ref.asset_id)
         template_data = _as_dict(template)
@@ -95,6 +96,10 @@ class RuntimeSnapshotService:
         ]
         if template_data.get("case_item_id"):
             content_assets.append(await self._case_item_ref(str(template_data["case_item_id"])))
+        if template_data.get("learning_content_id"):
+            content_assets.append(
+                await self._learning_content_ref(str(template_data["learning_content_id"]))
+            )
         role_profile_data = None
         if template_data.get("role_profile_id"):
             role_profile_data = _as_dict(
@@ -119,6 +124,7 @@ class RuntimeSnapshotService:
             rubric=await self._rubric_ref(str(template_data["scoring_ruleset_id"])),
             runtime=runtime,
             role_profile_voice_id=_voice_id_from_role_profile(role_profile_data),
+            learner_level=learner_level,
             stage_snapshots=await self._stage_snapshots(template_data),
         )
         payload = snapshot.model_dump()
@@ -146,7 +152,22 @@ class RuntimeSnapshotService:
             if not isinstance(stage, dict):
                 continue
             stage_key = str(stage["template_stage_key"])
+            stage_type = str(stage.get("stage_type", "practice"))
             template_ref_data = _as_dict(stage.get("template_ref"))
+            if stage_type in ("study", "exam"):
+                asset_ref = await self._curriculum_stage_asset_ref(template_ref_data)
+                snapshots[stage_key] = TemplateStageSnapshot(
+                    template_ref=asset_ref,
+                    runtime_payload={
+                        "stage_type": stage_type,
+                        "asset_type": str(template_ref_data["asset_type"]),
+                        "asset_id": str(template_ref_data["asset_id"]),
+                        "version": template_ref_data["version"],
+                        "content_hash": str(template_ref_data["hash"]),
+                    },
+                    content_assets=[asset_ref],
+                )
+                continue
             child_template_id = str(template_ref_data["asset_id"])
             child_template = _as_dict(
                 await self._read_reference("practice_template", child_template_id)
@@ -197,6 +218,47 @@ class RuntimeSnapshotService:
             )
         return snapshots
 
+    async def _curriculum_stage_asset_ref(
+        self, template_ref_data: dict[str, Any]
+    ) -> CurriculumVersionRef:
+        asset_type = str(template_ref_data["asset_type"])
+        asset_id = str(template_ref_data["asset_id"])
+        asset = _as_dict(await self._read_reference(asset_type, asset_id))
+        if not asset or asset.get("status") != "published":
+            raise RuntimeSnapshotBuildError(
+                "asset_unpublished",
+                "CurriculumPlan stage asset is missing or unpublished.",
+            )
+        expected_hash = str(template_ref_data["hash"])
+        current_hash = str(asset.get("content_hash"))
+        if current_hash != expected_hash:
+            raise RuntimeSnapshotBuildError(
+                "asset_hash_mismatch",
+                "CurriculumPlan stage asset hash does not match stage ref.",
+            )
+        return CurriculumVersionRef(
+            asset_type=asset_type,
+            asset_id=asset_id,
+            version=template_ref_data["version"],
+            hash=expected_hash,
+            snapshot_label=template_ref_data["snapshot_label"],
+        )
+
+    async def _learning_content_ref(self, asset_id: str) -> CurriculumVersionRef:
+        content = _as_dict(await self._read_reference("learning_content", asset_id))
+        if not content or content.get("status") != "published":
+            raise RuntimeSnapshotBuildError(
+                "asset_unpublished",
+                "LearningContent reference is missing or unpublished.",
+            )
+        return CurriculumVersionRef(
+            asset_type="learning_content",
+            asset_id=asset_id,
+            version=content.get("version", 1),
+            hash=str(content["content_hash"]),
+            snapshot_label="published",
+        )
+
     async def _runtime_ref(self, template_data: dict[str, Any]) -> CurriculumRuntimeRef:
         runtime_profile_id = str(template_data["runtime_profile_id"])
         runtime_profile = _as_dict(
@@ -226,6 +288,7 @@ class RuntimeSnapshotService:
                 }
             ),
         )
+
 
     async def _knowledge_base_ref(self, asset_id: str) -> CurriculumVersionRef:
         knowledge_base = _as_dict(await self._read_reference("knowledge_base", asset_id))
@@ -330,7 +393,7 @@ def _without_volatile_fields(payload: object) -> object:
 def _minimal_template_runtime_payload(
     template_data: dict[str, Any], *, role_profile_data: dict[str, Any] | None = None
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "template_id": str(template_data["template_id"]),
         "version": template_data.get("version", 1),
         "content_hash": str(template_data["content_hash"]),
@@ -340,9 +403,12 @@ def _minimal_template_runtime_payload(
         "persona_id": str(template_data["persona_id"]),
         "runtime_profile_id": str(template_data["runtime_profile_id"]),
         "voice_mode": str(template_data["voice_mode"]),
-        "role_profile_voice_id": _voice_id_from_role_profile(role_profile_data),
         "scoring_ruleset_id": str(template_data["scoring_ruleset_id"]),
     }
+    role_profile_voice_id = _voice_id_from_role_profile(role_profile_data)
+    if role_profile_voice_id is not None:
+        payload["role_profile_voice_id"] = role_profile_voice_id
+    return payload
 
 
 def _role_profile_ref_from_data(role_profile: dict[str, Any]) -> CurriculumVersionRef:

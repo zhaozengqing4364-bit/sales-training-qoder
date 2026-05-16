@@ -81,6 +81,13 @@ def _reference_reader(asset_type: str, asset_id: str) -> object | None:
             "content_hash": "sha256:case-hash",
             "hidden_information": "绝不能进入运行时快照的隐藏预算",
         },
+        ("learning_content", "learning-1"): {
+            "learning_content_id": "learning-1",
+            "status": "published",
+            "version": 2,
+            "content_hash": "sha256:learning-hash",
+            "title": "不应冻结的正文标题之外内容",
+        },
     }
     return references.get((asset_type, asset_id))
 
@@ -275,3 +282,55 @@ async def test_should_include_stage_snapshots_without_hidden_information() -> No
     assert stage_snapshot.content_assets[1].asset_type == "case_item"
     assert "hidden_information" not in encoded
     assert "隐藏预算" not in encoded
+
+
+@pytest.mark.asyncio
+async def test_should_freeze_study_stage_asset_and_learner_level() -> None:
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        if (asset_type, asset_id) == ("practice_template", "template-1"):
+            return _published_template() | {
+                "curriculum_plan": {
+                    "name": "学习考试闭环",
+                    "stages": [
+                        {
+                            "template_stage_key": "study_stage",
+                            "stage_type": "study",
+                            "order": 1,
+                            "name": "学习",
+                            "template_ref": {
+                                "asset_type": "learning_content",
+                                "asset_id": "learning-1",
+                                "version": 2,
+                                "hash": "sha256:learning-hash",
+                                "snapshot_label": "published",
+                            },
+                            "completion_policy": {
+                                "min_score": 0,
+                                "min_rounds": 0,
+                                "max_duration_seconds": 300,
+                            },
+                        }
+                    ],
+                }
+            }
+        return _reference_reader(asset_type, asset_id)
+
+    service = RuntimeSnapshotService(reference_reader=reference_reader)
+
+    snapshot = await service.build_for_session(
+        template_ref=_published_template_ref(),
+        training_task_ref={"id": "task-1", "scenario_type": "sales"},
+        actor_id="actor-1",
+        learner_level="beginner",
+    )
+
+    assert snapshot.learner_level == "beginner"
+    stage_snapshot = snapshot.stage_snapshots["study_stage"]
+    assert stage_snapshot.runtime_payload == {
+        "stage_type": "study",
+        "asset_type": "learning_content",
+        "asset_id": "learning-1",
+        "version": 2,
+        "content_hash": "sha256:learning-hash",
+    }
+    assert stage_snapshot.content_assets[0].asset_type == "learning_content"

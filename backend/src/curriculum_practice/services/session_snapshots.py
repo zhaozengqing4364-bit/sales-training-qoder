@@ -7,7 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, ScoringRuleset
 from common.knowledge.models import KnowledgeBase
-from curriculum_practice.models import CaseItem, PracticeTemplate, RoleProfile
+from curriculum_practice.models import (
+    CaseItem,
+    LearnerProfile,
+    LearningContent,
+    PracticeTemplate,
+    QuestionItem,
+    RoleProfile,
+)
+from curriculum_practice.services.learner_profiles import DEFAULT_LEARNER_LEVEL
 from curriculum_practice.services.practice_templates import published_ref
 from curriculum_practice.services.snapshots import (
     RuntimeSnapshotBuildError,
@@ -59,6 +67,7 @@ async def apply_curriculum_snapshot_to_session(
 
     snapshot_service = RuntimeSnapshotService(_reference_reader(db))
     try:
+        profile = await db.get(LearnerProfile, actor_id)
         snapshot = await snapshot_service.build_for_session(
             published_ref(template),
             {
@@ -66,6 +75,11 @@ async def apply_curriculum_snapshot_to_session(
                 "scenario_type": scenario_type_value,
             },
             actor_id,
+            learner_level=(
+                str(profile.effective_level)
+                if profile is not None
+                else DEFAULT_LEARNER_LEVEL
+            ),
         )
     except RuntimeSnapshotBuildError as exc:
         raise CurriculumSessionSnapshotError(
@@ -99,6 +113,10 @@ def _reference_reader(db: AsyncSession):
                 "scoring_ruleset_id": template.scoring_ruleset_id,
                 "case_item_id": template.case_item_id,
                 "role_profile_id": template.role_profile_id,
+                "learning_content_id": template.learning_content_id,
+                "examiner_agent_id": template.examiner_agent_id,
+                "target_learner_level": template.target_learner_level,
+                "timeout_config": template.timeout_config,
                 "curriculum_plan": template.curriculum_plan,
                 "max_stage_duration_seconds": template.max_stage_duration_seconds,
             }
@@ -161,6 +179,26 @@ def _reference_reader(db: AsyncSession):
                 "version": role_profile.version,
                 "content_hash": role_profile.content_hash,
                 "voice_id": role_profile.voice_id,
+            }
+        if asset_type == "learning_content":
+            content = await db.get(LearningContent, asset_id)
+            if content is None:
+                return None
+            return {
+                "learning_content_id": content.learning_content_id,
+                "status": content.status,
+                "version": content.version,
+                "content_hash": content.content_hash,
+            }
+        if asset_type == "question_item":
+            question = await db.get(QuestionItem, asset_id)
+            if question is None:
+                return None
+            return {
+                "question_id": question.question_id,
+                "status": question.status,
+                "version": question.version,
+                "content_hash": question.content_hash,
             }
         return None
 
