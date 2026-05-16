@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { AdminUser } from "@/lib/api/types";
+import type { PracticeTemplateRecord, BatchAssignResponse } from "@/lib/api/types";
 import {
     EMPTY_ADMIN_MANAGER_LITE_LISTS,
     buildOperatingPackReadModel,
@@ -18,7 +19,8 @@ import { formatIssueTypeLabel } from "@/lib/session-evidence";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, MoreHorizontal, UserPlus, Download, Mail, Shield, Ban, Trash2, Calendar, CheckCircle, Loader2, Eye, RefreshCw } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, Filter, MoreHorizontal, UserPlus, Download, Mail, Shield, Ban, Trash2, Calendar, CheckCircle, Loader2, Eye, RefreshCw, Send, Users, CheckSquare, AlertTriangle } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -108,6 +110,24 @@ export default function UsersPage() {
 
     // Action states
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+    // Department filter & multi-select
+    const [departmentFilter, setDepartmentFilter] = useState("all");
+    const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+
+    // Batch assign state
+    const [isBatchAssignOpen, setIsBatchAssignOpen] = useState(false);
+    const [batchTemplates, setBatchTemplates] = useState<PracticeTemplateRecord[]>([]);
+    const [selectedTemplateId, setSelectedTemplateId] = useState("");
+    const [batchTitle, setBatchTitle] = useState("");
+    const [batchGoal, setBatchGoal] = useState("");
+    const [batchScenarioType, setBatchScenarioType] = useState<"sales" | "presentation">("sales");
+    const [isBatchAssigning, setIsBatchAssigning] = useState(false);
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+
+    // Batch result state
+    const [batchResults, setBatchResults] = useState<BatchAssignResponse | null>(null);
+    const [isResultsOpen, setIsResultsOpen] = useState(false);
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
@@ -299,6 +319,95 @@ export default function UsersPage() {
     const handleApplyFilter = () => {
         setIsFilterOpen(false);
         setPage(1);
+    };
+
+    const uniqueDepartments = Array.from(
+        new Set(users.map((u) => u.department).filter((d): d is string => typeof d === "string" && d.trim().length > 0))
+    ).sort();
+
+    const filteredUsers = departmentFilter === "all"
+        ? users
+        : users.filter((u) => u.department === departmentFilter);
+
+    const allFilteredSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedUserIds.has(u.id));
+
+    const toggleSelectAll = () => {
+        if (allFilteredSelected) {
+            setSelectedUserIds((prev) => {
+                const next = new Set(prev);
+                filteredUsers.forEach((u) => next.delete(u.id));
+                return next;
+            });
+        } else {
+            setSelectedUserIds((prev) => {
+                const next = new Set(prev);
+                filteredUsers.forEach((u) => next.add(u.id));
+                return next;
+            });
+        }
+    };
+
+    const toggleUserSelection = (userId: string) => {
+        setSelectedUserIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(userId)) {
+                next.delete(userId);
+            } else {
+                next.add(userId);
+            }
+            return next;
+        });
+    };
+
+    const loadTemplates = async () => {
+        setIsLoadingTemplates(true);
+        try {
+            const data = await api.admin.listPracticeTemplates();
+            const published = (data.items || []).filter((t) => t.status === "published");
+            setBatchTemplates(published);
+            if (published.length > 0 && !selectedTemplateId) {
+                setSelectedTemplateId(published[0].template_id);
+            }
+        } catch (err) {
+            debug.error("Failed to load templates:", err);
+            toast.error("加载模板失败");
+        } finally {
+            setIsLoadingTemplates(false);
+        }
+    };
+
+    const handleBatchAssign = async () => {
+        if (selectedUserIds.size === 0 || !selectedTemplateId) return;
+
+        const template = batchTemplates.find((t) => t.template_id === selectedTemplateId);
+        if (!template) return;
+
+        setIsBatchAssigning(true);
+        try {
+            const result = await api.trainingTasks.batchAssign({
+                user_ids: Array.from(selectedUserIds),
+                template_id: selectedTemplateId,
+                curriculum_plan_id: template.curriculum_plan ? selectedTemplateId : selectedTemplateId,
+                title: batchTitle || template.name,
+                scenario_type: batchScenarioType,
+                goal: batchGoal || template.description || "完成训练任务",
+            });
+            setBatchResults(result);
+            setIsBatchAssignOpen(false);
+            setIsResultsOpen(true);
+            setSelectedUserIds(new Set());
+            if (result.assigned > 0) {
+                toast.success(`成功分配 ${result.assigned} 个训练任务`);
+            }
+            if (result.skipped > 0 || result.failed > 0) {
+                toast.error(`${result.skipped} 跳过, ${result.failed} 失败`);
+            }
+        } catch (err) {
+            debug.error("Failed to batch assign:", err);
+            toast.error("批量分配失败");
+        } finally {
+            setIsBatchAssigning(false);
+        }
     };
 
     // Open edit dialog
@@ -742,6 +851,20 @@ export default function UsersPage() {
                     />
                 </div>
                 <div className="flex gap-2">
+                    <select
+                        aria-label="部门筛选"
+                        className="h-10 px-3 rounded-full border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all text-slate-600"
+                        value={departmentFilter}
+                        onChange={(e) => {
+                            setDepartmentFilter(e.target.value);
+                            setSelectedUserIds(new Set());
+                        }}
+                    >
+                        <option value="all">全部部门</option>
+                        {uniqueDepartments.map((dept) => (
+                            <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                    </select>
                     <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                         <DialogTrigger asChild>
                             <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-900">
@@ -792,17 +915,206 @@ export default function UsersPage() {
                 </div>
             </GlassCard>
 
+            {/* Batch Assign Action Bar */}
+            {selectedUserIds.size > 0 && (
+                <div className="flex items-center gap-4 px-4 py-3 rounded-2xl border border-blue-200 bg-blue-50/80">
+                    <CheckSquare className="w-5 h-5 text-blue-600" />
+                    <span className="text-sm font-semibold text-blue-800">
+                        已选择 {selectedUserIds.size} 位学员
+                    </span>
+                    <Button
+                        className="ml-auto rounded-full bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={() => {
+                            setIsBatchAssignOpen(true);
+                            loadTemplates();
+                        }}
+                    >
+                        <Send className="w-4 h-4 mr-2" /> 批量分配训练任务
+                    </Button>
+                </div>
+            )}
+
+            {/* Batch Assign Dialog */}
+            <Dialog open={isBatchAssignOpen} onOpenChange={setIsBatchAssignOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>批量分配训练任务</DialogTitle>
+                        <DialogDescription>
+                            为 {selectedUserIds.size} 位学员分配训练任务
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        {isLoadingTemplates ? (
+                            <div className="flex items-center justify-center py-4">
+                                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                                <span className="ml-2 text-sm text-slate-500">加载模板中...</span>
+                            </div>
+                        ) : batchTemplates.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+                                没有可用的已发布模板，请先在模板管理中发布模板。
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase">训练模板</label>
+                                    <select
+                                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                        value={selectedTemplateId}
+                                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                    >
+                                        {batchTemplates.map((t) => (
+                                            <option key={t.template_id} value={t.template_id}>
+                                                {t.name} ({t.scenario_type === "sales" ? "销售" : "演讲"})
+                                                {t.curriculum_plan ? " ◆" : ""}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {(() => {
+                                        const t = batchTemplates.find((tmpl) => tmpl.template_id === selectedTemplateId);
+                                        return t?.curriculum_plan ? (
+                                            <p className="text-xs text-emerald-600">包含课程计划（{t.curriculum_plan.stages.length} 阶段）</p>
+                                        ) : null;
+                                    })()}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase">场景类型</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {(["sales", "presentation"] as const).map((s) => (
+                                            <div
+                                                key={s}
+                                                className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${
+                                                    batchScenarioType === s
+                                                        ? "border-blue-500 bg-blue-50 text-blue-700"
+                                                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                                }`}
+                                                onClick={() => setBatchScenarioType(s)}
+                                            >
+                                                <div className="font-bold text-sm">{s === "sales" ? "销售" : "演讲"}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase">任务标题（可选，默认使用模板名）</label>
+                                    <input
+                                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                        placeholder={selectedTemplateId ? batchTemplates.find((t) => t.template_id === selectedTemplateId)?.name || "" : ""}
+                                        value={batchTitle}
+                                        onChange={(e) => setBatchTitle(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase">训练目标</label>
+                                    <input
+                                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                        placeholder="例如：完成销售话术实战训练"
+                                        value={batchGoal}
+                                        onChange={(e) => setBatchGoal(e.target.value)}
+                                    />
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    <DialogFooter className="gap-2">
+                        <Button variant="ghost" className="rounded-full" onClick={() => setIsBatchAssignOpen(false)}>取消</Button>
+                        <Button
+                            className="rounded-full bg-slate-900 text-white px-6"
+                            onClick={handleBatchAssign}
+                            disabled={isBatchAssigning || batchTemplates.length === 0}
+                        >
+                            {isBatchAssigning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            确认分配
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Batch Result Dialog */}
+            <Dialog open={isResultsOpen} onOpenChange={setIsResultsOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>分配结果</DialogTitle>
+                        <DialogDescription>
+                            共处理 {batchResults?.total ?? 0} 位学员
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        {batchResults && (
+                            <>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
+                                        <div className="text-2xl font-bold text-emerald-700">{batchResults.assigned}</div>
+                                        <div className="text-xs text-emerald-600 mt-1">已分配</div>
+                                    </div>
+                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
+                                        <div className="text-2xl font-bold text-amber-700">{batchResults.skipped}</div>
+                                        <div className="text-xs text-amber-600 mt-1">已跳过</div>
+                                    </div>
+                                    <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
+                                        <div className="text-2xl font-bold text-red-700">{batchResults.failed}</div>
+                                        <div className="text-xs text-red-600 mt-1">失败</div>
+                                    </div>
+                                </div>
+                                <div className="max-h-64 overflow-y-auto space-y-2">
+                                    {batchResults.results.map((r) => (
+                                        <div
+                                            key={r.user_id}
+                                            className={`flex items-start gap-3 rounded-lg border px-3 py-2 text-sm ${
+                                                r.status === "assigned"
+                                                    ? "border-emerald-100 bg-emerald-50/50"
+                                                    : r.status === "skipped"
+                                                        ? "border-amber-100 bg-amber-50/50"
+                                                        : "border-red-100 bg-red-50/50"
+                                            }`}
+                                        >
+                                            {r.status === "assigned" ? (
+                                                <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                                            ) : r.status === "skipped" ? (
+                                                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                                            ) : (
+                                                <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <span className="font-semibold text-slate-900">{r.name}</span>
+                                                {r.reason && (
+                                                    <p className="text-xs text-slate-500 mt-0.5">{r.reason}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button className="w-full rounded-full bg-slate-900 text-white" onClick={() => setIsResultsOpen(false)}>关闭</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Users Table */}
             <GlassCard className="overflow-hidden">
                 {/* Mobile Card View */}
                 <div className="md:hidden space-y-4 p-4">
-                    {users.map((user) => (
+                    {filteredUsers.map((user) => (
                         <MobileTableCard
                             key={user.id}
                             title={
                                 <div>
-                                    <div className="font-bold text-slate-900">{user.display_name || user.email || "未知用户"}</div>
-                                    <div className="text-slate-400 text-xs">{user.email}</div>
+                                    <div className="flex items-start gap-3">
+                                        <Checkbox
+                                            checked={selectedUserIds.has(user.id)}
+                                            onCheckedChange={() => toggleUserSelection(user.id)}
+                                            aria-label={`选择 ${user.display_name}`}
+                                        />
+                                        <div>
+                                            <div className="font-bold text-slate-900">{user.display_name || user.email || "未知用户"}</div>
+                                            <div className="text-slate-400 text-xs">{user.email}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             }
                             icon={
@@ -854,6 +1166,13 @@ export default function UsersPage() {
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50/50 border-b border-slate-100 text-xs uppercase font-bold text-slate-400 tracking-wider">
                             <tr>
+                                <th className="px-6 py-4 w-10">
+                                    <Checkbox
+                                        checked={allFilteredSelected}
+                                        onCheckedChange={toggleSelectAll}
+                                        aria-label="全选"
+                                    />
+                                </th>
                                 <th className="px-6 py-4">用户</th>
                                 <th className="px-6 py-4">角色</th>
                                 <th className="px-6 py-4">状态</th>
@@ -862,8 +1181,15 @@ export default function UsersPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {users.map((user) => (
+                            {filteredUsers.map((user) => (
                                 <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
+                                    <td className="px-6 py-4">
+                                        <Checkbox
+                                            checked={selectedUserIds.has(user.id)}
+                                            onCheckedChange={() => toggleUserSelection(user.id)}
+                                            aria-label={`选择 ${user.display_name}`}
+                                        />
+                                    </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-xs font-bold group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">

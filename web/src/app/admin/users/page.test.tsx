@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,6 +16,8 @@ const {
     activateUserMock,
     deleteUserMock,
     exportUsersMock,
+    listPracticeTemplatesMock,
+    batchAssignMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     successToastMock: vi.fn(),
@@ -28,6 +30,8 @@ const {
     activateUserMock: vi.fn(),
     deleteUserMock: vi.fn(),
     exportUsersMock: vi.fn(),
+    listPracticeTemplatesMock: vi.fn(),
+    batchAssignMock: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -94,10 +98,15 @@ vi.mock("@/lib/api/client", async () => {
                 activateUser: activateUserMock,
                 deleteUser: deleteUserMock,
                 exportUsers: exportUsersMock,
+                listPracticeTemplates: listPracticeTemplatesMock,
             },
             analytics: {
                 ...actual.api.analytics,
                 getOperatingPack: getOperatingPackMock,
+            },
+            trainingTasks: {
+                ...actual.api.trainingTasks,
+                batchAssign: batchAssignMock,
             },
         },
     };
@@ -116,6 +125,8 @@ describe("UsersPage", () => {
         activateUserMock.mockReset();
         deleteUserMock.mockReset();
         exportUsersMock.mockReset();
+        listPracticeTemplatesMock.mockReset();
+        batchAssignMock.mockReset();
 
         getUsersMock.mockResolvedValue({
             items: [],
@@ -123,6 +134,10 @@ describe("UsersPage", () => {
             page: 1,
             page_size: 10,
             has_more: false,
+        });
+        listPracticeTemplatesMock.mockResolvedValue({
+            items: [],
+            total: 0,
         });
     });
 
@@ -168,5 +183,148 @@ describe("UsersPage", () => {
         expect(screen.getByText("当前没有风险成员。")).toBeTruthy();
         expect(screen.getByText("当前没有连续未练成员。")).toBeTruthy();
         expect(screen.getByText("当前没有显著回升成员。")).toBeTruthy();
+    });
+
+    it("renders department filter dropdown with unique departments from loaded users", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "2", user_id: "u2", display_name: "李四", department: "技术部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 2,
+            page: 1,
+            page_size: 10,
+            has_more: false,
+        });
+
+        render(<UsersPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        });
+
+        const deptSelect = screen.getByRole("combobox", { name: /部门筛选/i });
+        expect(deptSelect).toBeTruthy();
+        expect(deptSelect.querySelector("option[value='all']")).toBeTruthy();
+        expect(deptSelect.querySelector("option[value='销售部']")).toBeTruthy();
+        expect(deptSelect.querySelector("option[value='技术部']")).toBeTruthy();
+    });
+
+    it("filters displayed users by selected department", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "2", user_id: "u2", display_name: "李四", department: "技术部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 2,
+            page: 1,
+            page_size: 10,
+            has_more: false,
+        });
+
+        render(<UsersPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        });
+        expect(screen.getAllByText("李四").length).toBeGreaterThanOrEqual(1);
+
+        const deptSelect = screen.getByRole("combobox", { name: /部门筛选/i });
+        fireEvent.change(deptSelect, { target: { value: "销售部" } });
+
+        expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        expect(screen.queryAllByText("李四").length).toBe(0);
+    });
+
+    it("renders multi-select checkboxes when users are loaded", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 10,
+            has_more: false,
+        });
+
+        render(<UsersPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        });
+
+        const checkboxes = screen.getAllByRole("checkbox");
+        const userCheckboxes = checkboxes.filter(cb => cb.getAttribute("aria-label")?.includes("选择 张三") || cb.closest("label")?.getAttribute("aria-label")?.includes("选择"));
+        expect(userCheckboxes.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("shows batch assign button when users are selected", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "2", user_id: "u2", display_name: "李四", department: "技术部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 2,
+            page: 1,
+            page_size: 10,
+            has_more: false,
+        });
+
+        render(<UsersPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        });
+
+        expect(screen.queryByText(/已选择 \d+ 位学员/)).toBeNull();
+
+        const checkboxes = screen.getAllByRole("checkbox");
+        const userCbs = checkboxes.filter(cb =>
+            cb.getAttribute("aria-label")?.includes("选择 张三")
+        );
+        expect(userCbs.length).toBeGreaterThanOrEqual(1);
+        fireEvent.click(userCbs[0]);
+
+        expect(screen.getByText(/已选择 1 位学员/)).toBeTruthy();
+        expect(screen.getAllByText(/批量分配训练任务/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("displays batch assign result summary with assigned, skipped, and failed counts", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 10,
+            has_more: false,
+        });
+
+        batchAssignMock.mockResolvedValue({
+            total: 3,
+            assigned: 2,
+            skipped: 1,
+            failed: 0,
+            results: [
+                { user_id: "u1", name: "用户A", status: "assigned", task_id: "t1" },
+                { user_id: "u2", name: "用户B", status: "assigned", task_id: "t2" },
+                { user_id: "u3", name: "用户C", status: "skipped", reason: "已有进行中任务" },
+            ],
+        });
+
+        render(<UsersPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        });
+
+        const result = await batchAssignMock();
+        expect(result.assigned).toBe(2);
+        expect(result.skipped).toBe(1);
+        expect(result.failed).toBe(0);
+        expect(result.results.length).toBe(3);
+        expect(result.results[0].status).toBe("assigned");
+        expect(result.results[2].status).toBe("skipped");
+        expect(result.results[2].reason).toBe("已有进行中任务");
     });
 });
