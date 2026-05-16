@@ -38,6 +38,10 @@ class PracticeTemplate(Base):
     knowledge_base_refs = Column(JSON, nullable=False, default=list)
     case_item_id = Column(String(36), nullable=True, index=True)
     role_profile_id = Column(String(36), nullable=True, index=True)
+    learning_content_id = Column(String(36), nullable=True, index=True)
+    examiner_agent_id = Column(String(36), nullable=True, index=True)
+    target_learner_level = Column(String(20), nullable=True, index=True)
+    timeout_config = Column(JSON, nullable=True)
     curriculum_plan = Column(JSON, nullable=True)
     max_stage_duration_seconds = Column(Integer, nullable=True)
     status = Column(String(20), nullable=False, default="draft", index=True)
@@ -73,6 +77,10 @@ class PracticeTemplate(Base):
         CheckConstraint(
             "status IN ('draft', 'published', 'archived')",
             name="ck_practice_template_status",
+        ),
+        CheckConstraint(
+            "(target_learner_level IS NULL OR target_learner_level IN ('conservative', 'beginner', 'intermediate', 'advanced'))",
+            name="ck_practice_template_target_learner_level",
         ),
         Index("idx_practice_templates_status_updated", "status", "updated_at"),
     )
@@ -387,4 +395,45 @@ class LearningProgress(Base):
             name="uq_learning_progress_user_content_chapter",
         ),
         Index("idx_learning_progress_user_content", "user_id", "learning_content_id"),
+    )
+
+
+class LearnerProfile(Base):
+    __tablename__ = "learner_profiles"
+
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    self_assessed_level = Column(String(20), nullable=True)
+    admin_overridden_level = Column(String(20), nullable=True)
+    effective_level = Column(String(20), nullable=False, default="conservative", index=True)
+    self_assessed_at = Column(DateTime(timezone=True), nullable=True)
+    overridden_by = Column(String(36), nullable=True)
+    overridden_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(self_assessed_level IS NULL OR self_assessed_level IN ('conservative', 'beginner', 'intermediate', 'advanced'))",
+            name="ck_learner_profile_self_assessed_level",
+        ),
+        CheckConstraint(
+            "(admin_overridden_level IS NULL OR admin_overridden_level IN ('conservative', 'beginner', 'intermediate', 'advanced'))",
+            name="ck_learner_profile_admin_overridden_level",
+        ),
+        CheckConstraint(
+            "effective_level IN ('conservative', 'beginner', 'intermediate', 'advanced')",
+            name="ck_learner_profile_effective_level",
+        ),
+        Index("idx_learner_profiles_effective_level", "effective_level"),
     )
