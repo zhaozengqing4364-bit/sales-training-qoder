@@ -1,12 +1,12 @@
 {
   "updated": "2026-05-16T00:00:00Z",
   "phase": "1A",
-  "completed": ["#66", "#67", "#68", "#69", "#70", "#71"],
-  "current": "#72",
-  "remaining": ["#72", "#73", "#74", "#75", "#76", "#77"],
-  "last_commit": "13de7af1",
-  "migration_head": "20260516_0900_063",
-  "baseline_test_count": 2117,
+  "completed": ["#66", "#67", "#68", "#69", "#70", "#71", "#72"],
+  "current": "#73",
+  "remaining": ["#73", "#74", "#75", "#76", "#77"],
+  "last_commit": "5c9eb881",
+  "migration_head": "20260516_1000_064",
+  "baseline_test_count": 2125,
   "blockers": [],
-  "notes": "#71 从讲义生成 AI 考题草稿闭环完成。Backend commit: a987400a, Frontend commit: 13de7af1。验证证据：后端 tests/unit/test_question_generation_service.py + tests/integration/test_question_generation_api.py 10 passed；后端 ruff check src/ passed；alembic head 20260516_0900_063；collect 2117 tests；前端 question-generation-panel + test-bank 5 files passed, 53 tests passed；前端 npx tsc --noEmit passed, npm run lint -- --quiet passed, npm run build passed；浏览器 smoke /admin/learning-contents/test-content 重定向至 /login HTTP 200 console_errors=0。进入 #72。"
+  "notes": "#72 学习讲义 AI 考题生成系统后端实现闭环完成。Backend commits: f658878c → 5c9eb881。验证证据：target regression 1 passed；target suite 38 passed；ruff check src/ All checks passed!；alembic head 20260516_1000_064；collect 2125 tests；safety grep 无 matches；LSP diagnostics 仅 missing dependency imports。进入 #73。"
 }
