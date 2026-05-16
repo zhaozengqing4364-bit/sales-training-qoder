@@ -198,4 +198,19 @@ describe("LoginPage", () => {
             }),
         );
     });
+
+    // Regression: ISSUE-002 — native login fallback leaked credentials into the URL
+    // Found by /qa on 2026-05-16
+    // Report: .gstack/qa-reports/qa-report-127-0-0-1-3017-2026-05-16.md
+    it("prevents native form fallback from placing credentials in the URL", async () => {
+        const { container } = render(<LoginPage />);
+        await screen.findByRole("button", { name: /开发者快速登录/i });
+
+        const form = container.querySelector("form");
+        expect(form).not.toBeNull();
+        expect(form!.getAttribute("method")).toBe("post");
+
+        const passwordInput = screen.getByLabelText("密码");
+        expect(passwordInput.getAttribute("name")).toBeNull();
+    });
 });

@@ -285,7 +285,7 @@ export default function LoginPage() {
                         <div className="absolute top-1/2 left-0 w-full border-t border-slate-200 -z-0" />
                     </div>
 
-                    <form onSubmit={handleLogin} className="space-y-4">
+                    <form method="post" onSubmit={handleLogin} className="space-y-4">
                         {error && (
                             <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm flex items-center">
                                 <AlertCircle className="w-4 h-4 mr-2" />
@@ -297,7 +297,6 @@ export default function LoginPage() {
                             <Input
                                 id="login-email"
                                 type="email"
-                                name="email"
                                 autoComplete="username"
                                 placeholder="name@company.com"
                                 className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
@@ -320,7 +319,6 @@ export default function LoginPage() {
                                 <Input
                                     id="login-password"
                                     type={showPassword ? "text" : "password"}
-                                    name="password"
                                     autoComplete="current-password"
                                     placeholder="••••••••"
                                     className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full pl-6 pr-14"
