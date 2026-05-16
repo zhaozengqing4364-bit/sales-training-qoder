@@ -4090,3 +4090,119 @@ export interface QuestionGenerationConfirmResponse {
     items: QuestionItem[];
     total: number;
 }
+
+// ── ExaminerAgent Types (Issue #74) ──
+
+export type ExaminerAgentStatus = "draft" | "published" | "archived";
+
+export type ExaminerAgentLearnerLevel = "conservative" | "beginner" | "intermediate" | "advanced";
+
+export interface ExaminerAgentLearnerLevelStrategy {
+    default_level: ExaminerAgentLearnerLevel;
+    allowed_levels: ExaminerAgentLearnerLevel[];
+}
+
+export interface ExaminerAgentTimeoutConfig {
+    max_seconds: number;
+}
+
+export interface ExaminerAgentSafetyConfig {
+    enabled?: boolean;
+    max_tokens?: number;
+    blocked_phrases?: string[];
+    [key: string]: unknown;
+}
+
+export interface ExaminerAgentPromptConfig {
+    system_prompt?: string;
+    user_prompt_template?: string;
+    [key: string]: unknown;
+}
+
+export interface ExaminerAgentSimulationConfig {
+    default_learner_level?: ExaminerAgentLearnerLevel;
+    dry_run_timeout_seconds?: number;
+    [key: string]: unknown;
+}
+
+export interface ExaminerAgentGateResult {
+    gate_name: string;
+    status: "passed" | "failed" | "warning" | string;
+    reason_code: string;
+    message: string;
+}
+
+export interface ExaminerAgentRecord {
+    examiner_agent_id: string;
+    name: string;
+    description?: string | null;
+    question_source_ids: string[];
+    learner_level_strategy: ExaminerAgentLearnerLevelStrategy;
+    scoring_policy_id?: string | null;
+    timeout_config: ExaminerAgentTimeoutConfig;
+    safety_config: ExaminerAgentSafetyConfig;
+    prompt_config: ExaminerAgentPromptConfig;
+    simulation_config: ExaminerAgentSimulationConfig;
+    status: ExaminerAgentStatus;
+    version: number;
+    content_hash?: string | null;
+    created_at: string;
+    updated_at: string;
+    published_at?: string | null;
+}
+
+export interface ExaminerAgentListResponse {
+    items: ExaminerAgentRecord[];
+    total: number;
+}
+
+export interface ExaminerAgentCreateRequest {
+    name: string;
+    description?: string | null;
+    question_source_ids: string[];
+    learner_level_strategy: ExaminerAgentLearnerLevelStrategy;
+    scoring_policy_id?: string | null;
+    timeout_config?: ExaminerAgentTimeoutConfig;
+    safety_config?: ExaminerAgentSafetyConfig;
+    prompt_config?: ExaminerAgentPromptConfig;
+    simulation_config?: ExaminerAgentSimulationConfig;
+}
+
+export interface ExaminerAgentUpdateRequest {
+    name?: string;
+    description?: string | null;
+    question_source_ids?: string[];
+    learner_level_strategy?: ExaminerAgentLearnerLevelStrategy;
+    scoring_policy_id?: string | null;
+    timeout_config?: ExaminerAgentTimeoutConfig;
+    safety_config?: ExaminerAgentSafetyConfig;
+    prompt_config?: ExaminerAgentPromptConfig;
+    simulation_config?: ExaminerAgentSimulationConfig;
+}
+
+export interface ExaminerAgentSimulationResult {
+    score?: number | null;
+    passed: boolean;
+    feedback?: string | null;
+}
+
+export interface ExaminerAgentSimulationResponse {
+    mode: string;
+    mutates_records: boolean;
+    examiner_agent_id: string;
+    selected_question_id?: string | null;
+    learner_level: string;
+    scoring_policy_id?: string | null;
+    timeout_seconds: number;
+    result?: ExaminerAgentSimulationResult | null;
+}
+
+export interface ExaminerAgentSimulationRequest {
+    learner_level?: ExaminerAgentLearnerLevel;
+    sample_answer: string;
+    question_id?: string;
+}
+
+export interface ExaminerAgentErrorDetails {
+    gate_results?: ExaminerAgentGateResult[];
+}

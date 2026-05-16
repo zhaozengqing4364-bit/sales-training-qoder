@@ -196,6 +196,13 @@ import {
     QuestionGenerationPreviewResponse,
     QuestionGenerationConfirmRequest,
     QuestionGenerationConfirmResponse,
+    ExaminerAgentRecord,
+    ExaminerAgentListResponse,
+    ExaminerAgentCreateRequest,
+    ExaminerAgentUpdateRequest,
+    ExaminerAgentSimulationResponse,
+    ExaminerAgentSimulationRequest,
+    ExaminerAgentErrorDetails,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -444,6 +451,16 @@ export function getPracticeTemplateErrorDetails(error: unknown): PracticeTemplat
         return null;
     }
     return error.details as PracticeTemplateErrorDetails;
+}
+
+export function getExaminerAgentErrorDetails(error: unknown): ExaminerAgentErrorDetails | null {
+    if (!(error instanceof ApiRequestError)) {
+        return null;
+    }
+    if (!error.details || typeof error.details !== "object" || Array.isArray(error.details)) {
+        return null;
+    }
+    return error.details as ExaminerAgentErrorDetails;
 }
 
 export function getApiErrorMessage(error: unknown): string {
@@ -2994,6 +3011,65 @@ export const api = {
         cloneRoleProfileVoice: async (roleProfileId: string, payload: RoleProfileVoiceCloneRequest) => {
             return apiFetch<RoleProfileVoiceCloneResponse>(
                 `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}/voice-clone`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listExaminerAgents: async (status?: string) => {
+            const searchParams = new URLSearchParams();
+            if (status && status !== "all") searchParams.set("status", status);
+            const query = searchParams.toString();
+            return apiFetch<ExaminerAgentListResponse>(
+                `/admin/curriculum-practice/examiner-agents${query ? `?${query}` : ""}`,
+            );
+        },
+
+        getExaminerAgent: async (examinerAgentId: string) => {
+            return apiFetch<ExaminerAgentRecord>(
+                `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}`,
+            );
+        },
+
+        createExaminerAgent: async (payload: ExaminerAgentCreateRequest) => {
+            return apiFetch<ExaminerAgentRecord>(
+                "/admin/curriculum-practice/examiner-agents",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        updateExaminerAgent: async (examinerAgentId: string, payload: ExaminerAgentUpdateRequest) => {
+            return apiFetch<ExaminerAgentRecord>(
+                `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        publishExaminerAgent: async (examinerAgentId: string) => {
+            return apiFetch<ExaminerAgentRecord>(
+                `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}/publish`,
+                { method: "POST" },
+            );
+        },
+
+        archiveExaminerAgent: async (examinerAgentId: string) => {
+            return apiFetch<ExaminerAgentRecord>(
+                `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}/archive`,
+                { method: "POST" },
+            );
+        },
+
+        simulateExaminerAgent: async (examinerAgentId: string, payload: ExaminerAgentSimulationRequest) => {
+            return apiFetch<ExaminerAgentSimulationResponse>(
+                `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}/simulate`,
                 {
                     method: "POST",
                     body: JSON.stringify(payload),
