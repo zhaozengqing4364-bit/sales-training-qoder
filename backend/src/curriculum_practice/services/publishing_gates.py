@@ -81,6 +81,29 @@ class PublishingGateService:
             runtime_profile_ids: list[str] = []
             role_profile_voice_ids: list[str] = []
             for stage in candidate.curriculum_plan.stages:
+                if stage.stage_type in ("study", "exam"):
+                    stage_asset = self._reference_reader(
+                        stage.template_ref.asset_type, stage.template_ref.asset_id
+                    )
+                    if isawaitable(stage_asset):
+                        stage_asset = await stage_asset
+                    stage_status = getattr(stage_asset, "status", None)
+                    if isinstance(stage_asset, dict):
+                        stage_status = stage_asset.get("status")
+                    if stage_status != "published":
+                        results.append(
+                            GateResult(
+                                gate_name="curriculum_plan_stage_asset",
+                                status="failed",
+                                reason_code="curriculum_stage_asset_unpublished",
+                                message=(
+                                    "CurriculumPlan stage "
+                                    f"{stage.template_stage_key} references an unpublished "
+                                    f"{stage.template_ref.asset_type} asset."
+                                ),
+                            )
+                        )
+                    continue
                 if (
                     candidate.max_stage_duration_seconds is not None
                     and stage.completion_policy.max_duration_seconds
@@ -263,6 +286,10 @@ class PublishingGateService:
             refs.append(("case_item", candidate.case_item_id))
         if candidate.role_profile_id:
             refs.append(("role_profile", candidate.role_profile_id))
+        if candidate.learning_content_id:
+            refs.append(("learning_content", candidate.learning_content_id))
+        if candidate.examiner_agent_id:
+            refs.append(("agent", candidate.examiner_agent_id))
         return refs
 
 

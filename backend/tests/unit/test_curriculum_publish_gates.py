@@ -159,3 +159,53 @@ async def test_should_pass_publish_gate_when_template_is_publishable() -> None:
 
     assert decision.can_publish is True
     assert decision.results == []
+
+
+@pytest.mark.asyncio
+async def test_should_fail_publish_gate_when_study_stage_asset_is_unpublished() -> None:
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        if asset_type == "learning_content":
+            return None
+        return {"id": asset_id, "status": "published", "voice_mode": "stepfun_realtime"}
+
+    service = PublishingGateService(reference_reader=reference_reader)
+    candidate = PracticeTemplatePublishCandidate(
+        name="学习考试闭环",
+        scenario_type="sales",
+        mode="mixed_path",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        runtime_profile_id="runtime-1",
+        voice_mode="stepfun_realtime",
+        scoring_ruleset_id="ruleset-1",
+        curriculum_plan={
+            "name": "学习考试闭环",
+            "stages": [
+                {
+                    "template_stage_key": "study_stage",
+                    "stage_type": "study",
+                    "order": 1,
+                    "name": "学习",
+                    "template_ref": {
+                        "asset_type": "learning_content",
+                        "asset_id": "learning-1",
+                        "version": 1,
+                        "hash": "sha256:learning",
+                        "snapshot_label": "published",
+                    },
+                    "completion_policy": {
+                        "min_score": 0,
+                        "min_rounds": 0,
+                        "max_duration_seconds": 300,
+                    },
+                }
+            ],
+        },
+    )
+
+    decision = await service.validate(candidate)
+
+    assert decision.can_publish is False
+    assert [result.reason_code for result in decision.results] == [
+        "curriculum_stage_asset_unpublished"
+    ]

@@ -11,7 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.models import Agent, Persona, VoiceRuntimeProfile
 from common.db.models import ScoringRuleset
 from common.knowledge.models import KnowledgeBase
-from curriculum_practice.models import CaseItem, PracticeTemplate, RoleProfile
+from curriculum_practice.models import (
+    CaseItem,
+    LearningContent,
+    PracticeTemplate,
+    QuestionItem,
+    RoleProfile,
+)
 from curriculum_practice.schemas import (
     PracticeTemplateCreate,
     PracticeTemplatePublishCandidate,
@@ -114,6 +120,12 @@ class PracticeTemplateService:
         if asset_type == "role_profile":
             item = await self._db.get(RoleProfile, asset_id)
             return item if item is not None and item.status == "published" else None
+        if asset_type == "learning_content":
+            item = await self._db.get(LearningContent, asset_id)
+            return item if item is not None and item.status == "published" else None
+        if asset_type == "question_item":
+            item = await self._db.get(QuestionItem, asset_id)
+            return item if item is not None and item.status == "published" else None
         if asset_type == "practice_template":
             item = await self._db.get(PracticeTemplate, asset_id)
             if item is None or item.status != "published":
@@ -149,6 +161,10 @@ def serialize_template(template: PracticeTemplate) -> PracticeTemplateResponse:
         "knowledge_base_refs": list(template.knowledge_base_refs or []),
         "case_item_id": template.case_item_id,
         "role_profile_id": template.role_profile_id,
+        "learning_content_id": template.learning_content_id,
+        "examiner_agent_id": template.examiner_agent_id,
+        "target_learner_level": template.target_learner_level,
+        "timeout_config": template.timeout_config,
         "curriculum_plan": template.curriculum_plan,
         "max_stage_duration_seconds": template.max_stage_duration_seconds,
         "status": template.status,
@@ -176,6 +192,10 @@ def _candidate_from_template(
         knowledge_base_refs=list(template.knowledge_base_refs or []),
         case_item_id=template.case_item_id,
         role_profile_id=template.role_profile_id,
+        learning_content_id=template.learning_content_id,
+        examiner_agent_id=template.examiner_agent_id,
+        target_learner_level=template.target_learner_level,
+        timeout_config=template.timeout_config,
         curriculum_plan=template.curriculum_plan,
         max_stage_duration_seconds=template.max_stage_duration_seconds,
     )
@@ -195,6 +215,10 @@ def _content_hash(template: PracticeTemplate) -> str:
         "knowledge_base_refs": list(template.knowledge_base_refs or []),
         "case_item_id": template.case_item_id,
         "role_profile_id": template.role_profile_id,
+        "learning_content_id": template.learning_content_id,
+        "examiner_agent_id": template.examiner_agent_id,
+        "target_learner_level": template.target_learner_level,
+        "timeout_config": template.timeout_config,
         "curriculum_plan": template.curriculum_plan,
         "max_stage_duration_seconds": template.max_stage_duration_seconds,
         "version": template.version,
