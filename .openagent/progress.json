@@ -1,12 +1,12 @@
 {
   "updated": "2026-05-16T00:00:00Z",
   "phase": "1A",
-  "completed": ["#66", "#67", "#68", "#69", "#70", "#71", "#72"],
-  "current": "#73",
-  "remaining": ["#73", "#74", "#75", "#76", "#77"],
-  "last_commit": "5c9eb881",
-  "migration_head": "20260516_1000_064",
-  "baseline_test_count": 2125,
+  "completed": ["#66", "#67", "#68", "#69", "#70", "#71", "#72", "#73"],
+  "current": "#74",
+  "remaining": ["#74", "#75", "#76", "#77"],
+  "last_commit": "4f8b1137",
+  "migration_head": "20260516_1100_065",
+  "baseline_test_count": 2133,
   "blockers": [],
-  "notes": "#72 学员分层、模板绑定与 RuntimeSnapshot 发布门禁闭环完成。Backend commits: f658878c → 5c9eb881（LearnerProfile service + template runtime binding schemas + stage publish validation gate + RuntimeSnapshot freeze + runtime bindings API + stage_type alignment）。验证证据：target regression 1 passed；target suite 38 passed；ruff check src/ All checks passed!；alembic head 20260516_1000_064；collect 2125 tests；safety grep 无 matches；LSP diagnostics 仅 missing dependency imports。进入 #73。"
+  "notes": "#73 批量分配训练任务闭环完成。Backend: batch-assign endpoint + test suite；Frontend: admin users UI + Playwright smoke。验证证据：backend target 11 passed；ruff check src/ All checks passed!；alembic head 20260516_1100_065；collect 2133 tests；frontend users tests 17 passed；tsc/lint/build passed；Playwright smoke /admin/users → /login redirect HTTP 200 console_errors=0。进入 #74。"
 }
