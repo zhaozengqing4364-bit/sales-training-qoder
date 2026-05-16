@@ -57,6 +57,18 @@ class PublishingGateService:
                         )
                     )
                     continue
+                if asset_type == "examiner_agent":
+                    results.append(
+                        GateResult(
+                            gate_name="examiner_agent_reference",
+                            status="failed",
+                            reason_code="examiner_agent_unpublished",
+                            message=(
+                                f"{asset_type} reference {asset_id} does not exist or is not published."
+                            ),
+                        )
+                    )
+                    continue
                 results.append(
                     GateResult(
                         gate_name="reference_integrity",
@@ -289,7 +301,7 @@ class PublishingGateService:
         if candidate.learning_content_id:
             refs.append(("learning_content", candidate.learning_content_id))
         if candidate.examiner_agent_id:
-            refs.append(("agent", candidate.examiner_agent_id))
+            refs.append(("examiner_agent", candidate.examiner_agent_id))
         return refs
 
 

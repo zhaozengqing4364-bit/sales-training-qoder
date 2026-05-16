@@ -9,6 +9,7 @@ from common.db.models import PracticeSession, ScoringRuleset
 from common.knowledge.models import KnowledgeBase
 from curriculum_practice.models import (
     CaseItem,
+    ExaminerAgent,
     LearnerProfile,
     LearningContent,
     PracticeTemplate,
@@ -189,6 +190,23 @@ def _reference_reader(db: AsyncSession):
                 "status": content.status,
                 "version": content.version,
                 "content_hash": content.content_hash,
+            }
+        if asset_type == "examiner_agent":
+            examiner_agent = await db.get(ExaminerAgent, asset_id)
+            if examiner_agent is None:
+                return None
+            return {
+                "examiner_agent_id": examiner_agent.examiner_agent_id,
+                "status": examiner_agent.status,
+                "version": examiner_agent.version,
+                "content_hash": examiner_agent.content_hash,
+                "question_source_ids": list(examiner_agent.question_source_ids or []),
+                "learner_level_strategy": examiner_agent.learner_level_strategy or {},
+                "scoring_policy_id": examiner_agent.scoring_policy_id,
+                "timeout_config": examiner_agent.timeout_config or {},
+                "safety_config": examiner_agent.safety_config or {},
+                "prompt_config": examiner_agent.prompt_config or {},
+                "simulation_config": examiner_agent.simulation_config or {},
             }
         if asset_type == "question_item":
             question = await db.get(QuestionItem, asset_id)

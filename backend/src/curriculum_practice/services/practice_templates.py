@@ -13,6 +13,7 @@ from common.db.models import ScoringRuleset
 from common.knowledge.models import KnowledgeBase
 from curriculum_practice.models import (
     CaseItem,
+    ExaminerAgent,
     LearningContent,
     PracticeTemplate,
     QuestionItem,
@@ -122,6 +123,9 @@ class PracticeTemplateService:
             return item if item is not None and item.status == "published" else None
         if asset_type == "learning_content":
             item = await self._db.get(LearningContent, asset_id)
+            return item if item is not None and item.status == "published" else None
+        if asset_type == "examiner_agent":
+            item = await self._db.get(ExaminerAgent, asset_id)
             return item if item is not None and item.status == "published" else None
         if asset_type == "question_item":
             item = await self._db.get(QuestionItem, asset_id)

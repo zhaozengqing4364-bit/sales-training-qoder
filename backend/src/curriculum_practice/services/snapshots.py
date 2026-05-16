@@ -100,6 +100,10 @@ class RuntimeSnapshotService:
             content_assets.append(
                 await self._learning_content_ref(str(template_data["learning_content_id"]))
             )
+        if template_data.get("examiner_agent_id"):
+            content_assets.append(
+                await self._examiner_agent_ref(str(template_data["examiner_agent_id"]))
+            )
         role_profile_data = None
         if template_data.get("role_profile_id"):
             role_profile_data = _as_dict(
@@ -190,6 +194,10 @@ class RuntimeSnapshotService:
             if child_template.get("case_item_id"):
                 child_content_assets.append(
                     await self._case_item_ref(str(child_template["case_item_id"]))
+                )
+            if child_template.get("examiner_agent_id"):
+                child_content_assets.append(
+                    await self._examiner_agent_ref(str(child_template["examiner_agent_id"]))
                 )
             child_role_profile_data = None
             if child_template.get("role_profile_id"):
@@ -347,6 +355,21 @@ class RuntimeSnapshotService:
             asset_id=asset_id,
             version=role_profile.get("version", 1),
             hash=str(role_profile["content_hash"]),
+            snapshot_label="published",
+        )
+
+    async def _examiner_agent_ref(self, asset_id: str) -> CurriculumVersionRef:
+        examiner_agent = _as_dict(await self._read_reference("examiner_agent", asset_id))
+        if not examiner_agent or examiner_agent.get("status") != "published":
+            raise RuntimeSnapshotBuildError(
+                "examiner_agent_unpublished",
+                "ExaminerAgent reference is missing or unpublished.",
+            )
+        return CurriculumVersionRef(
+            asset_type="examiner_agent",
+            asset_id=asset_id,
+            version=examiner_agent.get("version", 1),
+            hash=str(examiner_agent["content_hash"]),
             snapshot_label="published",
         )
 
