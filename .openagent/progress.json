@@ -1,12 +1,12 @@
 {
-  "updated": "2026-05-16T00:00:00Z",
+  "updated": "2026-05-16T12:50:00Z",
   "phase": "1A",
-  "completed": ["#66", "#67", "#68", "#69", "#70", "#71", "#72", "#73", "#74", "#75"],
-  "current": "#76",
-  "remaining": ["#76", "#77"],
-  "last_commit": "05332bbb",
+  "completed": ["#66", "#67", "#68", "#69", "#70", "#71", "#72", "#73", "#74", "#75", "#76"],
+  "current": "#77",
+  "remaining": ["#77"],
+  "last_commit": "dbc1d6fc",
   "migration_head": "20260516_1200_066",
   "baseline_test_count": 2139,
   "blockers": [],
-  "notes": "#74 ExaminerAgent 配置管理切片完成。Backend: examiner_agent CRUD API + test suite（7 passed）；ruff check src/ All checks passed；alembic head 20260516_1200_066；collect 2139 tests；Frontend: examiner-agents page + tests（16 passed）；tsc/lint/build passed；Playwright smoke: /admin/curriculum-practice/examiner-agents → /login redirect（auth 保护生效），仅 Next dev HMR websocket 握手错误。进入 #75。\n#75 AI 考官 WebSocket 运行时闭环完成。Backend: examiner runtime + websocket router + snapshot question refs + idempotent report path marker；target tests（22 passed）；ruff check src/ All checks passed；alembic head 20260516_1200_066。进入 #76。"
+  "notes": "#74 ExaminerAgent 配置管理切片完成。Backend: examiner_agent CRUD API + test suite（7 passed）；ruff check src/ All checks passed；alembic head 20260516_1200_066；collect 2139 tests；Frontend: examiner-agents page + tests（16 passed）；tsc/lint/build passed。进入 #75。\n#75 AI 考官 WebSocket 运行时闭环完成。Backend: examiner runtime + websocket router + snapshot question refs + idempotent report path marker；target tests（22 passed）；ruff check src/ All checks passed；alembic head 20260516_1200_066。进入 #76。\n#76 学员 AI 考核前端闭环完成。合约对齐：类型定义精确匹配 backend examiner_runtime.py（session.init/exam.question/exam.feedback/exam.completed 全部字段）。Hook 测试 15 passed（WebSocket mock、连接/答题/反馈/完成/可选字段/重连/超时/failed/voice/error）。路由级页面测试 21 passed（loading/disabled→即将上线/题库为空/connecting/reconnecting/failed retry/超时警告/语音降级/题目显示+提交/feedback+reason/completed all_answered+timed_out+reconnected+empty_question_bank/报告导航/评分面板进度/行内错误）。tsc --noEmit passed。eslint --quiet passed。npm run build passed（/exam/[sessionId] 路由已注册）。进入 #77。"
 }
