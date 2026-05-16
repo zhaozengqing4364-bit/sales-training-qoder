@@ -1,12 +1,12 @@
 {
   "updated": "2026-05-16T00:00:00Z",
   "phase": "1A",
-  "completed": ["#66", "#67", "#68", "#69", "#70", "#71", "#72", "#73"],
-  "current": "#74",
-  "remaining": ["#74", "#75", "#76", "#77"],
+  "completed": ["#66", "#67", "#68", "#69", "#70", "#71", "#72", "#73", "#74"],
+  "current": "#75",
+  "remaining": ["#75", "#76", "#77"],
   "last_commit": "4f8b1137",
-  "migration_head": "20260516_1100_065",
-  "baseline_test_count": 2133,
+  "migration_head": "20260516_1200_066",
+  "baseline_test_count": 2139,
   "blockers": [],
-  "notes": "#73 批量分配训练任务闭环完成。Backend: batch-assign endpoint + test suite；Frontend: admin users UI + Playwright smoke。验证证据：backend target 11 passed；ruff check src/ All checks passed!；alembic head 20260516_1100_065；collect 2133 tests；frontend users tests 17 passed；tsc/lint/build passed；Playwright smoke /admin/users → /login redirect HTTP 200 console_errors=0。进入 #74。"
+  "notes": "#74 ExaminerAgent 配置管理切片完成。Backend: examiner_agent CRUD API + test suite（7 passed）；ruff check src/ All checks passed；alembic head 20260516_1200_066；collect 2139 tests；Frontend: examiner-agents page + tests（16 passed）；tsc/lint/build passed；Playwright smoke: /admin/curriculum-practice/examiner-agents → /login redirect（auth 保护生效），仅 Next dev HMR websocket 握手错误。进入 #75。"
 }
