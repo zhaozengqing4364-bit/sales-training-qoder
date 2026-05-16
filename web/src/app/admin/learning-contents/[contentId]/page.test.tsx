@@ -12,6 +12,7 @@ const {
     reorderChaptersMock,
     publishMock,
     archiveMock,
+    listCategoriesMock,
 } = vi.hoisted(() => ({
     getMock: vi.fn(),
     updateMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
     reorderChaptersMock: vi.fn(),
     publishMock: vi.fn(),
     archiveMock: vi.fn(),
+    listCategoriesMock: vi.fn(),
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -76,6 +78,9 @@ vi.mock("@/lib/api/client", async () => {
                 publish: publishMock,
                 archive: archiveMock,
             },
+            testBank: {
+                listCategories: listCategoriesMock,
+            },
         },
     };
 });
@@ -126,6 +131,7 @@ describe("AdminLearningContentDetailPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         getMock.mockResolvedValue(makeContent());
+        listCategoriesMock.mockResolvedValue({ items: [], total: 0 });
     });
 
     it("renders loading state initially", async () => {

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import React from "react";
 import {
     ArrowLeft,
     BookOpen,
@@ -15,10 +16,11 @@ import {
 } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { LearningChapter, LearningContent } from "@/lib/api/types";
+import type { LearningChapter, LearningContent, QuestionCategory } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { debug } from "@/lib/debug";
+import { QuestionGenerationPanel } from "./question-generation-panel";
 
 const STATUS_LABELS: Record<string, string> = {
     draft: "草稿",
@@ -94,11 +96,16 @@ export default function AdminLearningContentDetailPage() {
     const [actionError, setActionError] = useState<string | null>(null);
     const [publishGateErrors, setPublishGateErrors] = useState<GateResult[] | null>(null);
 
+    const [categories, setCategories] = useState<QuestionCategory[]>([]);
+
     const loadContent = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
-            const data = await api.learningContents.get(contentId);
+            const [data, catsResult] = await Promise.all([
+                api.learningContents.get(contentId),
+                api.testBank.listCategories(),
+            ]);
             setContent(data);
             setTitle(data.title);
             setSummary(data.summary ?? "");
@@ -107,6 +114,7 @@ export default function AdminLearningContentDetailPage() {
             setSafetyFlagged(data.safety_flagged);
             setActionError(null);
             setPublishGateErrors(null);
+            setCategories(catsResult.items);
         } catch (err) {
             debug.error("Failed to load learning content:", err);
             setError(getApiErrorMessage(err));
@@ -442,8 +450,8 @@ export default function AdminLearningContentDetailPage() {
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
                                                 {SORTED_CHAPTERS.map((chapter, index) => (
+                                                    <React.Fragment key={chapter.chapter_id}>
                                                     <tr
-                                                        key={chapter.chapter_id}
                                                         className="transition-colors hover:bg-slate-50/50"
                                                     >
                                                         <td className="px-3 py-3 text-slate-400">
@@ -547,6 +555,18 @@ export default function AdminLearningContentDetailPage() {
                                                             </div>
                                                         </td>
                                                     </tr>
+                                                    {!editingChapter || editingChapter.chapter_id !== chapter.chapter_id ? (
+                                                        <tr>
+                                                            <td colSpan={4} className="px-3 py-2">
+                                                                <QuestionGenerationPanel
+                                                                    learningContentId={content.learning_content_id}
+                                                                    chapterId={chapter.chapter_id}
+                                                                    categories={categories}
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    ) : null}
+                                                    </React.Fragment>
                                                 ))}
                                             </tbody>
                                         </table>

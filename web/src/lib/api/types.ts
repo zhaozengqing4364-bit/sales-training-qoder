@@ -4021,3 +4021,35 @@ export interface ImportJob {
     status: ImportJobStatus;
     result: ImportResult;
 }
+
+// QuestionGeneration types (Issue #71)
+export interface QuestionGenerationPreviewRequest {
+    learning_content_id: string;
+    chapter_id: string;
+}
+
+export interface QuestionGenerationDraft {
+    title: string;
+    stem: string;
+    reference_answer: string;
+    scoring_criteria: Record<string, unknown>;
+    scoring_dimensions: string[];
+    tags: string[];
+    difficulty: QuestionDifficulty;
+    source_learning_content_id: string;
+    source_chapter_id: string;
+}
+
+export interface QuestionGenerationPreviewResponse {
+    drafts: QuestionGenerationDraft[];
+}
+
+export interface QuestionGenerationConfirmRequest {
+    category_id: string;
+    drafts: QuestionGenerationDraft[];
+}
+
+export interface QuestionGenerationConfirmResponse {
+    items: QuestionItem[];
+    total: number;
+}

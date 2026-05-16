@@ -191,6 +191,11 @@ import {
     ImportResult,
     ImportError,
     ImportJobStatus,
+    QuestionGenerationDraft,
+    QuestionGenerationPreviewRequest,
+    QuestionGenerationPreviewResponse,
+    QuestionGenerationConfirmRequest,
+    QuestionGenerationConfirmResponse,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -1006,6 +1011,27 @@ function normalizeImportJob(input: unknown): ImportJob {
                 : "pending"
         ) as ImportJobStatus,
         result: normalizeImportResult(raw.result),
+    };
+}
+
+function normalizeQuestionGenerationDraft(input: unknown): QuestionGenerationDraft {
+    const raw = toRecord(input);
+    return {
+        title: toStringValue(raw.title),
+        stem: toStringValue(raw.stem),
+        reference_answer: toStringValue(raw.reference_answer),
+        scoring_criteria: (raw.scoring_criteria && typeof raw.scoring_criteria === "object" && !Array.isArray(raw.scoring_criteria))
+            ? raw.scoring_criteria as Record<string, unknown>
+            : {},
+        scoring_dimensions: Array.isArray(raw.scoring_dimensions)
+            ? (raw.scoring_dimensions as unknown[]).map((d: unknown) => toStringValue(d)).filter(Boolean)
+            : [],
+        tags: normalizeStringList(raw.tags),
+        difficulty: (["easy", "medium", "hard"].includes(toStringValue(raw.difficulty))
+            ? toStringValue(raw.difficulty)
+            : "medium") as QuestionDifficulty,
+        source_learning_content_id: toStringValue(raw.source_learning_content_id),
+        source_chapter_id: toStringValue(raw.source_chapter_id),
     };
 }
 
@@ -1976,6 +2002,33 @@ export const api = {
                 `/curriculum/test-bank/imports/${encodeURIComponent(taskId)}`,
             );
             return normalizeImportJob(result);
+        },
+        previewQuestionGeneration: async (payload: QuestionGenerationPreviewRequest) => {
+            const result = await apiFetch<{ drafts?: unknown[] }>(
+                "/curriculum/test-bank/generation/preview",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+            const drafts = Array.isArray(result.drafts) ? result.drafts : [];
+            return {
+                drafts: drafts.map(normalizeQuestionGenerationDraft),
+            };
+        },
+        confirmQuestionGeneration: async (payload: QuestionGenerationConfirmRequest) => {
+            const result = await apiFetch<{ items?: unknown[]; total?: unknown }>(
+                "/curriculum/test-bank/generation/confirm",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+            const items = Array.isArray(result.items) ? result.items : [];
+            return {
+                items: items.map(normalizeQuestionItem),
+                total: toNumberValue(result.total, 0),
+            };
         },
     },
 

@@ -455,4 +455,170 @@ describe("api.testBank contract", () => {
 
         await expect(api.testBank.deleteCategory("cat-parent")).rejects.toThrow();
     });
+
+    it("previews question generation from chapter", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    drafts: [
+                        {
+                            title: "异议处理测试",
+                            stem: "当客户提出价格异议时，你应该怎么做？",
+                            reference_answer: "先认同客户观点，再逐步引导。",
+                            scoring_criteria: { logic_weight: 0.6, persuasion_weight: 0.4 },
+                            scoring_dimensions: ["逻辑性", "说服力"],
+                            tags: ["异议处理", "价格"],
+                            difficulty: "medium",
+                            source_learning_content_id: "content-1",
+                            source_chapter_id: "chapter-1",
+                        },
+                        {
+                            title: "客户关系维护",
+                            stem: "如何在初次接触后保持与潜在客户的联系？",
+                            reference_answer: "定期发送有价值的信息，建立信任。",
+                            scoring_criteria: { follow_up: 1.0 },
+                            scoring_dimensions: ["客户关系"],
+                            tags: ["关系维护"],
+                            difficulty: "easy",
+                            source_learning_content_id: "content-1",
+                            source_chapter_id: "chapter-1",
+                        },
+                    ],
+                },
+            }),
+        });
+
+        const result = await api.testBank.previewQuestionGeneration({
+            learning_content_id: "content-1",
+            chapter_id: "chapter-1",
+        });
+
+        expect(result.drafts).toHaveLength(2);
+        expect(result.drafts[0]).toMatchObject({
+            title: "异议处理测试",
+            stem: "当客户提出价格异议时，你应该怎么做？",
+            difficulty: "medium",
+            source_learning_content_id: "content-1",
+            source_chapter_id: "chapter-1",
+        });
+        expect(result.drafts[0].scoring_dimensions).toEqual(["逻辑性", "说服力"]);
+        expect(result.drafts[0].scoring_criteria).toEqual({ logic_weight: 0.6, persuasion_weight: 0.4 });
+        expect(result.drafts[0].tags).toEqual(["异议处理", "价格"]);
+        expect(result.drafts[1].difficulty).toBe("easy");
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/curriculum/test-bank/generation/preview"),
+            expect.objectContaining({
+                method: "POST",
+                body: JSON.stringify({ learning_content_id: "content-1", chapter_id: "chapter-1" }),
+            }),
+        );
+    });
+
+    it("handles preview generation error (unsafe content)", async () => {
+        fetchMock.mockResolvedValue({
+            ok: false,
+            status: 400,
+            json: async () => ({
+                detail: {
+                    error: "[QUESTION_GENERATION_UNSAFE_CONTENT]",
+                    message: "Generated content contains potentially unsafe injection patterns.",
+                },
+            }),
+        });
+
+        await expect(
+            api.testBank.previewQuestionGeneration({
+                learning_content_id: "content-1",
+                chapter_id: "chapter-bad",
+            }),
+        ).rejects.toThrow();
+    });
+
+    it("confirms question generation drafts", async () => {
+        const draft = {
+            title: "异议处理测试",
+            stem: "当客户提出价格异议时，你应该怎么做？",
+            reference_answer: "先认同客户观点，再逐步引导。",
+            scoring_criteria: { logic_weight: 0.6 },
+            scoring_dimensions: ["逻辑性", "说服力"],
+            tags: ["异议处理"],
+            difficulty: "medium" as const,
+            source_learning_content_id: "content-1",
+            source_chapter_id: "chapter-1",
+        };
+
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    items: [
+                        {
+                            question_id: "q-gen-1",
+                            title: "异议处理测试",
+                            stem: "当客户提出价格异议时，你应该怎么做？",
+                            reference_answer: "先认同客户观点，再逐步引导。",
+                            category_id: "cat-1",
+                            difficulty: "medium",
+                            status: "draft",
+                            tags: ["异议处理"],
+                            scoring_dimensions: ["逻辑性", "说服力"],
+                            scoring_criteria: { logic_weight: 0.6 },
+                            safety_flagged: false,
+                            department: null,
+                            version: 1,
+                            created_at: "2026-05-16T00:00:00Z",
+                            updated_at: "2026-05-16T00:00:00Z",
+                        },
+                    ],
+                    total: 1,
+                },
+            }),
+        });
+
+        const result = await api.testBank.confirmQuestionGeneration({
+            category_id: "cat-1",
+            drafts: [draft],
+        });
+
+        expect(result.items).toHaveLength(1);
+        expect(result.items[0]).toMatchObject({
+            question_id: "q-gen-1",
+            title: "异议处理测试",
+            status: "draft",
+            category_id: "cat-1",
+        });
+        expect(result.total).toBe(1);
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/curriculum/test-bank/generation/confirm"),
+            expect.objectContaining({
+                method: "POST",
+                body: expect.stringContaining('"category_id":"cat-1"'),
+            }),
+        );
+    });
+
+    it("handles confirm generation error (malformed drafts)", async () => {
+        fetchMock.mockResolvedValue({
+            ok: false,
+            status: 400,
+            json: async () => ({
+                detail: {
+                    error: "[QUESTION_GENERATION_FAILED]",
+                    message: "One or more drafts contain malformed content.",
+                },
+            }),
+        });
+
+        await expect(
+            api.testBank.confirmQuestionGeneration({
+                category_id: "cat-1",
+                drafts: [],
+            }),
+        ).rejects.toThrow();
+    });
 });
