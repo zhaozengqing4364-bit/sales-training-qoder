@@ -13,6 +13,7 @@ from common.services.practice_session_service import (
     PracticeServiceError,
 )
 from common.training_tasks.schemas import (
+    TrainingTaskBatchAssignRequest,
     TrainingTaskCompleteRequest,
     TrainingTaskCreate,
     TrainingTaskListResponse,
@@ -23,6 +24,7 @@ from common.training_tasks.schemas import (
     TrainingTaskUpdate,
 )
 from common.training_tasks.service import (
+    batch_assign_training_tasks,
     can_manage_training_tasks,
     complete_training_task,
     create_training_task,
@@ -61,6 +63,22 @@ async def create_training_task_endpoint(
         await db.rollback()
         raise _error(400, str(exc)) from exc
     return _success(TrainingTaskResponse.model_validate(task).model_dump(mode="json"))
+
+
+@router.post("/batch-assign")
+async def batch_assign_training_tasks_endpoint(
+    payload: TrainingTaskBatchAssignRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    if not can_manage_training_tasks(current_user):
+        raise HTTPException(status_code=403, detail="[ROLE_REQUIRED]")
+    response = await batch_assign_training_tasks(
+        db,
+        payload,
+        current_user=current_user,
+    )
+    return _success(response.model_dump(mode="json"))
 
 
 @router.get("")

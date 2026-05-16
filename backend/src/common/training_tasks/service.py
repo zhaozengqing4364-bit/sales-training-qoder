@@ -14,6 +14,10 @@ from common.services.practice_session_service import (
     PracticeSessionCreateService,
 )
 from common.training_tasks.schemas import (
+    TrainingTaskBatchAssignAssignedItem,
+    TrainingTaskBatchAssignReasonItem,
+    TrainingTaskBatchAssignRequest,
+    TrainingTaskBatchAssignResponse,
     TrainingTaskCompleteRequest,
     TrainingTaskCreate,
     TrainingTaskStartSessionRequest,
@@ -85,6 +89,143 @@ async def create_training_task(
     await db.commit()
     await db.refresh(task)
     return task
+
+
+async def batch_assign_training_tasks(
+    db: AsyncSession,
+    payload: TrainingTaskBatchAssignRequest,
+    *,
+    current_user: User,
+) -> TrainingTaskBatchAssignResponse:
+    try:
+        template_id = str(UUID(str(payload.template_id)))
+    except ValueError:
+        return _batch_failed(payload.user_ids, "[PRACTICE_TEMPLATE_INVALID]")
+
+    template = await db.get(PracticeTemplate, template_id)
+    if template is None:
+        return _batch_failed(payload.user_ids, "[PRACTICE_TEMPLATE_NOT_FOUND]")
+    if template.status != "published":
+        return _batch_failed(payload.user_ids, "[PRACTICE_TEMPLATE_NOT_PUBLISHED]")
+
+    curriculum_reason = _validate_curriculum_plan_id(
+        template,
+        payload.curriculum_plan_id,
+    )
+    if curriculum_reason is not None:
+        return _batch_failed(payload.user_ids, curriculum_reason)
+
+    assigned: list[TrainingTaskBatchAssignAssignedItem] = []
+    skipped: list[TrainingTaskBatchAssignReasonItem] = []
+    failed: list[TrainingTaskBatchAssignReasonItem] = []
+    assigner_department = getattr(current_user, "department", None)
+
+    for user_id in payload.user_ids:
+        assignee = await db.get(User, user_id)
+        if assignee is None:
+            failed.append(
+                TrainingTaskBatchAssignReasonItem(
+                    user_id=user_id,
+                    reason="[USER_NOT_FOUND]",
+                )
+            )
+            continue
+        if getattr(assignee, "department", None) != assigner_department:
+            failed.append(
+                TrainingTaskBatchAssignReasonItem(
+                    user_id=user_id,
+                    reason="[DEPARTMENT_SCOPE_VIOLATION]",
+                )
+            )
+            continue
+
+        existing = (
+            await db.execute(
+                select(TrainingTask).where(
+                    TrainingTask.assignee_id == user_id,
+                    TrainingTask.practice_template_id == template_id,
+                )
+            )
+        ).scalars().first()
+        if existing is not None:
+            skipped.append(
+                TrainingTaskBatchAssignReasonItem(
+                    user_id=user_id,
+                    reason="[TRAINING_TASK_ALREADY_ASSIGNED]",
+                )
+            )
+            continue
+
+        task = TrainingTask(
+            title=payload.title,
+            assignee_id=user_id,
+            scenario_type=payload.scenario_type.value,
+            goal=payload.goal,
+            focus_intent=payload.focus_intent,
+            due_date=payload.due_date,
+            completion_criteria=payload.completion_criteria,
+            practice_template_id=template_id,
+            curriculum_plan_id=payload.curriculum_plan_id,
+            source="batch_assign",
+            status="assigned",
+        )
+        db.add(task)
+        await db.flush()
+        assigned.append(
+            TrainingTaskBatchAssignAssignedItem(
+                user_id=user_id,
+                task_id=str(task.task_id),
+            )
+        )
+
+    await db.commit()
+    return TrainingTaskBatchAssignResponse(
+        assigned_count=len(assigned),
+        skipped_count=len(skipped),
+        failed_count=len(failed),
+        assigned=assigned,
+        skipped=skipped,
+        failed=failed,
+    )
+
+
+def _batch_failed(
+    user_ids: list[str],
+    reason: str,
+) -> TrainingTaskBatchAssignResponse:
+    failed = [TrainingTaskBatchAssignReasonItem(user_id=user_id, reason=reason) for user_id in user_ids]
+    return TrainingTaskBatchAssignResponse(
+        assigned_count=0,
+        skipped_count=0,
+        failed_count=len(failed),
+        assigned=[],
+        skipped=[],
+        failed=failed,
+    )
+
+
+def _validate_curriculum_plan_id(
+    template: PracticeTemplate,
+    curriculum_plan_id: str,
+) -> str | None:
+    curriculum_plan = template.curriculum_plan
+    if not isinstance(curriculum_plan, dict):
+        return "[CURRICULUM_PLAN_NOT_FOUND]"
+    configured_id = (
+        curriculum_plan.get("curriculum_plan_id")
+        or curriculum_plan.get("plan_id")
+        or curriculum_plan.get("id")
+        or template.template_id
+    )
+    if str(configured_id) != str(curriculum_plan_id):
+        return "[CURRICULUM_PLAN_NOT_FOUND]"
+    stages = curriculum_plan.get("stages")
+    if not isinstance(stages, list):
+        return "[CURRICULUM_PLAN_INVALID]"
+    stage_types = {stage.get("stage_type") for stage in stages if isinstance(stage, dict)}
+    if not {"study", "exam", "practice"} <= stage_types:
+        return "[CURRICULUM_PLAN_INVALID]"
+    return None
 
 
 async def update_training_task(
