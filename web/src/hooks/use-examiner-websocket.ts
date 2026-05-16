@@ -72,7 +72,9 @@ export interface ExamState {
 const INITIAL_STATE: ExamState = {
   connectionState: "connecting",
   examPhase: "idle",
-  featureFlag: "loading",
+  // Default to "disabled" so SSR never shows perpetual "正在加载...".
+  // The page's useEffect fetches real feature flags and enables if allowed.
+  featureFlag: "disabled" as FeatureFlagStatus,
   error: null,
   sessionId: null,
   currentQuestion: null,

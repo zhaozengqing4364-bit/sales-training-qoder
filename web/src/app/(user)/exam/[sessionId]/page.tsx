@@ -195,8 +195,11 @@ export default function ExamPage() {
 
   if (featureFlag === "loading") {
     return (
-      <div className="flex items-center justify-center h-full text-slate-500">
-        正在加载...
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
+        <p>正在加载...</p>
+        <p className="text-xs text-slate-400">
+          如长时间未响应，请刷新页面后重试。
+        </p>
       </div>
     );
   }

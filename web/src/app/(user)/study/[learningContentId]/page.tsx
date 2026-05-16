@@ -111,9 +111,30 @@ export default function StudyPage() {
     if (isLoading) {
         return (
             <div className="space-y-6 animate-in fade-in duration-300">
+                <style>{`
+                    @keyframes loadingFallbackFade {
+                        0%, 95% { opacity: 0; height: 0; overflow: hidden; }
+                        100% { opacity: 1; height: auto; }
+                    }
+                `}</style>
                 <GlassCard className="p-8 text-center" role="status" aria-live="polite" aria-busy="true">
                     <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" />
                     <p className="text-slate-500">加载讲义中...</p>
+                    <p className="mt-3 text-xs text-slate-400">
+                        如长时间未响应，请刷新页面后重试。
+                    </p>
+                    <div
+                        className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700"
+                        style={{
+                            opacity: 0,
+                            animation: "loadingFallbackFade 8s forwards",
+                        }}
+                    >
+                        <p className="font-semibold">加载超时</p>
+                        <p className="mt-1 text-xs text-amber-600">
+                            后端服务可能未就绪，请确认服务已启动后刷新页面。
+                        </p>
+                    </div>
                 </GlassCard>
             </div>
         );
