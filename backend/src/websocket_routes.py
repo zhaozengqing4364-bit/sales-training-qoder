@@ -16,6 +16,7 @@ from common.db.session import AsyncSessionLocal
 from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.logger import get_logger
 from common.monitoring.trace_context import normalize_trace_id
+from curriculum_practice.websocket.router import router as examiner_ws_router
 from sales_bot.websocket.router import router as sales_ws_router
 
 logger = get_logger(__name__)
@@ -316,4 +317,5 @@ async def _is_presentation_kb_lock_unbound_session(session_id: str) -> bool:
 def register_websocket_routes(app: FastAPI) -> None:
     """Mount WebSocket route modules on the app."""
     app.include_router(router, tags=["presentation-websocket"])
+    app.include_router(examiner_ws_router, tags=["curriculum-examiner-websocket"])
     app.include_router(sales_ws_router, tags=["sales-websocket"])
