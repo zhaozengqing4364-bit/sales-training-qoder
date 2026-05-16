@@ -329,19 +329,19 @@ export default function UsersPage() {
         ? users
         : users.filter((u) => u.department === departmentFilter);
 
-    const allFilteredSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedUserIds.has(u.id));
+    const allFilteredSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedUserIds.has(u.user_id));
 
     const toggleSelectAll = () => {
         if (allFilteredSelected) {
             setSelectedUserIds((prev) => {
                 const next = new Set(prev);
-                filteredUsers.forEach((u) => next.delete(u.id));
+                filteredUsers.forEach((u) => next.delete(u.user_id));
                 return next;
             });
         } else {
             setSelectedUserIds((prev) => {
                 const next = new Set(prev);
-                filteredUsers.forEach((u) => next.add(u.id));
+                filteredUsers.forEach((u) => next.add(u.user_id));
                 return next;
             });
         }
@@ -396,11 +396,11 @@ export default function UsersPage() {
             setIsBatchAssignOpen(false);
             setIsResultsOpen(true);
             setSelectedUserIds(new Set());
-            if (result.assigned > 0) {
-                toast.success(`成功分配 ${result.assigned} 个训练任务`);
+            if (result.assigned_count > 0) {
+                toast.success(`成功分配 ${result.assigned_count} 个训练任务`);
             }
-            if (result.skipped > 0 || result.failed > 0) {
-                toast.error(`${result.skipped} 跳过, ${result.failed} 失败`);
+            if (result.skipped_count > 0 || result.failed_count > 0) {
+                toast.error(`${result.skipped_count} 跳过, ${result.failed_count} 失败`);
             }
         } catch (err) {
             debug.error("Failed to batch assign:", err);
@@ -1038,7 +1038,7 @@ export default function UsersPage() {
                     <DialogHeader>
                         <DialogTitle>分配结果</DialogTitle>
                         <DialogDescription>
-                            共处理 {batchResults?.total ?? 0} 位学员
+                            共处理 {(batchResults?.assigned_count ?? 0) + (batchResults?.skipped_count ?? 0) + (batchResults?.failed_count ?? 0)} 位学员
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
@@ -1046,39 +1046,44 @@ export default function UsersPage() {
                             <>
                                 <div className="grid grid-cols-3 gap-3">
                                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
-                                        <div className="text-2xl font-bold text-emerald-700">{batchResults.assigned}</div>
+                                        <div className="text-2xl font-bold text-emerald-700">{batchResults.assigned_count}</div>
                                         <div className="text-xs text-emerald-600 mt-1">已分配</div>
                                     </div>
                                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
-                                        <div className="text-2xl font-bold text-amber-700">{batchResults.skipped}</div>
+                                        <div className="text-2xl font-bold text-amber-700">{batchResults.skipped_count}</div>
                                         <div className="text-xs text-amber-600 mt-1">已跳过</div>
                                     </div>
                                     <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
-                                        <div className="text-2xl font-bold text-red-700">{batchResults.failed}</div>
+                                        <div className="text-2xl font-bold text-red-700">{batchResults.failed_count}</div>
                                         <div className="text-xs text-red-600 mt-1">失败</div>
                                     </div>
                                 </div>
                                 <div className="max-h-64 overflow-y-auto space-y-2">
-                                    {batchResults.results.map((r) => (
-                                        <div
-                                            key={r.user_id}
-                                            className={`flex items-start gap-3 rounded-lg border px-3 py-2 text-sm ${
-                                                r.status === "assigned"
-                                                    ? "border-emerald-100 bg-emerald-50/50"
-                                                    : r.status === "skipped"
-                                                        ? "border-amber-100 bg-amber-50/50"
-                                                        : "border-red-100 bg-red-50/50"
-                                            }`}
-                                        >
-                                            {r.status === "assigned" ? (
-                                                <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                                            ) : r.status === "skipped" ? (
-                                                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                                            ) : (
-                                                <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                                            )}
+                                    {batchResults.assigned.map((r) => (
+                                        <div key={`a-${r.user_id}`} className="flex items-start gap-3 rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm">
+                                            <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
                                             <div className="flex-1 min-w-0">
-                                                <span className="font-semibold text-slate-900">{r.name}</span>
+                                                <span className="font-semibold text-slate-900">{users.find((u) => u.user_id === r.user_id)?.display_name ?? r.user_id}</span>
+                                                <p className="text-xs text-slate-500 mt-0.5">任务ID: {r.task_id}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {batchResults.skipped.map((r) => (
+                                        <div key={`s-${r.user_id}`} className="flex items-start gap-3 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm">
+                                            <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                                            <div className="flex-1 min-w-0">
+                                                <span className="font-semibold text-slate-900">{users.find((u) => u.user_id === r.user_id)?.display_name ?? r.user_id}</span>
+                                                {r.reason && (
+                                                    <p className="text-xs text-slate-500 mt-0.5">{r.reason}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {batchResults.failed.map((r) => (
+                                        <div key={`f-${r.user_id}`} className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50/50 px-3 py-2 text-sm">
+                                            <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                                            <div className="flex-1 min-w-0">
+                                                <span className="font-semibold text-slate-900">{users.find((u) => u.user_id === r.user_id)?.display_name ?? r.user_id}</span>
                                                 {r.reason && (
                                                     <p className="text-xs text-slate-500 mt-0.5">{r.reason}</p>
                                                 )}
@@ -1106,8 +1111,8 @@ export default function UsersPage() {
                                 <div>
                                     <div className="flex items-start gap-3">
                                         <Checkbox
-                                            checked={selectedUserIds.has(user.id)}
-                                            onCheckedChange={() => toggleUserSelection(user.id)}
+                                            checked={selectedUserIds.has(user.user_id)}
+                                            onCheckedChange={() => toggleUserSelection(user.user_id)}
                                             aria-label={`选择 ${user.display_name}`}
                                         />
                                         <div>
@@ -1185,8 +1190,8 @@ export default function UsersPage() {
                                 <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
                                     <td className="px-6 py-4">
                                         <Checkbox
-                                            checked={selectedUserIds.has(user.id)}
-                                            onCheckedChange={() => toggleUserSelection(user.id)}
+                                            checked={selectedUserIds.has(user.user_id)}
+                                            onCheckedChange={() => toggleUserSelection(user.user_id)}
                                             aria-label={`选择 ${user.display_name}`}
                                         />
                                     </td>

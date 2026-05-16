@@ -3549,20 +3549,28 @@ export interface BatchAssignRequest {
     completion_criteria?: Record<string, unknown>;
 }
 
-export interface BatchAssignUserResult {
+export interface BatchAssignAssignedItem {
     user_id: string;
-    name: string;
-    status: "assigned" | "skipped" | "failed";
-    reason?: string;
-    task_id?: string;
+    task_id: string;
+}
+
+export interface BatchAssignSkippedItem {
+    user_id: string;
+    reason: string;
+}
+
+export interface BatchAssignFailedItem {
+    user_id: string;
+    reason: string;
 }
 
 export interface BatchAssignResponse {
-    total: number;
-    assigned: number;
-    skipped: number;
-    failed: number;
-    results: BatchAssignUserResult[];
+    assigned_count: number;
+    skipped_count: number;
+    failed_count: number;
+    assigned: BatchAssignAssignedItem[];
+    skipped: BatchAssignSkippedItem[];
+    failed: BatchAssignFailedItem[];
 }
 
 export interface SessionStats {

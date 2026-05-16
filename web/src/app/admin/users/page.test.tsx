@@ -282,34 +282,46 @@ describe("UsersPage", () => {
         const userCbs = checkboxes.filter(cb =>
             cb.getAttribute("aria-label")?.includes("选择 张三")
         );
-        expect(userCbs.length).toBeGreaterThanOrEqual(1);
+        expect(userCbs.length).toBeGreaterThanOrEqual(2);
         fireEvent.click(userCbs[0]);
 
         expect(screen.getByText(/已选择 1 位学员/)).toBeTruthy();
         expect(screen.getAllByText(/批量分配训练任务/).length).toBeGreaterThanOrEqual(1);
     });
 
-    it("displays batch assign result summary with assigned, skipped, and failed counts", async () => {
+    it("sends user_id payload and renders assigned/skipped/failed result from batch assign", async () => {
         getUsersMock.mockResolvedValue({
             items: [
-                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "row-1", user_id: "uid-01", display_name: "张三", email: "zhang@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "row-2", user_id: "uid-02", display_name: "李四", email: "li@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
-            total: 1,
+            total: 2,
             page: 1,
             page_size: 10,
             has_more: false,
         });
-
-        batchAssignMock.mockResolvedValue({
-            total: 3,
-            assigned: 2,
-            skipped: 1,
-            failed: 0,
-            results: [
-                { user_id: "u1", name: "用户A", status: "assigned", task_id: "t1" },
-                { user_id: "u2", name: "用户B", status: "assigned", task_id: "t2" },
-                { user_id: "u3", name: "用户C", status: "skipped", reason: "已有进行中任务" },
+        listPracticeTemplatesMock.mockResolvedValue({
+            items: [
+                {
+                    template_id: "tpl-1", name: "销售实战", description: "基础销售训练",
+                    scenario_type: "sales", mode: "examiner", status: "published",
+                    agent_id: "a1", persona_id: "p1", runtime_profile_id: "r1",
+                    voice_mode: "legacy", scoring_ruleset_id: "s1", knowledge_base_refs: [],
+                    version: 1, content_hash: "abc", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+                } as unknown as import("@/lib/api/types").PracticeTemplateRecord,
             ],
+            total: 1,
+        });
+        batchAssignMock.mockResolvedValue({
+            assigned_count: 2,
+            skipped_count: 0,
+            failed_count: 0,
+            assigned: [
+                { user_id: "uid-01", task_id: "task-a" },
+                { user_id: "uid-02", task_id: "task-b" },
+            ],
+            skipped: [],
+            failed: [],
         });
 
         render(<UsersPage />);
@@ -318,13 +330,37 @@ describe("UsersPage", () => {
             expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
         });
 
-        const result = await batchAssignMock();
-        expect(result.assigned).toBe(2);
-        expect(result.skipped).toBe(1);
-        expect(result.failed).toBe(0);
-        expect(result.results.length).toBe(3);
-        expect(result.results[0].status).toBe("assigned");
-        expect(result.results[2].status).toBe("skipped");
-        expect(result.results[2].reason).toBe("已有进行中任务");
+        const zhangCb = screen.getAllByRole("checkbox", { name: "选择 张三" })[0];
+        const liCb = screen.getAllByRole("checkbox", { name: "选择 李四" })[0];
+        fireEvent.click(zhangCb);
+        fireEvent.click(liCb);
+
+        expect(screen.getByText(/已选择 2 位学员/)).toBeTruthy();
+
+        const assignBtn = screen.getByRole("button", { name: /批量分配训练任务/ });
+        fireEvent.click(assignBtn);
+
+        await waitFor(() => {
+            expect(listPracticeTemplatesMock).toHaveBeenCalled();
+        });
+
+        const confirmBtn = screen.getByRole("button", { name: "确认分配" });
+        fireEvent.click(confirmBtn);
+
+        await waitFor(() => {
+            expect(batchAssignMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    user_ids: expect.arrayContaining(["uid-01", "uid-02"]),
+                }),
+            );
+        });
+
+        await waitFor(() => {
+            const twos = screen.getAllByText("2");
+            expect(twos.length).toBeGreaterThanOrEqual(1);
+        });
+
+        const zhangs = screen.getAllByText("张三");
+        expect(zhangs.length).toBeGreaterThanOrEqual(1);
     });
 });
