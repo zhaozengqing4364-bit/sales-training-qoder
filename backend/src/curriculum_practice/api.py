@@ -22,6 +22,9 @@ from curriculum_practice.schemas import (
     CaseItemCreate,
     CaseItemListResponse,
     CaseItemResponse,
+    LearnerAdminOverrideRequest,
+    LearnerProfileResponse,
+    LearnerSelfAssessmentRequest,
     LearningChapterCreate,
     LearningChapterReorderRequest,
     LearningChapterUpdate,
@@ -53,6 +56,7 @@ from curriculum_practice.services.content_assets import (
     ContentAssetPublishError,
     ContentAssetService,
 )
+from curriculum_practice.services.learner_profiles import LearnerProfileService
 from curriculum_practice.services.learning_contents import (
     SERVER_ERROR as LEARNING_CONTENT_SERVICE_FAILED,
 )
@@ -253,6 +257,37 @@ def _question_generation_service(
 ) -> QuestionGenerationService:
     generator = getattr(request.app.state, "question_generation_generator", None)
     return QuestionGenerationService(db, generator=generator)
+
+
+def _learner_profile_service_error(fallback: str | None) -> JSONResponse:
+    return _api_error(fallback or "[LEARNER_PROFILE_FAILED]", status_code=400)
+
+
+@learner_router.get("/me/profile", response_model=None)
+async def get_my_learner_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    result = await LearnerProfileService(db).get_or_create_for_user(
+        str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _learner_profile_service_error(result.fallback)
+    return _success(LearnerProfileResponse.model_validate(result.value))
+
+
+@learner_router.post("/me/profile/self-assessment", response_model=None)
+async def self_assess_learner_profile(
+    payload: LearnerSelfAssessmentRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    result = await LearnerProfileService(db).record_self_assessment(
+        str(current_user.user_id), payload.level
+    )
+    if not result.is_success or result.value is None:
+        return _learner_profile_service_error(result.fallback)
+    return _success(LearnerProfileResponse.model_validate(result.value))
 
 
 @study_router.get("/learning-contents/{content_id}", response_model=None)
@@ -1187,6 +1222,26 @@ async def create_practice_template(
             message="PracticeTemplate 创建失败。",
             exc=exc,
         )
+
+
+@router.put("/learner-profiles/{user_id}/override", response_model=None)
+async def override_learner_profile(
+    user_id: str,
+    payload: LearnerAdminOverrideRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await LearnerProfileService(db).apply_admin_override(
+        user_id,
+        payload.level,
+        actor_id=str(current_user.user_id),
+    )
+    if not result.is_success or result.value is None:
+        return _learner_profile_service_error(result.fallback)
+    return _success(LearnerProfileResponse.model_validate(result.value))
 
 
 @router.get("/templates/{template_id}", response_model=None)

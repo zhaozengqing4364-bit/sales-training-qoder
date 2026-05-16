@@ -420,6 +420,38 @@ async def test_should_create_list_and_update_practice_template_draft(
 
 
 @pytest.mark.asyncio
+async def test_should_roundtrip_practice_template_runtime_bindings(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+) -> None:
+    bindings = {
+        "learning_content_id": str(uuid.uuid4()),
+        "examiner_agent_id": str(uuid.uuid4()),
+        "target_learner_level": "beginner",
+        "timeout_config": {"study_seconds": 300, "exam_seconds": 600},
+    }
+
+    create_response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/templates",
+        headers=admin_headers,
+        json=_template_payload() | bindings,
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()["data"]
+    for key, value in bindings.items():
+        assert created[key] == value
+
+    read_response = await async_client.get(
+        f"/api/v1/admin/curriculum-practice/templates/{created['template_id']}",
+        headers=admin_headers,
+    )
+    assert read_response.status_code == 200
+    for key, value in bindings.items():
+        assert read_response.json()["data"][key] == value
+
+
+@pytest.mark.asyncio
 async def test_should_return_publish_gate_failure_when_template_reference_is_missing(
     async_client: AsyncClient,
     admin_headers: dict[str, str],
