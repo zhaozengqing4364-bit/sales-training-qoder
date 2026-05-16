@@ -3536,6 +3536,35 @@ export interface TrainingTaskStartSessionResponse {
     };
 }
 
+// Batch assign types
+export interface BatchAssignRequest {
+    user_ids: string[];
+    template_id: string;
+    curriculum_plan_id: string;
+    title: string;
+    scenario_type: "sales" | "presentation";
+    goal: string;
+    focus_intent?: string | null;
+    due_date?: string | null;
+    completion_criteria?: Record<string, unknown>;
+}
+
+export interface BatchAssignUserResult {
+    user_id: string;
+    name: string;
+    status: "assigned" | "skipped" | "failed";
+    reason?: string;
+    task_id?: string;
+}
+
+export interface BatchAssignResponse {
+    total: number;
+    assigned: number;
+    skipped: number;
+    failed: number;
+    results: BatchAssignUserResult[];
+}
+
 export interface SessionStats {
     total_sessions: number;
     weekly_sessions: number;

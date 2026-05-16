@@ -46,6 +46,8 @@ import type {
     TrainingTaskStartSessionResponse,
     TrainingTaskStatus,
     TrainingTaskUpdateRequest,
+    BatchAssignRequest,
+    BatchAssignResponse,
     LearningPathResponse,
     LearningPathNextTask,
     LearningContentCreateRequest,
@@ -696,6 +698,13 @@ export function createTrainingTasksDomain({ request }: TrainingTasksDomainDepend
             return request<TrainingTaskStartSessionResponse>(`/training-tasks/${taskId}/start-session`, {
                 method: "POST",
                 body: JSON.stringify(payload ?? {}),
+            });
+        },
+
+        batchAssign: async (data: BatchAssignRequest) => {
+            return request<BatchAssignResponse>("/training-tasks/batch-assign", {
+                method: "POST",
+                body: JSON.stringify(data),
             });
         },
     };
