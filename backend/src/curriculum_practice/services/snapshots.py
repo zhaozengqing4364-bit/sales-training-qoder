@@ -101,8 +101,8 @@ class RuntimeSnapshotService:
                 await self._learning_content_ref(str(template_data["learning_content_id"]))
             )
         if template_data.get("examiner_agent_id"):
-            content_assets.append(
-                await self._examiner_agent_ref(str(template_data["examiner_agent_id"]))
+            content_assets.extend(
+                await self._examiner_content_refs(str(template_data["examiner_agent_id"]))
             )
         role_profile_data = None
         if template_data.get("role_profile_id"):
@@ -196,8 +196,10 @@ class RuntimeSnapshotService:
                     await self._case_item_ref(str(child_template["case_item_id"]))
                 )
             if child_template.get("examiner_agent_id"):
-                child_content_assets.append(
-                    await self._examiner_agent_ref(str(child_template["examiner_agent_id"]))
+                child_content_assets.extend(
+                    await self._examiner_content_refs(
+                        str(child_template["examiner_agent_id"])
+                    )
                 )
             child_role_profile_data = None
             if child_template.get("role_profile_id"):
@@ -370,6 +372,45 @@ class RuntimeSnapshotService:
             asset_id=asset_id,
             version=examiner_agent.get("version", 1),
             hash=str(examiner_agent["content_hash"]),
+            snapshot_label="published",
+        )
+
+    async def _examiner_content_refs(self, asset_id: str) -> list[CurriculumVersionRef]:
+        examiner_agent = _as_dict(await self._read_reference("examiner_agent", asset_id))
+        if not examiner_agent or examiner_agent.get("status") != "published":
+            raise RuntimeSnapshotBuildError(
+                "examiner_agent_unpublished",
+                "ExaminerAgent reference is missing or unpublished.",
+            )
+        refs = [
+            CurriculumVersionRef(
+                asset_type="examiner_agent",
+                asset_id=asset_id,
+                version=examiner_agent.get("version", 1),
+                hash=str(examiner_agent["content_hash"]),
+                snapshot_label="published",
+            )
+        ]
+        for question_id in examiner_agent.get("question_source_ids", []) or []:
+            refs.append(await self._question_item_ref(str(question_id)))
+        return refs
+
+    async def _question_item_ref(self, asset_id: str) -> CurriculumVersionRef:
+        question = _as_dict(await self._read_reference("question_item", asset_id))
+        if (
+            not question
+            or question.get("status") != "published"
+            or bool(question.get("safety_flagged", False))
+        ):
+            raise RuntimeSnapshotBuildError(
+                "question_item_unpublished",
+                "QuestionItem reference is missing, unpublished, or safety flagged.",
+            )
+        return CurriculumVersionRef(
+            asset_type="question_item",
+            asset_id=asset_id,
+            version=question.get("version", 1),
+            hash=str(question["content_hash"]),
             snapshot_label="published",
         )
 

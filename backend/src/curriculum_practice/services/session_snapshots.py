@@ -217,6 +217,7 @@ def _reference_reader(db: AsyncSession):
                 "status": question.status,
                 "version": question.version,
                 "content_hash": question.content_hash,
+                "safety_flagged": question.safety_flagged,
             }
         return None
 

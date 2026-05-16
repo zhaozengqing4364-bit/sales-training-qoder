@@ -13,12 +13,17 @@ from tests.integration.test_curriculum_practice_session_snapshot import (
 )
 
 from common.db.models import PracticeSession, Scenario, User
-from curriculum_practice.models import ExaminerAgent, PracticeTemplate, QuestionCategory, QuestionItem
-from curriculum_practice.services.session_snapshots import (
-    apply_curriculum_snapshot_to_session,
+from curriculum_practice.models import (
+    ExaminerAgent,
+    PracticeTemplate,
+    QuestionCategory,
+    QuestionItem,
 )
 from curriculum_practice.services.examiner_agents import examiner_agent_content_hash
 from curriculum_practice.services.practice_templates import PracticeTemplateService
+from curriculum_practice.services.session_snapshots import (
+    apply_curriculum_snapshot_to_session,
+)
 
 
 @pytest.mark.asyncio
@@ -185,6 +190,11 @@ async def test_should_freeze_examiner_agent_ref_in_session_snapshot(
         for item in original_snapshot["content_assets"]
         if item["asset_type"] == "examiner_agent"
     )
+    question_ref = next(
+        item
+        for item in original_snapshot["content_assets"]
+        if item["asset_type"] == "question_item"
+    )
 
     stored_examiner = await test_db.get(ExaminerAgent, "examiner-snapshot")
     assert stored_examiner is not None
@@ -201,5 +211,12 @@ async def test_should_freeze_examiner_agent_ref_in_session_snapshot(
         "asset_id": "examiner-snapshot",
         "version": 1,
         "hash": examiner_agent_v1_hash,
+        "snapshot_label": "published",
+    }
+    assert question_ref == {
+        "asset_type": "question_item",
+        "asset_id": "exam-question",
+        "version": 1,
+        "hash": "sha256:exam-question",
         "snapshot_label": "published",
     }
