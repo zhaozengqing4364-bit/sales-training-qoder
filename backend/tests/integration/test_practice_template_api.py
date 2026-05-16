@@ -146,6 +146,7 @@ def _curriculum_plan_payload(child_template: dict[str, object]) -> dict[str, obj
         "stages": [
             {
                 "template_stage_key": "template_stage_opening",
+                "stage_type": "practice",
                 "order": 1,
                 "name": "开场",
                 "template_ref": {
