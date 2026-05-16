@@ -294,8 +294,9 @@ describe("UsersPage", () => {
             items: [
                 { id: "row-1", user_id: "uid-01", display_name: "张三", email: "zhang@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
                 { id: "row-2", user_id: "uid-02", display_name: "李四", email: "li@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+                { id: "row-3", user_id: "uid-03", display_name: "王五", email: "wang@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
             ],
-            total: 2,
+            total: 3,
             page: 1,
             page_size: 10,
             has_more: false,
@@ -303,25 +304,62 @@ describe("UsersPage", () => {
         listPracticeTemplatesMock.mockResolvedValue({
             items: [
                 {
-                    template_id: "tpl-1", name: "销售实战", description: "基础销售训练",
-                    scenario_type: "sales", mode: "examiner", status: "published",
-                    agent_id: "a1", persona_id: "p1", runtime_profile_id: "r1",
-                    voice_mode: "legacy", scoring_ruleset_id: "s1", knowledge_base_refs: [],
-                    version: 1, content_hash: "abc", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
-                } as unknown as import("@/lib/api/types").PracticeTemplateRecord,
+                    template_id: "tpl-1",
+                    name: "销售实战",
+                    description: "基础销售训练",
+                    scenario_type: "sales",
+                    mode: "examiner",
+                    status: "published",
+                    agent_id: "a1",
+                    persona_id: "p1",
+                    runtime_profile_id: "r1",
+                    voice_mode: "legacy",
+                    scoring_ruleset_id: "s1",
+                    knowledge_base_refs: [],
+                    version: 1,
+                    content_hash: "abc",
+                    created_at: "2026-01-01T00:00:00Z",
+                    updated_at: "2026-01-01T00:00:00Z",
+                    curriculum_plan: {
+                        name: "销售基础课程",
+                        stages: [
+                            {
+                                template_stage_key: "stage-1",
+                                order: 1,
+                                name: "学习阶段",
+                                template_ref: {
+                                    asset_type: "practice_template",
+                                    asset_id: "tpl-1",
+                                    version: 1,
+                                    hash: "abc",
+                                    snapshot_label: "published",
+                                },
+                                completion_policy: {
+                                    min_score: 70,
+                                    min_rounds: 1,
+                                    max_duration_seconds: 3600,
+                                },
+                            },
+                        ],
+                    },
+                },
             ],
             total: 1,
         });
         batchAssignMock.mockResolvedValue({
             assigned_count: 2,
-            skipped_count: 0,
-            failed_count: 0,
+            skipped_count: 1,
+            failed_count: 1,
             assigned: [
                 { user_id: "uid-01", task_id: "task-a" },
                 { user_id: "uid-02", task_id: "task-b" },
             ],
-            skipped: [],
-            failed: [],
+            skipped: [
+                { user_id: "uid-03", reason: "已有进行中任务" },
+            ],
+            failed: [
+                { user_id: "uid-04", reason: "用户不存在" },
+            ],
         });
 
         render(<UsersPage />);
@@ -356,11 +394,16 @@ describe("UsersPage", () => {
         });
 
         await waitFor(() => {
-            const twos = screen.getAllByText("2");
-            expect(twos.length).toBeGreaterThanOrEqual(1);
+            expect(screen.getByText("2")).toBeTruthy();
         });
 
         const zhangs = screen.getAllByText("张三");
         expect(zhangs.length).toBeGreaterThanOrEqual(1);
+
+        const skipResult = screen.getByText("已有进行中任务");
+        expect(skipResult).toBeTruthy();
+
+        const failResult = screen.getByText("用户不存在");
+        expect(failResult).toBeTruthy();
     });
 });

@@ -363,7 +363,9 @@ export default function UsersPage() {
         setIsLoadingTemplates(true);
         try {
             const data = await api.admin.listPracticeTemplates();
-            const published = (data.items || []).filter((t) => t.status === "published");
+            const published = (data.items || []).filter(
+                (t) => t.status === "published" && t.curriculum_plan,
+            );
             setBatchTemplates(published);
             if (published.length > 0 && !selectedTemplateId) {
                 setSelectedTemplateId(published[0].template_id);
@@ -387,7 +389,7 @@ export default function UsersPage() {
             const result = await api.trainingTasks.batchAssign({
                 user_ids: Array.from(selectedUserIds),
                 template_id: selectedTemplateId,
-                curriculum_plan_id: template.curriculum_plan ? selectedTemplateId : selectedTemplateId,
+                curriculum_plan_id: selectedTemplateId,
                 title: batchTitle || template.name,
                 scenario_type: batchScenarioType,
                 goal: batchGoal || template.description || "完成训练任务",
