@@ -1,12 +1,12 @@
 {
   "updated": "2026-05-16T00:00:00Z",
   "phase": "1A",
-  "completed": ["#66", "#67", "#68", "#69", "#70"],
-  "current": "#71",
-  "remaining": ["#71", "#72", "#73", "#74", "#75", "#76", "#77"],
-  "last_commit": "6db10396",
+  "completed": ["#66", "#67", "#68", "#69", "#70", "#71"],
+  "current": "#72",
+  "remaining": ["#72", "#73", "#74", "#75", "#76", "#77"],
+  "last_commit": "13de7af1",
   "migration_head": "20260516_0900_063",
-  "baseline_test_count": 2107,
+  "baseline_test_count": 2117,
   "blockers": [],
-  "notes": "#70 CSV/JSONL 导入完成。Commits: eec41395 feat(test-bank): 后端 CSV/JSONL 导入（API/importer/migration 063）, 6db10396 feat(test-bank): 前端导入 UI/API client。验证证据：后端 importer 单元测试通过，后端导入 API 集成测试通过，ruff passed，alembic head 20260516_0900_063，collect 2107（注意：实现 agent 尝试 alembic upgrade head 时被历史遗留 migration/本地 DB 问题阻塞——table agents already exists / scratch historical no such table practice_sessions——非 063 head 导致；已知环境 migration 注意事项）；前端 test-bank-import 6 passed，test-bank 38 passed，typecheck passed，lint passed，build passed，Playwright 导航重定向至登录页 0 console errors，HTTP smoke 200。进入 #71。"
+  "notes": "#71 从讲义生成 AI 考题草稿闭环完成。Backend commit: a987400a, Frontend commit: 13de7af1。验证证据：后端 tests/unit/test_question_generation_service.py + tests/integration/test_question_generation_api.py 10 passed；后端 ruff check src/ passed；alembic head 20260516_0900_063；collect 2117 tests；前端 question-generation-panel + test-bank 5 files passed, 53 tests passed；前端 npx tsc --noEmit passed, npm run lint -- --quiet passed, npm run build passed；浏览器 smoke /admin/learning-contents/test-content 重定向至 /login HTTP 200 console_errors=0。进入 #72。"
 }
