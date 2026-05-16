@@ -86,6 +86,47 @@ class PracticeTemplate(Base):
     )
 
 
+class ExaminerAgent(Base):
+    __tablename__ = "examiner_agents"
+
+    examiner_agent_id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    question_source_ids = Column(JSON, nullable=False, default=list)
+    learner_level_strategy = Column(JSON, nullable=False, default=dict)
+    scoring_policy_id = Column(String(36), nullable=False, index=True)
+    timeout_config = Column(JSON, nullable=False, default=dict)
+    safety_config = Column(JSON, nullable=False, default=dict)
+    prompt_config = Column(JSON, nullable=False, default=dict)
+    simulation_config = Column(JSON, nullable=False, default=dict)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    version = Column(Integer, nullable=False, default=1)
+    content_hash = Column(String(80), nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    published_by = Column(String(36), nullable=True)
+    created_by = Column(String(36), nullable=True)
+    updated_by = Column(String(36), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_examiner_agent_status",
+        ),
+        Index("idx_examiner_agents_status_updated", "status", "updated_at"),
+    )
+
+
 class CaseItem(Base):
     __tablename__ = "case_items"
 
