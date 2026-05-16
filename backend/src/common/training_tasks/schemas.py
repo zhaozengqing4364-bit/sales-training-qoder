@@ -33,10 +33,44 @@ class TrainingTaskCreate(BaseModel):
     due_date: datetime | None = None
     completion_criteria: dict[str, Any] = Field(default_factory=dict)
     practice_template_id: str | None = Field(None, max_length=36)
+    curriculum_plan_id: str | None = Field(None, max_length=36)
     source: str = Field(default="manual", min_length=1, max_length=50)
     status: TrainingTaskStatus = TrainingTaskStatus.ASSIGNED
     resulting_session_id: str | None = Field(None, max_length=36)
     before_after_summary: dict[str, Any] | None = None
+
+
+class TrainingTaskBatchAssignRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_ids: list[str] = Field(..., min_length=1)
+    template_id: str = Field(..., min_length=1, max_length=36)
+    curriculum_plan_id: str = Field(..., min_length=1, max_length=36)
+    title: str = Field(..., min_length=1, max_length=200)
+    scenario_type: TrainingTaskScenarioType
+    goal: str = Field(..., min_length=1)
+    focus_intent: str | None = Field(None, max_length=120)
+    due_date: datetime | None = None
+    completion_criteria: dict[str, Any] = Field(default_factory=dict)
+
+
+class TrainingTaskBatchAssignAssignedItem(BaseModel):
+    user_id: str
+    task_id: str
+
+
+class TrainingTaskBatchAssignReasonItem(BaseModel):
+    user_id: str
+    reason: str
+
+
+class TrainingTaskBatchAssignResponse(BaseModel):
+    assigned_count: int
+    skipped_count: int
+    failed_count: int
+    assigned: list[TrainingTaskBatchAssignAssignedItem]
+    skipped: list[TrainingTaskBatchAssignReasonItem]
+    failed: list[TrainingTaskBatchAssignReasonItem]
 
 
 class TrainingTaskUpdate(BaseModel):
@@ -49,6 +83,7 @@ class TrainingTaskUpdate(BaseModel):
     due_date: datetime | None = None
     completion_criteria: dict[str, Any] | None = None
     practice_template_id: str | None = Field(None, max_length=36)
+    curriculum_plan_id: str | None = Field(None, max_length=36)
     source: str | None = Field(None, min_length=1, max_length=50)
     status: TrainingTaskStatus | None = None
     resulting_session_id: str | None = Field(None, max_length=36)
@@ -67,6 +102,7 @@ class TrainingTaskResponse(BaseModel):
     due_date: datetime | None = None
     completion_criteria: dict[str, Any]
     practice_template_id: str | None = None
+    curriculum_plan_id: str | None = None
     source: str
     status: str
     resulting_session_id: str | None = None

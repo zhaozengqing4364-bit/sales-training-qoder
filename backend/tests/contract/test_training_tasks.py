@@ -4,6 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from common.training_tasks.schemas import (
+    TrainingTaskBatchAssignRequest,
+    TrainingTaskBatchAssignResponse,
     TrainingTaskCreate,
     TrainingTaskResponse,
     TrainingTaskScenarioType,
@@ -57,3 +59,28 @@ def test_training_task_create_rejects_runtime_state_fields() -> None:
             goal="练习处理价格异议",
             stage="preflight",
         )
+
+
+@pytest.mark.contract
+def test_training_task_batch_assign_contract_accepts_curriculum_plan_binding() -> None:
+    payload = TrainingTaskBatchAssignRequest(
+        user_ids=["user-1", "user-2"],
+        template_id="template-1",
+        curriculum_plan_id="template-1",
+        title="学习-考核-实战训练",
+        scenario_type=TrainingTaskScenarioType.SALES,
+        goal="完成三阶段训练闭环",
+    )
+
+    response = TrainingTaskBatchAssignResponse(
+        assigned_count=1,
+        skipped_count=1,
+        failed_count=0,
+        assigned=[{"user_id": "user-1", "task_id": "task-1"}],
+        skipped=[{"user_id": "user-2", "reason": "[TRAINING_TASK_ALREADY_ASSIGNED]"}],
+        failed=[],
+    )
+
+    assert payload.curriculum_plan_id == "template-1"
+    assert response.assigned_count == 1
+    assert response.skipped[0].reason == "[TRAINING_TASK_ALREADY_ASSIGNED]"
