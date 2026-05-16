@@ -16,12 +16,16 @@ from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
-from curriculum_practice.models import CaseItem, RoleProfile
+from curriculum_practice.models import CaseItem, ExaminerAgent, RoleProfile
 from curriculum_practice.permissions import can_manage_practice_templates
 from curriculum_practice.schemas import (
     CaseItemCreate,
     CaseItemListResponse,
     CaseItemResponse,
+    ExaminerAgentCreate,
+    ExaminerAgentListResponse,
+    ExaminerAgentSimulationRequest,
+    ExaminerAgentUpdate,
     LearnerAdminOverrideRequest,
     LearnerProfileResponse,
     LearnerSelfAssessmentRequest,
@@ -55,6 +59,10 @@ from curriculum_practice.services.content_assets import (
     ContentAssetNotEditableError,
     ContentAssetPublishError,
     ContentAssetService,
+)
+from curriculum_practice.services.examiner_agents import (
+    ExaminerAgentService,
+    serialize_examiner_agent,
 )
 from curriculum_practice.services.learner_profiles import LearnerProfileService
 from curriculum_practice.services.learning_contents import (
@@ -195,6 +203,14 @@ def _role_profile_not_found() -> JSONResponse:
     )
 
 
+def _examiner_agent_not_found() -> JSONResponse:
+    return _api_error(
+        "[EXAMINER_AGENT_NOT_FOUND]",
+        status_code=404,
+        message="ExaminerAgent 不存在。",
+    )
+
+
 def _learning_content_not_found() -> JSONResponse:
     return _api_error(
         "[LEARNING_CONTENT_NOT_FOUND]",
@@ -261,6 +277,46 @@ def _question_generation_service(
 
 def _learner_profile_service_error(fallback: str | None) -> JSONResponse:
     return _api_error(fallback or "[LEARNER_PROFILE_FAILED]", status_code=400)
+
+
+def _examiner_agent_result_error(fallback: str | None) -> JSONResponse:
+    error_code = fallback or "[EXAMINER_AGENT_FAILED]"
+    if error_code == "[EXAMINER_AGENT_NOT_FOUND]":
+        return _examiner_agent_not_found()
+    if error_code == "[EXAMINER_AGENT_NOT_EDITABLE]":
+        return _api_error(
+            error_code,
+            status_code=409,
+            message="Only draft ExaminerAgent records can be edited.",
+        )
+    if error_code == "[EXAMINER_AGENT_SERVICE_FAILED]":
+        return _api_error(
+            "[EXAMINER_AGENT_FAILED]",
+            status_code=500,
+            message="ExaminerAgent 操作失败。",
+        )
+    return _api_error(error_code, status_code=400, message=error_code)
+
+
+def _examiner_agent_publish_gate_error(decision: object) -> JSONResponse:
+    if not isinstance(decision, PublishGateDecision):
+        decision = PublishGateDecision(can_publish=False, results=[])
+    return JSONResponse(
+        status_code=400,
+        content=error_response(
+            "[EXAMINER_AGENT_PUBLISH_GATE_FAILED]",
+            message="ExaminerAgent 发布门禁未通过。",
+        )
+        | {
+            "details": {
+                "gate_results": [item.model_dump() for item in decision.results]
+            }
+        },
+    )
+
+
+def _serialize_examiner_agent(item: ExaminerAgent):
+    return serialize_examiner_agent(item)
 
 
 @learner_router.get("/me/profile", response_model=None)
@@ -1198,6 +1254,147 @@ async def list_practice_templates(
         total=len(items),
     )
     return _success(payload)
+
+
+@router.get("/examiner-agents", response_model=None)
+async def list_examiner_agents(
+    status: str | None = Query(default=None, pattern="^(draft|published|archived)$"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await ExaminerAgentService(db).list_agents(status=status)
+    if not result.is_success:
+        return _examiner_agent_result_error(result.fallback)
+    items = result.value or []
+    return _success(
+        ExaminerAgentListResponse(
+            items=[_serialize_examiner_agent(item) for item in items],
+            total=len(items),
+        )
+    )
+
+
+@router.post("/examiner-agents", response_model=None)
+async def create_examiner_agent(
+    payload: ExaminerAgentCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await ExaminerAgentService(db).create_agent(
+        payload, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _examiner_agent_result_error(result.fallback)
+    return _success(_serialize_examiner_agent(result.value))
+
+
+@router.get("/examiner-agents/{examiner_agent_id}", response_model=None)
+async def get_examiner_agent(
+    examiner_agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await ExaminerAgentService(db).get_agent(examiner_agent_id)
+    if not result.is_success or result.value is None:
+        return _examiner_agent_result_error(result.fallback)
+    return _success(_serialize_examiner_agent(result.value))
+
+
+@router.put("/examiner-agents/{examiner_agent_id}", response_model=None)
+async def update_examiner_agent(
+    examiner_agent_id: str,
+    payload: ExaminerAgentUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ExaminerAgentService(db)
+    agent_result = await service.get_agent(examiner_agent_id)
+    if not agent_result.is_success or agent_result.value is None:
+        return _examiner_agent_result_error(agent_result.fallback)
+    result = await service.update_agent(
+        agent_result.value, payload, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _examiner_agent_result_error(result.fallback)
+    return _success(_serialize_examiner_agent(result.value))
+
+
+@router.post("/examiner-agents/{examiner_agent_id}/publish", response_model=None)
+async def publish_examiner_agent(
+    examiner_agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ExaminerAgentService(db)
+    agent_result = await service.get_agent(examiner_agent_id)
+    if not agent_result.is_success or agent_result.value is None:
+        return _examiner_agent_result_error(agent_result.fallback)
+    result = await service.publish_agent(
+        agent_result.value, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success:
+        if result.fallback == "[EXAMINER_AGENT_PUBLISH_GATE_FAILED]":
+            return _examiner_agent_publish_gate_error(result.value)
+        return _examiner_agent_result_error(result.fallback)
+    if result.value is None or not isinstance(result.value, ExaminerAgent):
+        return _examiner_agent_result_error(result.fallback)
+    return _success(_serialize_examiner_agent(result.value))
+
+
+@router.post("/examiner-agents/{examiner_agent_id}/archive", response_model=None)
+async def archive_examiner_agent(
+    examiner_agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ExaminerAgentService(db)
+    agent_result = await service.get_agent(examiner_agent_id)
+    if not agent_result.is_success or agent_result.value is None:
+        return _examiner_agent_result_error(agent_result.fallback)
+    result = await service.archive_agent(
+        agent_result.value, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _examiner_agent_result_error(result.fallback)
+    return _success(_serialize_examiner_agent(result.value))
+
+
+@router.post("/examiner-agents/{examiner_agent_id}/simulate", response_model=None)
+async def simulate_examiner_agent(
+    examiner_agent_id: str,
+    payload: ExaminerAgentSimulationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ExaminerAgentService(db)
+    agent_result = await service.get_agent(examiner_agent_id)
+    if not agent_result.is_success or agent_result.value is None:
+        return _examiner_agent_result_error(agent_result.fallback)
+    result = await service.simulate_agent(agent_result.value, payload)
+    if not result.is_success or result.value is None:
+        return _examiner_agent_result_error(result.fallback)
+    return _success(result.value)
 
 
 @router.post("/templates", response_model=None)
