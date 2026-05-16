@@ -8,5 +8,5 @@
   "migration_head": "20260516_1000_064",
   "baseline_test_count": 2125,
   "blockers": [],
-  "notes": "#72 学习讲义 AI 考题生成系统后端实现闭环完成。Backend commits: f658878c → 5c9eb881。验证证据：target regression 1 passed；target suite 38 passed；ruff check src/ All checks passed!；alembic head 20260516_1000_064；collect 2125 tests；safety grep 无 matches；LSP diagnostics 仅 missing dependency imports。进入 #73。"
+  "notes": "#72 学员分层、模板绑定与 RuntimeSnapshot 发布门禁闭环完成。Backend commits: f658878c → 5c9eb881（LearnerProfile service + template runtime binding schemas + stage publish validation gate + RuntimeSnapshot freeze + runtime bindings API + stage_type alignment）。验证证据：target regression 1 passed；target suite 38 passed；ruff check src/ All checks passed!；alembic head 20260516_1000_064；collect 2125 tests；safety grep 无 matches；LSP diagnostics 仅 missing dependency imports。进入 #73。"
 }
