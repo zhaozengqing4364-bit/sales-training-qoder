@@ -57,12 +57,14 @@ describe("useExaminerWebSocket", () => {
     vi.useRealTimers();
   });
 
-  it("starts in connecting state", () => {
+  it("starts in connecting state with feature flag defaulting to disabled", () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 
     expect(result.current.connectionState).toBe("connecting");
     expect(result.current.examPhase).toBe("idle");
-    expect(result.current.featureFlag).toBe("loading");
+    // ISSUE-003: featureFlag defaults to "disabled" so SSR never renders perpetual "正在加载...".
+    // The page's useEffect fetches real feature flags and enables if allowed.
+    expect(result.current.featureFlag).toBe("disabled");
   });
 
   it("transitions to connected on session.init", async () => {
