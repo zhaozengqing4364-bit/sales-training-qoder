@@ -19,6 +19,8 @@ import {
     CurriculumAnalyticsResponse,
     User,
     AdminUser,
+    AdminUserUpdatePayload,
+    AdminUserRoleUpdatePayload,
     AdminAgent,
     AdminPersona,
     AdminPersonaCustomerPressure,
@@ -1831,7 +1833,7 @@ async function apiFetchBlob(
  * - extracted in `client-domains.ts`: auth, practice, sessions, agents, presentations,
  *   and admin report helpers consumed through `api.admin`
  * - currently still inline in `client.ts`: user, dashboard, analyticsOpen, supportRuntime,
- *   training, scenarios, analytics, admin, adminTools, adminPresentations, internal
+ *   training, scenarios, analytics, admin, adminTools, internal
  *
  * High-fan-out consumers confirmed by repo inventory:
  * - learner/auth/dashboard/practice/report/replay/profile pages import the façade directly
@@ -1881,36 +1883,6 @@ const presentationsDomain = createPresentationsDomain({
     normalizePresentationForbiddenWord,
 });
 const adminReportDomain = createAdminReportDomain({ request: apiFetch });
-
-export interface AudioSegmentUploadUrlRequest {
-    segment_sequence: number;
-    content_type: string;
-}
-
-export interface AudioSegmentUploadUrlResponse {
-    url: string;
-    object_key: string;
-    expires_at?: string;
-}
-
-export interface AudioSegmentRegisterRequest {
-    segment_sequence: number;
-    object_key: string;
-    size_bytes: number;
-    duration_ms?: number;
-}
-
-export type AudioSegmentFailureToken =
-    | "signing_failed"
-    | "oss_put_failed"
-    | "register_failed"
-    | "network_error"
-    | "unknown";
-
-export interface AudioSegmentFailureRequest {
-    segment_sequence: number;
-    error_token: AudioSegmentFailureToken;
-}
 
 export const api = {
     // Authentication
@@ -2593,48 +2565,6 @@ export const api = {
 
     // Practice / Sessions
     practice: practiceDomain,
-
-    // Browser-direct audio segment upload metadata.
-    // Keep these calls on apiFetch so base URL resolution, cookies, CSRF,
-    // trace headers, session-expiry handling, and error normalization stay unified.
-    audioSegments: {
-        createUploadUrl: async (
-            sessionId: string,
-            payload: AudioSegmentUploadUrlRequest,
-        ) => {
-            return apiFetch<AudioSegmentUploadUrlResponse>(
-                `/practice/sessions/${sessionId}/audio-upload-urls`,
-                {
-                    method: "POST",
-                    body: JSON.stringify(payload),
-                },
-            );
-        },
-        register: async (
-            sessionId: string,
-            payload: AudioSegmentRegisterRequest,
-        ) => {
-            return apiFetch<Record<string, unknown>>(
-                `/practice/sessions/${sessionId}/audio-segments`,
-                {
-                    method: "POST",
-                    body: JSON.stringify(payload),
-                },
-            );
-        },
-        registerFailure: async (
-            sessionId: string,
-            payload: AudioSegmentFailureRequest,
-        ) => {
-            return apiFetch<Record<string, unknown>>(
-                `/practice/sessions/${sessionId}/audio-segments/failure`,
-                {
-                    method: "POST",
-                    body: JSON.stringify(payload),
-                },
-            );
-        },
-    },
 
     // Sessions
     sessions: sessionsDomain,
@@ -3348,9 +3278,16 @@ export const api = {
             });
         },
 
-        updateUser: async (id: string, data: Partial<AdminUser>) => {
+        updateUser: async (id: string, data: AdminUserUpdatePayload) => {
             return apiFetch<AdminUser>(`/admin/users/${id}`, {
-                method: "PATCH",
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updateUserRole: async (id: string, data: AdminUserRoleUpdatePayload) => {
+            return apiFetch<AdminUser>(`/admin/users/${id}/role`, {
+                method: "PUT",
                 body: JSON.stringify(data),
             });
         },
@@ -4446,79 +4383,6 @@ export const api = {
 
     // Presentation coach (user)
     presentations: presentationsDomain,
-
-    // Presentation coach (admin)
-    adminPresentations: {
-        list: async () => {
-            return apiFetch<Array<Record<string, unknown>>>("/admin/presentations");
-        },
-
-        create: async (payload: Record<string, unknown>) => {
-            return apiFetch<Record<string, unknown>>("/admin/presentations", {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
-        },
-
-        upload: async (formData: FormData) => {
-            return apiUpload<Record<string, unknown>>("/admin/presentations/upload", formData);
-        },
-
-        get: async (presentationId: string) => {
-            return apiFetch<Record<string, unknown>>(`/admin/presentations/${presentationId}`);
-        },
-
-        delete: async (presentationId: string) => {
-            return apiFetch<void>(`/admin/presentations/${presentationId}`, {
-                method: "DELETE",
-            });
-        },
-
-        getPages: async (presentationId: string) => {
-            return apiFetch<Record<string, unknown>>(`/admin/presentations/${presentationId}/pages`);
-        },
-
-        updatePage: async (presentationId: string, pageNumber: number, payload: Record<string, unknown>) => {
-            return apiFetch<Record<string, unknown>>(`/admin/presentations/${presentationId}/pages/${pageNumber}`, {
-                method: "PUT",
-                body: JSON.stringify(payload),
-            });
-        },
-
-        getTalkingPoints: async (presentationId: string, pageNumber: number) => {
-            return apiFetch<Record<string, unknown>>(`/admin/presentations/${presentationId}/pages/${pageNumber}/talking-points`);
-        },
-
-        addTalkingPoint: async (presentationId: string, pageNumber: number, payload: Record<string, unknown>) => {
-            return apiFetch<Record<string, unknown>>(`/admin/presentations/${presentationId}/pages/${pageNumber}/talking-points`, {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
-        },
-
-        deleteTalkingPoint: async (pointId: string) => {
-            return apiFetch<void>(`/admin/talking-points/${pointId}`, {
-                method: "DELETE",
-            });
-        },
-
-        getForbiddenWords: async (presentationId: string) => {
-            return apiFetch<Record<string, unknown>>(`/admin/presentations/${presentationId}/forbidden-words`);
-        },
-
-        addForbiddenWord: async (presentationId: string, payload: Record<string, unknown>) => {
-            return apiFetch<Record<string, unknown>>(`/admin/presentations/${presentationId}/forbidden-words`, {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
-        },
-
-        deleteForbiddenWord: async (wordId: string) => {
-            return apiFetch<void>(`/admin/forbidden-words/${wordId}`, {
-                method: "DELETE",
-            });
-        },
-    },
 
     // Internal capabilities
     internal: {

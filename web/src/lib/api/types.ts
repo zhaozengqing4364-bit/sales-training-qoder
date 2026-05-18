@@ -1396,6 +1396,19 @@ export interface AdminUser {
     average_score: number;
 }
 
+export interface AdminUserUpdatePayload {
+    name?: string;
+    email?: string;
+    department?: string;
+    is_active?: boolean;
+    audit_reason?: string;
+}
+
+export interface AdminUserRoleUpdatePayload {
+    role: string;
+    audit_reason?: string;
+}
+
 export interface AdminAgent {
     id: string;
     name: string;
