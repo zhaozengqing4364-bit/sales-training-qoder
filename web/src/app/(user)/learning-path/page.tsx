@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, Clock3, Lock, RotateCcw, Route } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { LearningPathResponse, LearningPathStage } from "@/lib/api/types";
+import { LearningPathNextTask, LearningPathResponse, LearningPathStage } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -44,6 +44,13 @@ function formatCompletionPolicy(policy: Record<string, unknown>): string {
         typeof policy.max_duration_seconds === "number" ? `限时 ${Math.max(1, Math.round(policy.max_duration_seconds / 60))} 分钟` : null,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(" · ") : "按模板默认完成标准";
+}
+
+function nextTaskHref(nextTask: LearningPathNextTask): string {
+    if (nextTask.learning_content_id) {
+        return `/study/${encodeURIComponent(nextTask.learning_content_id)}`;
+    }
+    return "/training";
 }
 
 export default function LearningPathPage() {
@@ -112,7 +119,7 @@ export default function LearningPathPage() {
                         </p>
                     </div>
                     <Button asChild className="rounded-full bg-slate-900 text-white hover:bg-slate-800">
-                        <Link href="/training">
+                        <Link href={nextTaskHref(path.next_task)}>
                             {path.next_task.primary_cta} <ArrowRight className="ml-2 w-4 h-4" />
                         </Link>
                     </Button>

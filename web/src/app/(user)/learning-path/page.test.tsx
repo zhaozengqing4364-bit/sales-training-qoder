@@ -131,6 +131,34 @@ describe("LearningPathPage", () => {
         expect(screen.getByRole("link", { name: /重新训练/ }).getAttribute("href")).toBe("/training");
     });
 
+    it("routes continue-learning tasks to the study page", async () => {
+        getMineMock.mockResolvedValueOnce({
+            user_id: "learner-1",
+            path_type: "role_default",
+            recommended_template_ids: [],
+            recommendation_reasons: [],
+            next_task: {
+                title: "继续学习：预算异议处理",
+                state: "in_progress",
+                primary_cta: "continue learning",
+                reason: "先完成学习内容，再进入考试。",
+                estimated_duration_minutes: 12,
+                failure_reason: null,
+                retry_action: null,
+                learning_content_id: "content-lesson-1",
+            },
+            stages: [],
+            generated_at: "2026-05-13T00:00:00Z",
+        });
+
+        render(<LearningPathPage />);
+
+        expect(await screen.findByText("继续学习：预算异议处理")).toBeTruthy();
+        expect(screen.getByRole("link", { name: /continue learning/ }).getAttribute("href")).toBe(
+            "/study/content-lesson-1",
+        );
+    });
+
     it("renders pending review placeholder for certification path", async () => {
         render(<LearningPathPage />);
 

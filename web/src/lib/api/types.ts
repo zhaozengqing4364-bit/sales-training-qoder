@@ -611,6 +611,7 @@ export interface LearningPathNextTask {
     state: LearningPathStageState;
     primary_cta: string;
     reason: string;
+    learning_content_id?: string | null;
     estimated_duration_minutes?: number | null;
     failure_reason?: string | null;
     retry_action?: string | null;
