@@ -2183,6 +2183,14 @@ export default function ComprehensiveReportPage() {
                                     </span>
                                 ) : null}
                             </div>
+                            {nextRecommendation.source_session_id ? (
+                                <Link
+                                    href={`/practice/${nextRecommendation.source_session_id}/report`}
+                                    className="inline-block mt-3 text-sm font-medium text-blue-600 hover:text-blue-700"
+                                >
+                                    查看来源报告
+                                </Link>
+                            ) : null}
                             <Link href={nextRecommendation.target_path}>
                                 <Button variant="primary" size="sm" className="mt-4">
                                     {nextRecommendation.action_label}

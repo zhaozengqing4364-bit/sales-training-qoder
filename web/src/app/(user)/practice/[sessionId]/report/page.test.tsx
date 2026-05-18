@@ -2605,4 +2605,36 @@ describe("ReportPage", () => {
         expect((screen.getByRole("button", { name: "定位问题片段" }) as HTMLButtonElement).disabled).toBe(true);
         expect((screen.getByRole("button", { name: "定位目标片段" }) as HTMLButtonElement).disabled).toBe(true);
     });
+
+    it("renders a source report link when next recommendation includes a distinct source_session_id", async () => {
+        getReportMock.mockResolvedValue(baseReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+        getNextRecommendationMock.mockResolvedValue({
+            title: "补强产品知识与证据表达",
+            reason: "上次可评估训练中「产品知识与证据」为 55 分，低于 60 分阈值。",
+            action_label: "练产品知识专项",
+            target_path: "/training/sales?focus=product_knowledge",
+            recommendation_kind: "next_practice_ruleset",
+            scenario_type: "sales",
+            source_session_id: "session-source-1",
+            rule_version: "growth_recommendation_rules_v1",
+            explanation: "上次可评估训练中「产品知识与证据」为 55 分，低于 60 分阈值。",
+            evidence_summary: {
+                weak_dimension: "product_knowledge",
+                score_field: "accuracy_score",
+                score: 55,
+                threshold: 60,
+            },
+        });
+
+        render(<ReportPage />);
+
+        const sourceLink = await screen.findByRole("link", { name: /查看来源报告/ });
+        expect(sourceLink.getAttribute("href")).toBe("/practice/session-source-1/report");
+    });
 });
