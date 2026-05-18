@@ -35,7 +35,28 @@ async def _default_scorer(
     question: FrozenExamQuestion,
     answer_text: str,
 ) -> dict[str, object]:
-    return {"score": 0, "feedback": "not_scored"}
+    reference_answer = (question.reference_answer or "").strip()
+    answer = answer_text.strip()
+    if not answer:
+        return {"score": 0, "feedback": "未作答，无法评分", "reason": "EMPTY_ANSWER"}
+    if not reference_answer:
+        return {"score": 60, "feedback": "已提交答案，题目未配置参考答案，按基础完成度给分"}
+
+    reference_terms = [term for term in reference_answer.replace("，", " ").replace("。", " ").split() if term]
+    if not reference_terms:
+        return {"score": 60, "feedback": "已提交答案，参考答案过短，按基础完成度给分"}
+
+    matched_terms = [term for term in reference_terms if term in answer]
+    coverage = len(matched_terms) / len(reference_terms)
+    length_bonus = 0.15 if len(answer) >= min(len(reference_answer), 80) else 0
+    score = min(100, round((coverage + length_bonus) * 100))
+    if score >= 80:
+        feedback = "答案覆盖了多数参考要点。"
+    elif score >= 50:
+        feedback = "答案覆盖了部分参考要点，还需要补充关键细节。"
+    else:
+        feedback = "答案与参考要点匹配较少，请围绕题干重新组织回答。"
+    return {"score": score, "feedback": feedback, "matched_terms": matched_terms}
 
 
 @dataclass(frozen=True)
