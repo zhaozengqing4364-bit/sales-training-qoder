@@ -1,0 +1,6 @@
+- generic [active] [ref=e1]:
+  - status [ref=e3]:
+    - generic [ref=e4]: 正在加载应用页面
+    - paragraph [ref=e5]: 正在准备页面内容...
+  - button "Open Next.js Dev Tools" [ref=e19] [cursor=pointer]:
+    - img [ref=e20]

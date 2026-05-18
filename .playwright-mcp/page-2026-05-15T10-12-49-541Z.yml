@@ -1,0 +1,70 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - img [ref=e8]
+          - generic [ref=e10]:
+            - generic [ref=e11]: 管理
+            - generic [ref=e12]: 控制台
+        - navigation [ref=e13]:
+          - link "总览" [ref=e15] [cursor=pointer]:
+            - /url: /admin
+            - img [ref=e16]
+            - generic [ref=e21]: 总览
+          - button "业务资产" [ref=e23]:
+            - img [ref=e24]
+            - generic [ref=e27]: 业务资产
+            - img [ref=e28]
+          - button "策略中心" [ref=e31]:
+            - img [ref=e32]
+            - generic [ref=e35]: 策略中心
+            - img [ref=e36]
+          - button "运营分析" [ref=e39]:
+            - img [ref=e40]
+            - generic [ref=e42]: 运营分析
+            - img [ref=e43]
+          - button "组织与权限" [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e52]: 组织与权限
+            - img [ref=e53]
+          - button "系统治理" [ref=e56]:
+            - img [ref=e57]
+            - generic [ref=e60]: 系统治理
+            - img [ref=e61]
+        - generic [ref=e63]:
+          - link "回到用户端" [ref=e64] [cursor=pointer]:
+            - /url: /
+            - img [ref=e65]
+            - generic [ref=e67]: 回到用户端
+          - generic [ref=e68] [cursor=pointer]:
+            - img [ref=e70]
+            - generic [ref=e72]:
+              - generic [ref=e73]: Developer
+              - generic [ref=e74]: 超级用户
+            - img [ref=e76]
+          - button "折叠侧边栏" [ref=e79]:
+            - img [ref=e80]
+            - generic [ref=e83]: 折叠侧边栏
+    - main [ref=e84]:
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - heading "学习内容管理" [level=1] [ref=e89]
+            - paragraph [ref=e90]: 管理课程、章节和学习资料
+          - button "新建学习内容" [ref=e92]:
+            - img [ref=e93]
+            - text: 新建学习内容
+        - generic [ref=e96]:
+          - img [ref=e97]
+          - textbox "搜索学习内容..." [ref=e100]
+        - generic [ref=e101]:
+          - img [ref=e104]
+          - heading "加载失败" [level=3] [ref=e106]
+          - paragraph [ref=e107]: 请求的配置接口暂未开通或资源不存在，请刷新后重试或联系管理员。
+          - button "重试" [ref=e108]:
+            - img [ref=e109]
+            - text: 重试
+  - button "Open Next.js Dev Tools" [ref=e119] [cursor=pointer]:
+    - img [ref=e120]
+  - alert [ref=e123]

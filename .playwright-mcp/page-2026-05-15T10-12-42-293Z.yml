@@ -1,0 +1,260 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e51]:
+    - complementary [ref=e52]:
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - img [ref=e56]
+          - generic [ref=e59]:
+            - generic [ref=e60]: AI 销售教练
+            - generic [ref=e61]: 平台
+        - navigation "主导航" [ref=e62]:
+          - generic [ref=e63]: 菜单
+          - menubar [ref=e64]:
+            - menuitem "首页" [ref=e65] [cursor=pointer]:
+              - img [ref=e67]
+              - generic [ref=e70]: 首页
+            - menuitem "训练模式" [ref=e71] [cursor=pointer]:
+              - img [ref=e72]
+              - generic [ref=e77]: 训练模式
+            - menuitem "排行榜" [ref=e78] [cursor=pointer]:
+              - img [ref=e79]
+              - generic [ref=e80]: 排行榜
+            - menuitem "历史记录" [ref=e81] [cursor=pointer]:
+              - img [ref=e82]
+              - generic [ref=e86]: 历史记录
+          - generic [ref=e89]: 系统
+          - menubar [ref=e90]:
+            - menuitem "运行状态" [ref=e91] [cursor=pointer]:
+              - img [ref=e92]
+              - generic [ref=e94]: 运行状态
+            - menuitem "管理后台" [ref=e95] [cursor=pointer]:
+              - img [ref=e96]
+              - generic [ref=e99]: 管理后台
+        - generic [ref=e100]:
+          - button "帮助与反馈" [ref=e102]:
+            - img [ref=e103]
+            - generic [ref=e105]: 帮助与反馈
+          - generic [ref=e106] [cursor=pointer]:
+            - img [ref=e108]
+            - generic [ref=e111]:
+              - generic [ref=e112]: Developer
+              - generic [ref=e113]: Development
+            - img [ref=e115]
+          - button "折叠侧边栏" [ref=e118]:
+            - img [ref=e119]
+            - generic [ref=e122]: 折叠侧边栏
+    - main [ref=e123]:
+      - generic [ref=e125]:
+        - generic [ref=e126]:
+          - generic [ref=e127]:
+            - button "v0.1.0" [ref=e129]
+            - heading "晚安, Developer 👋" [level=1] [ref=e130]
+            - paragraph [ref=e131]: 查看您的训练概览与最新进展。
+          - generic [ref=e133] [cursor=pointer]:
+            - generic [ref=e135]:
+              - generic [ref=e136]: 本周练习
+              - generic [ref=e137]: 0.0 小时
+            - img [ref=e139]
+        - generic [ref=e142]:
+          - generic [ref=e143]:
+            - generic [ref=e145]:
+              - img [ref=e147]
+              - generic [ref=e149]:
+                - paragraph [ref=e150]: 连续练习
+                - heading "1 天" [level=2] [ref=e151]
+            - paragraph [ref=e152]: 只统计已完成且可评估的训练；证据不足或未完成训练不会计入连续天数。
+          - generic [ref=e153]:
+            - generic [ref=e155]:
+              - generic [ref=e156]:
+                - img [ref=e158]
+                - generic [ref=e164]:
+                  - paragraph [ref=e165]: 本周目标
+                  - heading "0/3" [level=2] [ref=e166]
+              - generic [ref=e167]: 完成 3 次可评估训练点亮本周轻成就
+            - paragraph [ref=e169]: 本周目标进度只纳入 completed/evaluable 训练，避免把未完成或证据不足记录包装成成就。
+        - generic [ref=e170]:
+          - generic [ref=e171]:
+            - paragraph [ref=e173]: 3分钟连续表达通过率
+            - paragraph [ref=e174]: 0.0%
+          - generic [ref=e175]:
+            - paragraph [ref=e177]: 5轮追问稳定通过率
+            - paragraph [ref=e178]: 0.0%
+          - generic [ref=e179]:
+            - paragraph [ref=e181]: 四段结构完整率
+            - paragraph [ref=e182]: 0.0%
+          - generic [ref=e183]:
+            - paragraph [ref=e185]: 次日复练率
+            - paragraph [ref=e186]: 0.0%
+        - generic [ref=e187]:
+          - generic [ref=e190]:
+            - generic [ref=e191]:
+              - generic [ref=e192]: 今日复练任务
+              - heading "今日复练：按上次主问题再练一轮" [level=2] [ref=e193]
+              - paragraph [ref=e194]: 下一轮只聚焦主能力动作，先完成核心沟通目标。 上次主问题：本场主能力未达标，关键沟通目标尚未完成。
+              - list [ref=e195]:
+                - listitem [ref=e196]: • 到期原因：上次报告已生成可复练的主问题与下一轮目标。
+                - listitem [ref=e197]: • 本次焦点：下一轮只聚焦主能力动作，先完成核心沟通目标。
+                - listitem [ref=e198]: • 建议时长：12 分钟
+              - paragraph [ref=e199]: 推荐来源：上次可评估训练报告的主问题与下一轮目标。
+            - link "按目标再练一轮" [ref=e200] [cursor=pointer]:
+              - /url: /agents/06abb669-50c2-47b1-a7c3-fd9fca781a79?persona_id=4c99d4d0-965b-439b-b746-33d2e1c55073&focus_intent=%7B%22version%22%3A%22retry_focus_v1%22%2C%22source_session_id%22%3A%22057f7257-8c6c-449a-b236-4d9beb24d4fc%22%2C%22main_issue%22%3A%7B%22issue_type%22%3A%22main_capability_not_passed%22%2C%22issue_text%22%3A%22%E6%9C%AC%E5%9C%BA%E4%B8%BB%E8%83%BD%E5%8A%9B%E6%9C%AA%E8%BE%BE%E6%A0%87%EF%BC%8C%E5%85%B3%E9%94%AE%E6%B2%9F%E9%80%9A%E7%9B%AE%E6%A0%87%E5%B0%9A%E6%9C%AA%E5%AE%8C%E6%88%90%E3%80%82%22%2C%22recovery_rule%22%3A%22%E4%B8%8B%E4%B8%80%E8%BD%AE%E8%81%9A%E7%84%A6%E5%8D%95%E4%B8%80%E4%B8%BB%E8%83%BD%E5%8A%9B%EF%BC%8C%E5%85%88%E5%AE%8C%E6%88%90%E6%A0%B8%E5%BF%83%E5%8A%A8%E4%BD%9C%E5%86%8D%E8%BF%BD%E6%B1%82%E9%AB%98%E5%88%86%E3%80%82%22%7D%2C%22next_goal%22%3A%7B%22goal_type%22%3A%22main_capability_focus%22%2C%22goal_text%22%3A%22%E4%B8%8B%E4%B8%80%E8%BD%AE%E5%8F%AA%E8%81%9A%E7%84%A6%E4%B8%BB%E8%83%BD%E5%8A%9B%E5%8A%A8%E4%BD%9C%EF%BC%8C%E5%85%88%E5%AE%8C%E6%88%90%E6%A0%B8%E5%BF%83%E6%B2%9F%E9%80%9A%E7%9B%AE%E6%A0%87%E3%80%82%22%2C%22rule%22%3A%22%E4%BF%9D%E6%8C%81%E4%B8%89%E9%A1%B9%E7%A1%AC%E6%8C%87%E6%A0%87%E5%9F%BA%E7%A1%80%E7%A8%B3%E5%AE%9A%EF%BC%8C%E4%BC%98%E5%85%88%E5%AE%8C%E6%88%90%E4%B8%BB%E8%83%BD%E5%8A%9B%E5%85%B3%E9%94%AE%E5%8A%A8%E4%BD%9C%E3%80%82%22%7D%7D
+              - button "按目标再练一轮" [ref=e201]:
+                - text: 按目标再练一轮
+                - img [ref=e202]
+          - generic [ref=e206]:
+            - generic [ref=e207]:
+              - img [ref=e209]
+              - generic [ref=e213]:
+                - paragraph [ref=e214]: 学习路径下一步
+                - heading "Smoke Phase 4 Sales Curriculum Template" [level=2] [ref=e215]
+                - paragraph [ref=e216]: 暂无足够报告证据，先从默认路径开始。
+            - link "开始默认路径" [ref=e217] [cursor=pointer]:
+              - /url: /learning-path
+              - text: 开始默认路径
+              - img [ref=e218]
+          - generic [ref=e220]:
+            - img [ref=e223]
+            - generic [ref=e226]:
+              - generic [ref=e227]: "59.4"
+              - generic [ref=e228]: 上次得分
+            - paragraph [ref=e229]: 均分仅统计 19 次可评估训练，3 次证据不足训练不会计入均分。
+        - generic [ref=e230]:
+          - generic [ref=e231]:
+            - heading "最近记录" [level=2] [ref=e232]
+            - generic [ref=e233]:
+              - generic [ref=e234]: 高级筛选请在历史页进行
+              - link "去历史页筛选" [ref=e235] [cursor=pointer]:
+                - /url: /history
+                - button "去历史页筛选" [ref=e236]:
+                  - img [ref=e237]
+                  - text: 去历史页筛选
+          - generic [ref=e239]:
+            - generic [ref=e241]:
+              - generic [ref=e243]:
+                - generic [ref=e244]:
+                  - generic [ref=e245]: S
+                  - generic [ref=e246]:
+                    - heading "石犀科技问答" [level=4] [ref=e247]
+                    - paragraph [ref=e248]: 5天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e249] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e250]:
+                - generic [ref=e251]:
+                  - generic [ref=e252]:
+                    - generic [ref=e253]: 综合评分
+                    - generic [ref=e254]: "0"
+                  - generic [ref=e256]:
+                    - generic [ref=e257]: 趋势
+                    - generic [ref=e258]: "--"
+                - generic [ref=e259]:
+                  - generic [ref=e260]:
+                    - generic [ref=e261]: 快捷入口
+                    - paragraph [ref=e262]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e263]:
+                    - link "历史页" [ref=e264] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+            - generic [ref=e266]:
+              - generic [ref=e268]:
+                - generic [ref=e269]:
+                  - generic [ref=e270]: S
+                  - generic [ref=e271]:
+                    - heading "石犀科技问答" [level=4] [ref=e272]
+                    - paragraph [ref=e273]: 6天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e274] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e275]:
+                - generic [ref=e276]:
+                  - generic [ref=e277]:
+                    - generic [ref=e278]: 综合评分
+                    - generic [ref=e279]: "0"
+                  - generic [ref=e281]:
+                    - generic [ref=e282]: 趋势
+                    - generic [ref=e283]: "--"
+                - generic [ref=e284]:
+                  - generic [ref=e285]:
+                    - generic [ref=e286]: 快捷入口
+                    - paragraph [ref=e287]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e288]:
+                    - link "历史页" [ref=e289] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+            - generic [ref=e291]:
+              - generic [ref=e293]:
+                - generic [ref=e294]:
+                  - generic [ref=e295]: S
+                  - generic [ref=e296]:
+                    - heading "石犀科技问答" [level=4] [ref=e297]
+                    - paragraph [ref=e298]: 6天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e299] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e300]:
+                - generic [ref=e301]:
+                  - generic [ref=e302]:
+                    - generic [ref=e303]: 综合评分
+                    - generic [ref=e304]: "0"
+                  - generic [ref=e306]:
+                    - generic [ref=e307]: 趋势
+                    - generic [ref=e308]: "--"
+                - generic [ref=e309]:
+                  - generic [ref=e310]:
+                    - generic [ref=e311]: 快捷入口
+                    - paragraph [ref=e312]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e313]:
+                    - link "历史页" [ref=e314] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+            - generic [ref=e316]:
+              - generic [ref=e318]:
+                - generic [ref=e319]:
+                  - generic [ref=e320]: S
+                  - generic [ref=e321]:
+                    - heading "石犀科技问答" [level=4] [ref=e322]
+                    - paragraph [ref=e323]: 6天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e324] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e325]:
+                - generic [ref=e326]:
+                  - generic [ref=e327]:
+                    - generic [ref=e328]: 综合评分
+                    - generic [ref=e329]: "0"
+                  - generic [ref=e331]:
+                    - generic [ref=e332]: 趋势
+                    - generic [ref=e333]: "--"
+                - generic [ref=e334]:
+                  - generic [ref=e335]:
+                    - generic [ref=e336]: 快捷入口
+                    - paragraph [ref=e337]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e338]:
+                    - link "历史页" [ref=e339] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+            - generic [ref=e341]:
+              - generic [ref=e343]:
+                - generic [ref=e344]:
+                  - generic [ref=e345]: S
+                  - generic [ref=e346]:
+                    - heading "石犀科技问答" [level=4] [ref=e347]
+                    - paragraph [ref=e348]: 6天前 • 持续 2分 51秒
+                - link "查看历史" [ref=e349] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e350]:
+                - generic [ref=e351]:
+                  - generic [ref=e352]:
+                    - generic [ref=e353]: 综合评分
+                    - generic [ref=e354]: "59.37"
+                  - generic [ref=e356]:
+                    - generic [ref=e357]: 趋势
+                    - generic [ref=e358]: "--"
+                - generic [ref=e359]:
+                  - generic [ref=e360]:
+                    - generic [ref=e361]: 快捷入口
+                    - paragraph [ref=e362]: 可直接打开统一报告；更多筛选与完整记录请前往历史页。
+                  - generic [ref=e363]:
+                    - link "历史页" [ref=e364] [cursor=pointer]:
+                      - /url: /history
+                    - link "查看报告" [ref=e365] [cursor=pointer]:
+                      - /url: /practice/057f7257-8c6c-449a-b236-4d9beb24d4fc/report
+  - button "Open Next.js Dev Tools" [ref=e45] [cursor=pointer]:
+    - img [ref=e46]
+  - alert [ref=e49]
