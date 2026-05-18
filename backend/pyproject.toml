@@ -4,7 +4,11 @@ version = "1.0.0"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "haystack-ai>=2.0.0",
+    "chromadb>=0.4.18",
     # Targeted pytest collection imports retrieval/auth modules directly.
+    "websockets>=12.0",
+    "prometheus-client>=0.19.0",
+    "oss2>=2.19.1",
     "rank_bm25>=0.2.2",
     "PyJWT[crypto]>=2.10.1",
 ]
