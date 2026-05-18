@@ -109,7 +109,8 @@ describe("learning content api client", () => {
             .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { ok: true } }) })
             .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { ok: true } }) })
             .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { ...content, status: "published" } }) })
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { ...content, status: "archived" } }) });
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { ...content, status: "archived" } }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { deleted: true } }) });
 
         await api.learningContents.get("content-1");
         await api.learningContents.update("content-1", { title: "更新后的学习内容" });
@@ -119,6 +120,7 @@ describe("learning content api client", () => {
         await api.learningContents.deleteChapter("content-1", "chapter-1");
         const published = await api.learningContents.publish("content-1");
         const archived = await api.learningContents.archive("content-1");
+        await api.learningContents.delete("content-1");
 
         expect(published.status).toBe("published");
         expect(archived.status).toBe("archived");
@@ -161,6 +163,11 @@ describe("learning content api client", () => {
             8,
             expect.stringContaining("/curriculum/learning-contents/content-1/archive"),
             expect.objectContaining({ method: "POST" }),
+        );
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            9,
+            expect.stringContaining("/curriculum/learning-contents/content-1"),
+            expect.objectContaining({ method: "DELETE" }),
         );
     });
 });

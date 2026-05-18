@@ -321,6 +321,10 @@ export function createLearningContentsDomain({ request }: LearningContentsDomain
             });
         },
 
+        delete: async (contentId: string) => {
+            return request<void>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}`, { method: "DELETE" });
+        },
+
         addChapter: async (contentId: string, payload: LearningChapterCreateRequest) => {
             return request<LearningChapter>(`/curriculum/learning-contents/${encodeURIComponent(contentId)}/chapters`, {
                 method: "POST",
