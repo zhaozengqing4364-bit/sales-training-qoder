@@ -39,7 +39,7 @@ class Settings:
     def __init__(self) -> None:
         self.CURRICULUM_EXAMINER_ENABLED = _env_bool(
             "CURRICULUM_EXAMINER_ENABLED",
-            False,
+            True,
         )
 
     # Environment
@@ -228,7 +228,7 @@ class Settings:
     ENABLE_LEADERBOARD: bool = os.getenv("ENABLE_LEADERBOARD", "true").lower() == "true"
     CURRICULUM_EXAMINER_ENABLED: bool = _env_bool(
         "CURRICULUM_EXAMINER_ENABLED",
-        False,
+        True,
     )
 
 
