@@ -18,6 +18,7 @@ const {
     exportUsersMock,
     listPracticeTemplatesMock,
     batchAssignMock,
+    updateUserRoleMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     successToastMock: vi.fn(),
@@ -32,6 +33,7 @@ const {
     exportUsersMock: vi.fn(),
     listPracticeTemplatesMock: vi.fn(),
     batchAssignMock: vi.fn(),
+    updateUserRoleMock: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -94,6 +96,7 @@ vi.mock("@/lib/api/client", async () => {
                 getUsers: getUsersMock,
                 createUser: createUserMock,
                 updateUser: updateUserMock,
+                updateUserRole: updateUserRoleMock,
                 suspendUser: suspendUserMock,
                 activateUser: activateUserMock,
                 deleteUser: deleteUserMock,
@@ -121,6 +124,7 @@ describe("UsersPage", () => {
         getOperatingPackMock.mockReset();
         createUserMock.mockReset();
         updateUserMock.mockReset();
+        updateUserRoleMock.mockReset();
         suspendUserMock.mockReset();
         activateUserMock.mockReset();
         deleteUserMock.mockReset();
@@ -405,5 +409,105 @@ describe("UsersPage", () => {
 
         const failResult = screen.getByText("用户不存在");
         expect(failResult).toBeTruthy();
+    });
+
+    it("updates profile fields separately from role changes", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "row-1", user_id: "uid-01", display_name: "张三", email: "old@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 1, page: 1, page_size: 10, has_more: false,
+        });
+        updateUserMock.mockResolvedValue({});
+        updateUserRoleMock.mockResolvedValue({});
+
+        render(<UsersPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        });
+
+        // Open edit dialog via "编辑权限" in action menu
+        fireEvent.click(screen.getByRole("button", { name: "编辑权限" }));
+
+        // Change name
+        const nameInput = screen.getByDisplayValue("张三");
+        fireEvent.change(nameInput, { target: { value: "张三新" } });
+
+        // Change email
+        const emailInput = screen.getByDisplayValue("old@test.com");
+        fireEvent.change(emailInput, { target: { value: "new@test.com" } });
+
+        // Change role to admin — click the edit dialog's "管理员" role card (index 1: after create dialog's card at index 0)
+        const adminRoles = screen.getAllByText("管理员");
+        fireEvent.click(adminRoles[1]);
+
+        fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+
+        await waitFor(() => {
+            expect(updateUserMock).toHaveBeenCalledWith("row-1", {
+                name: "张三新",
+                email: "new@test.com",
+                department: "销售部",
+            });
+        });
+        expect(updateUserRoleMock).toHaveBeenCalledWith("row-1", { role: "admin" });
+    });
+
+    it("refreshes list with partial-failure message when profile update succeeds but role update fails", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "row-1", user_id: "uid-01", display_name: "张三", email: "old@test.com", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 1, page: 1, page_size: 10, has_more: false,
+        });
+        updateUserMock.mockResolvedValue({});
+        updateUserRoleMock.mockRejectedValue(new Error("Role update permission denied"));
+
+        render(<UsersPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "编辑权限" }));
+        const adminRoles = screen.getAllByText("管理员");
+        fireEvent.click(adminRoles[1]);
+
+        fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+
+        await waitFor(() => {
+            expect(updateUserMock).toHaveBeenCalledWith("row-1", expect.objectContaining({
+                department: "销售部",
+            }));
+            expect(updateUserRoleMock).toHaveBeenCalledWith("row-1", { role: "admin" });
+        });
+
+        await waitFor(() => {
+            expect(getUsersMock).toHaveBeenCalledTimes(2);
+        });
+
+        expect(successToastMock).toHaveBeenCalledWith("资料已更新，但角色更新失败，请重试");
+        expect(errorToastMock).not.toHaveBeenCalled();
+    });
+
+    it("renders department column in the user table", async () => {
+        getUsersMock.mockResolvedValue({
+            items: [
+                { id: "1", user_id: "u1", display_name: "张三", department: "销售部", role: "user", is_active: true, status: "active", created_at: "2026-01-01T00:00:00Z", total_sessions: 0, total_duration_minutes: 0, average_score: 0 },
+            ],
+            total: 1, page: 1, page_size: 10, has_more: false,
+        });
+
+        render(<UsersPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText("张三").length).toBeGreaterThanOrEqual(1);
+        });
+
+        const headers = screen.getAllByRole("columnheader");
+        const deptHeader = headers.find(h => h.textContent === "部门");
+        expect(deptHeader).toBeTruthy();
+        expect(screen.getAllByText("销售部").length).toBeGreaterThanOrEqual(1);
     });
 });

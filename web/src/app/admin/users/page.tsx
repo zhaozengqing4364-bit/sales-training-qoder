@@ -209,20 +209,36 @@ export default function UsersPage() {
         setIsEditing(true);
         try {
             await api.admin.updateUser(editingUser.id, {
-                display_name: editForm.name || undefined,
+                name: editForm.name || undefined,
                 email: editForm.email || undefined,
                 department: editForm.department || undefined,
-                role: editForm.role || undefined
             });
-            setEditingUser(null);
-            toast.success("用户信息已更新");
-            loadData();
         } catch (err) {
             debug.error("Failed to update user:", err);
             toast.error("更新失败");
-        } finally {
             setIsEditing(false);
+            return;
         }
+
+        // Profile updated — role change is independent
+        let roleFailed = false;
+        if (editForm.role && editForm.role !== editingUser.role) {
+            try {
+                await api.admin.updateUserRole(editingUser.id, { role: editForm.role });
+            } catch (err) {
+                debug.error("Failed to update user role:", err);
+                roleFailed = true;
+            }
+        }
+
+        setEditingUser(null);
+        setIsEditing(false);
+        if (roleFailed) {
+            toast.success("资料已更新，但角色更新失败，请重试");
+        } else {
+            toast.success("用户信息已更新");
+        }
+        loadData();
     };
 
     // Suspend user handler - actual execution
@@ -418,7 +434,7 @@ export default function UsersPage() {
         setEditForm({
             name: user.display_name,
             email: user.email,
-            department: "",
+            department: user.department || "",
             role: user.role
         });
     };
@@ -1182,6 +1198,7 @@ export default function UsersPage() {
                                 </th>
                                 <th className="px-6 py-4">用户</th>
                                 <th className="px-6 py-4">角色</th>
+                                <th className="px-6 py-4">部门</th>
                                 <th className="px-6 py-4">状态</th>
                                 <th className="px-6 py-4">上次活跃</th>
                                 <th className="px-6 py-4 text-right">操作</th>
@@ -1210,6 +1227,9 @@ export default function UsersPage() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200 font-medium">{formatAdminUserRoleLabel(user.role)}</Badge>
+                                    </td>
+                                    <td className="px-6 py-4 text-slate-500 font-medium">
+                                        {user.department || "未设置"}
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
