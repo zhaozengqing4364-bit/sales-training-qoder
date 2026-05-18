@@ -339,7 +339,7 @@ describe("HomePage dashboard header", () => {
         expect(screen.queryByText("继续按这 3 步推进训练")).toBeNull();
         expect(screen.queryByText("需要帮助或反馈？")).toBeNull();
         expect(screen.queryByText("徽章墙")).toBeNull();
-        expect(screen.queryByText("首次有效训练")).toBeNull();
+        expect(screen.getByText("首次有效训练")).toBeTruthy();
         expect(screen.queryByText("练习目标")).toBeNull();
         expect(screen.queryByText("自适应难度 dry-run")).toBeNull();
         expect(screen.queryByText("通知与 AI 教练")).toBeNull();
@@ -848,6 +848,43 @@ describe("HomePage dashboard header", () => {
         expect(screen.getByText("本周目标进度只纳入 completed/evaluable 训练，避免把未完成或证据不足记录包装成成就。")).toBeTruthy();
     });
 
+
+    it("renders growth achievements and unread notification summary", async () => {
+        getGrowthMock.mockResolvedValue({
+            achievements: {
+                unlocked: [
+                    {
+                        achievement_id: "ach-1",
+                        code: "first_practice",
+                        name: "首次训练",
+                        description: "完成第一次训练",
+                        icon_key: "sparkles",
+                        unlocked_at: "2026-05-18T00:00:00Z",
+                    },
+                ],
+            },
+            notifications: {
+                items: [
+                    {
+                        notification_id: "n1",
+                        type: "achievement",
+                        title: "新成就",
+                        content: "你解锁了首次训练",
+                        is_read: false,
+                    },
+                ],
+                unread_count: 1,
+            },
+            goal: null,
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(await screen.findByText("成长动态")).toBeTruthy();
+        expect(await screen.findByText("首次训练")).toBeTruthy();
+        expect(await screen.findByText("1 条未读提醒")).toBeTruthy();
+    });
 
     it("renders the main training CTA while stats and history are still loading", async () => {
         getStatsMock.mockReturnValueOnce(new Promise(() => undefined));

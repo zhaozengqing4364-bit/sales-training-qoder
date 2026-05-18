@@ -23,7 +23,7 @@ import { api, getApiErrorMessage } from "@/lib/api/client";
 import { dashboardConfig } from "@/lib/dashboard-config";
 import { debug } from "@/lib/debug";
 import { normalizeInternalRecommendationPath } from "@/lib/recommendation-routing";
-import { DashboardStats, HistorySessionSummary, LearnerOpenIntervention, Recommendation, RetrainingTask, SessionItem, LearningPathNextTask } from "@/lib/api/types";
+import { DashboardStats, GrowthDashboardResponse, HistorySessionSummary, LearnerOpenIntervention, Recommendation, RetrainingTask, SessionItem, LearningPathNextTask } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { persistRetrainingTaskSessionLink } from "@/lib/retraining-task-session";
 import {
@@ -322,6 +322,7 @@ export default function HomePage() {
     const [momentumSessions, setMomentumSessions] = useState<MomentumSessionSource[]>([]);
     const [learningPathNextTask, setLearningPathNextTask] = useState<LearningPathNextTask | null>(null);
     const [isLearningPathLoading, setIsLearningPathLoading] = useState(true);
+    const [growthDashboard, setGrowthDashboard] = useState<GrowthDashboardResponse | null>(null);
     const [dashboardReloadVersion, setDashboardReloadVersion] = useState(0);
 
     useEffect(() => {
@@ -425,6 +426,14 @@ export default function HomePage() {
                 })
                 .catch(() => {
                     if (!cancelled) setMomentumSessions([]);
+                });
+
+            void api.dashboard.getGrowth()
+                .then((value) => {
+                    if (!cancelled) setGrowthDashboard(value);
+                })
+                .catch(() => {
+                    if (!cancelled) setGrowthDashboard(null);
                 });
 
             void api.learningPath.getNextTask()
@@ -746,6 +755,26 @@ export default function HomePage() {
                     </p>
                 </GlassCard>
             </section>
+
+            {growthDashboard && (
+                <GlassCard className="p-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <h2 className="text-base font-semibold text-slate-900">成长动态</h2>
+                            <p className="text-sm text-slate-500">
+                                {growthDashboard.notifications.unread_count > 0
+                                    ? `${growthDashboard.notifications.unread_count} 条未读提醒`
+                                    : "暂无未读提醒"}
+                            </p>
+                        </div>
+                        {growthDashboard.achievements.unlocked[0] && (
+                            <div className="rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
+                                {growthDashboard.achievements.unlocked[0].name}
+                            </div>
+                        )}
+                    </div>
+                </GlassCard>
+            )}
 
             {openIntervention && (
                 <section>
