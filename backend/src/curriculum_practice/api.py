@@ -1005,6 +1005,33 @@ async def update_learning_content(
     return _success(serialized_result.value)
 
 
+@learning_content_router.delete("/{content_id}", response_model=None)
+async def delete_learning_content(
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = LearningContentService(db)
+    content_result = await service.get_content(content_id)
+    if not content_result.is_success or content_result.value is None:
+        return _learning_content_result_error(
+            content_result.fallback,
+            server_error_code="[LEARNING_CONTENT_DELETE_FAILED]",
+            server_message="LearningContent 删除失败。",
+        )
+    delete_result = await service.delete_content(content_result.value)
+    if not delete_result.is_success:
+        return _learning_content_result_error(
+            delete_result.fallback,
+            server_error_code="[LEARNING_CONTENT_DELETE_FAILED]",
+            server_message="LearningContent 删除失败。",
+        )
+    return _success({"deleted": True})
+
+
 @learning_content_router.post("/{content_id}/chapters", response_model=None)
 async def add_learning_chapter(
     content_id: str,

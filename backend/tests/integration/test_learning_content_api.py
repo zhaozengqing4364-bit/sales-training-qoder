@@ -190,6 +190,32 @@ async def test_should_add_update_delete_and_reorder_learning_chapters(
 
 
 @pytest.mark.asyncio
+async def test_should_delete_learning_content_draft(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+) -> None:
+    create_response = await async_client.post(
+        "/api/v1/curriculum/learning-contents",
+        headers=admin_headers,
+        json=_content_payload(),
+    )
+    content_id = create_response.json()["data"]["learning_content_id"]
+
+    delete_response = await async_client.delete(
+        f"/api/v1/curriculum/learning-contents/{content_id}",
+        headers=admin_headers,
+    )
+
+    assert delete_response.status_code == 200, delete_response.json()
+    assert delete_response.json()["data"] == {"deleted": True}
+    read_response = await async_client.get(
+        f"/api/v1/curriculum/learning-contents/{content_id}",
+        headers=admin_headers,
+    )
+    assert read_response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_should_enforce_learning_content_publish_gates(
     async_client: AsyncClient,
     admin_headers: dict[str, str],

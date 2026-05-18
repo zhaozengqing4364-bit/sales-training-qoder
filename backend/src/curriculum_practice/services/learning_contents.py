@@ -112,6 +112,18 @@ class LearningContentService:
             return Result.fail(SERVER_ERROR)
         return Result.ok(content)
 
+    async def delete_content(self, content: LearningContent) -> Result[None]:
+        editable_result = self._editable_result(content)
+        if not editable_result.is_success:
+            return Result.fail(editable_result.fallback or "[LEARNING_CONTENT_NOT_EDITABLE]")
+        try:
+            await self._db.delete(content)
+            await self._db.commit()
+        except SQLAlchemyError:
+            await self._db.rollback()
+            return Result.fail(SERVER_ERROR)
+        return Result.ok(None)
+
     async def add_chapter(
         self,
         content: LearningContent,
