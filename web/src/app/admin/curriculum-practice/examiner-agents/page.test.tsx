@@ -9,6 +9,7 @@ const updateExaminerAgentMock = vi.hoisted(() => vi.fn());
 const publishExaminerAgentMock = vi.hoisted(() => vi.fn());
 const archiveExaminerAgentMock = vi.hoisted(() => vi.fn());
 const simulateExaminerAgentMock = vi.hoisted(() => vi.fn());
+const getActiveScoringRulesetMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
@@ -24,6 +25,7 @@ vi.mock("@/lib/api/client", async () => {
                 publishExaminerAgent: publishExaminerAgentMock,
                 archiveExaminerAgent: archiveExaminerAgentMock,
                 simulateExaminerAgent: simulateExaminerAgentMock,
+                getActiveScoringRuleset: getActiveScoringRulesetMock,
             },
         },
     };
@@ -67,6 +69,17 @@ const simulationResult: import("@/lib/api/types").ExaminerAgentSimulationRespons
     },
 };
 
+const activeRuleset: import("@/lib/api/types").ScoringRulesetRecord = {
+    ruleset_id: "ruleset-active-sales",
+    scenario_type: "sales",
+    version: "sales-active-v1",
+    display_name: "Sales Active Ruleset",
+    status: "published",
+    definition: { scenario_type: "sales" },
+    is_active: true,
+    source: "admin",
+};
+
 describe("AdminExaminerAgentsPage", () => {
     beforeEach(() => {
         listExaminerAgentsMock.mockResolvedValue({ items: [agent], total: 1 });
@@ -75,6 +88,7 @@ describe("AdminExaminerAgentsPage", () => {
         publishExaminerAgentMock.mockReset();
         archiveExaminerAgentMock.mockReset();
         simulateExaminerAgentMock.mockReset();
+        getActiveScoringRulesetMock.mockResolvedValue(activeRuleset);
     });
 
     it("renders ExaminerAgent list from admin API", async () => {
@@ -122,6 +136,30 @@ describe("AdminExaminerAgentsPage", () => {
             );
         });
         expect(screen.getByText(/创建完成：新考试/)).toBeTruthy();
+    });
+
+    it("uses the active sales scoring ruleset for a new ExaminerAgent", async () => {
+        createExaminerAgentMock.mockResolvedValue({
+            ...agent,
+            examiner_agent_id: "ea-active",
+            name: "Active Ruleset Exam",
+            scoring_policy_id: "ruleset-active-sales",
+        });
+
+        render(<AdminExaminerAgentsPage />);
+        await screen.findByText("销售入门考试");
+
+        await waitFor(() => {
+            expect((screen.getByLabelText("评分策略 ID") as HTMLInputElement).value).toBe("ruleset-active-sales");
+        });
+        fireEvent.change(screen.getByLabelText("名称"), { target: { value: "Active Ruleset Exam" } });
+        fireEvent.click(screen.getByRole("button", { name: "创建草稿" }));
+
+        await waitFor(() => {
+            expect(createExaminerAgentMock).toHaveBeenCalledWith(
+                expect.objectContaining({ scoring_policy_id: "ruleset-active-sales" }),
+            );
+        });
     });
 
     it("edits an existing ExaminerAgent from the admin form", async () => {

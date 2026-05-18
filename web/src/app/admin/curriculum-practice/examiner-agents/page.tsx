@@ -48,14 +48,14 @@ function emptyJsonField(): JsonFieldState {
     return { text: "{}", parsed: {}, error: null };
 }
 
-function createEmptyForm(): FormState {
+function createEmptyForm(scoringPolicyId = ""): FormState {
     return {
         name: "",
         description: "",
         question_source_ids_text: "",
         learner_default_level: "intermediate",
         learner_allowed_levels_text: "conservative, beginner, intermediate, advanced",
-        scoring_policy_id: "",
+        scoring_policy_id: scoringPolicyId,
         timeout_max_seconds: 30,
         safety_config: emptyJsonField(),
         prompt_config: emptyJsonField(),
@@ -196,6 +196,7 @@ export default function AdminExaminerAgentsPage() {
     const [busyAgentId, setBusyAgentId] = useState<string | null>(null);
     const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
     const [form, setForm] = useState<FormState>(() => createEmptyForm());
+    const [activeScoringPolicyId, setActiveScoringPolicyId] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("");
     const [simulationResult, setSimulationResult] = useState<ExaminerAgentSimulationResponse | null>(null);
     const [simSampleAnswer, setSimSampleAnswer] = useState("");
@@ -219,6 +220,30 @@ export default function AdminExaminerAgentsPage() {
     useEffect(() => {
         void Promise.resolve().then(loadAgents);
     }, [loadAgents]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadActiveScoringPolicy() {
+            try {
+                const ruleset = await api.admin.getActiveScoringRuleset("sales");
+                const rulesetId = ruleset.ruleset_id ?? "";
+                if (!rulesetId || cancelled) return;
+                setActiveScoringPolicyId(rulesetId);
+                setForm((current) => {
+                    if (editingAgentId || current.scoring_policy_id) return current;
+                    return { ...current, scoring_policy_id: rulesetId };
+                });
+            } catch (err) {
+                debug.warn("[AdminExaminerAgentsPage] failed to load active scoring ruleset", { error: err });
+            }
+        }
+
+        void loadActiveScoringPolicy();
+        return () => {
+            cancelled = true;
+        };
+    }, [editingAgentId]);
 
     const handlePublish = async (record: ExaminerAgentRecord) => {
         setNotice(null);
@@ -349,14 +374,14 @@ export default function AdminExaminerAgentsPage() {
                 );
                 setNotice(`保存完成：${updated.name}`);
                 setEditingAgentId(null);
-                setForm(createEmptyForm());
+                setForm(createEmptyForm(activeScoringPolicyId));
                 return;
             }
 
             const created = await api.admin.createExaminerAgent(buildCreatePayload(form));
             setItems((current) => [created, ...current]);
             setNotice(`创建完成：${created.name}`);
-            setForm(createEmptyForm());
+            setForm(createEmptyForm(activeScoringPolicyId));
         } catch (err) {
             setActionError(`保存失败：${getApiErrorMessage(err)}`);
             debug.warn("[AdminExaminerAgentsPage] failed to save agent", { error: err });
@@ -620,7 +645,7 @@ export default function AdminExaminerAgentsPage() {
                             variant="outline"
                             onClick={() => {
                                 setEditingAgentId(null);
-                                setForm(createEmptyForm());
+                                setForm(createEmptyForm(activeScoringPolicyId));
                             }}
                         >
                             取消编辑
