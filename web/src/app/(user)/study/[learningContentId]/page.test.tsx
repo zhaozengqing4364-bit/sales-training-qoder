@@ -1,15 +1,18 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import StudyPage from "./page";
 
-const { getContentMock, completeChapterMock } = vi.hoisted(() => ({
+const { getContentMock, completeChapterMock, startExamMock, pushMock } = vi.hoisted(() => ({
     getContentMock: vi.fn(),
     completeChapterMock: vi.fn(),
+    startExamMock: vi.fn(),
+    pushMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
     useParams: () => ({ learningContentId: "content-1" }),
+    useRouter: () => ({ push: pushMock }),
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -21,6 +24,7 @@ vi.mock("@/lib/api/client", async () => {
             learnerStudy: {
                 getContent: getContentMock,
                 completeChapter: completeChapterMock,
+                startExam: startExamMock,
             },
         },
     };
@@ -64,6 +68,8 @@ describe("StudyPage", () => {
     beforeEach(() => {
         getContentMock.mockReset();
         completeChapterMock.mockReset();
+        startExamMock.mockReset();
+        pushMock.mockReset();
     });
 
     it("renders loading state", async () => {
@@ -116,6 +122,20 @@ describe("StudyPage", () => {
         expect(screen.getByText("本章已完成")).toBeTruthy();
     });
 
+    it("shows completion errors without changing progress", async () => {
+        getContentMock.mockResolvedValue(makeContent());
+        completeChapterMock.mockRejectedValue(new Error("backend unavailable"));
+
+        render(<StudyPage />);
+
+        await screen.findByRole("button", { name: /标记完成/ });
+        fireEvent.click(screen.getByRole("button", { name: /标记完成/ }));
+
+        expect((await screen.findByRole("alert")).textContent).toMatch(/标记完成失败/);
+        expect(screen.getByText("阅读进度 0/2")).toBeTruthy();
+        expect(screen.queryByText("本章已完成")).toBeNull();
+    });
+
     it("renders mobile chapter selector with select element", async () => {
         getContentMock.mockResolvedValue(makeContent());
         render(<StudyPage />);
@@ -127,7 +147,7 @@ describe("StudyPage", () => {
         expect(options).toHaveLength(2);
     });
 
-    it("shows completed state with completion CTA disabled", async () => {
+    it("starts an AI exam when learning is completed", async () => {
         const completedContent = {
             ...makeContent(),
             progress: {
@@ -140,11 +160,17 @@ describe("StudyPage", () => {
             },
         };
         getContentMock.mockResolvedValue(completedContent);
+        startExamMock.mockResolvedValue({ session_id: "exam-session-1", examiner_agent_id: "examiner-1" });
         render(<StudyPage />);
 
         expect(await screen.findByText("学习完成")).toBeTruthy();
-        expect(screen.getByText("你已阅读完所有章节。考试功能即将上线，敬请期待。")).toBeTruthy();
-        expect(screen.getByRole("button", { name: /即将上线/ })).toBeTruthy();
+        expect(screen.getByText("你已阅读完所有章节。现在可以进入 AI 考官考核。")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: /开始 AI 考核/ }));
+
+        expect(startExamMock).toHaveBeenCalledWith("content-1");
+        await waitFor(() => {
+            expect(pushMock).toHaveBeenCalledWith("/exam/exam-session-1");
+        });
     });
 
     it("renders empty state when content has no chapters", async () => {

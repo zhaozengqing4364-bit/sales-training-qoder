@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { BookOpen, CheckCircle2, RefreshCcw } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
@@ -56,14 +56,18 @@ function ChapterSidebar({
 
 export default function StudyPage() {
     const { learningContentId } = useParams<{ learningContentId: string }>();
+    const router = useRouter();
 
     const [content, setContent] = useState<LearnerStudyContent | null>(null);
     const [progress, setProgress] = useState<LearnerStudyProgress | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [completeError, setCompleteError] = useState<string | null>(null);
+    const [examError, setExamError] = useState<string | null>(null);
 
     const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
     const [completingId, setCompletingId] = useState<string | null>(null);
+    const [isStartingExam, setIsStartingExam] = useState(false);
 
     const sortedChapters = content?.chapters
         ? [...content.chapters].sort((a, b) => a.order_index - b.order_index)
@@ -98,13 +102,27 @@ export default function StudyPage() {
 
     const handleCompleteChapter = async (chapterId: string) => {
         setCompletingId(chapterId);
+        setCompleteError(null);
         try {
             const result = await api.learnerStudy.completeChapter(learningContentId, chapterId);
             setProgress(result.progress);
-        } catch {
-            // ignore completion errors — progress stays intact
+        } catch (err) {
+            setCompleteError(`标记完成失败：${getApiErrorMessage(err)}`);
         } finally {
             setCompletingId(null);
+        }
+    };
+
+    const handleStartExam = async () => {
+        setIsStartingExam(true);
+        setExamError(null);
+        try {
+            const result = await api.learnerStudy.startExam(learningContentId);
+            router.push(`/exam/${result.session_id}`);
+        } catch (err) {
+            setExamError(`启动考试失败：${getApiErrorMessage(err)}`);
+        } finally {
+            setIsStartingExam(false);
         }
     };
 
@@ -245,6 +263,12 @@ export default function StudyPage() {
                                 {selectedChapter.content}
                             </div>
 
+                            {completeError ? (
+                                <div role="alert" className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                    {completeError}
+                                </div>
+                            ) : null}
+
                             <div className="mt-6 flex items-center gap-3 border-t border-slate-100 pt-4">
                                 {completedIds.has(selectedChapter.chapter_id) ? (
                                     <span className="text-sm text-slate-400">本章已完成</span>
@@ -273,11 +297,21 @@ export default function StudyPage() {
                                 <div>
                                     <h3 className="text-lg font-bold text-emerald-800">学习完成</h3>
                                     <p className="text-sm text-emerald-600">
-                                        你已阅读完所有章节。考试功能即将上线，敬请期待。
+                                        你已阅读完所有章节。现在可以进入 AI 考官考核。
                                     </p>
+                                    {examError ? (
+                                        <div role="alert" className="mt-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                            {examError}
+                                        </div>
+                                    ) : null}
                                 </div>
-                                <Button disabled className="rounded-full cursor-not-allowed opacity-60">
-                                    即将上线
+                                <Button
+                                    onClick={() => void handleStartExam()}
+                                    disabled={isStartingExam}
+                                    isLoading={isStartingExam}
+                                    className="rounded-full"
+                                >
+                                    开始 AI 考核
                                 </Button>
                             </div>
                         </GlassCard>
