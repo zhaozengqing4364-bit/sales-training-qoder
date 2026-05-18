@@ -620,6 +620,41 @@ async def test_env_fallback_policy_defaults_to_latest_realtime_model(
 
 
 @pytest.mark.asyncio
+async def test_resolve_effective_policy_uses_step_audio_2_default_profile(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("STEPFUN_REALTIME_MODEL", raising=False)
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="系统默认 Realtime",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+        input_audio_format="pcm16",
+        output_audio_format="pcm16",
+        output_sample_rate=24000,
+        turn_detection=None,
+        tool_policy={},
+    )
+    test_db.add(profile)
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy()
+
+    assert effective["source"]["runtime_profile"] == "system_default"
+    assert effective["model_name"] == "step-audio-2"
+    assert effective["voice_mode"] == "stepfun_realtime"
+    assert effective["input_audio_format"] == "pcm16"
+    assert effective["output_audio_format"] == "pcm16"
+    assert effective["output_sample_rate"] == 24000
+
+
+@pytest.mark.asyncio
 async def test_resolve_effective_policy_defaults_strict_audit_when_persona_requires_kb_without_mode(
     test_db: AsyncSession,
 ):
