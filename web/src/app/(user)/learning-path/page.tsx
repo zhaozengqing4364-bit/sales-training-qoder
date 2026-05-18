@@ -47,7 +47,7 @@ function formatCompletionPolicy(policy: Record<string, unknown>): string {
 }
 
 function nextTaskHref(nextTask: LearningPathNextTask): string {
-    if (nextTask.learning_content_id) {
+    if (nextTask.primary_cta === "continue learning" && nextTask.learning_content_id) {
         return `/study/${encodeURIComponent(nextTask.learning_content_id)}`;
     }
     return "/training";

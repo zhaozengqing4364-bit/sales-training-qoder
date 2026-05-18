@@ -159,6 +159,32 @@ describe("LearningPathPage", () => {
         );
     });
 
+    it("routes completed study tasks back to training instead of the study page", async () => {
+        getMineMock.mockResolvedValueOnce({
+            user_id: "learner-1",
+            path_type: "role_default",
+            recommended_template_ids: [],
+            recommendation_reasons: [],
+            next_task: {
+                title: "开始考试：预算异议处理",
+                state: "completed",
+                primary_cta: "start exam",
+                reason: "学习内容已完成，进入考试训练。",
+                estimated_duration_minutes: 15,
+                failure_reason: null,
+                retry_action: null,
+                learning_content_id: "content-lesson-1",
+            },
+            stages: [],
+            generated_at: "2026-05-13T00:00:00Z",
+        });
+
+        render(<LearningPathPage />);
+
+        expect(await screen.findByText("开始考试：预算异议处理")).toBeTruthy();
+        expect(screen.getByRole("link", { name: /start exam/ }).getAttribute("href")).toBe("/training");
+    });
+
     it("renders pending review placeholder for certification path", async () => {
         render(<LearningPathPage />);
 
