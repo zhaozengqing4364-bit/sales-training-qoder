@@ -135,6 +135,25 @@ describe("learner study api client", () => {
         expect(result.progress.state).toBe("in_progress");
     });
 
+    it("starts an AI exam for completed study content", async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: { session_id: "exam-session-1", examiner_agent_id: "examiner-1" },
+            }),
+        });
+
+        const result = await api.learnerStudy.startExam("content-1");
+
+        expect(result.session_id).toBe("exam-session-1");
+        expect(result.examiner_agent_id).toBe("examiner-1");
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/curriculum-practice/study/learning-contents/content-1/start-exam"),
+            expect.objectContaining({ method: "POST", credentials: "include" }),
+        );
+    });
+
     it("encodes special characters in content and chapter IDs", async () => {
         fetchMock.mockResolvedValueOnce({
             ok: true,

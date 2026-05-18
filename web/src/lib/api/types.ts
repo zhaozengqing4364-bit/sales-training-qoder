@@ -3950,6 +3950,23 @@ export interface LearnerStudyChapterCompletionResponse {
     progress: LearnerStudyProgress;
 }
 
+export interface LearnerStudyStartExamResponse {
+    session_id: string;
+    examiner_agent_id: string;
+}
+
+export type LearnerLevel = "conservative" | "beginner" | "intermediate" | "advanced";
+
+export interface LearnerProfile {
+    user_id: string;
+    self_assessed_level?: LearnerLevel | null;
+    admin_overridden_level?: LearnerLevel | null;
+    effective_level: LearnerLevel;
+    self_assessed_at?: string | null;
+    overridden_by?: string | null;
+    overridden_at?: string | null;
+}
+
 // TestBank types (Issue #69)
 export interface AssetRef {
     asset_type: string;

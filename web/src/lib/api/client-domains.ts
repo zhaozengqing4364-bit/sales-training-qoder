@@ -60,6 +60,7 @@ import type {
     FeatureFlags,
     LearnerStudyContent,
     LearnerStudyChapterCompletionResponse,
+    LearnerStudyStartExamResponse,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -387,6 +388,13 @@ export function createLearnerStudyDomain({ request }: LearnerStudyDomainDependen
         completeChapter: async (contentId: string, chapterId: string) => {
             return request<LearnerStudyChapterCompletionResponse>(
                 `/curriculum-practice/study/learning-contents/${encodeURIComponent(contentId)}/chapters/${encodeURIComponent(chapterId)}/complete`,
+                { method: "POST" },
+            );
+        },
+
+        startExam: async (contentId: string) => {
+            return request<LearnerStudyStartExamResponse>(
+                `/curriculum-practice/study/learning-contents/${encodeURIComponent(contentId)}/start-exam`,
                 { method: "POST" },
             );
         },

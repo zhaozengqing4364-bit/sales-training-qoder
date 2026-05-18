@@ -205,6 +205,8 @@ import {
     ExaminerAgentSimulationResponse,
     ExaminerAgentSimulationRequest,
     ExaminerAgentErrorDetails,
+    LearnerLevel,
+    LearnerProfile,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -3327,6 +3329,22 @@ export const api = {
             if (params?.granularity) searchParams.set("granularity", params.granularity);
 
             return apiFetch<UserProgressResponse>(`/admin/users/${userId}/progress?${searchParams}`);
+        },
+
+        getLearnerProfile: async (userId: string) => {
+            return apiFetch<LearnerProfile>(
+                `/admin/curriculum-practice/learner-profiles/${encodeURIComponent(userId)}`,
+            );
+        },
+
+        overrideLearnerProfile: async (userId: string, level: LearnerLevel) => {
+            return apiFetch<LearnerProfile>(
+                `/admin/curriculum-practice/learner-profiles/${encodeURIComponent(userId)}/override`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify({ level }),
+                },
+            );
         },
 
         listManagerInterventions: async (userId: string, params?: { limit?: number }) => {
