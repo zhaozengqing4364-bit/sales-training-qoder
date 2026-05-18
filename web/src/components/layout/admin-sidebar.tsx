@@ -123,6 +123,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
             { label: "课程训练模板", icon: Target, href: "/admin/curriculum-practice/templates" },
             { label: "学习内容管理", icon: BookOpen, href: "/admin/learning-contents" },
             { label: "题库管理", icon: FileText, href: "/admin/test-bank" },
+            { label: "AI 考官管理", icon: UserRoundCog, href: "/admin/curriculum-practice/examiner-agents" },
         ],
     },
     {

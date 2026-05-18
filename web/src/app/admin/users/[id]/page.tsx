@@ -5,6 +5,8 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
+    LearnerLevel,
+    LearnerProfile,
     ManagerInterventionItem,
     ManagerInterventionResultItem,
     SupportRuntimeFaultItem,
@@ -65,6 +67,17 @@ const INTERVENTION_ISSUE_FAMILY_OPTIONS: Array<{ value: string; label: string }>
     { value: "value_expression", label: "价值表达重点" },
     { value: "structure_gap", label: "结构表达重点" },
 ];
+
+const LEARNER_LEVEL_OPTIONS: Array<{ value: LearnerLevel; label: string; description: string }> = [
+    { value: "conservative", label: "保守型", description: "节奏更慢，先补基础安全边界" },
+    { value: "beginner", label: "初阶", description: "适合刚开始学习标准流程的学员" },
+    { value: "intermediate", label: "进阶", description: "可进入更复杂的问答和演练" },
+    { value: "advanced", label: "高阶", description: "适合高压力和综合场景考核" },
+];
+
+function formatLearnerLevel(level?: LearnerLevel | null): string {
+    return LEARNER_LEVEL_OPTIONS.find((option) => option.value === level)?.label ?? "未设置";
+}
 
 const INTERVENTION_ISSUE_FAMILY_LABELS: Record<string, string> = {
     evidence_gap: "主管重点 · 证据补强",
@@ -134,6 +147,8 @@ export default function UserDetailPage() {
     const [progress, setProgress] = useState<UserProgressResponse | null>(null);
     const [runtimeFaults, setRuntimeFaults] = useState<SupportRuntimeFaultItem[]>([]);
     const [interventions, setInterventions] = useState(EMPTY_ADMIN_MANAGER_INTERVENTIONS);
+    const [learnerProfile, setLearnerProfile] = useState<LearnerProfile | null>(null);
+    const [learnerLevelOverride, setLearnerLevelOverride] = useState<LearnerLevel>("conservative");
     const [interventionIssueFamily, setInterventionIssueFamily] = useState("evidence_gap");
     const [interventionNote, setInterventionNote] = useState("");
     const [isLoading, setIsLoading] = useState(true);
@@ -142,9 +157,12 @@ export default function UserDetailPage() {
     const [progressError, setProgressError] = useState<string | null>(null);
     const [interventionError, setInterventionError] = useState<string | null>(null);
     const [interventionNotice, setInterventionNotice] = useState<string | null>(null);
+    const [learnerProfileError, setLearnerProfileError] = useState<string | null>(null);
+    const [learnerProfileNotice, setLearnerProfileNotice] = useState<string | null>(null);
     const [progressState, setProgressState] = useState<AdminProgressLoadState>("loading");
     const [sessionsPage, setSessionsPage] = useState(1);
     const [isSavingIntervention, setIsSavingIntervention] = useState(false);
+    const [isSavingLearnerProfile, setIsSavingLearnerProfile] = useState(false);
     const [remindingInterventionId, setRemindingInterventionId] = useState<string | null>(null);
 
     const drillInContext = readAdminUserDrillInContext(searchParams);
@@ -164,14 +182,16 @@ export default function UserDetailPage() {
         setSessionsError(null);
         setProgressError(null);
         setInterventionError(null);
+        setLearnerProfileError(null);
         setProgressState("loading");
 
-        const [statsResult, sessionsResult, progressResult, interventionsResult, runtimeFaultsResult] = await Promise.allSettled([
+        const [statsResult, sessionsResult, progressResult, interventionsResult, runtimeFaultsResult, learnerProfileResult] = await Promise.allSettled([
             api.admin.getUserStats(userId, { time_range: timeRange }),
             api.admin.getUserSessions(userId, { page: 1, page_size: 10 }),
             api.admin.getUserProgress(userId, { time_range: timeRange }),
             api.admin.listManagerInterventions(userId, { limit: 10 }),
             api.supportRuntime.getFaults({ limit: 100 }),
+            api.admin.getLearnerProfile(userId),
         ]);
 
         if (statsResult.status === "fulfilled") {
@@ -209,6 +229,14 @@ export default function UserDetailPage() {
             setRuntimeFaults(runtimeFaultsResult.value.items || []);
         } else {
             setRuntimeFaults([]);
+        }
+
+        if (learnerProfileResult.status === "fulfilled") {
+            setLearnerProfile(learnerProfileResult.value);
+            setLearnerLevelOverride(learnerProfileResult.value.admin_overridden_level ?? learnerProfileResult.value.effective_level);
+        } else {
+            setLearnerProfile(null);
+            setLearnerProfileError(`学员分层加载失败：${getApiErrorMessage(learnerProfileResult.reason)}`);
         }
 
         setIsLoading(false);
@@ -292,6 +320,22 @@ export default function UserDetailPage() {
             setInterventionError(`主管提醒记录失败：${getApiErrorMessage(err)}`);
         } finally {
             setRemindingInterventionId(null);
+        }
+    };
+
+    const handleSaveLearnerProfileOverride = async () => {
+        setIsSavingLearnerProfile(true);
+        setLearnerProfileError(null);
+        setLearnerProfileNotice(null);
+        try {
+            const updated = await api.admin.overrideLearnerProfile(userId, learnerLevelOverride);
+            setLearnerProfile(updated);
+            setLearnerLevelOverride(updated.admin_overridden_level ?? updated.effective_level);
+            setLearnerProfileNotice("学员分层覆盖已保存，后续学习路径与考核将按该级别编排。");
+        } catch (err) {
+            setLearnerProfileError(`学员分层保存失败：${getApiErrorMessage(err)}`);
+        } finally {
+            setIsSavingLearnerProfile(false);
         }
     };
 
@@ -513,6 +557,63 @@ export default function UserDetailPage() {
                     </p>
                 </GlassCard>
             </div>
+
+            <GlassCard className="p-6 border border-blue-100 bg-blue-50/50">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="lg:max-w-xl">
+                        <h2 className="text-lg font-bold text-slate-900 text-balance">学员分层与路径编排</h2>
+                        <p className="mt-2 text-sm text-slate-500 text-pretty">
+                            管理员可覆盖学员等级，学习路径、AI 考官和后续训练阶段会使用当前生效等级。
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium">
+                            <span className="rounded-full bg-white px-3 py-1 text-blue-700">
+                                生效等级：{formatLearnerLevel(learnerProfile?.effective_level)}
+                            </span>
+                            <span className="rounded-full bg-white px-3 py-1 text-slate-600">
+                                自评：{formatLearnerLevel(learnerProfile?.self_assessed_level)}
+                            </span>
+                            <span className="rounded-full bg-white px-3 py-1 text-slate-600">
+                                管理覆盖：{formatLearnerLevel(learnerProfile?.admin_overridden_level)}
+                            </span>
+                        </div>
+                        {learnerProfileNotice ? (
+                            <div role="status" className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                                {learnerProfileNotice}
+                            </div>
+                        ) : null}
+                        {learnerProfileError ? (
+                            <div role="alert" className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                {learnerProfileError}
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div className="w-full rounded-2xl border border-blue-100 bg-white p-4 lg:max-w-md">
+                        <label htmlFor="learner-level-override" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            管理员覆盖等级
+                        </label>
+                        <select
+                            id="learner-level-override"
+                            value={learnerLevelOverride}
+                            onChange={(event) => setLearnerLevelOverride(event.target.value as LearnerLevel)}
+                            className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                        >
+                            {LEARNER_LEVEL_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label} · {option.description}
+                                </option>
+                            ))}
+                        </select>
+                        <Button
+                            onClick={() => void handleSaveLearnerProfileOverride()}
+                            disabled={isSavingLearnerProfile}
+                            className="mt-4 w-full rounded-full"
+                        >
+                            {isSavingLearnerProfile ? "保存中..." : "保存分层覆盖"}
+                        </Button>
+                    </div>
+                </div>
+            </GlassCard>
 
             {drillInBanner ? (
                 <GlassCard className="p-6 border border-indigo-100 bg-indigo-50/70">

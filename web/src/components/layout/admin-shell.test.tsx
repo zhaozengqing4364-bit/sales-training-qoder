@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -111,5 +111,20 @@ describe("AdminShell auth and role routing", () => {
             expect(replaceMock).toHaveBeenCalledWith("/");
         });
         expect(sessionExpiredMock).not.toHaveBeenCalled();
+    });
+
+    it("exposes the AI examiner management entry in the admin sidebar", () => {
+        useCurrentUserMock.mockReturnValue({ data: currentUser, error: null });
+        usePathnameMock.mockReturnValue("/admin/curriculum-practice/examiner-agents");
+
+        render(
+            <AdminShell currentUser={currentUser}>
+                <div>admin content</div>
+            </AdminShell>,
+        );
+
+        const examinerLinks = screen.getAllByRole("link", { name: /AI 考官管理/ });
+        expect(examinerLinks.some((link) => link.getAttribute("href") === "/admin/curriculum-practice/examiner-agents"))
+            .toBe(true);
     });
 });

@@ -19,6 +19,8 @@ const {
     getUserStatsMock,
     getUserSessionsMock,
     getUserProgressMock,
+    getLearnerProfileMock,
+    overrideLearnerProfileMock,
     listManagerInterventionsMock,
     createManagerInterventionMock,
     remindManagerInterventionMock,
@@ -29,6 +31,8 @@ const {
     getUserStatsMock: vi.fn(),
     getUserSessionsMock: vi.fn(),
     getUserProgressMock: vi.fn(),
+    getLearnerProfileMock: vi.fn(),
+    overrideLearnerProfileMock: vi.fn(),
     listManagerInterventionsMock: vi.fn(),
     createManagerInterventionMock: vi.fn(),
     remindManagerInterventionMock: vi.fn(),
@@ -74,6 +78,8 @@ vi.mock("@/lib/api/client", async () => {
                 getUserStats: getUserStatsMock,
                 getUserSessions: getUserSessionsMock,
                 getUserProgress: getUserProgressMock,
+                getLearnerProfile: getLearnerProfileMock,
+                overrideLearnerProfile: overrideLearnerProfileMock,
                 listManagerInterventions: listManagerInterventionsMock,
                 createManagerIntervention: createManagerInterventionMock,
                 remindManagerIntervention: remindManagerInterventionMock,
@@ -388,6 +394,8 @@ describe("UserDetailPage", () => {
         getUserStatsMock.mockReset();
         getUserSessionsMock.mockReset();
         getUserProgressMock.mockReset();
+        getLearnerProfileMock.mockReset();
+        overrideLearnerProfileMock.mockReset();
         listManagerInterventionsMock.mockReset();
         createManagerInterventionMock.mockReset();
         remindManagerInterventionMock.mockReset();
@@ -397,6 +405,24 @@ describe("UserDetailPage", () => {
         getUserStatsMock.mockResolvedValue(baseStatsResponse);
         getUserSessionsMock.mockResolvedValue(baseSessionsResponse);
         getUserProgressMock.mockResolvedValue(richProgressResponse);
+        getLearnerProfileMock.mockResolvedValue({
+            user_id: "user-1",
+            self_assessed_level: "beginner",
+            admin_overridden_level: null,
+            effective_level: "beginner",
+            self_assessed_at: "2026-03-23T08:00:00Z",
+            overridden_by: null,
+            overridden_at: null,
+        });
+        overrideLearnerProfileMock.mockResolvedValue({
+            user_id: "user-1",
+            self_assessed_level: "beginner",
+            admin_overridden_level: "advanced",
+            effective_level: "advanced",
+            self_assessed_at: "2026-03-23T08:00:00Z",
+            overridden_by: "admin-1",
+            overridden_at: "2026-03-24T09:00:00Z",
+        });
         listManagerInterventionsMock.mockResolvedValue(baseInterventionsResponse);
         getSupportRuntimeFaultsMock.mockResolvedValue(supportRuntimeFaultsResponse);
         createManagerInterventionMock.mockResolvedValue({
@@ -620,6 +646,27 @@ describe("UserDetailPage", () => {
 
         expect(await screen.findByText("主管重点已记录，可继续发送提醒。")).toBeTruthy();
         expect(screen.getByText("先补 ROI 与客户案例证据。")).toBeTruthy();
+    });
+
+    it("lets admins override learner level on the user detail page", async () => {
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("学员分层与路径编排")).toBeTruthy();
+        expect(screen.getByText("生效等级：初阶")).toBeTruthy();
+
+        const levelSelect = screen.getByLabelText("管理员覆盖等级") as HTMLSelectElement;
+        expect(levelSelect.value).toBe("beginner");
+
+        fireEvent.change(levelSelect, { target: { value: "advanced" } });
+        fireEvent.click(screen.getByRole("button", { name: "保存分层覆盖" }));
+
+        await waitFor(() => {
+            expect(overrideLearnerProfileMock).toHaveBeenCalledWith("user-1", "advanced");
+        });
+
+        expect(await screen.findByText("学员分层覆盖已保存，后续学习路径与考核将按该级别编排。")).toBeTruthy();
+        expect(screen.getByText("生效等级：高阶")).toBeTruthy();
+        expect(screen.getByText("管理覆盖：高阶")).toBeTruthy();
     });
 
     it("shows the latest intervention result with a report drill-in on the current intervention card", async () => {
