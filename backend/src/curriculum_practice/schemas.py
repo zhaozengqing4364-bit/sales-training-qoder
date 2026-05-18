@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import Generic, Literal, Protocol, TypeVar
+from typing import Any, Generic, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -777,7 +777,7 @@ class PracticeTemplateResponse(BaseModel):
     examiner_agent_id: str | None = None
     target_learner_level: str | None = None
     timeout_config: dict[str, object] | None = None
-    curriculum_plan: CurriculumPlanSchema | None = None
+    curriculum_plan: dict[str, Any] | None = None
     max_stage_duration_seconds: int | None = None
     status: str
     version: int

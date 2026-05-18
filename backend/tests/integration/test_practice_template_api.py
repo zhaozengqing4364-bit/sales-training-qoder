@@ -13,6 +13,7 @@ from common.auth.service import create_access_token
 from common.db.models import Base, ScoringRuleset, User
 from common.db.session import get_db
 from common.knowledge.models import KnowledgeBase
+from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.services.content_assets import (
     case_item_content_hash,
     role_profile_content_hash,
@@ -450,6 +451,49 @@ async def test_should_roundtrip_practice_template_runtime_bindings(
     assert read_response.status_code == 200
     for key, value in bindings.items():
         assert read_response.json()["data"][key] == value
+
+
+@pytest.mark.asyncio
+async def test_should_list_template_with_legacy_curriculum_plan_shape(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    admin_headers: dict[str, str],
+) -> None:
+    legacy_plan = {
+        "version": 1,
+        "stages": [
+            {
+                "stage_id": "opening",
+                "goal": "识别客户预算异议",
+            }
+        ],
+    }
+    template = PracticeTemplate(
+        name="旧版课程模板",
+        description="旧版 smoke seed 数据",
+        scenario_type="sales",
+        mode="customer_roleplay",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        runtime_profile_id="runtime-1",
+        voice_mode="stepfun_realtime",
+        scoring_ruleset_id="ruleset-1",
+        knowledge_base_refs=[],
+        curriculum_plan=legacy_plan,
+        status="published",
+    )
+    db_session.add(template)
+    await db_session.commit()
+
+    list_response = await async_client.get(
+        "/api/v1/admin/curriculum-practice/templates",
+        headers=admin_headers,
+    )
+
+    assert list_response.status_code == 200
+    listed = list_response.json()["data"]["items"][0]
+    assert listed["template_id"] == template.template_id
+    assert listed["curriculum_plan"] == legacy_plan
 
 
 @pytest.mark.asyncio
