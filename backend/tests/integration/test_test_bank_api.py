@@ -265,6 +265,34 @@ async def test_should_create_edit_filter_publish_archive_question_and_keep_snaps
 
 
 @pytest.mark.asyncio
+async def test_should_publish_question_when_dimensions_are_submitted_separately(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+) -> None:
+    category_id = await _create_category(async_client, admin_headers)
+    create_response = await async_client.post(
+        "/api/v1/curriculum/test-bank/questions",
+        headers=admin_headers,
+        json=_question_payload(category_id)
+        | {
+            "scoring_criteria": {"rubric": "按澄清度评分"},
+            "scoring_dimensions": ["clarity"],
+        },
+    )
+    assert create_response.status_code == 200, create_response.json()
+    question = create_response.json()["data"]
+    assert question["scoring_criteria"]["dimensions"] == ["clarity"]
+
+    publish_response = await async_client.post(
+        f"/api/v1/curriculum/test-bank/questions/{question['question_id']}/publish",
+        headers=admin_headers,
+    )
+
+    assert publish_response.status_code == 200, publish_response.json()
+    assert publish_response.json()["data"]["status"] == "published"
+
+
+@pytest.mark.asyncio
 async def test_should_reject_question_publish_when_required_gates_fail(
     async_client: AsyncClient,
     admin_headers: dict[str, str],

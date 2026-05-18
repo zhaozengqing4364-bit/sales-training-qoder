@@ -160,8 +160,12 @@ class TestBankService:
         category_result = await self.get_category(payload.category_id)
         if not category_result.is_success:
             return Result.fail(category_result.fallback or "[QUESTION_CATEGORY_NOT_FOUND]")
+        data = payload.model_dump()
+        data["scoring_criteria"] = _criteria_with_dimensions(
+            data.get("scoring_criteria"), data.get("scoring_dimensions")
+        )
         question = QuestionItem(
-            **payload.model_dump(), created_by=actor_id, updated_by=actor_id
+            **data, created_by=actor_id, updated_by=actor_id
         )
         self._db.add(question)
         try:
@@ -187,6 +191,11 @@ class TestBankService:
             category_result = await self.get_category(str(category_id))
             if not category_result.is_success:
                 return Result.fail(category_result.fallback or "[QUESTION_CATEGORY_NOT_FOUND]")
+        if "scoring_dimensions" in data:
+            data["scoring_criteria"] = _criteria_with_dimensions(
+                data.get("scoring_criteria", question.scoring_criteria),
+                data.get("scoring_dimensions"),
+            )
         for field, value in data.items():
             setattr(question, field, value)
         question.updated_by = actor_id
@@ -389,6 +398,18 @@ def _publish_decision(question: QuestionItem) -> PublishGateDecision:
             )
         )
     return PublishGateDecision(can_publish=not results, results=results)
+
+
+def _criteria_with_dimensions(
+    scoring_criteria: object, scoring_dimensions: object
+) -> dict[str, Any]:
+    criteria = dict(scoring_criteria) if isinstance(scoring_criteria, dict) else {}
+    if not isinstance(scoring_dimensions, list) or not scoring_dimensions:
+        return criteria
+    criteria_dimensions = criteria.get("dimensions")
+    if not isinstance(criteria_dimensions, list) or not criteria_dimensions:
+        criteria["dimensions"] = list(scoring_dimensions)
+    return criteria
 
 
 def _gate(gate_name: str, reason_code: str, message: str) -> GateResult:
