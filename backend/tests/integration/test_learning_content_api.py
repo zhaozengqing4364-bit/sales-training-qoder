@@ -216,6 +216,37 @@ async def test_should_delete_learning_content_draft(
 
 
 @pytest.mark.asyncio
+async def test_should_reject_delete_for_published_learning_content(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+) -> None:
+    create_response = await async_client.post(
+        "/api/v1/curriculum/learning-contents",
+        headers=admin_headers,
+        json=_content_payload(),
+    )
+    content_id = create_response.json()["data"]["learning_content_id"]
+    await async_client.post(
+        f"/api/v1/curriculum/learning-contents/{content_id}/chapters",
+        headers=admin_headers,
+        json={"title": "第一章", "content": "建立信任", "order_index": 1},
+    )
+    publish_response = await async_client.post(
+        f"/api/v1/curriculum/learning-contents/{content_id}/publish",
+        headers=admin_headers,
+    )
+    assert publish_response.status_code == 200, publish_response.json()
+
+    delete_response = await async_client.delete(
+        f"/api/v1/curriculum/learning-contents/{content_id}",
+        headers=admin_headers,
+    )
+
+    assert delete_response.status_code == 409
+    assert delete_response.json()["error"] == "[LEARNING_CONTENT_NOT_EDITABLE]"
+
+
+@pytest.mark.asyncio
 async def test_should_enforce_learning_content_publish_gates(
     async_client: AsyncClient,
     admin_headers: dict[str, str],

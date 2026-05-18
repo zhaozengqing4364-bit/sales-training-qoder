@@ -225,14 +225,18 @@ export default function AdminLearningContentsPage() {
                                             </td>
                                             <td className="px-6 py-4 font-medium text-slate-700">v{item.version}</td>
                                             <td className="px-6 py-4">
-                                                <Button
-                                                    variant="outline"
-                                                    className="rounded-full text-red-600"
-                                                    onClick={() => void handleDelete(item)}
-                                                >
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    删除
-                                                </Button>
+                                                {item.status === "draft" ? (
+                                                    <Button
+                                                        variant="outline"
+                                                        className="rounded-full text-red-600"
+                                                        onClick={() => void handleDelete(item)}
+                                                    >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        删除
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-xs font-medium text-slate-400">仅草稿可删除</span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}

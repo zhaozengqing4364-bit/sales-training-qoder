@@ -134,8 +134,8 @@ describe("AdminLearningContentsPage", () => {
             expect(screen.getByText("成交推进")).toBeTruthy();
         });
 
-        expect(screen.getByText(/草稿/)).toBeTruthy();
-        expect(screen.getByText(/已发布/)).toBeTruthy();
+        expect(screen.getByText("草稿")).toBeTruthy();
+        expect(screen.getByText("已发布")).toBeTruthy();
         expect(screen.getByText(/curriculum-team/)).toBeTruthy();
         expect(screen.getByText(/sales-team/)).toBeTruthy();
         expect(screen.getByText(/manual/)).toBeTruthy();
@@ -193,5 +193,18 @@ describe("AdminLearningContentsPage", () => {
         });
         expect(screen.queryByText("销售异议处理")).toBeNull();
         expect(screen.getByText(/删除完成/)).toBeTruthy();
+    });
+
+    it("does not expose delete action for published learning content", async () => {
+        listMock.mockResolvedValue({
+            items: [makeLearningContent({ status: "published" })],
+            total: 1,
+        });
+        render(<AdminLearningContentsPage />);
+
+        await screen.findByText("销售异议处理");
+
+        expect(screen.queryByRole("button", { name: "删除" })).toBeNull();
+        expect(screen.getByText("仅草稿可删除")).toBeTruthy();
     });
 });

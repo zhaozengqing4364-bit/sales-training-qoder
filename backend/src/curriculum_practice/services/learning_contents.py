@@ -116,6 +116,8 @@ class LearningContentService:
         editable_result = self._editable_result(content)
         if not editable_result.is_success:
             return Result.fail(editable_result.fallback or "[LEARNING_CONTENT_NOT_EDITABLE]")
+        if content.status != "draft":
+            return Result.fail("[LEARNING_CONTENT_NOT_EDITABLE]")
         try:
             await self._db.delete(content)
             await self._db.commit()
