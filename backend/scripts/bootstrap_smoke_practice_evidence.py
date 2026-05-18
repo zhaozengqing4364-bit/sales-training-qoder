@@ -317,7 +317,9 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
         )
         session = session_result.scalars().first()
 
-        session_start = now - timedelta(minutes=6)
+        # Keep the deterministic smoke record visible on dashboard even when a local
+        # developer database contains newer ad-hoc sessions from previous runs.
+        session_start = now + timedelta(minutes=1)
 
         if session is None:
             session = PracticeSession(
@@ -333,7 +335,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
         stage_summaries = _make_stage_summaries()
         session.status = SessionStatus.COMPLETED.value
         session.start_time = session_start
-        session.end_time = now
+        session.end_time = session_start + timedelta(minutes=6)
         session.total_duration_seconds = 6 * 60
         session.voice_mode = "stepfun_realtime"
         session.practice_template_id = template_id
@@ -497,7 +499,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
             session_id=session.session_id,
             status="succeeded",
             started_at=session_start + timedelta(minutes=6),
-            finished_at=now,
+                    finished_at=session_start + timedelta(minutes=6),
             input_evidence_reference={"source": "smoke_practice_evidence"},
             result_payload={"overall_score": 84.0, "dimension_scores": dimension_scores},
             result_summary="Smoke report snapshot for curriculum analytics and report QA.",
@@ -522,7 +524,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
                         "score_basis": "smoke_seed",
                         "source": "smoke_seed",
                     },
-                    created_at=now,
+                    created_at=session_start + timedelta(minutes=6),
                 ),
                 TrainingReportSnapshot(
                     snapshot_id=str(uuid.uuid4()),
@@ -538,7 +540,7 @@ async def bootstrap_smoke_practice_evidence(*, email: str) -> tuple[str, str, st
                     ruleset_version="smoke-v1",
                     score_basis="smoke_seed",
                     evidence_completeness={"conversation": True, "staged_evaluations": True},
-                    generated_at=now,
+                    generated_at=session_start + timedelta(minutes=6),
                 ),
             ]
         )
