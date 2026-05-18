@@ -7,16 +7,22 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
-from common.db.models import User
+from common.db.models import PracticeSession, Scenario, User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
-from curriculum_practice.models import CaseItem, ExaminerAgent, RoleProfile
+from curriculum_practice.models import (
+    CaseItem,
+    ExaminerAgent,
+    QuestionItem,
+    RoleProfile,
+)
 from curriculum_practice.permissions import can_manage_practice_templates
 from curriculum_practice.schemas import (
     CaseItemCreate,
@@ -380,6 +386,140 @@ async def complete_my_study_chapter(
     if not result.is_success or result.value is None:
         return _learning_progress_result_error(result.fallback)
     return _success(result.value)
+
+
+def _curriculum_exam_asset_ref(asset_type: str, asset: object, label: str) -> dict[str, object]:
+    id_attr = {
+        "examiner_agent": "examiner_agent_id",
+        "question_item": "question_id",
+        "learning_content": "learning_content_id",
+    }.get(asset_type, f"{asset_type}_id")
+    return {
+        "asset_type": asset_type,
+        "asset_id": str(getattr(asset, id_attr, "")),
+        "version": int(getattr(asset, "version", 0) or 0),
+        "hash": getattr(asset, "content_hash", None),
+        "snapshot_label": label,
+    }
+
+
+async def _get_or_create_exam_scenario(db: AsyncSession) -> Scenario:
+    result = await db.execute(
+        select(Scenario)
+        .where(Scenario.scenario_type == "sales", Scenario.is_active.is_(True))
+        .order_by(Scenario.created_at.desc())
+        .limit(1)
+    )
+    scenario = result.scalar_one_or_none()
+    if scenario is not None:
+        return scenario
+    scenario = Scenario(
+        scenario_type="sales",
+        name="AI 考官考核",
+        description="课程学习完成后的 AI 考官考核场景。",
+        persona_prompt="AI 考官根据题库逐题考核学员。",
+        is_active=True,
+    )
+    db.add(scenario)
+    await db.flush()
+    return scenario
+
+
+@study_router.post("/learning-contents/{content_id}/start-exam", response_model=None)
+async def start_my_study_exam(
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    progress_service = LearningProgressService(db)
+    content_result = await progress_service.get_study_content(
+        user_id=str(current_user.user_id), content_id=content_id
+    )
+    if not content_result.is_success or content_result.value is None:
+        return _learning_progress_result_error(content_result.fallback)
+
+    if not content_result.value.progress.is_completed:
+        return _api_error(
+            "[LEARNING_CONTENT_NOT_COMPLETED]",
+            status_code=409,
+            message="请先完成全部讲义章节，再开始 AI 考核。",
+        )
+
+    agent_result = await db.execute(
+        select(ExaminerAgent)
+        .where(ExaminerAgent.status == "published")
+        .order_by(ExaminerAgent.updated_at.desc())
+        .limit(1)
+    )
+    agent = agent_result.scalar_one_or_none()
+    if agent is None:
+        return _api_error(
+            "[EXAMINER_AGENT_NOT_AVAILABLE]",
+            status_code=409,
+            message="暂无已发布 AI 考官，请联系管理员发布考官。",
+        )
+
+    question_ids = [str(item).strip() for item in (agent.question_source_ids or []) if str(item).strip()]
+    if not question_ids:
+        return _api_error(
+            "[EXAM_QUESTION_BANK_EMPTY]",
+            status_code=409,
+            message="AI 考官未绑定题目，请联系管理员配置题库。",
+        )
+
+    questions_result = await db.execute(
+        select(QuestionItem).where(
+            QuestionItem.question_id.in_(question_ids),
+            QuestionItem.status == "published",
+            QuestionItem.safety_flagged.is_(False),
+        )
+    )
+    questions_by_id = {str(item.question_id): item for item in questions_result.scalars().all()}
+    questions = [questions_by_id[question_id] for question_id in question_ids if question_id in questions_by_id]
+    if not questions:
+        return _api_error(
+            "[EXAM_QUESTION_BANK_EMPTY]",
+            status_code=409,
+            message="AI 考官绑定的题目不可用，请联系管理员检查题库。",
+        )
+
+    scenario = await _get_or_create_exam_scenario(db)
+    session = PracticeSession(
+        user_id=str(current_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="in_progress",
+        report_status="pending",
+        curriculum_snapshot={
+            "kind": "curriculum_examiner_session",
+            "learning_content_id": content_id,
+            "content_assets": [
+                _curriculum_exam_asset_ref("examiner_agent", agent, str(agent.name)),
+                *[
+                    _curriculum_exam_asset_ref("question_item", question, str(question.title))
+                    for question in questions
+                ],
+            ],
+        },
+    )
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
+    return _success({"session_id": str(session.session_id), "examiner_agent_id": str(agent.examiner_agent_id)})
+
+
+@router.get("/learner-profiles/{user_id}", response_model=None)
+async def get_admin_learner_profile(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    result = await LearnerProfileService(db).get_or_create_for_user(user_id)
+    if not result.is_success or result.value is None:
+        return _learner_profile_service_error(result.fallback)
+    return _success(LearnerProfileResponse.model_validate(result.value))
 
 
 def _learning_content_result_error(

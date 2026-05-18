@@ -6,8 +6,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
-from common.db.models import User
-from curriculum_practice.models import LearningChapter, LearningContent, LearningProgress
+from common.db.models import PracticeSession, User
+from curriculum_practice.models import (
+    ExaminerAgent,
+    LearningChapter,
+    LearningContent,
+    LearningProgress,
+    QuestionCategory,
+    QuestionItem,
+)
+
 
 async def _create_published_content(
     db: AsyncSession,
@@ -132,6 +140,93 @@ async def test_should_complete_chapter_idempotently_and_report_all_completed(
         )
     )
     assert count_result.scalar_one() == 1
+
+
+@pytest.mark.asyncio
+async def test_should_start_exam_after_all_chapters_completed(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    content, chapters = await _create_published_content(test_db)
+    category = QuestionCategory(name="课程考题", order_index=1)
+    test_db.add(category)
+    await test_db.flush()
+    question = QuestionItem(
+        category_id=category.category_id,
+        title="信任建立考题",
+        stem="如何建立客户信任？",
+        reference_answer="确认 背景 需求 案例",
+        scoring_criteria={"keywords": ["确认", "背景", "需求", "案例"]},
+        scoring_dimensions=["coverage"],
+        status="published",
+        safety_flagged=False,
+        version=1,
+        content_hash="question-hash",
+    )
+    test_db.add(question)
+    await test_db.flush()
+    agent = ExaminerAgent(
+        name="课程 AI 考官",
+        question_source_ids=[question.question_id],
+        learner_level_strategy={"default_level": "beginner", "allowed_levels": ["beginner"]},
+        scoring_policy_id="policy-1",
+        timeout_config={"max_seconds": 600},
+        safety_config={},
+        prompt_config={},
+        simulation_config={},
+        status="published",
+        version=1,
+        content_hash="agent-hash",
+    )
+    test_db.add(agent)
+    test_db.add_all(
+        LearningProgress(
+            user_id=str(test_user.user_id),
+            learning_content_id=content.learning_content_id,
+            chapter_id=chapter.chapter_id,
+        )
+        for chapter in chapters
+    )
+    await test_db.commit()
+
+    response = await async_client.post(
+        f"/api/v1/curriculum-practice/study/learning-contents/{content.learning_content_id}/start-exam",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.json()
+    data = response.json()["data"]
+    session = await test_db.get(PracticeSession, data["session_id"])
+    assert session is not None
+    assert session.user_id == str(test_user.user_id)
+    assert session.status == "in_progress"
+    assert session.curriculum_snapshot["kind"] == "curriculum_examiner_session"
+    assert session.curriculum_snapshot["learning_content_id"] == content.learning_content_id
+    assert [asset["asset_type"] for asset in session.curriculum_snapshot["content_assets"]] == [
+        "examiner_agent",
+        "question_item",
+    ]
+    assert session.curriculum_snapshot["content_assets"][0]["asset_id"] == agent.examiner_agent_id
+    assert session.curriculum_snapshot["content_assets"][1]["asset_id"] == question.question_id
+
+
+@pytest.mark.asyncio
+async def test_should_reject_start_exam_before_learning_completed(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+) -> None:
+    content, _chapters = await _create_published_content(test_db)
+
+    response = await async_client.post(
+        f"/api/v1/curriculum-practice/study/learning-contents/{content.learning_content_id}/start-exam",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "[LEARNING_CONTENT_NOT_COMPLETED]"
 
 
 @pytest.mark.asyncio
