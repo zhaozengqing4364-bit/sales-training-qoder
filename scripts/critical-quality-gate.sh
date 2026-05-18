@@ -106,6 +106,18 @@ finalize() {
   exit ${exit_code}
 }
 
+start_smoke_stack() {
+  bash "${ROOT_DIR}/scripts/dev-smoke-up.sh"
+  STACK_STARTED="1"
+}
+
+stop_smoke_stack() {
+  if [[ "${STACK_STARTED}" == "1" ]]; then
+    bash "${ROOT_DIR}/scripts/dev-smoke-stop.sh" || true
+    STACK_STARTED="0"
+  fi
+}
+
 trap finalize EXIT
 
 mkdir -p "${EVIDENCE_DIR}"
@@ -194,8 +206,7 @@ assert_non_empty_vitest_coverage_summary() {
 }
 
 log "[quality-gate] Ensuring database schema is current before smoke bootstrap and Playwright"
-bash "${ROOT_DIR}/scripts/dev-smoke-up.sh"
-STACK_STARTED="1"
+start_smoke_stack
 
 log "Web typecheck"
 (
@@ -212,10 +223,50 @@ log "Vitest"
 )
 assert_non_empty_vitest_coverage_summary
 
-log "Playwright smoke matrix"
+log "Playwright smoke E2E"
 (
   cd "${ROOT_DIR}/web"
   SMOKE_REUSE_EXISTING_STACK=1 npx playwright test tests/e2e/smoke.spec.ts
+)
+
+log "Playwright presentation Phase 4 E2E"
+stop_smoke_stack
+PHASE4_E2E_PROVIDER=local \
+PHASE4_E2E_PROVIDER_SCRIPT=presentation-provider-script.v1.json \
+PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-44-provider-transcript.jsonl" \
+ISSUE44_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-44-run-manifest.jsonl" \
+ISSUE44_BACKEND_LOG_PATH="${ROOT_DIR}/.dev/logs/backend.log" \
+STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
+start_smoke_stack
+(
+  cd "${ROOT_DIR}/web"
+  PHASE4_E2E_PROVIDER=local \
+  PHASE4_E2E_PROVIDER_SCRIPT=presentation-provider-script.v1.json \
+  PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-44-provider-transcript.jsonl" \
+  ISSUE44_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-44-run-manifest.jsonl" \
+  ISSUE44_BACKEND_LOG_PATH="${ROOT_DIR}/.dev/logs/backend.log" \
+  STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
+  SMOKE_REUSE_EXISTING_STACK=1 \
+  npx playwright test tests/e2e/presentation-phase4.spec.ts --workers=1
+)
+
+log "Playwright sales Phase 4 E2E"
+stop_smoke_stack
+PHASE4_E2E_PROVIDER=local \
+PHASE4_E2E_PROVIDER_SCRIPT=sales-provider-script.v1.json \
+PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-43-provider-transcript.jsonl" \
+ISSUE43_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-43-run-manifest.jsonl" \
+STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
+start_smoke_stack
+(
+  cd "${ROOT_DIR}/web"
+  PHASE4_E2E_PROVIDER=local \
+  PHASE4_E2E_PROVIDER_SCRIPT=sales-provider-script.v1.json \
+  PHASE4_E2E_PROVIDER_TRANSCRIPT="${ROOT_DIR}/.sisyphus/evidence/issue-43-provider-transcript.jsonl" \
+  ISSUE43_E2E_RUN_MANIFEST="${ROOT_DIR}/.sisyphus/evidence/issue-43-run-manifest.jsonl" \
+  STEPFUN_API_KEY="${STEPFUN_API_KEY:-phase4-local-e2e}" \
+  SMOKE_REUSE_EXISTING_STACK=1 \
+  npx playwright test tests/e2e/sales-phase4.spec.ts --workers=1
 )
 
 log "Backend tests: auth + history/report/replay + admin analytics + support runtime + business rules + model config + release verification"

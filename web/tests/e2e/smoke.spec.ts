@@ -92,15 +92,10 @@ function unwrapApiPayload<T>(payload: T | { data?: T }): T {
 
 function isIgnorableConsoleMessage(message: ConsoleMessage): boolean {
   const text = message.text();
-  const nextTaskConsoleSignal =
-    text.includes(nextTaskPath) &&
-    (text.includes("Failed to load resource: net::ERR_FAILED") ||
-      text.includes("Failed to load resource: the server responded with a status of 401"));
   return (
     text.includes("Download the React DevTools") ||
     text.includes("[HMR]") ||
-    text.includes("[Fast Refresh]") ||
-    nextTaskConsoleSignal
+    text.includes("[Fast Refresh]")
   );
 }
 
@@ -108,8 +103,7 @@ function isIgnorableResponse(response: Response): boolean {
   const url = response.url();
   return (
     url.includes("_next/webpack-hmr") ||
-    url.endsWith("/favicon.ico") ||
-    (response.status() === 401 && url.includes(nextTaskPath))
+    url.endsWith("/favicon.ico")
   );
 }
 
@@ -172,7 +166,7 @@ async function loginFromUi(page: Page): Promise<void> {
   await page.getByRole("button", { name: /^登录$/ }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: /晚安, .+ 👋/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /(早安|午安|晚安), .+ 👋/ })).toBeVisible();
   await expect(page.getByText("查看您的训练概览与最新进展。")).toBeVisible();
 }
 
@@ -290,6 +284,16 @@ async function getPublishedSalesSeed(
 }
 
 test.describe("full-stack smoke baseline", () => {
+  test("learning path redirects unauthenticated users to login", async ({ page }) => {
+    const signals = watchForBlockingSignals(page);
+
+    await page.goto("/learning-path");
+
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+    await expectNoBlockingSignals(signals, "unauthenticated learning path redirect smoke");
+  });
+
   test("login smoke", async ({ page }) => {
     const signals = watchForBlockingSignals(page);
 
@@ -304,7 +308,7 @@ test.describe("full-stack smoke baseline", () => {
 
     await loginFromUi(page);
 
-    const reportEntry = page.getByRole("link", { name: "查看报告" }).first();
+    const reportEntry = page.locator(`a[href="${smokeReportPath}"]`, { hasText: "查看报告" });
     await expect(reportEntry).toBeVisible();
     await expect(reportEntry).toHaveAttribute("href", smokeReportPath);
     await expect(page.getByRole("heading", { name: "最近记录" })).toBeVisible();
