@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminLearningContentsPage from "./page";
@@ -13,8 +13,12 @@ vi.mock("next/link", () => ({
 }));
 
 const {
+    createMock,
+    deleteMock,
     listMock,
 } = vi.hoisted(() => ({
+    createMock: vi.fn(),
+    deleteMock: vi.fn(),
     listMock: vi.fn(),
 }));
 
@@ -47,6 +51,8 @@ vi.mock("@/lib/api/client", async () => {
         api: {
             ...actual.api,
             learningContents: {
+                create: createMock,
+                delete: deleteMock,
                 list: listMock,
             },
         },
@@ -76,6 +82,8 @@ describe("AdminLearningContentsPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         listMock.mockResolvedValue({ items: [], total: 0 });
+        createMock.mockResolvedValue(makeLearningContent({ learning_content_id: "content-new", title: "新学习内容" }));
+        deleteMock.mockResolvedValue(undefined);
     });
 
     it("renders loading state initially", () => {
@@ -154,5 +162,36 @@ describe("AdminLearningContentsPage", () => {
         const link = screen.getByRole("link", { name: /销售异议处理/ });
         expect(link).toBeTruthy();
         expect(link.getAttribute("href")).toBe("/admin/learning-contents/content-1");
+    });
+
+    it("creates a draft learning content from the admin list page", async () => {
+        render(<AdminLearningContentsPage />);
+        await screen.findByText(/暂无学习内容/);
+
+        fireEvent.change(screen.getByLabelText("标题"), { target: { value: "新学习内容" } });
+        fireEvent.change(screen.getByLabelText("摘要"), { target: { value: "用于训练闭环" } });
+        fireEvent.change(screen.getByLabelText("负责人"), { target: { value: "curriculum-team" } });
+        fireEvent.click(screen.getByRole("button", { name: "创建内容" }));
+
+        await waitFor(() => {
+            expect(createMock).toHaveBeenCalledWith(
+                expect.objectContaining({ title: "新学习内容", summary: "用于训练闭环", owner: "curriculum-team" }),
+            );
+        });
+        expect(screen.getByText(/创建完成/)).toBeTruthy();
+    });
+
+    it("deletes a draft learning content from the admin list page", async () => {
+        listMock.mockResolvedValue({ items: [makeLearningContent()], total: 1 });
+        render(<AdminLearningContentsPage />);
+        await screen.findByText("销售异议处理");
+
+        fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+        await waitFor(() => {
+            expect(deleteMock).toHaveBeenCalledWith("content-1");
+        });
+        expect(screen.queryByText("销售异议处理")).toBeNull();
+        expect(screen.getByText(/删除完成/)).toBeTruthy();
     });
 });
