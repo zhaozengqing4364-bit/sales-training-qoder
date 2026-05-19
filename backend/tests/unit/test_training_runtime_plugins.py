@@ -18,6 +18,7 @@ from training_runtime import (
 REQUIRED_PLUGIN_METHODS = (
     "on_session_start",
     "on_session_end",
+    "select_runtime_handler",
     "build_evidence",
     "trigger_evaluation",
     "build_report_view",
@@ -122,6 +123,23 @@ def test_should_keep_sales_plugin_stepfun_only_and_legacy_handlers_absent() -> N
     }
 
 
+def test_should_select_sales_stepfun_runtime_handler() -> None:
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="sales-session",
+        scenario_type="sales",
+        voice_mode="legacy",
+    )
+    plugin = get_scenario_plugin("sales")
+
+    selection = plugin.select_runtime_handler(descriptor)
+
+    assert selection.scenario_type == "sales"
+    assert selection.runtime_mode == "stepfun_realtime"
+    assert selection.websocket_route == "/ws/sales/{session_id}"
+    assert selection.handler_factory_path == "sales_bot.websocket.stepfun_realtime_handler"
+    assert selection.handler_factory_name == "create_stepfun_realtime_handler"
+
+
 def test_should_keep_presentation_training_flow_entrypoints() -> None:
     legacy_descriptor = TrainingRuntimeDescriptor(
         session_id="presentation-legacy",
@@ -146,6 +164,51 @@ def test_should_keep_presentation_training_flow_entrypoints() -> None:
     assert diagnostics.runtime_family == "presentation_training_flow"
 
 
+def test_should_select_presentation_runtime_handler_by_voice_mode() -> None:
+    legacy_descriptor = TrainingRuntimeDescriptor(
+        session_id="presentation-legacy",
+        scenario_type="presentation",
+        voice_mode="legacy",
+    )
+    stepfun_descriptor = TrainingRuntimeDescriptor(
+        session_id="presentation-stepfun",
+        scenario_type="presentation",
+        voice_mode="stepfun_realtime",
+    )
+    plugin = get_scenario_plugin("presentation")
+
+    legacy_selection = plugin.select_runtime_handler(legacy_descriptor)
+    stepfun_selection = plugin.select_runtime_handler(stepfun_descriptor)
+
+    assert legacy_selection.scenario_type == "presentation"
+    assert legacy_selection.runtime_mode == "legacy"
+    assert legacy_selection.websocket_route == "/ws/presentation/{session_id}"
+    assert legacy_selection.handler_factory_path == (
+        "presentation_coach.websocket.presentation_handler"
+    )
+    assert legacy_selection.handler_factory_name == "PresentationWebSocketHandler"
+    assert stepfun_selection.runtime_mode == "stepfun_realtime"
+    assert stepfun_selection.websocket_route == "/ws/presentation/{session_id}"
+    assert stepfun_selection.handler_factory_path == (
+        "presentation_coach.websocket.presentation_stepfun_realtime_handler"
+    )
+    assert stepfun_selection.handler_factory_name == "PresentationStepFunRealtimeHandler"
+
+
 def test_should_reject_unknown_scenario_type() -> None:
     with pytest.raises(KeyError, match="Unsupported training scenario plugin"):
         get_scenario_plugin("roleplay")
+
+
+def test_sales_runtime_selection_points_to_existing_factory() -> None:
+    descriptor = TrainingRuntimeDescriptor(
+        session_id="sales-session",
+        scenario_type="sales",
+        voice_mode="stepfun_realtime",
+    )
+    selection = get_scenario_plugin("sales").select_runtime_handler(descriptor)
+
+    module = __import__(selection.handler_factory_path, fromlist=[selection.handler_factory_name])
+    factory = getattr(module, selection.handler_factory_name)
+
+    assert callable(factory)
