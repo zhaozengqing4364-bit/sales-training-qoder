@@ -159,4 +159,3 @@ manager 读侧当前也消费同一条 read-side truth line，因此管理面说
   - `backend/src/common/effectiveness/methodology.py`
   - 本文件
   - focused tests
-  - `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`

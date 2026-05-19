@@ -1,8 +1,6 @@
 # WebSocket 消息契约
 
 > 状态: 部分 ✅ 已实现，部分 📋 计划中
-> 
-> 参考: `docs/roadmap/sales-coach-upgrade.md` - 8. WebSocket 消息协议扩展
 
 ## Auth transport contract（M020/S01 authority）
 
@@ -37,14 +35,14 @@ wss://api.your-domain.com/ws/sales?session_id={session_id}&token={jwt_token}
 ### 兼容路径关闭条件
 - 前端与脚本调用方全部迁移到 header/cookie；
 - focused proof 不再依赖 `query token`，且 backend websocket contract tests 与前端 websocket tests 同步通过；
-- 本文档、`docs/setup/auth-local.md`、`.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 同步删掉 query-token authority，避免文档与代码各说各话。
+- 本文档、`docs/setup/auth-local.md` 同步删掉 query-token authority，避免文档与代码各说各话。
 
 ### Repo-root 验证命令
 
 ```bash
 backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py -x -q
 npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/lib/auth-handler.test.ts
-rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/auth-handler.ts
+rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md web/src/lib/auth-handler.ts
 ```
 
 ## 连接建立

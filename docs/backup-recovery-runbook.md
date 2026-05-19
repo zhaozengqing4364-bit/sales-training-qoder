@@ -53,7 +53,7 @@ python3 scripts/recovery-drill-runner.py run --continue-on-failure
 
 ## 0.2 Deploy bundle boundary / drill 适用范围
 
-当前仓库里的 `.sisyphus/deploy/ai-backend.service`、`.sisyphus/deploy/ai-frontend.service`、`.sisyphus/deploy/ai-practice.nginx.conf` 描述的是**single-node / 单机 native deploy bundle**：
+当前仓库使用 **single-node / 单机 native deploy bundle**：
 
 - backend 只绑定一个 loopback 进程到 `127.0.0.1:3444`；
 - frontend 只绑定一个 loopback 进程到 `127.0.0.1:3445`；
@@ -75,7 +75,7 @@ python3 scripts/recovery-drill-runner.py run --continue-on-failure
 | 审批人 | 当前环境负责人；仓库内未记录具体人名 | 工单审批记录 |
 | 仓库内事实依据 | 本 runbook | 仓库文档本身 |
 | 备份产物目录（建议） | 当前仓库无固定目录；最小基线建议放到本机或挂载盘的 `./.dev/backup-evidence/<YYYYMMDD-HHMM>/`，不要提交到 Git | 备份目录、截图、命令回显 |
-| Deploy health 证据 | `.sisyphus/evidence/<deploy-run>/health-*.txt` 或等价的 systemd/nginx 健康检查回显 | 同一发布 / 恢复记录 |
+| Deploy health 证据 | systemd/nginx 健康检查回显 | 同一发布 / 恢复记录 |
 | Drill automation 证据 | `./.dev/recovery-drills/<timestamp>/summary.json` + 同目录逐 drill `*.log` | 同一发布 / 恢复记录 |
 | 恢复验证证据 | `/health` 回包、`alembic upgrade head` 输出、必要时 legacy repair / 管理员重建回显 | 同一工单 / 恢复演练记录 |
 

@@ -41,7 +41,7 @@ function parseJsonDraft(value: string): { ok: true; value: Record<string, unknow
     try {
         const parsed = JSON.parse(value);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-            return { ok: false, message: "评分定义必须是 JSON object。" };
+            return { ok: false, message: "评分定义必须是 JSON 对象。" };
         }
         return { ok: true, value: parsed as Record<string, unknown> };
     } catch (error) {
@@ -279,7 +279,7 @@ export default function AdminScoringRulesetsPage() {
         }
         const sessionId = dryRunSessionId.trim();
         if (!sessionId) {
-            setActionError("dry-run 需要填写已完成训练 session_id。");
+            setActionError("试运行需要填写已完成训练 session_id。");
             return;
         }
 
@@ -291,9 +291,13 @@ export default function AdminScoringRulesetsPage() {
                 candidate_definition: selectedRuleset?.ruleset_id ? undefined : parsed.value,
             });
             setDryRunDelta(result.delta);
-            setNotice(`Dry-run 完成；mutates_history=${String(result.mutates_history)}。`);
+            setNotice(
+              result.mutates_history
+                ? "试运行完成；请查看差异。"
+                : "试运行完成；不会修改历史记录。",
+            );
         } catch (err) {
-            setActionError(`Dry-run 失败：${getApiErrorMessage(err)}`);
+            setActionError(`试运行失败：${getApiErrorMessage(err)}`);
         } finally {
             setBusyAction(null);
         }
@@ -313,7 +317,7 @@ export default function AdminScoringRulesetsPage() {
                 <h1 className="text-2xl font-black text-slate-900">评分规则集</h1>
                 <p className="text-sm text-amber-800">{error}</p>
                 <p className="text-sm text-slate-600">
-                    当前不会保存本地草稿；请等待评分规则集 API 恢复后再 dry-run、发布或回滚。
+                    当前不会保存本地草稿；请等待评分规则集 API 恢复后再试运行、发布或回滚。
                 </p>
                 <Button onClick={() => loadRulesets(scenarioType)}>重试加载</Button>
             </GlassCard>
@@ -348,7 +352,7 @@ export default function AdminScoringRulesetsPage() {
                         </Badge>
                     </div>
                     <p className="mt-2 max-w-3xl text-sm text-slate-600">
-                        管理训练评分 ruleset 的草稿、dry-run、发布和回滚。评分权重、证据门槛和不可评估原因都保存在后端 ruleset definition 中。
+                        管理训练评分 ruleset 的草稿、试运行、发布和回滚。评分权重、证据门槛和不可评估原因都保存在后端 ruleset definition 中。
                     </p>
                     <p className="mt-2 text-xs text-slate-500">
                         API: /api/v1/evaluation/admin/scoring-rulesets · 权限：admin only · 发布/回滚写入 SystemLog 审计。
@@ -393,7 +397,7 @@ export default function AdminScoringRulesetsPage() {
             <GlassCard className="space-y-5 p-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 className="text-xl font-black text-slate-900">草稿与 Dry-run</h2>
+                        <h2 className="text-xl font-black text-slate-900">草稿与试运行</h2>
                         <p className="mt-1 text-sm text-slate-600">
                             选中：{selectedRuleset ? rulesetOptionLabel(selectedRuleset) : "默认兜底定义"}。
                             已 active 的 published ruleset 不可直接更新，请另建草稿。
@@ -453,9 +457,9 @@ export default function AdminScoringRulesetsPage() {
                     rows={22}
                     isValid={parsedDefinition.ok}
                     validationMessage={parsedDefinition.ok
-                        ? "JSON object 格式有效；后端 Pydantic ruleset schema 会在保存、发布和 dry-run 时再次校验。"
+                        ? "JSON 对象格式有效；后端规则校验会在保存、发布和试运行时再次校验。"
                         : `JSON 格式错误：${parsedDefinition.message}`}
-                    helpText="必须是 JSON object，不支持数组；保存、发布和 Dry-run 前会再次校验。"
+                    helpText="必须是 JSON 对象，不支持数组；保存、发布和试运行前会再次校验。"
                 />
 
                 <div className="grid gap-3 xl:grid-cols-[1fr_1fr_auto_auto_auto] xl:items-center">
@@ -468,11 +472,11 @@ export default function AdminScoringRulesetsPage() {
                     <input
                         value={dryRunSessionId}
                         onChange={(event) => setDryRunSessionId(event.target.value)}
-                        placeholder="dry-run session_id"
+                        placeholder="试运行 session_id"
                         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                     />
                     <Button variant="outline" onClick={handleDryRun} disabled={!parsedDefinition.ok || busyAction !== null}>
-                        {busyAction === "dry-run" ? "Dry-run 中..." : "Dry-run"}
+                        {busyAction === "dry-run" ? "试运行中..." : "试运行"}
                     </Button>
                     <Button variant="outline" onClick={handleCreateOrUpdateDraft} disabled={!parsedDefinition.ok || busyAction !== null}>
                         {busyAction === "save" ? "保存中..." : isEditableDraft(selectedRuleset) ? "更新草稿" : "创建草稿"}
@@ -490,7 +494,7 @@ export default function AdminScoringRulesetsPage() {
                 )}
                 {dryRunDelta && (
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-4">
-                        <h3 className="text-sm font-black text-slate-900">Dry-run 差异</h3>
+                        <h3 className="text-sm font-black text-slate-900">试运行差异</h3>
                         <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-blue-950">
                             {JSON.stringify(dryRunDelta, null, 2)}
                         </pre>

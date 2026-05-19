@@ -1,6 +1,6 @@
 # 会话管理 API 契约
 
-> 状态: ✅ 已实现（2026-02-22 更新）
+> 状态: ✅ 已实现（2026-05-19 更新）
 >
 > 后端实现: `backend/src/common/api/practice.py`
 >
@@ -439,6 +439,40 @@ WebSocket 同步事件（由 lifecycle 触发）:
     "expected": "paused|in_progress"
   }
 }
+```
+
+---
+
+## 补充会话接口
+
+以下端点扩展自 `backend/src/common/api/practice.py`：
+
+### 报告趋势与推荐
+
+```http
+GET /api/v1/practice/sessions/{session_id}/report-trends
+GET /api/v1/practice/sessions/{session_id}/next-recommendation
+```
+
+### 诊断信息
+
+```http
+GET /api/v1/practice/sessions/{session_id}/diagnostics
+```
+
+### 综合评价报告
+
+```http
+GET /api/v1/practice/sessions/{session_id}/comprehensive-report
+```
+
+### 音频分段管理
+
+```http
+POST /api/v1/practice/sessions/{session_id}/audio-upload-urls
+POST /api/v1/practice/sessions/{session_id}/audio-segments
+GET  /api/v1/practice/sessions/{session_id}/audio-segments
+POST /api/v1/practice/sessions/{session_id}/audio-segments/failure
 ```
 
 ---

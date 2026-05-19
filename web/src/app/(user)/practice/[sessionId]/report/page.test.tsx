@@ -1046,7 +1046,7 @@ describe("ReportPage", () => {
         expect(screen.getAllByText("主张证据状态").length).toBeGreaterThan(0);
         expect(screen.getByText("已经给出了证据，但力度还不够，仍需要更具体的案例、数据或 ROI 证明。")).toBeTruthy();
         expect(screen.getByText("证据强度：63 分。")).toBeTruthy();
-        expect(screen.getByText("证据支撑")).toBeTruthy();
+        expect(screen.getAllByText("证据支撑").length).toBeGreaterThan(0);
         expect(screen.getByText("证据补强")).toBeTruthy();
         expect(screen.getByText("下一轮训练卡")).toBeTruthy();
         expect(screen.getByText("汇总上次卡点、修正动作、判定条件、回放锚点和按目标再练入口。")).toBeTruthy();
@@ -1158,7 +1158,7 @@ describe("ReportPage", () => {
         const overallScore = await screen.findByTestId("report-overall-score");
         expect(overallScore.textContent).toContain("76");
         expect(overallScore.getAttribute("data-contract-source")).toBe("compatibility_reader");
-        expect(screen.getByText("兼容了 legacy score key")).toBeTruthy();
+        expect(screen.getByText("已兼容历史评分数据")).toBeTruthy();
     });
 
     it("deep-links the report issue and goal cards into replay using the stable replay anchors", async () => {
@@ -1324,7 +1324,7 @@ describe("ReportPage", () => {
 
         render(<ReportPage />);
 
-        expect(await screen.findByText("本分数来自当前会话的 canonical evidence；只有可评估训练才会纳入首页、个人中心和排行榜均分。")).toBeTruthy();
+        expect(await screen.findByText("本分数来自当前会话的统一评分依据；只有可评估训练才会纳入首页、个人中心和排行榜均分。")).toBeTruthy();
         fireEvent.click(await screen.findByRole("button", { name: "按目标再练一轮" }));
 
         await waitFor(() => {
@@ -2538,7 +2538,7 @@ describe("ReportPage", () => {
         render(<ReportPage />);
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("61");
-        expect(screen.getByText("证据支撑")).toBeTruthy();
+        expect(screen.getAllByText("证据支撑").length).toBeGreaterThan(0);
         expect(screen.getByText("价值主张已经提到了，但还没有拿出能让客户相信的证据。")).toBeTruthy();
         expect(screen.getByText("证据补强")).toBeTruthy();
         expect(screen.getByText("先补 ROI 证据，再确认客户愿不愿意进入下一步。")).toBeTruthy();
@@ -2636,5 +2636,39 @@ describe("ReportPage", () => {
 
         const sourceLink = await screen.findByRole("link", { name: /查看来源报告/ });
         expect(sourceLink.getAttribute("href")).toBe("/practice/session-source-1/report");
+    });
+
+    it("renders friendly voice settings copy and never leaks raw runtime values to learners", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            voice_policy_snapshot_ref: {
+                voice_mode: "legacy",
+                runtime_profile_id: "profile-internal-123",
+                tool_policy: {},
+                knowledge_base_ids: [],
+                source: { profile_id: "profile-internal-123", rule: "raw-rule" },
+                resolved_at: "2026-04-01T10:00:00Z",
+            },
+        });
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+
+        render(<ReportPage />);
+
+        // Assert friendly visible text
+        expect(await screen.findByText("本场语音设置")).toBeTruthy();
+        expect(screen.getByText("经典语音模式")).toBeTruthy();
+        expect(screen.getByText("已匹配合适配置")).toBeTruthy();
+        expect(screen.getByText("设置来源已记录")).toBeTruthy();
+
+        // Assert raw internal values are never exposed
+        expect(screen.queryByText("legacy")).toBeNull();
+        expect(screen.queryByText("profile-internal-123")).toBeNull();
+        expect(screen.queryByText(/profile_id:profile-internal-123/)).toBeNull();
+        expect(screen.queryByText("raw-rule")).toBeNull();
     });
 });

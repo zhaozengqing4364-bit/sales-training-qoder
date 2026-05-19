@@ -53,6 +53,32 @@ function nextTaskHref(nextTask: LearningPathNextTask): string {
     return "/training";
 }
 
+function stageNameByKey(key: string, stages: LearningPathStage[]): string | null {
+    const found = stages.find((s) => s.template_stage_key === key);
+    return found?.name ?? null;
+}
+
+function formatStageResult(result: Record<string, unknown> | null | undefined): string {
+    if (!result || Object.keys(result).length === 0) return "";
+    const parts: string[] = [];
+
+    if (typeof result.score === "number") {
+        parts.push(`得分：${result.score}`);
+    }
+    if ("passed" in result && result.passed != null) {
+        parts.push(result.passed ? "通过：已通过" : "通过：未通过");
+    }
+    if (typeof result.attempts === "number") {
+        parts.push(`尝试次数：${result.attempts}`);
+    }
+    if ("completed_at" in result && result.completed_at != null && result.completed_at !== "") {
+        parts.push("已完成");
+    }
+
+    if (parts.length > 0) return parts.join("，");
+    return "阶段结果已记录";
+}
+
 export default function LearningPathPage() {
     const router = useRouter();
     const [path, setPath] = useState<LearningPathResponse | null>(null);
@@ -160,10 +186,9 @@ export default function LearningPathPage() {
                                     </div>
                                     <div>
                                         <h3 className="font-black text-slate-900">{stage.name}</h3>
-                                        <p className="text-sm text-slate-500 mt-1">{stage.template_stage_key}</p>
                                          {stage.prerequisites.length > 0 && (
                                             <p className="text-sm text-slate-600 mt-2">
-                                                前置条件：{stage.prerequisites.map((item) => item.template_stage_key).join("、")}
+                                                前置条件：{stage.prerequisites.map((item) => stageNameByKey(item.template_stage_key, path.stages) ?? "前置阶段").join("、")}
                                             </p>
                                         )}
                                         <p className="text-sm text-slate-600 mt-2">
@@ -171,7 +196,7 @@ export default function LearningPathPage() {
                                         </p>
                                         {stage.result && Object.keys(stage.result).length > 0 && (
                                             <p className="text-sm text-slate-600 mt-2">
-                                                阶段结果：{JSON.stringify(stage.result)}
+                                                阶段结果：{formatStageResult(stage.result)}
                                             </p>
                                         )}
                                         {stage.failure_reason && (

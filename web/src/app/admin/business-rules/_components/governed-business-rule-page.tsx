@@ -21,6 +21,16 @@ interface GovernedBusinessRulePageProps {
     description: string;
 }
 
+function formatConfigStatus(status: string): string {
+    switch (status) {
+        case "draft": return "草稿";
+        case "published": return "已发布";
+        case "archived": return "已归档";
+        case "disabled": return "已禁用";
+        default: return status;
+    }
+}
+
 function formatDateTime(value?: string | null) {
     if (!value) return "未记录";
     const date = new Date(value);
@@ -42,7 +52,7 @@ function parseJsonDraft(value: string): { ok: true; value: Record<string, unknow
     try {
         const parsed = JSON.parse(value);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-            return { ok: false, message: "配置值必须是 JSON object。" };
+            return { ok: false, message: "配置值必须是 JSON 对象。" };
         }
         return { ok: true, value: parsed as Record<string, unknown> };
     } catch (error) {
@@ -206,7 +216,7 @@ export function GovernedBusinessRulePage({
         try {
             const result = await api.admin.previewBusinessRule(configKey, parsed.value, reason.trim() || undefined);
             setPreview(result);
-            setNotice(`预览完成；当前 active version 仍为 ${result.active_version ?? activeConfig?.version ?? "默认配置"}。`);
+            setNotice(`预览完成；当前生效版本仍为 ${result.active_version ?? activeConfig?.version ?? "默认配置"}。`);
         } catch (err) {
             setActionError(`预览失败：${getApiErrorMessage(err)}`);
         } finally {
@@ -326,7 +336,7 @@ export function GovernedBusinessRulePage({
                 title={confirmAction?.type === "rollback" ? "确认回滚业务规则" : "确认发布业务规则"}
                 description={confirmAction?.type === "rollback"
                     ? `将 ${title} 回滚到 v${confirmAction.target.version}。原因：${reason.trim()}`
-                    : `将 ${title} 当前草稿发布为 active 配置。原因：${reason.trim()}`}
+                    : `将 ${title} 当前草稿发布为生效配置。原因：${reason.trim()}`}
                 confirmText={confirmAction?.type === "rollback" ? "确认回滚" : "确认发布"}
                 variant={confirmAction?.type === "rollback" ? "warning" : "danger"}
                 onConfirm={handleConfirmAction}
@@ -338,12 +348,12 @@ export function GovernedBusinessRulePage({
                     <div className="flex flex-wrap items-center gap-2">
                         <h1 className="text-3xl font-black tracking-tight text-slate-900">{title}</h1>
                         <Badge variant={activeConfig?.enabled === false ? "orange" : "green"}>
-                            {activeConfig?.enabled === false ? "active disabled" : "governed"}
+                            {activeConfig?.enabled === false ? "已禁用" : "已治理"}
                         </Badge>
                     </div>
                     <p className="mt-2 max-w-3xl text-sm text-slate-600">{description}</p>
                     <p className="mt-2 max-w-3xl text-xs text-slate-500">
-                        Key: {configKey} · 读取位置：{data?.definition.read_path || "未返回"} · 权限：{data?.definition.permission || "未返回"}
+                        配置标识：{configKey} · 读取位置：{data?.definition.read_path || "未返回"} · 权限：{data?.definition.permission || "未返回"}
                     </p>
                 </div>
                 <Button variant="outline" onClick={loadRule}>刷新配置</Button>
@@ -351,22 +361,22 @@ export function GovernedBusinessRulePage({
 
             <div className="grid gap-4 lg:grid-cols-3">
                 <GlassCard className="p-5">
-                    <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Active</div>
+                    <div className="text-xs font-bold uppercase tracking-widest text-slate-500">生效配置</div>
                     <div className="mt-2 text-2xl font-black text-slate-900">
                         {activeConfig ? `v${activeConfig.version}` : "默认兜底"}
                     </div>
-                    <p className="mt-2 text-sm text-slate-600">状态：{activeConfig?.status || "database config missing"}</p>
+                    <p className="mt-2 text-sm text-slate-600">状态：{activeConfig?.status ? formatConfigStatus(activeConfig.status) : "数据库配置缺失"}</p>
                     <p className="mt-1 text-sm text-slate-600">更新：{formatDateTime(activeConfig?.updated_at)}</p>
                 </GlassCard>
 
                 <GlassCard className="p-5">
-                    <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Fallback</div>
+                    <div className="text-xs font-bold uppercase tracking-widest text-slate-500">兜底策略</div>
                     <div className="mt-2 text-sm font-bold text-slate-900">{data?.definition.fallback_policy}</div>
                     <p className="mt-2 text-sm text-slate-600">配置缺失或非法时由后端规则服务统一兜底。</p>
                 </GlassCard>
 
                 <GlassCard className="p-5">
-                    <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Audit</div>
+                    <div className="text-xs font-bold uppercase tracking-widest text-slate-500">审计</div>
                     <div className="mt-2 text-2xl font-black text-slate-900">{data?.audit_logs?.length ?? 0}</div>
                     <p className="mt-2 text-sm text-slate-600">发布、回滚、预览和校验均写入审计记录。</p>
                 </GlassCard>
@@ -377,8 +387,8 @@ export function GovernedBusinessRulePage({
                     <div>
                         <h2 className="text-xl font-black text-slate-900">配置草稿</h2>
                         <p className="mt-1 text-sm text-slate-600">
-                            选中：{selectedConfig ? `${selectedConfig.status} · v${selectedConfig.version}` : "默认值"}。
-                            编辑区只保存为后台草稿，发布后才会成为 active。
+                            选中：{selectedConfig ? `${formatConfigStatus(selectedConfig.status)} · v${selectedConfig.version}` : "默认值"}。
+                            编辑区只保存为后台草稿，发布后才会成为生效配置。
                         </p>
                     </div>
                     <select
@@ -396,7 +406,7 @@ export function GovernedBusinessRulePage({
                     >
                         {data?.items.map((item) => (
                             <option key={item.id} value={item.id}>
-                                {item.status} · v{item.version}
+                                {formatConfigStatus(item.status)} · v{item.version}
                             </option>
                         ))}
                         {(data?.items.length ?? 0) === 0 && <option value="">默认配置</option>}
@@ -413,9 +423,9 @@ export function GovernedBusinessRulePage({
                     rows={22}
                     isValid={parsedDraft.ok}
                     validationMessage={parsedDraft.ok
-                        ? "JSON object 格式有效；仍需后端 schema 校验后才能发布。"
+                        ? "JSON 对象格式有效；仍需后端规则校验后才能发布。"
                         : `JSON 格式错误：${parsedDraft.message}`}
-                    helpText="必须是 JSON object；后端会在校验、预览、发布时执行 schema 约束。"
+                    helpText="必须是 JSON 对象；后端会在校验、预览、发布时执行规则约束。"
                 />
 
                 <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto_auto] lg:items-center">
@@ -458,7 +468,7 @@ export function GovernedBusinessRulePage({
                     {historyItems.map((item) => (
                         <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white/80 p-4 md:flex-row md:items-center md:justify-between">
                             <div>
-                                <div className="font-bold text-slate-900">v{item.version} · {item.status}</div>
+                                <div className="font-bold text-slate-900">v{item.version} · {formatConfigStatus(item.status)}</div>
                                 <div className="mt-1 text-sm text-slate-600">
                                     更新人：{item.updated_by || "未记录"} · {formatDateTime(item.updated_at)}
                                 </div>

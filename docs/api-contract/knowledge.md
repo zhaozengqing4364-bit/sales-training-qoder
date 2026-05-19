@@ -136,6 +136,7 @@ interface KnowledgeDictionaryGenerateResponse {
 | `GET` | `/api/v1/admin/knowledge/{kb_id}` | 查询知识库详情 |
 | `PUT` | `/api/v1/admin/knowledge/{kb_id}` | 更新知识库 |
 | `DELETE` | `/api/v1/admin/knowledge/{kb_id}` | 删除知识库 |
+| `PATCH` | `/api/v1/admin/knowledge/{kb_id}/rag-profile` | 更新 RAG 配置 |
 
 ### 文档管理
 
@@ -432,6 +433,7 @@ Authorization: Bearer <token>
 |------|------|------|
 | 2026-02-10 | 契约状态改为已实现 | 对齐 `knowledge/api.py` 真实路由 |
 | 2026-02-10 | 明确 admin/internal 双检索契约 | 统一 `results + total` 响应结构 |
+| 2026-05-19 | 增补 RAG Profile PATCH 接口 | 对齐 `/knowledge/{kb_id}/rag-profile` 路由 |
 | 2026-02-10 | 补齐文档重处理接口 | 增加 `reprocess` 约束与响应示例 |
 | 2026-02-10 | 清理历史规划引用 | 移除已废弃 roadmap 引用与旧示例 |
 | 2026-05-09 | 新增知识库级词典契约 | 支持创建/生成/发布 KB-scoped alias dictionary，并说明 evidence gate 约束 |

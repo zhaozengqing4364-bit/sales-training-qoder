@@ -171,7 +171,6 @@ feat(curriculum): add CaseItem and RoleProfile pilot
 
 **Files:**
 - Create or Modify: `docs/adr/2026-05-11-curriculum-practice-boundary-contract.md`
-- Reference: `docs/plans/2026-05-11-curriculum-practice-stepfun-llm-architecture-detailed.md`
 - Reference: `docs/adr/2026-05-11-architecture-boundary-domain-contract.md`
 
 - [ ] **Step 1: 写架构边界 addendum**

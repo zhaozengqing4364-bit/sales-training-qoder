@@ -71,7 +71,7 @@ function parseJsonField(text: string): JsonFieldState {
     try {
         const parsed = JSON.parse(trimmed);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-            return { text: trimmed, parsed: null, error: "值必须是 JSON object。" };
+            return { text: trimmed, parsed: null, error: "值必须是 JSON 对象。" };
         }
         return { text: trimmed, parsed: parsed as Record<string, unknown>, error: null };
     } catch (err) {
@@ -656,8 +656,8 @@ export default function AdminExaminerAgentsPage() {
                                     setForm((current) => ({ ...current, [key]: updated }));
                                 }}
                                 isValid={!field.error}
-                                validationMessage={field.error ? `JSON 格式错误：${field.error}` : "JSON object 格式有效。"}
-                                helpText="必须是 JSON object；留空会按空对象提交。"
+                                validationMessage={field.error ? `JSON 格式错误：${field.error}` : "JSON 对象格式有效。"}
+                                helpText="必须是 JSON 对象；留空会按空对象提交。"
                             />
                         );
                     })}

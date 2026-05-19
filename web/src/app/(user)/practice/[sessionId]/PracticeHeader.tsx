@@ -1,6 +1,8 @@
+import * as React from "react";
 import { ArrowLeft, Pause, Play, Square, Wifi, WifiOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { ConnectionState } from "@/hooks/use-practice-websocket";
 
 export function formatPracticeElapsedTime(seconds: number): string {
@@ -80,7 +82,23 @@ export function PracticeHeader({
     onTogglePauseResume,
     onEndSession,
 }: PracticeHeaderProps) {
+    const [showEndConfirm, setShowEndConfirm] = React.useState(false);
+
     return (
+        <>
+        <ConfirmDialog
+            open={showEndConfirm}
+            onOpenChange={setShowEndConfirm}
+            title="确认结束练习"
+            description="结束当前练习后将生成练习报告，你可以在报告中查看本次表现。确认要结束吗？"
+            confirmText="确认结束"
+            cancelText="取消"
+            variant="warning"
+            onConfirm={() => {
+                setShowEndConfirm(false);
+                onEndSession();
+            }}
+        />
         <header className="h-16 px-4 md:px-6 flex items-center justify-between bg-white/40 backdrop-blur-md border-b border-white/20 z-10">
             <div className="flex items-center gap-3">
                 <Button
@@ -108,7 +126,7 @@ export function PracticeHeader({
                         <span>•</span>
                         <span>{sessionStatusLabel}</span>
                         <span>•</span>
-                        <span>{voiceMode === "stepfun_realtime" ? "Realtime 模式" : "经典模式"}</span>
+                        <span>{voiceMode === "stepfun_realtime" ? "实时语音模式" : "经典模式"}</span>
                     </div>
                 </div>
             </div>
@@ -149,7 +167,7 @@ export function PracticeHeader({
                 <Button
                     variant="destructive"
                     size="sm"
-                    onClick={onEndSession}
+                    onClick={() => setShowEndConfirm(true)}
                     disabled={isEndingSession || isSessionTerminal || pendingLifecycleAction !== null}
                     className="hidden md:flex rounded-full"
                 >
@@ -189,7 +207,7 @@ export function PracticeHeader({
                 <Button
                     variant="ghost"
                     size="sm"
-                    onClick={onEndSession}
+                    onClick={() => setShowEndConfirm(true)}
                     disabled={isEndingSession || isSessionTerminal || pendingLifecycleAction !== null}
                     className="md:hidden text-red-500"
                 >
@@ -197,5 +215,6 @@ export function PracticeHeader({
                 </Button>
             </div>
         </header>
+        </>
     );
 }

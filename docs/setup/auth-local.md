@@ -75,7 +75,7 @@ AUTH_USER_PASSWORDS_JSON={"admin@qoder.ai":"admin123","support@qoder.ai":"suppor
 1. web 主链与所有脚本调用都改为 `Authorization` header 或 session cookie；
 2. `web/src/hooks/use-practice-websocket.ts` 不再生成 `token=`，且 focused tests 保持通过；
 3. backend websocket contract proof 明确证明 query token 已降为兼容或已完全移除；
-4. `docs/api-contract/websocket.md` 与 `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 同步更新，不保留双重 authority。
+4. `docs/api-contract/websocket.md` 同步更新，不保留双重 authority。
 
 ## 9) Secret hygiene gate
 
@@ -122,7 +122,7 @@ python scripts/bootstrap_auth_admin.py --email support@qoder.ai --name 支持工
 backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q
 backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py -x -q
 npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/lib/auth-handler.test.ts
-rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/auth-handler.ts
+rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md web/src/lib/auth-handler.ts
 ```
 
 如果这些 proof 与代码/文档描述不一致，应先修正文档 authority 或运行时，再继续后续安全切片。 

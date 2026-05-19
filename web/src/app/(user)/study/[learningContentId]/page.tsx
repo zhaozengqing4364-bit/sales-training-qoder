@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { BookOpen, CheckCircle2, RefreshCcw } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, RefreshCcw } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { LearnerStudyContent, LearnerStudyProgress, LearningChapter } from "@/lib/api/types";
@@ -76,6 +76,16 @@ export default function StudyPage() {
     const selectedChapter = sortedChapters.find((c) => c.chapter_id === selectedChapterId) ?? null;
 
     const completedIds = new Set(progress?.completed_chapter_ids ?? []);
+
+    const completedCount = progress?.completed_count ?? 0;
+    const totalCount = progress?.total_chapters ?? sortedChapters.length;
+    const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    const currentChapterIndex = sortedChapters.findIndex((c) => c.chapter_id === selectedChapterId);
+    const nextChapter =
+        currentChapterIndex >= 0 && currentChapterIndex < sortedChapters.length - 1
+            ? sortedChapters[currentChapterIndex + 1]
+            : null;
 
     const loadContent = useCallback(async () => {
         setIsLoading(true);
@@ -152,8 +162,8 @@ export default function StudyPage() {
                         <p className="mt-1 text-xs text-amber-600">
                             后端服务可能未就绪，请确认服务已启动后刷新页面。
                         </p>
-                    </div>
-                </GlassCard>
+                            </div>
+                        </GlassCard>
             </div>
         );
     }
@@ -203,7 +213,7 @@ export default function StudyPage() {
                 <div className="flex items-center gap-3">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600">
                         <BookOpen className="h-3.5 w-3.5" />
-                        阅读进度 {progress?.completed_count ?? 0}/{progress?.total_chapters ?? sortedChapters.length}
+                        阅读进度 {completedCount}/{totalCount} ({progressPercent}%)
                     </span>
                     {isCompleted && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-600">
@@ -213,6 +223,22 @@ export default function StudyPage() {
                     )}
                 </div>
             </div>
+
+            {totalCount > 0 && (
+                <div
+                    className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"
+                    role="progressbar"
+                    aria-valuenow={progressPercent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`学习进度 ${progressPercent}%`}
+                >
+                    <div
+                        className="bg-blue-500 h-full rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${progressPercent}%` }}
+                    />
+                </div>
+            )}
 
             <div className="block lg:hidden">
                 <label htmlFor="chapter-select" className="sr-only">
@@ -236,7 +262,7 @@ export default function StudyPage() {
 
             <div className="grid gap-6 lg:grid-cols-4">
                 <div className="hidden lg:block lg:col-span-1">
-                    <GlassCard className="p-4">
+                    <GlassCard className="p-4 sticky top-6">
                         <h2 className="mb-3 text-sm font-bold text-slate-500 uppercase tracking-wider">章节</h2>
                         <ChapterSidebar
                             chapters={sortedChapters}
@@ -284,6 +310,18 @@ export default function StudyPage() {
                                     </Button>
                                 )}
                             </div>
+
+                            {nextChapter ? (
+                                <div className="mt-4 border-t border-slate-100 pt-4">
+                                    <Button
+                                        onClick={() => setSelectedChapterId(nextChapter.chapter_id)}
+                                        className="rounded-full"
+                                    >
+                                        <ArrowRight className="mr-2 h-4 w-4" />
+                                        下一章：{nextChapter.title}
+                                    </Button>
+                                </div>
+                            ) : null}
                         </GlassCard>
                     ) : (
                         <GlassCard className="p-8 text-center">

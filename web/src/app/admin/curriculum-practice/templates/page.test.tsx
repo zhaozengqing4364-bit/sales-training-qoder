@@ -337,7 +337,7 @@ describe("AdminPracticeTemplatesPage", () => {
 
         expect(await screen.findByText("published · v1")).toBeTruthy();
         expect(screen.queryByRole("button", { name: "编辑模板" })).toBeNull();
-        expect(screen.getByText("仅 draft 模板可编辑")).toBeTruthy();
+        expect(screen.getByText("仅草稿模板可编辑")).toBeTruthy();
     });
 
     it("updates the row after publishing succeeds", async () => {

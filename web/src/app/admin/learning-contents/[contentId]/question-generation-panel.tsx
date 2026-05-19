@@ -107,7 +107,7 @@ export function QuestionGenerationPanel({
                 handleUpdateDraft(index, "scoring_criteria", parsed);
                 setScoringCriteriaErrors((prev) => ({ ...prev, [index]: null }));
             } else {
-                setScoringCriteriaErrors((prev) => ({ ...prev, [index]: "评分标准必须是 JSON object。" }));
+                setScoringCriteriaErrors((prev) => ({ ...prev, [index]: "评分标准必须是 JSON 对象。" }));
             }
         } catch (error) {
             setScoringCriteriaErrors((prev) => ({
@@ -288,8 +288,8 @@ export function QuestionGenerationPanel({
                                 onChange={(value) => handleUpdateScoringCriteria(index, value)}
                                 rows={4}
                                 isValid={!scoringCriteriaErrors[index]}
-                                validationMessage={scoringCriteriaErrors[index] || "评分标准 JSON object 格式有效。"}
-                                helpText="必须是 JSON object；无效时不会覆盖当前草稿。"
+                                validationMessage={scoringCriteriaErrors[index] || "评分标准 JSON 对象格式有效。"}
+                                helpText="必须是 JSON 对象；无效时不会覆盖当前草稿。"
                             />
                             <div>
                                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">

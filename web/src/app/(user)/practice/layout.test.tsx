@@ -89,4 +89,20 @@ describe("PracticeLayout learner help entry", () => {
         expect(screen.queryByRole("button", { name: "帮助与反馈" })).toBeNull();
         expect(screen.getByText("report content")).toBeTruthy();
     });
+
+    it("omits the floating help entry and allows scrolling on replay pages", () => {
+        usePathnameMock.mockReturnValue("/practice/session-42/replay");
+
+        render(
+            <PracticeLayout>
+                <div>replay content</div>
+            </PracticeLayout>,
+        );
+
+        const layout = screen.getByTestId("practice-layout");
+        expect(layout.className).toContain("overflow-y-auto");
+        expect(layout.className).not.toContain("overflow-hidden");
+        expect(screen.queryByRole("button", { name: "帮助与反馈" })).toBeNull();
+        expect(screen.getByText("replay content")).toBeTruthy();
+    });
 });

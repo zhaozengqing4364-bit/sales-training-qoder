@@ -62,25 +62,33 @@ function getRoleLabel(role: string): string {
 }
 
 function formatGovernanceIssue(issue: string): string {
-  switch (issue) {
-    case "variables_object_migratable":
-    case "variables_object_schema":
-      return "历史变量对象已标记待迁移";
-    case "variables_string_not_json_array":
-    case "variables_json_not_array":
-    case "variables_not_array":
-    case "variables_invalid_json":
-    case "variables_non_string_item":
-    case "variables_not_list":
-      return "变量字段不是字符串数组";
-    case "prompt_type_not_allowed":
-    case "invalid_prompt_type":
-      return "提示词类型不在允许列表";
-    case "empty_template":
-      return "模板内容为空";
-    default:
-      return issue;
-  }
+    switch (issue) {
+        case "variables_object_migratable":
+        case "variables_object_schema":
+            return "历史变量对象已标记待迁移";
+        case "variables_string_not_json_array":
+        case "variables_json_not_array":
+        case "variables_not_array":
+        case "variables_invalid_json":
+        case "variables_non_string_item":
+        case "variables_not_list":
+            return "变量字段不是字符串数组";
+        case "prompt_type_not_allowed":
+        case "invalid_prompt_type":
+            return "提示词类型不在允许列表";
+        case "empty_template":
+            return "模板内容为空";
+        default:
+            return issue;
+    }
+}
+
+function formatCategoryLabel(category: string): string {
+    switch (category) {
+        case "sales": return "销售训练";
+        case "presentation": return "PPT 演练";
+        default: return category;
+    }
 }
 
 type ConfirmAction =
@@ -413,7 +421,7 @@ export default function AdminPromptsPage() {
     if (confirmAction.type === "remediate") {
       return { title: "停用非法历史模板", description: "将批量停用非法且仍活跃的历史模板，避免运行时继续命中。", confirmText: "确认停用", variant: "danger" as const };
     }
-    return { title: "删除场景绑定", description: `删除「${confirmAction.binding.scenario_type} / ${confirmAction.binding.prompt_type}」绑定后，该场景会回退到默认模板。`, confirmText: "确认删除", variant: "danger" as const };
+    return { title: "删除场景绑定", description: `删除「${confirmAction.binding.scenario_type === "sales" ? "销售" : "演讲"} / ${PROMPT_TYPE_LABELS[confirmAction.binding.prompt_type as PromptType] || confirmAction.binding.prompt_type}」绑定后，该场景会回退到默认模板。`, confirmText: "确认删除", variant: "danger" as const };
   })();
 
   useEffect(() => {
@@ -511,7 +519,7 @@ export default function AdminPromptsPage() {
               <div className="font-semibold">提示词治理状态</div>
               <div className="mt-1">
                 {governanceStatus
-                  ? `允许类型 ${governanceStatus.allowed_prompt_types.join(" / ")}；非法历史模板 ${governanceStatus.invalid_count} 个；变量 schema：${governanceStatus.policy.variables_schema}`
+                  ? `允许类型 ${governanceStatus.allowed_prompt_types.join(" / ")}；非法历史模板 ${governanceStatus.invalid_count} 个；变量规则：${governanceStatus.policy.variables_schema}`
                   : "治理状态暂不可用，请刷新或查看后端日志。"}
               </div>
             </div>
@@ -577,7 +585,7 @@ export default function AdminPromptsPage() {
               <div className="flex flex-wrap gap-2">
                 {governanceStatus.issues.slice(0, 4).map((issue) => (
                   <Badge key={issue.template_id} className="bg-white text-red-700 border border-red-200">
-                    {issue.name || issue.template_id.slice(0, 8)} · {issue.issue_codes.join("/")}
+                    {issue.name || issue.template_id.slice(0, 8)} · {issue.issue_codes.map(formatGovernanceIssue).join(" / ")}
                   </Badge>
                 ))}
               </div>
@@ -647,7 +655,7 @@ export default function AdminPromptsPage() {
                             {PROMPT_TYPE_LABELS[template.prompt_type]}
                           </Badge>
                         </td>
-                        <td className="py-3 pr-3 text-slate-600">{template.category}</td>
+                        <td className="py-3 pr-3 text-slate-600">{formatCategoryLabel(template.category)}</td>
                         <td className="py-3 pr-3">
                           <div className="flex flex-col gap-1">
                             <Badge className={template.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}>
@@ -727,7 +735,7 @@ export default function AdminPromptsPage() {
             <div className="space-y-3">
               <div>
                 <div className="text-sm font-semibold text-zinc-900">{selectedTemplate.name}</div>
-                <div className="text-xs text-slate-500 mt-1">类型：{PROMPT_TYPE_LABELS[selectedTemplate.prompt_type]} · 分类：{selectedTemplate.category}</div>
+                <div className="text-xs text-slate-500 mt-1">类型：{PROMPT_TYPE_LABELS[selectedTemplate.prompt_type]} · 分类：{formatCategoryLabel(selectedTemplate.category)}</div>
               </div>
 
               <div className="text-xs text-slate-500">变量：{selectedTemplate.variables.length ? selectedTemplate.variables.join("、") : "无"}</div>

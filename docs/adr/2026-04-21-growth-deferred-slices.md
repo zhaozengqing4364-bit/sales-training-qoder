@@ -52,9 +52,8 @@ Do not enable the following user-facing behaviors in this slice:
 - The shipped Growth UI never advertises disabled G-08/G-10 behavior.
 - G-04 remains safe: users can still review persisted highlights in report/replay,
   but cross-device selected-review-list sync and coach sharing are deferred.
-- Future implementation must include tests from
-  `docs/plans/2026-04-21-audit-product-remediation-test-spec.md` §11.5 before
-  exposing sharing.
+- Future implementation must include equivalent
+  coverage before exposing sharing.
 
 ## Rejected
 

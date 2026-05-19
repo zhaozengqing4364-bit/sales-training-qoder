@@ -91,7 +91,7 @@ describe("StudyPage", () => {
 
         expect(await screen.findByRole("heading", { name: "销售异议处理" })).toBeTruthy();
         expect(screen.getByText("学习如何处理常见异议")).toBeTruthy();
-        expect(screen.getByText("阅读进度 0/2")).toBeTruthy();
+        expect(screen.getByText(/阅读进度 0\/2/)).toBeTruthy();
         expect(screen.getByText("先确认客户背景。")).toBeTruthy();
         expect(screen.getByRole("button", { name: /标记完成/ })).toBeTruthy();
     });
@@ -118,7 +118,7 @@ describe("StudyPage", () => {
         fireEvent.click(completeButton);
 
         expect(completeChapterMock).toHaveBeenCalledWith("content-1", "chapter-1");
-        expect(await screen.findByText("阅读进度 1/2")).toBeTruthy();
+        expect(await screen.findByText(/阅读进度 1\/2/)).toBeTruthy();
         expect(screen.getByText("本章已完成")).toBeTruthy();
     });
 
@@ -132,7 +132,7 @@ describe("StudyPage", () => {
         fireEvent.click(screen.getByRole("button", { name: /标记完成/ }));
 
         expect((await screen.findByRole("alert")).textContent).toMatch(/标记完成失败/);
-        expect(screen.getByText("阅读进度 0/2")).toBeTruthy();
+        expect(screen.getByText(/阅读进度 0\/2/)).toBeTruthy();
         expect(screen.queryByText("本章已完成")).toBeNull();
     });
 
@@ -201,7 +201,32 @@ describe("StudyPage", () => {
 
         render(<StudyPage />);
 
-        await screen.findByText("阅读进度 1/2");
+        await screen.findByText(/阅读进度 1\/2/);
         expect(screen.getByText("本章已完成")).toBeTruthy();
+    });
+
+    it("displays progress bar with percentage", async () => {
+        getContentMock.mockResolvedValue(makeContent());
+        render(<StudyPage />);
+
+        await screen.findByText(/阅读进度 0\/2/);
+        const progressBar = screen.getByRole("progressbar", { name: /学习进度/ });
+        expect(progressBar).toBeTruthy();
+        expect(progressBar.getAttribute("aria-valuenow")).toBe("0");
+        expect(progressBar.getAttribute("aria-valuemax")).toBe("100");
+    });
+
+    it("shows next-chapter button and switches content on click", async () => {
+        getContentMock.mockResolvedValue(makeContent());
+        render(<StudyPage />);
+
+        await screen.findByText("先确认客户背景。");
+        const nextButton = screen.getByRole("button", { name: /下一章/ });
+        expect(nextButton).toBeTruthy();
+
+        fireEvent.click(nextButton);
+
+        expect(await screen.findByText("识别常见的四种异议类型。")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: /下一章/ })).toBeNull();
     });
 });

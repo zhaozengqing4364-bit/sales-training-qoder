@@ -594,7 +594,7 @@ export default function AdminPracticeTemplatesPage() {
                                     {item.status === "draft" ? (
                                         <Button variant="outline" onClick={() => { handleEdit(item); }}>编辑模板</Button>
                                     ) : (
-                                        <span className="self-center text-xs text-slate-500">仅 draft 模板可编辑</span>
+                                        <span className="self-center text-xs text-slate-500">仅草稿模板可编辑</span>
                                     )}
                                     <Button
                                         onClick={() => { setConfirmTarget({ type: "publish", template: item }); }}

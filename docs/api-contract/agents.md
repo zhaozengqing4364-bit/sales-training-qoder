@@ -82,6 +82,7 @@ interface PersonaUserListItem {
 | `POST` | `/api/v1/admin/agents/{agent_id}/publish` | 发布 Agent |
 | `POST` | `/api/v1/admin/agents/{agent_id}/archive` | 归档 Agent |
 | `POST` | `/api/v1/admin/agents/{agent_id}/unpublish` | 下线 Agent（回退 `draft`） |
+| `GET` | `/api/v1/admin/agents/industry-pack-contract` | 获取行业包合约 |
 
 ### 用户端
 
@@ -262,6 +263,7 @@ Authorization: Bearer <token>
 |------|------|------|
 | 2026-02-10 | 契约状态改为已实现 | 对齐 `agents.py` 真实路由 |
 | 2026-02-10 | 增补 `unpublish` 生命周期接口 | 补齐 `/admin/agents/{agent_id}/unpublish` |
+| 2026-05-19 | 增补 `industry-pack-contract` 接口 | 补齐 `/admin/agents/industry-pack-contract` |
 | 2026-02-10 | 清理历史规划引用 | 移除已废弃 roadmap 引用与旧示例 |
 | 2026-02-11 | 补充归档场景会话保护约束 | 记录 `archived` Agent 在会话创建入口的拒绝语义 `[AGENT_ARCHIVED]` |
 | 2026-02-11 | 补充增强模式参数配对约束 | 记录 `agent_id/persona_id` 需成对传入，错误码 `[AGENT_PERSONA_PAIR_REQUIRED]` |

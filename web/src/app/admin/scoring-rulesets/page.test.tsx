@@ -173,12 +173,12 @@ describe("AdminScoringRulesetsPage", () => {
         render(<AdminScoringRulesetsPage />);
 
         await screen.findAllByText(/sales-v2/);
-        fireEvent.change(screen.getByPlaceholderText("dry-run session_id"), {
+        fireEvent.change(screen.getByPlaceholderText("试运行 session_id"), {
             target: { value: "session-1" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Dry-run" }));
+        fireEvent.click(screen.getByRole("button", { name: "试运行" }));
 
-        expect(await screen.findByText(/Dry-run 完成；mutates_history=false/)).toBeTruthy();
+        expect(await screen.findByText(/试运行完成；不会修改历史记录/)).toBeTruthy();
         expect(screen.getByText(/"overall_score": 6/)).toBeTruthy();
         expect(dryRunScoringRulesetMock).toHaveBeenCalledWith({
             session_id: "session-1",

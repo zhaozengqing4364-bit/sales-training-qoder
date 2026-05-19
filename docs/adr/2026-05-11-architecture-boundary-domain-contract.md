@@ -11,10 +11,8 @@ Accepted. 本 ADR 是 PRD #23 入口 issue #24 的产出，作为 #25-#45 所有
 本 ADR 在不大改功能的前提下，锁定领域模型、实体关系、共享接口契约、配置迁移规则、HITL/AFK 门禁，确保 #25-#45 的所有 AFK agent 能以一致语言和边界工作。
 
 **参考文档（必读）**：
-- `CONTEXT.md`：Phase 4 E2E 领域语言
 - `docs/adr/2026-03-14-training-runtime-subject.md`：运行时主语收敛 ADR
 - `docs/adr/2026-04-24-scoring-ruleset-governance.md`：评分治理 ADR
-- `.sisyphus/drafts/architecture-upgrade-direction.md`：架构升级方向
 
 ## Decision
 
@@ -362,15 +360,13 @@ AI 能力层
 
 **必读清单**（每个 issue 开始前）：
 1. 本文档 `docs/adr/2026-05-11-architecture-boundary-domain-contract.md`
-2. `CONTEXT.md`（领域语言）
-3. Parent issue #23 body
-4. 当前 issue body
-5. 上游 blocked issue 的 completion note
+2. Parent issue #23 body
+3. 当前 issue body
+4. 上游 blocked issue 的 completion note
 
 **术语使用规则**：
 - 实体使用本文档 Section 1 中定义的标准名称。
-- 流程使用 CONTEXT.md 中的标准短语。
-- 不自行创造新术语；如需新概念，先记录到 `.sisyphus/notepads/prd-23-full-implementation/issues.md` 并标记为 HITL。
+- 不自行创造新术语；如需新概念，先标记为 HITL。
 
 **引用示例**：
 > "按 ADR 2026-05-11 Section 1.1，TrainingTask 的状态机为 assigned→in_progress→completed，本实现不改变该状态集。"
@@ -406,4 +402,4 @@ AI 能力层
 - 本 ADR 由 #24 完成并 review 后即生效。
 - #25 和 #30 直接引用本文档作为实施起点。
 - #41 引用本文档 Section 3 定义 Sales/PPT 插件协议。
-- 如后续 issue 实施中发现本文档未覆盖的边界歧义，需追加补充 ADR 或记录到 `.sisyphus/notepads/prd-23-full-implementation/issues.md`。
+- 如后续 issue 实施中发现本文档未覆盖的边界歧义，需追加补充 ADR。

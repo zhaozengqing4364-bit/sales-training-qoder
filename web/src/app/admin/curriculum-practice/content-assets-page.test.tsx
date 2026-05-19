@@ -111,7 +111,7 @@ describe("AdminContentAssetsPage", () => {
 
         expect(await screen.findByRole("heading", { name: "CaseItem 案例库" })).toBeTruthy();
         expect(screen.getByText("制造业 · 采购总监")).toBeTruthy();
-        expect(screen.getByText("draft · v1")).toBeTruthy();
+        expect(screen.getByText("草稿 · v1")).toBeTruthy();
         fireEvent.change(screen.getByLabelText("搜索"), { target: { value: "不存在" } });
         expect(screen.getByText("暂无资产")).toBeTruthy();
     });
@@ -206,9 +206,9 @@ describe("AdminContentAssetsPage", () => {
         await screen.findByText("谨慎型采购总监");
 
         fireEvent.click(screen.getByRole("button", { name: "编辑资产" }));
-        fireEvent.change(screen.getByLabelText("Voice Name"), { target: { value: "谨慎采购" } });
-        fireEvent.change(screen.getByLabelText("Voice Sample URL"), { target: { value: "https://cdn.example/voice.wav" } });
-        fireEvent.change(screen.getByLabelText("Voice Audio Base64"), { target: { value: "UklGRg==" } });
+        fireEvent.change(screen.getByLabelText("声音名称"), { target: { value: "谨慎采购" } });
+        fireEvent.change(screen.getByLabelText("声音样本 URL"), { target: { value: "https://cdn.example/voice.wav" } });
+        fireEvent.change(screen.getByLabelText("声音音频 Base64"), { target: { value: "UklGRg==" } });
         fireEvent.click(screen.getByRole("button", { name: "提交声音克隆" }));
 
         await waitFor(() => {

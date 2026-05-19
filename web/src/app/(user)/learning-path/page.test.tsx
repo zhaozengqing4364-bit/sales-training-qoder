@@ -64,6 +64,7 @@ describe("LearningPathPage", () => {
                     state: "available",
                     prerequisites: [],
                     completion_policy: { min_score: 7 },
+                    result: { score: 8, passed: true, attempts: 2 },
                     report_url: "/practice/session-1/report",
                     failure_reason: null,
                     retry_action: null,
@@ -89,8 +90,26 @@ describe("LearningPathPage", () => {
         expect(await screen.findByText("我的学习路径")).toBeTruthy();
         expect(screen.getByText("产品证据表达")).toBeTruthy();
         expect(screen.getByText("主管认证复核")).toBeTruthy();
-        expect(screen.getByText("前置条件：template_stage_product")).toBeTruthy();
+        expect(screen.getByText("前置条件：产品证据表达")).toBeTruthy();
         expect(screen.getByText("完成标准：最低 7 分")).toBeTruthy();
+        expect(screen.getByText(/得分：8/)).toBeTruthy();
+        expect(screen.getByText(/通过：已通过/)).toBeTruthy();
+    });
+
+    it("shows learner-friendly stage result labels without raw keys, booleans, or JSON", async () => {
+        render(<LearningPathPage />);
+
+        await screen.findByText("我的学习路径");
+
+        // Friendly labels MUST be visible
+        expect(screen.getByText("阶段结果：得分：8，通过：已通过，尝试次数：2")).toBeTruthy();
+
+        // Raw internals MUST NOT leak
+        expect(screen.queryByText("通过：true")).toBeNull();
+        expect(screen.queryByText("通过：false")).toBeNull();
+        expect(screen.queryByText("template_stage_product")).toBeNull();
+        expect(screen.queryByText("template_stage_review")).toBeNull();
+        expect(screen.queryByText(/{\s*"score"/)).toBeNull();
     });
 
     it("renders failure reason and retry action", async () => {

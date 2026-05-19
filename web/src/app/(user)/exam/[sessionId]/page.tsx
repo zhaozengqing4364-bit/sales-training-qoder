@@ -12,6 +12,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GlassSheet } from "@/components/ui/glass-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -118,6 +119,9 @@ export default function ExamPage() {
   const [isPanelOpen, setIsPanelOpen] = React.useState(false);
   const [answerText, setAnswerText] = React.useState("");
   const [sending, setSending] = React.useState(false);
+  const [hasPendingSubmit, setHasPendingSubmit] = React.useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = React.useState(false);
+  const pendingAnswerRef = React.useRef("");
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
   const {
@@ -146,6 +150,48 @@ export default function ExamPage() {
     setErrorState,
   } = useExaminerWebSocket(sessionId);
 
+  // Versioned, question-scoped localStorage key for answer persistence
+  const storageKey = currentQuestion
+    ? `exam-answer-v1-${sessionId}-${currentQuestion.question_id}`
+    : null;
+
+  // Restore answer text from localStorage on mount or question change
+  React.useEffect(() => {
+    if (!storageKey || examPhase !== "answering" || !currentQuestion) return;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setAnswerText(saved);
+      } else {
+        setAnswerText("");
+      }
+    } catch {
+      setAnswerText("");
+    }
+    pendingAnswerRef.current = "";
+    setSending(false);
+    setHasPendingSubmit(false);
+    setShowSubmitConfirm(false);
+  }, [storageKey, examPhase, currentQuestion]);
+
+  // Persist answer text to localStorage on changes
+  React.useEffect(() => {
+    if (!storageKey || examPhase !== "answering" || !currentQuestion) return;
+    if (answerText) {
+      try {
+        localStorage.setItem(storageKey, answerText);
+      } catch {
+        // localStorage not available
+      }
+    } else {
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        // localStorage not available
+      }
+    }
+  }, [answerText, storageKey, examPhase, currentQuestion]);
+
   React.useEffect(() => {
     let cancelled = false;
     api.featureFlags
@@ -172,11 +218,32 @@ export default function ExamPage() {
   const handleSubmit = () => {
     const trimmed = answerText.trim();
     if (!trimmed || sending) return;
-    setSending(true);
-    sendAnswer(trimmed);
-    setAnswerText("");
-    setSending(false);
+    pendingAnswerRef.current = trimmed;
+    setShowSubmitConfirm(true);
   };
+
+  const handleConfirmSubmit = () => {
+    setShowSubmitConfirm(false);
+    const trimmed = pendingAnswerRef.current;
+    if (!trimmed) return;
+    // Guard: only enter sending state when answer can actually be sent
+    if (connectionState !== "connected") return;
+    if (examPhase !== "answering") return;
+    if (!currentQuestion) return;
+    setSending(true);
+    setHasPendingSubmit(true);
+    sendAnswer(trimmed);
+  };
+
+  // Clear sending state and draft when examPhase transitions away from "answering"
+  React.useEffect(() => {
+    if (hasPendingSubmit && examPhase !== "answering") {
+      setSending(false);
+      setHasPendingSubmit(false);
+      setAnswerText("");
+      pendingAnswerRef.current = "";
+    }
+  }, [examPhase, hasPendingSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -225,6 +292,17 @@ export default function ExamPage() {
   }
 
   return (
+    <>
+    <ConfirmDialog
+      open={showSubmitConfirm}
+      onOpenChange={setShowSubmitConfirm}
+      title="提交答案"
+      description="答案提交后将由 AI 进行评分，提交后不可修改。确认要提交当前答案吗？"
+      confirmText="确认提交"
+      cancelText="继续作答"
+      variant="default"
+      onConfirm={handleConfirmSubmit}
+    />
     <div className="flex h-full w-full">
       {/* Left column: exam content */}
       <div className="flex-1 flex flex-col h-full relative">
@@ -449,8 +527,16 @@ export default function ExamPage() {
                 disabled={!answerText.trim() || sending}
                 size="lg"
                 className="self-end rounded-full"
+                aria-label="提交答案"
               >
-                <Send className="w-4 h-4" />
+                {sending ? (
+                  <span className="flex items-center gap-1">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    提交中
+                  </span>
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
               </Button>
             </div>
             <p className="mt-2 text-center text-xs text-slate-400">
@@ -493,5 +579,6 @@ export default function ExamPage() {
         </div>
       </GlassSheet>
     </div>
+    </>
   );
 }

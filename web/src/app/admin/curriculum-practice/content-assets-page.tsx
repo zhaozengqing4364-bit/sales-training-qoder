@@ -64,6 +64,15 @@ function statusVariant(status: string): "green" | "orange" | "gray" {
     return "gray";
 }
 
+function formatAssetStatus(status: string): string {
+    switch (status) {
+        case "draft": return "草稿";
+        case "published": return "已发布";
+        case "archived": return "已归档";
+        default: return status;
+    }
+}
+
 function refsFromText(value: string): string[] {
     return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
@@ -220,7 +229,7 @@ function roleFormFromRecord(item: RoleProfileRecord): RoleProfileFormState {
 }
 
 function recordStatus(item: AssetRecord): string {
-    return `${item.status} · v${item.version}`;
+    return `${formatAssetStatus(item.status)} · v${item.version}`;
 }
 
 function isCaseItem(item: AssetRecord): item is CaseItemRecord {
@@ -238,7 +247,7 @@ function recordTitle(item: AssetRecord): string {
 function recordSubtitle(item: AssetRecord): string {
     return isCaseItem(item)
         ? `痛点 ${item.pain_points.length} · 异议 ${item.objections.length}`
-        : `${item.role_type} · ${item.pressure_level} pressure · persona ${item.persona_ref ?? "未绑定"}`;
+        : `${item.role_type} · 压力等级 ${item.pressure_level} · 角色画像 ${item.persona_ref ?? "未绑定"}`;
 }
 
 export function AdminContentAssetsPage({ assetType }: { assetType: AssetType }) {
@@ -509,7 +518,7 @@ export function AdminContentAssetsPage({ assetType }: { assetType: AssetType }) 
                     className="min-h-28 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                     value={csvText}
                     onChange={(event) => setCsvText(event.target.value)}
-                    placeholder={isCase ? "industry,company_profile,customer_role,pain1;pain2,objection1;objection2,hidden_information,success1;success2,content_hash" : "role_name,communication_style,pressure_level,knowledge1;knowledge2,rule1;rule2,voice_style_hint,content_hash"}
+                    placeholder={isCase ? "CSV 列格式：industry,company_profile,customer_role,pain1;pain2,objection1;objection2,hidden_information,success1;success2,content_hash" : "CSV 列格式：role_name,communication_style,pressure_level,knowledge1;knowledge2,rule1;rule2,voice_style_hint,content_hash"}
                 />
                 <div className="flex flex-wrap gap-3">
                     <Button variant="outline" onClick={handleCsvValidate}>校验 CSV</Button>
@@ -539,9 +548,9 @@ export function AdminContentAssetsPage({ assetType }: { assetType: AssetType }) 
                         <span>状态</span>
                         <select className="w-full rounded-xl border border-slate-200 px-3 py-2" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                             <option value="all">全部</option>
-                            <option value="draft">draft</option>
-                            <option value="published">published</option>
-                            <option value="archived">archived</option>
+                            <option value="draft">草稿</option>
+                            <option value="published">已发布</option>
+                            <option value="archived">已归档</option>
                         </select>
                     </label>
                 </div>
@@ -561,7 +570,7 @@ export function AdminContentAssetsPage({ assetType }: { assetType: AssetType }) 
                                     {item.status === "draft" ? (
                                         <Button variant="outline" onClick={() => handleEdit(item)}>编辑资产</Button>
                                     ) : (
-                                        <span className="self-center text-xs text-slate-500">仅 draft 可编辑</span>
+                                        <span className="self-center text-xs text-slate-500">仅草稿可编辑</span>
                                     )}
                                     <Button onClick={() => { setConfirmTarget({ type: "publish", item }); }} disabled={item.status === "published" || busyId !== null}>
                                         {busyId === recordId(item) ? "发布中..." : "发布资产"}
@@ -620,10 +629,10 @@ function RoleProfileForm({ form, onChange }: { form: RoleProfileFormState; onCha
             <TextField label="声音风格提示" value={form.voice_style_hint} onChange={(value) => update({ voice_style_hint: value })} />
             <TextAreaField label="沟通风格" value={form.communication_style} onChange={(value) => update({ communication_style: value })} />
             <TextField label="Content Hash" value={form.content_hash} onChange={(value) => update({ content_hash: value })} />
-            <TextField label="Voice Name" value={form.voice_name} onChange={(value) => update({ voice_name: value })} />
-            <TextField label="Voice Sample URL" value={form.voice_sample_url} onChange={(value) => update({ voice_sample_url: value })} />
-            <TextField label="Voice Audio Base64" value={form.voice_audio_base64} onChange={(value) => update({ voice_audio_base64: value })} />
-            <TextField label="Voice Content Type" value={form.voice_content_type} onChange={(value) => update({ voice_content_type: value })} />
+            <TextField label="声音名称" value={form.voice_name} onChange={(value) => update({ voice_name: value })} />
+            <TextField label="声音样本 URL" value={form.voice_sample_url} onChange={(value) => update({ voice_sample_url: value })} />
+            <TextField label="声音音频 Base64" value={form.voice_audio_base64} onChange={(value) => update({ voice_audio_base64: value })} />
+            <TextField label="声音内容类型" value={form.voice_content_type} onChange={(value) => update({ voice_content_type: value })} />
         </div>
     );
 }

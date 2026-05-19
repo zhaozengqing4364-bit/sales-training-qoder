@@ -295,30 +295,42 @@ function buildSalesDimensionScores(scores: {
     ];
 }
 
+function formatVoiceModeLabel(mode: string | null | undefined): string {
+    if (!mode) return "--";
+    if (mode === "legacy") return "经典语音模式";
+    if (mode === "stepfun_realtime") return "实时语音模式";
+    return "已选择语音模式";
+}
+
+function hasVoiceSourceKeys(source: Record<string, string> | null | undefined): boolean {
+    if (!source) return false;
+    return Object.keys(source).length > 0;
+}
+
 const SALES_RUBRIC_EXPLAINERS = [
     {
         id: "discovery_qualification",
-        label: "discovery / qualification",
-        description: "先确认现状、目标、优先级和决策线索；当前 qualification 仍并入 discovery。",
+        label: "发现需求 / 资质判断",
+        description: "先确认现状、目标、优先级和决策线索；当前资质判断仍并入需求发现。",
     },
     {
         id: "value_story",
-        label: "value",
+        label: "价值传递",
         description: "把产品能力翻译成客户收益，而不是只讲功能清单。",
     },
     {
         id: "evidence_proof",
-        label: "evidence",
-        description: "用案例、数据、ROI 或 benchmark 支撑价值主张。",
+        label: "证据支撑",
+        description: "用案例、数据、ROI 或基准数据支撑价值主张。",
     },
     {
         id: "objection_reframe",
-        label: "objection",
+        label: "异议处理",
         description: "先承接客户顾虑，再用收益和证据推进对话。",
     },
     {
         id: "next_step_commitment",
-        label: "next-step",
+        label: "下一步推进",
         description: "把对话收束为动作、时间点和责任人，不把推进留在口头上。",
     },
 ] as const;
@@ -1712,7 +1724,7 @@ export default function ComprehensiveReportPage() {
         : "综合评分反映价值翻译、证据支撑和异议推进的完成度。";
     const scoreBasisIntro = report?.evaluable === false
         ? "本会话证据不足，不会纳入首页、个人中心或排行榜均分。"
-        : "本分数来自当前会话的 canonical evidence；只有可评估训练才会纳入首页、个人中心和排行榜均分。";
+        : "本分数来自当前会话的统一评分依据；只有可评估训练才会纳入首页、个人中心和排行榜均分。";
     const overallResult = report?.overall_result || null;
     const overallResultLabel = overallResult === "strong_pass"
         ? "销售价值表达优秀"
@@ -2174,12 +2186,12 @@ export default function ComprehensiveReportPage() {
                             <div className="mt-3 flex flex-wrap gap-2 text-xs text-emerald-700">
                                 {nextRecommendation.rule_version ? (
                                     <span className="rounded-full border border-emerald-100 bg-white/80 px-2.5 py-1">
-                                        rule {nextRecommendation.rule_version}
+                                        推荐规则版本：{nextRecommendation.rule_version}
                                     </span>
                                 ) : null}
                                 {nextRecommendation.source_session_id ? (
                                     <span className="rounded-full border border-emerald-100 bg-white/80 px-2.5 py-1">
-                                        source {nextRecommendation.source_session_id.slice(0, 8)}
+                                        来自历史练习
                                     </span>
                                 ) : null}
                             </div>
@@ -2223,16 +2235,16 @@ export default function ComprehensiveReportPage() {
                 <GlassCard className="p-6 mb-6 border border-indigo-200 bg-indigo-50/70">
                     <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
                         <div>
-                            <h2 className="text-lg font-semibold text-zinc-900">本页的销售 rubric 怎么看</h2>
+                            <h2 className="text-lg font-semibold text-zinc-900">本页的销售评分怎么读</h2>
                             <p className="text-sm text-zinc-700 mt-2 max-w-3xl leading-7">
                                 这页不是只给一个总分，而是把你的销售对话放回
-                                discovery / qualification、value、evidence、objection、next-step
-                                五个 rubric 视角里解释。主问题、下一轮目标和主张证据状态，
-                                都来自同一条 canonical evidence，而不是额外拼出来的第二套评分器。
+                                发现需求/资质判断、价值传递、证据支撑、异议处理、下一步推进
+                                五个评分维度里解释。主问题、下一轮目标和主张证据状态，
+                                都基于同一条统一评分依据，而不是额外拼出来的第二套评分器。
                             </p>
                         </div>
                         <span className="inline-flex rounded-full border border-indigo-200 bg-white/80 px-3 py-1 text-xs font-medium text-indigo-700">
-                            sales_methodology_rubric_v1
+                            销售能力评分说明
                         </span>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
@@ -2246,8 +2258,8 @@ export default function ComprehensiveReportPage() {
                         ))}
                     </div>
                     <p className="text-xs text-indigo-700 mt-4">
-                        首轮边界：qualification 目前仍并入 opening / discovery，本页不会宣称已经提供独立 qualification stage，
-                        也不会把当前 rubric 解释成完整销售方法论覆盖。
+                        首轮边界：资质判断目前仍并入开场/需求发现环节，本页不会宣称已经提供独立的资质判断阶段，
+                        也不会把当前评分维度解释成完整销售方法论覆盖。
                     </p>
                 </GlassCard>
             )}
@@ -2905,18 +2917,18 @@ export default function ComprehensiveReportPage() {
 
             {report.voice_policy_snapshot_ref && (
                 <GlassCard className="p-6 mb-6">
-                    <h2 className="text-lg font-semibold text-zinc-900 mb-4">会话策略快照基线</h2>
+                    <h2 className="text-lg font-semibold text-zinc-900 mb-4">本场语音设置</h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                         <div className="rounded-xl bg-zinc-50 p-3">
                             <div className="text-xs text-zinc-500">语音模式</div>
                             <div className="font-semibold text-zinc-900 mt-1">
-                                {report.voice_policy_snapshot_ref.voice_mode || "--"}
+                                {formatVoiceModeLabel(report.voice_policy_snapshot_ref.voice_mode)}
                             </div>
                         </div>
                         <div className="rounded-xl bg-zinc-50 p-3">
-                            <div className="text-xs text-zinc-500">Runtime Profile</div>
-                            <div className="font-semibold text-zinc-900 mt-1 break-all">
-                                {report.voice_policy_snapshot_ref.runtime_profile_id || "--"}
+                            <div className="text-xs text-zinc-500">运行配置</div>
+                            <div className="font-semibold text-zinc-900 mt-1">
+                                {report.voice_policy_snapshot_ref.runtime_profile_id ? "已匹配合适配置" : "未记录"}
                             </div>
                         </div>
                         <div className="rounded-xl bg-zinc-50 p-3">
@@ -2927,10 +2939,7 @@ export default function ComprehensiveReportPage() {
                         </div>
                     </div>
                     <div className="text-xs text-zinc-500 mt-3">
-                        来源链路：
-                        {Object.entries(report.voice_policy_snapshot_ref.source || {})
-                            .map(([key, value]) => `${key}:${value}`)
-                            .join(" / ") || "--"}
+                        {hasVoiceSourceKeys(report.voice_policy_snapshot_ref.source) ? "设置来源已记录" : "设置来源未记录"}
                     </div>
                 </GlassCard>
             )}
@@ -2940,7 +2949,7 @@ export default function ComprehensiveReportPage() {
                     <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                         <h2 className="text-lg font-semibold text-zinc-900">销售能力总览</h2>
                         {report.evidence_completeness?.legacy_score_key_used ? (
-                            <span className="text-xs text-zinc-500">兼容了 legacy score key</span>
+                            <span className="text-xs text-zinc-500">已兼容历史评分数据</span>
                         ) : null}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

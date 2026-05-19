@@ -14,7 +14,7 @@
 
 Read successfully: PRD file, root `CLAUDE.md`, `.kiro/steering/backend-principles.md`, `.kiro/steering/frontend-principles.md`, `.kiro/steering/QUICK-REFERENCE.md`, `docs/api-contract/README.md`, `docs/agents/issue-tracker.md`, `docs/agents/domain.md`, key ADRs, issue #65 and issues #66-#77 full bodies.
 
-Could not read because files do not exist in this checkout: `docs/architecture.md`, `docs/roadmap/backend-gap-analysis.md`, `docs/roadmap/sales-coach-upgrade.md`.
+
 
 ## Critical Constraints
 

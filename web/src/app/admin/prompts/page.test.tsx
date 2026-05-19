@@ -207,7 +207,7 @@ describe("AdminPromptsPage governance UI", () => {
         render(<AdminPromptsPage />);
 
         expect(await screen.findByText(/提示词治理发现 1 条非法历史模板/)).toBeTruthy();
-        expect(screen.getByText(/变量 schema：list\[str\]/)).toBeTruthy();
+        expect(screen.getByText(/变量规则：list\[str\]/)).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "禁用非法历史模板" }));
         expect(remediateInvalidPromptTemplatesMock).not.toHaveBeenCalled();

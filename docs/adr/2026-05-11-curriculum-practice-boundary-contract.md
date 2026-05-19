@@ -12,9 +12,7 @@ PRD #23 已完成 `TrainingTask → PracticeSession → Evidence → EvaluationR
 
 **参考文档（必读）**：
 - `docs/superpowers/plans/2026-05-11-prd46-curriculum-practice-issues-closure.md`：issues #47-#54 实施计划
-- `docs/plans/2026-05-11-curriculum-practice-stepfun-llm-architecture-detailed.md`：课程化域详细架构规格
 - `docs/adr/2026-05-11-architecture-boundary-domain-contract.md`：PRD #23 底座边界契约
-- `CONTEXT.md`：Phase 4 E2E 领域语言
 
 ## Decision
 

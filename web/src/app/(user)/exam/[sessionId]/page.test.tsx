@@ -283,7 +283,7 @@ describe("ExamPage", () => {
     expect(screen.getByText("本题剩余 90 秒")).toBeDefined();
   });
 
-  it("sends answer on submit button click", async () => {
+  it("opens confirmation dialog on submit click, does not call sendAnswer until confirmed", async () => {
     const sendAnswerMock = vi.fn();
     useExaminerWebSocketMock.mockReturnValue(
       buildExamHookMock({
@@ -307,20 +307,331 @@ describe("ExamPage", () => {
       target: { value: "SPIN = Situation, Problem, Implication, Need-payoff" },
     });
 
-    const sendBtn = screen.getByRole("button", { name: "" });
-    // Find the send button (Send icon button without text)
-    const buttons = screen.getAllByRole("button");
-    const submitBtn = buttons.find(
-      (btn) =>
-        btn.getAttribute("disabled") === null &&
-        btn.className.includes("rounded-full"),
+    const submitBtn = screen.getByRole("button", { name: "提交答案" });
+    fireEvent.click(submitBtn);
+
+    // Clicking submit should open confirmation, NOT call sendAnswer
+    expect(sendAnswerMock).not.toHaveBeenCalled();
+    expect(screen.getByText("提交答案")).toBeTruthy();
+    expect(screen.getByText(/提交后不可修改/)).toBeTruthy();
+
+    // Confirm the submission
+    fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
+    expect(sendAnswerMock).toHaveBeenCalledWith(
+      "SPIN = Situation, Problem, Implication, Need-payoff",
     );
-    if (submitBtn) {
-      fireEvent.click(submitBtn);
-      expect(sendAnswerMock).toHaveBeenCalledWith(
-        "SPIN = Situation, Problem, Implication, Need-payoff",
-      );
-    }
+    expect(sendAnswerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels submission and keeps answer text intact", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 0,
+          question_id: "q-001",
+          title: "Q1",
+          stem: "What is sales?",
+          remaining_seconds: 120,
+        },
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, {
+      target: { value: "My draft answer" },
+    });
+
+    const submitBtn = screen.getByRole("button", { name: "提交答案" });
+    fireEvent.click(submitBtn);
+
+    // Cancel the submission
+    fireEvent.click(screen.getByRole("button", { name: "继续作答" }));
+
+    // sendAnswer should never be called
+    expect(sendAnswerMock).not.toHaveBeenCalled();
+
+    // Answer text should still be in the textarea
+    expect((textarea as HTMLTextAreaElement).value).toBe("My draft answer");
+  });
+
+  it("prevents double submit while answer is in flight", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 0,
+          question_id: "q-001",
+          title: "Q1",
+          stem: "Test question",
+          remaining_seconds: 120,
+        },
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, { target: { value: "First answer" } });
+
+    // Open confirmation dialog and confirm
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
+
+    expect(sendAnswerMock).toHaveBeenCalledTimes(1);
+
+    // After sending, the button should have the disabled attribute
+    const submitBtnAfter = screen.getByRole("button", { name: "提交答案" });
+    expect(submitBtnAfter.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows submitting state and retains draft while phase remains answering", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 0,
+          question_id: "q-001",
+          title: "Q1",
+          stem: "Test question",
+          remaining_seconds: 120,
+        },
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, { target: { value: "My answer" } });
+
+    // Open confirmation and confirm
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
+
+    // sendAnswer called once
+    expect(sendAnswerMock).toHaveBeenCalledTimes(1);
+    expect(sendAnswerMock).toHaveBeenCalledWith("My answer");
+
+    // Button should show submitting state
+    expect(screen.getByText(/提交中/)).toBeTruthy();
+
+    // Draft should REMAIN in textarea during flight (cleared only on success signal)
+    expect((textarea as HTMLTextAreaElement).value).toBe("My answer");
+  });
+
+  it("textarea is empty when phase is not answering (draft already cleared)", async () => {
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "feedback",
+        lastFeedback: {
+          question_index: 0,
+          question_id: "q-001",
+          score: 7,
+          feedback: "Good job.",
+        },
+        gradedQuestions: [{ index: 0, score: 7, feedback: "Good job." }],
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    // No answer textarea rendered in feedback phase — confirmed by absence
+    expect(screen.queryByPlaceholderText("请输入你的答案...")).toBeNull();
+  });
+
+  it("Enter key opens confirmation dialog without immediately calling sendAnswer", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 0,
+          question_id: "q-001",
+          title: "Q1",
+          stem: "Test question",
+          remaining_seconds: 120,
+        },
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, { target: { value: "Enter-triggered answer" } });
+
+    // Press Enter
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    // Confirmation dialog should appear, sendAnswer should NOT have been called
+    expect(sendAnswerMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/提交后不可修改/)).toBeTruthy();
+
+    // Confirm
+    fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
+    expect(sendAnswerMock).toHaveBeenCalledWith("Enter-triggered answer");
+    expect(sendAnswerMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Send guards ──
+
+  it("does not enter submitting state when confirming while disconnected", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        connectionState: "failed",
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 0,
+          question_id: "q-001",
+          title: "Q1",
+          stem: "Test question",
+          remaining_seconds: 120,
+        },
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, { target: { value: "My answer" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
+
+    expect(sendAnswerMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(/提交中/)).toBeNull();
+    expect((textarea as HTMLTextAreaElement).value).toBe("My answer");
+  });
+
+  it("does not enter submitting state when confirming while not in answering phase", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        connectionState: "connected",
+        examPhase: "feedback",
+        lastFeedback: {
+          question_index: 0,
+          question_id: "q-001",
+          score: 7,
+          feedback: "Good job.",
+        },
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    // In feedback phase, there is no answer textarea; confirm path is unreachable
+    expect(screen.queryByPlaceholderText("请输入你的答案...")).toBeNull();
+    expect(sendAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it("does not enter submitting state when confirming with no current question", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        connectionState: "connected",
+        examPhase: "answering",
+        currentQuestion: null,
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    // Without currentQuestion, the answer textarea is not rendered at all
+    expect(screen.queryByPlaceholderText("请输入你的答案...")).toBeNull();
+    expect(sendAnswerMock).not.toHaveBeenCalled();
+  });
+
+  // ── Draft isolation ──
+
+  it("does not restore Q1 draft when Q2 is the active question", async () => {
+    localStorage.clear();
+    localStorage.setItem("exam-answer-v1-exam-session-1-q-001", "stale Q1 draft");
+
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        connectionState: "connected",
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 1,
+          question_id: "q-002",
+          title: "Q2",
+          stem: "Second question",
+          remaining_seconds: 120,
+        },
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("clears textarea when active question changes to Q2 with no in-memory draft", async () => {
+    localStorage.clear();
+
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        connectionState: "connected",
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 0,
+          question_id: "q-001",
+          title: "Q1",
+          stem: "First question",
+          remaining_seconds: 120,
+        },
+      }),
+    );
+
+    const { rerender } = render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, { target: { value: "My Q1 answer" } });
+    expect((textarea as HTMLTextAreaElement).value).toBe("My Q1 answer");
+
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        connectionState: "connected",
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 1,
+          question_id: "q-002",
+          title: "Q2",
+          stem: "Second question",
+          remaining_seconds: 120,
+        },
+      }),
+    );
+
+    rerender(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textareaAfter = screen.getByPlaceholderText("请输入你的答案...");
+    expect((textareaAfter as HTMLTextAreaElement).value).toBe("");
   });
 
   // ── Feedback display ──

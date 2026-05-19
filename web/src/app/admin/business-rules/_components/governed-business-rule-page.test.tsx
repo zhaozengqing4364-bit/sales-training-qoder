@@ -204,7 +204,7 @@ describe("GovernedBusinessRulePage", () => {
         renderPage();
 
         expect(await screen.findByText("练后推荐规则")).toBeTruthy();
-        expect(screen.getByText(/Key: recommendation.next_practice.ruleset/)).toBeTruthy();
+        expect(screen.getByText(/配置标识：recommendation.next_practice.ruleset/)).toBeTruthy();
         expect(screen.getByText("v1")).toBeTruthy();
         expect(screen.getByText(/use bundled default ruleset/)).toBeTruthy();
         expect(screen.getByText(/recommendation_v2_draft/)).toBeTruthy();
@@ -229,7 +229,7 @@ describe("GovernedBusinessRulePage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "预览影响" }));
 
-        expect(await screen.findByText(/预览完成；当前 active version 仍为 1/)).toBeTruthy();
+        expect(await screen.findByText(/预览完成；当前生效版本仍为 1/)).toBeTruthy();
         expect(screen.getByText(/weak_score_threshold: 66/)).toBeTruthy();
         expect(publishBusinessRuleMock).not.toHaveBeenCalled();
     });

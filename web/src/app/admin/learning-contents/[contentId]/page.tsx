@@ -103,6 +103,12 @@ export default function AdminLearningContentDetailPage() {
         | null
     >(null);
 
+    const [editDiscardConfirm, setEditDiscardConfirm] = useState<
+        | { type: "cancel" }
+        | { type: "switch"; chapter: LearningChapter }
+        | null
+    >(null);
+
     const [categories, setCategories] = useState<QuestionCategory[]>([]);
 
     const loadContent = useCallback(async () => {
@@ -175,7 +181,24 @@ export default function AdminLearningContentDetailPage() {
         }
     };
 
+    const hasEditingChanges = editingChapter
+        ? (() => {
+            const original = content?.chapters.find(
+                (c) => c.chapter_id === editingChapter.chapter_id,
+            );
+            if (!original) return false;
+            return (
+                editingChapter.title !== original.title ||
+                editingChapter.content !== original.content
+            );
+        })()
+        : false;
+
     const handleEditChapter = (chapter: LearningChapter) => {
+        if (editingChapter && hasEditingChanges && editingChapter.chapter_id !== chapter.chapter_id) {
+            setEditDiscardConfirm({ type: "switch", chapter });
+            return;
+        }
         setEditingChapter({
             chapter_id: chapter.chapter_id,
             title: chapter.title,
@@ -202,6 +225,10 @@ export default function AdminLearningContentDetailPage() {
     };
 
     const handleCancelEdit = () => {
+        if (hasEditingChanges) {
+            setEditDiscardConfirm({ type: "cancel" });
+            return;
+        }
         setEditingChapter(null);
     };
 
@@ -296,6 +323,22 @@ export default function AdminLearningContentDetailPage() {
         void handleArchive();
     };
 
+    const handleConfirmDiscard = () => {
+        const action = editDiscardConfirm;
+        setEditDiscardConfirm(null);
+        if (!action) return;
+        if (action.type === "cancel") {
+            setEditingChapter(null);
+            return;
+        }
+        // switch to another chapter after discarding
+        setEditingChapter({
+            chapter_id: action.chapter.chapter_id,
+            title: action.chapter.title,
+            content: action.chapter.content,
+        });
+    };
+
     const confirmTitle = confirmAction?.type === "delete-chapter"
         ? "删除学习章节"
         : confirmAction?.type === "archive"
@@ -324,6 +367,19 @@ export default function AdminLearningContentDetailPage() {
                 variant={confirmAction?.type === "delete-chapter" ? "danger" : "warning"}
                 onConfirm={handleConfirmAction}
                 isLoading={chapterAdding || actionLoading}
+            />
+
+            <ConfirmDialog
+                open={!!editDiscardConfirm}
+                onOpenChange={(open) => {
+                    if (!open) setEditDiscardConfirm(null);
+                }}
+                title="未保存的修改"
+                description="当前章节有未保存的修改内容，如果放弃修改，所有的更改将会丢失。要放弃修改吗？"
+                confirmText="放弃修改"
+                cancelText="继续编辑"
+                variant="warning"
+                onConfirm={handleConfirmDiscard}
             />
 
             <div className="flex items-center gap-4">

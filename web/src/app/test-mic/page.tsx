@@ -12,6 +12,10 @@ export default function TestMicPage() {
     const [logs, setLogs] = React.useState<string[]>([]);
     const [stream, setStream] = React.useState<MediaStream | null>(null);
     const [backendStatus, setBackendStatus] = React.useState<"checking" | "online" | "offline">("checking");
+    const [directMonitoringEnabled, setDirectMonitoringEnabled] = React.useState(false);
+    const processorRef = React.useRef<ScriptProcessorNode | null>(null);
+    const audioContextRef = React.useRef<AudioContext | null>(null);
+    const streamRef = React.useRef<MediaStream | null>(null);
 
     const addLog = React.useCallback((msg: string) => {
         const timestamp = new Date().toLocaleTimeString();
@@ -53,6 +57,27 @@ export default function TestMicPage() {
     React.useEffect(() => {
         runBackendDiagnostics();
     }, [runBackendDiagnostics]);
+
+    React.useEffect(() => {
+        streamRef.current = stream;
+    }, [stream]);
+
+    React.useEffect(() => {
+        return () => {
+            if (processorRef.current) {
+                processorRef.current.disconnect();
+                processorRef.current = null;
+            }
+            if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+                audioContextRef.current.close().catch(() => {});
+                audioContextRef.current = null;
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track) => track.stop());
+                streamRef.current = null;
+            }
+        };
+    }, []);
 
     const startRecording = async () => {
         try {
@@ -117,7 +142,15 @@ export default function TestMicPage() {
             };
             
             source.connect(processor);
-            processor.connect(audioContext.destination);
+            if (directMonitoringEnabled) {
+                processor.connect(audioContext.destination);
+                addLog("直接监听已开启（麦克风 → 扬声器，可能有回声）");
+            } else {
+                addLog("直接监听已关闭（静默模式，避免回声）");
+            }
+
+            processorRef.current = processor;
+            audioContextRef.current = audioContext;
 
             setIsRecording(true);
             addLog("Recording started - 请对着麦克风说话");
@@ -128,6 +161,14 @@ export default function TestMicPage() {
     };
 
     const stopRecording = () => {
+        if (processorRef.current) {
+            processorRef.current.disconnect();
+            processorRef.current = null;
+        }
+        if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+            audioContextRef.current.close().catch(() => {});
+            audioContextRef.current = null;
+        }
         if (stream) {
             stream.getTracks().forEach(track => track.stop());
             setStream(null);
@@ -186,6 +227,41 @@ export default function TestMicPage() {
                     <p className="text-xs text-slate-400 mt-2">
                         {isRecording ? "正在录音 - 如果看到波形跳动，说明麦克风正常" : "点击开始录音查看音频波形"}
                     </p>
+                </div>
+
+                {/* 直接监听警告 */}
+                {isRecording && (
+                    <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                        <p className="font-semibold mb-1">注意：直接监听已{ directMonitoringEnabled ? "开启" : "关闭" }</p>
+                        <p className="text-xs text-amber-700">
+                            {directMonitoringEnabled
+                                ? "麦克风音频直接输出到扬声器，可能产生回声或啸叫。建议佩戴耳机或关闭下方「直接监听」。"
+                                : "麦克风音频不会输出到扬声器。如需听到自己的声音，请开启「直接监听」。"
+                            }
+                        </p>
+                    </div>
+                )}
+
+                {/* 直接监听开关 */}
+                <div className="mb-6 flex items-center gap-3">
+                    <label className={`flex items-center gap-2 select-none ${isRecording ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+                        <input
+                            type="checkbox"
+                            checked={directMonitoringEnabled}
+                            onChange={(e) => setDirectMonitoringEnabled(e.target.checked)}
+                            disabled={isRecording}
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
+                        />
+                        <span className="text-sm font-medium text-slate-700">直接监听</span>
+                    </label>
+                    <span className="text-xs text-slate-400">
+                        {directMonitoringEnabled ? "麦克风 → 扬声器（可能产生回声）" : "静默模式"}
+                    </span>
+                    {isRecording && (
+                        <span className="text-xs text-amber-600 font-medium">
+                            录音中无法切换，请先停止录音
+                        </span>
+                    )}
                 </div>
 
                 {/* 控制按钮 */}

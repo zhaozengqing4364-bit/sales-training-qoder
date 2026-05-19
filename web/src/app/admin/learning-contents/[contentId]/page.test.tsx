@@ -287,13 +287,9 @@ describe("AdminLearningContentDetailPage", () => {
         });
     });
 
-    it("edits a chapter", async () => {
+    it("cancels edit without confirmation when no changes were made", async () => {
         const chapter = makeChapter({ chapter_id: "c1", title: "第一章", order_index: 0 });
         getMock.mockResolvedValue(makeContent({ chapters: [chapter] }));
-        updateChapterMock.mockResolvedValue({ ...chapter, title: "修改后的章节" });
-        getMock
-            .mockResolvedValueOnce(makeContent({ chapters: [chapter] }))
-            .mockResolvedValueOnce(makeContent({ chapters: [{ ...chapter, title: "修改后的章节" }] }));
 
         render(<AdminLearningContentDetailPage />);
 
@@ -301,26 +297,92 @@ describe("AdminLearningContentDetailPage", () => {
             expect(screen.getByText("第一章")).toBeTruthy();
         });
 
+        // Enter edit mode
         fireEvent.click(screen.getAllByTitle("编辑")[0]);
 
         await waitFor(() => {
             expect(screen.getByDisplayValue("第一章")).toBeTruthy();
         });
 
-        fireEvent.change(screen.getByDisplayValue("第一章"), { target: { value: "修改后的章节" } });
+        // Cancel without changes — should close immediately
+        fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
-        // Find inline save button: it's the button whose textContent is exactly "保存"
-        const allBtns = screen.getAllByRole("button");
-        const saveBtn = allBtns.find((b) => b.textContent?.trim() === "保存");
-        expect(saveBtn).toBeTruthy();
-        fireEvent.click(saveBtn!);
+        await waitFor(() => {
+            // Should be back to view mode
+            expect(screen.getByText("第一章")).toBeTruthy();
+        });
+    });
 
-        await waitFor(
-            () => {
-                expect(updateChapterMock).toHaveBeenCalled();
-            },
-            { timeout: 3000 },
-        );
+    it("warns before discarding unsaved chapter edits when switching to another chapter", async () => {
+        const c1 = makeChapter({ chapter_id: "c1", title: "第一章", order_index: 0 });
+        const c2 = makeChapter({ chapter_id: "c2", title: "第二章", order_index: 1 });
+        getMock.mockResolvedValue(makeContent({ chapters: [c1, c2] }));
+
+        render(<AdminLearningContentDetailPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("第一章")).toBeTruthy();
+        });
+
+        // Start editing chapter 1
+        fireEvent.click(screen.getAllByTitle("编辑")[0]);
+
+        await waitFor(() => {
+            expect(screen.getByDisplayValue("第一章")).toBeTruthy();
+        });
+
+        // Modify the title
+        fireEvent.change(screen.getAllByDisplayValue("第一章")[0], {
+            target: { value: "修改中的第一章" },
+        });
+
+        // Try to edit chapter 2 — should show confirmation dialog
+        const editButtons = screen.getAllByTitle("编辑");
+        fireEvent.click(editButtons[0]);
+
+        expect(screen.getAllByText(/未保存的修改/).length).toBeGreaterThanOrEqual(1);
+
+        // Confirm discard
+        fireEvent.click(screen.getByRole("button", { name: /放弃修改/ }));
+
+        await waitFor(() => {
+            // Should now be editing chapter 2
+            expect(screen.getByDisplayValue("第二章")).toBeTruthy();
+        });
+    });
+
+    it("warns before cancelling edit when chapter content has been modified", async () => {
+        const chapter = makeChapter({ chapter_id: "c1", title: "第一章", order_index: 0 });
+        getMock.mockResolvedValue(makeContent({ chapters: [chapter] }));
+
+        render(<AdminLearningContentDetailPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("第一章")).toBeTruthy();
+        });
+
+        // Enter edit mode
+        fireEvent.click(screen.getAllByTitle("编辑")[0]);
+
+        await waitFor(() => {
+            expect(screen.getByDisplayValue("第一章")).toBeTruthy();
+        });
+
+        // Modify content
+        fireEvent.change(screen.getByDisplayValue("第一章内容"), {
+            target: { value: "修改后的内容" },
+        });
+
+        // Cancel — should show confirmation
+        fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+        expect(screen.getAllByText(/未保存的修改/).length).toBeGreaterThanOrEqual(1);
+
+        // Dismiss the confirmation (keep editing)
+        fireEvent.click(screen.getByRole("button", { name: "继续编辑" }));
+
+        // Should still be in edit mode with modified content
+        expect(screen.getByDisplayValue("修改后的内容")).toBeTruthy();
     });
 
     it("deletes a chapter", async () => {

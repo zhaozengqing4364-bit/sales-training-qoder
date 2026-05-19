@@ -59,9 +59,9 @@ function getScoringCriteriaValidation(raw: string): { ok: boolean; message: stri
     }
     const parsed = parseScoringCriteria(raw);
     if (parsed === null) {
-        return { ok: false, message: "评分标准格式无效，请输入 JSON object，例如 {\"dimensions\":[\"clarity\"]}。" };
+        return { ok: false, message: "评分标准格式无效，请输入 JSON 对象，例如 {\"dimensions\":[\"clarity\"]}。" };
     }
-    return { ok: true, message: "评分标准 JSON object 格式有效。" };
+    return { ok: true, message: "评分标准 JSON 对象格式有效。" };
 }
 
 type QuestionAction = { type: "publish" | "archive"; question: QuestionItem } | null;
@@ -841,7 +841,7 @@ export default function TestBankPage() {
                                 className="md:col-span-2"
                                 isValid={scoringCriteriaValidation.ok}
                                 validationMessage={scoringCriteriaValidation.message}
-                                helpText="必须是 JSON object；留空会提交空对象。"
+                                helpText="必须是 JSON 对象；留空会提交空对象。"
                             />
                         </div>
                         <div className="mt-3 flex gap-2">
