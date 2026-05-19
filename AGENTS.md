@@ -124,7 +124,21 @@
 
 
 - **破窗理论 (Broken Windows Theory)**
-  - 不要容忍代码库中的“坏味道”（糟糕设计、错误代码）。
-  - 一旦出现“破窗”，模仿效应会让代码库加速腐化，甚至 AI 也会模仿坏模式，导致问题指数级扩散。
+  - 不要容忍代码库中的”坏味道”（糟糕设计、错误代码）。
+  - 一旦出现”破窗”，模仿效应会让代码库加速腐化，甚至 AI 也会模仿坏模式，导致问题指数级扩散。
+
+---
+
+## 重要文档索引
+
+| 文档 | 位置 | 说明 |
+|------|------|------|
+| **系统架构** | `docs/architecture.md` | 完整架构描述：22 个章节覆盖骨架、WS、语音、知识、评估、Supervisor、Curriculum、Agent、Config Bundles、Effectiveness、Business Rules、Prompt Templates、前端等 |
+| API 契约 | `docs/api-contract/` | 前后端同步开发接口定义 |
+| 架构决策 | `docs/adr/` | 关键决策记录（运行时主语、评分治理、领域边界等） |
+| 部署设置 | `docs/setup/` | 开发/生产环境搭建指南 |
+| 灾备恢复 | `docs/backup-recovery-runbook.md` | 灾备恢复操作手册 |
+| Agent 工作指南 | `docs/agents/` | Issue tracker、triage labels、domain doc |
+| 项目概览 | `CLAUDE.md` | 开发命令、编码规范、目录结构 |
 
 ---
