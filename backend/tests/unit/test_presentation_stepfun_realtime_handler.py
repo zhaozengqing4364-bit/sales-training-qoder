@@ -23,6 +23,28 @@ def handler() -> PresentationStepFunRealtimeHandler:
     return instance
 
 
+def test_presentation_stepfun_handler_forwards_collaborator_factories():
+    transport = SimpleNamespace()
+
+    def db_session_factory():
+        raise AssertionError("factory should only be stored during construction")
+
+    def knowledge_service_factory(_db):
+        raise AssertionError("factory should only be stored during construction")
+
+    handler = PresentationStepFunRealtimeHandler(
+        stepfun_transport=transport,
+        db_session_factory=db_session_factory,
+        knowledge_service_factory=knowledge_service_factory,
+    )
+
+    assert handler._stepfun_transport is transport
+    assert handler._db_session_factory is db_session_factory
+    assert handler._knowledge_service_factory is knowledge_service_factory
+    assert handler.scenario == "presentation"
+    assert handler.session_scenario_type == "presentation"
+
+
 @pytest.mark.asyncio
 async def test_handle_client_text_routes_page_change(handler):
     handler._handle_page_change = AsyncMock()

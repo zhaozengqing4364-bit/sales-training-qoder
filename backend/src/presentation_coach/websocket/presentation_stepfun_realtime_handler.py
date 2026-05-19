@@ -47,8 +47,19 @@ logger = get_logger(__name__)
 class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
     """StepFun realtime handler adapted for presentation scenario."""
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(
+        self,
+        *,
+        stepfun_transport: Any | None = None,
+        db_session_factory: Any | None = None,
+        knowledge_service_factory: Any | None = None,
+    ) -> None:
+        super_kwargs: dict[str, Any] = {"stepfun_transport": stepfun_transport}
+        if db_session_factory is not None:
+            super_kwargs["db_session_factory"] = db_session_factory
+        if knowledge_service_factory is not None:
+            super_kwargs["knowledge_service_factory"] = knowledge_service_factory
+        super().__init__(**super_kwargs)
         self.scenario = "presentation"
         self.session_scenario_type = "presentation"
         self.current_page = 1
