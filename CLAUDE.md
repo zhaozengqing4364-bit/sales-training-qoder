@@ -503,9 +503,11 @@ const data = await api.module.getEndpoint();
 
 ## 开发前必读文档
 
+| 系统架构 | `docs/architecture.md` |
 | API 接口规范 | `docs/api-contract/` |
 | 后端编码原则 | `.kiro/steering/backend-principles.md` |
 | 前端编码原则 | `.kiro/steering/frontend-principles.md` |
+| 架构决策 | `docs/adr/` |
 | 快速参考 | `.kiro/steering/QUICK-REFERENCE.md` |
 
 ## 提交前检查
