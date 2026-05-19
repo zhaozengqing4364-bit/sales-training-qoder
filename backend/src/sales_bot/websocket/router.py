@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from importlib import import_module
 from typing import Any
 
 from fastapi import APIRouter, Query, WebSocket
@@ -22,8 +23,7 @@ from common.monitoring.logger import get_logger
 from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.session_manager import get_session_manager
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
-
-from .stepfun_realtime_handler import create_stepfun_realtime_handler
+from training_runtime import TrainingRuntimeDescriptor, dispatch_scenario_plugin
 
 logger = get_logger(__name__)
 
@@ -437,6 +437,12 @@ def _merge_snapshot_runtime_overlays(
     return merged
 
 
+def _instantiate_runtime_handler(selection: Any) -> Any:
+    module = import_module(selection.handler_factory_path)
+    factory = getattr(module, selection.handler_factory_name)
+    return factory()
+
+
 async def _handle_stepfun_realtime_connection(
     websocket: WebSocket,
     session_id: str,
@@ -444,12 +450,19 @@ async def _handle_stepfun_realtime_connection(
     trace_id: str | None = None,
 ) -> None:
     """Handle connection with StepFun realtime end-to-end voice model."""
+    descriptor = TrainingRuntimeDescriptor(
+        session_id=session_id,
+        scenario_type="sales",
+        voice_mode="stepfun_realtime",
+    )
+    selection = dispatch_scenario_plugin(descriptor).select_runtime_handler(descriptor)
+    handler = _instantiate_runtime_handler(selection)
+
     logger.info(
         f"Using StepFunRealtimeHandler for session {session_id}",
         session_id=session_id,
     )
 
-    handler = create_stepfun_realtime_handler()
     session_manager = get_session_manager()
     await session_manager.register_session(session_id, handler)
     try:

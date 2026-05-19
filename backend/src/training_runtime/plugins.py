@@ -31,6 +31,17 @@ class ScenarioPluginEntrypoint:
 
 
 @dataclass(frozen=True)
+class ScenarioRuntimeHandlerSelection:
+    """A scenario websocket runtime handler selection."""
+
+    scenario_type: str
+    runtime_mode: str
+    websocket_route: str
+    handler_factory_path: str
+    handler_factory_name: str
+
+
+@dataclass(frozen=True)
 class ScenarioPluginDiagnostics:
     """Inspectable plugin wiring details for tests and operators."""
 
@@ -54,6 +65,11 @@ class ScenarioTrainingPlugin(Protocol):
         self,
         descriptor: TrainingRuntimeDescriptor,
     ) -> ScenarioPluginEntrypoint: ...
+
+    def select_runtime_handler(
+        self,
+        descriptor: TrainingRuntimeDescriptor,
+    ) -> ScenarioRuntimeHandlerSelection: ...
 
     def build_evidence(
         self,
@@ -103,6 +119,18 @@ class SalesScenarioPlugin:
         descriptor: TrainingRuntimeDescriptor,
     ) -> ScenarioPluginEntrypoint:
         return self._report_trigger_entrypoint(descriptor, action="on_session_end")
+
+    def select_runtime_handler(
+        self,
+        descriptor: TrainingRuntimeDescriptor,
+    ) -> ScenarioRuntimeHandlerSelection:
+        return ScenarioRuntimeHandlerSelection(
+            scenario_type=self.scenario_type,
+            runtime_mode=self._runtime_mode,
+            websocket_route="/ws/sales/{session_id}",
+            handler_factory_path="sales_bot.websocket.stepfun_realtime_handler",
+            handler_factory_name="create_stepfun_realtime_handler",
+        )
 
     def build_evidence(
         self,
@@ -219,6 +247,28 @@ class PresentationScenarioPlugin:
         descriptor: TrainingRuntimeDescriptor,
     ) -> ScenarioPluginEntrypoint:
         return self._report_trigger_entrypoint(descriptor, action="on_session_end")
+
+    def select_runtime_handler(
+        self,
+        descriptor: TrainingRuntimeDescriptor,
+    ) -> ScenarioRuntimeHandlerSelection:
+        runtime_mode = self._runtime_mode(descriptor)
+        if runtime_mode == "stepfun_realtime":
+            handler_factory_path = (
+                "presentation_coach.websocket.presentation_stepfun_realtime_handler"
+            )
+            handler_factory_name = "PresentationStepFunRealtimeHandler"
+        else:
+            handler_factory_path = "presentation_coach.websocket.presentation_handler"
+            handler_factory_name = "PresentationWebSocketHandler"
+
+        return ScenarioRuntimeHandlerSelection(
+            scenario_type=self.scenario_type,
+            runtime_mode=runtime_mode,
+            websocket_route="/ws/presentation/{session_id}",
+            handler_factory_path=handler_factory_path,
+            handler_factory_name=handler_factory_name,
+        )
 
     def build_evidence(
         self,

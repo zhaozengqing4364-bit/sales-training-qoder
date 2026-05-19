@@ -9,6 +9,7 @@ import pytest
 
 import main
 from common.auth.service import JWTError
+from training_runtime.plugins import ScenarioRuntimeHandlerSelection
 
 
 @pytest.mark.asyncio
@@ -132,6 +133,76 @@ async def test_presentation_ws_uses_persisted_stepfun_mode() -> None:
         trace_id=None,
     )
     legacy_handler.handle_connection.assert_not_called()
+    session_manager.unregister_session.assert_awaited_once_with(session_id)
+
+
+@pytest.mark.asyncio
+async def test_presentation_ws_runtime_selection_uses_plugin_seam() -> None:
+    session_id = str(uuid.uuid4())
+    websocket = MagicMock()
+    websocket.headers = {}
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+
+    selected_handler = MagicMock()
+    selected_handler.handle_connection = AsyncMock()
+
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    session_manager.unregister_session = AsyncMock()
+
+    plugin = MagicMock()
+    plugin.select_runtime_handler.return_value = ScenarioRuntimeHandlerSelection(
+        scenario_type="presentation",
+        runtime_mode="stepfun_realtime",
+        websocket_route="/ws/presentation/{session_id}",
+        handler_factory_path="presentation_coach.websocket.presentation_stepfun_realtime_handler",
+        handler_factory_name="PresentationStepFunRealtimeHandler",
+    )
+
+    with (
+        patch(
+            "main._resolve_presentation_runtime",
+            new=AsyncMock(return_value=("presentation", "stepfun_realtime")),
+        ),
+        patch(
+            "main._is_presentation_kb_lock_unbound_session",
+            new=AsyncMock(return_value=False),
+        ),
+        patch("websocket_routes.dispatch_scenario_plugin", return_value=plugin),
+        patch(
+            "presentation_coach.websocket.presentation_stepfun_realtime_handler.PresentationStepFunRealtimeHandler",
+            return_value=selected_handler,
+        ),
+        patch(
+            "common.websocket.session_manager.get_session_manager",
+            return_value=session_manager,
+        ),
+        patch("common.auth.service.verify_token", return_value={"sub": "user-789"}),
+    ):
+        await main._handle_presentation_websocket(
+            websocket=websocket,
+            session_id=session_id,
+            token="query-token",
+            voice_mode="legacy",
+        )
+
+    plugin.select_runtime_handler.assert_called_once()
+    descriptor = plugin.select_runtime_handler.call_args.args[0]
+    assert descriptor.session_id == session_id
+    assert descriptor.scenario_type == "presentation"
+    assert descriptor.voice_mode == "stepfun_realtime"
+    session_manager.register_session.assert_awaited_once_with(
+        session_id,
+        selected_handler,
+        user_id="user-789",
+    )
+    selected_handler.handle_connection.assert_awaited_once_with(
+        websocket,
+        session_id,
+        "query-token",
+        trace_id=None,
+    )
     session_manager.unregister_session.assert_awaited_once_with(session_id)
 
 

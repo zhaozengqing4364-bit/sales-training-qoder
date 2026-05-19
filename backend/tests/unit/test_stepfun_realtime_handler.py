@@ -22,6 +22,94 @@ from sales_bot.websocket.stepfun_realtime_handler import (
     RealtimeResponseState,
     StepFunRealtimeHandler,
 )
+from training_runtime import StepFunSessionConfig, build_stepfun_session_update_payload
+
+
+def test_stepfun_transport_builds_session_update_payload_with_transcription_and_tools():
+    payload = build_stepfun_session_update_payload(
+        StepFunSessionConfig(
+            voice="qingchunshaonv",
+            temperature=0.42,
+            input_audio_format="pcm16",
+            output_audio_format="pcm16",
+            turn_detection={"type": "server_vad"},
+            input_transcription_enabled=True,
+            input_transcription_language="zh",
+            input_transcription_model="step-asr",
+            instructions="保持销售训练角色。",
+            tools=[{"type": "function", "name": "search_internal_knowledge"}],
+        )
+    )
+
+    assert payload == {
+        "type": "session.update",
+        "session": {
+            "voice": "qingchunshaonv",
+            "temperature": 0.42,
+            "input_audio_format": "pcm16",
+            "output_audio_format": "pcm16",
+            "turn_detection": {"type": "server_vad"},
+            "input_audio_transcription": {
+                "language": "zh",
+                "model": "step-asr",
+            },
+            "instructions": "保持销售训练角色。",
+            "tools": [{"type": "function", "name": "search_internal_knowledge"}],
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_connect_upstream_delegates_connection_to_shared_stepfun_transport():
+    upstream_ws = object()
+    transport = SimpleNamespace(
+        connect=AsyncMock(return_value=upstream_ws),
+        close=AsyncMock(),
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=transport)
+    handler._stepfun_api_key = "test-api-key"
+    handler._stepfun_url = "wss://stepfun.example/realtime"
+    handler._stepfun_model = "step-audio-test"
+    handler._stepfun_voice = "voice-default"
+    handler._effective_policy = {"turn_detection": "server_vad"}
+    handler._stepfun_input_transcription_enabled = True
+    handler._stepfun_input_transcription_language = "zh"
+    handler._stepfun_input_transcription_model = "step-asr"
+    handler._stepfun_instructions = "保持销售训练角色。"
+    handler._build_stepfun_tools_from_policy = MagicMock(
+        return_value=[{"type": "function", "name": "search_internal_knowledge"}]
+    )
+    handler._enforce_stepfun_tool_guardrails = MagicMock(
+        side_effect=lambda tools: tools
+    )
+    handler._send_upstream = AsyncMock()
+    handler._ensure_upstream_keepalive_task = MagicMock()
+    handler._maybe_start_kb_lock_warmup = AsyncMock()
+
+    await handler._connect_upstream()
+
+    transport.connect.assert_awaited_once_with(
+        api_key="test-api-key",
+        url="wss://stepfun.example/realtime",
+        model="step-audio-test",
+    )
+    assert handler.upstream_ws is upstream_ws
+    assert handler._upstream_connected_at > 0
+    assert handler._upstream_last_activity_at == handler._upstream_connected_at
+    handler._send_upstream.assert_awaited_once()
+    payload = handler._send_upstream.await_args.args[0]
+    assert payload["type"] == "session.update"
+    assert payload["session"]["voice"] == "voice-default"
+    assert payload["session"]["turn_detection"] == {"type": "server_vad"}
+    assert payload["session"]["input_audio_transcription"] == {
+        "language": "zh",
+        "model": "step-asr",
+    }
+    assert payload["session"]["tools"] == [
+        {"type": "function", "name": "search_internal_knowledge"}
+    ]
+    handler._ensure_upstream_keepalive_task.assert_called_once_with()
+    handler._maybe_start_kb_lock_warmup.assert_awaited_once_with()
 
 
 def test_stepfun_realtime_handler_defaults_to_latest_realtime_model(
@@ -1719,6 +1807,103 @@ async def test_load_effective_policy_merges_active_kb_dictionary_into_transcript
 
     assert handler._effective_policy["tool_policy"]["transcript_normalization_enabled"] is True
     assert handler._effective_policy["tool_policy"]["transcript_normalization_lexicon"][0]["canonical_term"] == "石犀科技"
+    assert handler._effective_policy["source"]["kb_dictionary_lexicon"] == "knowledge_base_active_dictionary"
+    dummy_db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_load_effective_policy_uses_injected_db_and_knowledge_factories_without_monkeypatch():
+    frozen_snapshot = {
+        "voice_mode": "stepfun_realtime",
+        "runtime_profile_id": "profile-injected",
+        "model_name": "step-audio-2",
+        "voice_name": "qingchunshaonv",
+        "temperature": 0.7,
+        "input_audio_format": "pcm16",
+        "output_audio_format": "pcm16",
+        "output_sample_rate": 24000,
+        "instructions": "injected factory instructions",
+        "instruction_contract_hash": "hash-injected",
+        "knowledge_base_ids": ["kb-injected-1"],
+        "tool_policy": {
+            "transcript_normalization_enabled": True,
+            "transcript_normalization_lexicon": [],
+        },
+    }
+    session_obj = SimpleNamespace(
+        session_id="session-injected",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        user_id="user-1",
+        voice_policy_snapshot=frozen_snapshot,
+        voice_mode="stepfun_realtime",
+        voice_runtime_profile_id="profile-injected",
+    )
+
+    class DummyResult:
+        def scalar_one_or_none(self):
+            return session_obj
+
+    class DummyDb:
+        def __init__(self):
+            self.commit = AsyncMock()
+
+        async def execute(self, _stmt):
+            return DummyResult()
+
+    dummy_db = DummyDb()
+    opened_contexts = []
+    created_services = []
+
+    class DummyDbSessionContext:
+        async def __aenter__(self):
+            return dummy_db
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class DummyKnowledgeService:
+        def __init__(self, db):
+            self.db = db
+
+        async def active_dictionary_lexicon(self, kb_ids):
+            assert kb_ids == ["kb-injected-1"]
+            return [
+                {
+                    "canonical_term": "注入知识库术语",
+                    "aliases": ["注入知识"],
+                    "entity_type": "term",
+                    "confidence": 0.97,
+                    "scope": "knowledge_base:kb-injected-1",
+                }
+            ]
+
+    def db_session_factory():
+        context = DummyDbSessionContext()
+        opened_contexts.append(context)
+        return context
+
+    def knowledge_service_factory(db):
+        assert db is dummy_db
+        service = DummyKnowledgeService(db)
+        created_services.append(service)
+        return service
+
+    handler = StepFunRealtimeHandler(
+        db_session_factory=db_session_factory,
+        knowledge_service_factory=knowledge_service_factory,
+    )
+    handler.session_id = "session-injected"
+    handler._refresh_sales_stage_runtime_config = AsyncMock()
+    handler._enforce_tool_policy_guardrails = MagicMock(return_value=False)
+    handler._ensure_knowledge_runtime_metrics = MagicMock()
+
+    await handler._load_effective_policy()
+
+    assert len(opened_contexts) == 1
+    assert len(created_services) == 1
+    assert created_services[0].db is dummy_db
+    assert handler._effective_policy["tool_policy"]["transcript_normalization_lexicon"][0]["canonical_term"] == "注入知识库术语"
     assert handler._effective_policy["source"]["kb_dictionary_lexicon"] == "knowledge_base_active_dictionary"
     dummy_db.commit.assert_awaited()
 

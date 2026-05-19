@@ -23,10 +23,9 @@ import sys
 import time
 import uuid
 from datetime import UTC, datetime
+from collections.abc import Callable
 from typing import Any, cast
-from urllib.parse import urlencode
 
-import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -160,15 +159,20 @@ from sales_bot.websocket.components.stepfun_upstream_router import (
     extract_response_done_function_calls,
 )
 from sales_bot.websocket.components.stepfun_voice_selection import resolve_session_voice
-from sales_bot.websocket.phase4_local_provider import (
-    Phase4LocalStepFunProvider,
-    should_use_phase4_local_provider,
-)
 from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.phase4_local_provider import (
+    Phase4LocalStepFunProvider,
+    should_use_phase4_local_provider,
+)
 from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
+from training_runtime import (
+    StepFunSessionConfig,
+    StepFunTransport,
+    build_stepfun_session_update_payload,
+)
 
 logger = get_logger(__name__)
 
@@ -283,9 +287,23 @@ class StepFunRealtimeHandler(
     BINARY_AUDIO_CHUNK = 0x01
     BINARY_AUDIO_INTERRUPT = 0x02
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        stepfun_transport: StepFunTransport | None = None,
+        db_session_factory: Callable[[], Any] | None = None,
+        knowledge_service_factory: Callable[[AsyncSession], Any] | None = None,
+    ) -> None:
         super().__init__("sales")
         self.upstream_ws = None
+        self._stepfun_transport = stepfun_transport or StepFunTransport(
+            local_provider_enabled=should_use_phase4_local_provider,
+            local_provider_factory=Phase4LocalStepFunProvider.from_env,
+        )
+        self._db_session_factory = db_session_factory or self._default_db_session_factory
+        self._knowledge_service_factory = (
+            knowledge_service_factory or self._default_knowledge_service_factory
+        )
         self._upstream_task: asyncio.Task | None = None
         self._effective_policy: dict[str, Any] = {}
         self._coach_health: str = "healthy"
@@ -467,6 +485,12 @@ class StepFunRealtimeHandler(
         self._transcript_normalization_service = TranscriptNormalizationService()
         self._unavailable_voice_ids: set[str] = set()
         self._selected_stepfun_voice: str | None = None
+
+    def _default_db_session_factory(self) -> Any:
+        return AsyncSessionLocal()
+
+    def _default_knowledge_service_factory(self, db: AsyncSession) -> Any:
+        return KnowledgeService(db)
 
     @staticmethod
     def _normalize_connection_epoch(value: Any) -> int:
@@ -675,7 +699,7 @@ class StepFunRealtimeHandler(
             tool_policy = {}
 
         try:
-            kb_lexicon = await KnowledgeService(db).active_dictionary_lexicon(
+            kb_lexicon = await self._knowledge_service_factory(db).active_dictionary_lexicon(
                 [str(kb_id) for kb_id in knowledge_base_ids if str(kb_id).strip()]
             )
         except Exception as exc:  # noqa: BLE001
@@ -1277,7 +1301,7 @@ class StepFunRealtimeHandler(
     async def _load_effective_policy(self) -> None:
         """Load effective voice policy from session snapshot or resolver service."""
         self._effective_policy = {}
-        async with AsyncSessionLocal() as db:
+        async with self._db_session_factory() as db:
             session_result = await db.execute(
                 select(PracticeSession).where(
                     PracticeSession.session_id == self.session_id
@@ -2044,36 +2068,28 @@ class StepFunRealtimeHandler(
 
     async def _connect_upstream(self) -> None:
         """Connect to StepFun realtime WebSocket and initialize session."""
-        if should_use_phase4_local_provider():
-            self.upstream_ws = Phase4LocalStepFunProvider.from_env()
-            now = asyncio.get_running_loop().time()
-            self._upstream_connected_at = now
-            self._upstream_last_activity_at = now
-            self._last_upstream_event_type = ""
-            await self._send_upstream(
-                {
-                    "type": "session.update",
-                    "session": {
-                        "provider": "phase4_local",
-                        "model": self._stepfun_model,
-                    },
-                }
-            )
-            logger.info("Phase 4 local StepFun provider attached")
-            return
-
-        query = urlencode({"model": self._stepfun_model})
-        endpoint = f"{self._stepfun_url}?{query}"
-        headers = {"Authorization": f"Bearer {self._stepfun_api_key}"}
-
         logger.info(f"Connecting StepFun realtime: model={self._stepfun_model}")
-        self.upstream_ws = await websockets.connect(
-            endpoint, additional_headers=headers
+        self.upstream_ws = await self._stepfun_transport.connect(
+            api_key=self._stepfun_api_key,
+            url=self._stepfun_url,
+            model=self._stepfun_model,
         )
         now = asyncio.get_running_loop().time()
         self._upstream_connected_at = now
         self._upstream_last_activity_at = now
         self._last_upstream_event_type = ""
+
+        session_payload = build_stepfun_session_update_payload(
+            self._build_stepfun_session_config()
+        )
+
+        await self._send_upstream(session_payload)
+        self._ensure_upstream_keepalive_task()
+        logger.info("StepFun session.update sent")
+        await self._maybe_start_kb_lock_warmup()
+
+    def _build_stepfun_session_config(self) -> StepFunSessionConfig:
+        """Collect handler-owned runtime values into transport session config."""
 
         turn_detection_value = None
         if self._effective_policy.get("turn_detection") == "server_vad":
@@ -2085,32 +2101,6 @@ class StepFunRealtimeHandler(
             unavailable_voice_ids=self._unavailable_voice_ids,
         )
         self._selected_stepfun_voice = selected_voice
-        session_payload: dict = {
-            "type": "session.update",
-            "session": {
-                "voice": selected_voice,
-                "temperature": self._stepfun_temperature,
-                "input_audio_format": self._stepfun_input_audio_format,
-                "output_audio_format": self._stepfun_output_audio_format,
-                "turn_detection": turn_detection_value,
-            },
-        }
-        if self._stepfun_input_transcription_enabled:
-            input_audio_transcription: dict[str, Any] = {}
-            if self._stepfun_input_transcription_language:
-                input_audio_transcription["language"] = (
-                    self._stepfun_input_transcription_language
-                )
-            if self._stepfun_input_transcription_model:
-                input_audio_transcription["model"] = (
-                    self._stepfun_input_transcription_model
-                )
-            if input_audio_transcription:
-                session_payload["session"]["input_audio_transcription"] = (
-                    input_audio_transcription
-                )
-        if self._stepfun_instructions:
-            session_payload["session"]["instructions"] = self._stepfun_instructions
         tools = self._enforce_stepfun_tool_guardrails(
             self._build_stepfun_tools_from_policy()
         )
@@ -2129,23 +2119,24 @@ class StepFunRealtimeHandler(
             network_access_mode=str(tool_policy.get("network_access_mode") or ""),
             input_transcription_enabled=self._stepfun_input_transcription_enabled,
         )
-        if tools:
-            session_payload["session"]["tools"] = tools
-
-        await self._send_upstream(session_payload)
-        self._ensure_upstream_keepalive_task()
-        logger.info("StepFun session.update sent")
-        await self._maybe_start_kb_lock_warmup()
+        return StepFunSessionConfig(
+            voice=selected_voice,
+            temperature=self._stepfun_temperature,
+            input_audio_format=self._stepfun_input_audio_format,
+            output_audio_format=self._stepfun_output_audio_format,
+            turn_detection=turn_detection_value,
+            input_transcription_enabled=self._stepfun_input_transcription_enabled,
+            input_transcription_language=self._stepfun_input_transcription_language,
+            input_transcription_model=self._stepfun_input_transcription_model,
+            instructions=self._stepfun_instructions,
+            tools=tools,
+        )
 
     async def _close_upstream(self) -> None:
         """Close upstream connection safely."""
         await self._stop_upstream_keepalive_task()
-        if self.upstream_ws:
-            try:
-                await self.upstream_ws.close()
-            except (RuntimeError, ValueError, OSError):
-                pass
-            self.upstream_ws = None
+        await self._stepfun_transport.close(self.upstream_ws)
+        self.upstream_ws = None
         self._upstream_connected_at = 0.0
         self._upstream_last_activity_at = 0.0
 
@@ -2177,8 +2168,8 @@ class StepFunRealtimeHandler(
         chromadb_warmed = False
         embedding_client_warmed = False
         try:
-            async with AsyncSessionLocal() as db:
-                knowledge_service = KnowledgeService(db)
+            async with self._db_session_factory() as db:
+                knowledge_service = self._knowledge_service_factory(db)
                 _ = await knowledge_service.get_search_health(kb_ids=kb_ids)
                 chromadb_warmed = True
 
@@ -2488,7 +2479,7 @@ class StepFunRealtimeHandler(
         if self._feedback_context is None or not self.session_id:
             return
         try:
-            async with AsyncSessionLocal() as db:
+            async with self._db_session_factory() as db:
                 result = await db.execute(
                     select(PracticeSession.runtime_state).where(
                         PracticeSession.session_id == self.session_id
@@ -4454,8 +4445,8 @@ class StepFunRealtimeHandler(
                         "session_id": self.session_id,
                     },
                     effective_policy=self._effective_policy,
-                    session_factory=AsyncSessionLocal,
-                    knowledge_service_cls=KnowledgeService,
+                    session_factory=self._db_session_factory,
+                    knowledge_service_cls=self._knowledge_service_factory,
                     record_metric=self._record_knowledge_runtime_metric,
                 )
             except asyncio.CancelledError:
@@ -4699,7 +4690,7 @@ class StepFunRealtimeHandler(
         await persist_runtime_metrics_to_session(
             session_id=self.session_id,
             effective_policy=self._effective_policy,
-            session_factory=AsyncSessionLocal,
+            session_factory=self._db_session_factory,
         )
 
     def _build_stepfun_tools_from_policy(self) -> list[dict[str, Any]]:
