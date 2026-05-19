@@ -16,6 +16,19 @@ describe("client domain factories", () => {
         });
     });
 
+    it("loads auth providers through the shared request seam without session-expired handling", async () => {
+        const request = vi.fn().mockResolvedValue({ environment: "development" });
+        const auth = createAuthDomain({ request });
+
+        await auth.getProviders();
+
+        expect(request).toHaveBeenCalledWith("/auth/providers", {
+            method: "GET",
+            cache: "no-store",
+            skipSessionExpiredHandling: true,
+        });
+    });
+
     it("keeps practice lifecycle helpers delegating through the domain lifecycle endpoint", async () => {
         const request = vi.fn().mockResolvedValue({ ok: true });
         const practice = createPracticeDomain({ request });

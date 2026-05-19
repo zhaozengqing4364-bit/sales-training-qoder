@@ -10,10 +10,6 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 
-const API_BASE_URL = (
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1"
-).replace(/\/+$/, "");
-
 type ProviderStatus = {
     enabled: boolean;
     loginUrl: string;
@@ -48,11 +44,6 @@ const AUTH_ERROR_MESSAGE_MAP: Record<string, string> = {
 };
 const REMEMBER_EMAIL_STORAGE_KEY = "qoder.login.rememberEmail.v1";
 
-function buildApiUrl(path: string): string {
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-    return `${API_BASE_URL}${normalizedPath}`;
-}
-
 function toProviderStatus(input: unknown, fallbackMessage: string): ProviderStatus {
     const record = input && typeof input === "object" ? input as Record<string, unknown> : {};
     return {
@@ -66,7 +57,7 @@ function toProviderStatus(input: unknown, fallbackMessage: string): ProviderStat
 
 function toAuthProviderState(payload: unknown): AuthProviderState {
     const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
-    const data = root.data && typeof root.data === "object" ? root.data as Record<string, unknown> : {};
+    const data = root.data && typeof root.data === "object" ? root.data as Record<string, unknown> : root;
 
     return {
         environment: typeof data.environment === "string" && data.environment.trim()
@@ -120,19 +111,7 @@ export default function LoginPage() {
 
         const loadProviders = async () => {
             try {
-                const response = await fetch(buildApiUrl("/auth/providers"), {
-                    method: "GET",
-                    cache: "no-store",
-                    credentials: "include",
-                });
-                const payload = await response.json().catch(() => null);
-                if (!response.ok) {
-                    throw new Error(
-                        payload && typeof payload === "object" && "message" in payload
-                            ? String((payload as { message?: unknown }).message || "")
-                            : "登录配置加载失败，请刷新页面后重试。",
-                    );
-                }
+                const payload = await api.auth.getProviders();
                 if (active) {
                     setProviderState(toAuthProviderState(payload));
                 }
@@ -154,7 +133,7 @@ export default function LoginPage() {
                     },
                 });
                 if (!authErrorMessage) {
-                    setError(loadError instanceof Error ? loadError.message : "登录配置加载失败，请刷新页面后重试。");
+                    setError(getApiErrorMessage(loadError));
                 }
             }
         };
@@ -200,21 +179,10 @@ export default function LoginPage() {
         setIsDevLoginLoading(true);
         setError("");
         try {
-            const response = await fetch(providerState.devFallback.loginUrl, {
-                method: "POST",
-                credentials: "include",
-            });
-            const payload = await response.json().catch(() => null);
-            if (!response.ok || (payload && typeof payload === "object" && (payload as { success?: unknown }).success === false)) {
-                throw new Error(
-                    payload && typeof payload === "object" && "message" in payload
-                        ? String((payload as { message?: unknown }).message || "开发者登录失败，请稍后重试。")
-                        : "开发者登录失败，请稍后重试。",
-                );
-            }
+            await api.auth.devLogin();
             router.push("/");
         } catch (err) {
-            setError(err instanceof Error ? err.message : "开发者登录失败，请稍后重试。");
+            setError(getApiErrorMessage(err));
         } finally {
             setIsDevLoginLoading(false);
         }

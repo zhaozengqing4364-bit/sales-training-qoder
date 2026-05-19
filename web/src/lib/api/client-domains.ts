@@ -122,6 +122,18 @@ type AuthDomainDependencies = {
     request: ApiRequest;
 };
 
+type AuthProviderStatus = {
+    enabled: boolean;
+    login_url: string;
+    message: string;
+};
+
+type AuthProvidersResponse = {
+    environment: string;
+    wecom: AuthProviderStatus & { configured?: boolean };
+    dev_fallback: AuthProviderStatus;
+};
+
 type PracticeDomainDependencies = {
     request: ApiRequest;
 };
@@ -175,6 +187,14 @@ type AudioSegmentFailureToken =
 
 export function createAuthDomain({ request }: AuthDomainDependencies) {
     return {
+        getProviders: async () => {
+            return request<AuthProvidersResponse>("/auth/providers", {
+                method: "GET",
+                cache: "no-store",
+                skipSessionExpiredHandling: true,
+            });
+        },
+
         login: async (credentials: { email: string; password: string }) => {
             return request<{ token?: string; access_token?: string; user: User & { id?: string } }>("/auth/login", {
                 method: "POST",

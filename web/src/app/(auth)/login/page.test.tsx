@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import LoginPage from "./page";
 
-const { pushMock, loginMock } = vi.hoisted(() => ({
+const { pushMock, loginMock, getProvidersMock, devLoginMock } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     loginMock: vi.fn(),
+    getProvidersMock: vi.fn(),
+    devLoginMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -23,77 +25,54 @@ vi.mock("@/lib/api/client", async () => {
             auth: {
                 ...actual.api.auth,
                 login: loginMock,
+                getProviders: getProvidersMock,
+                devLogin: devLoginMock,
             },
         },
     };
 });
 
-function mockProvidersResponse(overrides?: {
+function mockProvidersPayload(overrides?: {
     wecom?: Partial<{ enabled: boolean; configured: boolean; login_url: string; message: string }>;
     devFallback?: Partial<{ enabled: boolean; login_url: string; message: string }>;
 }) {
-    const payload = {
-        success: true,
-        data: {
-            environment: "development",
-            wecom: {
-                enabled: false,
-                configured: false,
-                login_url: "http://localhost:3444/api/v1/auth/wecom/start?return_to=%2F",
-                message: "当前环境未配置企业微信 SSO。",
-                ...overrides?.wecom,
-            },
-            dev_fallback: {
-                enabled: true,
-                login_url: "http://localhost:3444/api/v1/auth/dev-login",
-                message: "仅 development 环境可用的开发者登录。",
-                ...overrides?.devFallback,
-            },
+    return {
+        environment: "development",
+        wecom: {
+            enabled: false,
+            configured: false,
+            login_url: "http://localhost:3444/api/v1/auth/wecom/start?return_to=%2F",
+            message: "当前环境未配置企业微信 SSO。",
+            ...overrides?.wecom,
+        },
+        dev_fallback: {
+            enabled: true,
+            login_url: "http://localhost:3444/api/v1/auth/dev-login",
+            message: "仅 development 环境可用的开发者登录。",
+            ...overrides?.devFallback,
         },
     };
-
-    return new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-    });
 }
 
 describe("LoginPage", () => {
     beforeEach(() => {
         pushMock.mockReset();
         loginMock.mockReset();
+        getProvidersMock.mockReset();
+        devLoginMock.mockReset();
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
 
-        const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-            const url = String(input);
-            if (url.includes("/auth/providers")) {
-                return mockProvidersResponse();
-            }
-            if (url.includes("/auth/dev-login")) {
-                return new Response(
-                    JSON.stringify({
-                        success: true,
-                        data: {
-                            access_token: "dev-token",
-                            token_type: "bearer",
-                            user: {
-                                user_id: "dev-user-1",
-                                email: "dev@example.com",
-                                name: "Developer",
-                            },
-                        },
-                    }),
-                    {
-                        status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    },
-                );
-            }
-            throw new Error(`Unexpected fetch: ${url} ${init?.method ?? "GET"}`);
+        getProvidersMock.mockResolvedValue(mockProvidersPayload());
+        devLoginMock.mockResolvedValue({
+            access_token: "dev-token",
+            token_type: "bearer",
+            user: {
+                user_id: "dev-user-1",
+                email: "dev@example.com",
+                name: "Developer",
+            },
         });
-
-        vi.stubGlobal("fetch", fetchMock);
     });
 
     it("renders WeCom as unavailable when the provider is not configured and shows the explicit dev fallback", async () => {
@@ -180,8 +159,6 @@ describe("LoginPage", () => {
     });
 
     it("uses the explicit dev-login fallback and redirects home", async () => {
-        const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
-
         render(<LoginPage />);
 
         fireEvent.click(await screen.findByRole("button", { name: /开发者快速登录/i }));
@@ -190,13 +167,15 @@ describe("LoginPage", () => {
             expect(pushMock).toHaveBeenCalledWith("/");
         });
 
-        expect(fetchMock).toHaveBeenCalledWith(
-            "http://localhost:3444/api/v1/auth/dev-login",
-            expect.objectContaining({
-                method: "POST",
-                credentials: "include",
-            }),
-        );
+        expect(devLoginMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("loads provider state through the shared auth API client", async () => {
+        render(<LoginPage />);
+
+        await screen.findByRole("button", { name: /开发者快速登录/i });
+
+        expect(getProvidersMock).toHaveBeenCalledTimes(1);
     });
 
     // Regression: ISSUE-002 — native login fallback leaked credentials into the URL
