@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
@@ -259,6 +260,7 @@ export function AdminContentAssetsPage({ assetType }: { assetType: AssetType }) 
     const [csvErrors, setCsvErrors] = useState<CsvRowError[]>([]);
     const [caseForm, setCaseForm] = useState<CaseItemFormState>(() => emptyCaseItemForm());
     const [roleForm, setRoleForm] = useState<RoleProfileFormState>(() => emptyRoleProfileForm());
+    const [confirmTarget, setConfirmTarget] = useState<{ type: "publish" | "archive"; item: AssetRecord } | null>(null);
 
     const loadItems = useCallback(async () => {
         setLoading(true);
@@ -447,6 +449,32 @@ export function AdminContentAssetsPage({ assetType }: { assetType: AssetType }) 
 
     return (
         <div className="space-y-8 pb-20">
+            <ConfirmDialog
+                open={!!confirmTarget}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmTarget(null);
+                }}
+                title={confirmTarget?.type === "archive" ? "确认归档内容资产" : "确认发布内容资产"}
+                description={confirmTarget
+                    ? confirmTarget.type === "archive"
+                        ? `将「${recordTitle(confirmTarget.item)}」归档，归档后不会再作为可绑定资产使用。`
+                        : `将「${recordTitle(confirmTarget.item)}」发布，发布后可被 PracticeTemplate 绑定引用。`
+                    : "确认执行该内容资产操作。"}
+                confirmText={confirmTarget?.type === "archive" ? "确认归档" : "确认发布"}
+                variant={confirmTarget?.type === "archive" ? "warning" : "danger"}
+                onConfirm={() => {
+                    const target = confirmTarget;
+                    setConfirmTarget(null);
+                    if (!target) return;
+                    if (target.type === "archive") {
+                        void handleArchive(target.item);
+                        return;
+                    }
+                    void handlePublish(target.item);
+                }}
+                isLoading={busyId !== null}
+            />
+
             <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">{title}</h1>
@@ -535,11 +563,11 @@ export function AdminContentAssetsPage({ assetType }: { assetType: AssetType }) 
                                     ) : (
                                         <span className="self-center text-xs text-slate-500">仅 draft 可编辑</span>
                                     )}
-                                    <Button onClick={() => { void handlePublish(item); }} disabled={item.status === "published" || busyId !== null}>
+                                    <Button onClick={() => { setConfirmTarget({ type: "publish", item }); }} disabled={item.status === "published" || busyId !== null}>
                                         {busyId === recordId(item) ? "发布中..." : "发布资产"}
                                     </Button>
                                     {item.status !== "archived" && (
-                                        <Button variant="outline" onClick={() => { void handleArchive(item); }} disabled={busyId !== null}>
+                                        <Button variant="outline" onClick={() => { setConfirmTarget({ type: "archive", item }); }} disabled={busyId !== null}>
                                             {busyId === recordId(item) ? "归档中..." : "归档资产"}
                                         </Button>
                                     )}

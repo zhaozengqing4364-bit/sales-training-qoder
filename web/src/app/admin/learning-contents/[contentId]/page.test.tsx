@@ -166,7 +166,7 @@ describe("AdminLearningContentDetailPage", () => {
             expect(screen.getByDisplayValue("销售异议处理")).toBeTruthy();
             expect(screen.getByDisplayValue("学习如何处理常见异议")).toBeTruthy();
             expect(screen.getByDisplayValue("curriculum-team")).toBeTruthy();
-            expect(screen.getByDisplayValue("manual")).toBeTruthy();
+            expect((screen.getByLabelText("来源") as HTMLSelectElement).value).toBe("manual");
         });
 
         expect(screen.getByText(/草稿/)).toBeTruthy();
@@ -220,7 +220,7 @@ describe("AdminLearningContentDetailPage", () => {
         fireEvent.change(screen.getByDisplayValue("销售异议处理"), { target: { value: "新标题" } });
         fireEvent.change(screen.getByDisplayValue("学习如何处理常见异议"), { target: { value: "新摘要" } });
         fireEvent.change(screen.getByDisplayValue("curriculum-team"), { target: { value: "new-team" } });
-        fireEvent.change(screen.getByDisplayValue("manual"), { target: { value: "imported" } });
+        fireEvent.change(screen.getByLabelText("来源"), { target: { value: "imported" } });
         fireEvent.click(screen.getByRole("checkbox", { name: /安全标记/ }));
         fireEvent.click(screen.getByText(/保存元数据/));
 
@@ -336,6 +336,8 @@ describe("AdminLearningContentDetailPage", () => {
         });
 
         fireEvent.click(screen.getAllByTitle("删除")[0]);
+        expect(deleteChapterMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
         await waitFor(() => {
             expect(deleteChapterMock).toHaveBeenCalledWith(MOCK_CONTENT_ID, "c1");
@@ -422,6 +424,7 @@ describe("AdminLearningContentDetailPage", () => {
         });
 
         fireEvent.click(screen.getByRole("button", { name: "发布" }));
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(screen.getByText(/no_chapters/)).toBeTruthy();
@@ -445,6 +448,8 @@ describe("AdminLearningContentDetailPage", () => {
         });
 
         fireEvent.click(screen.getByRole("button", { name: "发布" }));
+        expect(publishMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(publishMock).toHaveBeenCalledWith(MOCK_CONTENT_ID);
@@ -468,6 +473,8 @@ describe("AdminLearningContentDetailPage", () => {
         });
 
         fireEvent.click(screen.getByRole("button", { name: "归档" }));
+        expect(archiveMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认归档" }));
 
         await waitFor(() => {
             expect(archiveMock).toHaveBeenCalledWith(MOCK_CONTENT_ID);

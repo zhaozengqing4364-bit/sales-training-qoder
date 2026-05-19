@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
@@ -82,6 +83,15 @@ function formatGovernanceIssue(issue: string): string {
   }
 }
 
+type ConfirmAction =
+  | { type: "toggle"; template: PromptTemplate }
+  | { type: "default"; template: PromptTemplate }
+  | { type: "migrate" }
+  | { type: "rollback"; template: PromptTemplate }
+  | { type: "remediate" }
+  | { type: "delete-binding"; binding: ScenarioPrompt }
+  | null;
+
 export default function AdminPromptsPage() {
   const router = useRouter();
   const toast = useToast();
@@ -99,6 +109,7 @@ export default function AdminPromptsPage() {
 
   const [userRole, setUserRole] = useState("user");
   const [isOperating, setIsOperating] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
 
   const [bindingTemplateId, setBindingTemplateId] = useState("");
   const [bindingScenarioType, setBindingScenarioType] = useState<"sales" | "presentation">("presentation");
@@ -351,6 +362,60 @@ export default function AdminPromptsPage() {
     }
   };
 
+  const handleConfirmAction = () => {
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (!action) return;
+    if (action.type === "toggle") {
+      void handleToggleActive(action.template);
+      return;
+    }
+    if (action.type === "default") {
+      void handleSetDefault(action.template);
+      return;
+    }
+    if (action.type === "migrate") {
+      void handleMigrateInvalidTemplates();
+      return;
+    }
+    if (action.type === "rollback") {
+      void handleRollbackGovernance(action.template);
+      return;
+    }
+    if (action.type === "remediate") {
+      void handleRemediateInvalidTemplates();
+      return;
+    }
+    void handleDeleteScenarioBinding(action.binding.id);
+  };
+
+  const confirmCopy = (() => {
+    if (!confirmAction) {
+      return { title: "确认操作", description: "确认执行该提示词治理操作。", confirmText: "确认", variant: "warning" as const };
+    }
+    if (confirmAction.type === "toggle") {
+      return {
+        title: confirmAction.template.is_active ? "停用提示词模板" : "启用提示词模板",
+        description: `${confirmAction.template.is_active ? "停用" : "启用"}「${confirmAction.template.name}」会影响运行时模板检索结果。`,
+        confirmText: confirmAction.template.is_active ? "确认停用" : "确认启用",
+        variant: "warning" as const,
+      };
+    }
+    if (confirmAction.type === "default") {
+      return { title: "设为默认模板", description: `将「${confirmAction.template.name}」设为 ${PROMPT_TYPE_LABELS[confirmAction.template.prompt_type]} 默认模板。`, confirmText: "确认设为默认", variant: "warning" as const };
+    }
+    if (confirmAction.type === "migrate") {
+      return { title: "执行治理扫描/迁移", description: "将批量修复可迁移的历史提示词变量格式，并写入治理审计。", confirmText: "确认迁移", variant: "danger" as const };
+    }
+    if (confirmAction.type === "rollback") {
+      return { title: "回滚治理变更", description: `将尝试从审计快照回滚「${confirmAction.template.name}」的提示词治理变更。`, confirmText: "确认回滚", variant: "warning" as const };
+    }
+    if (confirmAction.type === "remediate") {
+      return { title: "停用非法历史模板", description: "将批量停用非法且仍活跃的历史模板，避免运行时继续命中。", confirmText: "确认停用", variant: "danger" as const };
+    }
+    return { title: "删除场景绑定", description: `删除「${confirmAction.binding.scenario_type} / ${confirmAction.binding.prompt_type}」绑定后，该场景会回退到默认模板。`, confirmText: "确认删除", variant: "danger" as const };
+  })();
+
   useEffect(() => {
     if (!selectedTemplate) {
       return;
@@ -366,6 +431,19 @@ export default function AdminPromptsPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <ConfirmDialog
+        open={!!confirmAction}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+        title={confirmCopy.title}
+        description={confirmCopy.description}
+        confirmText={confirmCopy.confirmText}
+        variant={confirmCopy.variant}
+        onConfirm={handleConfirmAction}
+        isLoading={isOperating}
+      />
+
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">评估/报告提示词管理</h1>
@@ -382,7 +460,7 @@ export default function AdminPromptsPage() {
               <Button
                 variant="outline"
                 className="rounded-full"
-                onClick={() => void handleMigrateInvalidTemplates()}
+                onClick={() => setConfirmAction({ type: "migrate" })}
                 disabled={isOperating}
               >
                 治理扫描/迁移
@@ -442,7 +520,7 @@ export default function AdminPromptsPage() {
                 variant="outline"
                 size="sm"
                 disabled={!canOperate || isOperating}
-                onClick={() => void handleRemediateInvalidTemplates()}
+                onClick={() => setConfirmAction({ type: "remediate" })}
               >
                 停用非法历史模板
               </Button>
@@ -508,7 +586,7 @@ export default function AdminPromptsPage() {
               variant="outline"
               className="border-red-200 bg-white text-red-700"
               disabled={!canOperate || isOperating || governanceStatus.invalid_active_count === 0}
-              onClick={() => void handleRemediateInvalidTemplates()}
+              onClick={() => setConfirmAction({ type: "remediate" })}
             >
               禁用非法历史模板
             </Button>
@@ -589,7 +667,7 @@ export default function AdminPromptsPage() {
                               variant="outline"
                               size="sm"
                               disabled={!canOperate || isOperating}
-                              onClick={() => void handleToggleActive(template)}
+                              onClick={() => setConfirmAction({ type: "toggle", template })}
                             >
                               {template.is_active ? "停用" : "启用"}
                             </Button>
@@ -597,7 +675,7 @@ export default function AdminPromptsPage() {
                               variant="outline"
                               size="sm"
                               disabled={!canOperate || template.is_default || isOperating}
-                              onClick={() => void handleSetDefault(template)}
+                              onClick={() => setConfirmAction({ type: "default", template })}
                             >
                               设为默认
                             </Button>
@@ -608,7 +686,7 @@ export default function AdminPromptsPage() {
                                     variant="outline"
                                     size="sm"
                                     disabled={isOperating}
-                                    onClick={() => void handleMigrateInvalidTemplates()}
+                                    onClick={() => setConfirmAction({ type: "migrate" })}
                                   >
                                     迁移
                                   </Button>
@@ -624,7 +702,7 @@ export default function AdminPromptsPage() {
                                   variant="outline"
                                   size="sm"
                                   disabled={isOperating}
-                                  onClick={() => void handleRollbackGovernance(template)}
+                                  onClick={() => setConfirmAction({ type: "rollback", template })}
                                 >
                                   回滚治理
                                 </Button>
@@ -780,7 +858,7 @@ export default function AdminPromptsPage() {
                     variant="outline"
                     size="sm"
                     disabled={!canOperate || isOperating}
-                    onClick={() => void handleDeleteScenarioBinding(item.id)}
+                    onClick={() => setConfirmAction({ type: "delete-binding", binding: item })}
                   >
                     删除绑定
                   </Button>

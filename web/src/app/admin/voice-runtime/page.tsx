@@ -8,6 +8,7 @@ import { AssetGovernanceOverview, AssetGovernanceSummaryCard, type AssetGovernan
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/client";
@@ -165,11 +166,20 @@ export default function VoiceRuntimePage() {
     const [lexiconDraft, setLexiconDraft] = useState<string>(
         formatLexiconForEditor(DEFAULT_RUNTIME_TOOL_POLICY.transcript_normalization_lexicon),
     );
+    const [deleteTarget, setDeleteTarget] = useState<RuntimeProfileWithGovernance | null>(null);
 
     const selectedProfile = useMemo(
         () => profiles.find((profile) => profile.id === selectedProfileId) || null,
         [profiles, selectedProfileId],
     );
+    const lexiconValidation = useMemo(() => {
+        try {
+            parseLexiconFromEditor(lexiconDraft);
+            return { ok: true, message: "词典 JSON 数组格式有效。" };
+        } catch (error) {
+            return { ok: false, message: error instanceof Error ? error.message : "词典 JSON 格式无效" };
+        }
+    }, [lexiconDraft]);
 
     const loadProfiles = async () => {
         setIsLoading(true);
@@ -226,6 +236,39 @@ export default function VoiceRuntimePage() {
         setLexiconDraft(formatLexiconForEditor(DEFAULT_RUNTIME_TOOL_POLICY.transcript_normalization_lexicon));
     };
 
+    const handleCopySelected = () => {
+        if (!selectedProfile) {
+            handleCreateNew();
+            return;
+        }
+        const editableProfile = toEditableRuntimeProfile(selectedProfile);
+        const sanitizedToolPolicy = sanitizeRuntimeToolPolicy(editableProfile.tool_policy as Record<string, unknown>);
+        setSelectedProfileId(null);
+        setForm({
+            ...editableProfile,
+            name: `${selectedProfile.name} 副本`,
+            is_default: false,
+            tool_policy: sanitizedToolPolicy,
+        });
+        setLexiconDraft(formatLexiconForEditor(sanitizedToolPolicy.transcript_normalization_lexicon));
+        toast.showToast("已复制当前配置为新草稿，保存后才会生效。", "info");
+    };
+
+    const applyRetrievalPreset = (preset: "fast" | "balanced" | "precise") => {
+        const next = preset === "fast"
+            ? { retrieval_top_k: 3, retrieval_similarity_threshold: 0.72, retrieval_rerank_top_k: 4 }
+            : preset === "precise"
+              ? { retrieval_top_k: 8, retrieval_similarity_threshold: 0.58, retrieval_rerank_top_k: 12 }
+              : { retrieval_top_k: 5, retrieval_similarity_threshold: 0.65, retrieval_rerank_top_k: 8 };
+        setForm((prev) => ({
+            ...prev,
+            tool_policy: {
+                ...prev.tool_policy,
+                ...next,
+            },
+        }));
+    };
+
     const handleSave = async () => {
         if (!form.name.trim()) {
             toast.error("请先填写配置名称");
@@ -259,11 +302,12 @@ export default function VoiceRuntimePage() {
     };
 
     const handleDelete = async () => {
-        if (!selectedProfileId) return;
+        if (!deleteTarget) return;
         setIsSaving(true);
         try {
-            await api.admin.deleteVoiceRuntimeProfile(selectedProfileId);
+            await api.admin.deleteVoiceRuntimeProfile(deleteTarget.id);
             toast.success("配置已删除");
+            setDeleteTarget(null);
             await loadProfiles();
         } catch (error) {
             debug.error("Failed to delete runtime profile", error);
@@ -275,6 +319,19 @@ export default function VoiceRuntimePage() {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTarget(null);
+                }}
+                title="删除语音运行时配置"
+                description={deleteTarget ? `确定要删除「${deleteTarget.name}」吗？已绑定该配置的训练可能需要重新选择运行时策略。` : "确定要删除该语音运行时配置吗？"}
+                confirmText="确认删除"
+                variant="danger"
+                onConfirm={handleDelete}
+                isLoading={isSaving}
+            />
+
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">语音运行时策略</h1>
@@ -288,6 +345,9 @@ export default function VoiceRuntimePage() {
                     <Button className="rounded-full bg-slate-900 text-white" onClick={handleCreateNew}>
                         <Plus className="w-4 h-4 mr-2" />
                         新建配置
+                    </Button>
+                    <Button variant="outline" className="rounded-full" onClick={handleCopySelected} disabled={!selectedProfile}>
+                        复制当前配置
                     </Button>
                 </div>
             </div>
@@ -465,6 +525,11 @@ export default function VoiceRuntimePage() {
                         </div>
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">内部检索 TopK</label>
+                            <div className="mb-2 flex flex-wrap gap-2">
+                                <button type="button" className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50" onClick={() => applyRetrievalPreset("fast")}>快速</button>
+                                <button type="button" className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50" onClick={() => applyRetrievalPreset("balanced")}>均衡</button>
+                                <button type="button" className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50" onClick={() => applyRetrievalPreset("precise")}>精确</button>
+                            </div>
                             <Input
                                 name="voice_runtime_retrieval_top_k"
                                 autoComplete="section-voice-runtime off"
@@ -668,6 +733,9 @@ export default function VoiceRuntimePage() {
                                 onChange={(event) => setLexiconDraft(event.target.value)}
                                 placeholder='[{"canonical_term":"石犀","aliases":["石溪","食犀"],"scope":"global","replace_on_final_only":true}]'
                             />
+                            <p className={`rounded-xl border px-3 py-2 text-xs ${lexiconValidation.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`}>
+                                {lexiconValidation.message}
+                            </p>
                         </div>
                         <div className="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                             角色中心仍负责知识库绑定、联网开关和检索优先级；本页补充运行时层的 KB 锁降级、单轮提问上限、转写词典和检索重排参数。
@@ -692,13 +760,14 @@ export default function VoiceRuntimePage() {
                                 />
                                 启用
                             </label>
+                            <span className="text-xs text-slate-500">默认配置用于新训练；停用配置不会再出现在可选运行时策略中。</span>
                         </div>
                         <div className="flex gap-2">
                             {selectedProfile && (
                                 <Button
                                     variant="outline"
                                     className="rounded-full border-red-200 text-red-600 hover:bg-red-50"
-                                    onClick={() => void handleDelete()}
+                                    onClick={() => setDeleteTarget(selectedProfile)}
                                     disabled={isSaving}
                                 >
                                     <Trash2 className="w-4 h-4 mr-2" />

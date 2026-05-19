@@ -19,6 +19,7 @@ import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { LearningChapter, LearningContent, QuestionCategory } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { debug } from "@/lib/debug";
 import { QuestionGenerationPanel } from "./question-generation-panel";
 
@@ -95,6 +96,12 @@ export default function AdminLearningContentDetailPage() {
     const [actionLoading, setActionLoading] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
     const [publishGateErrors, setPublishGateErrors] = useState<GateResult[] | null>(null);
+    const [confirmAction, setConfirmAction] = useState<
+        | { type: "delete-chapter"; chapter: LearningChapter }
+        | { type: "publish" }
+        | { type: "archive" }
+        | null
+    >(null);
 
     const [categories, setCategories] = useState<QuestionCategory[]>([]);
 
@@ -274,12 +281,51 @@ export default function AdminLearningContentDetailPage() {
         }
     };
 
+    const handleConfirmAction = () => {
+        const action = confirmAction;
+        setConfirmAction(null);
+        if (!action) return;
+        if (action.type === "delete-chapter") {
+            void handleDeleteChapter(action.chapter.chapter_id);
+            return;
+        }
+        if (action.type === "publish") {
+            void handlePublish();
+            return;
+        }
+        void handleArchive();
+    };
+
+    const confirmTitle = confirmAction?.type === "delete-chapter"
+        ? "删除学习章节"
+        : confirmAction?.type === "archive"
+          ? "归档学习内容"
+          : "发布学习内容";
+    const confirmDescription = confirmAction?.type === "delete-chapter"
+        ? `确定要删除「${confirmAction.chapter.title}」吗？删除后该章节无法恢复。`
+        : confirmAction?.type === "archive"
+          ? `确定要归档「${content?.title ?? "当前学习内容"}」吗？归档后学员将不能继续访问该内容。`
+          : `确定要发布「${content?.title ?? "当前学习内容"}」吗？发布前会再次执行章节与安全门禁检查。`;
+
     const SORTED_CHAPTERS = content?.chapters
         ? [...content.chapters].sort((a, b) => a.order_index - b.order_index)
         : [];
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <ConfirmDialog
+                open={!!confirmAction}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmAction(null);
+                }}
+                title={confirmTitle}
+                description={confirmDescription}
+                confirmText={confirmAction?.type === "delete-chapter" ? "确认删除" : confirmAction?.type === "archive" ? "确认归档" : "确认发布"}
+                variant={confirmAction?.type === "delete-chapter" ? "danger" : "warning"}
+                onConfirm={handleConfirmAction}
+                isLoading={chapterAdding || actionLoading}
+            />
+
             <div className="flex items-center gap-4">
                 <Link
                     href="/admin/learning-contents"
@@ -379,12 +425,16 @@ export default function AdminLearningContentDetailPage() {
                                             <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">
                                                 来源
                                             </label>
-                                            <input
-                                                type="text"
+                                            <select
+                                                aria-label="来源"
                                                 value={source}
                                                 onChange={(e) => setSource(e.target.value)}
                                                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                            />
+                                            >
+                                                <option value="manual">手动录入</option>
+                                                <option value="imported">批量导入</option>
+                                                <option value="generated">系统生成</option>
+                                            </select>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -544,7 +594,7 @@ export default function AdminLearningContentDetailPage() {
                                                                         </button>
                                                                         <button
                                                                             type="button"
-                                                                            onClick={() => handleDeleteChapter(chapter.chapter_id)}
+                                                                            onClick={() => setConfirmAction({ type: "delete-chapter", chapter })}
                                                                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
                                                                             title="删除"
                                                                         >
@@ -630,7 +680,7 @@ export default function AdminLearningContentDetailPage() {
                                 ) : null}
                                 <div className="space-y-3">
                                     <Button
-                                        onClick={() => void handlePublish()}
+                                        onClick={() => setConfirmAction({ type: "publish" })}
                                         disabled={actionLoading || content.status === "published"}
                                         isLoading={actionLoading}
                                         className="w-full rounded-full"
@@ -639,7 +689,7 @@ export default function AdminLearningContentDetailPage() {
                                         发布
                                     </Button>
                                     <Button
-                                        onClick={() => void handleArchive()}
+                                        onClick={() => setConfirmAction({ type: "archive" })}
                                         disabled={actionLoading || content.status === "archived"}
                                         isLoading={actionLoading}
                                         className="w-full rounded-full"

@@ -181,18 +181,34 @@ describe("AdminLearningContentsPage", () => {
         expect(screen.getByText(/创建完成/)).toBeTruthy();
     });
 
-    it("deletes a draft learning content from the admin list page", async () => {
+    it("confirms before deleting a draft learning content from the admin list page", async () => {
         listMock.mockResolvedValue({ items: [makeLearningContent()], total: 1 });
         render(<AdminLearningContentsPage />);
         await screen.findByText("销售异议处理");
 
         fireEvent.click(screen.getByRole("button", { name: "删除" }));
+        expect(deleteMock).not.toHaveBeenCalled();
+        expect(screen.getByRole("dialog", { name: "删除学习内容草稿" })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
         await waitFor(() => {
             expect(deleteMock).toHaveBeenCalledWith("content-1");
         });
         expect(screen.queryByText("销售异议处理")).toBeNull();
         expect(screen.getByText(/删除完成/)).toBeTruthy();
+    });
+
+    it("keeps a draft learning content when delete confirmation is cancelled", async () => {
+        listMock.mockResolvedValue({ items: [makeLearningContent()], total: 1 });
+        render(<AdminLearningContentsPage />);
+        await screen.findByText("销售异议处理");
+
+        fireEvent.click(screen.getByRole("button", { name: "删除" }));
+        fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+        expect(deleteMock).not.toHaveBeenCalled();
+        expect(screen.getByText("销售异议处理")).toBeTruthy();
     });
 
     it("does not expose delete action for published learning content", async () => {

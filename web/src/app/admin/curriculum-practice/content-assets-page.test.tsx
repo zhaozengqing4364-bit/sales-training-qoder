@@ -189,10 +189,14 @@ describe("AdminContentAssetsPage", () => {
         await screen.findByText("制造业 · 采购总监");
 
         fireEvent.click(screen.getByRole("button", { name: "发布资产" }));
+        expect(publishCaseItemMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
         await waitFor(() => expect(publishCaseItemMock).toHaveBeenCalledWith("case-1"));
         expect(screen.getByText(/发布完成/)).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "归档资产" }));
+        expect(archiveCaseItemMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认归档" }));
         await waitFor(() => expect(archiveCaseItemMock).toHaveBeenCalledWith("case-1"));
     });
 

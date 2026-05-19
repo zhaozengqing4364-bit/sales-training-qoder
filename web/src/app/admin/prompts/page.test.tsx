@@ -56,6 +56,21 @@ vi.mock("@/components/ui/input", () => ({
     Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 
+vi.mock("@/components/ui/confirm-dialog", () => ({
+    ConfirmDialog: ({ open, title, description, confirmText, onConfirm }: {
+        open: boolean;
+        title: string;
+        description: string;
+        confirmText?: string;
+        onConfirm: () => void;
+    }) => open ? (
+        <div role="dialog" aria-label={title}>
+            <p>{description}</p>
+            <button type="button" onClick={onConfirm}>{confirmText ?? "确认"}</button>
+        </div>
+    ) : null,
+}));
+
 vi.mock("@/components/ui/toast", () => ({
     useToast: () => ({
         success: successToastMock,
@@ -195,6 +210,8 @@ describe("AdminPromptsPage governance UI", () => {
         expect(screen.getByText(/变量 schema：list\[str\]/)).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "禁用非法历史模板" }));
+        expect(remediateInvalidPromptTemplatesMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认停用" }));
 
         await waitFor(() => {
             expect(remediateInvalidPromptTemplatesMock).toHaveBeenCalledWith(

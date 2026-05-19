@@ -8,6 +8,7 @@ import { api } from "@/lib/api/client";
 import type { LearningContent, LearningContentCreateRequest } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { debug } from "@/lib/debug";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -37,6 +38,8 @@ export default function AdminLearningContentsPage() {
     const [notice, setNotice] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
     const [form, setForm] = useState<LearningContentCreateRequest>(EMPTY_FORM);
+    const [deleteTarget, setDeleteTarget] = useState<LearningContent | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -82,21 +85,39 @@ export default function AdminLearningContentsPage() {
         }
     };
 
-    const handleDelete = async (item: LearningContent) => {
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
         setNotice(null);
         setActionError(null);
+        setIsDeleting(true);
         try {
-            await api.learningContents.delete(item.learning_content_id);
-            setItems((current) => current.filter((currentItem) => currentItem.learning_content_id !== item.learning_content_id));
-            setNotice(`删除完成：${item.title}`);
+            await api.learningContents.delete(deleteTarget.learning_content_id);
+            setItems((current) => current.filter((currentItem) => currentItem.learning_content_id !== deleteTarget.learning_content_id));
+            setNotice(`删除完成：${deleteTarget.title}`);
+            setDeleteTarget(null);
         } catch (err) {
             debug.error("Failed to delete learning content:", err);
             setActionError(err instanceof Error ? err.message : "删除失败");
+        } finally {
+            setIsDeleting(false);
         }
     };
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTarget(null);
+                }}
+                title="删除学习内容草稿"
+                description={deleteTarget ? `确定要删除「${deleteTarget.title}」吗？删除后该草稿无法恢复。` : "确定要删除该学习内容草稿吗？"}
+                confirmText="确认删除"
+                variant="danger"
+                onConfirm={handleDelete}
+                isLoading={isDeleting}
+            />
+
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">学习内容管理</h1>
@@ -151,11 +172,15 @@ export default function AdminLearningContentsPage() {
                     </label>
                     <label className="space-y-1 text-sm font-medium text-slate-700">
                         <span>来源</span>
-                        <input
+                        <select
                             className="w-full rounded-xl border border-slate-200 px-3 py-2"
                             value={form.source ?? ""}
                             onChange={(event) => setForm((current) => ({ ...current, source: event.target.value }))}
-                        />
+                        >
+                            <option value="manual">手动录入</option>
+                            <option value="imported">批量导入</option>
+                            <option value="generated">系统生成</option>
+                        </select>
                     </label>
                 </div>
                 <Button onClick={() => void handleCreate()} className="rounded-full">
@@ -229,7 +254,7 @@ export default function AdminLearningContentsPage() {
                                                     <Button
                                                         variant="outline"
                                                         className="rounded-full text-red-600"
-                                                        onClick={() => void handleDelete(item)}
+                                                        onClick={() => setDeleteTarget(item)}
                                                     >
                                                         <Trash2 className="mr-2 h-4 w-4" />
                                                         删除
