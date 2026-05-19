@@ -29,6 +29,13 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   evaluation: "实时评价",
   report: "综合报告",
 };
+
+const PROMPT_CATEGORY_OPTIONS = [
+    { value: "common", label: "通用" },
+    { value: "sales", label: "销售训练" },
+    { value: "presentation", label: "PPT 演练" },
+] as const;
+
 export default function NewPromptTemplatePage() {
     const router = useRouter();
     const [saving, setSaving] = useState(false);
@@ -163,7 +170,8 @@ export default function NewPromptTemplatePage() {
                             <label className="block text-sm font-medium text-zinc-700 mb-2">
                                 分类
                             </label>
-                            <Input
+                            <input
+                                list="prompt-category-options"
                                 value={category}
                                 onChange={(e) => {
                                     const nextCategory = e.target.value;
@@ -177,8 +185,14 @@ export default function NewPromptTemplatePage() {
                                     }
                                     setCategory(nextCategory);
                                 }}
-                                placeholder="例如：sales, presentation, common"
+                                className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                                placeholder="例如：common、sales、presentation，或输入自定义分类"
                             />
+                            <datalist id="prompt-category-options">
+                                {PROMPT_CATEGORY_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </datalist>
                             {normalizedCategory === "sales" && (
                                 <p className="mt-1 text-xs text-amber-600">
                                     销售场景仅允许评估/报告相关模板类型。

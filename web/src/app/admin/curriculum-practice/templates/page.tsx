@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage, getPracticeTemplateErrorDetails } from "@/lib/api/client";
 import type { CaseItemRecord, CurriculumPlanStage, PracticeTemplateGateResult, PracticeTemplateMutationRequest, PracticeTemplateRecord, RoleProfileRecord } from "@/lib/api/types";
@@ -90,7 +91,11 @@ function formFromTemplate(template: PracticeTemplateRecord): FormState {
 }
 
 function refsFromText(value: string): string[] {
-    return value.split(",").map((item) => item.trim()).filter(Boolean);
+    return value.split(/[，,\n]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function refsToText(values: string[]): string {
+    return values.join("\n");
 }
 
 function prerequisitesFromText(value: string) {
@@ -119,6 +124,7 @@ export default function AdminPracticeTemplatesPage() {
     const [roleProfiles, setRoleProfiles] = useState<RoleProfileRecord[]>([]);
     const [caseItemSearch, setCaseItemSearch] = useState("");
     const [roleProfileSearch, setRoleProfileSearch] = useState("");
+    const [confirmTarget, setConfirmTarget] = useState<{ type: "publish" | "archive"; template: PracticeTemplateRecord } | null>(null);
 
     const loadTemplates = useCallback(async () => {
         setLoading(true);
@@ -339,6 +345,32 @@ export default function AdminPracticeTemplatesPage() {
 
     return (
         <div className="space-y-8 pb-20">
+            <ConfirmDialog
+                open={!!confirmTarget}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmTarget(null);
+                }}
+                title={confirmTarget?.type === "archive" ? "确认归档模板" : "确认发布模板"}
+                description={confirmTarget
+                    ? confirmTarget.type === "archive"
+                        ? `将「${confirmTarget.template.name}」归档，归档后不能继续作为可编辑草稿使用。`
+                        : `将「${confirmTarget.template.name}」发布为可用训练模板，发布门禁会再次校验引用与阶段配置。`
+                    : "确认执行该模板操作。"}
+                confirmText={confirmTarget?.type === "archive" ? "确认归档" : "确认发布"}
+                variant={confirmTarget?.type === "archive" ? "warning" : "danger"}
+                onConfirm={() => {
+                    const target = confirmTarget;
+                    setConfirmTarget(null);
+                    if (!target) return;
+                    if (target.type === "archive") {
+                        void handleArchive(target.template);
+                        return;
+                    }
+                    void handlePublish(target.template);
+                }}
+                isLoading={busyTemplateId !== null}
+            />
+
             <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">课程训练模板</h1>
@@ -399,7 +431,12 @@ export default function AdminPracticeTemplatesPage() {
                     </label>
                     <label className="space-y-1 text-sm font-medium text-slate-700">
                         <span>Knowledge Base Refs</span>
-                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.knowledge_base_refs.join(",")} onChange={(event) => setForm((current) => ({ ...current, knowledge_base_refs: refsFromText(event.target.value) }))} />
+                        <textarea
+                            className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2"
+                            value={refsToText(form.knowledge_base_refs)}
+                            onChange={(event) => setForm((current) => ({ ...current, knowledge_base_refs: refsFromText(event.target.value) }))}
+                            placeholder="每行一个知识库引用 ID，也兼容逗号粘贴"
+                        />
                     </label>
                     <label className="space-y-1 text-sm font-medium text-slate-700">
                         <span>搜索 CaseItem</span>
@@ -508,7 +545,12 @@ export default function AdminPracticeTemplatesPage() {
                                     </label>
                                     <label className="space-y-1 text-sm font-medium text-slate-700 md:col-span-2">
                                         <span>{`Stage Prerequisites ${index + 1}`}</span>
-                                        <input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={(stage.prerequisites ?? []).map((item) => item.template_stage_key).join(",")} onChange={(event) => updateStage(index, { prerequisites: prerequisitesFromText(event.target.value) })} />
+                                        <textarea
+                                            className="min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2"
+                                            value={refsToText((stage.prerequisites ?? []).map((item) => item.template_stage_key))}
+                                            onChange={(event) => updateStage(index, { prerequisites: prerequisitesFromText(event.target.value) })}
+                                            placeholder="每行一个前置 Stage Key，也兼容逗号粘贴"
+                                        />
                                     </label>
                                 </div>
                             </div>
@@ -555,7 +597,7 @@ export default function AdminPracticeTemplatesPage() {
                                         <span className="self-center text-xs text-slate-500">仅 draft 模板可编辑</span>
                                     )}
                                     <Button
-                                        onClick={() => { void handlePublish(item); }}
+                                        onClick={() => { setConfirmTarget({ type: "publish", template: item }); }}
                                         disabled={item.status === "published" || busyTemplateId !== null}
                                     >
                                         {busyTemplateId === item.template_id ? "发布中..." : "发布模板"}
@@ -563,7 +605,7 @@ export default function AdminPracticeTemplatesPage() {
                                     {item.status !== "archived" && (
                                         <Button
                                             variant="outline"
-                                            onClick={() => { void handleArchive(item); }}
+                                            onClick={() => { setConfirmTarget({ type: "archive", template: item }); }}
                                             disabled={busyTemplateId !== null}
                                         >
                                             {busyTemplateId === item.template_id ? "归档中..." : "归档模板"}

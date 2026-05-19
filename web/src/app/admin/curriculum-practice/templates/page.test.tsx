@@ -147,6 +147,7 @@ describe("AdminPracticeTemplatesPage", () => {
         render(<AdminPracticeTemplatesPage />);
         await screen.findByText("客户异议处理训练");
         fireEvent.click(screen.getByRole("button", { name: "发布模板" }));
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(screen.getByText(/PracticeTemplate 发布门禁未通过/)).toBeTruthy();
@@ -177,6 +178,7 @@ describe("AdminPracticeTemplatesPage", () => {
         render(<AdminPracticeTemplatesPage />);
         await screen.findByText("客户异议处理训练");
         fireEvent.click(screen.getByRole("button", { name: "发布模板" }));
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(screen.getByText(/Stage validation errors/)).toBeTruthy();
@@ -344,6 +346,8 @@ describe("AdminPracticeTemplatesPage", () => {
         render(<AdminPracticeTemplatesPage />);
         await screen.findByText("客户异议处理训练");
         fireEvent.click(screen.getByRole("button", { name: "发布模板" }));
+        expect(publishPracticeTemplateMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(screen.getByText(/发布完成：客户异议处理训练 v1/)).toBeTruthy();
@@ -357,6 +361,8 @@ describe("AdminPracticeTemplatesPage", () => {
         render(<AdminPracticeTemplatesPage />);
         await screen.findByText("客户异议处理训练");
         fireEvent.click(screen.getByRole("button", { name: "归档模板" }));
+        expect(archivePracticeTemplateMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认归档" }));
 
         await waitFor(() => {
             expect(archivePracticeTemplateMock).toHaveBeenCalledWith("template-1");
@@ -383,6 +389,7 @@ describe("AdminPracticeTemplatesPage", () => {
         render(<AdminPracticeTemplatesPage />);
         await screen.findByText("客户异议处理训练");
         fireEvent.click(screen.getByRole("button", { name: "归档模板" }));
+        fireEvent.click(screen.getByRole("button", { name: "确认归档" }));
 
         await waitFor(() => {
             expect(screen.getByText(/归档失败：network down/)).toBeTruthy();
