@@ -51,6 +51,18 @@ export default function KnowledgePage() {
 
     const [deleteTarget, setDeleteTarget] = useState<KnowledgeBaseWithGovernance | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState<"all" | "product" | "competitor" | "faq" | "policy">("all");
+
+    const filteredKbs = kbs.filter((kb) => {
+        const query = searchQuery.trim().toLowerCase();
+        const matchesQuery = !query || [kb.name, kb.description ?? "", kb.category, kb.id]
+            .join(" ")
+            .toLowerCase()
+            .includes(query);
+        const matchesCategory = categoryFilter === "all" || kb.category === categoryFilter;
+        return matchesQuery && matchesCategory;
+    });
 
     const loadData = async () => {
         setIsLoading(true);
@@ -192,6 +204,8 @@ export default function KnowledgePage() {
                     <input
                         type="text"
                         placeholder="搜索知识库..."
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
                         className="h-10 w-full rounded-full border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10"
                     />
                 </div>
@@ -210,10 +224,22 @@ export default function KnowledgePage() {
                                 <div>
                                     <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">类型</label>
                                     <div className="flex flex-wrap gap-2">
-                                        <Badge variant="blue" className="cursor-pointer">全部</Badge>
-                                        <Badge variant="secondary" className="cursor-pointer bg-slate-100 text-slate-600 hover:bg-slate-200">产品</Badge>
-                                        <Badge variant="secondary" className="cursor-pointer bg-slate-100 text-slate-600 hover:bg-slate-200">竞品</Badge>
-                                        <Badge variant="secondary" className="cursor-pointer bg-slate-100 text-slate-600 hover:bg-slate-200">FAQ</Badge>
+                                        {[
+                                            { value: "all", label: "全部" },
+                                            { value: "product", label: "产品" },
+                                            { value: "competitor", label: "竞品" },
+                                            { value: "faq", label: "FAQ" },
+                                            { value: "policy", label: "政策" },
+                                        ].map((item) => (
+                                            <button
+                                                key={item.value}
+                                                type="button"
+                                                onClick={() => setCategoryFilter(item.value as typeof categoryFilter)}
+                                                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors ${categoryFilter === item.value ? "border-blue-100 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
@@ -250,9 +276,9 @@ export default function KnowledgePage() {
             {!isLoading && !error ? (
                 <GlassCard className="overflow-hidden">
                     <div className="space-y-4 p-4 md:hidden">
-                        {kbs.length === 0 ? (
-                            <div className="py-8 text-center text-slate-500">暂无知识库数据</div>
-                        ) : kbs.map((kb) => (
+                        {filteredKbs.length === 0 ? (
+                            <div className="py-8 text-center text-slate-500">{kbs.length === 0 ? "暂无知识库数据" : "没有匹配当前搜索或筛选条件的知识库"}</div>
+                        ) : filteredKbs.map((kb) => (
                             <MobileTableCard
                                 key={kb.id}
                                 title={<div className="font-bold text-slate-900">{kb.name}</div>}
@@ -283,8 +309,8 @@ export default function KnowledgePage() {
                     </div>
 
                     <div className="hidden overflow-x-auto md:block">
-                        {kbs.length === 0 ? (
-                            <div className="py-12 text-center text-slate-500">暂无知识库数据</div>
+                        {filteredKbs.length === 0 ? (
+                            <div className="py-12 text-center text-slate-500">{kbs.length === 0 ? "暂无知识库数据" : "没有匹配当前搜索或筛选条件的知识库"}</div>
                         ) : (
                             <table className="w-full text-left text-sm">
                                 <thead className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -299,7 +325,7 @@ export default function KnowledgePage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {kbs.map((kb) => (
+                                    {filteredKbs.map((kb) => (
                                         <tr key={kb.id} className="group transition-colors hover:bg-slate-50/50">
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
@@ -351,11 +377,10 @@ export default function KnowledgePage() {
 
                     <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
                         <span className="text-xs font-medium text-slate-400">
-                            显示 {kbs.length > 0 ? `1-${kbs.length}` : "0"} 共 {kbs.length} 个知识库
+                            显示 {filteredKbs.length > 0 ? `1-${filteredKbs.length}` : "0"} 共 {kbs.length} 个知识库
                         </span>
                         <div className="flex gap-2">
-                            <Button variant="outline" size="sm" className="h-8 rounded-full text-xs" disabled>上一页</Button>
-                            <Button variant="outline" size="sm" className="h-8 rounded-full text-xs" disabled>下一页</Button>
+                            <span className="text-xs text-slate-400">知识库列表当前一次性展示全部结果，无分页操作。</span>
                         </div>
                     </div>
                 </GlassCard>

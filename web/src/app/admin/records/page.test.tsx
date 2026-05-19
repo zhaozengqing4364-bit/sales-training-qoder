@@ -162,4 +162,24 @@ describe("RecordsPage", () => {
         expect(errorToastMock).toHaveBeenCalledWith("删除失败");
         expect(nativeAlertSpy).not.toHaveBeenCalled();
     });
+
+    it("shows load failures instead of silently rendering an empty table", async () => {
+        getTrainingRecordsMock.mockRejectedValueOnce(new Error("records offline"));
+
+        render(<RecordsPage />);
+
+        expect(await screen.findByText("训练记录加载失败")).toBeTruthy();
+        expect(screen.getByText("records offline")).toBeTruthy();
+        expect(errorToastMock).toHaveBeenCalledWith("records offline");
+    });
+
+    it("disables next page when fewer than one page of records is returned", async () => {
+        render(<RecordsPage />);
+
+        await waitFor(() => {
+            expect(getTrainingRecordsMock).toHaveBeenCalled();
+        });
+
+        expect((screen.getByRole("button", { name: "下一页" }) as HTMLButtonElement).disabled).toBe(true);
+    });
 });

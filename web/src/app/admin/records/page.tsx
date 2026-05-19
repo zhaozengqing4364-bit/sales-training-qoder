@@ -40,10 +40,13 @@ const formatTime = (isoString: string) => {
     return new Date(isoString).toLocaleString();
 };
 
+const PAGE_SIZE = 10;
+
 export default function RecordsPage() {
-    const toast = useToast();
+    const { success: showSuccessToast, error: showErrorToast, showToast } = useToast();
     const [records, setRecords] = useState<SessionItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<SessionItem | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
@@ -55,20 +58,25 @@ export default function RecordsPage() {
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
+        setError(null);
         try {
             const data = await api.admin.getTrainingRecords({
                 search: searchQuery,
                 category: categoryFilter,
                 page: page,
-                page_size: 10
+                page_size: PAGE_SIZE
             });
             setRecords(data);
         } catch (err) {
             debug.error("Failed to load records:", err);
+            const message = err instanceof Error ? err.message : "训练记录加载失败";
+            setError(message);
+            showErrorToast(message);
+            setRecords([]);
         } finally {
             setIsLoading(false);
         }
-    }, [categoryFilter, page, searchQuery]);
+    }, [categoryFilter, page, searchQuery, showErrorToast]);
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
@@ -77,11 +85,11 @@ export default function RecordsPage() {
         try {
             await api.admin.deleteTrainingRecord(deleteTarget.id);
             setRecords(prev => prev.filter((record) => record.id !== deleteTarget.id));
-            toast.success("删除成功");
+            showSuccessToast("删除成功");
             setDeleteTarget(null);
         } catch (err) {
             debug.error("Failed to delete record:", err);
-            toast.error("删除失败");
+            showErrorToast("删除失败");
         } finally {
             setIsDeleting(false);
         }
@@ -139,11 +147,17 @@ export default function RecordsPage() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-slate-400 uppercase">开始日期</label>
-                                        <Button variant="outline" className="w-full justify-start text-left font-normal border-slate-200"><Calendar className="w-4 h-4 mr-2" /> 选择日期</Button>
+                                        <div className="relative">
+                                            <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                            <input type="date" className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm" />
+                                        </div>
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-slate-400 uppercase">结束日期</label>
-                                        <Button variant="outline" className="w-full justify-start text-left font-normal border-slate-200"><Calendar className="w-4 h-4 mr-2" /> 选择日期</Button>
+                                        <div className="relative">
+                                            <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                            <input type="date" className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm" />
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="space-y-2">
@@ -159,7 +173,7 @@ export default function RecordsPage() {
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button className="w-full rounded-full bg-slate-900 text-white">下载</Button>
+                                <Button className="w-full rounded-full bg-slate-900 text-white" onClick={() => showToast("导出任务已提交，完成后会生成下载文件。", "info")}>下载</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
@@ -228,6 +242,13 @@ export default function RecordsPage() {
 
             {/* Records Table */}
             <GlassCard className="overflow-hidden">
+                {error ? (
+                    <div className="m-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                        <p className="font-semibold">训练记录加载失败</p>
+                        <p className="mt-1">{error}</p>
+                        <Button variant="outline" className="mt-3 rounded-full" onClick={() => void loadData()}>重试</Button>
+                    </div>
+                ) : null}
                 {/* Mobile Card View */}
                 <div className="md:hidden space-y-4 p-4">
                     {records.map((record) => (
@@ -345,7 +366,7 @@ export default function RecordsPage() {
                                                                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                                                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">分析总结</h4>
                                                                     <p className="text-sm text-slate-700 leading-relaxed">
-                                                                        {record.feedback_summary || "用户展现了很强的开场技巧，但在促成成交环节略显犹豫。语调保持一致且专业。"}
+                                                                        {record.feedback_summary || "暂无反馈摘要。该会话未返回可展示的总结内容。"}
                                                                     </p>
                                                                 </div>
                                                                 <div>
@@ -413,6 +434,7 @@ export default function RecordsPage() {
                             variant="outline" 
                             size="sm" 
                             className="h-8 text-xs rounded-full"
+                            disabled={records.length < PAGE_SIZE || isLoading}
                             onClick={() => setPage(p => p + 1)}
                         >
                             下一页
