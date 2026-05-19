@@ -45,6 +45,21 @@ vi.mock("@/lib/debug", () => ({
     },
 }));
 
+vi.mock("@/components/ui/confirm-dialog", () => ({
+    ConfirmDialog: ({ open, title, description, confirmText, onConfirm }: {
+        open: boolean;
+        title: string;
+        description: string;
+        confirmText?: string;
+        onConfirm: () => void;
+    }) => open ? (
+        <div role="dialog" aria-label={title}>
+            <div>{description}</div>
+            <button type="button" onClick={onConfirm}>{confirmText ?? "确认"}</button>
+        </div>
+    ) : null,
+}));
+
 const configKey = "recommendation.next_practice.ruleset";
 
 const defaultValue = {
@@ -236,6 +251,8 @@ describe("GovernedBusinessRulePage", () => {
         );
 
         fireEvent.click(screen.getByRole("button", { name: "发布草稿" }));
+        expect(publishBusinessRuleMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(publishBusinessRuleMock).toHaveBeenCalledWith(
@@ -268,6 +285,8 @@ describe("GovernedBusinessRulePage", () => {
             target: { value: "restore stable recommendation" },
         });
         fireEvent.click(screen.getAllByRole("button", { name: "回滚到此版本" })[1]);
+        expect(rollbackBusinessRuleMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认回滚" }));
 
         await waitFor(() => {
             expect(rollbackBusinessRuleMock).toHaveBeenCalledWith(

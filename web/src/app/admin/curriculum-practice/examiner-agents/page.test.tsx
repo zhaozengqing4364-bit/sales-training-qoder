@@ -218,6 +218,7 @@ describe("AdminExaminerAgentsPage", () => {
         render(<AdminExaminerAgentsPage />);
         await screen.findByText("销售入门考试");
         fireEvent.click(screen.getByRole("button", { name: "发布" }));
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(screen.getByText(/ExaminerAgent 发布门禁未通过/)).toBeTruthy();
@@ -236,6 +237,8 @@ describe("AdminExaminerAgentsPage", () => {
         render(<AdminExaminerAgentsPage />);
         await screen.findByText("销售入门考试");
         fireEvent.click(screen.getByRole("button", { name: "发布" }));
+        expect(publishExaminerAgentMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(screen.getByText(/发布完成：销售入门考试 v1/)).toBeTruthy();
@@ -249,6 +252,8 @@ describe("AdminExaminerAgentsPage", () => {
         render(<AdminExaminerAgentsPage />);
         await screen.findByText("销售入门考试");
         fireEvent.click(screen.getByRole("button", { name: "归档" }));
+        expect(archiveExaminerAgentMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认归档" }));
 
         await waitFor(() => {
             expect(archiveExaminerAgentMock).toHaveBeenCalledWith("ea-1");
@@ -353,6 +358,7 @@ describe("AdminExaminerAgentsPage", () => {
         render(<AdminExaminerAgentsPage />);
         await screen.findByText("销售入门考试");
         fireEvent.click(screen.getByRole("button", { name: "归档" }));
+        fireEvent.click(screen.getByRole("button", { name: "确认归档" }));
 
         await waitFor(() => {
             expect(screen.getByText(/归档失败：network error/)).toBeTruthy();

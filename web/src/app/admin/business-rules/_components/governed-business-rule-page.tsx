@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
+import { JsonEditorWithValidation } from "@/components/ui/json-editor-with-validation";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     BusinessRuleConfigRecord,
@@ -66,6 +68,11 @@ function previewSummaryText(preview: BusinessRulePreviewResponse | null) {
     return summary || "后端预览通过，未返回额外摘要。";
 }
 
+type ConfirmAction =
+    | { type: "publish" }
+    | { type: "rollback"; target: BusinessRuleConfigRecord }
+    | null;
+
 export function GovernedBusinessRulePage({
     configKey,
     title,
@@ -81,6 +88,7 @@ export function GovernedBusinessRulePage({
     const [actionError, setActionError] = useState<string | null>(null);
     const [preview, setPreview] = useState<BusinessRulePreviewResponse | null>(null);
     const [busyAction, setBusyAction] = useState<"save" | "validate" | "preview" | "publish" | "rollback" | null>(null);
+    const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
 
     const selectedConfig = useMemo(() => {
         if (!data) return null;
@@ -253,6 +261,40 @@ export function GovernedBusinessRulePage({
         }
     };
 
+    const requestPublish = () => {
+        setNotice(null);
+        setActionError(null);
+        setPreview(null);
+        const trimmedReason = requireReason();
+        if (!trimmedReason) return;
+        const target = draftConfig ?? selectedConfig;
+        if (!target || target.status !== "draft") {
+            setActionError("需要先保存草稿，才能发布。");
+            return;
+        }
+        setConfirmAction({ type: "publish" });
+    };
+
+    const requestRollback = (target: BusinessRuleConfigRecord) => {
+        setNotice(null);
+        setActionError(null);
+        setPreview(null);
+        const trimmedReason = requireReason();
+        if (!trimmedReason) return;
+        setConfirmAction({ type: "rollback", target });
+    };
+
+    const handleConfirmAction = () => {
+        const action = confirmAction;
+        setConfirmAction(null);
+        if (!action) return;
+        if (action.type === "publish") {
+            void handlePublish();
+            return;
+        }
+        void handleRollback(action.target);
+    };
+
     if (loading) {
         return (
             <div className="rounded-2xl border border-slate-100 bg-white/80 p-8 text-slate-600">
@@ -276,6 +318,21 @@ export function GovernedBusinessRulePage({
 
     return (
         <div className="space-y-8 pb-20">
+            <ConfirmDialog
+                open={!!confirmAction}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmAction(null);
+                }}
+                title={confirmAction?.type === "rollback" ? "确认回滚业务规则" : "确认发布业务规则"}
+                description={confirmAction?.type === "rollback"
+                    ? `将 ${title} 回滚到 v${confirmAction.target.version}。原因：${reason.trim()}`
+                    : `将 ${title} 当前草稿发布为 active 配置。原因：${reason.trim()}`}
+                confirmText={confirmAction?.type === "rollback" ? "确认回滚" : "确认发布"}
+                variant={confirmAction?.type === "rollback" ? "warning" : "danger"}
+                onConfirm={handleConfirmAction}
+                isLoading={busyAction === "publish" || busyAction === "rollback"}
+            />
+
             <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -346,26 +403,20 @@ export function GovernedBusinessRulePage({
                     </select>
                 </div>
 
-                <textarea
-                    aria-label={`${title} JSON 配置`}
+                <JsonEditorWithValidation
+                    label={`${title} JSON 配置`}
                     value={draftJson}
-                    onChange={(event) => {
-                        setDraftJson(event.target.value);
+                    onChange={(value) => {
+                        setDraftJson(value);
                         setPreview(null);
                     }}
-                    className="min-h-[420px] w-full rounded-2xl border border-slate-200 bg-slate-950 p-4 font-mono text-xs leading-5 text-slate-100 outline-none focus:ring-2 focus:ring-slate-400"
-                    spellCheck={false}
+                    rows={22}
+                    isValid={parsedDraft.ok}
+                    validationMessage={parsedDraft.ok
+                        ? "JSON object 格式有效；仍需后端 schema 校验后才能发布。"
+                        : `JSON 格式错误：${parsedDraft.message}`}
+                    helpText="必须是 JSON object；后端会在校验、预览、发布时执行 schema 约束。"
                 />
-
-                {parsedDraft.ok ? (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
-                        JSON object 格式有效；仍需后端 schema 校验后才能发布。
-                    </div>
-                ) : (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                        JSON 格式错误：{parsedDraft.message}
-                    </div>
-                )}
 
                 <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto_auto] lg:items-center">
                     <input
@@ -383,7 +434,7 @@ export function GovernedBusinessRulePage({
                     <Button variant="outline" onClick={handleSaveDraft} disabled={!parsedDraft.ok || busyAction !== null}>
                         {busyAction === "save" ? "保存中..." : "保存草稿"}
                     </Button>
-                    <Button onClick={handlePublish} disabled={!draftConfig || busyAction !== null}>
+                    <Button onClick={requestPublish} disabled={!draftConfig || busyAction !== null}>
                         {busyAction === "publish" ? "发布中..." : "发布草稿"}
                     </Button>
                 </div>
@@ -417,9 +468,7 @@ export function GovernedBusinessRulePage({
                             </div>
                             <Button
                                 variant="outline"
-                                onClick={() => {
-                                    void handleRollback(item);
-                                }}
+                                onClick={() => requestRollback(item)}
                                 disabled={busyAction !== null || item.id === activeConfig?.id}
                             >
                                 回滚到此版本

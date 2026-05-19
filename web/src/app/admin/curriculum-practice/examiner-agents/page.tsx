@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
+import { JsonEditorWithValidation } from "@/components/ui/json-editor-with-validation";
 import { api, getApiErrorMessage, getExaminerAgentErrorDetails } from "@/lib/api/client";
 import type {
     ExaminerAgentCreateRequest,
@@ -202,6 +204,7 @@ export default function AdminExaminerAgentsPage() {
     const [simSampleAnswer, setSimSampleAnswer] = useState("");
     const [simLearnerLevel, setSimLearnerLevel] = useState("");
     const [simQuestionId, setSimQuestionId] = useState("");
+    const [confirmTarget, setConfirmTarget] = useState<{ type: "publish" | "archive"; agent: ExaminerAgentRecord } | null>(null);
 
     const loadAgents = useCallback(async () => {
         setLoading(true);
@@ -408,6 +411,32 @@ export default function AdminExaminerAgentsPage() {
 
     return (
         <div className="space-y-8 pb-20">
+            <ConfirmDialog
+                open={!!confirmTarget}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmTarget(null);
+                }}
+                title={confirmTarget?.type === "archive" ? "确认归档考试智能体" : "确认发布考试智能体"}
+                description={confirmTarget
+                    ? confirmTarget.type === "archive"
+                        ? `将「${confirmTarget.agent.name}」归档，归档后不能再作为可用 ExamAgent。`
+                        : `将「${confirmTarget.agent.name}」发布为可用 ExamAgent，发布门禁会再次校验题目来源和评分策略。`
+                    : "确认执行该 ExamAgent 操作。"}
+                confirmText={confirmTarget?.type === "archive" ? "确认归档" : "确认发布"}
+                variant={confirmTarget?.type === "archive" ? "warning" : "danger"}
+                onConfirm={() => {
+                    const target = confirmTarget;
+                    setConfirmTarget(null);
+                    if (!target) return;
+                    if (target.type === "archive") {
+                        void handleArchive(target.agent);
+                        return;
+                    }
+                    void handlePublish(target.agent);
+                }}
+                isLoading={busyAgentId !== null}
+            />
+
             <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">考试智能体管理</h1>
@@ -617,21 +646,19 @@ export default function AdminExaminerAgentsPage() {
                                   : "模拟配置 (JSON)";
                         const field = form[key];
                         return (
-                            <label key={key} className="space-y-1 block text-sm font-medium text-slate-700">
-                                <span>{label}</span>
-                                <textarea
-                                    className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs"
-                                    rows={3}
-                                    value={field.text}
-                                    onChange={(event) => {
-                                        const updated = parseJsonField(event.target.value);
-                                        setForm((current) => ({ ...current, [key]: updated }));
-                                    }}
-                                />
-                                {field.error && (
-                                    <p className="mt-1 text-xs text-red-600">{field.error}</p>
-                                )}
-                            </label>
+                            <JsonEditorWithValidation
+                                key={key}
+                                label={label}
+                                value={field.text}
+                                rows={4}
+                                onChange={(value) => {
+                                    const updated = parseJsonField(value);
+                                    setForm((current) => ({ ...current, [key]: updated }));
+                                }}
+                                isValid={!field.error}
+                                validationMessage={field.error ? `JSON 格式错误：${field.error}` : "JSON object 格式有效。"}
+                                helpText="必须是 JSON object；留空会按空对象提交。"
+                            />
                         );
                     })}
                 </div>
@@ -745,7 +772,7 @@ export default function AdminExaminerAgentsPage() {
                                         </span>
                                     )}
                                     <Button
-                                        onClick={() => void handlePublish(item)}
+                                        onClick={() => setConfirmTarget({ type: "publish", agent: item })}
                                         disabled={item.status === "published" || busyAgentId !== null}
                                     >
                                         {busyAgentId === item.examiner_agent_id ? "处理中..." : "发布"}
@@ -753,7 +780,7 @@ export default function AdminExaminerAgentsPage() {
                                     {item.status !== "archived" && (
                                         <Button
                                             variant="outline"
-                                            onClick={() => void handleArchive(item)}
+                                            onClick={() => setConfirmTarget({ type: "archive", agent: item })}
                                             disabled={busyAgentId !== null}
                                         >
                                             {busyAgentId === item.examiner_agent_id ? "处理中..." : "归档"}

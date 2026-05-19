@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
+import { JsonEditorWithValidation } from "@/components/ui/json-editor-with-validation";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     ScoringRulesetAuditEntry,
@@ -58,6 +60,11 @@ function isEditableDraft(item: ScoringRulesetRecord | null) {
     return Boolean(item?.ruleset_id && item.status === "draft");
 }
 
+type ConfirmAction =
+    | { type: "publish"; ruleset: ScoringRulesetRecord; reason: string }
+    | { type: "rollback"; ruleset: ScoringRulesetRecord; reason: string }
+    | null;
+
 export default function AdminScoringRulesetsPage() {
     const [scenarioType, setScenarioType] = useState<ScoringRulesetScenarioType>("sales");
     const [items, setItems] = useState<ScoringRulesetRecord[]>([]);
@@ -76,6 +83,7 @@ export default function AdminScoringRulesetsPage() {
     const [notice, setNotice] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
     const [busyAction, setBusyAction] = useState<"load" | "save" | "publish" | "rollback" | "dry-run" | null>(null);
+    const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
 
     const selectedRuleset = useMemo(
         () => items.find((item) => item.ruleset_id === selectedRulesetId) ?? null,
@@ -202,6 +210,18 @@ export default function AdminScoringRulesetsPage() {
         }
     };
 
+    const requestPublish = () => {
+        setNotice(null);
+        setActionError(null);
+        const trimmedReason = requireReason();
+        if (!trimmedReason) return;
+        if (!selectedRuleset?.ruleset_id) {
+            setActionError("需要选择可发布的评分规则集。");
+            return;
+        }
+        setConfirmAction({ type: "publish", ruleset: selectedRuleset, reason: trimmedReason });
+    };
+
     const handleRollback = async (target: ScoringRulesetRecord) => {
         setNotice(null);
         setActionError(null);
@@ -223,6 +243,29 @@ export default function AdminScoringRulesetsPage() {
         } finally {
             setBusyAction(null);
         }
+    };
+
+    const requestRollback = (target: ScoringRulesetRecord) => {
+        setNotice(null);
+        setActionError(null);
+        const trimmedReason = requireReason();
+        if (!trimmedReason) return;
+        if (!target.ruleset_id) {
+            setActionError("默认兜底规则集不能作为回滚目标。");
+            return;
+        }
+        setConfirmAction({ type: "rollback", ruleset: target, reason: trimmedReason });
+    };
+
+    const handleConfirmAction = () => {
+        const action = confirmAction;
+        setConfirmAction(null);
+        if (!action) return;
+        if (action.type === "publish") {
+            void handlePublish();
+            return;
+        }
+        void handleRollback(action.ruleset);
     };
 
     const handleDryRun = async () => {
@@ -279,6 +322,23 @@ export default function AdminScoringRulesetsPage() {
 
     return (
         <div className="space-y-8 pb-20">
+            <ConfirmDialog
+                open={!!confirmAction}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmAction(null);
+                }}
+                title={confirmAction?.type === "rollback" ? "确认回滚评分规则" : "确认发布评分规则"}
+                description={confirmAction
+                    ? confirmAction.type === "rollback"
+                        ? `将 ${confirmAction.ruleset.version} 恢复为当前 active ruleset。原因：${confirmAction.reason}`
+                        : `将 ${confirmAction.ruleset.version} 发布为 ${confirmAction.ruleset.scenario_type} 当前 active ruleset。原因：${confirmAction.reason}`
+                    : "确认执行该评分规则操作。"}
+                confirmText={confirmAction?.type === "rollback" ? "确认回滚" : "确认发布"}
+                variant={confirmAction?.type === "rollback" ? "warning" : "danger"}
+                onConfirm={handleConfirmAction}
+                isLoading={busyAction === "publish" || busyAction === "rollback"}
+            />
+
             <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -383,26 +443,20 @@ export default function AdminScoringRulesetsPage() {
                     />
                 </div>
 
-                <textarea
-                    aria-label="评分规则 JSON 定义"
+                <JsonEditorWithValidation
+                    label="评分规则 JSON 定义"
                     value={definitionJson}
-                    onChange={(event) => {
-                        setDefinitionJson(event.target.value);
+                    onChange={(value) => {
+                        setDefinitionJson(value);
                         setDryRunDelta(null);
                     }}
-                    className="min-h-[440px] w-full rounded-2xl border border-slate-200 bg-slate-950 p-4 font-mono text-xs leading-5 text-slate-100 outline-none focus:ring-2 focus:ring-slate-400"
-                    spellCheck={false}
+                    rows={22}
+                    isValid={parsedDefinition.ok}
+                    validationMessage={parsedDefinition.ok
+                        ? "JSON object 格式有效；后端 Pydantic ruleset schema 会在保存、发布和 dry-run 时再次校验。"
+                        : `JSON 格式错误：${parsedDefinition.message}`}
+                    helpText="必须是 JSON object，不支持数组；保存、发布和 Dry-run 前会再次校验。"
                 />
-
-                {parsedDefinition.ok ? (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
-                        JSON object 格式有效；后端 Pydantic ruleset schema 会在保存、发布和 dry-run 时再次校验。
-                    </div>
-                ) : (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                        JSON 格式错误：{parsedDefinition.message}
-                    </div>
-                )}
 
                 <div className="grid gap-3 xl:grid-cols-[1fr_1fr_auto_auto_auto] xl:items-center">
                     <input
@@ -423,7 +477,7 @@ export default function AdminScoringRulesetsPage() {
                     <Button variant="outline" onClick={handleCreateOrUpdateDraft} disabled={!parsedDefinition.ok || busyAction !== null}>
                         {busyAction === "save" ? "保存中..." : isEditableDraft(selectedRuleset) ? "更新草稿" : "创建草稿"}
                     </Button>
-                    <Button onClick={handlePublish} disabled={!selectedRuleset?.ruleset_id || busyAction !== null}>
+                    <Button onClick={requestPublish} disabled={!selectedRuleset?.ruleset_id || busyAction !== null}>
                         {busyAction === "publish" ? "发布中..." : "发布选中规则"}
                     </Button>
                 </div>
@@ -461,7 +515,7 @@ export default function AdminScoringRulesetsPage() {
                             <Button
                                 variant="outline"
                                 onClick={() => {
-                                    void handleRollback(item);
+                                    requestRollback(item);
                                 }}
                                 disabled={!item.ruleset_id || item.is_active || item.status !== "published" || busyAction !== null}
                             >

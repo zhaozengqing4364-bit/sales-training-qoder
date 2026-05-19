@@ -207,6 +207,8 @@ describe("AdminScoringRulesetsPage", () => {
         );
 
         fireEvent.click(screen.getByRole("button", { name: "发布选中规则" }));
+        expect(publishScoringRulesetMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(publishScoringRulesetMock).toHaveBeenCalledWith("ruleset-draft", "publish scoring candidate");
@@ -237,6 +239,8 @@ describe("AdminScoringRulesetsPage", () => {
             target: { value: "restore baseline scoring" },
         });
         fireEvent.click(rollbackButtons[1]);
+        expect(rollbackScoringRulesetMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认回滚" }));
 
         await waitFor(() => {
             expect(rollbackScoringRulesetMock).toHaveBeenCalledWith("ruleset-history", "restore baseline scoring");
