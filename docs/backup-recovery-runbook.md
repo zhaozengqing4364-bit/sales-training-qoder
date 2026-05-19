@@ -1,8 +1,7 @@
 # Backup / Recovery Baseline Runbook
 
 最后更新：2026-04-14  
-适用范围：当前仓库可见的本地开发 / 轻量手工运维场景  
-配套现状清单：`docs/setup/backup-recovery-current-state.md`
+适用范围：当前仓库可见的本地开发 / 轻量手工运维场景
 
 > 当前基线只描述**今天仓库里真实能执行的路径**：本地脚本、PostgreSQL/Redis 标准工具、文件归档、Alembic、老库修复脚本、管理员账号重建。
 >
@@ -74,7 +73,7 @@ python3 scripts/recovery-drill-runner.py run --continue-on-failure
 |---|---|---|
 | 执行人 | 当前实际维护该环境的人；仓库内未记录具体姓名/值班表 | 工单 / 变更单 / 值班记录 |
 | 审批人 | 当前环境负责人；仓库内未记录具体人名 | 工单审批记录 |
-| 仓库内事实依据 | 本 runbook + `docs/setup/backup-recovery-current-state.md` | 仓库文档本身 |
+| 仓库内事实依据 | 本 runbook | 仓库文档本身 |
 | 备份产物目录（建议） | 当前仓库无固定目录；最小基线建议放到本机或挂载盘的 `./.dev/backup-evidence/<YYYYMMDD-HHMM>/`，不要提交到 Git | 备份目录、截图、命令回显 |
 | Deploy health 证据 | `.sisyphus/evidence/<deploy-run>/health-*.txt` 或等价的 systemd/nginx 健康检查回显 | 同一发布 / 恢复记录 |
 | Drill automation 证据 | `./.dev/recovery-drills/<timestamp>/summary.json` + 同目录逐 drill `*.log` | 同一发布 / 恢复记录 |
@@ -348,8 +347,6 @@ done
 ```bash
 rg -n "alembic upgrade head|repair_legacy_schema|bootstrap_auth_admin|init_db|startup" \
   docs/backup-recovery-runbook.md \
-  docs/setup/backup-recovery-current-state.md \
-  .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md \
   .github/workflows
 
 backend/venv/bin/python -m pytest -c backend/pyproject.toml \

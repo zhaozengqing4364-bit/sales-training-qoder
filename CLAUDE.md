@@ -503,10 +503,6 @@ const data = await api.module.getEndpoint();
 
 ## 开发前必读文档
 
-| 开发内容 | 必读文档 |
-|----------|----------|
-| 销售对练功能 | `docs/roadmap/sales-coach-upgrade.md` |
-| 前端页面 | `docs/roadmap/frontend-pages-spec.md` |
 | API 接口规范 | `docs/api-contract/` |
 | 后端编码原则 | `.kiro/steering/backend-principles.md` |
 | 前端编码原则 | `.kiro/steering/frontend-principles.md` |
