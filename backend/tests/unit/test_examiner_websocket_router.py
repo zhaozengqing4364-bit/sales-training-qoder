@@ -10,6 +10,7 @@ from curriculum_practice.websocket.examiner_runtime import (
     ExaminerRuntime,
     FrozenExamQuestion,
 )
+from curriculum_practice.websocket.router import _AuthUser
 
 
 @pytest.mark.asyncio
@@ -44,6 +45,18 @@ async def test_should_reject_examiner_websocket_when_runtime_config_missing(monk
         "_build_runtime_from_session",
         AsyncMock(return_value=(None, "EXAMINER_RUNTIME_CONFIG_MISSING")),
     )
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(examiner_router, "verify_token", lambda token: {"sub": "user-1"})
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=_AuthUser(user_id="user-1", role="user", is_active=True)),
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        AsyncMock(return_value=(None, True)),
+    )
 
     await examiner_router._handle_examiner_websocket(
         websocket=websocket,
@@ -57,6 +70,29 @@ async def test_should_reject_examiner_websocket_when_runtime_config_missing(monk
         code=4413,
         reason="EXAMINER_RUNTIME_CONFIG_MISSING",
     )
+
+
+@pytest.mark.asyncio
+async def test_should_reject_examiner_websocket_when_token_invalid_before_runtime_work(
+    monkeypatch,
+) -> None:
+    websocket = MagicMock()
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+    monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
+    build_runtime_mock = AsyncMock(return_value=(None, "MOCKED_ERROR"))
+    monkeypatch.setattr(examiner_router, "_build_runtime_from_session", build_runtime_mock)
+
+    await examiner_router._handle_examiner_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="",
+        trace_id="",
+    )
+
+    websocket.accept.assert_awaited_once()
+    websocket.close.assert_awaited_once_with(code=4001, reason="Unauthorized")
+    build_runtime_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -78,11 +114,31 @@ async def test_should_connect_examiner_handler_when_enabled(monkeypatch) -> None
             )
         ],
     )
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    session_manager.unregister_session = AsyncMock()
+
     monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
     monkeypatch.setattr(
         examiner_router,
         "_build_runtime_from_session",
         AsyncMock(return_value=(runtime, None)),
+    )
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(examiner_router, "verify_token", lambda token: {"sub": "user-123"})
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=_AuthUser(user_id="user-123", role="user", is_active=True)),
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        AsyncMock(return_value=(None, True)),
+    )
+    monkeypatch.setattr(
+        examiner_router, "get_session_manager", lambda: session_manager,
+        raising=False,
     )
     handler_cls_mock = MagicMock(return_value=handler)
     monkeypatch.setattr(examiner_router, "ExaminerWebSocketHandler", handler_cls_mock)
@@ -98,8 +154,151 @@ async def test_should_connect_examiner_handler_when_enabled(monkeypatch) -> None
     handler.handle_connection.assert_awaited_once_with(
         websocket,
         "11111111-1111-1111-1111-111111111111",
-        "token",
+        "valid-token",
         trace_id="trace-1",
+    )
+    session_manager.register_session.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        handler,
+        user_id="user-123",
+    )
+    session_manager.unregister_session.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        reason="connection_closed",
+    )
+
+
+@pytest.mark.asyncio
+async def test_should_register_session_with_user_id_from_user_id_claim(
+    monkeypatch,
+) -> None:
+    websocket = MagicMock()
+    handler = MagicMock()
+    handler.handle_connection = AsyncMock()
+    runtime = ExaminerRuntime(
+        session_id="11111111-1111-1111-1111-111111111111",
+        examiner_agent_id="examiner-1",
+        timeout_seconds=600,
+        questions=[
+            FrozenExamQuestion(
+                question_id="question-1",
+                title="题目",
+                stem="题干",
+                reference_answer="参考答案",
+                scoring_criteria={},
+            )
+        ],
+    )
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    session_manager.unregister_session = AsyncMock()
+
+    monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
+    monkeypatch.setattr(
+        examiner_router,
+        "_build_runtime_from_session",
+        AsyncMock(return_value=(runtime, None)),
+    )
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(
+        examiner_router, "verify_token", lambda token: {"user_id": "user-456"},
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=_AuthUser(user_id="user-456", role="user", is_active=True)),
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        AsyncMock(return_value=(None, True)),
+    )
+    monkeypatch.setattr(
+        examiner_router, "get_session_manager", lambda: session_manager,
+        raising=False,
+    )
+    handler_cls_mock = MagicMock(return_value=handler)
+    monkeypatch.setattr(examiner_router, "ExaminerWebSocketHandler", handler_cls_mock)
+
+    await examiner_router._handle_examiner_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="token",
+        trace_id="",
+    )
+
+    session_manager.register_session.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        handler,
+        user_id="user-456",
+    )
+    session_manager.unregister_session.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        reason="connection_closed",
+    )
+
+
+@pytest.mark.asyncio
+async def test_should_unregister_session_in_finally_when_handler_raises(
+    monkeypatch,
+) -> None:
+    websocket = MagicMock()
+    handler = MagicMock()
+    handler.handle_connection = AsyncMock(side_effect=RuntimeError("boom"))
+    runtime = ExaminerRuntime(
+        session_id="11111111-1111-1111-1111-111111111111",
+        examiner_agent_id="examiner-1",
+        timeout_seconds=600,
+        questions=[
+            FrozenExamQuestion(
+                question_id="question-1",
+                title="题目",
+                stem="题干",
+                reference_answer="参考答案",
+                scoring_criteria={},
+            )
+        ],
+    )
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    session_manager.unregister_session = AsyncMock()
+
+    monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
+    monkeypatch.setattr(
+        examiner_router,
+        "_build_runtime_from_session",
+        AsyncMock(return_value=(runtime, None)),
+    )
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(examiner_router, "verify_token", lambda token: {"sub": "user-1"})
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=_AuthUser(user_id="user-1", role="user", is_active=True)),
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        AsyncMock(return_value=(None, True)),
+    )
+    monkeypatch.setattr(
+        examiner_router, "get_session_manager", lambda: session_manager,
+        raising=False,
+    )
+    handler_cls_mock = MagicMock(return_value=handler)
+    monkeypatch.setattr(examiner_router, "ExaminerWebSocketHandler", handler_cls_mock)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await examiner_router._handle_examiner_websocket(
+            websocket=websocket,
+            session_id="11111111-1111-1111-1111-111111111111",
+            token="token",
+            trace_id="",
+        )
+
+    session_manager.unregister_session.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        reason="connection_closed",
     )
 
 
@@ -380,3 +579,283 @@ async def test_should_mark_examiner_report_completed_idempotently(monkeypatch) -
     assert session.report_retryable is False
     assert session.report_error is None
     assert commit_count == 1
+
+
+@pytest.mark.asyncio
+async def test_should_reject_examiner_websocket_when_session_owner_mismatch(
+    monkeypatch,
+) -> None:
+    websocket = MagicMock()
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+
+    monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        AsyncMock(return_value=("owner-other", True)),
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=_AuthUser(user_id="user-1", role="user", is_active=True)),
+    )
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(examiner_router, "verify_token", lambda token: {"sub": "user-1"})
+
+    build_runtime_mock = AsyncMock(return_value=(None, "MOCKED_ERROR"))
+    monkeypatch.setattr(examiner_router, "_build_runtime_from_session", build_runtime_mock)
+
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    monkeypatch.setattr(
+        examiner_router, "get_session_manager", lambda: session_manager,
+        raising=False,
+    )
+    handler_cls_mock = MagicMock()
+    monkeypatch.setattr(examiner_router, "ExaminerWebSocketHandler", handler_cls_mock)
+
+    await examiner_router._handle_examiner_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="token",
+        trace_id="",
+    )
+
+    websocket.accept.assert_awaited_once()
+    websocket.close.assert_awaited_once_with(code=4003, reason="ACCESS_DENIED")
+
+    build_runtime_mock.assert_not_awaited()
+    handler_cls_mock.assert_not_called()
+    session_manager.register_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_should_allow_examiner_websocket_when_admin_connects_to_other_user_session(
+    monkeypatch,
+) -> None:
+    websocket = MagicMock()
+    handler = MagicMock()
+    handler.handle_connection = AsyncMock()
+    runtime = ExaminerRuntime(
+        session_id="11111111-1111-1111-1111-111111111111",
+        examiner_agent_id="examiner-1",
+        timeout_seconds=600,
+        questions=[
+            FrozenExamQuestion(
+                question_id="question-1",
+                title="题目",
+                stem="题干",
+                reference_answer="参考答案",
+                scoring_criteria={},
+            )
+        ],
+    )
+
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    session_manager.unregister_session = AsyncMock()
+
+    monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        AsyncMock(return_value=("owner-other", True)),
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=_AuthUser(user_id="user-admin", role="admin", is_active=True)),
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_build_runtime_from_session",
+        AsyncMock(return_value=(runtime, None)),
+    )
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(examiner_router, "verify_token", lambda token: {"sub": "user-admin"})
+    monkeypatch.setattr(
+        examiner_router, "get_session_manager", lambda: session_manager,
+        raising=False,
+    )
+    handler_cls_mock = MagicMock(return_value=handler)
+    monkeypatch.setattr(examiner_router, "ExaminerWebSocketHandler", handler_cls_mock)
+
+    await examiner_router._handle_examiner_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="token",
+        trace_id="",
+    )
+
+    handler_cls_mock.assert_called_once_with(runtime)
+    handler.handle_connection.assert_awaited_once()
+    session_manager.register_session.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        handler,
+        user_id="user-admin",
+    )
+    session_manager.unregister_session.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        reason="connection_closed",
+    )
+
+
+# ── New security tests: active user validation + fail-closed owner lookup ──
+
+
+@pytest.mark.asyncio
+async def test_should_reject_examiner_websocket_when_token_user_not_found(
+    monkeypatch,
+) -> None:
+    """token resolves to a user_id, but no matching User row exists in the DB."""
+    websocket = MagicMock()
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+
+    monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(
+        examiner_router, "verify_token", lambda token: {"sub": "missing-user"},
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=None),
+    )
+
+    resolve_owner_mock = AsyncMock()
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        resolve_owner_mock,
+    )
+    build_runtime_mock = AsyncMock(return_value=(None, "MOCKED_ERROR"))
+    monkeypatch.setattr(examiner_router, "_build_runtime_from_session", build_runtime_mock)
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    monkeypatch.setattr(
+        examiner_router, "get_session_manager", lambda: session_manager,
+        raising=False,
+    )
+    handler_cls_mock = MagicMock()
+    monkeypatch.setattr(examiner_router, "ExaminerWebSocketHandler", handler_cls_mock)
+
+    await examiner_router._handle_examiner_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="token",
+        trace_id="",
+    )
+
+    websocket.accept.assert_awaited_once()
+    websocket.close.assert_awaited_once_with(code=4001, reason="Unauthorized")
+
+    resolve_owner_mock.assert_not_awaited()
+    build_runtime_mock.assert_not_awaited()
+    handler_cls_mock.assert_not_called()
+    session_manager.register_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_should_reject_examiner_websocket_when_token_user_inactive(
+    monkeypatch,
+) -> None:
+    """token resolves to a user that exists but is_active=False."""
+    websocket = MagicMock()
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+
+    monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(
+        examiner_router, "verify_token", lambda token: {"sub": "inactive-user"},
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=_AuthUser(user_id="inactive-user", role="user", is_active=False)),
+    )
+
+    resolve_owner_mock = AsyncMock()
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        resolve_owner_mock,
+    )
+    build_runtime_mock = AsyncMock(return_value=(None, "MOCKED_ERROR"))
+    monkeypatch.setattr(examiner_router, "_build_runtime_from_session", build_runtime_mock)
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    monkeypatch.setattr(
+        examiner_router, "get_session_manager", lambda: session_manager,
+        raising=False,
+    )
+    handler_cls_mock = MagicMock()
+    monkeypatch.setattr(examiner_router, "ExaminerWebSocketHandler", handler_cls_mock)
+
+    await examiner_router._handle_examiner_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="token",
+        trace_id="",
+    )
+
+    websocket.accept.assert_awaited_once()
+    websocket.close.assert_awaited_once_with(code=4001, reason="Unauthorized")
+
+    resolve_owner_mock.assert_not_awaited()
+    build_runtime_mock.assert_not_awaited()
+    handler_cls_mock.assert_not_called()
+    session_manager.register_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_should_reject_examiner_websocket_when_owner_lookup_fails_closed(
+    monkeypatch,
+) -> None:
+    """owner DB lookup fails (transient error, connection loss, etc.) — must fail CLOSED."""
+    websocket = MagicMock()
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+
+    monkeypatch.setattr(examiner_router.settings, "CURRICULUM_EXAMINER_ENABLED", True)
+    monkeypatch.setattr(examiner_router, "resolve_websocket_token", lambda **kw: "valid-token")
+    monkeypatch.setattr(
+        examiner_router, "verify_token", lambda token: {"sub": "user-1"},
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_authenticated_user",
+        AsyncMock(return_value=_AuthUser(user_id="user-1", role="user", is_active=True)),
+    )
+    monkeypatch.setattr(
+        examiner_router,
+        "_resolve_examiner_session_owner_id",
+        AsyncMock(return_value=(None, False)),  # lookup failed
+    )
+
+    build_runtime_mock = AsyncMock(return_value=(None, "MOCKED_ERROR"))
+    monkeypatch.setattr(examiner_router, "_build_runtime_from_session", build_runtime_mock)
+    session_manager = MagicMock()
+    session_manager.register_session = AsyncMock()
+    monkeypatch.setattr(
+        examiner_router, "get_session_manager", lambda: session_manager,
+        raising=False,
+    )
+    handler_cls_mock = MagicMock()
+    monkeypatch.setattr(examiner_router, "ExaminerWebSocketHandler", handler_cls_mock)
+
+    await examiner_router._handle_examiner_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="token",
+        trace_id="",
+    )
+
+    websocket.accept.assert_awaited_once()
+    websocket.close.assert_awaited_once_with(code=4003, reason="ACCESS_DENIED")
+
+    build_runtime_mock.assert_not_awaited()
+    handler_cls_mock.assert_not_called()
+    session_manager.register_session.assert_not_awaited()
