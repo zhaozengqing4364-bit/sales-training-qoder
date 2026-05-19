@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Awaitable, Callable
+from importlib import import_module
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Query, WebSocket
@@ -18,6 +19,8 @@ from common.monitoring.logger import get_logger
 from common.monitoring.trace_context import normalize_trace_id
 from curriculum_practice.websocket.router import router as examiner_ws_router
 from sales_bot.websocket.router import router as sales_ws_router
+from training_runtime import TrainingRuntimeDescriptor
+from training_runtime.plugins import dispatch_scenario_plugin
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -48,6 +51,12 @@ async def _reject_invalid_presentation_session(
     await websocket.close(code=4400, reason="INVALID_SESSION_ID")
 
 
+def _instantiate_runtime_handler(selection: Any) -> Any:
+    handler_module = import_module(selection.handler_factory_path)
+    handler_factory = getattr(handler_module, selection.handler_factory_name)
+    return handler_factory()
+
+
 async def _handle_presentation_websocket(
     websocket: WebSocket,
     session_id: str | None,
@@ -62,12 +71,6 @@ async def _handle_presentation_websocket(
 ) -> None:
     from common.auth.service import verify_token
     from common.websocket.session_manager import get_session_manager
-    from presentation_coach.websocket.presentation_handler import (
-        PresentationWebSocketHandler,
-    )
-    from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
-        PresentationStepFunRealtimeHandler,
-    )
 
     resolve_runtime = resolve_runtime or _resolve_presentation_runtime
     is_kb_lock_unbound = is_kb_lock_unbound or _is_presentation_kb_lock_unbound_session
@@ -117,11 +120,13 @@ async def _handle_presentation_websocket(
         )
 
     effective_voice_mode = persisted_voice_mode
-    handler: Any
-    if effective_voice_mode == "stepfun_realtime":
-        handler = PresentationStepFunRealtimeHandler()
-    else:
-        handler = PresentationWebSocketHandler()
+    descriptor = TrainingRuntimeDescriptor(
+        session_id=resolved_session_id,
+        scenario_type="presentation",
+        voice_mode=effective_voice_mode,
+    )
+    selection = dispatch_scenario_plugin(descriptor).select_runtime_handler(descriptor)
+    handler = _instantiate_runtime_handler(selection)
 
     try:
         payload = verify_token(token)
