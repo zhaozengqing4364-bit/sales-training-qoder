@@ -41,6 +41,7 @@ function getStatusStyle(status: string) {
 export default function AgentsPage() {
     const toast = useToast();
     const [agents, setAgents] = useState<AdminAgent[]>([]);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     // Filter & Search States
     const [searchQuery, setSearchQuery] = useState("");
@@ -72,6 +73,7 @@ export default function AgentsPage() {
     }, [statusDropdownId]);
 
     const loadData = async () => {
+        setLoadError(null);
         try {
             const data = await api.admin.getAgents({
                 search: searchQuery || undefined,
@@ -82,6 +84,9 @@ export default function AgentsPage() {
             setAgents(data.items || []);
         } catch (err) {
             debug.error("Failed to load agents:", err);
+            const message = err instanceof Error ? err.message : "智能体列表加载失败";
+            setLoadError(message);
+            toast.error(message);
             setAgents([]);
         }
     };
@@ -317,6 +322,13 @@ export default function AgentsPage() {
 
             {/* Agents Table */}
             <GlassCard className="overflow-hidden">
+                {loadError ? (
+                    <div className="m-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                        <p className="font-semibold">智能体列表加载失败</p>
+                        <p className="mt-1">{loadError}</p>
+                        <Button variant="outline" className="mt-3 rounded-full" onClick={() => void loadData()}>重试</Button>
+                    </div>
+                ) : null}
                 {/* Mobile Card View */}
                 <div className="md:hidden space-y-4 p-4">
                     {agents.map((agent) => {

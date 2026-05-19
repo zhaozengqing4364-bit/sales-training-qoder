@@ -57,6 +57,7 @@ export default function PresentationsPage() {
     const toast = useToast();
     const [presentations, setPresentations] = useState<PresentationItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
@@ -73,6 +74,7 @@ export default function PresentationsPage() {
 
     const loadData = async () => {
         setIsLoading(true);
+        setLoadError(null);
         try {
             const data = await api.presentations.list({
                 status: statusFilter !== "all" ? statusFilter : undefined,
@@ -81,6 +83,9 @@ export default function PresentationsPage() {
             setPresentations((data || []) as PresentationItem[]);
         } catch (err) {
             debug.error("Failed to load presentations:", err);
+            const message = err instanceof Error ? err.message : "PPT 列表加载失败";
+            setLoadError(message);
+            toast.error(message);
             setPresentations([]);
         } finally {
             setIsLoading(false);
@@ -251,6 +256,13 @@ export default function PresentationsPage() {
             {!isLoading ? <AssetGovernanceOverview assetType="presentation" items={filteredPresentations} /> : null}
 
             <GlassCard className="overflow-hidden">
+                {loadError ? (
+                    <div className="m-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                        <p className="font-semibold">PPT 列表加载失败</p>
+                        <p className="mt-1">{loadError}</p>
+                        <Button variant="outline" className="mt-3 rounded-full" onClick={() => void loadData()}>重试</Button>
+                    </div>
+                ) : null}
                 <div className="space-y-4 p-4 md:hidden">
                     {filteredPresentations.map((presentation) => {
                         const statusStyle = getStatusStyle(presentation.status);
