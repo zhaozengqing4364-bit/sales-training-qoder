@@ -39,7 +39,7 @@ async def search_internal_knowledge(
     arguments_obj: dict[str, Any],
     effective_policy: dict[str, Any],
     session_factory: Callable[[], Any],
-    knowledge_service_cls: type,
+    knowledge_service_cls: Callable[[Any], Any],
     record_metric: Callable[..., Awaitable[None]],
 ) -> dict[str, Any]:
     """Execute knowledge retrieval with consistent metrics recording."""
