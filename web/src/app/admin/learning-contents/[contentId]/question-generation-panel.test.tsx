@@ -188,6 +188,28 @@ describe("QuestionGenerationPanel", () => {
         expect(screen.getByDisplayValue("修改后的标题")).toBeTruthy();
     });
 
+    it("keeps invalid scoring criteria text visible for correction", async () => {
+        previewMock.mockResolvedValue({
+            drafts: [makeDraft()],
+        });
+
+        render(
+            <QuestionGenerationPanel
+                learningContentId="content-1"
+                chapterId="chapter-1"
+                categories={MOCK_CATEGORIES}
+            />,
+        );
+
+        fireEvent.click(screen.getByText("AI 生成考题"));
+
+        const editor = await screen.findByLabelText("评分标准 JSON");
+        fireEvent.change(editor, { target: { value: "not-json" } });
+
+        expect(screen.getByDisplayValue("not-json")).toBeTruthy();
+        expect(screen.getByText(/Unexpected token/)).toBeTruthy();
+    });
+
     it("displays category selector before confirm", async () => {
         previewMock.mockResolvedValue({
             drafts: [makeDraft()],

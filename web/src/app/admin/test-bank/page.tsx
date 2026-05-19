@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCcw, Plus, Edit2, Trash2, BookOpen, Filter, Archive, X, Upload } from "lucide-react";
 
 import { api } from "@/lib/api/client";
-import type { QuestionCategory, QuestionItem, CreateCategoryRequest, UpdateCategoryRequest, ImportJob, ImportResult, ImportError } from "@/lib/api/types";
+import type { QuestionCategory, QuestionItem, CreateCategoryRequest, UpdateCategoryRequest, ImportJob, ImportResult } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { JsonEditorWithValidation } from "@/components/ui/json-editor-with-validation";
 
 const STATUS_LABELS: Record<string, string> = {
     draft: "草稿",
@@ -42,6 +43,28 @@ function parseScoringCriteria(raw: string): Record<string, unknown> | null {
         return null;
     }
 }
+
+function listFromLines(value: string): string[] {
+    return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+}
+
+function linesFromList(items: string[]): string {
+    return items.join("\n");
+}
+
+function getScoringCriteriaValidation(raw: string): { ok: boolean; message: string } {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+        return { ok: true, message: "未填写评分标准，将按空对象提交。" };
+    }
+    const parsed = parseScoringCriteria(raw);
+    if (parsed === null) {
+        return { ok: false, message: "评分标准格式无效，请输入 JSON object，例如 {\"dimensions\":[\"clarity\"]}。" };
+    }
+    return { ok: true, message: "评分标准 JSON object 格式有效。" };
+}
+
+type QuestionAction = { type: "publish" | "archive"; question: QuestionItem } | null;
 
 export default function TestBankPage() {
     const toast = useToast();
@@ -90,13 +113,15 @@ export default function TestBankPage() {
     const [formDepartment, setFormDepartment] = useState("");
     const [formSubmitting, setFormSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const scoringCriteriaValidation = getScoringCriteriaValidation(formScoringCriteria);
+    const [questionAction, setQuestionAction] = useState<QuestionAction>(null);
 
     // ── Import ──
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
     const [importError, setImportError] = useState<string | null>(null);
     const [importSubmitting, setImportSubmitting] = useState(false);
 
-    const loadCategories = async () => {
+    const loadCategories = useCallback(async () => {
         setCatLoading(true);
         setCatError(null);
         try {
@@ -107,9 +132,9 @@ export default function TestBankPage() {
         } finally {
             setCatLoading(false);
         }
-    };
+    }, []);
 
-    const loadQuestions = async () => {
+    const loadQuestions = useCallback(async () => {
         setQLoading(true);
         setQError(null);
         try {
@@ -129,16 +154,15 @@ export default function TestBankPage() {
         } finally {
             setQLoading(false);
         }
-    };
+    }, [filterCategoryId, filterDifficulty, filterStatus, filterTag]);
 
     useEffect(() => {
         void loadCategories();
-        void loadQuestions();
-    }, []);
+    }, [loadCategories]);
 
     useEffect(() => {
         void loadQuestions();
-    }, [filterCategoryId, filterDifficulty, filterStatus, filterTag]);
+    }, [loadQuestions]);
 
     const handleCreateCategory = async () => {
         if (!newCatName.trim()) return;
@@ -220,9 +244,9 @@ export default function TestBankPage() {
         setFormReferenceAnswer(q.reference_answer || "");
         setFormCategoryId(q.category_id);
         setFormDifficulty(q.difficulty);
-        setFormTags(q.tags.join(", "));
-        setFormScoringDimensions(q.scoring_dimensions.join(", "));
-        setFormScoringCriteria(JSON.stringify(q.scoring_criteria));
+        setFormTags(linesFromList(q.tags));
+        setFormScoringDimensions(linesFromList(q.scoring_dimensions));
+        setFormScoringCriteria(JSON.stringify(q.scoring_criteria, null, 2));
         setFormSafetyFlagged(q.safety_flagged);
         setFormDepartment(q.department || "");
         setFormError(null);
@@ -266,11 +290,8 @@ export default function TestBankPage() {
                 reference_answer: formReferenceAnswer.trim() || null,
                 category_id: formCategoryId,
                 difficulty: formDifficulty,
-                tags: formTags.split(",").map((t) => t.trim()).filter(Boolean),
-                scoring_dimensions: formScoringDimensions
-                    .split(",")
-                    .map((d) => d.trim())
-                    .filter(Boolean),
+                tags: listFromLines(formTags),
+                scoring_dimensions: listFromLines(formScoringDimensions),
                 scoring_criteria: criteria,
                 safety_flagged: formSafetyFlagged,
                 department: formDepartment.trim() || null,
@@ -359,6 +380,17 @@ export default function TestBankPage() {
         }
     };
 
+    const handleConfirmQuestionAction = () => {
+        const action = questionAction;
+        setQuestionAction(null);
+        if (!action) return;
+        if (action.type === "publish") {
+            void handlePublish(action.question.question_id);
+            return;
+        }
+        void handleArchive(action.question.question_id);
+    };
+
     const getCategoryName = (categoryId: string) => {
         return categories.find((c) => c.category_id === categoryId)?.name || categoryId;
     };
@@ -380,6 +412,20 @@ export default function TestBankPage() {
                 variant="danger"
                 onConfirm={handleDeleteCategory}
                 isLoading={catDeleting}
+            />
+
+            <ConfirmDialog
+                open={!!questionAction}
+                onOpenChange={(open) => !open && setQuestionAction(null)}
+                title={questionAction?.type === "archive" ? "归档题目" : "发布题目"}
+                description={questionAction
+                    ? questionAction.type === "archive"
+                        ? `确定要归档「${questionAction.question.title}」吗？归档后该题目不会再作为可用试题。`
+                        : `确定要发布「${questionAction.question.title}」吗？发布门禁会再次校验参考答案、分类和安全标记。`
+                    : "确认执行题目操作。"}
+                confirmText={questionAction?.type === "archive" ? "确认归档" : "确认发布"}
+                variant={questionAction?.type === "archive" ? "warning" : "danger"}
+                onConfirm={handleConfirmQuestionAction}
             />
 
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -757,17 +803,17 @@ export default function TestBankPage() {
                                 <option value="medium">中等</option>
                                 <option value="hard">困难</option>
                             </select>
-                            <input
-                                type="text"
-                                placeholder="标签（逗号分隔）"
-                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none"
+                            <textarea
+                                aria-label="标签"
+                                placeholder="标签：每行一个，例如\n异议处理\n价格谈判"
+                                className="min-h-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                 value={formTags}
                                 onChange={(e) => setFormTags(e.target.value)}
                             />
-                            <input
-                                type="text"
-                                placeholder="评分维度（逗号分隔）"
-                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none"
+                            <textarea
+                                aria-label="评分维度"
+                                placeholder="评分维度：每行一个，例如\n逻辑性\n说服力"
+                                className="min-h-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                 value={formScoringDimensions}
                                 onChange={(e) => setFormScoringDimensions(e.target.value)}
                             />
@@ -787,11 +833,15 @@ export default function TestBankPage() {
                                 />
                                 安全标记
                             </label>
-                            <textarea
-                                placeholder="评分标准 JSON"
-                                className="h-16 rounded-lg border border-slate-200 bg-white p-3 text-sm font-mono focus:border-blue-500 focus:outline-none md:col-span-2"
+                            <JsonEditorWithValidation
+                                label="评分标准 JSON"
                                 value={formScoringCriteria}
-                                onChange={(e) => setFormScoringCriteria(e.target.value)}
+                                onChange={setFormScoringCriteria}
+                                rows={4}
+                                className="md:col-span-2"
+                                isValid={scoringCriteriaValidation.ok}
+                                validationMessage={scoringCriteriaValidation.message}
+                                helpText="必须是 JSON object；留空会提交空对象。"
                             />
                         </div>
                         <div className="mt-3 flex gap-2">
@@ -865,7 +915,7 @@ export default function TestBankPage() {
                                                             variant="ghost"
                                                             size="sm"
                                                             className="rounded-full text-xs text-green-600 hover:text-green-800"
-                                                            onClick={() => handlePublish(q.question_id)}
+                                                            onClick={() => setQuestionAction({ type: "publish", question: q })}
                                                         >
                                                             发布
                                                         </Button>
@@ -875,7 +925,7 @@ export default function TestBankPage() {
                                                             variant="ghost"
                                                             size="sm"
                                                             className="rounded-full text-xs text-amber-600 hover:text-amber-800"
-                                                            onClick={() => handleArchive(q.question_id)}
+                                                            onClick={() => setQuestionAction({ type: "archive", question: q })}
                                                         >
                                                             <Archive className="mr-1 h-3 w-3" /> 归档
                                                         </Button>

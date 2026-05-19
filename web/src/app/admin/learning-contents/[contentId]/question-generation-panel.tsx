@@ -7,6 +7,7 @@ import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { QuestionCategory, QuestionGenerationDraft } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
+import { JsonEditorWithValidation } from "@/components/ui/json-editor-with-validation";
 import { debug } from "@/lib/debug";
 
 interface QuestionGenerationPanelProps {
@@ -26,6 +27,14 @@ function mapPreviewError(error: unknown): string {
     return msg;
 }
 
+function listFromLines(value: string): string[] {
+    return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+}
+
+function linesFromList(items: string[]): string {
+    return items.join("\n");
+}
+
 export function QuestionGenerationPanel({
     learningContentId,
     chapterId,
@@ -39,6 +48,8 @@ export function QuestionGenerationPanel({
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [savedCount, setSavedCount] = useState<number | null>(null);
+    const [scoringCriteriaErrors, setScoringCriteriaErrors] = useState<Record<number, string | null>>({});
+    const [scoringCriteriaDrafts, setScoringCriteriaDrafts] = useState<Record<number, string>>({});
 
     const handlePreview = async () => {
         setIsOpen(true);
@@ -47,12 +58,17 @@ export function QuestionGenerationPanel({
         setDrafts([]);
         setSaveError(null);
         setSavedCount(null);
+        setScoringCriteriaErrors({});
+        setScoringCriteriaDrafts({});
         try {
             const result = await api.testBank.previewQuestionGeneration({
                 learning_content_id: learningContentId,
                 chapter_id: chapterId,
             });
             setDrafts(result.drafts);
+            setScoringCriteriaDrafts(Object.fromEntries(
+                result.drafts.map((draft, index) => [index, JSON.stringify(draft.scoring_criteria, null, 2)]),
+            ));
             if (result.drafts.length === 0) {
                 setError("未生成可用考题，请检查章节内容。");
             }
@@ -79,26 +95,35 @@ export function QuestionGenerationPanel({
         field: "scoring_dimensions" | "tags",
         value: string,
     ) => {
-        const items = value
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
+        const items = listFromLines(value);
         handleUpdateDraft(index, field, items);
     };
 
     const handleUpdateScoringCriteria = (index: number, value: string) => {
+        setScoringCriteriaDrafts((prev) => ({ ...prev, [index]: value }));
         try {
             const parsed = JSON.parse(value);
             if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
                 handleUpdateDraft(index, "scoring_criteria", parsed);
+                setScoringCriteriaErrors((prev) => ({ ...prev, [index]: null }));
+            } else {
+                setScoringCriteriaErrors((prev) => ({ ...prev, [index]: "评分标准必须是 JSON object。" }));
             }
-        } catch {
-            // ignore invalid JSON
+        } catch (error) {
+            setScoringCriteriaErrors((prev) => ({
+                ...prev,
+                [index]: error instanceof Error ? error.message : "评分标准 JSON 格式无效。",
+            }));
         }
     };
 
     const handleConfirm = async () => {
         if (!categoryId || drafts.length === 0) return;
+        const firstError = Object.values(scoringCriteriaErrors).find(Boolean);
+        if (firstError) {
+            setSaveError(`请先修正评分标准 JSON：${firstError}`);
+            return;
+        }
         setIsSaving(true);
         setSaveError(null);
         try {
@@ -108,6 +133,7 @@ export function QuestionGenerationPanel({
             });
             setSavedCount(result.total);
             setDrafts([]);
+            setScoringCriteriaDrafts({});
         } catch (err) {
             debug.error("Confirm generation failed:", err);
             setSaveError(`保存失败: ${getApiErrorMessage(err)}`);
@@ -229,11 +255,10 @@ export function QuestionGenerationPanel({
                             <div className="grid gap-3 sm:grid-cols-2">
                                 <div>
                                     <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                                        评分维度 (逗号分隔)
+                                        评分维度（每行一个）
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={draft.scoring_dimensions.join(",")}
+                                    <textarea
+                                        value={linesFromList(draft.scoring_dimensions)}
                                         onChange={(e) =>
                                             handleUpdateDraftArrayField(
                                                 index,
@@ -241,36 +266,31 @@ export function QuestionGenerationPanel({
                                                 e.target.value,
                                             )
                                         }
-                                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                                        className="min-h-20 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
                                     />
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                                        标签 (逗号分隔)
+                                        标签（每行一个）
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={draft.tags.join(",")}
+                                    <textarea
+                                        value={linesFromList(draft.tags)}
                                         onChange={(e) =>
                                             handleUpdateDraftArrayField(index, "tags", e.target.value)
                                         }
-                                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                                        className="min-h-20 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
                                     />
                                 </div>
                             </div>
-                            <div>
-                                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                                    评分标准 (JSON)
-                                </label>
-                                <textarea
-                                    value={JSON.stringify(draft.scoring_criteria, null, 2)}
-                                    onChange={(e) =>
-                                        handleUpdateScoringCriteria(index, e.target.value)
-                                    }
-                                    rows={3}
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                />
-                            </div>
+                            <JsonEditorWithValidation
+                                label="评分标准 JSON"
+                                value={scoringCriteriaDrafts[index] ?? JSON.stringify(draft.scoring_criteria, null, 2)}
+                                onChange={(value) => handleUpdateScoringCriteria(index, value)}
+                                rows={4}
+                                isValid={!scoringCriteriaErrors[index]}
+                                validationMessage={scoringCriteriaErrors[index] || "评分标准 JSON object 格式有效。"}
+                                helpText="必须是 JSON object；无效时不会覆盖当前草稿。"
+                            />
                             <div>
                                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">
                                     难度

@@ -231,6 +231,8 @@ describe("TestBankPage", () => {
         await screen.findByText("如何应对客户异议");
 
         fireEvent.click(screen.getByRole("button", { name: /发布/ }));
+        expect(publishQuestionMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(publishQuestionMock).toHaveBeenCalledWith("q-1");
@@ -247,6 +249,8 @@ describe("TestBankPage", () => {
         await screen.findByText("如何应对客户异议");
 
         fireEvent.click(screen.getByRole("button", { name: /归档/ }));
+        expect(archiveQuestionMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "确认归档" }));
 
         await waitFor(() => {
             expect(archiveQuestionMock).toHaveBeenCalledWith("q-1");
@@ -261,6 +265,7 @@ describe("TestBankPage", () => {
         await screen.findByText("如何应对客户异议");
 
         fireEvent.click(screen.getByRole("button", { name: /发布/ }));
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
         await waitFor(() => {
             expect(screen.getByText(/缺少参考答案/)).toBeTruthy();
@@ -365,13 +370,13 @@ describe("TestBankPage", () => {
         });
         const formCatSelect = screen.getByTestId("form-category");
         fireEvent.change(formCatSelect, { target: { value: "cat-1" } });
-        fireEvent.change(screen.getByPlaceholderText("评分标准 JSON"), {
+        fireEvent.change(screen.getByLabelText("评分标准 JSON"), {
             target: { value: "not-json" },
         });
         fireEvent.click(screen.getByRole("button", { name: /创建/ }));
 
         await waitFor(() => {
-            expect(screen.getByText(/评分标准格式无效/)).toBeTruthy();
+            expect(screen.getAllByText(/评分标准格式无效/).length).toBeGreaterThan(0);
         });
         expect(createQuestionMock).not.toHaveBeenCalled();
     });
@@ -409,7 +414,7 @@ describe("TestBankPage", () => {
         });
         const formCatSelect = screen.getByTestId("form-category");
         fireEvent.change(formCatSelect, { target: { value: "cat-1" } });
-        fireEvent.change(screen.getByPlaceholderText("评分标准 JSON"), {
+        fireEvent.change(screen.getByLabelText("评分标准 JSON"), {
             target: { value: '{"dimensions":["clarity"]}' },
         });
         fireEvent.click(screen.getByRole("button", { name: /创建/ }));
