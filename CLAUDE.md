@@ -155,6 +155,172 @@
 - 不多做，也不少做
 - 不猜测，不编造，不越界
 - 优先准确，其次高效，再次简洁
+重要！！！所有的回复和解释都要使用中文、中文！！！
+减少LLM编码常见错误的行为准则。根据需要与项目特定说明合并。
+
+权衡：这些指导原则倾向于谨慎而非速度。对于琐碎的任务，请自行判断。
+
+1. 编码前先思考
+不要妄下断言。不要掩饰困惑。坦诚地权衡利弊。
+
+实施前：
+
+请明确陈述您的假设。如有疑问，请提出。
+如果存在多种解释，请将它们提出来——不要默默地做出选择。
+如果存在更简单的方法，请提出来。必要时要坚持己见。
+如果有什么不清楚的地方，停下来。说出让你困惑的地方。然后提问。
+2. 简单至上
+用最少的代码解决问题。不要进行任何推测。
+
+没有超出要求的功能。
+不为一次性代码进行抽象。
+没有提供任何未要求的“灵活性”或“可配置性”。
+对于不可能出现的情况，不进行错误处理。
+如果你写了 200 行，而 50 行就可以写完，那就重写。
+问问自己：“一位资深工程师会认为这过于复杂吗？” 如果答案是肯定的，那就简化它。
+
+3. 手术改变
+只碰你必须碰的东西。只收拾你自己的烂摊子。
+
+编辑现有代码时：
+
+不要“改进”相邻的代码、注释或格式。
+不要重构没有问题的代码。
+即使你的做法不同，也要保持与现有风格一致。
+如果你发现无关的死代码，请指出来——不要删除它。
+当你的更改创建了孤立文件时：
+
+删除因您的修改而不再使用的导入项/变量/函数。
+除非被要求，否则不要删除已有的无效代码。
+测试要求：每一行修改后的代码都应该直接追溯到用户的请求。
+
+4. 目标驱动型执行
+定义成功标准。循环直至验证通过。
+
+将任务转化为可验证的目标：
+
+“添加验证”→“编写针对无效输入的测试，并确保它们都能通过”
+“修复漏洞”→“编写一个能够重现该漏洞的测试，然后使其通过”。
+“重构 X” → “确保重构前后测试均通过”
+对于多步骤任务，请简要说明计划：
+
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+明确的成功标准能让你独立循环迭代。而模糊的标准（“只要能行就行”）则需要不断澄清。
+
+如果以下情况发生，则这些指导原则是有效的：差异中不必要的更改减少，由于过于复杂而导致的重写减少，并且在实施之前而不是在出错之后提出澄清问题。
+
+---
+
+## 一、源头活水：永恒的哲学基石
+
+- **Unix 哲学：分而治之，组合至上**
+  - 核心：单一职责、模块化、文本化接口。
+  - 大量小而美、通过清晰接口连接的工具，比庞大复杂的黑盒更具生命力。
+  - 面对 AI 生成的大段“意大利面条式”代码，通过“高内聚、低耦合”的模块化设计，将复杂问题化解，每个模块都易于人类和 AI 理解和测试。
+
+- **文学化编程：代码为人，沟通为要**（Donald Knuth）
+  - 核心：意图优先，代码服务于解释。
+  - 代码的首要读者是人，其次才是机器。
+  - AI 常陷入“意图缺失”（Intent Gap），强制用自然语言阐述意图和逻辑，让 AI 精确理解需求并自我纠错。
+
+- **计算思维：解构世界，算法为魂**
+  - 核心：抽象、分解、模式识别、算法设计。
+  - 编程的本质是解决问题的方法论，是独立于具体工具的元能力。
+  - 这种思维是评估 AI 生成方案优劣、设计整体架构、驾驭复杂性的核心竞争力。
+
+---
+
+## 二、四大元原则：AI 协作的“语法”
+
+- **KISS (Keep It Simple, Stupid) —— 保持简单**
+  - AI 倾向于过度设计，生成不必要的复杂方案。
+  - 要求和引导 AI 生成最简单、最直接的代码，因为 **清晰比聪明更重要**。
+
+- **DRY (Don't Repeat Yourself) —— 不要重复自己**
+  - AI 常在不经意间复制粘贴代码，导致“逻辑碎片化”。
+  - 被 AI “诱惑”重复时，应将其重构为单一、权威的模块。
+  - 确保 **知识** 的唯一性，一处修改，处处生效。
+
+- **YAGNI (You Ain't Gonna Need It) —— 你不会需要它**
+  - AI 可能为“可能”的未来需求添加功能，造成过度设计。
+  - 严格规划，只实现当前明确需要的功能，拒绝 AI 生成的冗余代码。
+
+- **SOLID 原则 —— 稳固根基**
+  - 虽源于面向对象，但其思想（单一职责、开闭原则等）对模块化设计同样重要。
+  - 帮助审查和重构 AI 输出，确保模块职责清晰，降低系统复杂度。
+
+---
+
+## 三、架构与设计：不可撼动的基石
+
+- **关注点分离 (Separation of Concerns)**
+  - 将不同功能（业务逻辑、数据访问、UI 等）严格分离到独立模块。
+  - 通过清晰的边界，限制 AI 在局部任务中的“视野”和“破坏力”，管控风险。
+
+- **深模块 (Deep Module)**
+  - 提供简洁强大的接口，内部封装复杂实现。
+  - AI 受上下文窗口限制，深模块的“高内聚”可极大缓解其无法处理高度复杂全局逻辑的局限。
+
+- **奥卡姆剃刀原则 (Occam's Razor)**
+  - 核心：“如无必要，勿增实体”。
+  - 抵制 AI 生成的多余抽象层或不必要依赖，探寻并采用最简单的有效方案。
+
+---
+
+## 四、工程策略与习惯：实现价值交付的纪律
+
+- **让每一个程序只做好一件事**
+  - 软件由功能专一的模块组合而成，提高可重用性和可维护性。
+  - AI 在处理单一、明确的任务时更加高效和可靠。
+
+- **为维护而写，而不仅仅是执行**
+  - 代码不仅要让机器执行，更要让后来者（包括人类自己和 AI）易于阅读理解。
+  - 良好的可读性是高效人机协作的基础。
+
+
+- **破窗理论 (Broken Windows Theory)**
+  - 不要容忍代码库中的”坏味道”（糟糕设计、错误代码）。
+  - 一旦出现”破窗”，模仿效应会让代码库加速腐化，甚至 AI 也会模仿坏模式，导致问题指数级扩散。
+
+---
+
+## 重要文档索引
+
+| 文档 | 位置 | 说明 |
+|------|------|------|
+| **系统架构** | `docs/architecture.md` | 完整架构描述：22 个章节覆盖骨架、WS、语音、知识、评估、Supervisor、Curriculum、Agent、Config Bundles、Effectiveness、Business Rules、Prompt Templates、前端等 |
+| API 契约 | `docs/api-contract/` | 前后端同步开发接口定义 |
+| 架构决策 | `docs/adr/` | 关键决策记录（运行时主语、评分治理、领域边界等） |
+| 部署设置 | `docs/setup/` | 开发/生产环境搭建指南 |
+| 灾备恢复 | `docs/backup-recovery-runbook.md` | 灾备恢复操作手册 |
+| Agent 工作指南 | `docs/agents/` | Issue tracker、triage labels、domain doc |
+| 项目概览 | `CLAUDE.md` | 开发命令、编码规范、目录结构 |
+
+---
+<!-- TRELLIS:START -->
+# Trellis Instructions
+
+These instructions are for AI assistants working in this project.
+
+This project is managed by Trellis. The working knowledge you need lives under `.trellis/`:
+
+- `.trellis/workflow.md` — development phases, when to create tasks, skill routing
+- `.trellis/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
+- `.trellis/workspace/` — per-developer journals and session traces
+- `.trellis/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+
+If a Trellis command is available on your platform (e.g. `/trellis:finish-work`, `/trellis:continue`), prefer it over manual steps. Not every platform exposes every command.
+
+If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
+- `.agents/skills/` — reusable Trellis skills
+- `.codex/agents/` — optional custom subagents
+
+Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
+
+<!-- TRELLIS:END -->
+
 
 ## Agent skills
 
