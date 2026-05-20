@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 from urllib.parse import urlencode
 
@@ -25,6 +27,43 @@ class StepFunSessionConfig:
     input_transcription_model: str = ""
     instructions: str = ""
     tools: list[dict[str, Any]] = field(default_factory=list)
+
+
+class StepFunSendStatus(StrEnum):
+    SENT = "sent"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class StepFunSendResult:
+    status: StepFunSendStatus
+    error_type: str = ""
+
+
+class StepFunHealthStatus(StrEnum):
+    HEALTHY = "healthy"
+    UNHEALTHY = "unhealthy"
+
+
+@dataclass(frozen=True, slots=True)
+class StepFunHealthResult:
+    status: StepFunHealthStatus
+    error_type: str = ""
+
+
+class StepFunBackpressureStatus(StrEnum):
+    ALLOW = "allow"
+    DROP = "drop"
+
+
+@dataclass(frozen=True, slots=True)
+class StepFunBackpressurePolicy:
+    high_watermark_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class StepFunBackpressureResult:
+    status: StepFunBackpressureStatus
 
 
 def build_stepfun_session_update_payload(
@@ -98,3 +137,62 @@ class StepFunTransport:
                 await result
         except (RuntimeError, ValueError, OSError):
             pass
+
+    async def send_json(self, upstream_ws: Any, payload: dict[str, Any]) -> StepFunSendResult:
+        """Send one JSON payload through a WebSocket-like upstream."""
+
+        try:
+            send_json = getattr(upstream_ws, "send_json")
+            result = send_json(payload)
+            if inspect.isawaitable(result):
+                await result
+        except (RuntimeError, ValueError, OSError) as exc:
+            return StepFunSendResult(
+                status=StepFunSendStatus.FAILED,
+                error_type=type(exc).__name__,
+            )
+        return StepFunSendResult(status=StepFunSendStatus.SENT)
+
+    async def check_health(
+        self,
+        upstream_ws: Any,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> StepFunHealthResult:
+        """Check upstream keepalive with a WebSocket-like ping/pong."""
+
+        try:
+            ping = getattr(upstream_ws, "ping")
+            result = ping()
+            if inspect.isawaitable(result):
+                if timeout_seconds is None:
+                    await result
+                else:
+                    await asyncio.wait_for(result, timeout=timeout_seconds)
+        except TimeoutError as exc:
+            return StepFunHealthResult(
+                status=StepFunHealthStatus.UNHEALTHY,
+                error_type=type(exc).__name__,
+            )
+        except (RuntimeError, ValueError, OSError) as exc:
+            return StepFunHealthResult(
+                status=StepFunHealthStatus.UNHEALTHY,
+                error_type=type(exc).__name__,
+            )
+        return StepFunHealthResult(status=StepFunHealthStatus.HEALTHY)
+
+    def decide_backpressure(
+        self,
+        payload: dict[str, Any],
+        *,
+        pending_bytes: int,
+        policy: StepFunBackpressurePolicy,
+    ) -> StepFunBackpressureResult:
+        """Decide whether an upstream event should pass under current pressure."""
+
+        if (
+            payload.get("type") == "input_audio_buffer.append"
+            and pending_bytes > policy.high_watermark_bytes
+        ):
+            return StepFunBackpressureResult(status=StepFunBackpressureStatus.DROP)
+        return StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)

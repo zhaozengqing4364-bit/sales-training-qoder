@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
@@ -22,7 +23,17 @@ from sales_bot.websocket.stepfun_realtime_handler import (
     RealtimeResponseState,
     StepFunRealtimeHandler,
 )
+from sales_bot.websocket.stepfun_tool_execution import StepFunToolExecutionModule
+from sales_bot.websocket.voice_runtime_profile import VoiceRuntimeProfile
 from training_runtime import StepFunSessionConfig, build_stepfun_session_update_payload
+from training_runtime.stepfun_transport import (
+    StepFunBackpressureResult,
+    StepFunBackpressureStatus,
+    StepFunHealthResult,
+    StepFunHealthStatus,
+    StepFunSendResult,
+    StepFunSendStatus,
+)
 
 
 def test_stepfun_transport_builds_session_update_payload_with_transcription_and_tools():
@@ -112,6 +123,96 @@ async def test_connect_upstream_delegates_connection_to_shared_stepfun_transport
     handler._maybe_start_kb_lock_warmup.assert_awaited_once_with()
 
 
+@pytest.mark.asyncio
+async def test_send_upstream_delegates_to_transport_and_marks_activity_only_on_success():
+    upstream_ws = object()
+    transport = SimpleNamespace(
+        send_json=AsyncMock(return_value=StepFunSendResult(status=StepFunSendStatus.SENT))
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=transport)
+    handler.upstream_ws = upstream_ws
+
+    await handler._send_upstream({"type": "session.update"})
+
+    transport.send_json.assert_awaited_once_with(upstream_ws, {"type": "session.update"})
+    assert handler._upstream_last_activity_at > 0
+
+    failed_transport = SimpleNamespace(
+        send_json=AsyncMock(return_value=StepFunSendResult(status=StepFunSendStatus.FAILED))
+    )
+    failed_handler = StepFunRealtimeHandler(stepfun_transport=failed_transport)
+    failed_handler.upstream_ws = upstream_ws
+
+    await failed_handler._send_upstream({"type": "response.create"})
+
+    failed_transport.send_json.assert_awaited_once_with(
+        upstream_ws,
+        {"type": "response.create"},
+    )
+    assert failed_handler._upstream_last_activity_at == 0.0
+
+
+@pytest.mark.asyncio
+async def test_apply_lifecycle_action_delegates_transition_to_session_control_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = SimpleNamespace(status="preparing")
+    transition = SimpleNamespace(action="start", to_status="in_progress", changed=True)
+    adapter_calls: list[dict[str, Any]] = []
+
+    class FakeDb:
+        commit = AsyncMock()
+        rollback = AsyncMock()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeLifecycleService:
+        def __init__(self, db: Any) -> None:
+            self.db = db
+
+        async def get_session_with_scenario(self, session_id: str):
+            assert session_id == "session-adapter-delegation"
+            return session, "sales"
+
+        async def transition(self, **kwargs):  # pragma: no cover - must use adapter seam
+            raise AssertionError("handler bypassed SessionControlAdapter")
+
+        async def trigger_report_generation_if_needed(self, observed_transition: Any) -> None:
+            assert observed_transition is transition
+
+    class FakeSessionControlAdapter:
+        def __init__(self, lifecycle_service: Any) -> None:
+            self.lifecycle_service = lifecycle_service
+
+        async def apply_action(self, **kwargs):
+            adapter_calls.append(kwargs)
+            return transition
+
+    monkeypatch.setattr(stepfun_module, "AsyncSessionLocal", FakeDb)
+    monkeypatch.setattr(stepfun_module, "SessionLifecycleService", FakeLifecycleService)
+    monkeypatch.setattr(stepfun_module, "SessionControlAdapter", FakeSessionControlAdapter)
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-adapter-delegation"
+    handler._send_error = AsyncMock()
+    handler._send_status = AsyncMock()
+
+    result = await handler._apply_lifecycle_action("start")
+
+    assert result is transition
+    assert handler.session_status == "in_progress"
+    assert adapter_calls == [
+        {
+            "session": session,
+            "scenario_type": "sales",
+            "action": "start",
+        }
+    ]
+
+
 def test_stepfun_realtime_handler_defaults_to_latest_realtime_model(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -120,6 +221,63 @@ def test_stepfun_realtime_handler_defaults_to_latest_realtime_model(
     handler = StepFunRealtimeHandler()
 
     assert handler._stepfun_model == "step-audio-2"
+
+
+def test_handler_applies_voice_runtime_profile_from_policy_snapshot() -> None:
+    handler = StepFunRealtimeHandler()
+    snapshot = {
+        "voice_mode": "stepfun_realtime",
+        "model_name": "step-audio-custom",
+        "voice_name": "voice-custom",
+        "temperature": 0.33,
+        "instructions": "保持客户角色。",
+        "instruction_contract_hash": "hash-custom",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"network_access_mode": "off"},
+    }
+
+    profile = handler._apply_voice_runtime_profile(snapshot)
+
+    assert isinstance(profile, VoiceRuntimeProfile)
+    assert handler._voice_runtime_profile is profile
+    assert handler._stepfun_model == "step-audio-custom"
+    assert handler._stepfun_voice == "voice-custom"
+    assert handler._stepfun_temperature == 0.33
+    assert handler._stepfun_instructions == "保持客户角色。"
+    assert handler._instruction_contract_hash == "hash-custom"
+
+
+def test_handler_delegates_tool_building_and_guardrails_to_execution_module():
+    class DelegatingToolExecution(StepFunToolExecutionModule):
+        def __init__(self) -> None:
+            super().__init__()
+            self.build_policy_calls: list[dict] = []
+            self.guardrail_calls: list[tuple[list[dict], dict]] = []
+
+        def build_tools_from_policy(self, policy: dict) -> list[dict]:
+            self.build_policy_calls.append(policy)
+            return [
+                {"type": "function", "function": {"name": "search_internal_knowledge"}}
+            ]
+
+        def enforce_guardrails(self, tools: list[dict], policy: dict) -> list[dict]:
+            self.guardrail_calls.append((tools, policy))
+            return []
+
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"network_access_mode": "off"},
+    }
+    tool_execution = DelegatingToolExecution()
+    handler._tool_execution = tool_execution
+
+    built_tools = handler._build_stepfun_tools_from_policy()
+    guarded_tools = handler._enforce_stepfun_tool_guardrails(built_tools)
+
+    assert tool_execution.build_policy_calls == [handler._effective_policy]
+    assert tool_execution.guardrail_calls == [(built_tools, handler._effective_policy)]
+    assert guarded_tools == []
 
 
 @pytest.mark.asyncio
@@ -171,6 +329,65 @@ async def test_handle_client_text_persists_user_message_before_create_response()
     payload = handler._send_upstream.await_args_list[0].args[0]
     assert payload["type"] == "conversation.item.create"
     assert payload["item"]["content"][0]["text"] == "你好，给我介绍一下产品"
+
+
+@pytest.mark.asyncio
+async def test_audio_chunk_backpressure_delegates_to_transport_and_drops_audio_append():
+    transport = SimpleNamespace(
+        decide_backpressure=MagicMock(
+            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.DROP)
+        )
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
+    handler.session_status = "in_progress"
+    handler._ensure_input_allowed = AsyncMock(return_value=True)
+    handler._send_upstream = AsyncMock()
+
+    await handler._handle_client_text(
+        json.dumps(
+            {
+                "type": "audio_chunk",
+                "data": {"audio": "base64-audio"},
+            }
+        )
+    )
+
+    transport.decide_backpressure.assert_called_once()
+    payload = transport.decide_backpressure.call_args.args[0]
+    assert payload == {"type": "input_audio_buffer.append", "audio": "base64-audio"}
+    handler._send_upstream.assert_not_awaited()
+    assert handler._has_uncommitted_audio is False
+    assert handler._audio_flow.get_input_buffer() == []
+
+
+@pytest.mark.asyncio
+async def test_audio_chunk_delegates_sent_audio_to_audio_flow_without_payload_change():
+    transport = SimpleNamespace(
+        decide_backpressure=MagicMock(
+            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
+        )
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
+    handler.session_status = "in_progress"
+    handler._ensure_input_allowed = AsyncMock(return_value=True)
+    handler._send_upstream = AsyncMock()
+
+    await handler._handle_client_text(
+        json.dumps(
+            {
+                "type": "audio_chunk",
+                "data": {"audio": "base64-audio"},
+            }
+        )
+    )
+
+    transport.decide_backpressure.assert_called_once()
+    assert transport.decide_backpressure.call_args.kwargs["pending_bytes"] == 0
+    handler._send_upstream.assert_awaited_once_with(
+        {"type": "input_audio_buffer.append", "audio": "base64-audio"}
+    )
+    assert handler._audio_flow.get_input_buffer() == ["base64-audio"]
+    assert handler._has_uncommitted_audio is True
 
 
 @pytest.mark.asyncio
@@ -764,9 +981,7 @@ async def test_prepare_grounding_context_blocks_any_bound_kb_query_when_kb_not_r
 
 
 @pytest.mark.asyncio
-async def test_prepare_grounding_context_sets_blocked_response_when_kb_lock_blocks(
-    monkeypatch,
-):
+async def test_prepare_grounding_context_sets_blocked_response_when_kb_lock_blocks():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
         "knowledge_base_ids": ["kb-1"],
@@ -776,10 +991,8 @@ async def test_prepare_grounding_context_sets_blocked_response_when_kb_lock_bloc
         },
     }
     handler._record_kb_lock_decision = AsyncMock()
-    monkeypatch.setattr(
-        stepfun_module,
-        "evaluate_kb_lock_decision",
-        AsyncMock(
+    pipeline = SimpleNamespace(
+        evaluate=AsyncMock(
             return_value=SimpleNamespace(
                 allow_generation=False,
                 status="blocked_empty",
@@ -790,15 +1003,62 @@ async def test_prepare_grounding_context_sets_blocked_response_when_kb_lock_bloc
             )
         ),
     )
+    cast(Any, handler)._grounding_pipeline = pipeline
 
     await handler._prepare_grounding_context("介绍产品价格")
 
     assert handler._pending_blocked_response_text == "知识库未命中，请补充关键词"
     assert handler._pending_grounding_context == ""
     assert handler._record_kb_lock_decision.await_count == 1
-    decision_kwargs = handler._record_kb_lock_decision.await_args.kwargs
+    record_args = handler._record_kb_lock_decision.await_args
+    assert record_args is not None
+    decision_kwargs = record_args.kwargs
     assert decision_kwargs["status"] == "blocked_empty"
     assert decision_kwargs["blocked"] is True
+
+
+@pytest.mark.asyncio
+async def test_prepare_grounding_context_delegates_kb_lock_to_grounding_pipeline():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "require_kb_grounding": True,
+            "enable_internal_retrieval": True,
+        },
+    }
+    handler._record_kb_lock_decision = AsyncMock()
+    pipeline = SimpleNamespace(
+        evaluate=AsyncMock(
+            return_value=SimpleNamespace(
+                allow_generation=True,
+                status="pass",
+                grounding_context="管线返回的 grounding",
+                user_message="",
+                result_count=1,
+                retrieval_mode="hybrid",
+                error_detail="",
+                decision_id="decision-from-pipeline",
+                duration_ms=12.3,
+                phase_breakdown={"phase_total_ms": 12.3},
+            )
+        )
+    )
+    cast(Any, handler)._grounding_pipeline = pipeline
+
+    await handler._prepare_grounding_context("介绍产品价格")
+
+    pipeline.evaluate.assert_awaited_once()
+    assert pipeline.evaluate.await_args.kwargs["query"] == "介绍产品价格"
+    context = pipeline.evaluate.await_args.kwargs["context"]
+    assert context.effective_policy is handler._effective_policy
+    assert context.record_metric == handler._record_knowledge_runtime_metric
+    assert handler._pending_grounding_context == "管线返回的 grounding"
+    record_args = handler._record_kb_lock_decision.await_args
+    assert record_args is not None
+    decision_kwargs = record_args.kwargs
+    assert decision_kwargs["status"] == "pass"
+    assert decision_kwargs["blocked"] is False
 
 
 @pytest.mark.asyncio
@@ -995,6 +1255,28 @@ async def test_create_response_uses_local_blocked_message_without_upstream_call(
     assert payload["type"] == "tts_audio"
     assert payload["data"]["text"] == "当前会话必须先命中知识库，暂不生成回答。"
     assert payload["data"]["playback_rate"] == 1.25
+
+
+@pytest.mark.asyncio
+async def test_create_and_flush_response_updates_turn_coordinator_speaking_state():
+    handler = StepFunRealtimeHandler()
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._send_upstream = AsyncMock()
+    handler._persist_message = AsyncMock()
+
+    created = await handler._create_response(count_turn=True)
+
+    assert created is True
+    assert handler._turn_coordinator.is_speaking() is True
+
+    flushed = await handler._flush_active_response({"response": {"output": []}})
+
+    assert flushed is True
+    assert handler._turn_coordinator.is_speaking() is False
+    handler._send_status.assert_has_awaits([call("thinking"), call("listening")])
 
 
 @pytest.mark.asyncio
@@ -1360,6 +1642,15 @@ async def test_pending_response_timeout_fallback_skips_stale_generation(monkeypa
     async def _fake_sleep(_seconds: float) -> None:
         return None
 
+    async def _stop_after_first_ping(_upstream_ws: object) -> None:
+        handler.running = False
+        await handler._stepfun_transport.check_health(
+            _upstream_ws,
+            timeout_seconds=handler._upstream_keepalive_pong_timeout_seconds,
+        )
+
+    handler._send_upstream_keepalive_ping = _stop_after_first_ping  # type: ignore[method-assign]
+
     monkeypatch.setattr(stepfun_module.asyncio, "sleep", _fake_sleep)
 
     await handler._pending_response_timeout_fallback(expected_generation=3)
@@ -1402,12 +1693,13 @@ async def test_upstream_keepalive_loop_sends_ping_when_upstream_connection_is_id
 async def test_upstream_keepalive_loop_skips_ping_when_recent_activity_exists(
     monkeypatch,
 ):
-    handler = StepFunRealtimeHandler()
+    transport = SimpleNamespace(check_health=AsyncMock())
+    handler = StepFunRealtimeHandler(stepfun_transport=transport)
     handler.running = True
     handler._upstream_keepalive_interval_seconds = 5.0
     handler._upstream_last_activity_at = asyncio.get_running_loop().time()
 
-    upstream_ws = SimpleNamespace(ping=AsyncMock())
+    upstream_ws = object()
     handler.upstream_ws = upstream_ws
 
     async def _fake_sleep(_seconds: float) -> None:
@@ -1417,7 +1709,72 @@ async def test_upstream_keepalive_loop_skips_ping_when_recent_activity_exists(
 
     await handler._run_upstream_keepalive_loop(upstream_ws)
 
-    upstream_ws.ping.assert_not_awaited()
+    transport.check_health.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_upstream_keepalive_loop_delegates_health_check_and_stops_when_unhealthy(
+    monkeypatch,
+):
+    upstream_ws = object()
+    transport = SimpleNamespace(
+        check_health=AsyncMock(
+            return_value=StepFunHealthResult(
+                status=StepFunHealthStatus.UNHEALTHY,
+                error_type="TimeoutError",
+            )
+        )
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=transport)
+    handler.running = True
+    handler.session_id = "session-health"
+    handler.upstream_ws = upstream_ws
+    handler._upstream_keepalive_interval_seconds = 5.0
+    handler._upstream_keepalive_pong_timeout_seconds = 1.25
+    handler._upstream_connected_at = 0.0
+    handler._upstream_last_activity_at = 0.0
+
+    async def _fake_sleep(_seconds: float) -> None:
+        return None
+
+    async def _stop_after_first_ping(_upstream_ws: object) -> None:
+        handler.running = False
+        await handler._stepfun_transport.check_health(
+            _upstream_ws,
+            timeout_seconds=handler._upstream_keepalive_pong_timeout_seconds,
+        )
+
+    handler._send_upstream_keepalive_ping = _stop_after_first_ping  # type: ignore[method-assign]
+
+    monkeypatch.setattr(stepfun_module.asyncio, "sleep", _fake_sleep)
+
+    await handler._run_upstream_keepalive_loop(upstream_ws)
+
+    transport.check_health.assert_awaited_once_with(
+        upstream_ws,
+        timeout_seconds=1.25,
+    )
+    assert handler._upstream_last_activity_at == 0.0
+
+
+@pytest.mark.asyncio
+async def test_send_upstream_keepalive_ping_delegates_to_transport_health_check():
+    upstream_ws = object()
+    transport = SimpleNamespace(
+        check_health=AsyncMock(
+            return_value=StepFunHealthResult(status=StepFunHealthStatus.HEALTHY)
+        )
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=transport)
+    handler._upstream_keepalive_pong_timeout_seconds = 1.25
+
+    await handler._send_upstream_keepalive_ping(upstream_ws)
+
+    transport.check_health.assert_awaited_once_with(
+        upstream_ws,
+        timeout_seconds=1.25,
+    )
+    assert handler._upstream_last_activity_at > 0
 
 
 @pytest.mark.asyncio
@@ -2594,7 +2951,8 @@ async def test_prepare_grounding_context_blocks_any_bound_kb_query_when_coach_mo
         raise TimeoutError
 
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(stepfun_module, "evaluate_kb_lock_decision", _never_returns)
+        pipeline = SimpleNamespace(evaluate=_never_returns)
+        cast(Any, handler)._grounding_pipeline = pipeline
         mp.setattr(stepfun_module.asyncio, "wait_for", fake_wait_for)
         mp.setattr(handler, "_record_kb_lock_decision", AsyncMock())
         await handler._prepare_grounding_context(

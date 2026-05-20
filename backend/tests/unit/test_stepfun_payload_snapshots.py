@@ -62,6 +62,7 @@ if "chromadb" not in sys.modules:
 
 import sales_bot.websocket.stepfun_realtime_handler as stepfun_handler_module
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
+from training_runtime.stepfun_transport import StepFunTransport
 
 
 class CaptureManager:
@@ -194,7 +195,7 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
         AsyncMock(return_value=False),
     )
     monkeypatch.setattr(
-        stepfun_handler_module.websockets,
+        StepFunTransport,
         "connect",
         AsyncMock(return_value=object()),
         raising=False,

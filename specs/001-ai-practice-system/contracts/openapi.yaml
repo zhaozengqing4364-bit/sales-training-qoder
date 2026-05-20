@@ -2028,6 +2028,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feature-flags:
+    get:
+      tags:
+      - feature-flags
+      - feature-flags
+      summary: Get Feature Flags
+      operationId: get_feature_flags_api_v1_feature_flags_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  additionalProperties:
+                    type: boolean
+                  type: object
+                type: object
+                title: Response Get Feature Flags Api V1 Feature Flags Get
   /api/v1/growth/dashboard:
     get:
       tags:
@@ -2445,6 +2464,45 @@ paths:
                 additionalProperties: true
                 title: Response List Training Tasks Endpoint Api V1 Training Tasks
                   Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-tasks/batch-assign:
+    post:
+      tags:
+      - training-tasks
+      summary: Batch Assign Training Tasks Endpoint
+      operationId: batch_assign_training_tasks_endpoint_api_v1_training_tasks_batch_assign_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingTaskBatchAssignRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Batch Assign Training Tasks Endpoint Api V1 Training
+                  Tasks Batch Assign Post
         '422':
           description: Validation Error
           content:
@@ -10066,6 +10124,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/analytics/curriculum:
+    get:
+      tags:
+      - admin-curriculum-analytics
+      - admin-curriculum-analytics
+      summary: Get Curriculum Analytics Dashboard
+      operationId: get_curriculum_analytics_dashboard_api_v1_admin_analytics_curriculum_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: time_range
+        in: query
+        required: false
+        schema:
+          enum:
+          - 7d
+          - 30d
+          - 90d
+          - all_time
+          type: string
+          description: Time range filter
+          default: 30d
+          title: Time Range
+        description: Time range filter
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Curriculum Analytics Dashboard Api V1 Admin Analytics
+                  Curriculum Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/admin/governance/permissions-matrix:
     get:
       tags:
@@ -10488,6 +10594,2274 @@ paths:
                 additionalProperties: true
                 title: Response List Admin Settings Audit Api V1 Admin Settings  Surface  Audit
                   Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/learner-profiles/{user_id}:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Admin Learner Profile
+      operationId: get_admin_learner_profile_api_v1_admin_curriculum_practice_learner_profiles__user_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/templates:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: List Practice Templates
+      operationId: list_practice_templates_api_v1_admin_curriculum_practice_templates_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Create Practice Template
+      operationId: create_practice_template_api_v1_admin_curriculum_practice_templates_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PracticeTemplateCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/examiner-agents:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: List Examiner Agents
+      operationId: list_examiner_agents_api_v1_admin_curriculum_practice_examiner_agents_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(draft|published|archived)$
+          - type: 'null'
+          title: Status
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Create Examiner Agent
+      operationId: create_examiner_agent_api_v1_admin_curriculum_practice_examiner_agents_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExaminerAgentCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Examiner Agent
+      operationId: get_examiner_agent_api_v1_admin_curriculum_practice_examiner_agents__examiner_agent_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: examiner_agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Examiner Agent Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Update Examiner Agent
+      operationId: update_examiner_agent_api_v1_admin_curriculum_practice_examiner_agents__examiner_agent_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: examiner_agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Examiner Agent Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExaminerAgentUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}/publish:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Publish Examiner Agent
+      operationId: publish_examiner_agent_api_v1_admin_curriculum_practice_examiner_agents__examiner_agent_id__publish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: examiner_agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Examiner Agent Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}/archive:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Archive Examiner Agent
+      operationId: archive_examiner_agent_api_v1_admin_curriculum_practice_examiner_agents__examiner_agent_id__archive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: examiner_agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Examiner Agent Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}/simulate:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Simulate Examiner Agent
+      operationId: simulate_examiner_agent_api_v1_admin_curriculum_practice_examiner_agents__examiner_agent_id__simulate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: examiner_agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Examiner Agent Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExaminerAgentSimulationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/learner-profiles/{user_id}/override:
+    put:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Override Learner Profile
+      operationId: override_learner_profile_api_v1_admin_curriculum_practice_learner_profiles__user_id__override_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearnerAdminOverrideRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/templates/{template_id}:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Practice Template
+      operationId: get_practice_template_api_v1_admin_curriculum_practice_templates__template_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Update Practice Template
+      operationId: update_practice_template_api_v1_admin_curriculum_practice_templates__template_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PracticeTemplateUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/templates/{template_id}/archive:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Archive Practice Template
+      operationId: archive_practice_template_api_v1_admin_curriculum_practice_templates__template_id__archive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/templates/{template_id}/publish:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Publish Practice Template
+      operationId: publish_practice_template_api_v1_admin_curriculum_practice_templates__template_id__publish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/case-items:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: List Case Items
+      operationId: list_case_items_api_v1_admin_curriculum_practice_case_items_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(draft|published|archived)$
+          - type: 'null'
+          title: Status
+      - name: query
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Query
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Create Case Item
+      operationId: create_case_item_api_v1_admin_curriculum_practice_case_items_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseItemCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/case-items/{case_item_id}:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Case Item
+      operationId: get_case_item_api_v1_admin_curriculum_practice_case_items__case_item_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: case_item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Item Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Update Case Item
+      operationId: update_case_item_api_v1_admin_curriculum_practice_case_items__case_item_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: case_item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Item Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseItemCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/case-items/{case_item_id}/publish:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Publish Case Item
+      operationId: publish_case_item_api_v1_admin_curriculum_practice_case_items__case_item_id__publish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: case_item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Item Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/case-items/{case_item_id}/archive:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Archive Case Item
+      operationId: archive_case_item_api_v1_admin_curriculum_practice_case_items__case_item_id__archive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: case_item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Item Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/role-profiles:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: List Role Profiles
+      operationId: list_role_profiles_api_v1_admin_curriculum_practice_role_profiles_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(draft|published|archived)$
+          - type: 'null'
+          title: Status
+      - name: query
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Query
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Create Role Profile
+      operationId: create_role_profile_api_v1_admin_curriculum_practice_role_profiles_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleProfileCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/role-profiles/{role_profile_id}:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Role Profile
+      operationId: get_role_profile_api_v1_admin_curriculum_practice_role_profiles__role_profile_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: role_profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Role Profile Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Update Role Profile
+      operationId: update_role_profile_api_v1_admin_curriculum_practice_role_profiles__role_profile_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: role_profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Role Profile Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleProfileCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/role-profiles/{role_profile_id}/publish:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Publish Role Profile
+      operationId: publish_role_profile_api_v1_admin_curriculum_practice_role_profiles__role_profile_id__publish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: role_profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Role Profile Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/role-profiles/{role_profile_id}/voice-clone:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Clone Role Profile Voice
+      operationId: clone_role_profile_voice_api_v1_admin_curriculum_practice_role_profiles__role_profile_id__voice_clone_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: role_profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Role Profile Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleProfileVoiceCloneRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/role-profiles/{role_profile_id}/archive:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Archive Role Profile
+      operationId: archive_role_profile_api_v1_admin_curriculum_practice_role_profiles__role_profile_id__archive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: role_profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Role Profile Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/learning-contents:
+    get:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: List Learning Contents
+      operationId: list_learning_contents_api_v1_curriculum_learning_contents_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(draft|published|archived)$
+          - type: 'null'
+          title: Status
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Create Learning Content
+      operationId: create_learning_content_api_v1_curriculum_learning_contents_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningContentCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/learning-contents/{content_id}:
+    get:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Get Learning Content
+      operationId: get_learning_content_api_v1_curriculum_learning_contents__content_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Update Learning Content
+      operationId: update_learning_content_api_v1_curriculum_learning_contents__content_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningContentUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Delete Learning Content
+      operationId: delete_learning_content_api_v1_curriculum_learning_contents__content_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/learning-contents/{content_id}/chapters:
+    post:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Add Learning Chapter
+      operationId: add_learning_chapter_api_v1_curriculum_learning_contents__content_id__chapters_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningChapterCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/learning-contents/{content_id}/chapters/reorder:
+    put:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Reorder Learning Chapters
+      operationId: reorder_learning_chapters_api_v1_curriculum_learning_contents__content_id__chapters_reorder_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningChapterReorderRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/learning-contents/{content_id}/chapters/{chapter_id}:
+    put:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Update Learning Chapter
+      operationId: update_learning_chapter_api_v1_curriculum_learning_contents__content_id__chapters__chapter_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: chapter_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Chapter Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningChapterUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Delete Learning Chapter
+      operationId: delete_learning_chapter_api_v1_curriculum_learning_contents__content_id__chapters__chapter_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: chapter_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Chapter Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/learning-contents/{content_id}/publish:
+    post:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Publish Learning Content
+      operationId: publish_learning_content_api_v1_curriculum_learning_contents__content_id__publish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/learning-contents/{content_id}/archive:
+    post:
+      tags:
+      - admin-learning-contents
+      - admin-learning-contents
+      summary: Archive Learning Content
+      operationId: archive_learning_content_api_v1_curriculum_learning_contents__content_id__archive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/categories:
+    get:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: List Question Categories
+      operationId: list_question_categories_api_v1_curriculum_test_bank_categories_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Create Question Category
+      operationId: create_question_category_api_v1_curriculum_test_bank_categories_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionCategoryCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/generation/preview:
+    post:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Preview Question Generation
+      operationId: preview_question_generation_api_v1_curriculum_test_bank_generation_preview_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionGenerationPreviewRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/generation/confirm:
+    post:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Confirm Question Generation
+      operationId: confirm_question_generation_api_v1_curriculum_test_bank_generation_confirm_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionGenerationConfirmRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/imports:
+    post:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Create Test Bank Import
+      operationId: create_test_bank_import_api_v1_curriculum_test_bank_imports_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_create_test_bank_import_api_v1_curriculum_test_bank_imports_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/imports/{task_id}:
+    get:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Get Test Bank Import
+      operationId: get_test_bank_import_api_v1_curriculum_test_bank_imports__task_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/categories/{category_id}:
+    put:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Update Question Category
+      operationId: update_question_category_api_v1_curriculum_test_bank_categories__category_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Category Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionCategoryUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Delete Question Category
+      operationId: delete_question_category_api_v1_curriculum_test_bank_categories__category_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Category Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/questions:
+    get:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: List Questions
+      operationId: list_questions_api_v1_curriculum_test_bank_questions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category Id
+      - name: difficulty
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(easy|medium|hard)$
+          - type: 'null'
+          title: Difficulty
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(draft|published|archived)$
+          - type: 'null'
+          title: Status
+      - name: tag
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tag
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Create Question
+      operationId: create_question_api_v1_curriculum_test_bank_questions_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionItemCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/questions/{question_id}:
+    get:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Get Question
+      operationId: get_question_api_v1_curriculum_test_bank_questions__question_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Question Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Update Question
+      operationId: update_question_api_v1_curriculum_test_bank_questions__question_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Question Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionItemUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/questions/{question_id}/publish:
+    post:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Publish Question
+      operationId: publish_question_api_v1_curriculum_test_bank_questions__question_id__publish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Question Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum/test-bank/questions/{question_id}/archive:
+    post:
+      tags:
+      - admin-test-bank
+      - admin-test-bank
+      summary: Archive Question
+      operationId: archive_question_api_v1_curriculum_test_bank_questions__question_id__archive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Question Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum-practice/learning-path/me:
+    get:
+      tags:
+      - curriculum-practice-learning-path
+      - curriculum-practice-learning-path
+      summary: Get My Learning Path
+      operationId: get_my_learning_path_api_v1_curriculum_practice_learning_path_me_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum-practice/learning-path/me/next-task:
+    get:
+      tags:
+      - curriculum-practice-learning-path
+      - curriculum-practice-learning-path
+      summary: Get My Learning Path Next Task
+      operationId: get_my_learning_path_next_task_api_v1_curriculum_practice_learning_path_me_next_task_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum-practice/learning-path/me/profile:
+    get:
+      tags:
+      - curriculum-practice-learning-path
+      - curriculum-practice-learning-path
+      summary: Get My Learner Profile
+      operationId: get_my_learner_profile_api_v1_curriculum_practice_learning_path_me_profile_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum-practice/learning-path/me/profile/self-assessment:
+    post:
+      tags:
+      - curriculum-practice-learning-path
+      - curriculum-practice-learning-path
+      summary: Self Assess Learner Profile
+      operationId: self_assess_learner_profile_api_v1_curriculum_practice_learning_path_me_profile_self_assessment_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearnerSelfAssessmentRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum-practice/study/learning-contents/{content_id}:
+    get:
+      tags:
+      - curriculum-practice-study
+      - curriculum-practice-study
+      summary: Get My Study Content
+      operationId: get_my_study_content_api_v1_curriculum_practice_study_learning_contents__content_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum-practice/study/learning-contents/{content_id}/chapters/{chapter_id}/complete:
+    post:
+      tags:
+      - curriculum-practice-study
+      - curriculum-practice-study
+      summary: Complete My Study Chapter
+      operationId: complete_my_study_chapter_api_v1_curriculum_practice_study_learning_contents__content_id__chapters__chapter_id__complete_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: chapter_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Chapter Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum-practice/study/learning-contents/{content_id}/start-exam:
+    post:
+      tags:
+      - curriculum-practice-study
+      - curriculum-practice-study
+      summary: Start My Study Exam
+      operationId: start_my_study_exam_api_v1_curriculum_practice_study_learning_contents__content_id__start_exam_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -15621,6 +17995,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/supervisor/certification-review-queue:
+    get:
+      tags:
+      - supervisor
+      summary: List Certification Review Queue
+      description: List high-stakes certification/onboarding sessions awaiting review.
+      operationId: list_certification_review_queue_api_v1_supervisor_certification_review_queue_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response List Certification Review Queue Api V1 Supervisor
+                  Certification Review Queue Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/supervisor/team/insights:
     get:
       tags:
@@ -16571,6 +18986,16 @@ components:
       type: object
       title: BehaviorConfigSchema
       description: Persona behavior configuration - R3.8
+    Body_create_test_bank_import_api_v1_curriculum_test_bank_imports_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_create_test_bank_import_api_v1_curriculum_test_bank_imports_post
     Body_replace_presentation_api_v1_presentations__presentation_id__replace_post:
       properties:
         file:
@@ -16718,6 +19143,68 @@ components:
       additionalProperties: false
       type: object
       title: BusinessRuleValueRequest
+    CaseItemCreate:
+      properties:
+        industry:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Industry
+        company_profile:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Company Profile
+        customer_role:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Customer Role
+        pain_points:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Pain Points
+        objections:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Objections
+        hidden_information:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Hidden Information
+        success_criteria:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Success Criteria
+        allowed_disclosure_policy:
+          additionalProperties: true
+          type: object
+          title: Allowed Disclosure Policy
+        content_hash:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Content Hash
+      additionalProperties: false
+      type: object
+      required:
+      - industry
+      - company_profile
+      - customer_role
+      - pain_points
+      - objections
+      - hidden_information
+      - success_criteria
+      - allowed_disclosure_policy
+      - content_hash
+      title: CaseItemCreate
     ChunkingPresetCreateRequest:
       properties:
         profile_key:
@@ -17785,6 +20272,176 @@ components:
           description: Only accepted on write, never returned in responses
       type: object
       title: CrossEncoderSettings
+    CurriculumCompletionPolicy:
+      properties:
+        min_score:
+          type: number
+          maximum: 10.0
+          minimum: 0.0
+          title: Min Score
+        min_rounds:
+          type: integer
+          minimum: 0.0
+          title: Min Rounds
+        max_duration_seconds:
+          type: integer
+          maximum: 1500.0
+          minimum: 1.0
+          title: Max Duration Seconds
+      additionalProperties: false
+      type: object
+      required:
+      - min_score
+      - min_rounds
+      - max_duration_seconds
+      title: CurriculumCompletionPolicy
+    CurriculumPlanSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        max_stage_duration_seconds:
+          anyOf:
+          - type: integer
+            maximum: 1500.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Stage Duration Seconds
+        stages:
+          items:
+            $ref: '#/components/schemas/CurriculumPlanStage'
+          type: array
+          minItems: 1
+          title: Stages
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - stages
+      title: CurriculumPlanSchema
+    CurriculumPlanStage:
+      properties:
+        template_stage_key:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Template Stage Key
+        stage_type:
+          type: string
+          enum:
+          - study
+          - exam
+          - practice
+          - report
+          title: Stage Type
+          default: practice
+        order:
+          type: integer
+          minimum: 1.0
+          title: Order
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        template_ref:
+          $ref: '#/components/schemas/CurriculumVersionRef'
+        completion_policy:
+          $ref: '#/components/schemas/CurriculumCompletionPolicy'
+        failure_policy:
+          type: string
+          enum:
+          - retry_current
+          - fallback_to_previous
+          - allow_skip
+          title: Failure Policy
+          default: retry_current
+        prerequisites:
+          items:
+            $ref: '#/components/schemas/CurriculumStagePrerequisite'
+          type: array
+          title: Prerequisites
+      additionalProperties: false
+      type: object
+      required:
+      - template_stage_key
+      - order
+      - name
+      - template_ref
+      - completion_policy
+      title: CurriculumPlanStage
+    CurriculumStagePrerequisite:
+      properties:
+        template_stage_key:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Template Stage Key
+        required_result:
+          type: string
+          const: completed
+          title: Required Result
+          default: completed
+      additionalProperties: false
+      type: object
+      required:
+      - template_stage_key
+      title: CurriculumStagePrerequisite
+    CurriculumVersionRef:
+      properties:
+        asset_type:
+          type: string
+          enum:
+          - practice_template
+          - curriculum
+          - lesson
+          - knowledge_point
+          - question_bank
+          - question_item
+          - case_item
+          - role_profile
+          - rubric_set
+          - scoring_ruleset
+          - knowledge_base
+          - prompt_contract
+          - model_config
+          - learning_content
+          - examiner_agent
+          title: Asset Type
+        asset_id:
+          type: string
+          title: Asset Id
+        version:
+          anyOf:
+          - type: integer
+          - type: string
+          title: Version
+        hash:
+          type: string
+          title: Hash
+        snapshot_label:
+          type: string
+          enum:
+          - published
+          - superseded
+          - legacy_unversioned
+          title: Snapshot Label
+      type: object
+      required:
+      - asset_type
+      - asset_id
+      - version
+      - hash
+      - snapshot_label
+      title: CurriculumVersionRef
     DebugTriggerRequest:
       properties:
         query:
@@ -17874,6 +20531,176 @@ components:
           title: Enabled
       type: object
       title: EntityAliasUpdateRequest
+    ExaminerAgentCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        question_source_ids:
+          items:
+            type: string
+          type: array
+          title: Question Source Ids
+        learner_level_strategy:
+          $ref: '#/components/schemas/ExaminerLearnerLevelStrategy'
+        scoring_policy_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Scoring Policy Id
+        timeout_config:
+          $ref: '#/components/schemas/ExaminerTimeoutConfig'
+        safety_config:
+          additionalProperties: true
+          type: object
+          title: Safety Config
+        prompt_config:
+          additionalProperties: true
+          type: object
+          title: Prompt Config
+        simulation_config:
+          additionalProperties: true
+          type: object
+          title: Simulation Config
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - scoring_policy_id
+      - timeout_config
+      title: ExaminerAgentCreate
+    ExaminerAgentSimulationRequest:
+      properties:
+        learner_level:
+          anyOf:
+          - type: string
+            enum:
+            - conservative
+            - beginner
+            - intermediate
+            - advanced
+          - type: 'null'
+          title: Learner Level
+        sample_answer:
+          type: string
+          maxLength: 8000
+          minLength: 1
+          title: Sample Answer
+        question_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Question Id
+      additionalProperties: false
+      type: object
+      required:
+      - sample_answer
+      title: ExaminerAgentSimulationRequest
+    ExaminerAgentUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Name
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        question_source_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Question Source Ids
+        learner_level_strategy:
+          anyOf:
+          - $ref: '#/components/schemas/ExaminerLearnerLevelStrategy'
+          - type: 'null'
+        scoring_policy_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Scoring Policy Id
+        timeout_config:
+          anyOf:
+          - $ref: '#/components/schemas/ExaminerTimeoutConfig'
+          - type: 'null'
+        safety_config:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Safety Config
+        prompt_config:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Prompt Config
+        simulation_config:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Simulation Config
+      additionalProperties: false
+      type: object
+      title: ExaminerAgentUpdate
+    ExaminerLearnerLevelStrategy:
+      properties:
+        default_level:
+          type: string
+          enum:
+          - conservative
+          - beginner
+          - intermediate
+          - advanced
+          title: Default Level
+          default: conservative
+        allowed_levels:
+          items:
+            type: string
+            enum:
+            - conservative
+            - beginner
+            - intermediate
+            - advanced
+          type: array
+          minItems: 1
+          title: Allowed Levels
+      additionalProperties: false
+      type: object
+      title: ExaminerLearnerLevelStrategy
+    ExaminerTimeoutConfig:
+      properties:
+        max_seconds:
+          type: integer
+          maximum: 1500.0
+          minimum: 1.0
+          title: Max Seconds
+      additionalProperties: true
+      type: object
+      required:
+      - max_seconds
+      title: ExaminerTimeoutConfig
     ForgotPasswordRequest:
       properties:
         email:
@@ -18678,6 +21505,169 @@ components:
       - query
       title: KnowledgeSearchRequest
       description: Request schema for knowledge search (internal API)
+    LearnerAdminOverrideRequest:
+      properties:
+        level:
+          type: string
+          enum:
+          - conservative
+          - beginner
+          - intermediate
+          - advanced
+          title: Level
+      additionalProperties: false
+      type: object
+      required:
+      - level
+      title: LearnerAdminOverrideRequest
+    LearnerSelfAssessmentRequest:
+      properties:
+        level:
+          type: string
+          enum:
+          - conservative
+          - beginner
+          - intermediate
+          - advanced
+          title: Level
+      additionalProperties: false
+      type: object
+      required:
+      - level
+      title: LearnerSelfAssessmentRequest
+    LearningChapterCreate:
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        content:
+          type: string
+          minLength: 1
+          title: Content
+        order_index:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Order Index
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      - content
+      title: LearningChapterCreate
+    LearningChapterReorderRequest:
+      properties:
+        chapter_ids:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Chapter Ids
+      additionalProperties: false
+      type: object
+      required:
+      - chapter_ids
+      title: LearningChapterReorderRequest
+    LearningChapterUpdate:
+      properties:
+        title:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Title
+        content:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Content
+        order_index:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Order Index
+      additionalProperties: false
+      type: object
+      title: LearningChapterUpdate
+    LearningContentCreate:
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        summary:
+          anyOf:
+          - type: string
+            maxLength: 4000
+          - type: 'null'
+          title: Summary
+        owner:
+          anyOf:
+          - type: string
+            maxLength: 120
+            minLength: 1
+          - type: 'null'
+          title: Owner
+        source:
+          anyOf:
+          - type: string
+            maxLength: 300
+            minLength: 1
+          - type: 'null'
+          title: Source
+        safety_flagged:
+          type: boolean
+          title: Safety Flagged
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      title: LearningContentCreate
+    LearningContentUpdate:
+      properties:
+        title:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Title
+        summary:
+          anyOf:
+          - type: string
+            maxLength: 4000
+          - type: 'null'
+          title: Summary
+        owner:
+          anyOf:
+          - type: string
+            maxLength: 120
+            minLength: 1
+          - type: 'null'
+          title: Owner
+        source:
+          anyOf:
+          - type: string
+            maxLength: 300
+            minLength: 1
+          - type: 'null'
+          title: Source
+        safety_flagged:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Safety Flagged
+      additionalProperties: false
+      type: object
+      title: LearningContentUpdate
     LinkedAssetChangeReference:
       properties:
         asset_type:
@@ -19191,6 +22181,267 @@ components:
       additionalProperties: false
       type: object
       title: PolicyUpsertPayload
+    PracticeTemplateCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        scenario_type:
+          type: string
+          enum:
+          - sales
+          - presentation
+          title: Scenario Type
+        mode:
+          type: string
+          enum:
+          - learning
+          - expert_qa
+          - examiner
+          - customer_roleplay
+          - mixed_path
+          title: Mode
+        agent_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Agent Id
+        persona_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Persona Id
+        runtime_profile_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Runtime Profile Id
+        voice_mode:
+          type: string
+          enum:
+          - legacy
+          - stepfun_realtime
+          title: Voice Mode
+          default: stepfun_realtime
+        scoring_ruleset_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Scoring Ruleset Id
+        knowledge_base_refs:
+          items:
+            type: string
+          type: array
+          title: Knowledge Base Refs
+        case_item_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Case Item Id
+        role_profile_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Role Profile Id
+        learning_content_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Learning Content Id
+        examiner_agent_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Examiner Agent Id
+        target_learner_level:
+          anyOf:
+          - type: string
+            enum:
+            - conservative
+            - beginner
+            - intermediate
+            - advanced
+          - type: 'null'
+          title: Target Learner Level
+        timeout_config:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Timeout Config
+        curriculum_plan:
+          anyOf:
+          - $ref: '#/components/schemas/CurriculumPlanSchema'
+          - type: 'null'
+        max_stage_duration_seconds:
+          anyOf:
+          - type: integer
+            maximum: 1500.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Stage Duration Seconds
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - scenario_type
+      - mode
+      - agent_id
+      - persona_id
+      - runtime_profile_id
+      - scoring_ruleset_id
+      title: PracticeTemplateCreate
+    PracticeTemplateUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Name
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        scenario_type:
+          anyOf:
+          - type: string
+            enum:
+            - presentation
+            - sales
+          - type: 'null'
+          title: Scenario Type
+        mode:
+          anyOf:
+          - type: string
+            enum:
+            - learning
+            - expert_qa
+            - examiner
+            - customer_roleplay
+            - mixed_path
+          - type: 'null'
+          title: Mode
+        agent_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Agent Id
+        persona_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Persona Id
+        runtime_profile_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Runtime Profile Id
+        voice_mode:
+          anyOf:
+          - type: string
+            enum:
+            - legacy
+            - stepfun_realtime
+          - type: 'null'
+          title: Voice Mode
+        scoring_ruleset_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Scoring Ruleset Id
+        knowledge_base_refs:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Knowledge Base Refs
+        case_item_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Case Item Id
+        role_profile_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Role Profile Id
+        learning_content_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Learning Content Id
+        examiner_agent_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Examiner Agent Id
+        target_learner_level:
+          anyOf:
+          - type: string
+            enum:
+            - conservative
+            - beginner
+            - intermediate
+            - advanced
+          - type: 'null'
+          title: Target Learner Level
+        timeout_config:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Timeout Config
+        curriculum_plan:
+          anyOf:
+          - $ref: '#/components/schemas/CurriculumPlanSchema'
+          - type: 'null'
+        max_stage_duration_seconds:
+          anyOf:
+          - type: integer
+            maximum: 1500.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Stage Duration Seconds
+      additionalProperties: false
+      type: object
+      title: PracticeTemplateUpdate
     PresentationCreate:
       properties:
         title:
@@ -19878,6 +23129,299 @@ components:
           title: Enabled
       type: object
       title: QueryProfileUpdateRequest
+    QuestionCategoryCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Name
+        parent_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Parent Id
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        order_index:
+          type: integer
+          minimum: 1.0
+          title: Order Index
+          default: 1
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      title: QuestionCategoryCreate
+    QuestionCategoryUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 160
+            minLength: 1
+          - type: 'null'
+          title: Name
+        parent_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Parent Id
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        order_index:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Order Index
+      additionalProperties: false
+      type: object
+      title: QuestionCategoryUpdate
+    QuestionGenerationConfirmRequest:
+      properties:
+        category_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Category Id
+        drafts:
+          items:
+            $ref: '#/components/schemas/QuestionGenerationDraft'
+          type: array
+          maxItems: 5
+          minItems: 1
+          title: Drafts
+      additionalProperties: false
+      type: object
+      required:
+      - category_id
+      - drafts
+      title: QuestionGenerationConfirmRequest
+    QuestionGenerationDraft:
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        stem:
+          type: string
+          minLength: 1
+          title: Stem
+        reference_answer:
+          type: string
+          maxLength: 8000
+          minLength: 1
+          title: Reference Answer
+        scoring_criteria:
+          additionalProperties: true
+          type: object
+          title: Scoring Criteria
+        scoring_dimensions:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Scoring Dimensions
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        difficulty:
+          type: string
+          enum:
+          - easy
+          - medium
+          - hard
+          title: Difficulty
+          default: medium
+        source_learning_content_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Source Learning Content Id
+        source_chapter_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Source Chapter Id
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      - stem
+      - reference_answer
+      - scoring_criteria
+      - scoring_dimensions
+      - source_learning_content_id
+      - source_chapter_id
+      title: QuestionGenerationDraft
+    QuestionGenerationPreviewRequest:
+      properties:
+        learning_content_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Learning Content Id
+        chapter_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Chapter Id
+      additionalProperties: false
+      type: object
+      required:
+      - learning_content_id
+      - chapter_id
+      title: QuestionGenerationPreviewRequest
+    QuestionItemCreate:
+      properties:
+        category_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Category Id
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        stem:
+          type: string
+          minLength: 1
+          title: Stem
+        reference_answer:
+          anyOf:
+          - type: string
+            maxLength: 8000
+          - type: 'null'
+          title: Reference Answer
+        scoring_criteria:
+          additionalProperties: true
+          type: object
+          title: Scoring Criteria
+        scoring_dimensions:
+          items:
+            type: string
+          type: array
+          title: Scoring Dimensions
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        difficulty:
+          type: string
+          enum:
+          - easy
+          - medium
+          - hard
+          title: Difficulty
+          default: medium
+        safety_flagged:
+          type: boolean
+          title: Safety Flagged
+          default: false
+        department:
+          anyOf:
+          - type: string
+            maxLength: 120
+            minLength: 1
+          - type: 'null'
+          title: Department
+      additionalProperties: false
+      type: object
+      required:
+      - category_id
+      - title
+      - stem
+      title: QuestionItemCreate
+    QuestionItemUpdate:
+      properties:
+        category_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Category Id
+        title:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Title
+        stem:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Stem
+        reference_answer:
+          anyOf:
+          - type: string
+            maxLength: 8000
+          - type: 'null'
+          title: Reference Answer
+        scoring_criteria:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Scoring Criteria
+        scoring_dimensions:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Scoring Dimensions
+        tags:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Tags
+        difficulty:
+          anyOf:
+          - type: string
+            enum:
+            - easy
+            - medium
+            - hard
+          - type: 'null'
+          title: Difficulty
+        safety_flagged:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Safety Flagged
+        department:
+          anyOf:
+          - type: string
+            maxLength: 120
+            minLength: 1
+          - type: 'null'
+          title: Department
+      additionalProperties: false
+      type: object
+      title: QuestionItemUpdate
     RankingProfileCreateRequest:
       properties:
         profile_key:
@@ -20482,6 +24026,99 @@ components:
       - skill_dimension
       - title
       title: RetrainingTaskCreate
+    RoleProfileCreate:
+      properties:
+        role_type:
+          type: string
+          const: customer
+          title: Role Type
+        role_name:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Role Name
+        persona_ref:
+          anyOf:
+          - type: string
+            maxLength: 36
+            minLength: 1
+          - type: 'null'
+          title: Persona Ref
+        communication_style:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Communication Style
+        pressure_level:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          title: Pressure Level
+        knowledge_boundary:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Knowledge Boundary
+        behavior_rules:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Behavior Rules
+        voice_style_hint:
+          type: string
+          maxLength: 300
+          minLength: 1
+          title: Voice Style Hint
+        content_hash:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Content Hash
+      additionalProperties: false
+      type: object
+      required:
+      - role_type
+      - role_name
+      - communication_style
+      - pressure_level
+      - knowledge_boundary
+      - behavior_rules
+      - voice_style_hint
+      - content_hash
+      title: RoleProfileCreate
+    RoleProfileVoiceCloneRequest:
+      properties:
+        voice_name:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Voice Name
+        audio_base64:
+          type: string
+          minLength: 1
+          title: Audio Base64
+        content_type:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Content Type
+        voice_sample_url:
+          type: string
+          maxLength: 512
+          minLength: 1
+          title: Voice Sample Url
+      additionalProperties: false
+      type: object
+      required:
+      - voice_name
+      - audio_base64
+      - content_type
+      - voice_sample_url
+      title: RoleProfileVoiceCloneRequest
     RulesetRollupContribution:
       properties:
         rollup_id:
@@ -21182,6 +24819,13 @@ components:
           - type: 'null'
           title: Runtime Profile Id
           description: Optional runtime profile override
+        practice_template_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Practice Template Id
+          description: Optional published PracticeTemplate backing this session
         focus_intent:
           anyOf:
           - additionalProperties: true
@@ -21917,6 +25561,61 @@ components:
       - message_id
       title: TimelineMarkerSchema
       description: Timeline marker for replay visualization - R10
+    TrainingTaskBatchAssignRequest:
+      properties:
+        user_ids:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: User Ids
+        template_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Template Id
+        curriculum_plan_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Curriculum Plan Id
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        scenario_type:
+          $ref: '#/components/schemas/TrainingTaskScenarioType'
+        goal:
+          type: string
+          minLength: 1
+          title: Goal
+        focus_intent:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Focus Intent
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        completion_criteria:
+          additionalProperties: true
+          type: object
+          title: Completion Criteria
+      additionalProperties: false
+      type: object
+      required:
+      - user_ids
+      - template_id
+      - curriculum_plan_id
+      - title
+      - scenario_type
+      - goal
+      title: TrainingTaskBatchAssignRequest
     TrainingTaskCompleteRequest:
       properties:
         session_id:
@@ -21963,6 +25662,18 @@ components:
           additionalProperties: true
           type: object
           title: Completion Criteria
+        practice_template_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Practice Template Id
+        curriculum_plan_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Curriculum Plan Id
         source:
           type: string
           maxLength: 50
@@ -22085,6 +25796,18 @@ components:
             type: object
           - type: 'null'
           title: Completion Criteria
+        practice_template_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Practice Template Id
+        curriculum_plan_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Curriculum Plan Id
         source:
           anyOf:
           - type: string
