@@ -554,7 +554,7 @@ class VoiceRuntimePolicyService:
                 .where(VoiceRuntimeProfile.is_active.is_(True))
                 .order_by(VoiceRuntimeProfile.updated_at.desc())
             )
-            next_default = next_default_result.scalar_one_or_none()
+            next_default = next_default_result.scalars().first()
             if next_default:
                 _set_orm_field(next_default, "is_default", True)
                 _set_orm_field(next_default, "updated_at", datetime.now(UTC))
@@ -728,7 +728,8 @@ class VoiceRuntimePolicyService:
                 .where(VoiceRuntimeProfile.is_active.is_(True))
                 .order_by(VoiceRuntimeProfile.updated_at.desc())
             )
-            runtime_profile = runtime_profile_result.scalar_one_or_none()
+            # Tolerate legacy rows that accidentally kept is_default=true on multiple profiles.
+            runtime_profile = runtime_profile_result.scalars().first()
             if runtime_profile:
                 source["runtime_profile"] = "system_default"
 

@@ -230,6 +230,11 @@ class Settings:
         "CURRICULUM_EXAMINER_ENABLED",
         False,
     )
+    # 测试期：参与即满足前置（正式环境可设为 false）
+    LEARNING_PATH_PARTICIPATION_UNLOCK: bool = _env_bool(
+        "LEARNING_PATH_PARTICIPATION_UNLOCK",
+        True,
+    )
 
 
 settings = Settings()

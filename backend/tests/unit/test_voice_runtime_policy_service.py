@@ -655,6 +655,40 @@ async def test_resolve_effective_policy_uses_step_audio_2_default_profile(
 
 
 @pytest.mark.asyncio
+async def test_resolve_effective_policy_tolerates_multiple_default_profiles(
+    test_db: AsyncSession,
+):
+    older = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="older default",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    newer = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="newer default",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2-mini",
+        voice_name="qingchunshaonv",
+        temperature=0.5,
+    )
+    test_db.add_all([older, newer])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy()
+
+    assert effective["source"]["runtime_profile"] == "system_default"
+    assert effective["runtime_profile_id"] in {older.id, newer.id}
+
+
+@pytest.mark.asyncio
 async def test_resolve_effective_policy_defaults_strict_audit_when_persona_requires_kb_without_mode(
     test_db: AsyncSession,
 ):

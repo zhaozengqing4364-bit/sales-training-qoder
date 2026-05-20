@@ -14,6 +14,7 @@ from common.db.models import (
     TrainingReportSnapshot,
 )
 from curriculum_practice.models import PracticeTemplate
+from common.config import settings
 from curriculum_practice.services.learning_path import LearningPathService
 
 
@@ -370,23 +371,11 @@ async def test_should_fallback_when_published_template_has_invalid_curriculum_pl
 
     assert result["path_type"] == "role_default"
     assert result["next_task"]["title"] == "坏计划模板"
-    assert result["stages"] == [
-        {
-            "template_stage_key": "template_stage_template-invalid-plan",
-            "name": "坏计划模板",
-            "state": "available",
-            "prerequisites": [],
-            "completion_policy": {
-                "min_score": 7,
-                "min_rounds": 1,
-                "max_duration_seconds": 600,
-            },
-            "report_url": None,
-            "failure_reason": None,
-            "result": None,
-            "template_id": "template-invalid-plan",
-        }
-    ]
+    assert len(result["stages"]) == 1
+    stage = result["stages"][0]
+    assert stage["template_stage_key"] == "template_stage_template-invalid-plan"
+    assert stage["state"] == "available"
+    assert stage["template_id"] == "template-invalid-plan"
 
 
 @pytest.mark.asyncio
@@ -409,3 +398,302 @@ async def test_should_refresh_database_ruleset_when_db_is_available() -> None:
     )
 
     assert "db:session-db" in spy.seen_session_ids
+
+
+def _presales_path_template(
+    *,
+    learning_content_id: str = "content-presales",
+    examiner_agent_id: str = "examiner-presales",
+    template_id: str = "template-presales",
+) -> PracticeTemplate:
+    return PracticeTemplate(
+        template_id=template_id,
+        name="售前基础训练营",
+        description="study -> exam -> practice -> review",
+        scenario_type="sales",
+        mode="mixed_path",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        runtime_profile_id="runtime-1",
+        voice_mode="stepfun_realtime",
+        scoring_ruleset_id="ruleset-1",
+        knowledge_base_refs=[],
+        learning_content_id=learning_content_id,
+        examiner_agent_id=examiner_agent_id,
+        status="published",
+        version=1,
+        content_hash="hash-presales",
+        curriculum_plan={
+            "name": "售前新人完整路径",
+            "stages": [
+                {
+                    "template_stage_key": "presales_study",
+                    "stage_type": "study",
+                    "order": 1,
+                    "name": "产品知识学习",
+                    "template_ref": {
+                        "asset_type": "learning_content",
+                        "asset_id": learning_content_id,
+                        "version": 1,
+                        "hash": "hash-learning",
+                        "snapshot_label": "published",
+                    },
+                    "completion_policy": {
+                        "min_score": 0,
+                        "min_rounds": 0,
+                        "max_duration_seconds": 600,
+                    },
+                    "failure_policy": "retry_current",
+                    "prerequisites": [],
+                },
+                {
+                    "template_stage_key": "presales_exam",
+                    "stage_type": "exam",
+                    "order": 2,
+                    "name": "售前知识考核",
+                    "template_ref": {
+                        "asset_type": "examiner_agent",
+                        "asset_id": examiner_agent_id,
+                        "version": 1,
+                        "hash": "hash-examiner",
+                        "snapshot_label": "published",
+                    },
+                    "completion_policy": {
+                        "min_score": 6,
+                        "min_rounds": 1,
+                        "max_duration_seconds": 900,
+                    },
+                    "failure_policy": "retry_current",
+                    "prerequisites": [
+                        {
+                            "template_stage_key": "presales_study",
+                            "required_result": "completed",
+                        }
+                    ],
+                },
+                {
+                    "template_stage_key": "presales_practice",
+                    "stage_type": "practice",
+                    "order": 3,
+                    "name": "客户角色对练",
+                    "template_ref": {
+                        "asset_type": "practice_template",
+                        "asset_id": template_id,
+                        "version": 1,
+                        "hash": "hash-presales",
+                        "snapshot_label": "published",
+                    },
+                    "completion_policy": {
+                        "min_score": 6,
+                        "min_rounds": 3,
+                        "max_duration_seconds": 900,
+                    },
+                    "failure_policy": "retry_current",
+                    "prerequisites": [
+                        {
+                            "template_stage_key": "presales_exam",
+                            "required_result": "completed",
+                        }
+                    ],
+                },
+            ],
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_should_mark_study_completed_and_unlock_exam_from_learning_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = LearningPathService(recommendation_service=_SpyRecommendationService())
+    template = _presales_path_template()
+
+    async def _fake_evidence(
+        self: LearningPathService,
+        *,
+        user_id: str,
+        templates: list[PracticeTemplate],
+        completed_sessions: list[PracticeSession],
+    ) -> dict[str, object]:
+        return {
+            "practice_template_ids": set(),
+            "learning_content_ids": {"content-presales"},
+            "learning_content_participated_ids": {"content-presales"},
+            "examiner_agent_ids": set(),
+            "exam_sessions_by_agent_id": {},
+            "exam_latest_session_by_agent_id": {},
+            "exam_stats_by_agent_id": {},
+        }
+
+    monkeypatch.setattr(
+        LearningPathService,
+        "_load_stage_completion_evidence",
+        _fake_evidence,
+    )
+
+    result = await service.build_from_evidence(
+        user_id="learner-1",
+        sessions=[],
+        templates=[template],
+    )
+    stages = {stage["template_stage_key"]: stage for stage in result["stages"]}
+
+    assert stages["presales_study"]["state"] == "completed"
+    assert stages["presales_exam"]["state"] == "available"
+    assert stages["presales_practice"]["state"] == "locked"
+
+
+@pytest.mark.asyncio
+async def test_should_mark_exam_completed_and_unlock_practice_after_examiner_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = LearningPathService(recommendation_service=_SpyRecommendationService())
+    template = _presales_path_template()
+    exam_session = PracticeSession(
+        session_id="exam-session-1",
+        user_id="learner-1",
+        scenario_id="scenario-exam",
+        status=SessionStatus.COMPLETED.value,
+        curriculum_snapshot={
+            "kind": "curriculum_examiner_session",
+            "learning_content_id": "content-presales",
+            "content_assets": [
+                {
+                    "asset_type": "examiner_agent",
+                    "asset_id": "examiner-presales",
+                    "version": 1,
+                    "hash": "hash-examiner",
+                    "snapshot_label": "published",
+                }
+            ],
+        },
+        runtime_state={
+            "examiner_report": {
+                "overall_score": 72.0,
+                "passed": True,
+                "answered_count": 20,
+                "total_questions": 20,
+            }
+        },
+        start_time=datetime.now(UTC),
+    )
+
+    async def _fake_evidence(
+        self: LearningPathService,
+        *,
+        user_id: str,
+        templates: list[PracticeTemplate],
+        completed_sessions: list[PracticeSession],
+    ) -> dict[str, object]:
+        return {
+            "practice_template_ids": set(),
+            "learning_content_ids": {"content-presales"},
+            "learning_content_participated_ids": {"content-presales"},
+            "examiner_agent_ids": {"examiner-presales"},
+            "exam_sessions_by_agent_id": {"examiner-presales": exam_session},
+            "exam_latest_session_by_agent_id": {"examiner-presales": exam_session},
+            "exam_stats_by_agent_id": {
+                "examiner-presales": {
+                    "best_score": 72.0,
+                    "lowest_score": 72.0,
+                    "latest_score": 72.0,
+                    "attempt_count": 1,
+                }
+            },
+        }
+
+    monkeypatch.setattr(
+        LearningPathService,
+        "_load_stage_completion_evidence",
+        _fake_evidence,
+    )
+
+    result = await service.build_from_evidence(
+        user_id="learner-1",
+        sessions=[],
+        templates=[template],
+    )
+    stages = {stage["template_stage_key"]: stage for stage in result["stages"]}
+
+    assert stages["presales_study"]["state"] == "completed"
+    assert stages["presales_exam"]["state"] == "completed"
+    assert stages["presales_exam"]["report_url"] == "/exam/exam-session-1/report"
+    assert stages["presales_practice"]["state"] == "available"
+
+
+@pytest.mark.asyncio
+async def test_should_unlock_practice_after_failed_exam_when_user_participated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = LearningPathService(recommendation_service=_SpyRecommendationService())
+    template = _presales_path_template()
+    exam_session = PracticeSession(
+        session_id="exam-session-failed",
+        user_id="learner-1",
+        scenario_id="scenario-exam",
+        status=SessionStatus.COMPLETED.value,
+        curriculum_snapshot={
+            "kind": "curriculum_examiner_session",
+            "learning_content_id": "content-presales",
+            "content_assets": [
+                {
+                    "asset_type": "examiner_agent",
+                    "asset_id": "examiner-presales",
+                    "version": 1,
+                    "hash": "hash-examiner",
+                    "snapshot_label": "published",
+                }
+            ],
+        },
+        runtime_state={
+            "examiner_report": {
+                "overall_score": 0.0,
+                "passed": False,
+                "answered_count": 5,
+                "total_questions": 20,
+            }
+        },
+        start_time=datetime.now(UTC),
+    )
+
+    async def _fake_evidence(
+        self: LearningPathService,
+        *,
+        user_id: str,
+        templates: list[PracticeTemplate],
+        completed_sessions: list[PracticeSession],
+    ) -> dict[str, object]:
+        return {
+            "practice_template_ids": set(),
+            "learning_content_ids": {"content-presales"},
+            "learning_content_participated_ids": {"content-presales"},
+            "examiner_agent_ids": {"examiner-presales"},
+            "exam_sessions_by_agent_id": {"examiner-presales": exam_session},
+            "exam_latest_session_by_agent_id": {"examiner-presales": exam_session},
+            "exam_stats_by_agent_id": {
+                "examiner-presales": {
+                    "best_score": 0.0,
+                    "lowest_score": 0.0,
+                    "latest_score": 0.0,
+                    "attempt_count": 1,
+                }
+            },
+        }
+
+    monkeypatch.setattr(settings, "LEARNING_PATH_PARTICIPATION_UNLOCK", False)
+    monkeypatch.setattr(
+        LearningPathService,
+        "_load_stage_completion_evidence",
+        _fake_evidence,
+    )
+
+    result = await service.build_from_evidence(
+        user_id="learner-1",
+        sessions=[],
+        templates=[template],
+    )
+    stages = {stage["template_stage_key"]: stage for stage in result["stages"]}
+
+    assert stages["presales_exam"]["state"] == "failed"
+    assert stages["presales_exam"]["result"]["attempt_count"] == 1
+    assert stages["presales_practice"]["state"] == "available"

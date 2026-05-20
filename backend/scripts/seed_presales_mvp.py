@@ -677,8 +677,8 @@ def _build_full_curriculum_plan(
                 "name": "售前知识考核",
                 "template_ref": examiner_ref,
                 "completion_policy": {
-                    "min_score": 6,
-                    "min_rounds": 1,
+                    "min_score": 0,
+                    "min_rounds": 0,
                     "max_duration_seconds": 900,
                 },
                 "failure_policy": "retry_current",
@@ -696,8 +696,8 @@ def _build_full_curriculum_plan(
                 "name": "客户角色对练",
                 "template_ref": practice_ref,
                 "completion_policy": {
-                    "min_score": 6,
-                    "min_rounds": 3,
+                    "min_score": 0,
+                    "min_rounds": 0,
                     "max_duration_seconds": 900,
                 },
                 "failure_policy": "retry_current",

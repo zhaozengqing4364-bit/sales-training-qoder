@@ -13,6 +13,7 @@ import os
 from copy import deepcopy
 from typing import Any
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.business_rules.defaults import (
@@ -102,10 +103,16 @@ class NextPracticeRecommendationService:
 
     @staticmethod
     def _scenario_type(session: PracticeSession) -> str:
-        return str(
-            getattr(getattr(session, "scenario", None), "scenario_type", None)
-            or "sales"
-        )
+        if "scenario" in sa_inspect(session).unloaded:
+            snapshot = getattr(session, "curriculum_snapshot", None)
+            if isinstance(snapshot, dict):
+                scenario_type = snapshot.get("scenario_type")
+                if scenario_type:
+                    return str(scenario_type)
+            return "sales"
+        scenario = getattr(session, "scenario", None)
+        scenario_type = getattr(scenario, "scenario_type", None) if scenario is not None else None
+        return str(scenario_type or "sales")
 
     @staticmethod
     def _is_evaluable(session: PracticeSession) -> bool:

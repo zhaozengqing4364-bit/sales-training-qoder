@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypedDict
 
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.config import settings
 from common.db.models import (
     PracticeSession,
     RetrainingTask,
@@ -19,6 +20,8 @@ from common.db.models import (
 from common.recommendations.next_practice import NextPracticeRecommendationService
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import CurriculumPlanSchema
+from curriculum_practice.schemas import CurriculumPlanStage
+from curriculum_practice.services.examiner_report_service import examiner_report_frontend_path
 from curriculum_practice.services.learning_progress_service import (
     LearningProgressService,
 )
@@ -31,6 +34,23 @@ class LearningPathRecommendationReason:
     score: float
     recommended_template_id: str
     reason: str
+
+
+class _ExamAttemptStats(TypedDict):
+    best_score: float | None
+    lowest_score: float | None
+    latest_score: float | None
+    attempt_count: int
+
+
+class _StageCompletionEvidence(TypedDict):
+    practice_template_ids: set[str]
+    learning_content_ids: set[str]
+    learning_content_participated_ids: set[str]
+    examiner_agent_ids: set[str]
+    exam_sessions_by_agent_id: dict[str, PracticeSession]
+    exam_latest_session_by_agent_id: dict[str, PracticeSession]
+    exam_stats_by_agent_id: dict[str, _ExamAttemptStats]
 
 
 DIMENSION_TEMPLATE_HINTS: dict[str, tuple[str, ...]] = {
@@ -84,7 +104,7 @@ class LearningPathService:
             reverse=True,
         )[:lookback]
         if not recent_sessions:
-            return self._role_default_path(user_id=user_id, templates=templates)
+            return await self._role_default_path(user_id=user_id, templates=templates)
 
         reasons_by_template: dict[str, LearningPathRecommendationReason] = {}
         recommendation_payloads: list[dict[str, Any]] = []
@@ -120,12 +140,13 @@ class LearningPathService:
                     reasons_by_template[template_id] = candidate
 
         if not reasons_by_template:
-            return self._role_default_path(user_id=user_id, templates=templates)
+            return await self._role_default_path(user_id=user_id, templates=templates)
 
         reasons = sorted(reasons_by_template.values(), key=lambda item: item.score)
         recommended_template_ids = [reason.recommended_template_id for reason in reasons]
         review_outcomes = await self._review_outcomes_for_sessions(recent_sessions)
-        stages = self._build_stages(
+        stages = await self._build_stages(
+            user_id=user_id,
             templates=templates,
             completed_sessions=recent_sessions,
             review_outcomes=review_outcomes,
@@ -162,7 +183,10 @@ class LearningPathService:
         assert self.db is not None
         result = await self.db.execute(
             select(PracticeSession)
-            .options(selectinload(PracticeSession.report_snapshots))
+            .options(
+                selectinload(PracticeSession.report_snapshots),
+                selectinload(PracticeSession.scenario),
+            )
             .where(PracticeSession.user_id == user_id)
             .where(PracticeSession.status == SessionStatus.COMPLETED.value)
             .order_by(PracticeSession.start_time.desc())
@@ -191,7 +215,11 @@ class LearningPathService:
             "title": content.title,
             "state": progress.state,
             "primary_cta": progress.primary_cta,
-            "reason": "继续完成讲义学习，完成后可进入考试。",
+            "reason": (
+                "讲义已全部完成，可开始 AI 考核。"
+                if progress.is_completed
+                else "继续完成讲义学习，完成后可进入考试。"
+            ),
             "estimated_duration_minutes": None,
             "failure_reason": None,
             "retry_action": None,
@@ -241,8 +269,9 @@ class LearningPathService:
                 outcomes[session_id] = "pending_review"
         return outcomes
 
-    def _role_default_path(self, *, user_id: str, templates: list[PracticeTemplate]) -> dict[str, Any]:
-        stages = self._build_stages(
+    async def _role_default_path(self, *, user_id: str, templates: list[PracticeTemplate]) -> dict[str, Any]:
+        stages = await self._build_stages(
+            user_id=user_id,
             templates=templates,
             completed_sessions=[],
             review_outcomes={},
@@ -389,39 +418,47 @@ class LearningPathService:
             return str(reason)
         return f"{dimension_name} 得分 {score:g}，建议专项练习。"
 
-    def _build_stages(
+    async def _build_stages(
         self,
         *,
+        user_id: str,
         templates: list[PracticeTemplate],
         completed_sessions: list[PracticeSession],
         review_outcomes: dict[str, str],
     ) -> list[dict[str, Any]]:
-        completed_template_ids = {
-            str(session.practice_template_id)
-            for session in completed_sessions
-            if session.practice_template_id
-            and str(session.status) == SessionStatus.COMPLETED.value
-            and isinstance(session.effectiveness_snapshot, dict)
-            and session.effectiveness_snapshot.get("evaluable") is True
-        }
+        evidence = await self._load_stage_completion_evidence(
+            user_id=user_id,
+            templates=templates,
+            completed_sessions=completed_sessions,
+        )
         stages: list[dict[str, Any]] = []
         for template in templates:
             plan = self._plan_for_template(template)
             if plan is None:
-                stages.append(self._fallback_stage(template, completed_template_ids))
+                stages.append(
+                    self._fallback_stage(template, evidence["practice_template_ids"])
+                )
                 continue
             for stage in sorted(plan.stages, key=lambda item: item.order):
-                template_id = str(stage.template_ref.asset_id)
+                asset_id = str(stage.template_ref.asset_id)
                 prerequisite_keys = [item.template_stage_key for item in stage.prerequisites]
                 prereqs_met = all(
-                    self._stage_completed(prerequisite_key=key, stages=stages)
+                    self._stage_prerequisite_satisfied(
+                        prerequisite_key=key,
+                        stages=stages,
+                        evidence=evidence,
+                    )
                     for key in prerequisite_keys
                 )
-                state = "completed" if template_id in completed_template_ids else "available" if prereqs_met else "locked"
+                state = self._base_stage_state(
+                    stage=stage,
+                    evidence=evidence,
+                    prereqs_met=prereqs_met,
+                )
                 if "review" in stage.template_stage_key.lower():
                     state = self._review_stage_state(
                         default_state=state,
-                        template_id=template_id,
+                        template_id=asset_id,
                         sessions=completed_sessions,
                         review_outcomes=review_outcomes,
                     )
@@ -448,17 +485,353 @@ class LearningPathService:
                         ),
                         "prerequisites": [item.model_dump(mode="json") for item in stage.prerequisites],
                         "completion_policy": stage.completion_policy.model_dump(mode="json"),
-                        "report_url": self._report_url_for_template(template_id, completed_sessions),
-                        "failure_reason": self._failure_reason_for_stage(template_id, completed_sessions),
-                        "result": self._stage_result_for_stage(
-                            stage_key=stage.template_stage_key,
-                            template_id=template_id,
-                            sessions=completed_sessions,
+                        "report_url": self._report_url_for_stage(
+                            stage=stage,
+                            evidence=evidence,
+                            completed_sessions=completed_sessions,
                         ),
-                        "template_id": template_id,
+                        "failure_reason": self._failure_reason_for_stage(
+                            asset_id, completed_sessions
+                        ),
+                        "result": self._stage_result_payload(
+                            stage=stage,
+                            evidence=evidence,
+                            completed_sessions=completed_sessions,
+                        ),
+                        "template_id": asset_id,
                     }
                 )
         return stages
+
+    async def _load_stage_completion_evidence(
+        self,
+        *,
+        user_id: str,
+        templates: list[PracticeTemplate],
+        completed_sessions: list[PracticeSession],
+    ) -> _StageCompletionEvidence:
+        if self.db is None:
+            return self._completion_evidence_from_sessions(
+                completed_sessions=completed_sessions,
+            )
+
+        practice_template_ids: set[str] = set()
+        session_result = await self.db.execute(
+            select(PracticeSession)
+            .where(PracticeSession.user_id == user_id)
+            .where(PracticeSession.status == SessionStatus.COMPLETED.value)
+            .order_by(PracticeSession.start_time.desc())
+        )
+        all_completed_sessions = list(session_result.scalars().all())
+        for session in all_completed_sessions:
+            template_id = session.practice_template_id
+            if not template_id:
+                continue
+            if self._is_curriculum_examiner_session(session):
+                continue
+            if not isinstance(session.effectiveness_snapshot, dict):
+                continue
+            if session.effectiveness_snapshot.get("evaluable") is not True:
+                continue
+            practice_template_ids.add(str(template_id))
+
+        exam_aggregate = self._aggregate_exam_sessions(all_completed_sessions)
+        examiner_agent_ids = set(exam_aggregate["exam_sessions_by_agent_id"].keys())
+        exam_sessions_by_agent_id = exam_aggregate["exam_sessions_by_agent_id"]
+        exam_latest_session_by_agent_id = exam_aggregate["exam_latest_session_by_agent_id"]
+        exam_stats_by_agent_id = exam_aggregate["exam_stats_by_agent_id"]
+
+        learning_content_ids: set[str] = set()
+        learning_content_participated_ids: set[str] = set()
+        content_ids: set[str] = set()
+        for template in templates:
+            if template.learning_content_id:
+                content_ids.add(str(template.learning_content_id))
+            plan = self._plan_for_template(template)
+            if plan is None:
+                continue
+            for stage in plan.stages:
+                if (
+                    stage.stage_type == "study"
+                    and stage.template_ref.asset_type == "learning_content"
+                ):
+                    content_ids.add(str(stage.template_ref.asset_id))
+
+        progress_service = LearningProgressService(self.db)
+        for content_id in content_ids:
+            content_result = await progress_service.get_study_content(
+                user_id=user_id,
+                content_id=content_id,
+            )
+            if not content_result.is_success or content_result.value is None:
+                continue
+            progress = content_result.value.progress
+            if progress.completed_chapter_ids:
+                learning_content_participated_ids.add(content_id)
+            if progress.is_completed:
+                learning_content_ids.add(content_id)
+
+        return {
+            "practice_template_ids": practice_template_ids,
+            "learning_content_ids": learning_content_ids,
+            "learning_content_participated_ids": learning_content_participated_ids,
+            "examiner_agent_ids": examiner_agent_ids,
+            "exam_sessions_by_agent_id": exam_sessions_by_agent_id,
+            "exam_latest_session_by_agent_id": exam_latest_session_by_agent_id,
+            "exam_stats_by_agent_id": exam_stats_by_agent_id,
+        }
+
+    @staticmethod
+    def _completion_evidence_from_sessions(
+        *,
+        completed_sessions: list[PracticeSession],
+    ) -> _StageCompletionEvidence:
+        practice_template_ids: set[str] = set()
+        examiner_agent_ids: set[str] = set()
+        exam_sessions_by_agent_id: dict[str, PracticeSession] = {}
+        for session in completed_sessions:
+            if str(session.status) != SessionStatus.COMPLETED.value:
+                continue
+            if LearningPathService._is_curriculum_examiner_session(session):
+                agent_id = LearningPathService._examiner_agent_id_from_session(session)
+                if agent_id and agent_id not in exam_sessions_by_agent_id:
+                    exam_sessions_by_agent_id[agent_id] = session
+                    examiner_agent_ids.add(agent_id)
+                continue
+            template_id = session.practice_template_id
+            if not template_id:
+                continue
+            if not isinstance(session.effectiveness_snapshot, dict):
+                continue
+            if session.effectiveness_snapshot.get("evaluable") is not True:
+                continue
+            practice_template_ids.add(str(template_id))
+        exam_aggregate = LearningPathService._aggregate_exam_sessions(completed_sessions)
+        return {
+            "practice_template_ids": practice_template_ids,
+            "learning_content_ids": set(),
+            "learning_content_participated_ids": set(),
+            "examiner_agent_ids": set(exam_aggregate["exam_sessions_by_agent_id"].keys()),
+            "exam_sessions_by_agent_id": exam_aggregate["exam_sessions_by_agent_id"],
+            "exam_latest_session_by_agent_id": exam_aggregate[
+                "exam_latest_session_by_agent_id"
+            ],
+            "exam_stats_by_agent_id": exam_aggregate["exam_stats_by_agent_id"],
+        }
+
+    @staticmethod
+    def _aggregate_exam_sessions(
+        sessions: list[PracticeSession],
+    ) -> dict[str, Any]:
+        by_agent: dict[str, list[PracticeSession]] = {}
+        for session in sessions:
+            if str(session.status) != SessionStatus.COMPLETED.value:
+                continue
+            if not LearningPathService._is_curriculum_examiner_session(session):
+                continue
+            agent_id = LearningPathService._examiner_agent_id_from_session(session)
+            if not agent_id:
+                continue
+            by_agent.setdefault(agent_id, []).append(session)
+
+        exam_sessions_by_agent_id: dict[str, PracticeSession] = {}
+        exam_latest_session_by_agent_id: dict[str, PracticeSession] = {}
+        exam_stats_by_agent_id: dict[str, _ExamAttemptStats] = {}
+        for agent_id, agent_sessions in by_agent.items():
+            ordered = sorted(
+                agent_sessions,
+                key=lambda item: getattr(item, "start_time", None) or "",
+                reverse=True,
+            )
+            latest = ordered[0]
+            exam_latest_session_by_agent_id[agent_id] = latest
+            scores: list[float] = []
+            for item in agent_sessions:
+                metrics = LearningPathService._exam_report_metrics(item)
+                if metrics is not None:
+                    scores.append(metrics["score"])
+            best_session = latest
+            if scores:
+                best_session = max(
+                    agent_sessions,
+                    key=lambda item: (
+                        LearningPathService._exam_report_metrics(item) or {"score": -1.0}
+                    )["score"],
+                )
+            exam_sessions_by_agent_id[agent_id] = best_session
+            exam_stats_by_agent_id[agent_id] = {
+                "best_score": max(scores) if scores else None,
+                "lowest_score": min(scores) if scores else None,
+                "latest_score": (
+                    LearningPathService._exam_report_metrics(latest) or {}
+                ).get("score"),
+                "attempt_count": len(agent_sessions),
+            }
+        return {
+            "exam_sessions_by_agent_id": exam_sessions_by_agent_id,
+            "exam_latest_session_by_agent_id": exam_latest_session_by_agent_id,
+            "exam_stats_by_agent_id": exam_stats_by_agent_id,
+        }
+
+    @staticmethod
+    def _exam_report_metrics(session: PracticeSession) -> dict[str, Any] | None:
+        runtime_state = (
+            session.runtime_state if isinstance(session.runtime_state, dict) else {}
+        )
+        report = runtime_state.get("examiner_report")
+        if not isinstance(report, dict):
+            return None
+        try:
+            score = float(report.get("overall_score") or 0)
+        except (TypeError, ValueError):
+            score = 0.0
+        return {
+            "score": score,
+            "passed": report.get("passed"),
+            "answered_count": int(report.get("answered_count") or 0),
+        }
+
+    @staticmethod
+    def _is_curriculum_examiner_session(session: PracticeSession) -> bool:
+        snapshot = session.curriculum_snapshot
+        return isinstance(snapshot, dict) and snapshot.get("kind") == "curriculum_examiner_session"
+
+    @staticmethod
+    def _examiner_agent_id_from_session(session: PracticeSession) -> str | None:
+        snapshot = session.curriculum_snapshot
+        if not isinstance(snapshot, dict):
+            return None
+        assets = snapshot.get("content_assets")
+        if not isinstance(assets, list):
+            return None
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            if asset.get("asset_type") != "examiner_agent":
+                continue
+            agent_id = str(asset.get("asset_id") or "").strip()
+            if agent_id:
+                return agent_id
+        return None
+
+    @staticmethod
+    def _completion_policy_participation_unlock(completion_policy: dict[str, Any]) -> bool:
+        if settings.LEARNING_PATH_PARTICIPATION_UNLOCK:
+            return True
+        try:
+            min_score = float(completion_policy.get("min_score") or 0)
+            min_rounds = int(completion_policy.get("min_rounds") or 0)
+        except (TypeError, ValueError):
+            return False
+        return min_score <= 0 and min_rounds <= 0
+
+    @staticmethod
+    def _exam_report_passed(
+        session: PracticeSession, *, completion_policy: dict[str, Any]
+    ) -> bool:
+        metrics = LearningPathService._exam_report_metrics(session)
+        if metrics is None:
+            return LearningPathService._completion_policy_participation_unlock(
+                completion_policy
+            )
+        if LearningPathService._completion_policy_participation_unlock(completion_policy):
+            return metrics.get("answered_count", 0) > 0 or metrics.get("score", 0) >= 0
+        if metrics.get("passed") is False:
+            return False
+        try:
+            min_score = float(completion_policy.get("min_score") or 0)
+        except (TypeError, ValueError):
+            return True
+        overall_score = float(metrics["score"])
+        if min_score <= 10:
+            return overall_score >= min_score * 10
+        return overall_score >= min_score
+
+    def _base_stage_state(
+        self,
+        *,
+        stage: CurriculumPlanStage,
+        evidence: _StageCompletionEvidence,
+        prereqs_met: bool,
+    ) -> str:
+        asset_id = str(stage.template_ref.asset_id)
+        asset_type = str(stage.template_ref.asset_type)
+        completion_policy = stage.completion_policy.model_dump(mode="json")
+
+        if stage.stage_type == "study" and asset_type == "learning_content":
+            if asset_id in evidence["learning_content_ids"]:
+                return "completed"
+        elif stage.stage_type == "exam" and asset_type == "examiner_agent":
+            exam_session = evidence["exam_sessions_by_agent_id"].get(asset_id)
+            if asset_id in evidence["examiner_agent_ids"] and exam_session is not None:
+                if self._exam_report_passed(exam_session, completion_policy=completion_policy):
+                    return "completed"
+                return "failed"
+        elif asset_type == "practice_template" or stage.stage_type == "practice":
+            if asset_id in evidence["practice_template_ids"]:
+                return "completed"
+
+        return "available" if prereqs_met else "locked"
+
+    @staticmethod
+    def _report_url_for_stage(
+        *,
+        stage: CurriculumPlanStage,
+        evidence: _StageCompletionEvidence,
+        completed_sessions: list[PracticeSession],
+    ) -> str | None:
+        asset_id = str(stage.template_ref.asset_id)
+        if stage.stage_type == "exam" and stage.template_ref.asset_type == "examiner_agent":
+            exam_session = evidence["exam_latest_session_by_agent_id"].get(asset_id)
+            if exam_session is None:
+                exam_session = evidence["exam_sessions_by_agent_id"].get(asset_id)
+            if exam_session is not None:
+                return examiner_report_frontend_path(str(exam_session.session_id))
+        return LearningPathService._report_url_for_template(asset_id, completed_sessions)
+
+    @staticmethod
+    def _stage_result_payload(
+        *,
+        stage: CurriculumPlanStage,
+        evidence: _StageCompletionEvidence,
+        completed_sessions: list[PracticeSession],
+    ) -> dict[str, Any] | None:
+        asset_id = str(stage.template_ref.asset_id)
+        if stage.stage_type == "study" and stage.template_ref.asset_type == "learning_content":
+            if asset_id not in evidence["learning_content_ids"]:
+                return None
+            return {"result": "completed"}
+
+        if stage.stage_type == "exam" and stage.template_ref.asset_type == "examiner_agent":
+            exam_session = evidence["exam_sessions_by_agent_id"].get(asset_id)
+            if exam_session is None:
+                return None
+            completion_policy = stage.completion_policy.model_dump(mode="json")
+            passed = LearningPathService._exam_report_passed(
+                exam_session,
+                completion_policy=completion_policy,
+            )
+            stats = evidence["exam_stats_by_agent_id"].get(asset_id)
+            metrics = LearningPathService._exam_report_metrics(exam_session)
+            payload: dict[str, Any] = {
+                "result": "completed" if passed else "failed",
+                "passed": passed,
+            }
+            if stats is not None:
+                payload["score"] = stats.get("best_score")
+                payload["best_score"] = stats.get("best_score")
+                payload["lowest_score"] = stats.get("lowest_score")
+                payload["latest_score"] = stats.get("latest_score")
+                payload["attempt_count"] = stats.get("attempt_count")
+            elif metrics is not None:
+                payload["score"] = metrics.get("score")
+            return payload
+
+        return LearningPathService._stage_result_for_stage(
+            stage_key=stage.template_stage_key,
+            template_id=asset_id,
+            sessions=completed_sessions,
+        )
 
     @staticmethod
     def _plan_for_template(template: PracticeTemplate) -> CurriculumPlanSchema | None:
@@ -518,11 +891,28 @@ class LearningPathService:
         return "pending_review"
 
     @staticmethod
-    def _stage_completed(*, prerequisite_key: str, stages: list[dict[str, Any]]) -> bool:
-        return any(
-            stage["template_stage_key"] == prerequisite_key and stage["state"] == "completed"
-            for stage in stages
-        )
+    def _stage_prerequisite_satisfied(
+        *,
+        prerequisite_key: str,
+        stages: list[dict[str, Any]],
+        evidence: _StageCompletionEvidence,
+    ) -> bool:
+        for stage in stages:
+            if stage["template_stage_key"] != prerequisite_key:
+                continue
+            state = str(stage.get("state") or "")
+            if state == "completed":
+                return True
+            if state in {"failed", "in_progress", "pending_review", "retraining_required"}:
+                return True
+            asset_id = str(stage.get("asset_id") or "")
+            if (
+                stage.get("stage_type") == "study"
+                and asset_id in evidence["learning_content_participated_ids"]
+            ):
+                return True
+            return False
+        return False
 
     @staticmethod
     def _report_url_for_template(
