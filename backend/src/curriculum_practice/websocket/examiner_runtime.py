@@ -231,7 +231,10 @@ class ExaminerRuntime:
         if not isinstance(data, dict):
             return []
         try:
-            question_index = int(data.get("question_index"))
+            question_index_value = data.get("question_index")
+            if question_index_value is None:
+                return []
+            question_index = int(question_index_value)
         except (TypeError, ValueError):
             return []
         if question_index < 0 or question_index >= len(self._questions):
@@ -247,7 +250,10 @@ class ExaminerRuntime:
         if not isinstance(data, dict):
             return []
         try:
-            question_index = int(data.get("question_index"))
+            question_index_value = data.get("question_index")
+            if question_index_value is None:
+                return []
+            question_index = int(question_index_value)
         except (TypeError, ValueError):
             return []
         if question_index < 0 or question_index >= len(self._questions):
@@ -265,10 +271,14 @@ class ExaminerRuntime:
             return [self._progress_message()]
 
         self._current_question_index += 1
-        if self._current_question_index < len(self._questions):
+        next_unanswered = self._next_unanswered_question_index(
+            start_index=self._current_question_index
+        )
+        if next_unanswered is not None:
+            self._current_question_index = next_unanswered
             return [
                 self._progress_message(),
-                self._question_message(self._current_question_index),
+                self._question_message(next_unanswered),
             ]
 
         messages: list[dict[str, Any]] = [self._finalizing_message()]
@@ -300,10 +310,23 @@ class ExaminerRuntime:
             if not str(entry.get("answer_text") or "").strip():
                 continue
             try:
-                indices.append(int(entry.get("question_index")))
+                question_index_value = entry.get("question_index")
+                if question_index_value is None:
+                    continue
+                indices.append(int(question_index_value))
             except (TypeError, ValueError):
                 continue
         return sorted(set(indices))
+
+    def _next_unanswered_question_index(self, *, start_index: int) -> int | None:
+        answered_indices = set(self._answered_question_indices())
+        for index in range(start_index, len(self._questions)):
+            if index not in answered_indices:
+                return index
+        for index in range(0, min(start_index, len(self._questions))):
+            if index not in answered_indices:
+                return index
+        return None
 
     async def _score_all_pending_answers(self) -> None:
         scored: list[dict[str, Any]] = []
@@ -318,7 +341,7 @@ class ExaminerRuntime:
                     {
                         **entry,
                         "score": 0,
-                        "feedback": "scoring_unavailable",
+                        "feedback": "题目索引异常，无法评分。",
                         "reason": "QUESTION_INDEX_OUT_OF_RANGE",
                     }
                 )
@@ -332,17 +355,23 @@ class ExaminerRuntime:
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "Examiner scoring failed; degraded to safe feedback",
+                    "Examiner scoring failed; falling back to keyword scorer",
                     session_id=self._session_id,
                     question_id=question.question_id,
                     reason="SCORING_EXCEPTION",
                     error_type=type(exc).__name__,
                 )
-                result = {
-                    "score": 0,
-                    "feedback": "scoring_unavailable",
-                    "reason": "SCORING_EXCEPTION",
-                }
+                try:
+                    result = await _default_scorer(
+                        question=question,
+                        answer_text=str(entry.get("answer_text") or ""),
+                    )
+                except Exception:  # noqa: BLE001
+                    result = {
+                        "score": 0,
+                        "feedback": "评分服务暂时不可用，请稍后重试或联系管理员。",
+                        "reason": "SCORING_EXCEPTION",
+                    }
 
             scored_entry: dict[str, Any] = {
                 "question_index": question_index,

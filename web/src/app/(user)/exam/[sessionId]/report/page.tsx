@@ -49,6 +49,16 @@ function scoreRingColor(score: number): string {
   return "stroke-rose-500";
 }
 
+/** 将后端评分占位符转为用户可读文案（兼容旧报告数据） */
+function displayExamFeedback(feedback: string | undefined): string {
+  const raw = (feedback ?? "").trim();
+  if (!raw) return "暂无评语";
+  if (raw === "scoring_unavailable") {
+    return "AI 评分服务当时不可用，未生成评语。请重新完成一次考核，或联系管理员检查大模型配置。";
+  }
+  return raw;
+}
+
 function ScoreRing({ score }: { score: number }) {
   const clamped = Math.max(0, Math.min(100, score));
   const radius = 54;
@@ -237,7 +247,7 @@ export default function ExamReportPage() {
                       AI 评语
                     </p>
                     <p className="mt-1 whitespace-pre-wrap text-sm text-indigo-900">
-                      {item.feedback || "暂无评语"}
+                      {displayExamFeedback(item.feedback)}
                     </p>
                   </div>
                 </GlassCard>

@@ -59,12 +59,15 @@ function nextTaskHref(nextTask: LearningPathNextTask): string {
     return "/training";
 }
 
-function stageActionHref(stage: LearningPathStage): string | null {
+type StageAction = {
+    href: string;
+    label: string;
+    variant: "default" | "outline";
+};
+
+function stageEntryHref(stage: LearningPathStage): string | null {
     if (stage.state === "locked") {
         return null;
-    }
-    if (stage.report_url && (stage.state === "completed" || stage.state === "failed")) {
-        return stage.report_url;
     }
     if (stage.stage_type === "study" && stage.learning_content_id) {
         return studyHrefForLearningContent(stage.learning_content_id, {
@@ -82,19 +85,47 @@ function stageActionHref(stage: LearningPathStage): string | null {
     return null;
 }
 
-function stageActionLabel(stage: LearningPathStage): string {
-    if (stage.report_url && (stage.state === "completed" || stage.state === "failed")) {
-        return "查看报告";
-    }
+function stageRetryLabel(stage: LearningPathStage): string {
+    if (stage.stage_type === "exam") return "重考";
+    if (stage.stage_type === "study") return "再学一遍";
+    if (stage.stage_type === "practice") return "再练一次";
+    return "再来一次";
+}
+
+function stagePrimaryLabel(stage: LearningPathStage): string {
     if (stage.stage_type === "study") return "去学习";
     if (stage.stage_type === "exam") return "去考核";
     if (stage.stage_type === "practice") return "开始对练";
     return "进入";
 }
 
-function stageIsActionable(stage: LearningPathStage): boolean {
-    return stageActionHref(stage) !== null
-        && ["available", "in_progress", "failed", "retraining_required", "completed"].includes(stage.state);
+function buildStageActions(stage: LearningPathStage): StageAction[] {
+    const actions: StageAction[] = [];
+    const entryHref = stageEntryHref(stage);
+    const canRetry = ["available", "in_progress", "failed", "retraining_required", "completed"].includes(
+        stage.state,
+    );
+
+    if (stage.report_url && (stage.state === "completed" || stage.state === "failed")) {
+        actions.push({ href: stage.report_url, label: "查看报告", variant: "outline" });
+    }
+
+    if (!entryHref || !canRetry) {
+        return actions;
+    }
+
+    if (stage.state === "failed" || stage.state === "retraining_required") {
+        actions.push({ href: entryHref, label: stageRetryLabel(stage), variant: "default" });
+        return actions;
+    }
+
+    if (stage.state === "completed") {
+        actions.push({ href: entryHref, label: stageRetryLabel(stage), variant: "outline" });
+        return actions;
+    }
+
+    actions.push({ href: entryHref, label: stagePrimaryLabel(stage), variant: "default" });
+    return actions;
 }
 
 function stageNameByKey(key: string, stages: LearningPathStage[]): string | null {
@@ -106,14 +137,32 @@ function formatStageResult(result: Record<string, unknown> | null | undefined): 
     if (!result || Object.keys(result).length === 0) return "";
     const parts: string[] = [];
 
-    if (typeof result.score === "number") {
-        parts.push(`得分：${result.score}`);
+    const displayScore =
+        typeof result.best_score === "number"
+            ? result.best_score
+            : typeof result.score === "number"
+              ? result.score
+              : null;
+    if (displayScore !== null) {
+        parts.push(`最高得分：${displayScore}`);
+    }
+    if (typeof result.lowest_score === "number") {
+        parts.push(`最低得分：${result.lowest_score}`);
+    }
+    if (typeof result.latest_score === "number" && result.latest_score !== displayScore) {
+        parts.push(`最近得分：${result.latest_score}`);
     }
     if ("passed" in result && result.passed != null) {
         parts.push(result.passed ? "通过：已通过" : "通过：未通过");
     }
-    if (typeof result.attempts === "number") {
-        parts.push(`尝试次数：${result.attempts}`);
+    const attemptCount =
+        typeof result.attempt_count === "number"
+            ? result.attempt_count
+            : typeof result.attempts === "number"
+              ? result.attempts
+              : null;
+    if (attemptCount !== null && attemptCount > 0) {
+        parts.push(`尝试次数：${attemptCount}`);
     }
     if ("completed_at" in result && result.completed_at != null && result.completed_at !== "") {
         parts.push("已完成");
@@ -261,18 +310,19 @@ export default function LearningPathPage() {
                                     <span className={cn("rounded-full px-3 py-1 text-xs font-bold", stageClassName(stage))}>
                                         {stateCopy[stage.state]}
                                     </span>
-                                    {stageIsActionable(stage) && stageActionHref(stage) ? (
-                                        <Button asChild variant="outline" size="sm" className="rounded-full">
-                                            <Link href={stageActionHref(stage)!}>
-                                                {stageActionLabel(stage)}
-                                            </Link>
-                                        </Button>
-                                    ) : null}
-                                    {stage.report_url && !stageIsActionable(stage) ? (
-                                        <Link href={stage.report_url} className="text-sm font-bold text-blue-600 hover:text-blue-700">
-                                            查看报告
-                                        </Link>
-                                    ) : null}
+                                    <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
+                                        {buildStageActions(stage).map((action) => (
+                                            <Button
+                                                key={`${stage.template_stage_key}-${action.label}`}
+                                                asChild
+                                                variant={action.variant}
+                                                size="sm"
+                                                className="rounded-full"
+                                            >
+                                                <Link href={action.href}>{action.label}</Link>
+                                            </Button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </GlassCard>

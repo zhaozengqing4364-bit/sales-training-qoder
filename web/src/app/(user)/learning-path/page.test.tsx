@@ -94,7 +94,7 @@ describe("LearningPathPage", () => {
         expect(screen.getByText("主管认证复核")).toBeTruthy();
         expect(screen.getByText("前置条件：产品证据表达")).toBeTruthy();
         expect(screen.getByText("完成标准：最低 7 分")).toBeTruthy();
-        expect(screen.getByText(/得分：8/)).toBeTruthy();
+        expect(screen.getByText(/最高得分：8/)).toBeTruthy();
         expect(screen.getByText(/通过：已通过/)).toBeTruthy();
     });
 
@@ -104,7 +104,7 @@ describe("LearningPathPage", () => {
         await screen.findByText("我的学习路径");
 
         // Friendly labels MUST be visible
-        expect(screen.getByText("阶段结果：得分：8，通过：已通过，尝试次数：2")).toBeTruthy();
+        expect(screen.getByText("阶段结果：最高得分：8，通过：已通过，尝试次数：2")).toBeTruthy();
 
         // Raw internals MUST NOT leak
         expect(screen.queryByText("通过：true")).toBeNull();

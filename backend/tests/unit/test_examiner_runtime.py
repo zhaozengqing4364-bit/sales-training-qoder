@@ -77,9 +77,13 @@ async def test_should_advance_to_next_question_without_mid_exam_feedback() -> No
         }
     )
 
-    assert [message["type"] for message in messages] == ["exam.question"]
-    assert messages[0]["data"]["question_index"] == 1
-    assert messages[0]["data"]["question_id"] == "question-2"
+    assert [message["type"] for message in messages] == [
+        "exam.progress",
+        "exam.question",
+    ]
+    assert messages[0]["data"]["answered_question_indices"] == [0]
+    assert messages[1]["data"]["question_index"] == 1
+    assert messages[1]["data"]["question_id"] == "question-2"
     assert runtime.serialize_state()["answers"] == [
         {
             "question_index": 0,
@@ -120,7 +124,7 @@ async def test_should_emit_completed_after_final_answer() -> None:
 
 
 @pytest.mark.asyncio
-async def test_should_record_off_index_answer_without_advancing_current_question() -> None:
+async def test_should_complete_after_off_index_answers_cover_all_questions() -> None:
     scoring_calls = 0
 
     async def scorer(*, question: FrozenExamQuestion, answer_text: str) -> dict[str, object]:
@@ -143,6 +147,8 @@ async def test_should_record_off_index_answer_without_advancing_current_question
             "data": {"question_index": 1, "answer_text": "跳题回答"},
         }
     )
+    assert scoring_calls == 0
+
     accepted = await runtime.handle_client_message(
         {
             "type": "exam.answer",
@@ -152,11 +158,43 @@ async def test_should_record_off_index_answer_without_advancing_current_question
 
     assert off_index[0]["type"] == "exam.progress"
     assert off_index[0]["data"]["answered_question_indices"] == [1]
-    assert scoring_calls == 0
-    assert accepted[0]["type"] == "exam.progress"
-    assert accepted[0]["data"]["answered_question_indices"] == [0, 1]
-    assert accepted[1]["type"] == "exam.question"
-    assert accepted[1]["data"]["question_index"] == 1
+    assert scoring_calls == 2
+    assert [message["type"] for message in accepted] == [
+        "exam.finalizing",
+        "exam.completed",
+    ]
+    assert accepted[1]["data"]["answered_count"] == 2
+    assert accepted[1]["data"]["total_questions"] == 2
+
+
+@pytest.mark.asyncio
+async def test_should_not_complete_when_navigating_to_last_question_before_answering_all() -> None:
+    runtime = ExaminerRuntime(
+        session_id="session-1",
+        examiner_agent_id="examiner-1",
+        timeout_seconds=600,
+        questions=[
+            _question("question-1", title="Q1", stem="第一题"),
+            _question("question-2", title="Q2", stem="第二题"),
+            _question("question-3", title="Q3", stem="第三题"),
+        ],
+    )
+    await runtime.connect()
+    await runtime.handle_client_message(
+        {"type": "exam.navigate", "data": {"question_index": 2}}
+    )
+
+    messages = await runtime.handle_client_message(
+        {"type": "exam.answer", "data": {"question_index": 2, "answer_text": "最后一题"}}
+    )
+
+    assert [message["type"] for message in messages] == [
+        "exam.progress",
+        "exam.question",
+    ]
+    assert messages[0]["data"]["answered_question_indices"] == [2]
+    assert messages[1]["data"]["question_index"] == 0
+    assert messages[1]["data"]["question_id"] == "question-1"
 
 
 @pytest.mark.asyncio
@@ -250,22 +288,20 @@ async def test_should_degrade_scoring_exception_with_stable_reason() -> None:
     await runtime.connect()
 
     messages = await runtime.handle_client_message(
-        {"type": "exam.answer", "data": {"question_index": 0, "answer_text": "回答"}}
+        {
+            "type": "exam.answer",
+            "data": {"question_index": 0, "answer_text": "先确认预算区间，再确认决策流程。"},
+        }
     )
 
     assert messages[0]["type"] == "exam.finalizing"
     assert messages[1]["type"] == "exam.completed"
     assert messages[1]["data"]["reason"] == "all_questions_answered"
-    assert runtime.serialize_state()["answers"] == [
-        {
-            "question_index": 0,
-            "question_id": "question-1",
-            "answer_text": "回答",
-            "score": 0,
-            "feedback": "scoring_unavailable",
-            "reason": "SCORING_EXCEPTION",
-        }
-    ]
+    answer = runtime.serialize_state()["answers"][0]
+    assert answer["question_index"] == 0
+    assert answer["answer_text"] == "先确认预算区间，再确认决策流程。"
+    assert answer["score"] == 100
+    assert "覆盖了多数参考要点" in str(answer["feedback"])
 
 
 @pytest.mark.asyncio
