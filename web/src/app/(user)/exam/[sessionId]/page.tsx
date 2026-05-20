@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   ArrowLeft,
@@ -21,14 +21,18 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api/client";
 import { resolveExamReportHref } from "@/lib/exam-report-routing";
 import {
+  ensureExamReturnToStudy,
   getExamReturnHref,
   getExamReturnLabel,
   saveExamProgressSnapshot,
 } from "@/lib/exam-session-storage";
+import { ExamQuestionGrid } from "@/components/exam/ExamQuestionGrid";
 import {
   useExaminerWebSocket,
+  type ExamQuestionOutlineItem,
   type GradedQuestion,
 } from "@/hooks/use-examiner-websocket";
+import { examQuestionTypeLabel } from "@/lib/exam-question-type";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -72,12 +76,24 @@ function completionReasonLabel(reason: string | null): string {
 }
 
 function ScorePanel({
-  gradedQuestions,
+  questionOutline,
+  answeredQuestionIndices,
+  currentIndex,
   totalQuestions,
+  disabled,
+  onSelectQuestion,
+  gradedQuestions,
 }: {
-  gradedQuestions: GradedQuestion[];
+  questionOutline: ExamQuestionOutlineItem[];
+  answeredQuestionIndices: number[];
+  currentIndex: number;
   totalQuestions: number;
+  disabled: boolean;
+  onSelectQuestion: (questionIndex: number) => void;
+  gradedQuestions: GradedQuestion[];
 }) {
+  const answeredCount = answeredQuestionIndices.length;
+
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-bold text-slate-800">答题进度</h2>
@@ -87,14 +103,24 @@ function ScorePanel({
           <div
             className="h-full rounded-full bg-indigo-600 transition-all duration-500"
             style={{
-              width: `${totalQuestions > 0 ? Math.round((gradedQuestions.length / totalQuestions) * 100) : 0}%`,
+              width: `${totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0}%`,
             }}
           />
         </div>
         <span className="text-sm font-semibold text-slate-600 tabular-nums">
-          {gradedQuestions.length}/{totalQuestions}
+          {answeredCount}/{totalQuestions}
         </span>
       </div>
+
+      {questionOutline.length > 0 && (
+        <ExamQuestionGrid
+          items={questionOutline}
+          answeredIndices={answeredQuestionIndices}
+          currentIndex={currentIndex}
+          disabled={disabled}
+          onSelect={onSelectQuestion}
+        />
+      )}
 
       {gradedQuestions.length > 0 && (
         <div className="space-y-2">
@@ -121,6 +147,7 @@ function ScorePanel({
 export default function ExamPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const sessionId = params.sessionId as string;
   const [isPanelOpen, setIsPanelOpen] = React.useState(false);
@@ -141,6 +168,8 @@ export default function ExamPage() {
     totalQuestions,
     lastFeedback,
     gradedQuestions,
+    questionOutline,
+    answeredQuestionIndices,
     remainingTimeSeconds,
     answeredCount,
     completionStatus,
@@ -151,6 +180,7 @@ export default function ExamPage() {
     isDisconnected,
     progress,
     sendAnswer,
+    sendNavigate,
     retry,
     setFeatureFlag,
     setVoiceFailed,
@@ -161,6 +191,12 @@ export default function ExamPage() {
   const storageKey = currentQuestion
     ? `exam-answer-v1-${sessionId}-${currentQuestion.question_id}`
     : null;
+
+  const contentIdFromQuery = searchParams.get("contentId")?.trim() ?? "";
+  if (contentIdFromQuery) {
+    ensureExamReturnToStudy(sessionId, contentIdFromQuery);
+  }
+  const examReturnLabel = getExamReturnLabel(sessionId);
 
   // Restore answer text from localStorage on mount or question change
   React.useEffect(() => {
@@ -179,6 +215,9 @@ export default function ExamPage() {
     setSending(false);
     setHasPendingSubmit(false);
     setShowSubmitConfirm(false);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
   }, [storageKey, examPhase, currentQuestion]);
 
   // Persist answer text to localStorage on changes
@@ -216,11 +255,14 @@ export default function ExamPage() {
     };
   }, [setFeatureFlag]);
 
-  React.useEffect(() => {
-    if (examPhase === "answering" && inputRef.current) {
-      inputRef.current.focus();
+  const focusAnswerInput = React.useCallback(() => {
+    if (examPhase !== "answering" || !currentQuestion || showSubmitConfirm) {
+      return;
     }
-  }, [examPhase]);
+    const el = inputRef.current;
+    if (!el || el.disabled) return;
+    el.focus();
+  }, [currentQuestion, examPhase, showSubmitConfirm]);
 
   const handleSubmit = React.useCallback(() => {
     const trimmed = answerText.trim();
@@ -237,14 +279,28 @@ export default function ExamPage() {
     if (connectionState !== "connected") return;
     if (examPhase !== "answering") return;
     if (!currentQuestion) return;
-    setSending(true);
-    setHasPendingSubmit(true);
     sendAnswer(trimmed);
+    setSending(false);
+    setHasPendingSubmit(false);
+    setAnswerText("");
+    pendingAnswerRef.current = "";
+    if (storageKey) {
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        // localStorage not available
+      }
+    }
+    requestAnimationFrame(() => {
+      focusAnswerInput();
+    });
   }, [
     connectionState,
     currentQuestion,
     examPhase,
+    focusAnswerInput,
     sendAnswer,
+    storageKey,
   ]);
 
   const persistExamSnapshot = React.useCallback(() => {
@@ -257,14 +313,14 @@ export default function ExamPage() {
     }
     saveExamProgressSnapshot(sessionId, {
       questionIndex,
-      answeredCount: gradedQuestions.length,
+      answeredCount: answeredQuestionIndices.length,
       totalQuestions,
       examPhase,
     });
   }, [
     answerText,
     examPhase,
-    gradedQuestions.length,
+    answeredQuestionIndices.length,
     questionIndex,
     sessionId,
     storageKey,
@@ -313,9 +369,69 @@ export default function ExamPage() {
     return () => window.removeEventListener("keydown", onWindowKeyDown);
   }, [handleConfirmSubmit, showSubmitConfirm]);
 
+  // 提交后或点击别处失去焦点时，再次键盘输入自动回到答案框
+  React.useEffect(() => {
+    if (examPhase !== "answering" || !currentQuestion || showSubmitConfirm) {
+      return;
+    }
+
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const active = document.activeElement;
+      if (active === inputRef.current) return;
+      if (
+        active instanceof HTMLElement &&
+        (active.tagName === "TEXTAREA" ||
+          active.tagName === "INPUT" ||
+          active.isContentEditable)
+      ) {
+        return;
+      }
+
+      const el = inputRef.current;
+      if (!el || el.disabled) return;
+
+      if (e.key === "Process") {
+        el.focus();
+        return;
+      }
+
+      const isPrintable =
+        e.key.length === 1 && e.key !== "Enter" && e.key !== "Tab";
+      if (isPrintable) {
+        e.preventDefault();
+        el.focus();
+        setAnswerText((prev) => prev + e.key);
+        return;
+      }
+
+      if (e.key === "Enter" && !e.shiftKey) {
+        el.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onWindowKeyDown, true);
+    return () => window.removeEventListener("keydown", onWindowKeyDown, true);
+  }, [currentQuestion, examPhase, showSubmitConfirm]);
+
   const handleViewReport = () => {
     router.push(resolveExamReportHref(sessionId, reportPath));
   };
+
+  const handleSelectQuestion = React.useCallback(
+    (targetIndex: number) => {
+      if (examPhase !== "answering" || targetIndex === questionIndex) return;
+      setShowSubmitConfirm(false);
+      pendingAnswerRef.current = "";
+      sendNavigate(targetIndex);
+    },
+    [examPhase, questionIndex, sendNavigate],
+  );
+
+  const navigationDisabled =
+    connectionState !== "connected" || examPhase !== "answering";
 
   if (featureFlag === "loading") {
     return (
@@ -372,11 +488,11 @@ export default function ExamPage() {
                 size="sm"
                 className="shrink-0 rounded-full pl-2 pr-3 text-slate-600 hover:text-slate-900"
                 onClick={handleBack}
-                aria-label={getExamReturnLabel(sessionId)}
+                aria-label={examReturnLabel}
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline text-sm">
-                  {getExamReturnLabel(sessionId)}
+                  {examReturnLabel}
                 </span>
               </Button>
               <div className="min-w-0">
@@ -433,6 +549,18 @@ export default function ExamPage() {
               </Button>
             </div>
           </div>
+
+          {examPhase === "answering" && questionOutline.length > 0 && (
+            <div className="mt-3 border-t border-white/30 pt-3">
+              <ExamQuestionGrid
+                items={questionOutline}
+                answeredIndices={answeredQuestionIndices}
+                currentIndex={questionIndex}
+                disabled={navigationDisabled}
+                onSelect={handleSelectQuestion}
+              />
+            </div>
+          )}
         </header>
 
         {/* Disconnection / reconnect banner */}
@@ -521,16 +649,14 @@ export default function ExamPage() {
             {/* Question display */}
             {examPhase === "answering" && currentQuestion && (
               <GlassCard className="p-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-4 flex flex-wrap items-center gap-2">
                   <Badge variant="gray">
                     第 {currentQuestion.question_index + 1} /{" "}
                     {totalQuestions} 题
                   </Badge>
-                  {currentQuestion.remaining_seconds > 0 && (
-                    <span className="text-xs text-slate-500">
-                      本题剩余 {currentQuestion.remaining_seconds} 秒
-                    </span>
-                  )}
+                  <Badge variant="blue">
+                    {examQuestionTypeLabel(currentQuestion.question_type)}
+                  </Badge>
                 </div>
                 {currentQuestion.title && (
                   <h3 className="text-base font-bold text-slate-800 mb-2">
@@ -630,8 +756,13 @@ export default function ExamPage() {
       {/* Right panel (desktop) */}
       <div className="hidden md:block w-80 lg:w-96 border-l border-white/40 bg-white/20 backdrop-blur-xl p-6 overflow-y-auto">
         <ScorePanel
-          gradedQuestions={gradedQuestions}
+          questionOutline={questionOutline}
+          answeredQuestionIndices={answeredQuestionIndices}
+          currentIndex={questionIndex}
           totalQuestions={totalQuestions}
+          disabled={navigationDisabled}
+          onSelectQuestion={handleSelectQuestion}
+          gradedQuestions={gradedQuestions}
         />
       </div>
 
@@ -644,8 +775,13 @@ export default function ExamPage() {
       >
         <div className="h-full overflow-y-auto pb-8 pt-2">
           <ScorePanel
-            gradedQuestions={gradedQuestions}
+            questionOutline={questionOutline}
+            answeredQuestionIndices={answeredQuestionIndices}
+            currentIndex={questionIndex}
             totalQuestions={totalQuestions}
+            disabled={navigationDisabled}
+            onSelectQuestion={handleSelectQuestion}
+            gradedQuestions={gradedQuestions}
           />
         </div>
       </GlassSheet>

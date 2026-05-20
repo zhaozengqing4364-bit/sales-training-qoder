@@ -1,5 +1,7 @@
 """Unit tests for StepFun tool execution module."""
 
+# pyright: reportMissingImports=false
+
 from __future__ import annotations
 
 import json
@@ -10,6 +12,7 @@ import pytest
 from sales_bot.websocket.stepfun_tool_execution import (
     StepFunToolExecutionModule,
     ToolExecutionContext,
+    ToolRoutingStatus,
 )
 
 
@@ -109,6 +112,75 @@ def test_enforce_guardrails_keeps_allowed_internal_knowledge_tool_exactly():
     )
 
     assert tools == [internal_tool]
+
+
+def test_decide_tool_routing_returns_skip_for_duplicate_call():
+    module = StepFunToolExecutionModule()
+    tool_call = {
+        "name": "search_internal_knowledge",
+        "arguments": {"query": " 产品 ", "top_k": 3},
+    }
+
+    first = module.decide_tool_routing(tool_call, turn_context={"turn_id": "turn-1"})
+    duplicate = module.decide_tool_routing(
+        {
+            "name": "search_internal_knowledge",
+            "arguments": {"top_k": 3, "query": " 产品 "},
+        },
+        turn_context={"turn_id": "turn-1"},
+    )
+
+    assert first.status == ToolRoutingStatus.EXECUTE
+    assert duplicate.status == ToolRoutingStatus.SKIP_DUPLICATE
+    assert duplicate.should_execute is False
+    assert duplicate.stable_key == first.stable_key
+
+
+def test_cache_result_stores_and_retrieves_without_sleeping():
+    now = 10.0
+    module = StepFunToolExecutionModule(clock=lambda: now)
+    result = {"query": "产品", "count": 1, "results": [{"snippet": "石犀"}]}
+
+    cache_key = module.build_internal_retrieval_cache_key(
+        {"query": " 产品 ", "top_k": 3}
+    )
+    module.cache_result(cache_key, result, ttl_seconds=5.0)
+
+    assert module.get_cached_result(cache_key) == result
+
+
+def test_cache_result_expires_after_ttl_without_sleeping():
+    now = 10.0
+    module = StepFunToolExecutionModule(clock=lambda: now)
+    cache_key = module.build_internal_retrieval_cache_key({"query": "产品"})
+    module.cache_result(cache_key, {"query": "产品", "count": 1}, ttl_seconds=2.0)
+
+    now = 12.1
+
+    assert module.get_cached_result(cache_key) is None
+
+
+def test_collect_diagnostics_aggregates_call_stats():
+    now = 10.0
+    module = StepFunToolExecutionModule(clock=lambda: now)
+    search_call = {"name": "search_internal_knowledge", "arguments": {"query": "产品"}}
+
+    decision = module.decide_tool_routing(search_call, turn_context={"turn_id": "t1"})
+    duplicate = module.decide_tool_routing(search_call, turn_context={"turn_id": "t1"})
+    cache_key = module.build_internal_retrieval_cache_key({"query": "产品"})
+    module.cache_result(cache_key, {"query": "产品", "count": 1}, ttl_seconds=5.0)
+    module.get_cached_result(cache_key)
+    module.record_execution_error()
+
+    diagnostics = module.collect_diagnostics()
+
+    assert decision.should_trigger_grounding is True
+    assert duplicate.status == ToolRoutingStatus.SKIP_DUPLICATE
+    assert diagnostics.total_calls == 2
+    assert diagnostics.duplicate_skips == 1
+    assert diagnostics.cache_hits == 1
+    assert diagnostics.grounding_triggers == 1
+    assert diagnostics.errors == 1
 
 
 def test_build_tool_response_with_content():

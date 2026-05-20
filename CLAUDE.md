@@ -469,8 +469,8 @@ web/src/app/
 ❌ raise HTTPException(500) → Result.fail()
 
 前端:
-❌ bg-white → bg-stone-50
-❌ text-black → text-zinc-950
+❌ bg-white（全页背景）→ bg-slate-50
+❌ text-black → text-slate-900
 ❌ 猜测 API → 查 docs/api-contract/
 ❌ alert/popup → 状态指示器
 ```

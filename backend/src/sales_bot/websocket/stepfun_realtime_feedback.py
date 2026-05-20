@@ -22,6 +22,7 @@ from urllib.parse import urlencode
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from websockets.exceptions import ConnectionClosed
 
 from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
@@ -88,6 +89,10 @@ from sales_bot.websocket.components.stepfun_asr_fallback import (
     build_asr_fallback_status_event,
     extract_asr_error_reason,
 )
+from sales_bot.websocket.components.stepfun_emotion_analyzer import (
+    EmotionSignal,
+    apply_emotion_signals_to_runtime_state,
+)
 from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
@@ -129,6 +134,10 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
 )
 from sales_bot.websocket.components.stepfun_tool_helpers import (
     build_stepfun_tools_from_policy,
+)
+from sales_bot.websocket.components.stepfun_thinking_capture import (
+    ThinkingEntry,
+    apply_thinking_entry_to_runtime_state,
 )
 from sales_bot.websocket.components.stepfun_tts_contracts import build_tts_chunk_event
 from sales_bot.websocket.components.stepfun_upstream_router import (
@@ -189,7 +198,7 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
             agent_id=self._session_agent_id or "unknown-agent",
             persona_id=self._session_persona_id or "unknown-persona",
             user_id=self._session_user_id or "unknown-user",
-            state={},
+            state={"emotion_log": []},
             conversation_history=[],
             agent_config={
                 "capabilities_config": self._agent_capabilities_config,
@@ -212,6 +221,32 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
             await self._realtime_scoring_capability.on_session_start(
                 self._feedback_context
             )
+
+    async def _load_emotion_log_into_feedback_context(self) -> None:
+        if self._feedback_context is None or not self.session_id:
+            return
+        session_factory = _handler_symbol("AsyncSessionLocal", AsyncSessionLocal)
+        try:
+            async with session_factory() as db:
+                result = await db.execute(
+                    select(PracticeSession.runtime_state).where(
+                        PracticeSession.session_id == self.session_id
+                    )
+                )
+                runtime_state = result.scalar_one_or_none()
+        except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
+            _handler_symbol("logger", logger).warning(
+                "StepFun emotion log loading degraded",
+                session_id=self.session_id,
+                error=str(exc),
+            )
+            return
+        if not isinstance(runtime_state, dict):
+            return
+        emotion_log = runtime_state.get("emotion_log")
+        self._feedback_context.state["emotion_log"] = [
+            item for item in emotion_log or [] if isinstance(item, dict)
+        ]
 
     async def _send_fuzzy_detection(self, detections: list[dict[str, Any]]) -> None:
         if not detections:
@@ -402,6 +437,7 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
         self._feedback_context.turn_count = max(
             self._feedback_context.turn_count, turn_number
         )
+        await self._load_emotion_log_into_feedback_context()
 
         capability_pipeline_degraded = False
 
@@ -636,6 +672,114 @@ class StepFunRealtimeFeedbackMixin(StepFunRealtimeStateBase):
 
         self._feedback_context.add_message(role="user", content=text)
         return analysis_data
+
+    async def _handle_thinking_event(self, event: dict[str, Any]) -> None:
+        """Forward StepFun thinking events to the reviewer-only capture component."""
+        event_type = str(event.get("type") or "")
+        entry: ThinkingEntry | None = None
+        if event_type == "response.thinking.delta":
+            self._thinking_capture.on_delta(event)
+        elif event_type == "response.thinking.done":
+            entry = self._thinking_capture.on_done(event)
+        if entry is not None:
+            await self._persist_thinking_entry(entry)
+
+    async def _handle_emotion_event(self, event: dict[str, Any]) -> None:
+        """Forward StepFun speech/transcript events to the emotion analyzer."""
+        event_type = str(event.get("type") or "")
+        signals: list[EmotionSignal] = []
+        if event_type.endswith("speech_started"):
+            signals = self._emotion_analyzer.on_speech_started(event)
+        elif event_type.endswith("speech_stopped") or event_type == "response.done":
+            signals = self._emotion_analyzer.on_speech_stopped(event)
+        elif "transcription" in event_type or "transcript" in event_type:
+            if event_type.endswith(("completed", "done", "final")):
+                signals = self._emotion_analyzer.on_audio_transcript_done(event)
+        if signals:
+            await self._persist_emotion_signals(
+                signals,
+                template_stage_key=self._current_template_stage_key(),
+            )
+
+    def _current_template_stage_key(self) -> str | None:
+        if self._curriculum_stage_runtime is None:
+            return None
+        patch = self._curriculum_stage_runtime.runtime_state_patch()
+        context = patch.get("template_stage_context")
+        if not isinstance(context, dict):
+            return None
+        stage_key = context.get("template_stage_key")
+        return str(stage_key) if stage_key else None
+
+    async def _persist_emotion_signals(
+        self,
+        signals: list[EmotionSignal],
+        *,
+        template_stage_key: str | None = None,
+    ) -> None:
+        if not self.session_id or not signals:
+            return
+        session_factory = _handler_symbol("AsyncSessionLocal", AsyncSessionLocal)
+        try:
+            async with self._db_lock:
+                async with session_factory() as db:
+                    result = await db.execute(
+                        select(PracticeSession).where(
+                            PracticeSession.session_id == self.session_id
+                        )
+                    )
+                    session = result.scalar_one_or_none()
+                    if not session:
+                        return
+                    existing_state: dict[str, Any] = (
+                        session.runtime_state
+                        if isinstance(session.runtime_state, dict)
+                        else {}
+                    )
+                    cast(Any, session).runtime_state = apply_emotion_signals_to_runtime_state(
+                        existing_state,
+                        signals,
+                        template_stage_key=template_stage_key,
+                    )
+                    await db.commit()
+        except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
+            _handler_symbol("logger", logger).warning(
+                "StepFun emotion signal persistence degraded",
+                session_id=self.session_id,
+                error=str(exc),
+            )
+
+    async def _persist_thinking_entry(self, entry: ThinkingEntry) -> None:
+        if not self.session_id:
+            return
+        session_factory = _handler_symbol("AsyncSessionLocal", AsyncSessionLocal)
+        try:
+            async with self._db_lock:
+                async with session_factory() as db:
+                    result = await db.execute(
+                        select(PracticeSession).where(
+                            PracticeSession.session_id == self.session_id
+                        )
+                    )
+                    session = result.scalar_one_or_none()
+                    if not session:
+                        return
+                    existing_state: dict[str, Any] = (
+                        session.runtime_state
+                        if isinstance(session.runtime_state, dict)
+                        else {}
+                    )
+                    cast(Any, session).runtime_state = apply_thinking_entry_to_runtime_state(
+                        existing_state,
+                        entry,
+                    )
+                    await db.commit()
+        except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
+            _handler_symbol("logger", logger).warning(
+                "StepFun thinking persistence degraded",
+                session_id=self.session_id,
+                error=str(exc),
+            )
 
     async def _prepare_grounding_context(self, query: str) -> None:
         """

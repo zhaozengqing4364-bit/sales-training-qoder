@@ -6,6 +6,7 @@ Includes degraded/resumed coach health state tests for S07.
 
 from __future__ import annotations
 
+# pyright: reportMissingImports=false, reportArgumentType=false, reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportAttributeAccessIssue=false
 import asyncio
 import json
 from types import SimpleNamespace
@@ -23,7 +24,11 @@ from sales_bot.websocket.stepfun_realtime_handler import (
     RealtimeResponseState,
     StepFunRealtimeHandler,
 )
-from sales_bot.websocket.stepfun_tool_execution import StepFunToolExecutionModule
+from sales_bot.websocket.stepfun_tool_execution import (
+    StepFunToolExecutionModule,
+    ToolRoutingDecision,
+    ToolRoutingStatus,
+)
 from sales_bot.websocket.voice_runtime_profile import VoiceRuntimeProfile
 from training_runtime import StepFunSessionConfig, build_stepfun_session_update_payload
 from training_runtime.stepfun_transport import (
@@ -245,6 +250,34 @@ def test_handler_applies_voice_runtime_profile_from_policy_snapshot() -> None:
     assert handler._stepfun_temperature == 0.33
     assert handler._stepfun_instructions == "保持客户角色。"
     assert handler._instruction_contract_hash == "hash-custom"
+
+
+def test_stepfun_session_config_uses_voice_runtime_profile_as_canonical_source() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._apply_voice_runtime_profile(
+        {
+            "voice_mode": "stepfun_realtime",
+            "model_name": "step-audio-profile",
+            "voice_name": "voice-profile",
+            "temperature": 0.44,
+            "instructions": "保持 profile 指令。",
+            "instruction_contract_hash": "hash-profile",
+            "knowledge_base_ids": ["kb-1"],
+            "tool_policy": {"network_access_mode": "off"},
+        }
+    )
+    handler._stepfun_voice = "voice-stale"
+    handler._stepfun_temperature = 1.5
+    handler._stepfun_instructions = "陈旧指令。"
+    handler._effective_policy = {}
+    handler._build_stepfun_tools_from_policy = MagicMock(return_value=[])
+    handler._enforce_stepfun_tool_guardrails = MagicMock(side_effect=lambda tools: tools)
+
+    config = handler._build_stepfun_session_config()
+
+    assert config.voice == "voice-profile"
+    assert config.temperature == 0.44
+    assert config.instructions == "保持 profile 指令。"
 
 
 def test_handler_delegates_tool_building_and_guardrails_to_execution_module():
@@ -885,6 +918,52 @@ async def test_prepare_grounding_context_short_query_still_retrieves_knowledge()
 
 
 @pytest.mark.asyncio
+async def test_prepare_grounding_context_uses_pipeline_retrieve_for_prefetch():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+        }
+    }
+    handler._tool_search_internal_knowledge = AsyncMock()
+    pipeline = SimpleNamespace(
+        retrieve=AsyncMock(
+            return_value={
+                "count": 1,
+                "results": [{"snippet": "标准版报价可按年付费。"}],
+            }
+        ),
+        evaluate_retrieval=handler._grounding_pipeline.evaluate_retrieval,
+    )
+    cast(Any, handler)._grounding_pipeline = pipeline
+
+    await handler._prepare_grounding_context("标准版价格")
+
+    pipeline.retrieve.assert_awaited_once_with("标准版价格", top_k=3)
+    handler._tool_search_internal_knowledge.assert_not_awaited()
+    assert "标准版报价可按年付费" in handler._pending_grounding_context
+
+
+@pytest.mark.asyncio
+async def test_maybe_start_kb_lock_warmup_delegates_to_grounding_pipeline():
+    handler = StepFunRealtimeHandler()
+    handler._kb_lock_warmup_enabled = True
+    handler._effective_policy = {
+        "knowledge_base_ids": [" kb-1 ", "", "kb-2"],
+        "tool_policy": {"require_kb_grounding": True},
+    }
+    pipeline = SimpleNamespace(warmup=AsyncMock())
+    cast(Any, handler)._grounding_pipeline = pipeline
+
+    await handler._maybe_start_kb_lock_warmup()
+    assert handler._kb_lock_warmup_task is not None
+    await handler._kb_lock_warmup_task
+
+    pipeline.warmup.assert_awaited_once_with(["kb-1", "kb-2"])
+
+
+@pytest.mark.asyncio
 async def test_prepare_grounding_context_empty_query_skips_retrieval():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
@@ -1280,6 +1359,53 @@ async def test_create_and_flush_response_updates_turn_coordinator_speaking_state
 
 
 @pytest.mark.asyncio
+async def test_handle_upstream_speech_started_notifies_turn_coordinator():
+    handler = StepFunRealtimeHandler()
+    handler._turn_coordinator.start_turn("turn-speech")
+
+    await handler._handle_upstream_event({"type": "input_audio_buffer.speech_started"})
+
+    current_turn = handler._turn_coordinator.get_current_turn()
+    assert current_turn is not None
+    assert current_turn.user_audio_active is True
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_speech_stopped_notifies_turn_coordinator():
+    handler = StepFunRealtimeHandler()
+    handler._turn_coordinator.start_turn("turn-speech")
+    handler._turn_coordinator.on_user_audio_start()
+
+    await handler._handle_upstream_event({"type": "input_audio_buffer.speech_stopped"})
+
+    current_turn = handler._turn_coordinator.get_current_turn()
+    assert current_turn is not None
+    assert current_turn.user_audio_active is False
+
+
+@pytest.mark.asyncio
+async def test_create_response_resolves_interruption_without_payload_shape_change():
+    handler = StepFunRealtimeHandler()
+    handler.upstream_ws = object()
+    handler._send_status = AsyncMock()
+    handler._send_upstream = AsyncMock()
+    handler._turn_coordinator.start_turn("turn-overlap")
+    handler._turn_coordinator.on_user_audio_start()
+    handler._turn_coordinator.on_model_response_start()
+
+    created = await handler._create_response(count_turn=True)
+
+    assert created is True
+    handler._send_upstream.assert_has_awaits(
+        [
+            call({"type": "response.cancel"}),
+            call({"type": "input_audio_buffer.clear"}),
+            call({"type": "response.create", "response": {"modalities": ["audio", "text"]}}),
+        ]
+    )
+
+
+@pytest.mark.asyncio
 async def test_forward_audio_delta_chunk_includes_server_playback_rate():
     handler = StepFunRealtimeHandler()
     handler.websocket = MagicMock()
@@ -1299,6 +1425,39 @@ async def test_forward_audio_delta_chunk_includes_server_playback_rate():
     payload = handler.manager.send_json.await_args.args[1]
     assert payload["type"] == "tts_chunk"
     assert payload["data"]["playback_rate"] == 1.25
+
+
+@pytest.mark.asyncio
+async def test_forward_audio_delta_chunk_appends_output_audio_without_payload_change():
+    handler = StepFunRealtimeHandler()
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._active_response = RealtimeResponseState(
+        request_id=3,
+        stream_id="stream-output-flow",
+    )
+    handler._stepfun_output_audio_format = "pcm16"
+    handler._stepfun_output_sample_rate = 24000
+    handler._stepfun_playback_rate = 1.25
+
+    await handler._forward_audio_delta_chunk("AAECAw==")
+
+    payload = handler.manager.send_json.await_args.args[1]
+    assert payload["type"] == "tts_chunk"
+    assert payload["stream_id"] == "stream-output-flow"
+    assert payload["request_id"] == 3
+    assert payload["data"] == {
+        "chunk_index": 0,
+        "audio": "AAECAw==",
+        "duration_ms": 0,
+        "is_final": False,
+        "audio_format": "pcm16",
+        "sample_rate": 24000,
+        "playback_rate": 1.25,
+    }
+    assert handler._audio_flow.get_output_buffer() == ["AAECAw=="]
 
 
 @pytest.mark.asyncio
@@ -1345,6 +1504,55 @@ async def test_flush_active_response_persists_assistant_message_and_sends_final_
     assert message["request_id"] == 7
     assert message["data"]["is_final"] is True
     assert message["data"]["text"] == "这是 AI 回复"
+
+
+@pytest.mark.asyncio
+async def test_flush_active_response_drains_output_audio_and_preserves_final_chunk_shape():
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 3
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._active_response = RealtimeResponseState(
+        request_id=7,
+        stream_id="stream-xyz",
+        chunk_index=2,
+        total_duration_ms=1200,
+    )
+    handler._audio_flow.append_output_audio("chunk-1")
+    handler._audio_flow.append_output_audio("chunk-2")
+    handler._persist_message = AsyncMock()
+    handler._send_status = AsyncMock()
+
+    await handler._flush_active_response(
+        {
+            "response": {
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "这是 AI 回复"}],
+                    }
+                ]
+            }
+        }
+    )
+
+    assert handler._audio_flow.get_output_buffer() == []
+    message = handler.manager.send_json.await_args_list[0].args[1]
+    assert message["type"] == "tts_chunk"
+    assert message["stream_id"] == "stream-xyz"
+    assert message["request_id"] == 7
+    assert message["data"] == {
+        "chunk_index": 2,
+        "audio": "",
+        "duration_ms": 0,
+        "is_final": True,
+        "text": "这是 AI 回复",
+        "total_duration_ms": 1200,
+        "audio_format": "pcm16",
+        "sample_rate": 24000,
+        "playback_rate": 1.0,
+    }
 
 
 def test_extract_text_payload_prefers_text_and_supports_legacy_content():
@@ -1415,6 +1623,104 @@ async def test_execute_function_call_defers_followup_while_response_active():
     payload = handler._send_upstream.await_args.args[0]
     assert payload["item"]["type"] == "function_call_output"
     assert payload["item"]["call_id"] == "call-1"
+
+
+@pytest.mark.asyncio
+async def test_handler_routes_tool_call_through_module_decide():
+    class RoutingToolExecution(StepFunToolExecutionModule):
+        def __init__(self) -> None:
+            super().__init__()
+            self.routing_calls: list[tuple[dict[str, Any], dict[str, Any]]] = []
+
+        def decide_tool_routing(self, tool_call, *, turn_context):  # type: ignore[no-untyped-def]
+            self.routing_calls.append((tool_call, turn_context))
+            return ToolRoutingDecision(
+                status=ToolRoutingStatus.SKIP_DUPLICATE,
+                stable_key="duplicate-key",
+                should_execute=False,
+            )
+
+    handler = StepFunRealtimeHandler()
+    tool_execution = RoutingToolExecution()
+    handler._tool_execution = tool_execution
+    handler.session_id = "session-routing"
+    handler.turn_count = 3
+    handler._send_upstream = AsyncMock()
+
+    executed = await handler._execute_function_call(
+        call_id="call-routed",
+        function_name="search_internal_knowledge",
+        raw_arguments='{"query":"产品"}',
+        trigger_followup_response=True,
+    )
+
+    assert executed is False
+    assert tool_execution.routing_calls == [
+        (
+            {"id": "call-routed", "name": "search_internal_knowledge", "arguments": {"query": "产品"}},
+            {"session_id": "session-routing", "turn_id": 3, "call_id": "call-routed"},
+        )
+    ]
+    handler._send_upstream.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_execute_function_call_skips_legacy_executed_call_id_before_module_routing():
+    handler = StepFunRealtimeHandler()
+    handler._executed_call_ids = {"call-duplicate"}
+    handler._tool_execution.decide_tool_routing = MagicMock(
+        wraps=handler._tool_execution.decide_tool_routing
+    )
+    handler._tool_search_internal_knowledge = AsyncMock()
+    handler._send_upstream = AsyncMock()
+
+    executed = await handler._execute_function_call(
+        call_id="call-duplicate",
+        function_name="search_internal_knowledge",
+        raw_arguments='{"query":"产品"}',
+        trigger_followup_response=True,
+    )
+
+    assert executed is False
+    handler._tool_execution.decide_tool_routing.assert_not_called()
+    handler._tool_search_internal_knowledge.assert_not_awaited()
+    handler._send_upstream.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handler_uses_module_cache_for_repeated_searches():
+    class CacheToolExecution(StepFunToolExecutionModule):
+        def __init__(self) -> None:
+            super().__init__()
+            self.get_calls: list[str] = []
+            self.cache_calls: list[tuple[str, dict[str, Any], float]] = []
+            self.execute_count = 0
+
+        def get_cached_result(self, cache_key: str) -> dict[str, Any] | None:
+            self.get_calls.append(cache_key)
+            return super().get_cached_result(cache_key)
+
+        def cache_result(self, cache_key: str, result: dict[str, Any], *, ttl_seconds: float) -> None:
+            self.cache_calls.append((cache_key, result, ttl_seconds))
+            super().cache_result(cache_key, result, ttl_seconds=ttl_seconds)
+
+        async def execute_tool(self, tool_call, *, context):  # type: ignore[no-untyped-def]
+            self.execute_count += 1
+            return {"query": tool_call["arguments"]["query"], "count": 1, "results": [{"snippet": "石犀"}]}
+
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-cache"
+    handler._tool_execution = CacheToolExecution()
+    handler._internal_retrieval_cache_ttl_seconds = 5.0
+
+    first = await handler._tool_search_internal_knowledge({"query": "产品", "top_k": 3})
+    second = await handler._tool_search_internal_knowledge({"top_k": 3, "query": "产品"})
+
+    assert first == second == {"query": "产品", "count": 1, "results": [{"snippet": "石犀"}]}
+    tool_execution = cast(CacheToolExecution, handler._tool_execution)
+    assert tool_execution.execute_count == 1
+    assert len(tool_execution.get_calls) == 2
+    assert len(tool_execution.cache_calls) == 1
 
 
 @pytest.mark.asyncio

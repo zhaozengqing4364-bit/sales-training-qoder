@@ -53,5 +53,9 @@ class RealtimeAudioFlowModule:
         with self._lock:
             return sum(len(audio.encode("utf-8")) for audio in self._input_audio)
 
+    def pending_output_audio_bytes(self) -> int:
+        with self._lock:
+            return sum(len(audio.encode("utf-8")) for audio in self._output_audio)
+
     def is_backpressure_applied(self, *, high_watermark_bytes: int) -> bool:
         return self.pending_input_audio_bytes() > high_watermark_bytes

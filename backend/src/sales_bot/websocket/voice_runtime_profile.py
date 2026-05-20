@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sales_bot.services.voice_instruction_compiler import (
+    VoiceInstructionCompiler,
     build_instruction_contract_hash,
 )
 
@@ -68,6 +69,29 @@ def _as_kb_ids(value: Any) -> tuple[str, ...]:
     if not isinstance(value, list | tuple):
         return ()
     return tuple(str(item).strip() for item in value if str(item).strip())
+
+
+@dataclass(frozen=True)
+class ContractValidationResult:
+    """Instruction contract validation diagnostic."""
+
+    valid: bool
+    expected_hash: str
+    actual_hash: str
+    reason: str = "ok"
+
+
+@dataclass(frozen=True)
+class ProfileDiff:
+    """Field-level diagnostic diff between two runtime profiles."""
+
+    changed_fields: tuple[str, ...]
+    before: Mapping[str, Any]
+    after: Mapping[str, Any]
+
+    @property
+    def has_changes(self) -> bool:
+        return bool(self.changed_fields)
 
 
 @dataclass(frozen=True)
@@ -136,6 +160,94 @@ class VoiceRuntimeProfile:
             and self.instructions
             and self.instruction_contract_hash
             and 0.0 <= self.temperature <= 2.0
+        )
+
+    def compile_instructions(
+        self,
+        *,
+        base_instructions: str | None = None,
+        grounding_context: str = "",
+    ) -> str:
+        return VoiceInstructionCompiler.compose_turn_instructions(
+            base_instructions=self.instructions if base_instructions is None else base_instructions,
+            grounding_context=grounding_context,
+        )
+
+    def validate_instruction_contract(self) -> ContractValidationResult:
+        return self.verify_contract_hash(
+            instructions=self.instructions,
+            contract_hash=self.instruction_contract_hash,
+        )
+
+    @staticmethod
+    def verify_contract_hash(
+        *,
+        instructions: str,
+        contract_hash: str,
+    ) -> ContractValidationResult:
+        normalized_instructions = instructions.strip()
+        expected_hash = build_instruction_contract_hash(normalized_instructions)
+        actual_hash = contract_hash.strip()
+        if not normalized_instructions:
+            return ContractValidationResult(
+                valid=False,
+                expected_hash=expected_hash,
+                actual_hash=actual_hash,
+                reason="empty_instructions",
+            )
+        if not actual_hash:
+            return ContractValidationResult(
+                valid=False,
+                expected_hash=expected_hash,
+                actual_hash=actual_hash,
+                reason="missing_instruction_contract_hash",
+            )
+        if expected_hash != actual_hash:
+            return ContractValidationResult(
+                valid=False,
+                expected_hash=expected_hash,
+                actual_hash=actual_hash,
+                reason="instruction_contract_hash_mismatch",
+            )
+        return ContractValidationResult(
+            valid=True,
+            expected_hash=expected_hash,
+            actual_hash=actual_hash,
+        )
+
+    def diff(self, other: VoiceRuntimeProfile) -> ProfileDiff:
+        return self.diff_with(other)
+
+    def diff_with(self, other: VoiceRuntimeProfile) -> ProfileDiff:
+        before = self.to_diagnostic_dict()
+        after = other.to_diagnostic_dict()
+        field_order = (
+            "voice_mode",
+            "model_name",
+            "voice_name",
+            "temperature",
+            "instructions",
+            "instruction_contract_hash",
+            "knowledge_base_ids",
+            "tool_policy",
+            "connection_health",
+        )
+        changed = tuple(key for key in field_order if before[key] != after[key])
+        return ProfileDiff(changed_fields=changed, before=before, after=after)
+
+    def to_diagnostic_dict(self) -> Mapping[str, Any]:
+        return FrozenDict(
+            {
+                "voice_mode": self.voice_mode,
+                "model_name": self.model_name,
+                "voice_name": self.voice_name,
+                "temperature": self.temperature,
+                "instructions": self.instructions,
+                "instruction_contract_hash": self.instruction_contract_hash,
+                "knowledge_base_ids": self.knowledge_base_ids,
+                "tool_policy": self.tool_policy,
+                "connection_health": self.connection_health,
+            }
         )
 
     @staticmethod

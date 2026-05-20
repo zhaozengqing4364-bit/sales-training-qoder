@@ -11,6 +11,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
+import { studyHrefForLearningContent } from "@/lib/exam-session-storage";
 
 const stateCopy: Record<LearningPathStage["state"], string> = {
     locked: "未解锁",
@@ -51,7 +52,9 @@ function nextTaskHref(nextTask: LearningPathNextTask): string {
         nextTask.learning_content_id
         && (nextTask.primary_cta === "continue learning" || nextTask.primary_cta === "start exam")
     ) {
-        return `/study/${encodeURIComponent(nextTask.learning_content_id)}`;
+        return studyHrefForLearningContent(nextTask.learning_content_id, {
+            fromLearningPath: true,
+        });
     }
     return "/training";
 }
@@ -64,10 +67,14 @@ function stageActionHref(stage: LearningPathStage): string | null {
         return stage.report_url;
     }
     if (stage.stage_type === "study" && stage.learning_content_id) {
-        return `/study/${encodeURIComponent(stage.learning_content_id)}`;
+        return studyHrefForLearningContent(stage.learning_content_id, {
+            fromLearningPath: true,
+        });
     }
     if (stage.stage_type === "exam" && stage.learning_content_id) {
-        return `/study/${encodeURIComponent(stage.learning_content_id)}`;
+        return studyHrefForLearningContent(stage.learning_content_id, {
+            fromLearningPath: true,
+        });
     }
     if (stage.stage_type === "practice" && stage.agent_id) {
         return `/agents/${encodeURIComponent(stage.agent_id)}`;

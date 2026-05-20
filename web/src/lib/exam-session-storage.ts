@@ -1,5 +1,8 @@
 const RETURN_KEY_PREFIX = "exam-return-v1-";
 const PROGRESS_KEY_PREFIX = "exam-progress-v1-";
+const LEARNING_CONTENT_KEY_PREFIX = "exam-learning-content-v1-";
+
+export const LEARNING_PATH_FROM_PARAM = "learning-path";
 
 export type ExamReturnContext = {
   href: string;
@@ -54,12 +57,76 @@ export function getExamReturnContext(sessionId: string): ExamReturnContext | nul
   }
 }
 
+export function studyHrefForLearningContent(
+  learningContentId: string,
+  options?: { fromLearningPath?: boolean },
+): string {
+  const base = `/study/${encodeURIComponent(learningContentId)}`;
+  if (options?.fromLearningPath) {
+    return `${base}?from=${LEARNING_PATH_FROM_PARAM}`;
+  }
+  return base;
+}
+
+export function examHrefForSession(
+  sessionId: string,
+  learningContentId: string,
+): string {
+  return `/exam/${encodeURIComponent(sessionId)}?contentId=${encodeURIComponent(learningContentId)}`;
+}
+
+export function setExamLearningContentBinding(
+  sessionId: string,
+  learningContentId: string,
+): void {
+  safeSetItem(
+    `${LEARNING_CONTENT_KEY_PREFIX}${sessionId}`,
+    learningContentId,
+  );
+}
+
+export function getExamLearningContentId(sessionId: string): string | null {
+  const raw = safeGetItem(`${LEARNING_CONTENT_KEY_PREFIX}${sessionId}`);
+  return raw && raw.trim().length > 0 ? raw : null;
+}
+
+/** 写入讲义返回地址；若已有完整 return context 则保留，仅补充 content 绑定。 */
+export function ensureExamReturnToStudy(
+  sessionId: string,
+  learningContentId: string,
+): void {
+  setExamLearningContentBinding(sessionId, learningContentId);
+  if (getExamReturnContext(sessionId)) {
+    return;
+  }
+  setExamReturnContext(sessionId, {
+    href: studyHrefForLearningContent(learningContentId),
+    label: "返回讲义",
+    learningContentId,
+  });
+}
+
 export function getExamReturnHref(sessionId: string): string {
-  return getExamReturnContext(sessionId)?.href ?? "/learning-path";
+  const context = getExamReturnContext(sessionId);
+  if (context) {
+    return context.href;
+  }
+  const learningContentId = getExamLearningContentId(sessionId);
+  if (learningContentId) {
+    return studyHrefForLearningContent(learningContentId);
+  }
+  return "/learning-path";
 }
 
 export function getExamReturnLabel(sessionId: string): string {
-  return getExamReturnContext(sessionId)?.label ?? "返回学习路径";
+  const context = getExamReturnContext(sessionId);
+  if (context) {
+    return context.label;
+  }
+  if (getExamLearningContentId(sessionId)) {
+    return "返回讲义";
+  }
+  return "返回学习路径";
 }
 
 export function saveExamProgressSnapshot(

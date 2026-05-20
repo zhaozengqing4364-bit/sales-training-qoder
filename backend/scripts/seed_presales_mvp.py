@@ -42,6 +42,7 @@ from curriculum_practice.models import (
 
 OWNER_EMAIL = "presales.seed.admin@example.com"
 LEARNER_EMAIL = "presales.learner@example.com"
+SUPERVISOR_EMAIL = OWNER_EMAIL  # admin 账号兼主管复核
 SCENARIO_NAME = "售前最小闭环训练"
 RUNTIME_NAME = "Presales MVP StepFun Runtime"
 RULESET_VERSION = "presales-mvp-v1"
@@ -170,7 +171,7 @@ async def _upsert_runtime_profile(
         counters["updated"] += 1
     profile.description = "售前 MVP 使用的 StepFun 实时语音运行时。"
     profile.is_active = True
-    profile.is_default = False
+    profile.is_default = True
     profile.voice_mode = "stepfun_realtime"
     profile.model_name = "step-audio-2"
     profile.voice_name = "qingchunshaonv"
@@ -623,6 +624,113 @@ async def _upsert_examiner(
     return examiner
 
 
+def _build_full_curriculum_plan(
+    *,
+    learning_content: LearningContent,
+    examiner: ExaminerAgent,
+    template: PracticeTemplate,
+) -> dict[str, Any]:
+    learning_ref = {
+        "asset_type": "learning_content",
+        "asset_id": str(learning_content.learning_content_id),
+        "version": int(learning_content.version),
+        "hash": str(learning_content.content_hash),
+        "snapshot_label": "published",
+    }
+    examiner_ref = {
+        "asset_type": "examiner_agent",
+        "asset_id": str(examiner.examiner_agent_id),
+        "version": int(examiner.version),
+        "hash": str(examiner.content_hash),
+        "snapshot_label": "published",
+    }
+    practice_ref = {
+        "asset_type": "practice_template",
+        "asset_id": str(template.template_id),
+        "version": int(template.version),
+        "hash": str(template.content_hash),
+        "snapshot_label": "published",
+    }
+    return {
+        "name": "售前新人完整路径",
+        "description": "产品学习 → AI 考核 → 客户对练 → 主管认证",
+        "max_stage_duration_seconds": 900,
+        "stages": [
+            {
+                "template_stage_key": "presales_study",
+                "stage_type": "study",
+                "order": 1,
+                "name": "产品知识学习",
+                "template_ref": learning_ref,
+                "completion_policy": {
+                    "min_score": 0,
+                    "min_rounds": 0,
+                    "max_duration_seconds": 600,
+                },
+                "failure_policy": "retry_current",
+                "prerequisites": [],
+            },
+            {
+                "template_stage_key": "presales_exam",
+                "stage_type": "exam",
+                "order": 2,
+                "name": "售前知识考核",
+                "template_ref": examiner_ref,
+                "completion_policy": {
+                    "min_score": 6,
+                    "min_rounds": 1,
+                    "max_duration_seconds": 900,
+                },
+                "failure_policy": "retry_current",
+                "prerequisites": [
+                    {
+                        "template_stage_key": "presales_study",
+                        "required_result": "completed",
+                    }
+                ],
+            },
+            {
+                "template_stage_key": "presales_practice",
+                "stage_type": "practice",
+                "order": 3,
+                "name": "客户角色对练",
+                "template_ref": practice_ref,
+                "completion_policy": {
+                    "min_score": 6,
+                    "min_rounds": 3,
+                    "max_duration_seconds": 900,
+                },
+                "failure_policy": "retry_current",
+                "prerequisites": [
+                    {
+                        "template_stage_key": "presales_exam",
+                        "required_result": "completed",
+                    }
+                ],
+            },
+            {
+                "template_stage_key": "presales_supervisor_review",
+                "stage_type": "report",
+                "order": 4,
+                "name": "主管认证复核",
+                "template_ref": practice_ref,
+                "completion_policy": {
+                    "min_score": 7,
+                    "min_rounds": 1,
+                    "max_duration_seconds": 600,
+                },
+                "failure_policy": "retry_current",
+                "prerequisites": [
+                    {
+                        "template_stage_key": "presales_practice",
+                        "required_result": "completed",
+                    }
+                ],
+            },
+        ],
+    }
+
+
 async def _upsert_practice_template(
     db: AsyncSession,
     counters: dict[str, int],
@@ -633,8 +741,8 @@ async def _upsert_practice_template(
     runtime_profile_id: str,
     ruleset_id: str,
     knowledge_base_id: str,
-    learning_content_id: str,
-    examiner_agent_id: str,
+    learning_content: LearningContent,
+    examiner: ExaminerAgent,
 ) -> PracticeTemplate:
     template = await _first(
         db,
@@ -659,19 +767,19 @@ async def _upsert_practice_template(
     template.voice_mode = "stepfun_realtime"
     template.scoring_ruleset_id = ruleset_id
     template.knowledge_base_refs = [knowledge_base_id]
-    template.learning_content_id = learning_content_id
-    template.examiner_agent_id = examiner_agent_id
+    template.learning_content_id = str(learning_content.learning_content_id)
+    template.examiner_agent_id = str(examiner.examiner_agent_id)
     template.target_learner_level = "beginner"
     template.timeout_config = {"roleplay_seconds": 900, "debrief_seconds": 180}
-    template.curriculum_plan = {
-        "learning_content_id": learning_content_id,
-        "examiner_agent_id": examiner_agent_id,
-        "dimensions": DIMENSIONS,
-    }
     template.max_stage_duration_seconds = 900
     template.status = "published"
     template.version = 1
     template.content_hash = _hash(TEMPLATE_NAME)
+    template.curriculum_plan = _build_full_curriculum_plan(
+        learning_content=learning_content,
+        examiner=examiner,
+        template=template,
+    )
     template.created_by = template.created_by or owner_id
     template.updated_by = owner_id
     template.published_by = owner_id
@@ -710,6 +818,7 @@ async def _upsert_training_task(
         "practice_template_id": template_id,
     }
     task.practice_template_id = template_id
+    task.curriculum_plan_id = template_id
     task.source = "seed"
     task.status = "assigned"
     task.before_after_summary = {"seed": "presales_mvp", "state": "assigned"}
@@ -771,8 +880,8 @@ async def seed_presales_mvp(db: AsyncSession) -> dict[str, Any]:
         runtime_profile_id=str(runtime_profile.id),
         ruleset_id=str(ruleset.ruleset_id),
         knowledge_base_id=str(kb.id),
-        learning_content_id=str(learning.learning_content_id),
-        examiner_agent_id=str(examiner.examiner_agent_id),
+        learning_content=learning,
+        examiner=examiner,
     )
     await db.flush()
     task = await _upsert_training_task(
@@ -1013,6 +1122,19 @@ async def verify_presales_mvp(db: AsyncSession) -> dict[str, Any]:
             errors.append(f"practice template {field} mismatch")
     if state.training_task.status != "assigned" or state.training_task.practice_template_id != state.practice_template.template_id:
         errors.append("training task must be assigned and linked to practice template")
+    if state.training_task.curriculum_plan_id != state.practice_template.template_id:
+        errors.append("training task must reference curriculum_plan_id")
+    plan = state.practice_template.curriculum_plan or {}
+    stages = plan.get("stages") if isinstance(plan, dict) else None
+    if not isinstance(stages, list) or len(stages) != 4:
+        errors.append("curriculum_plan must contain 4 stages (study/exam/practice/report)")
+    elif [stage.get("stage_type") for stage in stages if isinstance(stage, dict)] != [
+        "study",
+        "exam",
+        "practice",
+        "report",
+    ]:
+        errors.append("curriculum_plan stage_type order must be study/exam/practice/report")
     if errors:
         raise VerifyError("; ".join(errors))
     return await build_summary(db, state=state, verify_only=True, changes={"created": 0, "updated": 0})
@@ -1069,6 +1191,8 @@ async def build_summary(
         "keys": {
             "owner_email": OWNER_EMAIL,
             "learner_email": LEARNER_EMAIL,
+            "supervisor_email": SUPERVISOR_EMAIL,
+            "login_password_env": "AUTH_SHARED_PASSWORD",
             "ruleset": {"scenario_type": "sales", "version": RULESET_VERSION},
             "knowledge_vector_collection": KNOWLEDGE_COLLECTION,
             "runtime_profile_name": RUNTIME_NAME,

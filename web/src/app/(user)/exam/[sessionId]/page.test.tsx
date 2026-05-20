@@ -8,15 +8,18 @@ const {
   pushMock,
   useExaminerWebSocketMock,
   featureFlagsGetMock,
+  searchParamsGetMock,
 } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   useExaminerWebSocketMock: vi.fn(),
   featureFlagsGetMock: vi.fn(),
+  searchParamsGetMock: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ sessionId: "exam-session-1" }),
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => searchParamsGetMock(),
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -70,6 +73,13 @@ async function flushPreflightEffects() {
   });
 }
 
+const defaultQuestionOutline = Array.from({ length: 5 }, (_, index) => ({
+  question_index: index,
+  question_id: `q-00${index + 1}`,
+  title: `Q${index + 1}`,
+  question_type: "short_answer" as const,
+}));
+
 function buildExamHookMock(overrides: Record<string, unknown> = {}) {
   return {
     connectionState: "connected",
@@ -82,6 +92,8 @@ function buildExamHookMock(overrides: Record<string, unknown> = {}) {
     totalQuestions: 5,
     lastFeedback: null,
     gradedQuestions: [],
+    questionOutline: defaultQuestionOutline,
+    answeredQuestionIndices: [],
     remainingTimeSeconds: 600,
     answeredCount: null,
     completionStatus: null,
@@ -92,6 +104,7 @@ function buildExamHookMock(overrides: Record<string, unknown> = {}) {
     isDisconnected: false,
     progress: 0,
     sendAnswer: vi.fn(),
+    sendNavigate: vi.fn(),
     retry: vi.fn(),
     setFeatureFlag: vi.fn(),
     setVoiceFailed: vi.fn(),
@@ -265,6 +278,7 @@ describe("ExamPage", () => {
           question_id: "q-003",
           title: "SPIN 销售法",
           stem: "请简述 SPIN 销售法的四个步骤及其作用。",
+          question_type: "short_answer",
           remaining_seconds: 90,
         },
         questionIndex: 2,
@@ -280,7 +294,7 @@ describe("ExamPage", () => {
     ).toBeDefined();
     expect(screen.getByPlaceholderText("请输入你的答案...")).toBeDefined();
     expect(screen.getByText("第 3 / 5 题")).toBeDefined();
-    expect(screen.getByText("本题剩余 90 秒")).toBeDefined();
+    expect(screen.queryByText(/本题剩余/)).toBeNull();
   });
 
   it("opens confirmation dialog on submit click, does not call sendAnswer until confirmed", async () => {
@@ -360,7 +374,7 @@ describe("ExamPage", () => {
     expect((textarea as HTMLTextAreaElement).value).toBe("My draft answer");
   });
 
-  it("prevents double submit while answer is in flight", async () => {
+  it("clears answer input immediately after confirm submit", async () => {
     const sendAnswerMock = vi.fn();
     useExaminerWebSocketMock.mockReturnValue(
       buildExamHookMock({
@@ -387,13 +401,10 @@ describe("ExamPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
 
     expect(sendAnswerMock).toHaveBeenCalledTimes(1);
-
-    // After sending, the button should have the disabled attribute
-    const submitBtnAfter = screen.getByRole("button", { name: "提交答案" });
-    expect(submitBtnAfter.hasAttribute("disabled")).toBe(true);
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
   });
 
-  it("shows submitting state and retains draft while phase remains answering", async () => {
+  it("does not show submitting spinner after confirm submit", async () => {
     const sendAnswerMock = vi.fn();
     useExaminerWebSocketMock.mockReturnValue(
       buildExamHookMock({
@@ -419,15 +430,10 @@ describe("ExamPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
     fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
 
-    // sendAnswer called once
     expect(sendAnswerMock).toHaveBeenCalledTimes(1);
     expect(sendAnswerMock).toHaveBeenCalledWith("My answer");
-
-    // Button should show submitting state
-    expect(screen.getByText(/提交中/)).toBeTruthy();
-
-    // Draft should REMAIN in textarea during flight (cleared only on success signal)
-    expect((textarea as HTMLTextAreaElement).value).toBe("My answer");
+    expect(screen.queryByText(/提交中/)).toBeNull();
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
   });
 
   it("textarea is empty when phase is not answering (draft already cleared)", async () => {
@@ -482,6 +488,31 @@ describe("ExamPage", () => {
     expect(sendAnswerMock).toHaveBeenCalledTimes(1);
   });
 
+  it("seeds return to study from contentId query when return context is missing", async () => {
+    searchParamsGetMock.mockReturnValue(
+      new URLSearchParams("contentId=content-lesson-1"),
+    );
+
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 0,
+          question_id: "q-001",
+          title: "Q1",
+          stem: "Test question",
+          remaining_seconds: 120,
+        },
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回讲义" }));
+    expect(pushMock).toHaveBeenCalledWith("/study/content-lesson-1");
+  });
+
   it("navigates back to stored return href and saves progress snapshot", async () => {
     localStorage.setItem(
       "exam-return-v1-exam-session-1",
@@ -498,6 +529,7 @@ describe("ExamPage", () => {
         examPhase: "answering",
         questionIndex: 2,
         totalQuestions: 20,
+        answeredQuestionIndices: [0, 1],
         gradedQuestions: [
           { index: 0, score: 8, feedback: "Good" },
           { index: 1, score: 7, feedback: "OK" },
@@ -507,6 +539,7 @@ describe("ExamPage", () => {
           question_id: "q-003",
           title: "Q3",
           stem: "Question three",
+          question_type: "short_answer",
           remaining_seconds: 90,
         },
       }),
@@ -897,6 +930,7 @@ describe("ExamPage", () => {
         },
         questionIndex: 2,
         totalQuestions: 5,
+        answeredQuestionIndices: [0, 1],
         gradedQuestions: [
           { index: 0, score: 8, feedback: "Good" },
           { index: 1, score: 6, feedback: "OK" },
@@ -908,8 +942,7 @@ describe("ExamPage", () => {
 
     // Score panel renders in both desktop right panel and mobile GlassSheet (duplicate text)
     expect(screen.getAllByText("答题进度").length).toBeGreaterThanOrEqual(1);
-    // "2/5" appears in both header subtitle and score panel
-    expect(screen.getAllByText("2/5").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("已答 2/5").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("第 1 题").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("第 2 题").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("8 分").length).toBeGreaterThanOrEqual(1);

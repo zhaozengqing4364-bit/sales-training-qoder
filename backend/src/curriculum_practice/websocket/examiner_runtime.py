@@ -59,6 +59,20 @@ async def _default_scorer(
     return {"score": score, "feedback": feedback, "matched_terms": matched_terms}
 
 
+def _infer_question_type(scoring_criteria: dict[str, Any]) -> str:
+    raw = scoring_criteria.get("question_type") or scoring_criteria.get("format")
+    if not isinstance(raw, str):
+        return "short_answer"
+    normalized = raw.strip().lower()
+    if normalized in {"single_choice", "single", "radio"}:
+        return "single_choice"
+    if normalized in {"multiple_choice", "multiple", "checkbox"}:
+        return "multiple_choice"
+    if normalized in {"short_answer", "text", "essay"}:
+        return "short_answer"
+    return "short_answer"
+
+
 @dataclass(frozen=True)
 class FrozenExamQuestion:
     question_id: str
@@ -180,7 +194,7 @@ class ExaminerRuntime:
         )
         runtime._current_question_index = state.current_question_index
         runtime._answers = list(state.answers)
-        runtime._answered_count = len(state.answers)
+        runtime._answered_count = len(runtime._answered_question_indices())
         runtime._completed = state.status == "completed"
         runtime._completed_reason = state.completed_reason
         runtime._report_path = state.report_path
@@ -205,68 +219,135 @@ class ExaminerRuntime:
     async def handle_client_message(self, message: dict[str, Any]) -> list[dict[str, Any]]:
         if self._completed:
             return []
-        if message.get("type") != "exam.answer":
-            return []
+        msg_type = message.get("type")
+        if msg_type == "exam.navigate":
+            return self._handle_navigate(message)
+        if msg_type == "exam.answer":
+            return await self._handle_answer(message)
+        return []
 
+    def _handle_navigate(self, message: dict[str, Any]) -> list[dict[str, Any]]:
         data = message.get("data")
         if not isinstance(data, dict):
             return []
-        question_index = data.get("question_index")
-        if question_index != self._current_question_index:
+        try:
+            question_index = int(data.get("question_index"))
+        except (TypeError, ValueError):
+            return []
+        if question_index < 0 or question_index >= len(self._questions):
+            return []
+        self._current_question_index = question_index
+        return [self._question_message(question_index)]
+
+    async def _handle_answer(self, message: dict[str, Any]) -> list[dict[str, Any]]:
+        data = message.get("data")
+        if not isinstance(data, dict):
+            return []
+        try:
+            question_index = int(data.get("question_index"))
+        except (TypeError, ValueError):
+            return []
+        if question_index < 0 or question_index >= len(self._questions):
             return []
 
-        question = self._questions[self._current_question_index]
-        try:
-            result = await self._scorer(
-                question=question,
-                answer_text=str(data.get("answer_text") or ""),
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Examiner scoring failed; degraded to safe feedback",
-                session_id=self._session_id,
-                question_id=question.question_id,
-                reason="SCORING_EXCEPTION",
-                error_type=type(exc).__name__,
-            )
-            result = {
-                "score": 0,
-                "feedback": "scoring_unavailable",
-                "reason": "SCORING_EXCEPTION",
-            }
-        feedback_data = {
-            "question_index": self._current_question_index,
-            "question_id": question.question_id,
-            "score": result.get("score", 0),
-            "feedback": result.get("feedback", ""),
-            **(
-                {"reason": result["reason"]}
-                if isinstance(result.get("reason"), str)
-                else {}
-            ),
-        }
-        self._answers.append(
-            {
-                "question_index": feedback_data["question_index"],
-                "question_id": feedback_data["question_id"],
-                "answer_text": str(data.get("answer_text") or ""),
-                "score": feedback_data["score"],
-                "feedback": feedback_data["feedback"],
-            }
+        question = self._questions[question_index]
+        self._upsert_answer(
+            question_index=question_index,
+            question_id=question.question_id,
+            answer_text=str(data.get("answer_text") or ""),
         )
-        messages = [
-            {
-                "type": "exam.feedback",
-                "data": feedback_data,
-            }
-        ]
-        self._answered_count += 1
+        self._answered_count = len(self._answered_question_indices())
+
+        if question_index != self._current_question_index:
+            return [self._progress_message()]
+
         self._current_question_index += 1
         if self._current_question_index < len(self._questions):
-            messages.append(self._question_message(self._current_question_index))
-        else:
-            messages.append(await self._completed_message("all_questions_answered"))
-        return messages
+            return [self._question_message(self._current_question_index)]
+
+        await self._score_all_pending_answers()
+        return [await self._completed_message("all_questions_answered")]
+
+    def _upsert_answer(
+        self,
+        *,
+        question_index: int,
+        question_id: str,
+        answer_text: str,
+    ) -> None:
+        entry = {
+            "question_index": question_index,
+            "question_id": question_id,
+            "answer_text": answer_text,
+        }
+        for index, existing in enumerate(self._answers):
+            if int(existing.get("question_index") or -1) == question_index:
+                self._answers[index] = entry
+                return
+        self._answers.append(entry)
+
+    def _answered_question_indices(self) -> list[int]:
+        indices: list[int] = []
+        for entry in self._answers:
+            if not str(entry.get("answer_text") or "").strip():
+                continue
+            try:
+                indices.append(int(entry.get("question_index")))
+            except (TypeError, ValueError):
+                continue
+        return sorted(set(indices))
+
+    async def _score_all_pending_answers(self) -> None:
+        scored: list[dict[str, Any]] = []
+        for entry in self._answers:
+            if "score" in entry and "feedback" in entry:
+                scored.append(dict(entry))
+                continue
+
+            question_index = int(entry.get("question_index") or 0)
+            if question_index < 0 or question_index >= len(self._questions):
+                scored.append(
+                    {
+                        **entry,
+                        "score": 0,
+                        "feedback": "scoring_unavailable",
+                        "reason": "QUESTION_INDEX_OUT_OF_RANGE",
+                    }
+                )
+                continue
+
+            question = self._questions[question_index]
+            try:
+                result = await self._scorer(
+                    question=question,
+                    answer_text=str(entry.get("answer_text") or ""),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Examiner scoring failed; degraded to safe feedback",
+                    session_id=self._session_id,
+                    question_id=question.question_id,
+                    reason="SCORING_EXCEPTION",
+                    error_type=type(exc).__name__,
+                )
+                result = {
+                    "score": 0,
+                    "feedback": "scoring_unavailable",
+                    "reason": "SCORING_EXCEPTION",
+                }
+
+            scored_entry: dict[str, Any] = {
+                "question_index": question_index,
+                "question_id": str(entry.get("question_id") or question.question_id),
+                "answer_text": str(entry.get("answer_text") or ""),
+                "score": result.get("score", 0),
+                "feedback": result.get("feedback", ""),
+            }
+            if isinstance(result.get("reason"), str):
+                scored_entry["reason"] = result["reason"]
+            scored.append(scored_entry)
+
+        self._answers = scored
 
     def serialize_state(self, *, now: float | None = None) -> dict[str, Any]:
         state = ExaminerSessionState(
@@ -295,6 +376,8 @@ class ExaminerRuntime:
         current_time = now if now is not None else time()
         if self._completed or current_time - self._started_at < self._timeout_seconds:
             return []
+        if self._answers:
+            await self._score_all_pending_answers()
         return [await self._completed_message("timed_out")]
 
     def _session_init_message(self) -> dict[str, Any]:
@@ -307,6 +390,25 @@ class ExaminerRuntime:
                 "total_questions": len(self._questions),
                 "remaining_seconds": self._remaining_seconds(),
                 "status": "in_progress",
+                "questions_outline": [
+                    {
+                        "question_index": index,
+                        "question_id": question.question_id,
+                        "title": question.title,
+                        "question_type": _infer_question_type(question.scoring_criteria),
+                    }
+                    for index, question in enumerate(self._questions)
+                ],
+                "answered_question_indices": self._answered_question_indices(),
+            },
+        }
+
+    def _progress_message(self) -> dict[str, Any]:
+        return {
+            "type": "exam.progress",
+            "data": {
+                "answered_question_indices": self._answered_question_indices(),
+                "current_question_index": self._current_question_index,
             },
         }
 
@@ -319,6 +421,7 @@ class ExaminerRuntime:
                 "question_id": question.question_id,
                 "title": question.title,
                 "stem": question.stem,
+                "question_type": _infer_question_type(question.scoring_criteria),
                 "remaining_seconds": self._remaining_seconds(),
             },
         }

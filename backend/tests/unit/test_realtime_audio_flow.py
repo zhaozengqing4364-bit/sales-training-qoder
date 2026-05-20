@@ -61,6 +61,14 @@ def test_clear_output_audio_empties_buffer() -> None:
     assert flow.get_output_buffer() == []
 
 
+def test_pending_output_audio_bytes_returns_correct_count() -> None:
+    flow = RealtimeAudioFlowModule()
+    flow.append_output_audio("12345")
+    flow.append_output_audio("你好")
+
+    assert flow.pending_output_audio_bytes() == len("12345你好".encode())
+
+
 def test_backpressure_applies_when_input_buffer_exceeds_threshold() -> None:
     flow = RealtimeAudioFlowModule()
     flow.append_input_audio("12345")

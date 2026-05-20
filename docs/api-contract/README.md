@@ -19,7 +19,9 @@ docs/api-contract/
 ├── model-configs.md    # 模型配置 API 契约
 ├── voice-runtime.md    # 语音运行时策略 API 契约
 ├── release-verification.md # 发布验收 API 契约
-└── websocket.md        # WebSocket 消息契约
+├── learning-content.md     # 学习内容 API 契约
+├── test-bank.md            # 题库 API 契约
+└── websocket.md            # WebSocket 消息契约
 ```
 
 ## 状态标记
@@ -36,9 +38,9 @@ docs/api-contract/
 ### 前端开发
 
 1. 查看对应模块的契约文件
-2. 按照契约定义创建类型 (`frontend/src/types/api-future.ts`)
+2. 在 `web/src/lib/api/types.ts` 补充/对齐类型，在 `web/src/lib/api/client.ts`（及 `client-domains.ts`）实现调用与 normalize
 3. Mock 数据必须符合契约格式 (使用 snake_case)
-4. 后端实现后进行联调
+4. 后端实现后进行联调；变更时同步 `web/src/lib/api/client-domains.test.ts` 或 contract 测试
 
 ### 后端开发
 
@@ -49,8 +51,8 @@ docs/api-contract/
 ## 字段命名规范
 
 - **后端 API**: 使用 `snake_case`
-- **前端类型**: API 层使用 `snake_case`，内部模型使用 `camelCase`
-- **字段映射**: 在 `frontend/src/lib/transforms.ts` 中统一处理
+- **前端 API 类型** (`web/src/lib/api/types.ts`): 与后端一致，使用 `snake_case`
+- **响应 normalize**: 在 `web/src/lib/api/client.ts` 与各 domain builder 中统一处理（非独立 `transforms.ts`）
 
 ## 响应格式规范
 

@@ -28,6 +28,13 @@ Concise guide for the Next.js/React frontend. Read this before touching `web/`.
 - Prefer server components by default; mark `'use client'` only when needed
 - Keep `src/lib/api/*` and `src/hooks/*` as stable surfaces — changes ripple widely
 
+## Frontend Hard Rules
+
+- NEVER use `alert()`, `confirm()`, or `prompt()` in production UI — use `ConfirmDialog`, `StatusIndicator`, `Toast`, or inline error states (Constitution: UX never interrupted during practice).
+- NEVER use raw `console.log` / `console.error` in `app/`, `components/`, `hooks/`, or `lib/` — allowed only in `lib/debug.ts` and `instrumentation*.ts` (enforced by `lib/console-boundary.test.ts`).
+- NEVER use full-page `bg-white` canvas — use `bg-slate-50` for page background; white/glass for cards and inputs (see `.kiro/steering/frontend-principles.md`).
+- NEVER add Next.js API routes under `src/app/**/route.ts` — frontend consumes the Python backend only.
+
 ## Workflow / Verification
 
 - Run type checks from `web/`: `npx tsc --noEmit`

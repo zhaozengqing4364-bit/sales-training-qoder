@@ -145,6 +145,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.grounding_decision_pipeline import GroundingDecisionContext
 from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 from sales_bot.websocket.stepfun_realtime_constants import (
     DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
@@ -171,6 +172,8 @@ from sales_bot.websocket.stepfun_runtime_types import (
     FunctionCallState,
     RealtimeResponseState,
 )
+from sales_bot.websocket.stepfun_tool_execution import ToolExecutionContext
+from training_runtime.stepfun_transport import StepFunSendStatus
 
 logger = get_logger(__name__)
 
@@ -191,8 +194,450 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             )
             return
         await self._send_upstream({"type": "input_audio_buffer.commit"})
+        audio_flow = getattr(self, "_audio_flow", None)
+        if audio_flow is not None:
+            audio_flow.commit_input_audio()
         self._has_uncommitted_audio = False
         await self._schedule_response_after_commit()
+
+    async def _prepare_grounding_context(self, query: str) -> None:
+        """
+        Pre-fetch internal knowledge for the current user turn.
+
+        This provides deterministic grounding for realtime mode (even when model
+        does not proactively call `search_internal_knowledge`).
+        """
+        normalized_query = query.strip()
+        self._pending_grounding_context = ""
+        self._pending_blocked_response_text = ""
+        if not normalized_query:
+            self._log_grounding_debug("prefetch_skipped", reason="empty_query")
+            return
+
+        tool_policy = self._effective_policy.get("tool_policy")
+        if not isinstance(tool_policy, dict):
+            tool_policy = {}
+        knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+        has_bound_knowledge_base = isinstance(knowledge_base_ids, list) and bool(
+            [item for item in knowledge_base_ids if str(item).strip()]
+        )
+        require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
+        if require_kb_grounding:
+            decision: Any | None = None
+            decision_id = uuid.uuid4().hex[:12]
+            decision_started_at = asyncio.get_running_loop().time()
+            kb_lock_timeout_seconds = self._kb_lock_decision_timeout_seconds
+            decision_coro = self._grounding_pipeline.evaluate(
+                query=normalized_query,
+                context=GroundingDecisionContext(
+                    effective_policy=self._effective_policy,
+                    record_metric=self._record_knowledge_runtime_metric,
+                ),
+                decision_id=decision_id,
+            )
+            try:
+                decision = await asyncio.wait_for(
+                    decision_coro,
+                    timeout=kb_lock_timeout_seconds,
+                )
+            except TimeoutError:
+                decision_coro.close()
+                decision_duration_ms = round(
+                    (asyncio.get_running_loop().time() - decision_started_at) * 1000,
+                    1,
+                )
+                timeout_phase_breakdown = {
+                    "phase_total_ms": decision_duration_ms,
+                    "phase_health_ms": 0.0,
+                    "phase_search_ms": 0.0,
+                    "phase_vector_ms": 0.0,
+                    "phase_keyword_ms": 0.0,
+                    "timeout_budget_ms": int(kb_lock_timeout_seconds * 1000),
+                    "cache_hit_health": False,
+                    "cache_hit_ready_docs": False,
+                    "cache_hit_internal_retrieval": False,
+                }
+                decision_status = "blocked_search_timeout"
+                blocked = True
+                self._pending_blocked_response_text = (
+                    "当前内部知识检索超时，暂时无法基于内部资料回答这个问题。"
+                    "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
+                )
+                self._pending_grounding_context = ""
+                await self._record_kb_lock_decision(
+                    status=decision_status,
+                    blocked=blocked,
+                    decision_id=decision_id,
+                    duration_ms=decision_duration_ms,
+                    phase_breakdown=timeout_phase_breakdown,
+                    error_detail="[KB_LOCK_TIMEOUT]",
+                )
+                self._log_grounding_debug(
+                    "prefetch_kb_lock_timeout",
+                    decision_id=decision_id,
+                    query_length=len(normalized_query),
+                    timeout_ms=int(kb_lock_timeout_seconds * 1000),
+                    kb_count=len(knowledge_base_ids)
+                    if isinstance(knowledge_base_ids, list)
+                    else 0,
+                    status=decision_status,
+                    decision_duration_ms=decision_duration_ms,
+                )
+                logger.info(
+                    "kb_lock_timing_breakdown",
+                    session_id=self.session_id,
+                    decision_id=decision_id,
+                    query_length=len(normalized_query),
+                    timeout_budget_ms=int(kb_lock_timeout_seconds * 1000),
+                    decision_status=decision_status,
+                    phase_health_ms=0.0,
+                    phase_search_ms=0.0,
+                    phase_vector_ms=0.0,
+                    phase_keyword_ms=0.0,
+                    phase_total_ms=decision_duration_ms,
+                    cache_hit_health=False,
+                    cache_hit_ready_docs=False,
+                    cache_hit_internal_retrieval=False,
+                    max_score=0.0,
+                    min_pass_score=self._safe_float(
+                        timeout_phase_breakdown.get("min_pass_score"), 0.0
+                    ),
+                    result_count=0,
+                )
+                return
+
+            if decision is None:
+                return
+            decision_id = str(getattr(decision, "decision_id", "") or decision_id)
+            fallback_duration_ms = round(
+                (asyncio.get_running_loop().time() - decision_started_at) * 1000,
+                1,
+            )
+            decision_duration_ms = self._safe_float(
+                getattr(decision, "duration_ms", 0.0),
+                fallback_duration_ms,
+            )
+            if decision_duration_ms <= 0:
+                decision_duration_ms = fallback_duration_ms
+            phase_breakdown = getattr(decision, "phase_breakdown", None)
+            if not isinstance(phase_breakdown, dict):
+                phase_breakdown = {}
+            phase_breakdown = dict(phase_breakdown)
+            phase_breakdown.setdefault("phase_total_ms", round(decision_duration_ms, 1))
+            phase_breakdown.setdefault(
+                "timeout_budget_ms", int(kb_lock_timeout_seconds * 1000)
+            )
+            phase_breakdown.setdefault("cache_hit_internal_retrieval", False)
+            if decision.allow_generation:
+                self._pending_blocked_response_text = ""
+                self._pending_grounding_context = decision.grounding_context
+                await self._record_kb_lock_decision(
+                    status=decision.status,
+                    blocked=False,
+                    decision_id=decision_id,
+                    duration_ms=decision_duration_ms,
+                    phase_breakdown=phase_breakdown,
+                    error_detail=decision.error_detail,
+                )
+                self._log_grounding_debug(
+                    "prefetch_kb_lock_passed",
+                    decision_id=decision_id,
+                    query_length=len(normalized_query),
+                    result_count=decision.result_count,
+                    retrieval_mode=decision.retrieval_mode,
+                    decision_duration_ms=round(decision_duration_ms, 1),
+                )
+            else:
+                self._pending_blocked_response_text = decision.user_message
+                self._pending_grounding_context = ""
+                await self._record_kb_lock_decision(
+                    status=decision.status,
+                    blocked=True,
+                    decision_id=decision_id,
+                    duration_ms=decision_duration_ms,
+                    phase_breakdown=phase_breakdown,
+                    error_detail=decision.error_detail,
+                )
+                self._log_grounding_debug(
+                    "prefetch_kb_lock_blocked",
+                    decision_id=decision_id,
+                    query_length=len(normalized_query),
+                    kb_count=len(knowledge_base_ids)
+                    if isinstance(knowledge_base_ids, list)
+                    else 0,
+                    status=decision.status,
+                    error_detail=decision.error_detail,
+                    decision_duration_ms=round(decision_duration_ms, 1),
+                )
+            logger.info(
+                "kb_lock_timing_breakdown",
+                session_id=self.session_id,
+                decision_id=decision_id,
+                query_length=len(normalized_query),
+                timeout_budget_ms=int(kb_lock_timeout_seconds * 1000),
+                decision_status=str(decision.status),
+                phase_health_ms=self._safe_float(
+                    phase_breakdown.get("phase_health_ms"), 0.0
+                ),
+                phase_search_ms=self._safe_float(
+                    phase_breakdown.get("phase_search_ms"), 0.0
+                ),
+                phase_vector_ms=self._safe_float(
+                    phase_breakdown.get("phase_vector_ms"), 0.0
+                ),
+                phase_keyword_ms=self._safe_float(
+                    phase_breakdown.get("phase_keyword_ms"), 0.0
+                ),
+                phase_total_ms=self._safe_float(
+                    phase_breakdown.get("phase_total_ms"), decision_duration_ms
+                ),
+                cache_hit_health=bool(phase_breakdown.get("cache_hit_health", False)),
+                cache_hit_ready_docs=bool(
+                    phase_breakdown.get("cache_hit_ready_docs", False)
+                ),
+                cache_hit_internal_retrieval=bool(
+                    phase_breakdown.get("cache_hit_internal_retrieval", False)
+                ),
+                max_score=self._safe_float(phase_breakdown.get("max_score"), 0.0),
+                min_pass_score=self._safe_float(
+                    phase_breakdown.get("min_pass_score"), 0.0
+                ),
+                result_count=int(getattr(decision, "result_count", 0) or 0),
+            )
+            return
+
+        internal_retrieval_enabled = bool(
+            tool_policy.get("enable_internal_retrieval", True)
+        )
+        if not internal_retrieval_enabled and not has_bound_knowledge_base:
+            self._log_grounding_debug(
+                "prefetch_skipped",
+                reason="internal_retrieval_disabled",
+                query_length=len(normalized_query),
+            )
+            return
+        if not internal_retrieval_enabled and has_bound_knowledge_base:
+            self._log_grounding_debug(
+                "prefetch_internal_retrieval_forced",
+                reason="kb_bound_guardrail",
+                query_length=len(normalized_query),
+            )
+
+        try:
+            top_k = int(tool_policy.get("retrieval_top_k", 3) or 3)
+        except (TypeError, ValueError):
+            top_k = 3
+        retrieval_top_k = max(1, min(8, top_k))
+        retrieval: dict[str, Any] | None = None
+        prefetch_timeout_seconds = self._grounding_prefetch_timeout_seconds
+        if prefetch_timeout_seconds > 0:
+            try:
+                retrieval = await asyncio.wait_for(
+                    self._grounding_pipeline.retrieve(
+                        normalized_query,
+                        top_k=retrieval_top_k,
+                    ),
+                    timeout=prefetch_timeout_seconds,
+                )
+            except TimeoutError:
+                self._log_grounding_debug(
+                    "prefetch_timeout",
+                    query_length=len(normalized_query),
+                    timeout_ms=int(prefetch_timeout_seconds * 1000),
+                    kb_count=len(knowledge_base_ids)
+                    if isinstance(knowledge_base_ids, list)
+                    else 0,
+                )
+                if has_bound_knowledge_base:
+                    self._pending_blocked_response_text = (
+                        "当前内部知识检索超时，暂时无法基于内部资料回答这个问题。"
+                        "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
+                    )
+                    self._pending_grounding_context = ""
+                return
+        else:
+            retrieval = await self._grounding_pipeline.retrieve(
+                normalized_query,
+                top_k=retrieval_top_k,
+            )
+
+        if not isinstance(retrieval, dict):
+            self._log_grounding_debug(
+                "prefetch_skipped",
+                reason="invalid_retrieval_payload",
+                query_length=len(normalized_query),
+            )
+            if has_bound_knowledge_base:
+                self._pending_blocked_response_text = (
+                    "当前内部知识检索结果不可用，暂时无法基于内部资料回答这个问题。"
+                    "请稍后重试，或补充更具体的关键词、版本信息或业务场景。"
+                )
+                self._pending_grounding_context = ""
+            return
+        grounding_decision = self._grounding_pipeline.evaluate_retrieval(
+            normalized_query,
+            GroundingDecisionContext(effective_policy=self._effective_policy),
+            retrieval,
+        )
+        self._latest_knowledge_answer_diagnostics = (
+            copy.deepcopy(grounding_decision.diagnostics)
+            if isinstance(grounding_decision.diagnostics, dict)
+            else None
+        )
+        self._pending_grounding_context = grounding_decision.grounding_context
+        self._pending_blocked_response_text = grounding_decision.user_message
+        if not grounding_decision.allow_generation:
+            self._log_grounding_debug(
+                "prefetch_grounding_blocked",
+                query_length=len(normalized_query),
+                status=grounding_decision.status,
+                answerability_mode=grounding_decision.answerability_mode,
+                answerability=str(
+                    (grounding_decision.diagnostics or {}).get("answerability") or ""
+                ),
+                source_status=str(
+                    (grounding_decision.diagnostics or {}).get("source_status") or ""
+                ),
+            )
+            return
+        self._log_grounding_debug(
+            "prefetch_applied",
+            query_length=len(normalized_query),
+            snippet_count=grounding_decision.result_count,
+            answerability_mode=grounding_decision.answerability_mode,
+        )
+
+    async def _schedule_response_after_commit(self) -> None:
+        """
+        Schedule response creation after audio commit.
+
+        We wait briefly for final transcription so we can run sales-stage,
+        fuzzy/scoring, and grounding before creating the response.
+        """
+        async with self._pending_response_lock:
+            if self._pending_response_after_commit:
+                return
+            self._pending_response_after_commit = True
+            self._awaiting_transcription_after_commit = True
+            self._allow_late_transcription_response = False
+            self._latest_input_transcript_delta = ""
+            self._pending_response_generation += 1
+            generation = self._pending_response_generation
+            timeout_task = self._pending_response_timeout_task
+            self._pending_response_timeout_task = asyncio.create_task(
+                self._pending_response_timeout_fallback(generation)
+            )
+
+        if timeout_task:
+            timeout_task.cancel()
+
+    async def _pending_response_timeout_fallback(
+        self, expected_generation: int | None = None
+    ) -> None:
+        try:
+            await asyncio.sleep(PENDING_RESPONSE_FALLBACK_SECONDS)
+            if (
+                expected_generation is not None
+                and expected_generation != self._pending_response_generation
+            ):
+                self._log_grounding_debug(
+                    "skip_stale_pending_response_timeout",
+                    expected_generation=expected_generation,
+                    active_generation=self._pending_response_generation,
+                )
+                return
+            transcription_deadline = (
+                asyncio.get_running_loop().time() + TRANSCRIPTION_WAIT_GRACE_SECONDS
+            )
+            while (
+                self._awaiting_transcription_after_commit
+                and asyncio.get_running_loop().time() < transcription_deadline
+            ):
+                await asyncio.sleep(GROUNDING_WAIT_POLL_SECONDS)
+            if self._awaiting_transcription_after_commit:
+                self._log_grounding_debug(
+                    "timeout_proceeded_without_transcription_completion"
+                )
+                fallback_transcript = self._latest_input_transcript_delta.strip()
+                if fallback_transcript:
+                    self._log_grounding_debug(
+                        "timeout_use_delta_transcript_as_final",
+                        transcript_length=len(fallback_transcript),
+                    )
+                    await self._handle_final_user_transcript(fallback_transcript)
+                    return
+
+                self._pending_grounding_context = ""
+                self._pending_blocked_response_text = ""
+                await self._cancel_pending_response_after_commit()
+                self._allow_late_transcription_response = True
+
+                if self._is_kb_lock_required_for_current_policy():
+                    await self._record_kb_lock_decision(
+                        status="transcription_timeout_suppressed",
+                        blocked=False,
+                    )
+                else:
+                    self._log_grounding_debug("timeout_suppressed_without_transcript")
+
+                await self._send_status("listening")
+                return
+            if self._grounding_preparation_in_progress:
+                self._log_grounding_debug("timeout_waiting_for_prefetch")
+            deadline = asyncio.get_running_loop().time() + GROUNDING_WAIT_GRACE_SECONDS
+            while (
+                self._grounding_preparation_in_progress
+                and asyncio.get_running_loop().time() < deadline
+            ):
+                await asyncio.sleep(GROUNDING_WAIT_POLL_SECONDS)
+            if self._grounding_preparation_in_progress:
+                self._log_grounding_debug(
+                    "timeout_proceeded_without_prefetch_completion"
+                )
+            await self._create_response_from_pending_commit(
+                expected_generation=expected_generation
+            )
+        except asyncio.CancelledError:
+            return
+
+    async def _cancel_pending_response_after_commit(self) -> None:
+        async with self._pending_response_lock:
+            self._pending_response_after_commit = False
+            self._awaiting_transcription_after_commit = False
+            self._allow_late_transcription_response = False
+            self._latest_input_transcript_delta = ""
+            self._pending_response_generation += 1
+            timeout_task = self._pending_response_timeout_task
+            self._pending_response_timeout_task = None
+
+        if timeout_task:
+            timeout_task.cancel()
+
+    async def _create_response_from_pending_commit(
+        self, expected_generation: int | None = None
+    ) -> bool:
+        async with self._pending_response_lock:
+            if not self._pending_response_after_commit:
+                return False
+            if (
+                expected_generation is not None
+                and expected_generation != self._pending_response_generation
+            ):
+                self._log_grounding_debug(
+                    "skip_stale_pending_response_commit",
+                    expected_generation=expected_generation,
+                    active_generation=self._pending_response_generation,
+                )
+                return False
+            self._pending_response_after_commit = False
+            self._awaiting_transcription_after_commit = False
+            timeout_task = self._pending_response_timeout_task
+            self._pending_response_timeout_task = None
+
+        if timeout_task and timeout_task is not asyncio.current_task():
+            timeout_task.cancel()
+
+        return await self._create_response(count_turn=True)
 
     async def _create_response(self, *, count_turn: bool = False) -> bool:
         """Create a new upstream response and initialize local response state."""
@@ -255,6 +700,26 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             await self._send_status("listening")
             return True
 
+        turn_coordinator = getattr(self, "_turn_coordinator", None)
+        interruption = (
+            turn_coordinator.resolve_interruption()
+            if turn_coordinator is not None
+            else None
+        )
+        if (
+            turn_coordinator is not None
+            and interruption is not None
+            and interruption.should_interrupt
+        ):
+            logger.info(
+                "Realtime turn coordinator resolved interruption before response.create",
+                session_id=self.session_id,
+                turn_id=interruption.turn_id,
+                reason=interruption.reason,
+            )
+            await self._clear_upstream_generation()
+            turn_coordinator.reset()
+
         self.current_request_id += 1
         if count_turn:
             self.turn_count += 1
@@ -262,16 +727,39 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             request_id=self.current_request_id,
             stream_id=str(uuid.uuid4()),
         )
+        if turn_coordinator is not None:
+            turn_start = turn_coordinator.start_turn(str(self.current_request_id))
+            if not turn_start.started:
+                logger.warning(
+                    "Realtime turn coordinator rejected response start",
+                    session_id=self.session_id,
+                    request_id=self.current_request_id,
+                    reason=turn_start.reason,
+                )
+            turn_coordinator.on_model_response_start()
 
         response_payload: dict[str, Any] = {
             "type": "response.create",
             "response": {"modalities": ["audio", "text"]},
         }
+        try:
+            profile = self._active_voice_runtime_profile()
+        except AttributeError:
+            profile = None
         grounding_context = self._pending_grounding_context.strip()
-        turn_instructions = VoiceInstructionCompiler.compose_turn_instructions(
-            base_instructions=self._stepfun_instructions,
-            grounding_context=grounding_context,
-        )
+        if profile is not None:
+            turn_instructions = profile.compile_instructions(
+                grounding_context=grounding_context,
+            )
+            base_instructions = profile.instructions
+            instruction_contract_hash = profile.instruction_contract_hash
+        else:
+            turn_instructions = VoiceInstructionCompiler.compose_turn_instructions(
+                base_instructions=self._stepfun_instructions,
+                grounding_context=grounding_context,
+            )
+            base_instructions = self._stepfun_instructions
+            instruction_contract_hash = self._instruction_contract_hash
         if turn_instructions:
             response_payload["response"]["instructions"] = turn_instructions
         self._pending_grounding_context = ""
@@ -280,9 +768,9 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             request_id=self.current_request_id,
             has_grounding_context=bool(grounding_context),
             grounding_context_length=len(grounding_context),
-            has_base_instructions=bool(self._stepfun_instructions.strip()),
+            has_base_instructions=bool(base_instructions.strip()),
             final_instruction_length=len(turn_instructions),
-            instruction_contract_hash=self._instruction_contract_hash,
+            instruction_contract_hash=instruction_contract_hash,
         )
 
         await self._send_status("thinking")
@@ -300,16 +788,20 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
 
         await self.manager.send_json(
             self.websocket,
-            build_interrupted_event(
-                reason=reason,
-                session_status=self.session_status,
-                ai_state="listening"
-                if self.session_status == "in_progress"
-                else "idle",
-                turn_count=self.turn_count,
-                trace_id=get_trace_id(),
-                stream_id=interrupted_stream_id,
-            ),
+            {
+                "type": "interrupted",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": get_trace_id(),
+                "stream_id": interrupted_stream_id,
+                "data": {
+                    "reason": reason,
+                    "session_status": self.session_status,
+                    "ai_state": "listening"
+                    if self.session_status == "in_progress"
+                    else "idle",
+                    "turn_count": self.turn_count,
+                },
+            },
         )
         await self._send_status(
             "listening" if self.session_status == "in_progress" else "idle"
@@ -387,6 +879,69 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         if close_reason:
             return f"Realtime 上游连接已关闭：{close_reason}"
         return "Realtime 上游连接已关闭，请点击“重新连接”。"
+
+    async def _recover_upstream_after_disconnect(
+        self,
+        *,
+        close_code: Any,
+        close_reason: str,
+        ws_lifetime_ms: float | None,
+    ) -> bool:
+        if not self.running:
+            return False
+        if not self._upstream_auto_recover_enabled:
+            return False
+        if self._upstream_auto_recover_max_retries <= 0:
+            return False
+
+        for attempt in range(1, self._upstream_auto_recover_max_retries + 1):
+            backoff_seconds = _handler_symbol(
+                "compute_jitter_backoff_seconds",
+                compute_jitter_backoff_seconds,
+            )(
+                attempt=attempt,
+                base_delay_seconds=self._upstream_auto_recover_base_delay_seconds,
+                max_delay_seconds=self._upstream_auto_recover_max_delay_seconds,
+            )
+            try:
+                await asyncio.sleep(backoff_seconds)
+            except asyncio.CancelledError:
+                raise
+            if not self.running:
+                return False
+
+            try:
+                await self._close_upstream()
+                await self._connect_upstream()
+                await self._cancel_pending_response_after_commit()
+                self._reset_turn_runtime_state()
+                await self._send_status(
+                    "listening" if self.session_status == "in_progress" else "idle"
+                )
+                logger.info(
+                    "StepFun upstream recovered",
+                    session_id=self.session_id,
+                    close_code=close_code,
+                    close_reason=close_reason,
+                    ws_lifetime_ms=ws_lifetime_ms,
+                    attempt=attempt,
+                    backoff_ms=round(backoff_seconds * 1000, 1),
+                )
+                return True
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "StepFun upstream recover attempt failed",
+                    session_id=self.session_id,
+                    close_code=close_code,
+                    close_reason=close_reason,
+                    attempt=attempt,
+                    backoff_ms=round(backoff_seconds * 1000, 1),
+                    error=str(exc),
+                )
+
+        return False
 
     async def sync_lifecycle_transition(
         self, transition: SessionLifecycleTransition
@@ -476,6 +1031,8 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         """Map selected StepFun events to existing frontend contract."""
         event_type = str(event.get("type", ""))
         self._last_upstream_event_type = event_type
+        await self._handle_emotion_event(event)
+        await self._handle_thinking_event(event)
         route = classify_upstream_event(event_type)
 
         if route == UpstreamEventRoute.IGNORE:
@@ -488,6 +1045,18 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             return
         if route == UpstreamEventRoute.TRANSCRIPTION_COMPLETED:
             await self._handle_upstream_transcription_completed(event)
+            return
+        if route in {
+            UpstreamEventRoute.SPEECH_STARTED,
+            UpstreamEventRoute.SPEECH_STOPPED,
+        }:
+            if route == UpstreamEventRoute.SPEECH_STARTED:
+                self._turn_coordinator.on_user_audio_start()
+            else:
+                self._turn_coordinator.on_user_audio_stop()
+            return
+        if event_type == "input_audio_buffer.committed":
+            self._turn_coordinator.on_user_audio_stop()
             return
         if route == UpstreamEventRoute.RESPONSE_CREATED:
             await self._handle_upstream_response_created(event)
@@ -522,104 +1091,6 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             call_id=call_id,
             name=name,
         )
-
-    async def _handle_upstream_transcription_delta(self, event: dict) -> None:
-        """Forward interim ASR transcript to frontend."""
-        transcript = self._extract_transcription_delta_text(event)
-        if transcript:
-            normalized_transcript = self._normalize_transcript(
-                str(transcript),
-                is_final=False,
-            ).normalized_text
-            self._latest_input_transcript_delta = self._merge_transcription_delta_text(
-                self._latest_input_transcript_delta,
-                normalized_transcript,
-            )
-            await self._send_transcript(normalized_transcript, is_final=False)
-
-    async def _handle_upstream_transcription_completed(self, event: dict) -> None:
-        """Persist final ASR transcript and continue response chain."""
-        transcript = self._extract_final_transcript_text(event)
-        if not transcript:
-            transcript = self._latest_input_transcript_delta.strip()
-            if transcript:
-                self._log_grounding_debug(
-                    "transcription_completed_fallback_to_delta",
-                    transcript_length=len(transcript),
-                )
-        if not transcript:
-            return
-        await self._handle_final_user_transcript(transcript)
-
-    def _extract_final_transcript_text(self, event: dict) -> str:
-        """Extract final transcript from upstream payload variations."""
-        direct_candidates = (
-            event.get("transcript"),
-            event.get("text"),
-            event.get("audio_transcript"),
-            event.get("stash"),
-            event.get("delta"),
-        )
-        for candidate in direct_candidates:
-            if isinstance(candidate, str) and candidate.strip():
-                return candidate.strip()
-
-        item = event.get("item")
-        if isinstance(item, dict):
-            item_candidates = (
-                item.get("transcript"),
-                item.get("text"),
-                item.get("audio_transcript"),
-                item.get("stash"),
-            )
-            for candidate in item_candidates:
-                if isinstance(candidate, str) and candidate.strip():
-                    return candidate.strip()
-
-        return ""
-
-    def _extract_transcription_delta_text(self, event: dict) -> str:
-        """Extract interim transcript text from upstream payload variations."""
-        direct_candidates = (
-            event.get("delta"),
-            event.get("text"),
-            event.get("stash"),
-            event.get("audio_transcript"),
-        )
-        for candidate in direct_candidates:
-            if isinstance(candidate, str) and candidate.strip():
-                return candidate
-
-        item = event.get("item")
-        if isinstance(item, dict):
-            item_candidates = (
-                item.get("delta"),
-                item.get("text"),
-                item.get("stash"),
-                item.get("audio_transcript"),
-                item.get("transcript"),
-            )
-            for candidate in item_candidates:
-                if isinstance(candidate, str) and candidate.strip():
-                    return candidate
-
-        return ""
-
-    def _merge_transcription_delta_text(self, previous: str, incoming: str) -> str:
-        """Merge transcript chunks for both append-style and snapshot-style events."""
-        incoming = incoming or ""
-        if not incoming.strip():
-            return previous
-        if not previous:
-            return incoming
-
-        # Some providers emit a growing full snapshot for each delta frame.
-        if incoming.startswith(previous):
-            return incoming
-        # Ignore exact suffix duplicates to prevent repeated concatenation noise.
-        if previous.endswith(incoming):
-            return previous
-        return previous + incoming
 
     async def _handle_final_user_transcript(self, transcript: str) -> None:
         """Persist one final ASR transcript and continue response chain."""
@@ -691,6 +1162,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                         normalization_result,
                     ),
                 }
+            await self._handle_curriculum_stage_turn(turn_number=turn_number)
             await self._persist_message(
                 turn_number=turn_number,
                 role="user",
@@ -794,6 +1266,441 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 "响应生成暂时失败，请重试。",
             )
 
+    async def _handle_upstream_response_audio_delta(self, event: dict) -> None:
+        """Forward realtime audio chunk to frontend."""
+        delta = event.get("delta", "")
+        if self._active_response and delta:
+            if self._active_response.question_limit_enforced:
+                return
+            await self._forward_audio_delta_chunk(delta)
+
+    async def _flush_active_response(self, response_done_event: dict) -> bool:
+        """Finalize active response and send final marker (or fallback)."""
+        response_state = self._active_response
+        if not response_state:
+            await self._send_status("listening")
+            return False
+
+        response_obj = (
+            response_done_event.get("response", {})
+            if isinstance(response_done_event.get("response"), dict)
+            else {}
+        )
+        done_response_id = response_obj.get("id")
+        if (
+            response_state.response_id
+            and done_response_id
+            and done_response_id != response_state.response_id
+        ):
+            self._log_grounding_debug(
+                "skip_mismatched_response_done",
+                active_response_id=response_state.response_id,
+                done_response_id=str(done_response_id),
+            )
+            return False
+
+        self._active_response = None
+        turn_coordinator = getattr(self, "_turn_coordinator", None)
+        if turn_coordinator is not None:
+            turn_coordinator.on_model_response_done()
+            turn_coordinator.end_turn(str(response_state.request_id))
+
+        response_text = self._extract_response_text(response_done_event)
+        if not response_text:
+            response_text = "".join(response_state.text_parts).strip()
+        response_text = enforce_question_limit(
+            response_text,
+            self._get_max_questions_per_turn(),
+        )
+        response_text = self._apply_answerability_output_guard(response_text)
+
+        if response_text:
+            await self._persist_message(
+                turn_number=max(1, self.turn_count),
+                role="assistant",
+                content=response_text,
+            )
+            async with self._sales_stage_lock:
+                self._append_sales_stage_context_message(
+                    role="assistant",
+                    content=response_text,
+                    turn_number=max(1, self.turn_count),
+                )
+            if self._feedback_context is not None:
+                self._feedback_context.add_message(
+                    role="assistant",
+                    content=response_text,
+                )
+
+        # No output at all in this round; only reset status.
+        if response_state.chunk_index == 0 and not response_text:
+            await self._send_status("listening")
+            return True
+
+        # Streaming path: already sent audio chunks, now send final marker with text.
+        if response_state.chunk_index > 0:
+            self._audio_flow.drain_output_audio()
+            await self.manager.send_json(
+                self.websocket,
+                {
+                    "type": "tts_chunk",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "stream_id": response_state.stream_id,
+                    "request_id": response_state.request_id,
+                    "data": {
+                        "chunk_index": response_state.chunk_index,
+                        "audio": "",
+                        "duration_ms": 0,
+                        "is_final": True,
+                        "text": response_text,
+                        "total_duration_ms": response_state.total_duration_ms,
+                        "audio_format": self._stepfun_output_audio_format.lower(),
+                        "sample_rate": self._stepfun_output_sample_rate,
+                        "playback_rate": self._stepfun_playback_rate,
+                    },
+                },
+            )
+            await self._send_status("listening")
+            return True
+
+        # Fallback path: no audio chunks received from upstream.
+        payload_data = {
+            "text": response_text,
+            "audio": "",
+            "audio_format": "",
+            "duration_ms": len(response_text) * 100,
+            "fallback": "browser_tts",
+            "playback_rate": self._stepfun_playback_rate,
+        }
+        if isinstance(self._latest_knowledge_answer_diagnostics, dict):
+            payload_data["knowledge_answer_diagnostics"] = copy.deepcopy(
+                self._latest_knowledge_answer_diagnostics
+            )
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "tts_audio",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "stream_id": response_state.stream_id,
+                "request_id": response_state.request_id,
+                "data": payload_data,
+            },
+        )
+
+        await self._send_status("listening")
+        return True
+
+    async def _execute_function_call(
+        self,
+        call_id: str,
+        function_name: str,
+        raw_arguments: str,
+        trigger_followup_response: bool,
+    ) -> bool:
+        """Run one custom tool call and return output back to StepFun."""
+        if not call_id or call_id in self._executed_call_ids:
+            return False
+
+        function_name = function_name or "unknown"
+        arguments_obj = decode_function_arguments(raw_arguments)
+        tool_call = {"id": call_id, "name": function_name, "arguments": arguments_obj}
+        routing_decision = self._tool_execution.decide_tool_routing(
+            tool_call,
+            turn_context={
+                "session_id": self.session_id,
+                "turn_id": self.turn_count,
+                "call_id": call_id,
+            },
+        )
+        if not routing_decision.should_execute:
+            self._function_call_states.pop(call_id, None)
+            return False
+        self._log_grounding_debug(
+            "function_call_execute",
+            call_id=call_id,
+            function_name=function_name,
+            raw_arguments_length=len(raw_arguments),
+            argument_keys=sorted(arguments_obj.keys()),
+            has_query=bool(str(arguments_obj.get("query") or "").strip()),
+        )
+
+        output_payload: dict[str, Any]
+        if function_name == "search_internal_knowledge":
+            output_payload = await self._tool_search_internal_knowledge(arguments_obj)
+            grounding_decision = self._grounding_pipeline.evaluate_retrieval(
+                str(arguments_obj.get("query") or ""),
+                GroundingDecisionContext(effective_policy=self._effective_policy),
+                output_payload,
+            )
+            self._latest_knowledge_answer_diagnostics = (
+                copy.deepcopy(grounding_decision.diagnostics)
+                if isinstance(grounding_decision.diagnostics, dict)
+                else None
+            )
+            if grounding_decision.allow_generation:
+                self._pending_blocked_response_text = ""
+                if grounding_decision.grounding_context:
+                    self._pending_grounding_context = grounding_decision.grounding_context
+            else:
+                self._pending_grounding_context = ""
+                self._pending_blocked_response_text = grounding_decision.user_message
+                self._log_grounding_debug(
+                    "function_call_grounding_blocked",
+                    call_id=call_id,
+                    query_length=len(str(arguments_obj.get("query") or "").strip()),
+                    status=grounding_decision.status,
+                    answerability_mode=grounding_decision.answerability_mode,
+                )
+        else:
+            output_payload = build_unsupported_function_output(function_name)
+
+        self._log_grounding_debug(
+            "function_call_output",
+            call_id=call_id,
+            function_name=function_name,
+            result_count=int(output_payload.get("count") or 0),
+            retrieval_mode=str(output_payload.get("retrieval_mode") or ""),
+            message=str(output_payload.get("message") or ""),
+            has_error=bool(output_payload.get("error")),
+        )
+
+        self._executed_call_ids.add(call_id)
+        self._tool_execution.mark_tool_call_completed(call_id)
+        self._function_call_states.pop(call_id, None)
+
+        await self._send_upstream(
+            self._tool_execution.build_tool_response(
+                tool_call_id=call_id,
+                result=output_payload,
+            )
+        )
+
+        if trigger_followup_response:
+            if self._active_response is not None:
+                self._pending_tool_followup_response = True
+            else:
+                await self._create_response()
+        return True
+
+    def _build_internal_retrieval_cache_key(self, arguments_obj: dict[str, Any]) -> str:
+        cache_key: str = self._tool_execution.build_internal_retrieval_cache_key(
+            arguments_obj
+        )
+        return cache_key
+
+    async def _tool_search_internal_knowledge(
+        self, arguments_obj: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Search internal knowledge bases bound to current policy."""
+        cache_key = self._build_internal_retrieval_cache_key(arguments_obj)
+        cache_hit = False
+        output: dict[str, Any] = {}
+        if cache_key and self._internal_retrieval_cache_ttl_seconds > 0:
+            cached = self._tool_execution.get_cached_result(cache_key)
+            if cached is not None:
+                output = cached
+                cache_hit = True
+
+        if not cache_hit:
+            output = {}
+            try:
+                output = await self._tool_execution.execute_tool(
+                    {"name": "search_internal_knowledge", "arguments": arguments_obj},
+                    context=ToolExecutionContext(
+                        session_id=cast(str, self.session_id),
+                        effective_policy=self._effective_policy,
+                        session_factory=self._db_session_factory,
+                        knowledge_service_factory=self._knowledge_service_factory,
+                        record_metric=self._record_knowledge_runtime_metric,
+                    ),
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                self._tool_execution.record_execution_error()
+                logger.error(
+                    f"Internal knowledge search crashed: {exc}",
+                    exc_info=True,
+                )
+                output = {
+                    "query": str(arguments_obj.get("query") or ""),
+                    "count": 0,
+                    "results": [],
+                    "retrieval_mode": "unknown",
+                    "message": "internal_search_error",
+                    "error": str(exc),
+                }
+
+            if (
+                cache_key
+                and self._internal_retrieval_cache_ttl_seconds > 0
+                and isinstance(output, dict)
+                and not output.get("error")
+            ):
+                self._tool_execution.cache_result(
+                    cache_key,
+                    output,
+                    ttl_seconds=self._internal_retrieval_cache_ttl_seconds,
+                )
+        if isinstance(output, dict):
+            diagnostics = output.get("_diagnostics")
+            if not isinstance(diagnostics, dict):
+                diagnostics = {}
+            diagnostics["cache_hit_internal_retrieval"] = cache_hit
+            output["_diagnostics"] = diagnostics
+        knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+        if not isinstance(knowledge_base_ids, list):
+            knowledge_base_ids = []
+        query_text = str(arguments_obj.get("query") or "")
+        self._log_grounding_debug(
+            "internal_retrieval",
+            query_length=len(query_text.strip()),
+            kb_count=len(knowledge_base_ids),
+            result_count=int(output.get("count") or 0),
+            retrieval_mode=str(output.get("retrieval_mode") or ""),
+            status_message=str(output.get("message") or ""),
+            has_error=bool(output.get("error")),
+            cache_hit=cache_hit,
+        )
+        output.pop("_diagnostics", None)
+        return output
+
+    async def _record_knowledge_runtime_metric(
+        self,
+        *,
+        query: str,
+        result_count: int,
+        status: str,
+        knowledge_base_ids: list[str],
+        top_k: int | None = None,
+        similarity_threshold: float | None = None,
+        error_message: str | None = None,
+        retrieval_mode: str | None = None,
+        ledger_event: dict[str, Any] | None = None,
+    ) -> None:
+        """Record knowledge retrieval diagnostics for later report verification."""
+        try:
+            apply_metric = _handler_symbol(
+                "apply_knowledge_runtime_metric",
+                apply_knowledge_runtime_metric,
+            )
+            apply_metric(
+                effective_policy=self._effective_policy,
+                query=query,
+                result_count=result_count,
+                status=status,
+                knowledge_base_ids=knowledge_base_ids,
+                top_k=top_k,
+                similarity_threshold=similarity_threshold,
+                error_message=error_message,
+                retrieval_mode=retrieval_mode,
+                ledger_event=ledger_event,
+            )
+
+            await self._persist_runtime_metrics_to_session()
+        except Exception as exc:  # noqa: BLE001
+            _handler_symbol("logger", logger).warning(
+                f"Failed to record knowledge runtime metric: {exc}"
+            )
+
+    async def _handle_upstream_transcription_delta(self, event: dict) -> None:
+        """Forward interim ASR transcript to frontend."""
+        transcript = self._extract_transcription_delta_text(event)
+        if transcript:
+            normalized_transcript = self._normalize_transcript(
+                str(transcript),
+                is_final=False,
+            ).normalized_text
+            self._latest_input_transcript_delta = self._merge_transcription_delta_text(
+                self._latest_input_transcript_delta,
+                normalized_transcript,
+            )
+            await self._send_transcript(normalized_transcript, is_final=False)
+
+    async def _handle_upstream_transcription_completed(self, event: dict) -> None:
+        """Persist final ASR transcript and continue response chain."""
+        transcript = self._extract_final_transcript_text(event)
+        if not transcript:
+            transcript = self._latest_input_transcript_delta.strip()
+            if transcript:
+                self._log_grounding_debug(
+                    "transcription_completed_fallback_to_delta",
+                    transcript_length=len(transcript),
+                )
+        if not transcript:
+            return
+        await self._handle_final_user_transcript(transcript)
+
+    def _extract_final_transcript_text(self, event: dict) -> str:
+        """Extract final transcript from upstream payload variations."""
+        direct_candidates = (
+            event.get("transcript"),
+            event.get("text"),
+            event.get("audio_transcript"),
+            event.get("stash"),
+            event.get("delta"),
+        )
+        for candidate in direct_candidates:
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+
+        item = event.get("item")
+        if isinstance(item, dict):
+            item_candidates = (
+                item.get("transcript"),
+                item.get("text"),
+                item.get("audio_transcript"),
+                item.get("stash"),
+            )
+            for candidate in item_candidates:
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+
+        return ""
+
+    def _extract_transcription_delta_text(self, event: dict) -> str:
+        """Extract interim transcript text from upstream payload variations."""
+        direct_candidates = (
+            event.get("delta"),
+            event.get("text"),
+            event.get("stash"),
+            event.get("audio_transcript"),
+        )
+        for candidate in direct_candidates:
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate
+
+        item = event.get("item")
+        if isinstance(item, dict):
+            item_candidates = (
+                item.get("delta"),
+                item.get("text"),
+                item.get("stash"),
+                item.get("audio_transcript"),
+                item.get("transcript"),
+            )
+            for candidate in item_candidates:
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate
+
+        return ""
+
+    def _merge_transcription_delta_text(self, previous: str, incoming: str) -> str:
+        """Merge transcript chunks for both append-style and snapshot-style events."""
+        incoming = incoming or ""
+        if not incoming.strip():
+            return previous
+        if not previous:
+            return incoming
+
+        # Some providers emit a growing full snapshot for each delta frame.
+        if incoming.startswith(previous):
+            return incoming
+        # Ignore exact suffix duplicates to prevent repeated concatenation noise.
+        if previous.endswith(incoming):
+            return previous
+        return previous + incoming
+
     async def _handle_upstream_response_created(self, event: dict) -> None:
         """Bind upstream response id to current active response state."""
         response = (
@@ -816,14 +1723,6 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         delta = event.get("delta", "")
         if self._active_response and delta:
             self._active_response.text_parts.append(delta)
-
-    async def _handle_upstream_response_audio_delta(self, event: dict) -> None:
-        """Forward realtime audio chunk to frontend."""
-        delta = event.get("delta", "")
-        if self._active_response and delta:
-            if self._active_response.question_limit_enforced:
-                return
-            await self._forward_audio_delta_chunk(delta)
 
     async def _handle_upstream_response_done(self, event: dict) -> None:
         """Finalize response and execute potential tool follow-ups."""
@@ -876,114 +1775,6 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             return
         await self._send_error("[STEPFUN_API_ERROR]", extract_error_message(event))
 
-    async def _flush_active_response(self, response_done_event: dict) -> bool:
-        """Finalize active response and send final marker (or fallback)."""
-        response_state = self._active_response
-        if not response_state:
-            await self._send_status("listening")
-            return False
-
-        response_obj = (
-            response_done_event.get("response", {})
-            if isinstance(response_done_event.get("response"), dict)
-            else {}
-        )
-        done_response_id = response_obj.get("id")
-        if (
-            response_state.response_id
-            and done_response_id
-            and done_response_id != response_state.response_id
-        ):
-            self._log_grounding_debug(
-                "skip_mismatched_response_done",
-                active_response_id=response_state.response_id,
-                done_response_id=str(done_response_id),
-            )
-            return False
-
-        self._active_response = None
-
-        response_text = self._extract_response_text(response_done_event)
-        if not response_text:
-            response_text = "".join(response_state.text_parts).strip()
-        response_text = enforce_question_limit(
-            response_text,
-            self._get_max_questions_per_turn(),
-        )
-        response_text = self._apply_answerability_output_guard(response_text)
-
-        if response_text:
-            await self._persist_message(
-                turn_number=max(1, self.turn_count),
-                role="assistant",
-                content=response_text,
-            )
-            async with self._sales_stage_lock:
-                self._append_sales_stage_context_message(
-                    role="assistant",
-                    content=response_text,
-                    turn_number=max(1, self.turn_count),
-                )
-            if self._feedback_context is not None:
-                self._feedback_context.add_message(
-                    role="assistant",
-                    content=response_text,
-                )
-
-        # No output at all in this round; only reset status.
-        if response_state.chunk_index == 0 and not response_text:
-            await self._send_status("listening")
-            return True
-
-        # Streaming path: already sent audio chunks, now send final marker with text.
-        if response_state.chunk_index > 0:
-            await self.manager.send_json(
-                self.websocket,
-                build_tts_chunk_event(
-                    stream_id=response_state.stream_id,
-                    request_id=response_state.request_id,
-                    chunk_index=response_state.chunk_index,
-                    audio="",
-                    duration_ms=0,
-                    is_final=True,
-                    text=response_text,
-                    total_duration_ms=response_state.total_duration_ms,
-                    audio_format=self._stepfun_output_audio_format,
-                    sample_rate=self._stepfun_output_sample_rate,
-                    playback_rate=self._stepfun_playback_rate,
-                    protocol_version=self._tts_chunk_protocol_version,
-                ),
-            )
-            await self._send_status("listening")
-            return True
-
-        # Fallback path: no audio chunks received from upstream.
-        payload_data = {
-            "text": response_text,
-            "audio": "",
-            "audio_format": "",
-            "duration_ms": len(response_text) * 100,
-            "fallback": "browser_tts",
-            "playback_rate": self._stepfun_playback_rate,
-        }
-        if isinstance(self._latest_knowledge_answer_diagnostics, dict):
-            payload_data["knowledge_answer_diagnostics"] = copy.deepcopy(
-                self._latest_knowledge_answer_diagnostics
-            )
-        await self.manager.send_json(
-            self.websocket,
-            {
-                "type": "tts_audio",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "stream_id": response_state.stream_id,
-                "request_id": response_state.request_id,
-                "data": payload_data,
-            },
-        )
-
-        await self._send_status("listening")
-        return True
-
     async def _forward_audio_delta_chunk(self, delta_b64: str) -> None:
         """Forward one upstream audio delta as frontend tts_chunk for low-latency playback."""
         response_state = self._active_response
@@ -1026,6 +1817,9 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 protocol_version=self._tts_chunk_protocol_version,
             ),
         )
+        audio_flow = getattr(self, "_audio_flow", None)
+        if audio_flow is not None:
+            audio_flow.append_output_audio(delta_b64)
 
         if not response_state.first_chunk_sent:
             response_state.first_chunk_sent = True
@@ -1110,78 +1904,6 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             await self._create_response()
             return True
         return False
-
-    async def _execute_function_call(
-        self,
-        call_id: str,
-        function_name: str,
-        raw_arguments: str,
-        trigger_followup_response: bool,
-    ) -> bool:
-        """Run one custom tool call and return output back to StepFun."""
-        if not call_id or call_id in self._executed_call_ids:
-            return False
-
-        function_name = function_name or "unknown"
-        arguments_obj = decode_function_arguments(raw_arguments)
-        self._log_grounding_debug(
-            "function_call_execute",
-            call_id=call_id,
-            function_name=function_name,
-            raw_arguments_length=len(raw_arguments),
-            argument_keys=sorted(arguments_obj.keys()),
-            has_query=bool(str(arguments_obj.get("query") or "").strip()),
-        )
-
-        output_payload: dict[str, Any]
-        if function_name == "search_internal_knowledge":
-            output_payload = await self._tool_search_internal_knowledge(arguments_obj)
-        else:
-            output_payload = build_unsupported_function_output(function_name)
-
-        self._log_grounding_debug(
-            "function_call_output",
-            call_id=call_id,
-            function_name=function_name,
-            result_count=int(output_payload.get("count") or 0),
-            retrieval_mode=str(output_payload.get("retrieval_mode") or ""),
-            message=str(output_payload.get("message") or ""),
-            has_error=bool(output_payload.get("error")),
-        )
-
-        self._executed_call_ids.add(call_id)
-        self._function_call_states.pop(call_id, None)
-
-        await self._send_upstream(
-            build_function_call_output_event(
-                call_id=call_id,
-                output_payload=output_payload,
-            )
-        )
-
-        if trigger_followup_response:
-            if self._active_response is not None:
-                self._pending_tool_followup_response = True
-            else:
-                await self._create_response()
-        return True
-
-    def _build_internal_retrieval_cache_key(self, arguments_obj: dict[str, Any]) -> str:
-        query = str(arguments_obj.get("query") or "").strip().lower()
-        if not query:
-            return ""
-
-        top_k = arguments_obj.get("top_k")
-        metadata_filter = arguments_obj.get("metadata_filter")
-        if not isinstance(metadata_filter, dict):
-            metadata_filter = {}
-        metadata_filter_signature = json.dumps(
-            metadata_filter,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        return f"{query}|top_k={top_k}|filter={metadata_filter_signature}"
 
     def _ensure_knowledge_runtime_metrics(self) -> dict[str, Any]:
         """Ensure runtime metrics structure exists on effective policy snapshot."""
@@ -1338,12 +2060,26 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
 
     def _build_stepfun_tools_from_policy(self) -> list[dict[str, Any]]:
         """Build StepFun tool definitions from resolved policy."""
+        tool_execution = getattr(self, "_tool_execution", None)
+        if tool_execution is not None:
+            tools: list[dict[str, Any]] = tool_execution.build_tools_from_policy(
+                self._effective_policy
+            )
+            return tools
         return build_stepfun_tools_from_policy(self._effective_policy)
 
     def _enforce_stepfun_tool_guardrails(
         self, tools: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Filter tool list using final effective policy guarantees."""
+        tool_execution = getattr(self, "_tool_execution", None)
+        if tool_execution is not None:
+            filtered: list[dict[str, Any]] = tool_execution.enforce_guardrails(
+                tools,
+                self._effective_policy,
+            )
+            return filtered
+
         filtered_tools = list(tools)
         tool_policy = self._effective_policy.get("tool_policy")
         if not isinstance(tool_policy, dict):
@@ -1377,5 +2113,6 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         """Send one event to StepFun upstream."""
         if self.upstream_ws is None:
             return
-        await self.upstream_ws.send(json.dumps(payload, ensure_ascii=False))
-        self._mark_upstream_activity()
+        result = await self._stepfun_transport.send_json(self.upstream_ws, payload)
+        if result.status == StepFunSendStatus.SENT:
+            self._mark_upstream_activity()

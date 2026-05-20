@@ -6,7 +6,10 @@ import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, RefreshCcw } from "lucid
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { LearnerStudyContent, LearnerStudyProgress, LearningChapter } from "@/lib/api/types";
-import { setExamReturnContext } from "@/lib/exam-session-storage";
+import {
+    ensureExamReturnToStudy,
+    examHrefForSession,
+} from "@/lib/exam-session-storage";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -58,7 +61,6 @@ function ChapterSidebar({
 export default function StudyPage() {
     const { learningContentId } = useParams<{ learningContentId: string }>();
     const router = useRouter();
-
     const [content, setContent] = useState<LearnerStudyContent | null>(null);
     const [progress, setProgress] = useState<LearnerStudyProgress | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -129,12 +131,8 @@ export default function StudyPage() {
         setExamError(null);
         try {
             const result = await api.learnerStudy.startExam(learningContentId);
-            setExamReturnContext(result.session_id, {
-                href: `/study/${encodeURIComponent(learningContentId)}`,
-                label: "返回讲义",
-                learningContentId,
-            });
-            router.push(`/exam/${result.session_id}`);
+            ensureExamReturnToStudy(result.session_id, learningContentId);
+            router.push(examHrefForSession(result.session_id, learningContentId));
         } catch (err) {
             setExamError(`启动考试失败：${getApiErrorMessage(err)}`);
         } finally {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# pyright: reportMissingImports=false
 from typing import Any
 
 import pytest
@@ -87,6 +88,87 @@ async def test_retrieve_fetches_from_injected_search_seam():
     assert calls == [{"query": "标准版价格", "top_k": 3}]
     assert payload["count"] == 1
     assert payload["results"][0]["snippet"] == "标准版支持按年付费。"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_caches_successful_result_and_hits_on_second_call():
+    now = 100.0
+    calls: list[dict[str, Any]] = []
+
+    async def fake_retriever(arguments_obj: dict[str, Any]) -> dict[str, Any]:
+        calls.append(arguments_obj)
+        return {"count": 1, "results": [{"snippet": f"命中 {len(calls)}"}]}
+
+    pipeline = GroundingDecisionPipeline(
+        retriever=fake_retriever,
+        cache_ttl_seconds=30.0,
+        clock=lambda: now,
+    )
+
+    first = await pipeline.retrieve(" 标准版价格 ", top_k=3)
+    second = await pipeline.retrieve("标准版价格", top_k=3)
+
+    assert first == second
+    assert calls == [{"query": "标准版价格", "top_k": 3}]
+    stats = pipeline.get_cache_stats()
+    assert stats.hit_count == 1
+    assert stats.miss_count == 1
+    assert stats.hit_rate == pytest.approx(0.5)
+
+
+@pytest.mark.asyncio
+async def test_retrieve_expires_cached_result_after_ttl():
+    now = 100.0
+    calls = 0
+
+    async def fake_retriever(_arguments_obj: dict[str, Any]) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {"count": 1, "results": [{"snippet": f"命中 {calls}"}]}
+
+    pipeline = GroundingDecisionPipeline(
+        retriever=fake_retriever,
+        cache_ttl_seconds=5.0,
+        clock=lambda: now,
+    )
+
+    first = await pipeline.retrieve("标准版价格", top_k=3)
+    now = 106.0
+    second = await pipeline.retrieve("标准版价格", top_k=3)
+
+    assert first != second
+    assert calls == 2
+    stats = pipeline.get_cache_stats()
+    assert stats.hit_count == 0
+    assert stats.miss_count == 2
+
+
+@pytest.mark.asyncio
+async def test_warmup_preloads_kb_index_through_injected_seam():
+    calls: list[list[str]] = []
+
+    async def fake_warmup(kb_ids: list[str]) -> None:
+        calls.append(kb_ids)
+
+    pipeline = GroundingDecisionPipeline(warmup_callable=fake_warmup)
+
+    result = await pipeline.warmup([" kb-1 ", "", "kb-2"])
+
+    assert calls == [["kb-1", "kb-2"]]
+    assert result.status == "completed"
+    assert result.kb_count == 2
+    assert result.skipped is False
+
+
+@pytest.mark.asyncio
+async def test_warmup_returns_skipped_result_when_no_warmup_seam_configured():
+    pipeline = GroundingDecisionPipeline()
+
+    result = await pipeline.warmup(["kb-1"])
+
+    assert result.status == "skipped"
+    assert result.kb_count == 1
+    assert result.skipped is True
 
 
 def test_build_instruction_overlay_uses_existing_answerability_semantics():

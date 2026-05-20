@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportGeneralTypeIssues=false
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportGeneralTypeIssues=false, reportMissingImports=false
 # ruff: noqa: F401, I001
 
 import asyncio
@@ -68,6 +68,7 @@ from common.websocket.base_handler import (
 )
 from common.websocket.session_manager import get_session_manager
 from common.websocket.session_state_service import SessionStateSnapshot
+from curriculum_practice.models import PracticeTemplate
 from sales_bot.services.transcript_normalization import (
     TranscriptNormalizationResult,
     TranscriptNormalizationService,
@@ -143,6 +144,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
 )
+from sales_bot.websocket.session_control_adapter import SessionControlAdapter
 from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 from sales_bot.websocket.stepfun_realtime_constants import (
     DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
@@ -169,6 +171,7 @@ from sales_bot.websocket.stepfun_runtime_types import (
     FunctionCallState,
     RealtimeResponseState,
 )
+from sales_bot.websocket.voice_runtime_profile import VoiceRuntimeProfile
 
 logger = get_logger(__name__)
 
@@ -189,7 +192,17 @@ def _optional_runtime_score(value: Any) -> float | None:
         return None
 
 
+def _optional_runtime_text(value: Any) -> str | None:
+    """Normalize nullable ORM/runtime identifiers without treating SQLAlchemy columns as values."""
+    if value is None or hasattr(value, "expression"):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
+    _voice_runtime_profile: VoiceRuntimeProfile | None
+
     @staticmethod
     def _normalize_kb_ids(raw_kb_ids: Any) -> list[str]:
         if not isinstance(raw_kb_ids, list):
@@ -613,6 +626,345 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
                 turn_count=max(0, self.turn_count),
             )
 
+    async def _load_effective_policy(self) -> None:
+        """Load effective voice policy from session snapshot or resolver service."""
+        self._effective_policy = {}
+        async with self._db_session_factory() as db:
+            session_result = await db.execute(
+                select(PracticeSession).where(
+                    PracticeSession.session_id == self.session_id
+                )
+            )
+            session = session_result.scalar_one_or_none()
+            if not session:
+                logger.warning(
+                    f"Session not found when loading voice policy: {self.session_id}"
+                )
+                return
+
+            session_any = cast(Any, session)
+            curriculum_snapshot = getattr(session, "curriculum_snapshot", None)
+            self._curriculum_snapshot = (
+                copy.deepcopy(curriculum_snapshot)
+                if isinstance(curriculum_snapshot, dict)
+                else None
+            )
+            if self._curriculum_snapshot is not None:
+                practice_template_id = _optional_runtime_text(
+                    getattr(session, "practice_template_id", None)
+                )
+                if practice_template_id:
+                    template = await db.get(PracticeTemplate, practice_template_id)
+                    curriculum_plan = getattr(template, "curriculum_plan", None)
+                    if isinstance(curriculum_plan, dict):
+                        self._curriculum_snapshot["curriculum_plan"] = copy.deepcopy(
+                            curriculum_plan
+                        )
+            self._session_agent_id = _optional_runtime_text(
+                getattr(session, "agent_id", None)
+            )
+            self._session_persona_id = _optional_runtime_text(
+                getattr(session, "persona_id", None)
+            )
+            self._session_user_id = _optional_runtime_text(
+                getattr(session, "user_id", None)
+            )
+            await self._refresh_sales_stage_runtime_config(db)
+
+            snapshot_raw = getattr(session, "voice_policy_snapshot", None)
+            snapshot = snapshot_raw if isinstance(snapshot_raw, dict) else None
+
+            policy_source = "snapshot"
+            if snapshot:
+                self._effective_policy = snapshot
+            else:
+                policy_service_cls = _handler_symbol(
+                    "VoiceRuntimePolicyService",
+                    VoiceRuntimePolicyService,
+                )
+                policy_service = policy_service_cls(db)
+                resolved_policy = await policy_service.resolve_effective_policy(
+                    agent_id=self._session_agent_id,
+                    persona_id=self._session_persona_id,
+                    voice_mode_override=_optional_runtime_text(
+                        getattr(session, "voice_mode", None)
+                    ),
+                    runtime_profile_override=_optional_runtime_text(
+                        getattr(session, "voice_runtime_profile_id", None)
+                    ),
+                )
+                self._effective_policy = resolved_policy
+                session_any.voice_policy_snapshot = self._effective_policy
+                session_any.voice_mode = self._effective_policy.get(
+                    "voice_mode",
+                    _optional_runtime_text(getattr(session, "voice_mode", None))
+                    or "legacy",
+                )
+                session_any.voice_runtime_profile_id = self._effective_policy.get(
+                    "runtime_profile_id"
+                )
+                await db.commit()
+                policy_source = "resolved"
+
+            guardrail_applied = self._enforce_tool_policy_guardrails()
+            dictionary_applied = await self._merge_kb_dictionary_into_effective_policy(db)
+            if guardrail_applied or dictionary_applied:
+                session_any.voice_policy_snapshot = self._effective_policy
+                await db.commit()
+
+            profile = self._apply_voice_runtime_profile(self._effective_policy)
+            self._stepfun_input_audio_format = str(
+                self._effective_policy.get(
+                    "input_audio_format", self._stepfun_input_audio_format
+                )
+            )
+            self._stepfun_output_audio_format = str(
+                self._effective_policy.get(
+                    "output_audio_format", self._stepfun_output_audio_format
+                )
+            )
+            self._stepfun_output_sample_rate = int(
+                self._effective_policy.get(
+                    "output_sample_rate", self._stepfun_output_sample_rate
+                )
+            )
+            self._stepfun_playback_rate = float(
+                self._effective_policy.get(
+                    "playback_rate",
+                    self._stepfun_playback_rate,
+                )
+            )
+            self._ensure_knowledge_runtime_metrics()
+            tool_policy = self._effective_policy.get("tool_policy")
+            if not isinstance(tool_policy, dict):
+                tool_policy = dict(profile.tool_policy)
+            knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+            if not isinstance(knowledge_base_ids, list):
+                knowledge_base_ids = list(profile.knowledge_base_ids)
+            logger.info(
+                "StepFun policy loaded",
+                session_id=self.session_id,
+                policy_source=policy_source,
+                voice_mode=str(self._effective_policy.get("voice_mode") or ""),
+                internal_retrieval_enabled=bool(
+                    tool_policy.get("enable_internal_retrieval", False)
+                ),
+                retrieval_priority=str(tool_policy.get("retrieval_priority") or ""),
+                network_access_mode=str(tool_policy.get("network_access_mode") or ""),
+                instruction_contract_hash=profile.instruction_contract_hash,
+                knowledge_base_count=len(knowledge_base_ids),
+            )
+
+    def _apply_voice_runtime_profile(
+        self, policy_snapshot: dict[str, Any]
+    ) -> VoiceRuntimeProfile:
+        """Apply stable StepFun runtime fields via immutable policy profile seam."""
+
+        profile = VoiceRuntimeProfile.from_policy_snapshot(policy_snapshot)
+        self._voice_runtime_profile = profile
+        self._stepfun_model = profile.model_name
+        self._stepfun_voice = profile.voice_name
+        self._stepfun_temperature = profile.temperature
+        self._stepfun_instructions = profile.instructions
+        self._instruction_contract_hash = profile.instruction_contract_hash
+        return profile
+
+    def _active_voice_runtime_profile(self) -> VoiceRuntimeProfile:
+        """Return canonical voice runtime profile, falling back to legacy fields before policy load."""
+
+        if self._voice_runtime_profile is not None:
+            return self._voice_runtime_profile
+
+        snapshot = dict(self._effective_policy)
+        snapshot.setdefault("voice_mode", "legacy")
+        snapshot.setdefault("model_name", self._stepfun_model)
+        snapshot.setdefault("voice_name", self._stepfun_voice)
+        snapshot.setdefault("temperature", self._stepfun_temperature)
+        snapshot.setdefault("instructions", self._stepfun_instructions)
+        snapshot.setdefault(
+            "instruction_contract_hash",
+            self._instruction_contract_hash,
+        )
+        profile = VoiceRuntimeProfile.from_policy_snapshot(snapshot)
+        self._voice_runtime_profile = profile
+        return profile
+
+    async def _refresh_sales_stage_runtime_config(self, db: Any) -> None:
+        """Load stage runtime config from Agent/Persona and rebuild capability."""
+        agent_capabilities_config: dict[str, Any] = {}
+        persona_behavior_config: dict[str, Any] = {}
+        persona_scoring_weights: list[dict[str, Any]] | None = None
+
+        if self._session_agent_id:
+            agent_result = await db.execute(
+                select(Agent.capabilities_config).where(
+                    Agent.id == self._session_agent_id
+                )
+            )
+            agent_raw = agent_result.scalar_one_or_none()
+            if isinstance(agent_raw, dict):
+                agent_capabilities_config = agent_raw
+
+        if self._session_persona_id:
+            persona_result = await db.execute(
+                select(Persona.behavior_config, Persona.scoring_weights).where(
+                    Persona.id == self._session_persona_id
+                )
+            )
+            persona_row = persona_result.first()
+            if persona_row:
+                persona_behavior_raw, persona_scoring_raw = persona_row
+                if isinstance(persona_behavior_raw, dict):
+                    persona_behavior_config = persona_behavior_raw
+                if isinstance(persona_scoring_raw, list):
+                    persona_scoring_weights = persona_scoring_raw
+
+        self._agent_capabilities_config = agent_capabilities_config
+        self._persona_behavior_config = persona_behavior_config
+        self._persona_scoring_weights = persona_scoring_weights
+
+        runtime_config = self._merge_sales_stage_runtime_config(
+            agent_capabilities_config,
+            persona_behavior_config,
+        )
+
+        try:
+            self._sales_stage_runtime_config = runtime_config
+            self._sales_stage_enabled = bool(runtime_config.get("enabled", True))
+            self._sales_stage_capability = SalesStageCapability(runtime_config)
+        except (RuntimeError, ValueError, KeyError) as exc:
+            logger.warning(
+                "Invalid sales-stage runtime config, fallback to defaults",
+                session_id=self.session_id,
+                error=str(exc),
+            )
+            self._sales_stage_runtime_config = {"enabled": True}
+            self._sales_stage_enabled = True
+            self._sales_stage_capability = SalesStageCapability(
+                self._sales_stage_runtime_config
+            )
+
+        fuzzy_runtime_config = self._merge_capability_runtime_config(
+            capability_key="fuzzy_detection",
+            agent_capabilities_config=agent_capabilities_config,
+            persona_behavior_config=persona_behavior_config,
+            default_config={"enabled": True},
+        )
+        try:
+            self._fuzzy_detection_runtime_config = fuzzy_runtime_config
+            self._fuzzy_detection_enabled = bool(
+                fuzzy_runtime_config.get("enabled", True)
+            )
+            self._fuzzy_detection_capability = FuzzyDetectionCapability(
+                fuzzy_runtime_config
+            )
+        except (RuntimeError, ValueError, KeyError) as exc:
+            logger.warning(
+                "Invalid fuzzy-detection runtime config, fallback to defaults",
+                session_id=self.session_id,
+                error=str(exc),
+            )
+            self._fuzzy_detection_runtime_config = {"enabled": True}
+            self._fuzzy_detection_enabled = True
+            self._fuzzy_detection_capability = FuzzyDetectionCapability(
+                self._fuzzy_detection_runtime_config
+            )
+
+        scoring_runtime_config = self._merge_capability_runtime_config(
+            capability_key="realtime_scoring",
+            agent_capabilities_config=agent_capabilities_config,
+            persona_behavior_config=persona_behavior_config,
+            default_config={"enabled": True},
+        )
+        if (
+            persona_scoring_weights
+            and isinstance(persona_scoring_weights, list)
+            and not isinstance(scoring_runtime_config.get("dimensions"), list)
+        ):
+            scoring_runtime_config["dimensions"] = persona_scoring_weights
+
+        try:
+            self._realtime_scoring_runtime_config = scoring_runtime_config
+            self._realtime_scoring_enabled = bool(
+                scoring_runtime_config.get("enabled", True)
+            )
+            self._realtime_scoring_capability = RealtimeScoringCapability(
+                scoring_runtime_config
+            )
+        except (RuntimeError, ValueError, KeyError) as exc:
+            logger.warning(
+                "Invalid realtime-scoring runtime config, fallback to defaults",
+                session_id=self.session_id,
+                error=str(exc),
+            )
+            self._realtime_scoring_runtime_config = {"enabled": True}
+            self._realtime_scoring_enabled = True
+            self._realtime_scoring_capability = RealtimeScoringCapability(
+                self._realtime_scoring_runtime_config
+            )
+
+        self._sales_stage_context = None
+        self._feedback_context = None
+        self._last_emitted_stage = None
+        self._latest_action_card = None
+        self._feedback_pacing_state = RealtimeFeedbackPacingState()
+
+    async def _apply_lifecycle_action(
+        self, action: SessionLifecycleAction
+    ) -> object | None:
+        if not self.session_id:
+            return None
+
+        try:
+            session_factory = _handler_symbol("AsyncSessionLocal", AsyncSessionLocal)
+            async with session_factory() as db:
+                lifecycle_service_cls = _handler_symbol(
+                    "SessionLifecycleService",
+                    SessionLifecycleService,
+                )
+                lifecycle_service = lifecycle_service_cls(db)
+                (
+                    session,
+                    scenario_type,
+                ) = await lifecycle_service.get_session_with_scenario(self.session_id)
+                if not session:
+                    await self._send_error("[SESSION_NOT_FOUND]", "会话不存在")
+                    return None
+
+                self.session_scenario_type = scenario_type or "sales"
+
+                try:
+                    session_control_cls = _handler_symbol(
+                        "SessionControlAdapter",
+                        SessionControlAdapter,
+                    )
+                    session_control = session_control_cls(lifecycle_service)
+                    transition = await session_control.apply_action(
+                        session=session,
+                        scenario_type=self.session_scenario_type,
+                        action=cast(SessionLifecycleAction, action),
+                    )
+                except InvalidSessionTransitionError as exc:
+                    await db.rollback()
+                    self.session_status = str(session.status or self.session_status)
+                    await self._send_error("[INVALID_SESSION_TRANSITION]", exc.message)
+                    await self._send_status(
+                        "idle" if self.session_status != "in_progress" else "listening"
+                    )
+                    return None
+
+                if action == "end":
+                    self._apply_latest_scores_to_session(session)
+
+                await db.commit()
+                await lifecycle_service.trigger_report_generation_if_needed(transition)
+                self.session_status = transition.to_status
+                return cast(object, transition)
+        except (RuntimeError, ValueError, OSError) as exc:
+            logger.error(f"Failed to apply StepFun lifecycle action {action}: {exc}")
+            await self._send_error("[SESSION_LIFECYCLE_FAILED]", "会话状态更新失败")
+            return None
+
     async def _ensure_input_allowed(self, msg_type: str) -> bool:
         if SessionLifecycleService.is_input_allowed(self.session_status):
             return True
@@ -761,9 +1113,11 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
                 return
             audio = data.get("audio")
             if audio:
-                await self._send_upstream(
-                    {"type": "input_audio_buffer.append", "audio": audio}
-                )
+                payload = {"type": "input_audio_buffer.append", "audio": audio}
+                if self._should_drop_upstream_for_backpressure(payload):
+                    return
+                await self._send_upstream(payload)
+                self._audio_flow.append_input_audio(audio)
                 self._has_uncommitted_audio = True
 
         elif msg_type == "audio_end":
@@ -920,7 +1274,9 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
             return
 
         audio_b64 = base64.b64encode(payload).decode("utf-8")
-        await self._send_upstream(
-            {"type": "input_audio_buffer.append", "audio": audio_b64}
-        )
+        upstream_payload = {"type": "input_audio_buffer.append", "audio": audio_b64}
+        if self._should_drop_upstream_for_backpressure(upstream_payload):
+            return
+        await self._send_upstream(upstream_payload)
+        self._audio_flow.append_input_audio(audio_b64)
         self._has_uncommitted_audio = True

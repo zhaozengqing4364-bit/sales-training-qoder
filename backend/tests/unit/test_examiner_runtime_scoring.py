@@ -35,6 +35,7 @@ async def test_should_score_answer_against_reference_answer() -> None:
         }
     )
 
-    feedback = messages[0]["data"]
-    assert feedback["score"] >= 80
-    assert feedback["feedback"] != "not_scored"
+    assert messages[0]["type"] == "exam.completed"
+    answer = runtime.serialize_state()["answers"][0]
+    assert answer["score"] >= 80
+    assert answer["feedback"] != "not_scored"

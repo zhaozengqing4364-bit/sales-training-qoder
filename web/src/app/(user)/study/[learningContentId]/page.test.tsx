@@ -179,7 +179,9 @@ describe("StudyPage", () => {
 
         expect(startExamMock).toHaveBeenCalledWith("content-1");
         await waitFor(() => {
-            expect(pushMock).toHaveBeenCalledWith("/exam/exam-session-1");
+            expect(pushMock).toHaveBeenCalledWith(
+                "/exam/exam-session-1?contentId=content-1",
+            );
         });
     });
 

@@ -176,7 +176,7 @@ describe("LearningPathPage", () => {
 
         expect(await screen.findByText("继续学习：预算异议处理")).toBeTruthy();
         expect(screen.getByRole("link", { name: /continue learning/ }).getAttribute("href")).toBe(
-            "/study/content-lesson-1",
+            "/study/content-lesson-1?from=learning-path",
         );
     });
 
@@ -204,7 +204,7 @@ describe("LearningPathPage", () => {
 
         expect(await screen.findByText("开始考试：预算异议处理")).toBeTruthy();
         expect(screen.getByRole("link", { name: /start exam/ }).getAttribute("href")).toBe(
-            "/study/content-lesson-1",
+            "/study/content-lesson-1?from=learning-path",
         );
     });
 
@@ -242,7 +242,7 @@ describe("LearningPathPage", () => {
 
         expect(await screen.findByText("产品知识学习")).toBeTruthy();
         expect(screen.getByRole("link", { name: "去学习" }).getAttribute("href")).toBe(
-            "/study/content-lesson-1",
+            "/study/content-lesson-1?from=learning-path",
         );
     });
 

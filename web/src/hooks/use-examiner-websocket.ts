@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WS_BASE_URL } from "@/hooks/websocket/types";
+import {
+  normalizeExamQuestionType,
+  type ExamQuestionType,
+} from "@/lib/exam-question-type";
 
 // ── Exam message types (exact match with backend #75 examiner_runtime.py) ──
 
@@ -12,6 +16,15 @@ export interface ExamInitData {
   total_questions: number;
   remaining_seconds: number;
   status: string;
+  questions_outline?: ExamQuestionOutlineItem[];
+  answered_question_indices?: number[];
+}
+
+export interface ExamQuestionOutlineItem {
+  question_index: number;
+  question_id: string;
+  title: string;
+  question_type: ExamQuestionType;
 }
 
 export interface ExamQuestionData {
@@ -19,7 +32,13 @@ export interface ExamQuestionData {
   question_id: string;
   title: string;
   stem: string;
+  question_type: ExamQuestionType;
   remaining_seconds: number;
+}
+
+export interface ExamProgressData {
+  answered_question_indices: number[];
+  current_question_index: number;
 }
 
 export interface ExamFeedbackData {
@@ -60,6 +79,8 @@ export interface ExamState {
   totalQuestions: number;
   lastFeedback: ExamFeedbackData | null;
   gradedQuestions: GradedQuestion[];
+  questionOutline: ExamQuestionOutlineItem[];
+  answeredQuestionIndices: number[];
   remainingTimeSeconds: number | null;
   answeredCount: number | null;
   completionStatus: string | null;
@@ -82,6 +103,8 @@ const INITIAL_STATE: ExamState = {
   totalQuestions: 0,
   lastFeedback: null,
   gradedQuestions: [],
+  questionOutline: [],
+  answeredQuestionIndices: [],
   remainingTimeSeconds: null,
   answeredCount: null,
   completionStatus: null,
@@ -177,6 +200,13 @@ export function useExaminerWebSocket(sessionId: string) {
               sessionId: data.session_id,
               questionIndex: data.current_question_index,
               totalQuestions: data.total_questions,
+              questionOutline: (data.questions_outline ?? []).map((item) => ({
+                question_index: item.question_index,
+                question_id: item.question_id,
+                title: item.title,
+                question_type: normalizeExamQuestionType(item.question_type),
+              })),
+              answeredQuestionIndices: data.answered_question_indices ?? [],
               error: null,
             }));
             if (data.remaining_seconds > 0) {
@@ -190,7 +220,10 @@ export function useExaminerWebSocket(sessionId: string) {
             setState((prev) => ({
               ...prev,
               examPhase: "answering",
-              currentQuestion: data,
+              currentQuestion: {
+                ...data,
+                question_type: normalizeExamQuestionType(data.question_type),
+              },
               questionIndex: data.question_index,
               lastFeedback: null,
               error: null,
@@ -221,6 +254,16 @@ export function useExaminerWebSocket(sessionId: string) {
               clearTimeout(questionTimeoutRef.current);
               questionTimeoutRef.current = null;
             }
+            break;
+          }
+
+          case "exam.progress": {
+            const data = msg.data as ExamProgressData;
+            setState((prev) => ({
+              ...prev,
+              answeredQuestionIndices: data.answered_question_indices ?? [],
+              questionIndex: data.current_question_index ?? prev.questionIndex,
+            }));
             break;
           }
 
@@ -273,14 +316,37 @@ export function useExaminerWebSocket(sessionId: string) {
         },
       };
       wsRef.current.send(JSON.stringify(message));
+      const answeredIndex = current.currentQuestion.question_index;
       setState((prev) => ({
         ...prev,
         examPhase: "answering",
         error: null,
+        answeredQuestionIndices: prev.answeredQuestionIndices.includes(answeredIndex)
+          ? prev.answeredQuestionIndices
+          : [...prev.answeredQuestionIndices, answeredIndex].sort((a, b) => a - b),
       }));
     },
     [],
   );
+
+  const sendNavigate = useCallback((questionIndex: number) => {
+    const current = stateRef.current;
+    if (
+      wsRef.current?.readyState !== WebSocket.OPEN ||
+      current.examPhase === "completed" ||
+      questionIndex < 0 ||
+      questionIndex >= current.totalQuestions
+    ) {
+      return;
+    }
+
+    wsRef.current.send(
+      JSON.stringify({
+        type: "exam.navigate",
+        data: { question_index: questionIndex },
+      }),
+    );
+  }, []);
 
   const applyConnectionState = useCallback(
     (connectionState: ExamConnectionState, error: string | null) => {
@@ -400,6 +466,8 @@ export function useExaminerWebSocket(sessionId: string) {
       currentQuestion: null,
       lastFeedback: null,
       gradedQuestions: [],
+      questionOutline: [],
+      answeredQuestionIndices: [],
     }));
     connect();
   }, [connect]);
@@ -442,7 +510,9 @@ export function useExaminerWebSocket(sessionId: string) {
     state.connectionState === "reconnecting" || state.connectionState === "failed";
   const progress =
     state.totalQuestions > 0
-      ? Math.round((state.questionIndex / state.totalQuestions) * 100)
+      ? Math.round(
+          (state.answeredQuestionIndices.length / state.totalQuestions) * 100,
+        )
       : 0;
 
   return {
@@ -452,6 +522,7 @@ export function useExaminerWebSocket(sessionId: string) {
     isDisconnected,
     progress,
     sendAnswer,
+    sendNavigate,
     retry,
     setFeatureFlag,
     setVoiceFailed,

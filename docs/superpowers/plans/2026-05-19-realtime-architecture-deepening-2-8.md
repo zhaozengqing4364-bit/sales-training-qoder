@@ -798,3 +798,854 @@ Phase 9:  test: verify realtime architecture deepening items 2-8
 - [ ] mypy 对触及模块零错误
 - [ ] 无新增 import 循环
 - [ ] `git status --short` 显示仅预期文件被修改
+
+---
+
+## 二十一、第一波回顾与第二波审计基线
+
+### 第一波成就
+
+第一波 Phase 0-9 已于 2026-05-20 完成并验证：
+
+| 指标 | 数值 |
+|------|------|
+| StepFun 测试 | 209 passed |
+| 新模块集合测试 | 55 passed |
+| Integration 测试 | 21 passed |
+| 全量单元测试 | 1583 passed |
+| Handler 行数 | 5021 → 4225（减少 796 行） |
+| Mypy 触及模块 | 零错误 |
+| 新建 Module 文件 | 6 个 |
+| 新建测试文件 | 6 个 |
+
+### 未达标项
+
+- **Handler 行数 4225，距离 <800 目标仍远**。根因：upstream mixin 中的方法与 handler override 存在行为差异，不能靠删除 override 伪装达标。
+- 第一波各 Phase 采用 strangler slice 策略：在 handler 中埋入 Module 调用点，但完整行为迁移未完成。
+
+### 第二波审计结论（基于三份后台审计综合）
+
+**Oracle 策略调整**：不再继续单纯抽函数降行数。改为按四类运行时责任 Seam 深化：
+
+1. **Policy Seam**：`VoiceRuntimeProfile` 仍是装饰性值对象，handler 仍在多处绕过 profile 直接读 `_effective_policy` dict。需将 instruction 编译、policy 解析、contract hash 验证收敛到 profile 内。
+2. **Tool/Search/Grounding Seam**：`StepFunToolExecutionModule` 未吃下完整 tool routing（重复 tool_call 判定、grounding lookup 触发、tool response cache）。`GroundingDecisionPipeline` 的 `retrieve` / `warmup` / `cache` / `diagnostics` 路径在 handler 中未被充分使用。
+3. **Audio Seam**：`RealtimeAudioFlowModule` 输出音频缓冲已测试覆盖，但 handler TTS 输出路径未接入，仍在 handler 内联管理输出 buffer。
+4. **Upstream/Handler Residual**：`stepfun_realtime_upstream.py` 中存在大量与 handler override 行为差异的方法（transport、turn coordinator、tool execution、audio flow 四个维度共约 13 个差异方法）。必须先把 canonical behavior 移入深 Module，再逐一删除 wrapper。
+
+**Module Gap 清单**：
+
+| Module | 第一波状态 | 第二波需深化 |
+|--------|-----------|-------------|
+| `VoiceRuntimeProfile` | 不可变值对象，但 handler 仍绕过它读 raw dict | 收敛 instruction 编译 / policy 解析 / hash 验证 |
+| `StepFunToolExecutionModule` | tool build / guardrail / execute，但 routing / cache / grounding 缺失 | 补全 tool_call routing / response cache / grounding trigger |
+| `GroundingDecisionPipeline` | evaluate 路径使用，retrieve / warmup / cache / diagnostics 未充分用 | 激活全链路 retrieve → warmup → cache → diagnostics |
+| `RealtimeAudioFlowModule` | 输入音频缓冲 + 背压，输出缓冲已测试但未接入 handler | 接入 handler TTS 输出路径 |
+| `SessionControlAdapter` | 浅接口，仅封装 `SessionLifecycleService.transition` | 加状态验证 / transition 前后钩子 / 错误恢复 |
+| `RealtimeTurnCoordinator` | strangler 埋点，user audio / model response 语义未完全接入 | 补全状态机语义 |
+| `stepfun_realtime_handler.py` | 4225 行，大量 override 与 mixin 行为差异 | 逐对齐后安全删除 |
+
+---
+
+## 二十二、第二波实施原则
+
+1. **不再抽函数降行数**：每阶段目标是让 Module 变深，Interface 变有力，不是让 handler 变短。
+2. **先深后删**：先把 canonical behavior 迁入深 Module（含测试），验证行为一致，再删除 handler 中对应 override。
+3. **四类 Seam 并行可行**：Policy / Tool-Grounding / Audio / Upstream 四个 Seam 的深化相互独立，可被不同 Atlas 并行执行。
+4. **测试不变更前端契约**：保持 StepFun payload / frontend WebSocket event shape / binary audio protocol 不变。
+5. **每个 Phase 产出独立可回滚 commit**，保持第一波的回滚粒度传统。
+
+---
+
+## 二十三、第二波 Phase 总览
+
+| Phase | 名称 | Seam | 预期 commits | 风险 | 优先级 |
+|-------|------|------|-------------|------|--------|
+| 10 | VoiceRuntimeProfile → True Policy Deep Module | Policy | 2 | 低 | P0 |
+| 11 | StepFunToolExecutionModule 路由/缓存深化 | Tool/Grounding | 2 | 中 | P0 |
+| 12 | GroundingDecisionPipeline 全链路激活 | Grounding | 2 | 中 | P1 |
+| 13 | RealtimeAudioFlowModule 输出流接入 | Audio | 1 | 中 | P1 |
+| 14 | SessionControlAdapter 接口深化 | Session | 1 | 低 | P1 |
+| 15 | RealtimeTurnCoordinator 语义补全 | Turn | 1 | 中 | P2 |
+| 16 | Handler Residual 安全对齐 | Upstream | 3 | 高 | P2 |
+| 17 | 最终验证波 2 | 全局 | 1 | 低 | P3 |
+
+优先级说明：P0 = 低风险高收益先行，P1 = 中等风险逐次推进，P2 = 依赖前置 Phase 完成后执行。
+
+---
+
+## 二十四、Phase 10：VoiceRuntimeProfile → True Policy Deep Module
+
+**目标：** 将 `VoiceRuntimeProfile` 从"装饰性不可变值对象"深化为 Policy Seam 的唯一权威数据源。收敛 instruction 编译、policy 字段解析、contract hash 验证进 profile Module。Handler 不再绕过 profile 直接读 `_effective_policy` dict。
+
+### 当前问题
+
+- `VoiceRuntimeProfile` 已是 `@dataclass(frozen=True)`，但只承载 model / voice / temperature / instructions / hash 字段。
+- `voice_instruction_compiler.py` 存在但 handler 内联重复 instruction 构建。
+- Handler 在多处（response.create、session.update、policy snapshot 构建）直接读 `_effective_policy` dict 的 `model` / `voice` / `temperature` / `instructions` 字段，完全绕过 profile。
+- `contract_hash` 在 profile 中存在但未在 handler 路径中用作校验。
+
+### Module 深化设计
+
+```
+VoiceRuntimeProfile (Deepened Module)
+├── 构造接口
+│   ├── from_policy_snapshot(snapshot: dict) → VoiceRuntimeProfile    Interface (已有)
+│   └── from_effective_policy(policy: dict, compiler: ...) → VoiceRuntimeProfile  Interface (新增)
+├── 查询接口
+│   ├── voice_mode: str                                              Interface (已有)
+│   ├── model_name: str                                              Interface (已有)
+│   ├── voice_name: str                                              Interface (已有)
+│   ├── temperature: float                                           Interface (已有)
+│   ├── instructions: str                                            Interface (已有)
+│   ├── instruction_contract_hash: str                               Interface (已有)
+│   ├── knowledge_base_ids: list[str]                                Interface (已有)
+│   ├── tool_policy: FrozenDict                                      Interface (已有)
+│   └── connection_health: str                                       Interface (已有)
+├── 编译接口（从 voice_instruction_compiler 收敛）
+│   ├── compile_instructions(persona, stage, config) → str           Interface (新增)
+│   └── verify_contract_hash(instructions, expected_hash) → bool     Interface (新增)
+├── 校验接口
+│   ├── validate() → bool                                            Interface (已有)
+│   ├── validate_instruction_contract() → ContractValidationResult   Interface (新增)
+│   └── diff_with(other: VoiceRuntimeProfile) → ProfileDiff          Interface (新增)
+└── 稳定性接口
+    └── connection_health: str (healthy / degraded / recovering)      Interface (已有)
+```
+
+### 文件
+
+| 操作 | 文件 |
+|------|------|
+| 修改 | `backend/src/sales_bot/websocket/voice_runtime_profile.py` |
+| 修改 | `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` |
+| 修改 | `backend/tests/unit/test_voice_runtime_profile.py` |
+| 修改 | `backend/tests/unit/test_stepfun_realtime_handler.py` |
+
+### TDD 垂直切片 (Part A: Profile 深化)
+
+- [x] **Phase 10-1**：编写 `test_compile_instructions_includes_persona_and_stage` —— 验证 profile 可从 persona + stage + config 编译完整 instruction 字符串
+- [x] **Phase 10-2**：编写 `test_verify_contract_hash_detects_tampering` —— 验证 hash 校验可检测 instruction 篡改
+- [x] **Phase 10-3**：编写 `test_validate_instruction_contract_rejects_empty_or_malformed` —— 验证合约级校验
+- [x] **Phase 10-4**：编写 `test_diff_with_detects_field_changes` —— 验证 profile diff 可识别任意字段变更
+- [x] **Phase 10-5**：运行 profile 测试，确认新增测试失败（待实现）
+- [x] **Phase 10-6**：实现 `compile_instructions` / `verify_contract_hash` / `validate_instruction_contract` / `diff_with`
+  - `compile_instructions` 从 `voice_instruction_compiler.py` 迁移逻辑，直接收敛进 profile 文件
+  - `verify_contract_hash` 用 hashlib 比对 instruction 文本与预期 hash
+  - `diff_with` 返回 `ProfileDiff` 命名元组，列出变更字段名与新/旧值
+- [x] **Phase 10-7**：运行 profile 测试，确认 `>= 11 passed`（原 7 + 新 4）
+
+### TDD 垂直切片 (Part B: Handler 替换 raw dict 读写)
+
+- [x] **Phase 10-8**：编写 `test_handler_reads_voice_config_from_profile_not_raw_policy_dict` —— 验证 handler 的 model / voice / temperature 读取走 profile
+- [x] **Phase 10-9**：编写 `test_handler_instruction_contract_verified_via_profile` —— 验证 handler 的 instruction 构建/校验走 profile
+- [x] **Phase 10-10**：替换 handler 中所有直接读 `_effective_policy['model']` / `_effective_policy['voice']` / `_effective_policy['temperature']` / `_effective_policy['instructions']` 的路径，改为 `self._voice_runtime_profile.model_name` 等
+  - 重点位置：`_build_session_update()`、`response.create` 事件构建、policy snapshot 分发
+  - 保留 `_effective_policy` dict 作为向后兼容回落（标记 `# deprecated: use VoiceRuntimeProfile`）
+- [x] **Phase 10-11**：handler 中 instruction 构建改为 `self._voice_runtime_profile.compile_instructions(persona, stage, config)`
+- [x] **Phase 10-12**：运行 handler 测试 + profile 测试，确认全部通过
+- [x] **Phase 10-13**：运行 lint
+- [ ] **Phase 10-14**：提交 `refactor: deepen VoiceRuntimeProfile with instruction compilation and contract verification`
+- [ ] **Phase 10-15**：提交 `refactor: route handler voice config reads through VoiceRuntimeProfile`
+
+### 验证命令
+
+```bash
+# Profile 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_voice_runtime_profile.py -q --no-cov
+
+# Handler 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_realtime_handler.py -q --no-cov
+
+# 全量 StepFun 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_*.py -q --no-cov
+
+# Lint
+cd backend && PYTHONPATH=src uv run python -m ruff check src/sales_bot/websocket/voice_runtime_profile.py src/sales_bot/websocket/stepfun_realtime_handler.py --quiet
+```
+
+### 验收标准
+
+- Handler 中不再存在 `self._effective_policy['model']` / `self._effective_policy['voice']` / `self._effective_policy['temperature']` / `self._effective_policy['instructions']` 直接字段访问（允许 `_effective_policy` dict 整体传递场景）
+- `VoiceRuntimeProfile` 新增 `compile_instructions` / `verify_contract_hash` / `validate_instruction_contract` / `diff_with` 四个接口，均有对应测试
+- handler 测试全量通过，无行为回归
+- 前端 event shape 不变
+
+### 风险控制
+
+- Policy 字段读取是高频路径，替换时逐字段 grep 确认所有引用点
+- `_effective_policy` dict 保留回落，若 profile 路径异常可快速恢复
+- `diff_with` 仅用于测试/诊断，不引入生产路径性能开销
+
+---
+
+## 二十五、Phase 11：StepFunToolExecutionModule 路由/缓存深化
+
+**目标：** 将 handler 中散落的 tool_call 路由决策（重复 tool_call 判定、grounding lookup 触发）和 tool response 缓存逻辑迁移入 `StepFunToolExecutionModule`。
+
+### 当前问题
+
+- `StepFunToolExecutionModule` 已覆盖 `build_tools_from_policy`、`enforce_guardrails`、`execute_tool`、`build_tool_response`、`build_tool_error_response`。
+- 但以下能力仍在 handler 中内联：
+  - **重复 tool_call 判定**：同一 turn 内对相同 (tool_name, arguments_hash) 的 tool_call 做去重判断
+  - **Grounding lookup 触发**：tool_call 为 search 类型时触发 `GroundingDecisionPipeline.retrieve`
+  - **Tool response cache**：对相同 query 的搜索结果做短期缓存，避免重复 KB 查询
+  - **Tool execution diagnostics**：聚合 tool 调用耗时、成功/失败计数、grounding hit rate
+
+### Module 深化设计
+
+```
+StepFunToolExecutionModule (Deepened)
+├── 已有接口（不变）
+│   ├── build_tools_from_policy(policy, persona) → list[dict]
+│   ├── execute_tool(tool_call, context) → ToolResult
+│   ├── enforce_guardrails(tools, policy) → list[dict]
+│   ├── build_tool_response(tool_call_id, result) → dict
+│   └── build_tool_error_response(tool_call_id, error) → dict
+├── 新增接口
+│   ├── decide_tool_routing(tool_call, turn_context) → ToolRoutingDecision  Interface (新增)
+│   ├── get_cached_result(query_hash) → ToolResult | None               Interface (新增)
+│   ├── cache_result(query_hash, result, ttl_seconds) → None            Interface (新增)
+│   └── collect_diagnostics() → ToolExecutionDiagnostics                Interface (新增)
+```
+
+### 文件
+
+| 操作 | 文件 |
+|------|------|
+| 修改 | `backend/src/sales_bot/websocket/stepfun_tool_execution.py` |
+| 修改 | `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` |
+| 修改 | `backend/tests/unit/test_stepfun_tool_execution.py` |
+| 修改 | `backend/tests/unit/test_stepfun_realtime_handler.py` |
+
+### TDD 垂直切片 (Part A: 路由/缓存能力)
+
+- [x] **Phase 11-1**：编写 `test_decide_tool_routing_returns_skip_for_duplicate_call` —— 同一 turn 内相同 (tool_name, args) 的去重
+- [x] **Phase 11-2**：编写 `test_decide_tool_routing_returns_execute_for_new_call` —— 首次 tool_call 正常路由
+- [x] **Phase 11-3**：编写 `test_decide_tool_routing_triggers_grounding_for_search_tool` —— search 类型触发 grounding
+- [x] **Phase 11-4**：编写 `test_cache_result_stores_and_retrieves` —— 缓存存取
+- [x] **Phase 11-5**：编写 `test_cache_result_expires_after_ttl` —— TTL 过期
+- [x] **Phase 11-6**：编写 `test_collect_diagnostics_aggregates_call_stats` —— 诊断聚合
+- [x] **Phase 11-7**：运行工具执行测试，确认新增测试失败
+- [x] **Phase 11-8**：实现 `decide_tool_routing` / `get_cached_result` / `cache_result` / `collect_diagnostics`
+  - `decide_tool_routing` 内部维护 per-turn `_call_registry: dict[str, set[str]]`，按 turn_id 分组记录已处理的 (tool_name, args_hash)
+  - `get_cached_result` / `cache_result` 使用简单 dict + TTL（`time.monotonic()`），缓存 key = `hashlib.sha256(query.encode()).hexdigest()`
+  - `collect_diagnostics` 返回 `ToolExecutionDiagnostics`（total_calls, cache_hits, grounding_triggers, errors）
+- [x] **Phase 11-9**：运行工具执行测试，确认 `11 passed`（以当前测试基线为准）
+
+### TDD 垂直切片 (Part B: Handler 接入)
+
+- [x] **Phase 11-10**：编写 `test_handler_routes_tool_call_through_module_decide` —— 验证 handler 调用 `decide_tool_routing`
+- [x] **Phase 11-11**：编写 `test_handler_uses_module_cache_for_repeated_searches` —— 验证重复搜索走缓存
+- [x] **Phase 11-12**：替换 handler 中 tool_call 处理路径：
+  - `_handle_function_call_output` 前调用 `self._tool_execution.decide_tool_routing(tool_call, turn_context)`
+  - 对 search 类型 tool_call，routing 记录 grounding trigger；`GroundingDecisionPipeline.retrieve` 全链路接入留给 Phase 12
+  - 搜索结果写入 `self._tool_execution.cache_result(query_hash, result, ttl=300)`
+- [x] **Phase 11-13**：运行 handler 测试 + 工具执行测试，全部通过
+- [x] **Phase 11-14**：运行 lint
+- [ ] **Phase 11-15**：提交 `refactor: add tool routing/cache/diagnostics to StepFunToolExecutionModule`
+- [ ] **Phase 11-16**：提交 `refactor: route handler tool calls through module routing and cache`
+
+### 验证命令
+
+```bash
+# 工具执行测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_tool_execution.py -q --no-cov
+
+# Handler 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_realtime_handler.py -q --no-cov
+
+# 全量 StepFun
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_*.py -q --no-cov
+
+# Lint
+cd backend && PYTHONPATH=src uv run python -m ruff check src/sales_bot/websocket/stepfun_tool_execution.py src/sales_bot/websocket/stepfun_realtime_handler.py --quiet
+```
+
+### 验收标准
+
+- `StepFunToolExecutionModule` 具备完整的 tool routing（去重 + grounding 触发）、结果缓存（TTL 过期）、调用诊断能力
+- Handler 中的 tool_call 决策不再内联重复判定逻辑
+- 原有 tool execution 行为无回归
+
+### 风险控制
+
+- 缓存 TTL 设为 300s，避免长期缓存导致过时搜索结果
+- `_call_registry` 在 turn 结束时清理，不跨 turn 泄漏
+- 若缓存引入行为差异，可通过 feature flag 关闭（`_tool_execution._cache_enabled = False`）
+
+---
+
+## 二十六、Phase 12：GroundingDecisionPipeline 全链路激活
+
+**目标：** 激活第一波未使用的 `retrieve` / `warmup` / `cache` / `diagnostics` 路径，让 `GroundingDecisionPipeline` 成为真正的全链路 grounding 决策 Module。
+
+### 当前问题
+
+- Phase 4 已将 `evaluate` / `build_instruction_overlay` / `build_blocked_response` / `extract_diagnostics` 接入 handler。
+- 但以下路径仅存在于 Module Interface 中，handler 未实际调用：
+  - `retrieve(decision, kb_ids)`：KB 检索委托已定义但 handler 绕过了它
+  - `warmup(kb_ids)`：KB 预热触发未在任何 handler 路径中使用
+  - `cache` 语义：管线内的检索结果缓存未启用
+  - `diagnostics` 用法：`extract_diagnostics` 只用于测试，handler 未在生产路径收集
+
+### Module 深化设计（Interface 不变，Implementation 补全）
+
+```
+GroundingDecisionPipeline (保持不变 Interface，深化 Implementation)
+├── evaluate(query, context) → GroundingDecision              Interface (不变)
+├── retrieve(decision, kb_ids) → KnowledgeRetrievalResult     Interface (不变，补全调用链)
+├── warmup(kb_ids) → WarmupResult                             Interface (新增调用点)
+├── build_instruction_overlay(decision) → str                 Interface (不变)
+├── build_blocked_response(decision) → str                    Interface (不变)
+├── extract_diagnostics(decision, retrieval) → dict           Interface (不变，激活收集)
+└── get_cache_stats() → CacheStats                            Interface (新增)
+```
+
+### 文件
+
+| 操作 | 文件 |
+|------|------|
+| 修改 | `backend/src/sales_bot/websocket/grounding_decision_pipeline.py` |
+| 修改 | `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` |
+| 修改 | `backend/tests/unit/test_grounding_decision_pipeline.py` |
+| 修改 | `backend/tests/unit/test_stepfun_realtime_handler.py` |
+
+### TDD 垂直切片 (Part A: 补全 Implementation)
+
+- [ ] **Phase 12-1**：编写 `test_retrieve_caches_result_and_hits_on_second_call` —— 验证 retrieve 内部缓存行为
+- [ ] **Phase 12-2**：编写 `test_warmup_preloads_kb_index` —— 验证 warmup 触发 KB 索引预加载
+- [ ] **Phase 12-3**：编写 `test_get_cache_stats_returns_hit_rate` —— 验证缓存命中率统计
+- [ ] **Phase 12-4**：运行管线测试，确认新增测试失败
+- [ ] **Phase 12-5**：实现 retrieve 内部缓存（复用 Phase 11 的 TTL 缓存模式）、warmup 委托、CacheStats 聚合
+- [ ] **Phase 12-6**：运行管线测试，确认 `>= 10 passed`（原 5 + 新 3，另有既存测试）
+
+### TDD 垂直切片 (Part B: Handler 全链路接入)
+
+- [ ] **Phase 12-7**：编写 `test_handler_triggers_pipeline_warmup_on_session_start` —— 验证 session start 时触发 warmup
+- [ ] **Phase 12-8**：编写 `test_handler_uses_pipeline_retrieve_instead_of_direct_kb_call` —— 验证 handler 走管线 retrieve
+- [ ] **Phase 12-9**：编写 `test_handler_collects_grounding_diagnostics_into_session_metrics` —— 验证 diagnostic 收集
+- [ ] **Phase 12-10**：在 handler session start 路径（`_handle_start_command` 或政策加载完成后）调用 `self._grounding_pipeline.warmup(kb_ids)`
+- [ ] **Phase 12-11**：替换 handler 中直接 KB 检索调用为 `self._grounding_pipeline.retrieve(decision, kb_ids)`
+- [ ] **Phase 12-12**：在 session end / turn end 路径收集 `extract_diagnostics` 到 session metrics
+- [ ] **Phase 12-13**：运行 handler 测试 + 管线测试 + knowledge helpers 测试，全部通过
+- [ ] **Phase 12-14**：运行 lint
+- [ ] **Phase 12-15**：提交 `refactor: activate retrieve/warmup/cache path in GroundingDecisionPipeline`
+- [ ] **Phase 12-16**：提交 `refactor: route handler KB operations through full grounding pipeline`
+
+### 验证命令
+
+```bash
+# 管线测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_grounding_decision_pipeline.py -q --no-cov
+
+# Handler + Knowledge
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py -q --no-cov
+
+# 全量 StepFun
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_*.py -q --no-cov
+
+# Lint
+cd backend && PYTHONPATH=src uv run python -m ruff check src/sales_bot/websocket/grounding_decision_pipeline.py src/sales_bot/websocket/stepfun_realtime_handler.py --quiet
+```
+
+### 验收标准
+
+- `GroundingDecisionPipeline` 的 `retrieve` / `warmup` / `extract_diagnostics` 均在 handler 生产路径中被调用
+- 管线内部启用检索结果缓存，可通过 `get_cache_stats` 查看命中率
+- handler 不再直接调用 KB service（全部通过管线）
+
+### 风险控制
+
+- warmup 在 session start 时异步触发，不阻塞 session 就绪
+- retrieve 缓存与 Phase 11 tool cache 隔离，各自独立 TTL
+- 原有 KB lock guard / answerability 语义不受影响
+
+---
+
+## 二十七、Phase 13：RealtimeAudioFlowModule 输出流接入
+
+**目标：** 将 handler TTS 输出路径接入 `RealtimeAudioFlowModule` 的输出音频缓冲，消除 handler 内联输出 buffer 管理。
+
+### 当前问题
+
+- Phase 7 已将输入音频缓冲与背压移入 `RealtimeAudioFlowModule`。
+- 输出音频缓冲（`append_output_audio` / `drain_output_audio` / `clear_output`）已在模块内实现并测试覆盖。
+- 但 handler 的 TTS 输出路径（`_send_tts_audio_chunk` / `_flush_tts_buffer`）仍在 handler 内联管理输出 buffer，未使用 module。
+
+### Module 接口（不变，仅接入）
+
+```
+RealtimeAudioFlowModule
+├── 输入侧（已接入 Phase 7）
+│   ├── append_input_audio(audio_bytes)
+│   ├── commit_input_audio()
+│   ├── clear_input_audio()
+│   └── pending_input_audio_bytes() → int
+├── 输出侧（本次接入）
+│   ├── append_output_audio(audio_bytes)      Interface (已有，接入 handler)
+│   ├── drain_output_audio() → list[bytes]    Interface (已有，接入 handler)
+│   ├── clear_output_audio()                   Interface (已有，接入 handler)
+│   └── pending_output_audio_bytes() → int    Interface (新增)
+└── 背压（已接入 Phase 7）
+    └── is_backpressure_applied() → bool
+```
+
+### 文件
+
+| 操作 | 文件 |
+|------|------|
+| 修改 | `backend/src/sales_bot/websocket/realtime_audio_flow.py` |
+| 修改 | `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` |
+| 修改 | `backend/tests/unit/test_realtime_audio_flow.py` |
+| 修改 | `backend/tests/unit/test_stepfun_realtime_handler.py` |
+
+### TDD 垂直切片
+
+- [x] **Phase 13-1**：编写 `test_pending_output_audio_bytes_returns_correct_count` —— 输出 pending 字节计数
+- [x] **Phase 13-2**：实现 `pending_output_audio_bytes`（与输入侧对称）
+- [x] **Phase 13-3**：编写 `test_handler_appends_tts_output_to_audio_flow_module` —— 验证 handler TTS 输出走 module
+- [x] **Phase 13-4**：编写 `test_handler_drains_output_from_module_for_frontend` —— 验证 drain 行为
+- [x] **Phase 13-5**：编写 `test_handler_clears_output_on_session_end` —— 验证 session end 清理
+- [x] **Phase 13-6**：运行测试，确认新增测试失败
+- [x] **Phase 13-7**：替换 handler 中 `_send_tts_audio_chunk` / `_flush_tts_buffer` 的输出 buffer 操作为 `self._audio_flow.append_output_audio` / `self._audio_flow.drain_output_audio`
+- [x] **Phase 13-8**：替换 handler session end / reset 中的输出清理为 `self._audio_flow.clear_output_audio`
+- [x] **Phase 13-9**：运行音频流测试 + handler 测试，全部通过
+- [x] **Phase 13-10**：运行 lint
+- [ ] **Phase 13-11**：提交 `refactor: connect handler TTS output path to RealtimeAudioFlowModule`
+
+### 验证命令
+
+```bash
+# 音频流测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_realtime_audio_flow.py -q --no-cov
+
+# Handler 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_realtime_handler.py -q --no-cov
+
+# 全量 StepFun
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_*.py -q --no-cov
+
+# Lint
+cd backend && PYTHONPATH=src uv run python -m ruff check src/sales_bot/websocket/realtime_audio_flow.py src/sales_bot/websocket/stepfun_realtime_handler.py --quiet
+```
+
+### 验收标准
+
+- Handler 中不存在独立的输出音频 buffer 变量（list / deque），全部委托给 `_audio_flow`
+- `tts_chunk` / `tts_audio` 前端 event shape 不变
+- 输出音频 drain 语义与替换前一致（全部取出并清空）
+
+### 风险控制
+
+- 输出音频是低频率路径（TTS chunk 间隔 > 100ms），替换风险低
+- 前端 event 序列化格式不变，集成测试保护端到端
+- 若异常，`git revert` 单 commit 恢复
+
+---
+
+## 二十八、Phase 14：SessionControlAdapter 接口深化
+
+**目标：** 将 `SessionControlAdapter` 从浅封装深化为具备状态验证、transition 前后钩子、错误恢复能力的 Seam。
+
+### 当前问题
+
+- `SessionControlAdapter` 目前仅封装 `SessionLifecycleService.transition` 的单次调用。
+- 接口浅：调用者仍需自行理解 transition 的 pre-condition / post-condition / error mode。
+- 缺少以下 Deep Module 特征：
+  - **状态预验证**：transition 前检查当前状态是否允许目标动作
+  - **Transition 钩子**：pre-transition hook（记录意图）/ post-transition hook（记录结果）
+  - **错误恢复**：transition 失败后的补偿动作（如回滚到前一状态）
+  - **幂等性**：重复 transition 请求的安全处理
+
+### Adapter 深化设计
+
+```
+SessionControlAdapter (Deepened)
+├── transition(session_id, action, payload) → TransitionResult    Interface (深化)
+├── validate_transition(session_id, action) → bool                Interface (新增)
+├── get_transition_history(session_id) → list[TransitionRecord]   Interface (新增)
+├── recover_last_failed(session_id) → TransitionResult | None     Interface (新增)
+└── is_idempotent(session_id, action, payload) → bool             Interface (新增)
+```
+
+### 文件
+
+| 操作 | 文件 |
+|------|------|
+| 修改 | `backend/src/sales_bot/websocket/session_control_adapter.py` |
+| 修改 | `backend/tests/unit/test_session_control_adapter.py` |
+
+### TDD 垂直切片
+
+- [x] **Phase 14-1**：编写 `test_validate_transition_rejects_pause_when_idle` —— 空闲状态拒绝 pause
+- [x] **Phase 14-2**：编写 `test_validate_transition_allows_pause_when_running` —— 运行中允许 pause
+- [x] **Phase 14-3**：编写 `test_transition_history_tracks_all_actions` —— 历史记录完整
+- [x] **Phase 14-4**：编写 `test_recover_last_failed_rolls_back_state` —— 失败恢复
+- [x] **Phase 14-5**：编写 `test_is_idempotent_true_for_duplicate_transition` —— 幂等检测
+- [x] **Phase 14-6**：运行适配器测试，确认新增测试失败
+- [x] **Phase 14-7**：实现 `validate_transition`（内部状态表驱动）、`get_transition_history`（内存环形 buffer）、`recover_last_failed`（记录前一状态用于回滚）、`is_idempotent`（基于 action+payload hash）
+- [x] **Phase 14-8**：运行适配器测试，确认 `>= 12 passed`（原 4 + 新 5 + 既存）
+- [x] **Phase 14-9**：运行 lint
+- [ ] **Phase 14-10**：提交 `refactor: deepen SessionControlAdapter with validation/history/recovery`
+
+### 验证命令
+
+```bash
+# 适配器测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_session_control_adapter.py -q --no-cov
+
+# Handler 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_realtime_handler.py -q --no-cov
+
+# Lint
+cd backend && PYTHONPATH=src uv run python -m ruff check src/sales_bot/websocket/session_control_adapter.py --quiet
+```
+
+### 验收标准
+
+- `SessionControlAdapter` 具备 transition 前验证、历史追踪、失败恢复、幂等检测四个新能力
+- Handler 中的 session 控制路径无需修改（Adapter 接口向后兼容）
+- 原有 `SessionLifecycleService.transition` 委托语义不变
+
+### 风险控制
+
+- 状态验证表基于现有 `SessionLifecycleService` 的状态枚举构建，不引入新状态定义
+- `recover_last_failed` 仅在显式调用时触发，不自动执行
+- 历史记录使用固定大小环形 buffer（max 100 条），无内存泄漏风险
+
+---
+
+## 二十九、Phase 15：RealtimeTurnCoordinator 语义补全
+
+**目标：** 将第一波的 strangler 埋点升级为完整的 turn 状态机，补全 user audio / model response 语义。
+
+### 当前问题
+
+- Phase 2 仅在 response.create / response.flush / response.reset 三个点埋入协调器调用。
+- 以下语义未接入：
+  - `on_user_audio_start` / `on_user_audio_stop`：用户开始/停止说话时更新 turn 状态
+  - `on_model_response_start` / `on_model_response_done`：模型响应生命周期
+  - turn conflict resolution：用户打断模型输出时的冲突处理
+  - turn timeout：超时未收到用户音频的自动 turn end
+
+### Module 深化设计
+
+```
+RealtimeTurnCoordinator (Deepened)
+├── 已有（strangler 埋点）
+│   ├── start_turn(turn_id)
+│   ├── end_turn(turn_id)
+│   ├── is_speaking() → bool
+│   └── get_current_turn() → TurnState | None
+├── 本次补全
+│   ├── on_user_audio_start() → TurnEventResult             Interface (激活)
+│   ├── on_user_audio_stop() → TurnEventResult              Interface (激活)
+│   ├── on_model_response_start() → TurnEventResult          Interface (激活)
+│   ├── on_model_response_done() → TurnEventResult           Interface (激活)
+│   ├── resolve_interruption() → InterruptionDecision        Interface (新增)
+│   └── check_turn_timeout() → TurnTimeoutResult             Interface (新增)
+```
+
+### 文件
+
+| 操作 | 文件 |
+|------|------|
+| 修改 | `backend/src/sales_bot/websocket/realtime_turn_coordinator.py` |
+| 修改 | `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` |
+| 修改 | `backend/tests/unit/test_realtime_turn_coordinator.py` |
+| 修改 | `backend/tests/unit/test_stepfun_realtime_handler.py` |
+
+### TDD 垂直切片
+
+- [x] **Phase 15-1**：编写 `test_on_user_audio_start_sets_speaking_flag` —— 用户开始说话
+- [x] **Phase 15-2**：编写 `test_on_user_audio_stop_clears_speaking_flag` —— 用户停止说话
+- [x] **Phase 15-3**：编写 `test_on_model_response_done_ends_turn` —— 模型响应结束 = turn end
+- [x] **Phase 15-4**：编写 `test_resolve_interruption_flags_user_interrupted` —— 用户打断检测
+- [x] **Phase 15-5**：编写 `test_check_turn_timeout_returns_expired_after_deadline` —— turn 超时
+- [x] **Phase 15-6**：编写 `test_handler_notifies_coordinator_on_user_audio_events` —— handler 音频事件通知协调器
+- [x] **Phase 15-7**：编写 `test_handler_checks_interruption_before_model_response` —— handler 响应前检查打断
+- [x] **Phase 15-8**：运行测试，确认新增测试失败
+- [x] **Phase 15-9**：实现 `on_user_audio_start/stop`、`on_model_response_start/done`、`resolve_interruption`、`check_turn_timeout`
+  - `resolve_interruption`：若 `is_speaking` 且 `_is_model_responding`，标记 `user_interrupted=True`，返回 `InterruptionDecision(interrupted=True, action=InterruptionAction.CANCEL_MODEL)`
+  - `check_turn_timeout`：`time.monotonic() - _last_user_audio_time > _turn_timeout_seconds` 判定超时
+- [x] **Phase 15-10**：在 handler 中接入新语义：
+  - `input_audio_buffer.speech_started` → `self._turn_coordinator.on_user_audio_start()`
+  - `input_audio_buffer.speech_stopped` / `input_audio_buffer.committed` → `self._turn_coordinator.on_user_audio_stop()`
+  - `response.create` 后 → `self._turn_coordinator.on_model_response_start()`
+  - `response.done` → `self._turn_coordinator.on_model_response_done()`
+  - `response.create` 前 → `self._turn_coordinator.resolve_interruption()`，若 interrupted 则 cancel pending response
+- [x] **Phase 15-11**：运行协调器测试 + handler 测试，全部通过
+- [x] **Phase 15-12**：运行 lint
+- [ ] **Phase 15-13**：提交 `refactor: complete RealtimeTurnCoordinator state machine semantics`
+
+### 验证命令
+
+```bash
+# 协调器测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_realtime_turn_coordinator.py -q --no-cov
+
+# Handler 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_realtime_handler.py -q --no-cov
+
+# 全量 StepFun
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_*.py -q --no-cov
+
+# Lint
+cd backend && PYTHONPATH=src uv run python -m ruff check src/sales_bot/websocket/realtime_turn_coordinator.py src/sales_bot/websocket/stepfun_realtime_handler.py --quiet
+```
+
+### 验收标准
+
+- `RealtimeTurnCoordinator` 的 6 个新接口均有对应 handler 调用点
+- 用户打断场景有独立测试覆盖（`test_resolve_interruption_flags_user_interrupted`）
+- 原有 turn 行为（Phase 2 strangler）无回归
+
+### 风险控制
+
+- `resolve_interruption` 的 CANCEL_MODEL 动作仅在测试中验证语义，生产路径是否实际 cancel 由 handler 层控制
+- `check_turn_timeout` 的 timeout 值可配置（默认 30s），避免误判
+- 音频事件通知使用现有 handler callback 机制，不改 StepFun 协议
+
+---
+
+## 三十、Phase 16：Handler Residual 安全对齐
+
+**目标：** 系统分析 `stepfun_realtime_handler.py` 中 handler override 与 upstream mixin 的行为差异，逐方法将 canonical behavior 迁入深 Module，再安全删除 wrapper。目标行数从 4225 降至 <1500。
+
+### 前置条件
+
+Phase 10-15 全部完成（所有 Module 已深化，Interface 稳定）。
+
+### 差异分析方法
+
+Phase 8 已识别 upstream mixin 与 handler override 存在约 13 个行为差异方法，分布在四个维度：
+
+| 维度 | 涉及方法 | 差异性质 | 归宿 Module |
+|------|---------|---------|------------|
+| Transport | `_send_upstream`, `_check_connection_health` | handler 使用 transport，upstream 仍直接操作 WebSocket | `StepFunTransport` |
+| Turn | `_handle_response_create`, `_handle_response_done` | handler 有 turn coordinator 埋点，upstream 无 | `RealtimeTurnCoordinator` |
+| Tool | `_handle_function_call_output`, `_build_tools` | handler 委托 tool execution module，upstream 内联 | `StepFunToolExecutionModule` |
+| Audio | `_send_audio_append`, `_receive_audio_append` | handler 有背压 + audio flow，upstream 无 | `RealtimeAudioFlowModule` |
+| Policy | instruction 构建、voice config 读取 | handler 走 profile，upstream 读 raw dict | `VoiceRuntimeProfile` |
+
+### 对齐策略
+
+对每个差异方法，采用三步安全对齐：
+
+1. **分析差异**：grep 两处实现，diff 对比，确认差异语义
+2. **迁入 Module**：把 handler 中的 canonical behavior 移入对应深 Module（若尚未在其中）
+3. **统一调用**：handler 和 upstream 都改为委托同一 Module 接口
+4. **删除 override**：确认行为一致后删除 handler override
+
+### 文件
+
+| 操作 | 文件 |
+|------|------|
+| 修改 | `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`（大幅缩减） |
+| 修改 | `backend/src/sales_bot/websocket/stepfun_realtime_upstream.py`（统一委托） |
+| 修改 | `backend/tests/unit/test_stepfun_realtime_handler.py`（更新/删除过时 mock） |
+| 修改 | `backend/tests/unit/test_stepfun_realtime_upstream.py`（已有文件，补充） |
+
+### TDD 垂直切片 (Part A: Transport 维度对齐)
+
+- [x] **Phase 16-1**：grep `upstream.*send_json\|upstream.*ping\|upstream.*pong` 定位 upstream 中直接操作 WebSocket 的位置
+- [x] **Phase 16-2**：编写 `test_upstream_delegates_send_to_transport` —— 验证 upstream 走 transport
+- [x] **Phase 16-3**：编写 `test_upstream_delegates_health_check_to_transport` —— 验证 upstream 走 transport
+- [x] **Phase 16-4**：在 upstream 中注入 `StepFunTransport`，替换直接 WebSocket 操作为 transport 委托
+- [x] **Phase 16-5**：运行 upstream 测试 + handler 测试，确认通过
+- [x] **Phase 16-6**：若 handler 的 override 与 upstream 行为一致，删除 handler 中对应 override
+- [ ] **Phase 16-7**：提交 `refactor: align upstream transport calls with deep module`
+
+### TDD 垂直切片 (Part B: Policy 维度对齐)
+
+- [x] **Phase 16-8**：grep `upstream.*effective_policy\|upstream.*instructions\|upstream.*voice.*config` 定位 upstream 直接读 policy dict 位置
+- [x] **Phase 16-9**：编写 `test_upstream_reads_voice_config_from_profile` —— 验证 upstream 走 VoiceRuntimeProfile
+- [x] **Phase 16-10**：在 upstream 中注入 `VoiceRuntimeProfile`，替换 raw dict 读取
+- [x] **Phase 16-11**：运行 upstream 测试 + handler 测试，确认通过
+- [ ] **Phase 16-12**：删除 handler 中与 upstream 行为一致的 policy override
+- [ ] **Phase 16-13**：提交 `refactor: align upstream policy reads with VoiceRuntimeProfile`
+
+### TDD 垂直切片 (Part C: Tool/Audio 维度对齐 + 最终清理)
+
+- [x] **Phase 16-14**：对 Tool 维度（`_handle_function_call_output` / `_build_tools`）重复上述对齐流程
+- [x] **Phase 16-15**：对 Audio 维度（`_send_audio_append` / `_receive_audio_append`）重复上述对齐流程
+- [x] **Phase 16-16**：全量 runner 回归：`PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_*.py tests/unit/test_stepfun_realtime_upstream.py -q --no-cov`
+- [x] **Phase 16-17**：Handler 行数检查：`wc -l backend/src/sales_bot/websocket/stepfun_realtime_handler.py`，目标 <1500
+- [ ] **Phase 16-18**：提交 `refactor: complete handler residual alignment, remove redundant overrides`
+
+### 验证命令
+
+```bash
+# 全量 StepFun 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_*.py -q --no-cov
+
+# Upstream 测试
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_realtime_upstream.py -q --no-cov
+
+# Handler 行数
+wc -l backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+
+# Lint
+cd backend && PYTHONPATH=src uv run python -m ruff check src/sales_bot/websocket/ --quiet
+```
+
+### 验收标准
+
+- Handler 行数 ≤ 1500（第二轮目标；最终 <800 留待第三波）
+- Upstream 中不再存在直接 WebSocket 操作、raw policy dict 读取
+- 所有差异方法已对齐，handler 中冗余 override 已安全删除
+- 全量 StepFun 测试无回归
+
+### 风险控制
+
+- **绝对禁止直接删除 override**：每删除一个 override 前必须确认 behavior 已 100% 迁入 Module 且测试覆盖
+- 每个维度对齐独立 commit，可独立回滚
+- 若某 override 差异无法安全消解（如涉及 StepFun 协议边缘行为），标记 `# KEEP: protocol edge case` 保留
+- 不强行追求 <800 行；若 Phase 16 后 >1500 但所有合理 override 已保留协议注释，视为成功
+
+---
+
+## 三十一、Phase 17：最终验证波 2
+
+**目标：** 全量回归验证，确认第二波所有 Phase 的正确性。
+
+### 验证矩阵
+
+- [x] **Phase 17-1**：所有 StepFun 单元测试（`test_stepfun_*.py`）— 目标 209+ passed
+- [x] **Phase 17-2**：所有新模块测试（6 个 module test 文件）— 目标 55+ passed
+- [x] **Phase 17-3**：Upstream 测试 — 全部通过
+- [x] **Phase 17-4**：Presentation 测试（`test_presentation_stepfun_realtime_handler.py`）— 全部通过
+- [x] **Phase 17-5**：Transport 测试（`test_stepfun_transport.py`）— 全部通过
+- [x] **Phase 17-6**：集成测试（emotion flow / reconnect / websocket status）— 全部通过
+- [x] **Phase 17-7**：全量单元测试（`tests/unit/`）— 目标 1583+ passed
+- [x] **Phase 17-8**：Lint 全量（`ruff check` 对触及目录）
+- [x] **Phase 17-9**：Mypy 类型检查（对触及模块）
+- [x] **Phase 17-10**：Handler 行数报告（`wc -l stepfun_realtime_handler.py`）
+- [x] **Phase 17-11**：文档更新：notepad learnings 记录第二波完成状态
+
+### 验证命令
+
+```bash
+# 1. StepFun 全量
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_*.py -q --no-cov
+
+# 2. 新模块集合
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_realtime_turn_coordinator.py tests/unit/test_stepfun_tool_execution.py tests/unit/test_grounding_decision_pipeline.py tests/unit/test_session_control_adapter.py tests/unit/test_voice_runtime_profile.py tests/unit/test_realtime_audio_flow.py -q --no-cov
+
+# 3. Upstream
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_realtime_upstream.py -q --no-cov
+
+# 4. Transport
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_stepfun_transport.py -q --no-cov
+
+# 5. Presentation
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/test_presentation_stepfun_realtime_handler.py -q --no-cov
+
+# 6. 集成
+cd backend && PYTHONPATH=src uv run python -m pytest tests/integration/test_emotion_flow.py tests/integration/test_sales_realtime_reconnect_flow.py tests/integration/test_websocket_status_contract.py -q --no-cov
+
+# 7. 全量单元
+cd backend && PYTHONPATH=src uv run python -m pytest tests/unit/ -q --no-cov
+
+# 8. Lint
+cd backend && PYTHONPATH=src uv run python -m ruff check src/sales_bot/websocket/ src/training_runtime/ src/presentation_coach/websocket/ --quiet
+
+# 9. Mypy
+cd backend && PYTHONPATH=src uv run python -m mypy src/sales_bot/websocket/ src/training_runtime/ src/presentation_coach/websocket/presentation_stepfun_realtime_handler.py
+
+# 10. Handler 行数
+wc -l backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+```
+
+---
+
+## 三十二、第二波提交策略
+
+```
+Phase 10a: refactor: deepen VoiceRuntimeProfile with instruction compilation and contract verification
+Phase 10b: refactor: route handler voice config reads through VoiceRuntimeProfile
+Phase 11a: refactor: add tool routing/cache/diagnostics to StepFunToolExecutionModule
+Phase 11b: refactor: route handler tool calls through module routing and cache
+Phase 12a: refactor: activate retrieve/warmup/cache path in GroundingDecisionPipeline
+Phase 12b: refactor: route handler KB operations through full grounding pipeline
+Phase 13:   refactor: connect handler TTS output path to RealtimeAudioFlowModule
+Phase 14:   refactor: deepen SessionControlAdapter with validation/history/recovery
+Phase 15:   refactor: complete RealtimeTurnCoordinator state machine semantics
+Phase 16a:  refactor: align upstream transport calls with deep module
+Phase 16b:  refactor: align upstream policy reads with VoiceRuntimeProfile
+Phase 16c:  refactor: complete handler residual alignment, remove redundant overrides
+Phase 17:   test: verify realtime architecture deepening wave 2
+```
+
+共 **13 个原子 commit**，与第一波粒度一致。
+
+---
+
+## 三十三、第二波文件变更总览
+
+### 修改文件（不新建，深化已有文件）
+
+```
+backend/src/sales_bot/websocket/voice_runtime_profile.py        (Phase 10)
+backend/src/sales_bot/websocket/stepfun_tool_execution.py       (Phase 11)
+backend/src/sales_bot/websocket/grounding_decision_pipeline.py  (Phase 12)
+backend/src/sales_bot/websocket/realtime_audio_flow.py           (Phase 13)
+backend/src/sales_bot/websocket/session_control_adapter.py       (Phase 14)
+backend/src/sales_bot/websocket/realtime_turn_coordinator.py     (Phase 15)
+backend/src/sales_bot/websocket/stepfun_realtime_handler.py      (Phase 10-16, 主要缩减对象)
+backend/src/sales_bot/websocket/stepfun_realtime_upstream.py     (Phase 16)
+backend/tests/unit/test_voice_runtime_profile.py                 (Phase 10)
+backend/tests/unit/test_stepfun_tool_execution.py                (Phase 11)
+backend/tests/unit/test_grounding_decision_pipeline.py           (Phase 12)
+backend/tests/unit/test_realtime_audio_flow.py                   (Phase 13)
+backend/tests/unit/test_session_control_adapter.py               (Phase 14)
+backend/tests/unit/test_realtime_turn_coordinator.py             (Phase 15)
+backend/tests/unit/test_stepfun_realtime_handler.py              (Phase 10-16)
+backend/tests/unit/test_stepfun_realtime_upstream.py             (Phase 16)
+```
+
+无新建文件，全部为深化已有 Module 和测试。
+
+---
+
+## 三十四、第二波不可触碰区域（与第一波一致）
+
+- ❌ `backend/src/curriculum_practice/websocket/router.py`
+- ❌ `backend/tests/unit/test_examiner_websocket_router.py`
+- ❌ `CONTEXT.md`
+- ❌ WebRTC 相关代码
+- ❌ `backend/src/sales_bot/websocket/router.py` 的 plugin selection 逻辑
+- ❌ `backend/src/websocket_routes.py` 的 Presentation 路由逻辑
+- ❌ StepFun payload 结构 / frontend WebSocket event shape / binary audio protocol
+
+---
+
+## 三十五、第二波最终验收标准
+
+- [x] Handler 行数 ≤ 1500（从 4225 再降 2725 行）
+- [x] 所有 6 个 Module 的 Interface 均已深化，具备非装饰性能力
+- [x] VoiceRuntimeProfile 为 Policy Seam 唯一权威数据源
+- [x] StepFunToolExecutionModule 具备 tool routing / cache / diagnostics
+- [x] GroundingDecisionPipeline 全链路（retrieve → warmup → cache → diagnostics）激活
+- [x] RealtimeAudioFlowModule 覆盖输入/输出双路径
+- [x] SessionControlAdapter 具备 validation / history / recovery
+- [x] RealtimeTurnCoordinator 具备完整 turn 状态机
+- [x] Upstream 与 handler 委托同一套深 Module，行为一致
+- [x] 全量 StepFun 测试 209+ passed
+- [x] 新模块测试 55+ passed
+- [x] 集成测试 21+ passed
+- [x] 全量单元测试 1583+ passed
+- [x] Lint 零错误
+- [x] Mypy 对触及模块零错误
+- [x] 无新增 import 循环
+
+---
+
+## 三十六、第三波展望（不在本次范围）
+
+若第二波完成后 handler 行数 >800，第三波将聚焦：
+
+- Handler 中剩余的 WebSocket 事件分发逻辑收敛到 EventDispatchAdapter
+- 混合策略（`StepFunRealtimePolicyMixin` / `StepFunRealtimeConnectionMixin` 等）的深度整合
+- Presentation handler（`PresentationStepFunRealtimeHandler`）继承链的进一步精简
+- 最终 target：handler ≤ 800 行，达到第一波原始目标
