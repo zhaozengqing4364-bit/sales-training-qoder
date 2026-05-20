@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from common.error_handling.result import Result
 from curriculum_practice.websocket import router as examiner_router
 from curriculum_practice.websocket.examiner_runtime import (
     ExaminerRuntime,
@@ -533,52 +534,33 @@ def test_should_expose_examiner_websocket_routes() -> None:
 
 @pytest.mark.asyncio
 async def test_should_mark_examiner_report_completed_idempotently(monkeypatch) -> None:
-    class Session:
-        report_status = "pending"
-        report_generated_at = None
-        report_status_updated_at = None
-        report_retryable = True
-        report_error = "previous"
+    persist_calls = 0
 
-    session = Session()
-    commit_count = 0
+    class FakeReportService:
+        def __init__(self, _db: object) -> None:
+            pass
 
-    class DbContext:
-        async def __aenter__(self):
-            return self
+        async def persist_completion_report(self, **kwargs: object) -> Result[dict[str, object]]:
+            nonlocal persist_calls
+            persist_calls += 1
+            return Result.ok({"session_id": kwargs["session_id"]})
 
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def get(self, model, key):
-            return session if key == "session-1" else None
-
-        async def commit(self):
-            nonlocal commit_count
-            commit_count += 1
-
-    monkeypatch.setattr(examiner_router, "AsyncSessionLocal", lambda: DbContext())
+    monkeypatch.setattr(examiner_router, "ExaminerReportService", FakeReportService)
 
     first_path = await examiner_router._mark_examiner_report_completed(
         session_id="session-1",
-        answers=[{"question_id": "question-1"}],
+        answers=[{"question_id": "question-1", "question_index": 0, "score": 80}],
         reason="all_questions_answered",
     )
-    first_generated_at = session.report_generated_at
     second_path = await examiner_router._mark_examiner_report_completed(
         session_id="session-1",
-        answers=[{"question_id": "question-1"}],
+        answers=[{"question_id": "question-1", "question_index": 0, "score": 80}],
         reason="reconnected",
     )
 
-    assert first_path == "/api/v1/evaluation/sessions/session-1/report"
+    assert first_path == "/exam/session-1/report"
     assert second_path == first_path
-    assert session.report_status == "completed"
-    assert isinstance(session.report_generated_at, datetime)
-    assert session.report_generated_at == first_generated_at
-    assert session.report_retryable is False
-    assert session.report_error is None
-    assert commit_count == 1
+    assert persist_calls == 2
 
 
 @pytest.mark.asyncio

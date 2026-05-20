@@ -591,6 +591,11 @@ export interface LearningPathStage {
     template_stage_key: string;
     name: string;
     state: LearningPathStageState;
+    stage_type?: "study" | "exam" | "practice" | "report" | string;
+    asset_type?: string | null;
+    asset_id?: string | null;
+    learning_content_id?: string | null;
+    agent_id?: string | null;
     prerequisites: Array<{ template_stage_key: string; required_result: "completed" }>;
     completion_policy: Record<string, unknown>;
     result?: Record<string, unknown> | null;
@@ -3953,6 +3958,27 @@ export interface LearnerStudyChapterCompletionResponse {
 export interface LearnerStudyStartExamResponse {
     session_id: string;
     examiner_agent_id: string;
+}
+
+export interface ExaminerReportItem {
+    question_index: number;
+    question_id: string;
+    title: string;
+    stem: string;
+    answer_text: string;
+    score: number;
+    feedback: string;
+}
+
+export interface ExaminerSessionReport {
+    session_id: string;
+    completion_reason: string;
+    overall_score: number;
+    answered_count: number;
+    total_questions: number;
+    passed: boolean;
+    generated_at?: string | null;
+    items: ExaminerReportItem[];
 }
 
 export type LearnerLevel = "conservative" | "beginner" | "intermediate" | "advanced";

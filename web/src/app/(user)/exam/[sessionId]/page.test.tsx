@@ -451,6 +451,91 @@ describe("ExamPage", () => {
     expect(screen.queryByPlaceholderText("请输入你的答案...")).toBeNull();
   });
 
+  it("second Enter confirms submission while confirmation dialog is open", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "answering",
+        currentQuestion: {
+          question_index: 0,
+          question_id: "q-001",
+          title: "Q1",
+          stem: "Test question",
+          remaining_seconds: 120,
+        },
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, { target: { value: "Double-enter answer" } });
+
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+    expect(screen.getByText(/提交后不可修改/)).toBeTruthy();
+    expect(sendAnswerMock).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+    expect(sendAnswerMock).toHaveBeenCalledWith("Double-enter answer");
+    expect(sendAnswerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("navigates back to stored return href and saves progress snapshot", async () => {
+    localStorage.setItem(
+      "exam-return-v1-exam-session-1",
+      JSON.stringify({
+        href: "/study/content-1",
+        label: "返回讲义",
+        learningContentId: "content-1",
+        savedAt: Date.now(),
+      }),
+    );
+
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "answering",
+        questionIndex: 2,
+        totalQuestions: 20,
+        gradedQuestions: [
+          { index: 0, score: 8, feedback: "Good" },
+          { index: 1, score: 7, feedback: "OK" },
+        ],
+        currentQuestion: {
+          question_index: 2,
+          question_id: "q-003",
+          title: "Q3",
+          stem: "Question three",
+          remaining_seconds: 90,
+        },
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, { target: { value: "Saved draft" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "返回讲义" }));
+
+    expect(pushMock).toHaveBeenCalledWith("/study/content-1");
+    expect(localStorage.getItem("exam-answer-v1-exam-session-1-q-003")).toBe(
+      "Saved draft",
+    );
+    expect(
+      JSON.parse(
+        localStorage.getItem("exam-progress-v1-exam-session-1") ?? "{}",
+      ),
+    ).toMatchObject({
+      questionIndex: 2,
+      answeredCount: 2,
+      totalQuestions: 20,
+      examPhase: "answering",
+    });
+  });
+
   it("Enter key opens confirmation dialog without immediately calling sendAnswer", async () => {
     const sendAnswerMock = vi.fn();
     useExaminerWebSocketMock.mockReturnValue(
@@ -716,7 +801,7 @@ describe("ExamPage", () => {
         answeredCount: 5,
         totalQuestions: 5,
         completionReason: "all_questions_answered",
-        reportPath: "/reports/exam-session-1.pdf",
+        reportPath: "/exam/exam-session-1/report",
       }),
     );
 
@@ -725,10 +810,28 @@ describe("ExamPage", () => {
 
     const reportBtn = screen.getByText("查看考核报告");
     fireEvent.click(reportBtn);
-    expect(pushMock).toHaveBeenCalledWith("/reports/exam-session-1.pdf");
+    expect(pushMock).toHaveBeenCalledWith("/exam/exam-session-1/report");
   });
 
-  it("falls back to /practice/{sessionId}/report when no report_path", async () => {
+  it("normalizes api report_path to frontend route", async () => {
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "completed",
+        answeredCount: 5,
+        totalQuestions: 5,
+        completionReason: "all_questions_answered",
+        reportPath: "/api/v1/curriculum-practice/study/exam-sessions/exam-session-1/report",
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    fireEvent.click(screen.getByText("查看考核报告"));
+    expect(pushMock).toHaveBeenCalledWith("/exam/exam-session-1/report");
+  });
+
+  it("falls back to /exam/{sessionId}/report when no report_path", async () => {
     useExaminerWebSocketMock.mockReturnValue(
       buildExamHookMock({
         examPhase: "completed",
@@ -744,7 +847,7 @@ describe("ExamPage", () => {
 
     const reportBtn = screen.getByText("查看考核报告");
     fireEvent.click(reportBtn);
-    expect(pushMock).toHaveBeenCalledWith("/practice/exam-session-1/report");
+    expect(pushMock).toHaveBeenCalledWith("/exam/exam-session-1/report");
   });
 
   it("shows timed_out label in completed view", () => {

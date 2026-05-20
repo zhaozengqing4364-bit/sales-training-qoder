@@ -47,10 +47,47 @@ function formatCompletionPolicy(policy: Record<string, unknown>): string {
 }
 
 function nextTaskHref(nextTask: LearningPathNextTask): string {
-    if (nextTask.primary_cta === "continue learning" && nextTask.learning_content_id) {
+    if (
+        nextTask.learning_content_id
+        && (nextTask.primary_cta === "continue learning" || nextTask.primary_cta === "start exam")
+    ) {
         return `/study/${encodeURIComponent(nextTask.learning_content_id)}`;
     }
     return "/training";
+}
+
+function stageActionHref(stage: LearningPathStage): string | null {
+    if (stage.state === "locked") {
+        return null;
+    }
+    if (stage.report_url && (stage.state === "completed" || stage.state === "failed")) {
+        return stage.report_url;
+    }
+    if (stage.stage_type === "study" && stage.learning_content_id) {
+        return `/study/${encodeURIComponent(stage.learning_content_id)}`;
+    }
+    if (stage.stage_type === "exam" && stage.learning_content_id) {
+        return `/study/${encodeURIComponent(stage.learning_content_id)}`;
+    }
+    if (stage.stage_type === "practice" && stage.agent_id) {
+        return `/agents/${encodeURIComponent(stage.agent_id)}`;
+    }
+    return null;
+}
+
+function stageActionLabel(stage: LearningPathStage): string {
+    if (stage.report_url && (stage.state === "completed" || stage.state === "failed")) {
+        return "查看报告";
+    }
+    if (stage.stage_type === "study") return "去学习";
+    if (stage.stage_type === "exam") return "去考核";
+    if (stage.stage_type === "practice") return "开始对练";
+    return "进入";
+}
+
+function stageIsActionable(stage: LearningPathStage): boolean {
+    return stageActionHref(stage) !== null
+        && ["available", "in_progress", "failed", "retraining_required", "completed"].includes(stage.state);
 }
 
 function stageNameByKey(key: string, stages: LearningPathStage[]): string | null {
@@ -217,11 +254,18 @@ export default function LearningPathPage() {
                                     <span className={cn("rounded-full px-3 py-1 text-xs font-bold", stageClassName(stage))}>
                                         {stateCopy[stage.state]}
                                     </span>
-                                    {stage.report_url && (
+                                    {stageIsActionable(stage) && stageActionHref(stage) ? (
+                                        <Button asChild variant="outline" size="sm" className="rounded-full">
+                                            <Link href={stageActionHref(stage)!}>
+                                                {stageActionLabel(stage)}
+                                            </Link>
+                                        </Button>
+                                    ) : null}
+                                    {stage.report_url && !stageIsActionable(stage) ? (
                                         <Link href={stage.report_url} className="text-sm font-bold text-blue-600 hover:text-blue-700">
                                             查看报告
                                         </Link>
-                                    )}
+                                    ) : null}
                                 </div>
                             </div>
                         </GlassCard>

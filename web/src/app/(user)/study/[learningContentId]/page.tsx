@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowRight, BookOpen, CheckCircle2, RefreshCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, RefreshCcw } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { LearnerStudyContent, LearnerStudyProgress, LearningChapter } from "@/lib/api/types";
+import { setExamReturnContext } from "@/lib/exam-session-storage";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -128,6 +129,11 @@ export default function StudyPage() {
         setExamError(null);
         try {
             const result = await api.learnerStudy.startExam(learningContentId);
+            setExamReturnContext(result.session_id, {
+                href: `/study/${encodeURIComponent(learningContentId)}`,
+                label: "返回讲义",
+                learningContentId,
+            });
             router.push(`/exam/${result.session_id}`);
         } catch (err) {
             setExamError(`启动考试失败：${getApiErrorMessage(err)}`);
@@ -201,6 +207,15 @@ export default function StudyPage() {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <Button
+                variant="ghost"
+                className="w-fit gap-2 pl-0 text-slate-500 hover:bg-transparent hover:text-slate-900"
+                onClick={() => router.push("/learning-path")}
+            >
+                <ArrowLeft className="h-4 w-4" />
+                返回学习路径
+            </Button>
+
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">

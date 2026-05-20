@@ -62,6 +62,8 @@ describe("LearningPathPage", () => {
                     template_stage_key: "template_stage_product",
                     name: "产品证据表达",
                     state: "available",
+                    stage_type: "study",
+                    learning_content_id: "content-lesson-1",
                     prerequisites: [],
                     completion_policy: { min_score: 7 },
                     result: { score: 8, passed: true, attempts: 2 },
@@ -178,7 +180,7 @@ describe("LearningPathPage", () => {
         );
     });
 
-    it("routes completed study tasks back to training instead of the study page", async () => {
+    it("routes completed study tasks to the study page for exam entry", async () => {
         getMineMock.mockResolvedValueOnce({
             user_id: "learner-1",
             path_type: "role_default",
@@ -201,7 +203,47 @@ describe("LearningPathPage", () => {
         render(<LearningPathPage />);
 
         expect(await screen.findByText("开始考试：预算异议处理")).toBeTruthy();
-        expect(screen.getByRole("link", { name: /start exam/ }).getAttribute("href")).toBe("/training");
+        expect(screen.getByRole("link", { name: /start exam/ }).getAttribute("href")).toBe(
+            "/study/content-lesson-1",
+        );
+    });
+
+    it("shows stage entry action for available study stages", async () => {
+        getMineMock.mockResolvedValueOnce({
+            user_id: "learner-1",
+            path_type: "role_default",
+            recommended_template_ids: [],
+            recommendation_reasons: [],
+            next_task: {
+                title: "售前基础训练营",
+                state: "completed",
+                primary_cta: "start exam",
+                reason: "继续完成讲义学习，完成后可进入考试。",
+                learning_content_id: "content-lesson-1",
+            },
+            stages: [
+                {
+                    template_stage_key: "presales_study",
+                    name: "产品知识学习",
+                    state: "available",
+                    stage_type: "study",
+                    learning_content_id: "content-lesson-1",
+                    prerequisites: [],
+                    completion_policy: { min_score: 0, min_rounds: 0, max_duration_seconds: 600 },
+                    report_url: null,
+                    failure_reason: null,
+                    retry_action: null,
+                },
+            ],
+            generated_at: "2026-05-13T00:00:00Z",
+        });
+
+        render(<LearningPathPage />);
+
+        expect(await screen.findByText("产品知识学习")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "去学习" }).getAttribute("href")).toBe(
+            "/study/content-lesson-1",
+        );
     });
 
     it("renders pending review placeholder for certification path", async () => {

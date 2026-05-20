@@ -430,6 +430,22 @@ class LearningPathService:
                         "template_stage_key": stage.template_stage_key,
                         "name": stage.name,
                         "state": state,
+                        "stage_type": stage.stage_type,
+                        "asset_type": stage.template_ref.asset_type,
+                        "asset_id": stage.template_ref.asset_id,
+                        "learning_content_id": (
+                            str(stage.template_ref.asset_id)
+                            if stage.stage_type == "study"
+                            and stage.template_ref.asset_type == "learning_content"
+                            else str(template.learning_content_id)
+                            if stage.stage_type == "exam" and template.learning_content_id
+                            else None
+                        ),
+                        "agent_id": (
+                            str(template.agent_id)
+                            if stage.stage_type == "practice" and template.agent_id
+                            else None
+                        ),
                         "prerequisites": [item.model_dump(mode="json") for item in stage.prerequisites],
                         "completion_policy": stage.completion_policy.model_dump(mode="json"),
                         "report_url": self._report_url_for_template(template_id, completed_sessions),
@@ -462,6 +478,13 @@ class LearningPathService:
             "template_stage_key": f"template_stage_{template_id}",
             "name": str(template.name),
             "state": "completed" if template_id in completed_template_ids else "available",
+            "stage_type": "practice",
+            "asset_type": "practice_template",
+            "asset_id": template_id,
+            "learning_content_id": (
+                str(template.learning_content_id) if template.learning_content_id else None
+            ),
+            "agent_id": str(template.agent_id) if template.agent_id else None,
             "prerequisites": [],
             "completion_policy": {
                 "min_score": 7,

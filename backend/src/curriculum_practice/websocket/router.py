@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, WebSocket
 from jwt import InvalidTokenError as JWTError
 from sqlalchemy import select
 
+from common.ai.llm_service import LLMService
 from common.auth.service import resolve_websocket_token, verify_token
 from common.config import settings
 from common.db.models import PracticeSession, User
@@ -15,6 +16,11 @@ from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
 from common.websocket.session_manager import get_session_manager
 from curriculum_practice.models import ExaminerAgent, QuestionItem
+from curriculum_practice.services.examiner_report_service import (
+    ExaminerReportService,
+    examiner_report_frontend_path,
+)
+from curriculum_practice.services.examiner_scoring_service import build_llm_exam_scorer
 from curriculum_practice.websocket.examiner_runtime import (
     ExaminerRuntime,
     ExaminerWebSocketHandler,
@@ -272,6 +278,10 @@ async def _build_runtime_from_session(
                     examiner_agent_id=str(agent.examiner_agent_id),
                     timeout_seconds=_timeout_seconds(agent.timeout_config),
                     questions=questions,
+                    scorer=build_llm_exam_scorer(
+                        llm_service=LLMService(),
+                        session_id=session_id,
+                    ),
                     completion_writer=_mark_examiner_report_completed,
                 ),
                 None,
@@ -300,18 +310,20 @@ async def _mark_examiner_report_completed(
     answers: list[dict[str, object]],
     reason: str,
 ) -> str:
-    del answers, reason
     async with AsyncSessionLocal() as db:
-        session = await db.get(PracticeSession, session_id)
-        if session is not None and getattr(session, "report_status", None) != "completed":
-            now = datetime.now(UTC)
-            session.report_status = "completed"
-            session.report_status_updated_at = now
-            session.report_retryable = False
-            session.report_generated_at = now
-            session.report_error = None
-            await db.commit()
-    return f"/api/v1/evaluation/sessions/{session_id}/report"
+        report_service = ExaminerReportService(db)
+        persist_result = await report_service.persist_completion_report(
+            session_id=session_id,
+            answers=[item for item in answers if isinstance(item, dict)],
+            reason=reason,
+        )
+        if not persist_result.is_success:
+            logger.warning(
+                "Failed to persist examiner report payload",
+                session_id=session_id,
+                fallback=persist_result.fallback,
+            )
+    return examiner_report_frontend_path(session_id)
 
 
 def _asset_refs(content_assets: list[object], asset_type: str) -> list[dict[str, object]]:

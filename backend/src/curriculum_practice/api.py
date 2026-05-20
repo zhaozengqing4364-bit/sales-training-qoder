@@ -70,6 +70,7 @@ from curriculum_practice.services.examiner_agents import (
     ExaminerAgentService,
     serialize_examiner_agent,
 )
+from curriculum_practice.services.examiner_report_service import ExaminerReportService
 from curriculum_practice.services.learner_profiles import LearnerProfileService
 from curriculum_practice.services.learning_contents import (
     SERVER_ERROR as LEARNING_CONTENT_SERVICE_FAILED,
@@ -505,6 +506,25 @@ async def start_my_study_exam(
     await db.commit()
     await db.refresh(session)
     return _success({"session_id": str(session.session_id), "examiner_agent_id": str(agent.examiner_agent_id)})
+
+
+@study_router.get("/exam-sessions/{session_id}/report", response_model=None)
+async def get_my_exam_session_report(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    result = await ExaminerReportService(db).get_report_for_user(
+        session_id=session_id,
+        user_id=str(current_user.user_id),
+    )
+    if not result.is_success or result.value is None:
+        fallback = result.fallback or "[EXAMINER_REPORT_NOT_FOUND]"
+        status_code = 404
+        if fallback == "[ACCESS_DENIED]":
+            status_code = 403
+        return _api_error(fallback, status_code=status_code)
+    return _success(result.value)
 
 
 @router.get("/learner-profiles/{user_id}", response_model=None)

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   AlertCircle,
+  ArrowLeft,
   CheckCircle,
   Clock,
   FileText,
@@ -18,6 +19,12 @@ import { GlassSheet } from "@/components/ui/glass-sheet";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api/client";
+import { resolveExamReportHref } from "@/lib/exam-report-routing";
+import {
+  getExamReturnHref,
+  getExamReturnLabel,
+  saveExamProgressSnapshot,
+} from "@/lib/exam-session-storage";
 import {
   useExaminerWebSocket,
   type GradedQuestion,
@@ -215,14 +222,14 @@ export default function ExamPage() {
     }
   }, [examPhase]);
 
-  const handleSubmit = () => {
+  const handleSubmit = React.useCallback(() => {
     const trimmed = answerText.trim();
     if (!trimmed || sending) return;
     pendingAnswerRef.current = trimmed;
     setShowSubmitConfirm(true);
-  };
+  }, [answerText, sending]);
 
-  const handleConfirmSubmit = () => {
+  const handleConfirmSubmit = React.useCallback(() => {
     setShowSubmitConfirm(false);
     const trimmed = pendingAnswerRef.current;
     if (!trimmed) return;
@@ -233,7 +240,45 @@ export default function ExamPage() {
     setSending(true);
     setHasPendingSubmit(true);
     sendAnswer(trimmed);
-  };
+  }, [
+    connectionState,
+    currentQuestion,
+    examPhase,
+    sendAnswer,
+  ]);
+
+  const persistExamSnapshot = React.useCallback(() => {
+    if (storageKey && answerText.trim()) {
+      try {
+        localStorage.setItem(storageKey, answerText.trim());
+      } catch {
+        // localStorage not available
+      }
+    }
+    saveExamProgressSnapshot(sessionId, {
+      questionIndex,
+      answeredCount: gradedQuestions.length,
+      totalQuestions,
+      examPhase,
+    });
+  }, [
+    answerText,
+    examPhase,
+    gradedQuestions.length,
+    questionIndex,
+    sessionId,
+    storageKey,
+    totalQuestions,
+  ]);
+
+  const handleBack = React.useCallback(() => {
+    if (examPhase === "completed") {
+      router.push(getExamReturnHref(sessionId));
+      return;
+    }
+    persistExamSnapshot();
+    router.push(getExamReturnHref(sessionId));
+  }, [examPhase, persistExamSnapshot, router, sessionId]);
 
   // Clear sending state and draft when examPhase transitions away from "answering"
   React.useEffect(() => {
@@ -248,16 +293,28 @@ export default function ExamPage() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit();
+      e.stopPropagation();
+      if (showSubmitConfirm) {
+        handleConfirmSubmit();
+      } else {
+        handleSubmit();
+      }
     }
   };
 
+  React.useEffect(() => {
+    if (!showSubmitConfirm) return;
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || e.shiftKey) return;
+      e.preventDefault();
+      handleConfirmSubmit();
+    };
+    window.addEventListener("keydown", onWindowKeyDown);
+    return () => window.removeEventListener("keydown", onWindowKeyDown);
+  }, [handleConfirmSubmit, showSubmitConfirm]);
+
   const handleViewReport = () => {
-    if (reportPath) {
-      router.push(reportPath);
-    } else {
-      router.push(`/practice/${sessionId}/report`);
-    }
+    router.push(resolveExamReportHref(sessionId, reportPath));
   };
 
   if (featureFlag === "loading") {
@@ -309,9 +366,22 @@ export default function ExamPage() {
         {/* Header */}
         <header className="shrink-0 px-4 py-3 md:px-6 md:py-4 border-b border-white/40 bg-white/20 backdrop-blur-md">
           <div className="flex items-center justify-between gap-3">
-            <div>
+            <div className="flex items-center gap-2 min-w-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 rounded-full pl-2 pr-3 text-slate-600 hover:text-slate-900"
+                onClick={handleBack}
+                aria-label={getExamReturnLabel(sessionId)}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline text-sm">
+                  {getExamReturnLabel(sessionId)}
+                </span>
+              </Button>
+              <div className="min-w-0">
               <h1 className="text-lg font-bold text-slate-900">AI 考核</h1>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 truncate">
                 {connectionState === "connecting"
                   ? "连接中..."
                   : connectionState === "reconnecting"
@@ -322,6 +392,7 @@ export default function ExamPage() {
                   ? "考核完成"
                   : `第 ${questionIndex + 1}/${totalQuestions} 题`}
               </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -540,7 +611,7 @@ export default function ExamPage() {
               </Button>
             </div>
             <p className="mt-2 text-center text-xs text-slate-400">
-              按 Enter 发送，Shift+Enter 换行
+              按 Enter 打开提交确认，再按 Enter 确认提交；Shift+Enter 换行
             </p>
           </div>
         )}

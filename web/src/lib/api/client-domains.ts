@@ -61,6 +61,7 @@ import type {
     LearnerStudyContent,
     LearnerStudyChapterCompletionResponse,
     LearnerStudyStartExamResponse,
+    ExaminerSessionReport,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -416,6 +417,12 @@ export function createLearnerStudyDomain({ request }: LearnerStudyDomainDependen
             return request<LearnerStudyStartExamResponse>(
                 `/curriculum-practice/study/learning-contents/${encodeURIComponent(contentId)}/start-exam`,
                 { method: "POST" },
+            );
+        },
+
+        getExamReport: async (sessionId: string) => {
+            return request<ExaminerSessionReport>(
+                `/curriculum-practice/study/exam-sessions/${encodeURIComponent(sessionId)}/report`,
             );
         },
     };

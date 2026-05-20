@@ -85,6 +85,16 @@ describe("StudyPage", () => {
         expect(screen.getByRole("button", { name: /重试/ })).toBeTruthy();
     });
 
+    it("navigates back to learning path", async () => {
+        getContentMock.mockResolvedValue(makeContent());
+        render(<StudyPage />);
+
+        await screen.findByRole("heading", { name: "销售异议处理" });
+        fireEvent.click(screen.getByRole("button", { name: /返回学习路径/ }));
+
+        expect(pushMock).toHaveBeenCalledWith("/learning-path");
+    });
+
     it("renders study content with chapters and progress", async () => {
         getContentMock.mockResolvedValue(makeContent());
         render(<StudyPage />);
