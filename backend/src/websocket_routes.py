@@ -17,6 +17,10 @@ from common.db.session import AsyncSessionLocal
 from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.logger import get_logger
 from common.monitoring.trace_context import normalize_trace_id
+from common.services.session_runtime_lifecycle_hooks import (
+    mark_session_runtime_failed,
+    mark_session_runtime_started,
+)
 from curriculum_practice.websocket.router import router as examiner_ws_router
 from sales_bot.websocket.router import router as sales_ws_router
 from training_runtime import TrainingRuntimeDescriptor
@@ -90,6 +94,11 @@ async def _handle_presentation_websocket(
             expected="presentation",
             actual=scenario_type,
         )
+        await mark_session_runtime_failed(
+            resolved_session_id,
+            failure_code="SESSION_SCENARIO_MISMATCH",
+            source="presentation_websocket_reject",
+        )
         await websocket.accept()
         await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
         return
@@ -99,6 +108,11 @@ async def _handle_presentation_websocket(
         logger.warning(
             "Rejected /ws/presentation connection due to KB lock without bound knowledge base",
             session_id=resolved_session_id,
+        )
+        await mark_session_runtime_failed(
+            resolved_session_id,
+            failure_code="KB_LOCK_UNBOUND",
+            source="presentation_websocket_reject",
         )
         await websocket.accept()
         await websocket.close(code=4410, reason="KB_LOCK_UNBOUND")
@@ -144,6 +158,11 @@ async def _handle_presentation_websocket(
         user_id = None
 
     if user_id is None:
+        await mark_session_runtime_failed(
+            resolved_session_id,
+            failure_code="Unauthorized",
+            source="presentation_websocket_reject",
+        )
         await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return
@@ -160,10 +179,19 @@ async def _handle_presentation_websocket(
             request_user_id=user_id,
             session_owner_id=session_owner_id,
         )
+        await mark_session_runtime_failed(
+            resolved_session_id,
+            failure_code="ACCESS_DENIED",
+            source="presentation_websocket_reject",
+        )
         await websocket.accept()
         await websocket.close(code=4003, reason="ACCESS_DENIED")
         return
 
+    await mark_session_runtime_started(
+        resolved_session_id,
+        source="presentation_websocket_connect",
+    )
     session_manager = get_session_manager()
     await session_manager.register_session(
         resolved_session_id,

@@ -221,10 +221,58 @@ export default function PracticeSessionPage() {
         onRewriteQuery: router.replace,
     });
 
-    const canOpenPracticeSocket = isRuntimeLockReady && (
-        lockedScenarioType !== "sales"
-        || (Boolean(lockedAgentId) && Boolean(lockedPersonaId))
-    );
+    const [runtimePreflight, setRuntimePreflight] = React.useState<{
+        status: "idle" | "loading" | "ready" | "blocked" | "error";
+        hint: string | null;
+        code: string | null;
+        lifecycleState: string | null;
+    }>({ status: "idle", hint: null, code: null, lifecycleState: null });
+
+    React.useEffect(() => {
+        if (!isRuntimeLockReady) {
+            setRuntimePreflight({ status: "idle", hint: null, code: null, lifecycleState: null });
+            return;
+        }
+
+        let cancelled = false;
+        setRuntimePreflight({ status: "loading", hint: null, code: null, lifecycleState: null });
+        api.practice.getRuntimePreflight(sessionId)
+            .then((result) => {
+                if (cancelled) return;
+                if (result.runnable) {
+                    setRuntimePreflight({ status: "ready", hint: null, code: null, lifecycleState: result.runtime_lifecycle_state || "runnable" });
+                    return;
+                }
+                setRuntimePreflight({
+                    status: "blocked",
+                    hint: result.hint || "当前会话暂不可运行，请返回入口重试。",
+                    code: result.code || null,
+                    lifecycleState: result.runtime_lifecycle_state || "failed",
+                });
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setRuntimePreflight({
+                    status: "error",
+                    hint: "无法验证会话运行条件，请稍后刷新页面重试。",
+                    code: null,
+                    lifecycleState: null,
+                });
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [sessionId, isRuntimeLockReady]);
+
+    const runtimePreflightReady = runtimePreflight.status === "ready";
+
+    const canOpenPracticeSocket = isRuntimeLockReady
+        && runtimePreflightReady
+        && (
+            lockedScenarioType !== "sales"
+            || (Boolean(lockedAgentId) && Boolean(lockedPersonaId))
+        );
 
     const [isPanelOpen, setIsPanelOpen] = React.useState(false);
     const [sessionTime, setSessionTime] = React.useState(0);
@@ -600,6 +648,19 @@ export default function PracticeSessionPage() {
             });
         }
 
+        if (runtimePreflight.status === "blocked" || runtimePreflight.status === "error") {
+            const lifecycleLabel = formatRuntimeLifecycleState(
+                runtimePreflight.lifecycleState as import('@/lib/api/types').SessionRuntimeLifecycleState | null,
+            );
+            faults.push({
+                id: "runtime-preflight",
+                severity: "error",
+                title: lifecycleLabel ? `运行预检（${lifecycleLabel}）` : "运行预检",
+                message: runtimePreflight.hint || "当前会话暂不可运行。",
+                guidance: "请返回训练入口重新创建会话，或联系管理员完成配置。",
+            });
+        }
+
         if (lifecycleErrorMessage) {
             faults.push({
                 id: `lifecycle-${lifecycleError?.action ?? "unknown"}`,
@@ -705,6 +766,8 @@ export default function PracticeSessionPage() {
         lifecycleErrorGuidance,
         lifecycleErrorMessage,
         lifecycleRetryLabel,
+        runtimePreflight.hint,
+        runtimePreflight.status,
         sessionMetaError,
         wsError,
     ]);

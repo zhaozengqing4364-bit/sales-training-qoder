@@ -14,13 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.api.response import error_response
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
-from common.db.models import PracticeSession, Scenario, User
+from common.db.models import Scenario, User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
 from curriculum_practice.models import (
     CaseItem,
     ExaminerAgent,
-    QuestionItem,
     RoleProfile,
 )
 from curriculum_practice.permissions import can_manage_practice_templates
@@ -446,66 +445,37 @@ async def start_my_study_exam(
             message="请先完成全部讲义章节，再开始 AI 考核。",
         )
 
-    agent_result = await db.execute(
-        select(ExaminerAgent)
-        .where(ExaminerAgent.status == "published")
-        .order_by(ExaminerAgent.updated_at.desc())
-        .limit(1)
+    from curriculum_practice.services.examiner_session_assembler import (
+        ExaminerSessionAssembler,
     )
-    agent = agent_result.scalar_one_or_none()
-    if agent is None:
-        return _api_error(
-            "[EXAMINER_AGENT_NOT_AVAILABLE]",
-            status_code=409,
-            message="暂无已发布 AI 考官，请联系管理员发布考官。",
-        )
 
-    question_ids = [str(item).strip() for item in (agent.question_source_ids or []) if str(item).strip()]
-    if not question_ids:
-        return _api_error(
-            "[EXAM_QUESTION_BANK_EMPTY]",
-            status_code=409,
-            message="AI 考官未绑定题目，请联系管理员配置题库。",
+    try:
+        create_result = await ExaminerSessionAssembler(db).create_study_exam_session(
+            user_id=str(current_user.user_id),
+            learning_content_id=content_id,
         )
+    except ValueError as exc:
+        error_code = str(exc)
+        if error_code == "[EXAMINER_AGENT_NOT_AVAILABLE]":
+            return _api_error(
+                error_code,
+                status_code=409,
+                message="暂无已发布 AI 考官，请联系管理员发布考官。",
+            )
+        if error_code == "[EXAM_QUESTION_BANK_EMPTY]":
+            return _api_error(
+                error_code,
+                status_code=409,
+                message="AI 考官绑定的题目不可用，请联系管理员检查题库。",
+            )
+        raise
 
-    questions_result = await db.execute(
-        select(QuestionItem).where(
-            QuestionItem.question_id.in_(question_ids),
-            QuestionItem.status == "published",
-            QuestionItem.safety_flagged.is_(False),
-        )
+    return _success(
+        {
+            "session_id": str(create_result.session.session_id),
+            "examiner_agent_id": str(create_result.examiner_agent.examiner_agent_id),
+        }
     )
-    questions_by_id = {str(item.question_id): item for item in questions_result.scalars().all()}
-    questions = [questions_by_id[question_id] for question_id in question_ids if question_id in questions_by_id]
-    if not questions:
-        return _api_error(
-            "[EXAM_QUESTION_BANK_EMPTY]",
-            status_code=409,
-            message="AI 考官绑定的题目不可用，请联系管理员检查题库。",
-        )
-
-    scenario = await _get_or_create_exam_scenario(db)
-    session = PracticeSession(
-        user_id=str(current_user.user_id),
-        scenario_id=str(scenario.scenario_id),
-        status="in_progress",
-        report_status="pending",
-        curriculum_snapshot={
-            "kind": "curriculum_examiner_session",
-            "learning_content_id": content_id,
-            "content_assets": [
-                _curriculum_exam_asset_ref("examiner_agent", agent, str(agent.name)),
-                *[
-                    _curriculum_exam_asset_ref("question_item", question, str(question.title))
-                    for question in questions
-                ],
-            ],
-        },
-    )
-    db.add(session)
-    await db.commit()
-    await db.refresh(session)
-    return _success({"session_id": str(session.session_id), "examiner_agent_id": str(agent.examiner_agent_id)})
 
 
 @study_router.get("/exam-sessions/{session_id}/report", response_model=None)

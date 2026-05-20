@@ -80,6 +80,11 @@ from common.services.practice_service import (
     PracticeServiceError,
     build_practice_route_services,
 )
+from common.services.runtime_preflight_service import RuntimePreflightService
+from common.services.session_runtime_state_service import (
+    SessionRuntimeStateService,
+    suggested_action_for_lifecycle,
+)
 from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
 from presentation_coach.services.coach_service import PresentationCoachService
@@ -842,10 +847,60 @@ async def get_session(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
+    await SessionRuntimeStateService(db).ensure_lifecycle_initialized(
+        session_id,
+        source="practice_get_session",
+    )
+    await db.refresh(session)
+
     # Avoid async lazy-loading issues on relationship fields when serializing ORM model
     session_base = _build_session_response(session, scenario_type=scenario_type)
     session_detail = SessionDetail.model_validate(session_base.model_dump())
     return success_response(session_detail)
+
+
+@router.get("/practice/sessions/{session_id}/runtime-preflight")
+async def get_session_runtime_preflight(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Check whether a session can open its runtime WebSocket before connecting."""
+    result = await db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        return error_response("[SESSION_NOT_FOUND]", status_code=404)
+
+    if not _can_read_session(session, current_user):
+        return error_response("[ACCESS_DENIED]", status_code=403)
+
+    lifecycle_service = SessionRuntimeStateService(db)
+    await lifecycle_service.ensure_lifecycle_initialized(
+        session_id,
+        source="practice_runtime_preflight",
+    )
+    preflight = await RuntimePreflightService(db).evaluate_session(session_id)
+    if preflight is None:
+        return error_response("[SESSION_NOT_FOUND]", status_code=404)
+
+    await lifecycle_service.apply_preflight_result(
+        session_id,
+        runnable=preflight.runnable,
+        code=preflight.code,
+        hint=preflight.hint,
+    )
+    lifecycle = await lifecycle_service.get_snapshot(session_id)
+    return success_response(
+        preflight.as_payload(
+            runtime_lifecycle_state=lifecycle.state,
+            suggested_action=suggested_action_for_lifecycle(
+                lifecycle_state=lifecycle.state,
+                runnable=preflight.runnable,
+            ),
+        )
+    )
 
 
 @router.post("/practice/sessions/{session_id}/lifecycle")

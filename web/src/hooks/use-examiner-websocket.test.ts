@@ -75,6 +75,39 @@ describe("useExaminerWebSocket", () => {
     expect(MockWebSocket.instances).toHaveLength(0);
   });
 
+  it("does not retry after fatal examiner runtime close codes", async () => {
+    const { result } = renderHook(() =>
+      useExaminerWebSocket("session-1", { connectEnabled: true }),
+    );
+
+    await act(async () => {
+      result.current.setFeatureFlag("enabled");
+    });
+
+    const ws = MockWebSocket.instances[0];
+    await act(async () => {
+      openConnection(ws);
+      ws.close(4413, "EXAMINER_RUNTIME_CONFIG_MISSING");
+    });
+
+    expect(result.current.connectionState).toBe("failed");
+    expect(result.current.error).toContain("考核运行配置");
+
+    await act(async () => {
+      vi.advanceTimersByTime(30000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  it("does not create WebSocket when connectEnabled is false", () => {
+    renderHook(() =>
+      useExaminerWebSocket("session-1", { connectEnabled: false }),
+    );
+
+    expect(MockWebSocket.instances).toHaveLength(0);
+  });
+
   it("creates WebSocket when feature flag becomes enabled", async () => {
     const { result } = renderHook(() => useExaminerWebSocket("session-1"));
 

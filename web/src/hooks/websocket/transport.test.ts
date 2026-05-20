@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
     buildPracticeWebSocketUrl,
     createPendingMessageQueue,
+    isFatalWebSocketCloseCode,
     nextReconnectDelay,
+    resolveWebSocketCloseUserMessage,
     shouldTreatAsAbnormalCloseBurst,
     toCloseReasonMessage,
 } from "./transport";
@@ -83,5 +85,10 @@ describe("websocket transport helpers", () => {
         expect(nextReconnectDelay(0)).toBe(1000);
         expect(nextReconnectDelay(4)).toBe(16000);
         expect(nextReconnectDelay(8)).toBe(30000);
+    });
+
+    it("treats examiner runtime config failures as fatal websocket closes", () => {
+        expect(isFatalWebSocketCloseCode(4413)).toBe(true);
+        expect(resolveWebSocketCloseUserMessage("", 4413)).toContain("考核运行配置");
     });
 });

@@ -11,6 +11,7 @@ const {
     getPresentationMock,
     getPresentationProgressMock,
     savePresentationProgressMock,
+    getRuntimePreflightMock,
     sendMessageMock,
     usePracticeWebSocketMock,
     useAudioRecorderMock,
@@ -25,6 +26,7 @@ const {
     getPresentationMock: vi.fn(),
     getPresentationProgressMock: vi.fn(),
     savePresentationProgressMock: vi.fn(),
+    getRuntimePreflightMock: vi.fn(),
     sendMessageMock: vi.fn(),
     usePracticeWebSocketMock: vi.fn(),
     useAudioRecorderMock: vi.fn(),
@@ -117,6 +119,9 @@ vi.mock("@/lib/api/client", () => ({
             get: (...args: unknown[]) => getPresentationMock(...args),
             getProgress: (...args: unknown[]) => getPresentationProgressMock(...args),
             saveProgress: (...args: unknown[]) => savePresentationProgressMock(...args),
+        },
+        practice: {
+            getRuntimePreflight: (...args: unknown[]) => getRuntimePreflightMock(...args),
         },
     },
 }));
@@ -235,6 +240,13 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
                     description: "会反复确认投入产出、落地周期和风险控制。",
                 },
             ],
+        });
+        getRuntimePreflightMock.mockResolvedValue({
+            runnable: true,
+            runtime_type: "sales",
+            code: null,
+            missing: [],
+            hint: null,
         });
         getPresentationMock.mockResolvedValue({
             presentation_id: "presentation-1",

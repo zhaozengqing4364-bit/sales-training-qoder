@@ -37,8 +37,13 @@ from common.effectiveness import (
     build_sales_effectiveness_metrics,
     evaluate_effectiveness_snapshot,
 )
+from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.logger import get_logger, get_trace_id
 from common.services.practice_helpers import PracticeRetryEntryAssembler
+from common.services.session_runtime_state_service import (
+    SessionRuntimeStateService,
+    read_lifecycle_snapshot,
+)
 from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
 from curriculum_practice.services.session_snapshots import (
@@ -126,6 +131,10 @@ class PracticeRuntimeDescriptorService:
         payload.voice_policy_snapshot_ref = build_voice_policy_snapshot_ref(
             payload.voice_policy_snapshot
         )
+        lifecycle = read_lifecycle_snapshot(payload.runtime_state)
+        payload.runtime_lifecycle_state = lifecycle.state
+        payload.failure_code = lifecycle.failure_code
+        payload.failure_hint = lifecycle.failure_hint
         return payload
 
 
@@ -210,6 +219,14 @@ class PracticeSessionCreateService:
             requested_voice_mode=session_data.voice_mode,
             effective_voice_policy=effective_voice_policy,
         )
+        if scenario_type_value == "sales" and is_kb_lock_unbound_snapshot(
+            effective_voice_policy
+        ):
+            raise PracticeServiceError(
+                "[KB_LOCK_UNBOUND]",
+                status_code=400,
+                message="当前角色已开启知识库强制模式，但未绑定可用知识库。请联系管理员完成绑定后再创建会话。",
+            )
 
         self._log_voice_policy_resolution(
             current_user=current_user,
@@ -500,6 +517,11 @@ class PracticeSessionCreateService:
             raise
         await self.db.commit()
         await self.db.refresh(session)
+        await SessionRuntimeStateService(self.db).initialize_on_create(
+            str(session.session_id),
+            has_runtime_snapshot=bool(session.voice_policy_snapshot),
+            source="practice_session_create",
+        )
         return session
 
     async def _create_sales_session(
@@ -553,6 +575,11 @@ class PracticeSessionCreateService:
         self.db.add(session)
         await self.db.commit()
         await self.db.refresh(session)
+        await SessionRuntimeStateService(self.db).initialize_on_create(
+            str(session.session_id),
+            has_runtime_snapshot=bool(session.voice_policy_snapshot),
+            source="practice_session_create",
+        )
         return session
 
     async def _apply_curriculum_snapshot(
@@ -624,6 +651,16 @@ class PracticeSessionLifecycleApplicationService:
 
         await self.db.commit()
         await self.db.refresh(result.transition.session)
+
+        if (
+            result.transition.action == "end"
+            and result.transition.changed
+            and str(result.transition.to_status) in {"completed", "scoring"}
+        ):
+            await SessionRuntimeStateService(self.db).mark_completed(
+                str(result.transition.session.session_id),
+                source="session_lifecycle_end",
+            )
 
         self.logger.info(
             "practice_session_lifecycle_transition_applied",

@@ -17,6 +17,7 @@ import type {
     Persona,
     User,
     PracticeSessionRuntime,
+    PracticeRuntimePreflight,
     RetryFocusIntent,
     SessionItem,
     SessionStats,
@@ -264,6 +265,12 @@ export function createPracticeDomain({ request }: PracticeDomainDependencies) {
 
         getSession: async (sessionId: string) => {
             return request<PracticeSessionRuntime>(`/practice/sessions/${sessionId}`);
+        },
+
+        getRuntimePreflight: async (sessionId: string) => {
+            return request<PracticeRuntimePreflight>(
+                `/practice/sessions/${sessionId}/runtime-preflight`,
+            );
         },
 
         controlLifecycle,

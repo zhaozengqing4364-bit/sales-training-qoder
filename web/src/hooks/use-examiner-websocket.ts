@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WS_BASE_URL } from "@/hooks/websocket/types";
 import {
+  isFatalWebSocketCloseCode,
+  nextReconnectDelay,
+  resolveWebSocketCloseUserMessage,
+} from "@/hooks/websocket/transport";
+import {
   normalizeExamQuestionType,
   type ExamQuestionType,
 } from "@/lib/exam-question-type";
@@ -122,19 +127,21 @@ const INITIAL_STATE: ExamState = {
 
 // ── Constants ──
 const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 30000;
 const TIMEOUT_WARNING_THRESHOLD_S = 10;
-
-function nextReconnectDelay(attempt: number): number {
-  return Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt), RECONNECT_MAX_MS);
-}
 
 function buildExaminerWsUrl(sessionId: string): string {
   return `${WS_BASE_URL}/ws/curriculum/examiner/${encodeURIComponent(sessionId)}`;
 }
 
-export function useExaminerWebSocket(sessionId: string) {
+type UseExaminerWebSocketOptions = {
+  connectEnabled?: boolean;
+};
+
+export function useExaminerWebSocket(
+  sessionId: string,
+  options: UseExaminerWebSocketOptions = {},
+) {
+  const connectEnabled = options.connectEnabled ?? true;
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
   const manualDisconnectRef = useRef(false);
@@ -437,15 +444,20 @@ export function useExaminerWebSocket(sessionId: string) {
 
       if (manualDisconnectRef.current) return;
 
+      const closeReasonText = resolveWebSocketCloseUserMessage(
+        event.reason || "",
+        event.code,
+      );
       const shouldRetry =
-        reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS &&
-        event.code !== 1000 &&
-        event.code !== 1001;
+        reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS
+        && event.code !== 1000
+        && event.code !== 1001
+        && !isFatalWebSocketCloseCode(event.code);
 
       if (shouldRetry) {
         reconnectAttempts.current++;
         const delay = nextReconnectDelay(reconnectAttempts.current);
-        applyConnectionState("reconnecting", "连接中断，正在重连...");
+        applyConnectionState("reconnecting", closeReasonText || "连接中断，正在重连...");
         setTimeout(() => {
           if (!manualDisconnectRef.current) {
             connectRef.current?.();
@@ -454,7 +466,10 @@ export function useExaminerWebSocket(sessionId: string) {
         return;
       }
 
-      applyConnectionState("failed", "连接失败，请点击重试");
+      applyConnectionState(
+        "failed",
+        closeReasonText || "连接失败，请点击重试",
+      );
     };
 
     wsRef.current = ws;
@@ -507,7 +522,7 @@ export function useExaminerWebSocket(sessionId: string) {
     // Do not start WebSocket when the examiner feature is disabled.
     // This avoids 403 errors and wasted connections when the page
     // renders the "即将上线" fallback.
-    if (state.featureFlag === "disabled") {
+    if (state.featureFlag === "disabled" || !connectEnabled) {
       disconnect();
       return;
     }
@@ -517,7 +532,7 @@ export function useExaminerWebSocket(sessionId: string) {
     return () => {
       disconnect();
     };
-  }, [state.featureFlag, connect, disconnect]);
+  }, [state.featureFlag, connectEnabled, connect, disconnect]);
 
   const isTimedOut =
     state.remainingTimeSeconds !== null && state.remainingTimeSeconds <= 0;

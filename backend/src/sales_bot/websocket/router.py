@@ -21,6 +21,10 @@ from common.db.session import AsyncSessionLocal
 from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.logger import get_logger
 from common.monitoring.trace_context import normalize_trace_id
+from common.services.session_runtime_lifecycle_hooks import (
+    mark_session_runtime_failed,
+    mark_session_runtime_started,
+)
 from common.websocket.session_manager import get_session_manager
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 from training_runtime import TrainingRuntimeDescriptor, dispatch_scenario_plugin
@@ -120,9 +124,16 @@ async def _reject_sales_websocket(
     code: int,
     reason: str,
     log_message: str,
+    session_id: str | None = None,
     **log_fields: Any,
 ) -> None:
     logger.warning(log_message, **log_fields)
+    if session_id:
+        await mark_session_runtime_failed(
+            session_id,
+            failure_code=reason,
+            source="sales_websocket_reject",
+        )
     await websocket.accept()
     await websocket.close(code=code, reason=reason)
 
@@ -169,6 +180,11 @@ async def _handle_sales_websocket(
             expected="sales",
             actual=session_scenario_type,
         )
+        await mark_session_runtime_failed(
+            resolved_session_id,
+            failure_code="SESSION_SCENARIO_MISMATCH",
+            source="sales_websocket_reject",
+        )
         await websocket.accept()
         await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
         return
@@ -178,6 +194,11 @@ async def _handle_sales_websocket(
         logger.warning(
             "Rejected /ws/sales connection due to KB lock without bound knowledge base",
             session_id=resolved_session_id,
+        )
+        await mark_session_runtime_failed(
+            resolved_session_id,
+            failure_code="KB_LOCK_UNBOUND",
+            source="sales_websocket_reject",
         )
         await websocket.accept()
         await websocket.close(code=4410, reason="KB_LOCK_UNBOUND")
@@ -258,10 +279,19 @@ async def _handle_sales_websocket(
             persisted_agent_id=persisted_agent_id,
             persisted_persona_id=persisted_persona_id,
         )
+        await mark_session_runtime_failed(
+            resolved_session_id,
+            failure_code="AGENT_PERSONA_REQUIRED",
+            source="sales_websocket_reject",
+        )
         await websocket.accept()
         await websocket.close(code=4411, reason="AGENT_PERSONA_REQUIRED")
         return
 
+    await mark_session_runtime_started(
+        resolved_session_id,
+        source="sales_websocket_connect",
+    )
     await _handle_stepfun_realtime_connection(
         websocket=websocket,
         session_id=resolved_session_id,

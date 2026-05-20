@@ -154,9 +154,16 @@ export default function ExamPage() {
   const [sending, setSending] = React.useState(false);
   const [hasPendingSubmit, setHasPendingSubmit] = React.useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = React.useState(false);
+  const [runtimePreflight, setRuntimePreflight] = React.useState<{
+    status: "idle" | "loading" | "ready" | "blocked" | "error";
+    hint: string | null;
+    lifecycleState: string | null;
+  }>({ status: "idle", hint: null, lifecycleState: null });
   const pendingAnswerRef = React.useRef("");
   const confirmSubmitInFlightRef = React.useRef(false);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const canOpenExamSocket = runtimePreflight.status === "ready";
 
   const {
     connectionState,
@@ -185,7 +192,7 @@ export default function ExamPage() {
     setFeatureFlag,
     setVoiceFailed,
     setErrorState,
-  } = useExaminerWebSocket(sessionId);
+  } = useExaminerWebSocket(sessionId, { connectEnabled: canOpenExamSocket });
 
   // Versioned, question-scoped localStorage key for answer persistence
   const storageKey = currentQuestion
@@ -237,6 +244,35 @@ export default function ExamPage() {
       }
     }
   }, [answerText, storageKey, examPhase, currentQuestion]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setRuntimePreflight({ status: "loading", hint: null, lifecycleState: null });
+    api.practice.getRuntimePreflight(sessionId)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.runnable) {
+          setRuntimePreflight({ status: "ready", hint: null, lifecycleState: result.runtime_lifecycle_state || "runnable" });
+          return;
+        }
+        setRuntimePreflight({
+          status: "blocked",
+          hint: result.hint || "当前考核会话暂不可运行。",
+          lifecycleState: result.runtime_lifecycle_state || "failed",
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRuntimePreflight({
+          status: "error",
+          hint: "无法验证考核运行条件，请稍后刷新页面重试。",
+          lifecycleState: null,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -484,6 +520,38 @@ export default function ExamPage() {
       <div className="flex items-center justify-center h-full">
         <GlassCard className="max-w-md mx-4 p-8 text-center">
           <ComingSoon />
+        </GlassCard>
+      </div>
+    );
+  }
+
+  if (runtimePreflight.status === "loading") {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
+        <p>正在检查考核运行条件...</p>
+      </div>
+    );
+  }
+
+  if (runtimePreflight.status === "blocked" || runtimePreflight.status === "error") {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <GlassCard className="max-w-md mx-4 p-8 text-center">
+          <AlertCircle className="mx-auto mb-4 h-12 w-12 text-amber-500" />
+          <p className="text-lg font-semibold text-slate-800">暂无法开始考核</p>
+          <p className="mt-2 text-sm text-slate-600">
+            {runtimePreflight.hint || "当前考核会话暂不可运行。"}
+          </p>
+          {runtimePreflight.lifecycleState ? (
+            <p className="mt-2 text-xs text-slate-500">
+              运行态：{formatRuntimeLifecycleState(
+                runtimePreflight.lifecycleState as import('@/lib/api/types').SessionRuntimeLifecycleState,
+              )}
+            </p>
+          ) : null}
+          <Button className="mt-6" variant="outline" onClick={handleBack}>
+            {examReturnLabel}
+          </Button>
         </GlassCard>
       </div>
     );

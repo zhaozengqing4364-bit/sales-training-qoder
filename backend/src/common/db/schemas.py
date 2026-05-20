@@ -331,6 +331,12 @@ class SessionResponse(BaseModel):
     practice_template_id: UUID | None = None
     curriculum_snapshot: dict[str, Any] | None = None
     runtime_state: dict[str, Any] | None = None
+    runtime_lifecycle_state: (
+        Literal["draft", "validated", "runnable", "started", "completed", "failed"]
+        | None
+    ) = None
+    failure_code: str | None = None
+    failure_hint: str | None = None
     status: SessionStatus
     start_time: datetime
     end_time: datetime | None = None

@@ -14,6 +14,10 @@ from common.config import settings
 from common.db.models import PracticeSession, User
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
+from common.services.session_runtime_lifecycle_hooks import (
+    mark_session_runtime_failed,
+    mark_session_runtime_started,
+)
 from common.websocket.session_manager import get_session_manager
 from curriculum_practice.models import ExaminerAgent, QuestionItem
 from curriculum_practice.services.examiner_report_service import (
@@ -87,7 +91,19 @@ def _extract_user_id_from_payload(payload: dict) -> str | None:
     return None
 
 
-async def _reject(websocket: WebSocket, *, code: int, reason: str) -> None:
+async def _reject(
+    websocket: WebSocket,
+    *,
+    code: int,
+    reason: str,
+    session_id: str | None = None,
+) -> None:
+    if session_id:
+        await mark_session_runtime_failed(
+            session_id,
+            failure_code=reason,
+            source="examiner_websocket_reject",
+        )
     await websocket.accept()
     await websocket.close(code=code, reason=reason)
 
@@ -171,19 +187,19 @@ async def _handle_examiner_websocket(
         user_id = None
 
     if user_id is None:
-        await _reject(websocket, code=4001, reason="Unauthorized")
+        await _reject(websocket, code=4001, reason="Unauthorized", session_id=resolved_session_id)
         return
 
     auth_user = await _resolve_authenticated_user(user_id)
     if auth_user is None or not auth_user.is_active:
-        await _reject(websocket, code=4001, reason="Unauthorized")
+        await _reject(websocket, code=4001, reason="Unauthorized", session_id=resolved_session_id)
         return
 
     session_owner_id, owner_lookup_ok = await _resolve_examiner_session_owner_id(
         resolved_session_id
     )
     if not owner_lookup_ok:
-        await _reject(websocket, code=4003, reason="ACCESS_DENIED")
+        await _reject(websocket, code=4003, reason="ACCESS_DENIED", session_id=resolved_session_id)
         return
     if (
         session_owner_id
@@ -196,7 +212,7 @@ async def _handle_examiner_websocket(
             request_user_id=auth_user.user_id,
             session_owner_id=session_owner_id,
         )
-        await _reject(websocket, code=4003, reason="ACCESS_DENIED")
+        await _reject(websocket, code=4003, reason="ACCESS_DENIED", session_id=resolved_session_id)
         return
 
     runtime, failure_reason = await _build_runtime_from_session(resolved_session_id)
@@ -205,9 +221,14 @@ async def _handle_examiner_websocket(
             websocket,
             code=4413,
             reason=failure_reason or "EXAMINER_RUNTIME_CONFIG_MISSING",
+            session_id=resolved_session_id,
         )
         return
 
+    await mark_session_runtime_started(
+        resolved_session_id,
+        source="examiner_websocket_connect",
+    )
     handler = ExaminerWebSocketHandler(runtime)
     session_manager = get_session_manager()
     await session_manager.register_session(

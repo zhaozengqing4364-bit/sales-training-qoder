@@ -197,7 +197,28 @@ export interface PracticeSessionRuntime {
     runtime_descriptor?: TrainingRuntimeDescriptor | null;
     runtime_profile_id?: string | null;
     status?: SessionStatus;
+    runtime_lifecycle_state?: SessionRuntimeLifecycleState | null;
+    failure_code?: string | null;
+    failure_hint?: string | null;
     start_time?: string;
+}
+
+export type SessionRuntimeLifecycleState =
+    | "draft"
+    | "validated"
+    | "runnable"
+    | "started"
+    | "completed"
+    | "failed";
+
+export interface PracticeRuntimePreflight {
+    runnable: boolean;
+    runtime_type: "sales" | "presentation" | "examiner" | string;
+    code?: string | null;
+    missing?: string[];
+    hint?: string | null;
+    runtime_lifecycle_state?: SessionRuntimeLifecycleState | null;
+    suggested_action?: string | null;
 }
 
 export interface TrainingCategory {

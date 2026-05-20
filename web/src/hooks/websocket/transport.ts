@@ -35,6 +35,7 @@ const FATAL_WS_CLOSE_CODES = new Set([
     4410,
     4411,
     4412,
+    4413,
 ]);
 
 const FATAL_WS_CLOSE_USER_MESSAGES: Record<number, string> = {
@@ -46,6 +47,7 @@ const FATAL_WS_CLOSE_USER_MESSAGES: Record<number, string> = {
     4410: "知识库未绑定，请联系管理员配置后再练。",
     4411: "会话缺少智能体或客户画像，请返回入口重新创建会话。",
     4412: "旧版语音模式已停用，请使用实时语音模式。",
+    4413: "考核运行配置不完整，请联系管理员检查考官与题库。",
 };
 
 export function isFatalWebSocketCloseCode(code: number): boolean {
