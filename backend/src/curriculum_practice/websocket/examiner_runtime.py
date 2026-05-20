@@ -511,6 +511,15 @@ class ExaminerWebSocketHandler(BaseWebSocketHandler):
         self._runtime = runtime
 
     async def on_connect(self) -> None:
+        if self.session_id:
+            from common.services.session_runtime_lifecycle_hooks import (
+                mark_session_runtime_started,
+            )
+
+            await mark_session_runtime_started(
+                self.session_id,
+                source="examiner_websocket_on_open",
+            )
         for message in await self._runtime.connect():
             await self.send_message(message)
 

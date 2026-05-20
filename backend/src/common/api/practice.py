@@ -862,6 +862,10 @@ async def get_session(
 @router.get("/practice/sessions/{session_id}/runtime-preflight")
 async def get_session_runtime_preflight(
     session_id: str,
+    persist_lifecycle: bool = Query(
+        False,
+        description="When true, persist runnable/failed lifecycle from this check.",
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
@@ -885,12 +889,13 @@ async def get_session_runtime_preflight(
     if preflight is None:
         return error_response("[SESSION_NOT_FOUND]", status_code=404)
 
-    await lifecycle_service.apply_preflight_result(
-        session_id,
-        runnable=preflight.runnable,
-        code=preflight.code,
-        hint=preflight.hint,
-    )
+    if persist_lifecycle:
+        await lifecycle_service.apply_preflight_result(
+            session_id,
+            runnable=preflight.runnable,
+            code=preflight.code,
+            hint=preflight.hint,
+        )
     lifecycle = await lifecycle_service.get_snapshot(session_id)
     return success_response(
         preflight.as_payload(

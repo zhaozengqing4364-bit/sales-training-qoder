@@ -366,6 +366,15 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             self._effective_ai_policy = None
         await self.manager.connect(websocket, self.scenario, session_id)
 
+        from common.services.session_runtime_lifecycle_hooks import (
+            mark_session_runtime_started,
+        )
+
+        await mark_session_runtime_started(
+            session_id,
+            source="presentation_websocket_on_open",
+        )
+
         self.message_queue = asyncio.Queue()
         self.running = True
 

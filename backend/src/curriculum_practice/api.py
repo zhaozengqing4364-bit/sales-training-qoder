@@ -388,43 +388,6 @@ async def complete_my_study_chapter(
     return _success(result.value)
 
 
-def _curriculum_exam_asset_ref(asset_type: str, asset: object, label: str) -> dict[str, object]:
-    id_attr = {
-        "examiner_agent": "examiner_agent_id",
-        "question_item": "question_id",
-        "learning_content": "learning_content_id",
-    }.get(asset_type, f"{asset_type}_id")
-    return {
-        "asset_type": asset_type,
-        "asset_id": str(getattr(asset, id_attr, "")),
-        "version": int(getattr(asset, "version", 0) or 0),
-        "hash": getattr(asset, "content_hash", None),
-        "snapshot_label": label,
-    }
-
-
-async def _get_or_create_exam_scenario(db: AsyncSession) -> Scenario:
-    result = await db.execute(
-        select(Scenario)
-        .where(Scenario.scenario_type == "sales", Scenario.is_active.is_(True))
-        .order_by(Scenario.created_at.desc())
-        .limit(1)
-    )
-    scenario = result.scalar_one_or_none()
-    if scenario is not None:
-        return scenario
-    scenario = Scenario(
-        scenario_type="sales",
-        name="AI 考官考核",
-        description="课程学习完成后的 AI 考官考核场景。",
-        persona_prompt="AI 考官根据题库逐题考核学员。",
-        is_active=True,
-    )
-    db.add(scenario)
-    await db.flush()
-    return scenario
-
-
 @study_router.post("/learning-contents/{content_id}/start-exam", response_model=None)
 async def start_my_study_exam(
     content_id: str,

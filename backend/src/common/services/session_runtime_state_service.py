@@ -40,7 +40,7 @@ _ALLOWED_TRANSITIONS: dict[str | None, frozenset[str]] = {
     "runnable": frozenset({"started", "failed", "runnable"}),
     "started": frozenset({"completed", "failed", "started"}),
     "completed": frozenset(),
-    "failed": frozenset(),
+    "failed": frozenset({"runnable", "validated"}),
 }
 
 
@@ -103,13 +103,15 @@ def suggested_action_for_lifecycle(
     lifecycle_state: SessionRuntimeLifecycleState | None,
     runnable: bool,
 ) -> str:
+    if runnable:
+        return "connect_ws"
     if lifecycle_state == "failed":
         return "show_failure"
     if lifecycle_state == "completed":
         return "view_report"
     if lifecycle_state == "started":
         return "resume_session"
-    if runnable or lifecycle_state == "runnable":
+    if lifecycle_state == "runnable":
         return "connect_ws"
     if lifecycle_state in {"validated", "draft", None}:
         return "run_preflight"
@@ -183,18 +185,24 @@ class SessionRuntimeStateService:
             )
             return await self.get_snapshot(session_id)
 
-        from common.services.runtime_preflight_service import RuntimePreflightService
+        from common.services.runtime_gate import RuntimeGate
 
-        preflight = await RuntimePreflightService(self._db).evaluate_session(session_id)
+        preflight = await RuntimeGate(self._db).evaluate_session(session_id)
         if preflight is None:
             return current
 
-        await self.apply_preflight_result(
-            session_id,
-            runnable=preflight.runnable,
-            code=preflight.code,
-            hint=preflight.hint,
-        )
+        if preflight.runnable:
+            await self.transition(
+                session_id,
+                to_state="runnable",
+                source=source,
+            )
+        else:
+            await self.transition(
+                session_id,
+                to_state="validated",
+                source=source,
+            )
         return await self.get_snapshot(session_id)
 
     async def apply_preflight_result(
@@ -206,7 +214,7 @@ class SessionRuntimeStateService:
         hint: str | None,
     ) -> SessionRuntimeTransitionResult:
         current = await self.get_snapshot(session_id)
-        if current.state in {"started", "completed", "failed"}:
+        if current.state in {"started", "completed"}:
             return SessionRuntimeTransitionResult(
                 changed=False,
                 from_state=current.state,
@@ -305,7 +313,14 @@ class SessionRuntimeStateService:
                 to_state=to_state,
             )
 
-        if from_state in _TERMINAL_STATES and to_state != from_state:
+        if (
+            from_state in _TERMINAL_STATES
+            and to_state != from_state
+            and not (
+                from_state == "failed"
+                and to_state in {"runnable", "validated"}
+            )
+        ):
             logger.warning(
                 "session_runtime_lifecycle_transition_rejected",
                 session_id=session_id,

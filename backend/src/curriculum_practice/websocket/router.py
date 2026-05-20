@@ -1,34 +1,26 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from typing import NamedTuple
 
 from fastapi import APIRouter, Query, WebSocket
 from jwt import InvalidTokenError as JWTError
 from sqlalchemy import select
 
-from common.ai.llm_service import LLMService
 from common.auth.service import resolve_websocket_token, verify_token
 from common.config import settings
 from common.db.models import PracticeSession, User
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
-from common.services.session_runtime_lifecycle_hooks import (
-    mark_session_runtime_failed,
-    mark_session_runtime_started,
-)
+from common.services.runtime_gate import RuntimeGate
+from common.services.session_runtime_lifecycle_hooks import mark_session_runtime_failed
 from common.websocket.session_manager import get_session_manager
-from curriculum_practice.models import ExaminerAgent, QuestionItem
 from curriculum_practice.services.examiner_report_service import (
     ExaminerReportService,
     examiner_report_frontend_path,
 )
-from curriculum_practice.services.examiner_scoring_service import build_llm_exam_scorer
 from curriculum_practice.websocket.examiner_runtime import (
-    ExaminerRuntime,
     ExaminerWebSocketHandler,
-    FrozenExamQuestion,
 )
 
 
@@ -215,7 +207,11 @@ async def _handle_examiner_websocket(
         await _reject(websocket, code=4003, reason="ACCESS_DENIED", session_id=resolved_session_id)
         return
 
-    runtime, failure_reason = await _build_runtime_from_session(resolved_session_id)
+    async with AsyncSessionLocal() as db:
+        runtime, failure_reason = await RuntimeGate(db).build_examiner_runtime(
+            resolved_session_id,
+            completion_writer=_mark_examiner_report_completed,
+        )
     if runtime is None:
         await _reject(
             websocket,
@@ -225,10 +221,6 @@ async def _handle_examiner_websocket(
         )
         return
 
-    await mark_session_runtime_started(
-        resolved_session_id,
-        source="examiner_websocket_connect",
-    )
     handler = ExaminerWebSocketHandler(runtime)
     session_manager = get_session_manager()
     await session_manager.register_session(
@@ -243,86 +235,6 @@ async def _handle_examiner_websocket(
         )
     finally:
         await session_manager.unregister_session(resolved_session_id, reason="connection_closed")
-
-
-async def _build_runtime_from_session(
-    session_id: str,
-) -> tuple[ExaminerRuntime | None, str | None]:
-    try:
-        async with AsyncSessionLocal() as db:
-            session = await db.get(PracticeSession, session_id)
-            if session is None or not isinstance(session.curriculum_snapshot, dict):
-                return None, "EXAMINER_RUNTIME_SNAPSHOT_MISSING"
-
-            content_assets = session.curriculum_snapshot.get("content_assets")
-            if not isinstance(content_assets, list):
-                return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-            examiner_ref = _first_asset_ref(content_assets, "examiner_agent")
-            if examiner_ref is None:
-                return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-            agent = await db.get(ExaminerAgent, str(examiner_ref["asset_id"]))
-            if agent is None or getattr(agent, "status", None) != "published":
-                return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-            if not _asset_matches_ref(agent, examiner_ref):
-                return None, "EXAMINER_RUNTIME_SNAPSHOT_STALE"
-
-            questions: list[FrozenExamQuestion] = []
-            question_refs = _asset_refs(content_assets, "question_item")
-            if not question_refs:
-                return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-            for question_ref in question_refs:
-                question = await db.get(QuestionItem, str(question_ref["asset_id"]))
-                if (
-                    question is None
-                    or getattr(question, "status", None) != "published"
-                    or bool(getattr(question, "safety_flagged", False))
-                ):
-                    return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-                if not _asset_matches_ref(question, question_ref):
-                    return None, "EXAMINER_RUNTIME_SNAPSHOT_STALE"
-                questions.append(
-                    FrozenExamQuestion(
-                        question_id=str(question.question_id),
-                        title=str(question.title),
-                        stem=str(question.stem),
-                        reference_answer=getattr(question, "reference_answer", None),
-                        scoring_criteria=dict(question.scoring_criteria or {}),
-                    )
-                )
-
-            return (
-                ExaminerRuntime(
-                    session_id=session_id,
-                    examiner_agent_id=str(agent.examiner_agent_id),
-                    timeout_seconds=_timeout_seconds(agent.timeout_config),
-                    questions=questions,
-                    scorer=build_llm_exam_scorer(
-                        llm_service=LLMService(),
-                        session_id=session_id,
-                    ),
-                    completion_writer=_mark_examiner_report_completed,
-                ),
-                None,
-            )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to build examiner runtime from session",
-            session_id=session_id,
-            error_type=type(exc).__name__,
-        )
-        return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-
-def _timeout_seconds(config: object) -> int:
-    if not isinstance(config, dict):
-        return 0
-    try:
-        return max(0, int(config.get("max_seconds") or 0))
-    except (TypeError, ValueError):
-        return 0
 
 
 async def _mark_examiner_report_completed(
@@ -347,33 +259,3 @@ async def _mark_examiner_report_completed(
     return examiner_report_frontend_path(session_id)
 
 
-def _asset_refs(content_assets: list[object], asset_type: str) -> list[dict[str, object]]:
-    return [
-        asset
-        for asset in content_assets
-        if isinstance(asset, dict)
-        and asset.get("asset_type") == asset_type
-        and isinstance(asset.get("asset_id"), str)
-    ]
-
-
-def _first_asset_ref(
-    content_assets: list[object], asset_type: str
-) -> dict[str, object] | None:
-    refs = _asset_refs(content_assets, asset_type)
-    return refs[0] if refs else None
-
-
-def _asset_matches_ref(asset: object, ref: dict[str, object]) -> bool:
-    return str(getattr(asset, "content_hash", "")) == str(
-        ref.get("hash")
-    ) and _as_int(getattr(asset, "version", 0)) == _as_int(ref.get("version"))
-
-
-def _as_int(value: object) -> int:
-    if not isinstance(value, int | str):
-        return 0
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0

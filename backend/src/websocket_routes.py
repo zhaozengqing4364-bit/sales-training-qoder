@@ -14,12 +14,10 @@ from sqlalchemy import select
 from common.auth.service import JWTError, resolve_websocket_token
 from common.db.models import PracticeSession, Scenario, User
 from common.db.session import AsyncSessionLocal
-from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.logger import get_logger
 from common.monitoring.trace_context import normalize_trace_id
 from common.services.session_runtime_lifecycle_hooks import (
     mark_session_runtime_failed,
-    mark_session_runtime_started,
 )
 from curriculum_practice.websocket.router import router as examiner_ws_router
 from sales_bot.websocket.router import router as sales_ws_router
@@ -188,10 +186,6 @@ async def _handle_presentation_websocket(
         await websocket.close(code=4003, reason="ACCESS_DENIED")
         return
 
-    await mark_session_runtime_started(
-        resolved_session_id,
-        source="presentation_websocket_connect",
-    )
     session_manager = get_session_manager()
     await session_manager.register_session(
         resolved_session_id,
@@ -329,15 +323,11 @@ async def _resolve_presentation_runtime(
 
 
 async def _is_presentation_kb_lock_unbound_session(session_id: str) -> bool:
+    from common.services.runtime_gate import RuntimeGate
+
     try:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(PracticeSession.voice_policy_snapshot).where(
-                    PracticeSession.session_id == session_id
-                )
-            )
-            snapshot = result.scalar_one_or_none()
-            return bool(is_kb_lock_unbound_snapshot(snapshot))
+            return await RuntimeGate(db).is_kb_lock_unbound_for_session_id(session_id)
     except (RuntimeError, ValueError, OSError) as exc:
         logger.warning(
             "Failed to evaluate presentation KB lock binding before websocket connect",

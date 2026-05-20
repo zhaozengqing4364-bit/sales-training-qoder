@@ -29,7 +29,8 @@ from common.services.session_runtime_state_service import (
         ("started", "completed", True),
         ("started", "failed", True),
         ("completed", "failed", False),
-        ("failed", "runnable", False),
+        ("failed", "runnable", True),
+        ("failed", "validated", True),
         ("started", "validated", False),
     ],
 )
@@ -70,6 +71,13 @@ def test_should_suggest_show_failure_when_failed() -> None:
     assert (
         suggested_action_for_lifecycle(lifecycle_state="failed", runnable=False)
         == "show_failure"
+    )
+
+
+def test_should_suggest_connect_ws_when_failed_but_preflight_runnable() -> None:
+    assert (
+        suggested_action_for_lifecycle(lifecycle_state="failed", runnable=True)
+        == "connect_ws"
     )
 
 
@@ -175,8 +183,56 @@ async def test_should_backfill_failed_from_preflight_when_blocked(
         source="test",
     )
 
-    assert snapshot.state == "failed"
-    assert snapshot.failure_code == "LEGACY_SALES_RUNTIME_DISABLED"
+    assert snapshot.state == "validated"
+
+
+@pytest.mark.asyncio
+async def test_should_recover_failed_to_runnable_when_preflight_passes(
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    scenario = Scenario(
+        scenario_type="sales",
+        name="recover-failed",
+        persona_prompt="test",
+        is_active=True,
+    )
+    test_db.add(scenario)
+    await test_db.flush()
+
+    session = PracticeSession(
+        user_id=str(test_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="preparing",
+        agent_id="123e4567-e89b-12d3-a456-426614174001",
+        persona_id="223e4567-e89b-12d3-a456-426614174002",
+        voice_mode="stepfun_realtime",
+        voice_policy_snapshot={"voice_mode": "stepfun_realtime"},
+        runtime_state={
+            "_lifecycle": {
+                "state": "failed",
+                "failure_code": "KB_LOCK_UNBOUND",
+                "failure_hint": "blocked",
+                "updated_at": "2026-05-20T00:00:00+00:00",
+            }
+        },
+    )
+    test_db.add(session)
+    await test_db.commit()
+
+    service = SessionRuntimeStateService(test_db)
+    result = await service.apply_preflight_result(
+        str(session.session_id),
+        runnable=True,
+        code=None,
+        hint=None,
+    )
+
+    assert result.changed is True
+    assert result.to_state == "runnable"
+    snapshot = await service.get_snapshot(str(session.session_id))
+    assert snapshot.state == "runnable"
+    assert snapshot.failure_code is None
 
 
 @pytest.mark.asyncio

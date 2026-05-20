@@ -836,6 +836,15 @@ class StepFunRealtimeHandler(
             await self.manager.disconnect(self.scenario, session_id)
             return
 
+        from common.services.session_runtime_lifecycle_hooks import (
+            mark_session_runtime_started,
+        )
+
+        await mark_session_runtime_started(
+            session_id,
+            source="sales_stepfun_on_open",
+        )
+
         self.running = True
 
         try:

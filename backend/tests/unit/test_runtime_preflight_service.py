@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, Scenario, User
+from common.services.runtime_gate import RuntimeGate
 from common.services.runtime_preflight_service import RuntimePreflightService
 from curriculum_practice.models import ExaminerAgent, QuestionItem
 
@@ -44,8 +45,8 @@ async def test_sales_preflight_rejects_kb_lock_unbound(
         return True
 
     monkeypatch.setattr(
-        RuntimePreflightService,
-        "_is_kb_lock_unbound",
+        RuntimeGate,
+        "is_kb_lock_unbound",
         _force_kb_unbound,
     )
 

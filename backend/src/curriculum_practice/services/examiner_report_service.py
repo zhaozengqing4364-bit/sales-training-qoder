@@ -162,6 +162,15 @@ class ExaminerReportService:
             session.report_error = None
 
         await self._db.commit()
+
+        from common.services.session_runtime_lifecycle_hooks import (
+            mark_session_runtime_completed,
+        )
+
+        await mark_session_runtime_completed(
+            session_id,
+            source="examiner_report_completed",
+        )
         return Result.ok(report)
 
     async def get_report_for_user(

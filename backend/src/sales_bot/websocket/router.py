@@ -18,15 +18,12 @@ from sqlalchemy import select
 from common.auth.service import JWTError, resolve_websocket_auth
 from common.db.models import PracticeSession, Scenario, User
 from common.db.session import AsyncSessionLocal
-from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.logger import get_logger
 from common.monitoring.trace_context import normalize_trace_id
 from common.services.session_runtime_lifecycle_hooks import (
     mark_session_runtime_failed,
-    mark_session_runtime_started,
 )
 from common.websocket.session_manager import get_session_manager
-from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 from training_runtime import TrainingRuntimeDescriptor, dispatch_scenario_plugin
 
 logger = get_logger(__name__)
@@ -189,7 +186,12 @@ async def _handle_sales_websocket(
         await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
         return
 
-    kb_lock_unbound = await _is_kb_lock_unbound_session(resolved_session_id)
+    from common.services.runtime_gate import RuntimeGate
+
+    async with AsyncSessionLocal() as db:
+        kb_lock_unbound = await RuntimeGate(db).is_kb_lock_unbound_for_session_id(
+            resolved_session_id
+        )
     if kb_lock_unbound:
         logger.warning(
             "Rejected /ws/sales connection due to KB lock without bound knowledge base",
@@ -288,10 +290,6 @@ async def _handle_sales_websocket(
         await websocket.close(code=4411, reason="AGENT_PERSONA_REQUIRED")
         return
 
-    await mark_session_runtime_started(
-        resolved_session_id,
-        source="sales_websocket_connect",
-    )
     await _handle_stepfun_realtime_connection(
         websocket=websocket,
         session_id=resolved_session_id,
@@ -405,66 +403,6 @@ async def _is_admin_user_id(user_id: str) -> bool:
             error=str(exc),
         )
         return False
-
-
-async def _is_kb_lock_unbound_session(session_id: str) -> bool:
-    try:
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(PracticeSession).where(PracticeSession.session_id == session_id)
-            )
-            session = result.scalar_one_or_none()
-            if not session:
-                return False
-
-            snapshot_raw = getattr(session, "voice_policy_snapshot", None)
-            snapshot = snapshot_raw if isinstance(snapshot_raw, dict) else None
-
-            policy_service = VoiceRuntimePolicyService(db)
-            resolved_policy = await policy_service.resolve_effective_policy(
-                agent_id=_optional_text(getattr(session, "agent_id", None)),
-                persona_id=_optional_text(getattr(session, "persona_id", None)),
-                voice_mode_override=_optional_text(
-                    getattr(session, "voice_mode", None)
-                ),
-                runtime_profile_override=_optional_text(
-                    getattr(session, "voice_runtime_profile_id", None)
-                ),
-            )
-            refreshed_policy = _merge_snapshot_runtime_overlays(
-                resolved_policy=resolved_policy,
-                snapshot=snapshot,
-            )
-            if snapshot != refreshed_policy:
-                setattr(session, "voice_policy_snapshot", refreshed_policy)
-                await db.commit()
-            return is_kb_lock_unbound_snapshot(refreshed_policy)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to evaluate KB lock binding before websocket connect",
-            session_id=session_id,
-            error=str(exc),
-        )
-        return False
-
-
-def _merge_snapshot_runtime_overlays(
-    *,
-    resolved_policy: dict,
-    snapshot: dict | None,
-) -> dict:
-    merged = dict(resolved_policy)
-    if not isinstance(snapshot, dict):
-        return merged
-
-    runtime_metrics = snapshot.get("runtime_metrics")
-    if isinstance(runtime_metrics, dict):
-        merged["runtime_metrics"] = runtime_metrics
-    if "agent_persona_override_config" in snapshot:
-        merged["agent_persona_override_config"] = snapshot.get(
-            "agent_persona_override_config"
-        )
-    return merged
 
 
 def _instantiate_runtime_handler(selection: Any) -> Any:
