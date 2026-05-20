@@ -13,7 +13,6 @@ import {
   WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GlassSheet } from "@/components/ui/glass-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +25,7 @@ import {
   getExamReturnLabel,
   saveExamProgressSnapshot,
 } from "@/lib/exam-session-storage";
-import { ExamQuestionGrid } from "@/components/exam/ExamQuestionGrid";
+import { ExamQuestionNavGrouped } from "@/components/exam/ExamQuestionNavGrouped";
 import {
   useExaminerWebSocket,
   type ExamQuestionOutlineItem,
@@ -113,7 +112,7 @@ function ScorePanel({
       </div>
 
       {questionOutline.length > 0 && (
-        <ExamQuestionGrid
+        <ExamQuestionNavGrouped
           items={questionOutline}
           answeredIndices={answeredQuestionIndices}
           currentIndex={currentIndex}
@@ -156,6 +155,7 @@ export default function ExamPage() {
   const [hasPendingSubmit, setHasPendingSubmit] = React.useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = React.useState(false);
   const pendingAnswerRef = React.useRef("");
+  const confirmSubmitInFlightRef = React.useRef(false);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
   const {
@@ -272,18 +272,29 @@ export default function ExamPage() {
   }, [answerText, sending]);
 
   const handleConfirmSubmit = React.useCallback(() => {
+    if (confirmSubmitInFlightRef.current) return;
     setShowSubmitConfirm(false);
     const trimmed = pendingAnswerRef.current;
     if (!trimmed) return;
-    // Guard: only enter sending state when answer can actually be sent
     if (connectionState !== "connected") return;
     if (examPhase !== "answering") return;
     if (!currentQuestion) return;
+
+    const isLastQuestion =
+      totalQuestions > 0 &&
+      currentQuestion.question_index === totalQuestions - 1;
+
+    confirmSubmitInFlightRef.current = true;
     sendAnswer(trimmed);
     setSending(false);
     setHasPendingSubmit(false);
-    setAnswerText("");
     pendingAnswerRef.current = "";
+
+    if (isLastQuestion) {
+      return;
+    }
+
+    setAnswerText("");
     if (storageKey) {
       try {
         localStorage.removeItem(storageKey);
@@ -301,6 +312,7 @@ export default function ExamPage() {
     focusAnswerInput,
     sendAnswer,
     storageKey,
+    totalQuestions,
   ]);
 
   const persistExamSnapshot = React.useCallback(() => {
@@ -336,20 +348,47 @@ export default function ExamPage() {
     router.push(getExamReturnHref(sessionId));
   }, [examPhase, persistExamSnapshot, router, sessionId]);
 
-  // Clear sending state and draft when examPhase transitions away from "answering"
   React.useEffect(() => {
-    if (hasPendingSubmit && examPhase !== "answering") {
+    confirmSubmitInFlightRef.current = false;
+  }, [questionIndex]);
+
+  React.useEffect(() => {
+    if (examPhase === "finalizing" || examPhase === "completed") {
+      setShowSubmitConfirm(false);
+    }
+    if (examPhase === "completed") {
       setSending(false);
       setHasPendingSubmit(false);
       setAnswerText("");
       pendingAnswerRef.current = "";
     }
-  }, [examPhase, hasPendingSubmit]);
+  }, [examPhase]);
+
+  React.useEffect(() => {
+    if (!showSubmitConfirm) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowSubmitConfirm(false);
+        pendingAnswerRef.current = "";
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleConfirmSubmit();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [handleConfirmSubmit, showSubmitConfirm]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (examPhase === "finalizing") {
+      e.preventDefault();
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      e.stopPropagation();
       if (showSubmitConfirm) {
         handleConfirmSubmit();
       } else {
@@ -357,17 +396,6 @@ export default function ExamPage() {
       }
     }
   };
-
-  React.useEffect(() => {
-    if (!showSubmitConfirm) return;
-    const onWindowKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || e.shiftKey) return;
-      e.preventDefault();
-      handleConfirmSubmit();
-    };
-    window.addEventListener("keydown", onWindowKeyDown);
-    return () => window.removeEventListener("keydown", onWindowKeyDown);
-  }, [handleConfirmSubmit, showSubmitConfirm]);
 
   // 提交后或点击别处失去焦点时，再次键盘输入自动回到答案框
   React.useEffect(() => {
@@ -425,9 +453,16 @@ export default function ExamPage() {
       if (examPhase !== "answering" || targetIndex === questionIndex) return;
       setShowSubmitConfirm(false);
       pendingAnswerRef.current = "";
+      if (storageKey && answerText.trim()) {
+        try {
+          localStorage.setItem(storageKey, answerText.trim());
+        } catch {
+          // localStorage not available
+        }
+      }
       sendNavigate(targetIndex);
     },
-    [examPhase, questionIndex, sendNavigate],
+    [answerText, examPhase, questionIndex, sendNavigate, storageKey],
   );
 
   const navigationDisabled =
@@ -466,16 +501,6 @@ export default function ExamPage() {
 
   return (
     <>
-    <ConfirmDialog
-      open={showSubmitConfirm}
-      onOpenChange={setShowSubmitConfirm}
-      title="提交答案"
-      description="答案提交后将由 AI 进行评分，提交后不可修改。确认要提交当前答案吗？"
-      confirmText="确认提交"
-      cancelText="继续作答"
-      variant="default"
-      onConfirm={handleConfirmSubmit}
-    />
     <div className="flex h-full w-full">
       {/* Left column: exam content */}
       <div className="flex-1 flex flex-col h-full relative">
@@ -550,17 +575,6 @@ export default function ExamPage() {
             </div>
           </div>
 
-          {examPhase === "answering" && questionOutline.length > 0 && (
-            <div className="mt-3 border-t border-white/30 pt-3">
-              <ExamQuestionGrid
-                items={questionOutline}
-                answeredIndices={answeredQuestionIndices}
-                currentIndex={questionIndex}
-                disabled={navigationDisabled}
-                onSelect={handleSelectQuestion}
-              />
-            </div>
-          )}
         </header>
 
         {/* Disconnection / reconnect banner */}
@@ -647,6 +661,35 @@ export default function ExamPage() {
             )}
 
             {/* Question display */}
+            {examPhase === "finalizing" && currentQuestion && (
+              <GlassCard className="p-6">
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <Badge variant="gray">
+                    第 {currentQuestion.question_index + 1} / {totalQuestions} 题
+                  </Badge>
+                  <Badge variant="blue">已提交</Badge>
+                </div>
+                {currentQuestion.title && (
+                  <h3 className="text-base font-bold text-slate-800 mb-2">
+                    {currentQuestion.title}
+                  </h3>
+                )}
+                <p className="text-lg text-slate-700 whitespace-pre-wrap">
+                  {currentQuestion.stem}
+                </p>
+                {answerText.trim() && (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-2">
+                      你的答案
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {answerText.trim()}
+                    </p>
+                  </div>
+                )}
+              </GlassCard>
+            )}
+
             {examPhase === "answering" && currentQuestion && (
               <GlassCard className="p-6">
                 <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -708,6 +751,33 @@ export default function ExamPage() {
         {/* Answer input area */}
         {examPhase === "answering" && currentQuestion && (
           <div className="shrink-0 border-t border-white/40 bg-white/40 backdrop-blur-md p-4 md:p-6">
+            {showSubmitConfirm && (
+              <div className="max-w-3xl mx-auto mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50/90 px-4 py-2.5 text-sm text-indigo-900">
+                <span>确认提交本题答案？再按 Enter 确认，Esc 取消</span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => {
+                      setShowSubmitConfirm(false);
+                      pendingAnswerRef.current = "";
+                    }}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={handleConfirmSubmit}
+                  >
+                    确认提交
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="max-w-3xl mx-auto flex gap-3">
               <textarea
                 ref={inputRef}
@@ -737,7 +807,9 @@ export default function ExamPage() {
               </Button>
             </div>
             <p className="mt-2 text-center text-xs text-slate-400">
-              按 Enter 打开提交确认，再按 Enter 确认提交；Shift+Enter 换行
+              {showSubmitConfirm
+                ? "Enter 确认提交 · Esc 取消 · Shift+Enter 换行"
+                : "Enter 打开确认 · 再按 Enter 提交 · Shift+Enter 换行"}
             </p>
           </div>
         )}
@@ -748,6 +820,22 @@ export default function ExamPage() {
             <div className="max-w-3xl mx-auto flex items-center justify-center gap-3 text-slate-500">
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent" />
               <span className="text-sm">等待下一题...</span>
+            </div>
+          </div>
+        )}
+
+        {examPhase === "finalizing" && (
+          <div className="shrink-0 border-t border-white/40 bg-white/40 backdrop-blur-md p-4 md:p-6">
+            <div className="max-w-3xl mx-auto flex flex-col items-center justify-center gap-2 text-slate-600 py-2">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-indigo-600 border-t-transparent" />
+                <span className="text-sm font-medium">
+                  正在生成考核结果，请稍候…
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                全部题目已提交，请勿重复按 Enter
+              </p>
             </div>
           </div>
         )}

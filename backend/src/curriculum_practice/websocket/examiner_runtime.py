@@ -237,7 +237,10 @@ class ExaminerRuntime:
         if question_index < 0 or question_index >= len(self._questions):
             return []
         self._current_question_index = question_index
-        return [self._question_message(question_index)]
+        return [
+            self._progress_message(),
+            self._question_message(question_index),
+        ]
 
     async def _handle_answer(self, message: dict[str, Any]) -> list[dict[str, Any]]:
         data = message.get("data")
@@ -263,10 +266,15 @@ class ExaminerRuntime:
 
         self._current_question_index += 1
         if self._current_question_index < len(self._questions):
-            return [self._question_message(self._current_question_index)]
+            return [
+                self._progress_message(),
+                self._question_message(self._current_question_index),
+            ]
 
+        messages: list[dict[str, Any]] = [self._finalizing_message()]
         await self._score_all_pending_answers()
-        return [await self._completed_message("all_questions_answered")]
+        messages.append(await self._completed_message("all_questions_answered"))
+        return messages
 
     def _upsert_answer(
         self,
@@ -409,6 +417,15 @@ class ExaminerRuntime:
             "data": {
                 "answered_question_indices": self._answered_question_indices(),
                 "current_question_index": self._current_question_index,
+            },
+        }
+
+    def _finalizing_message(self) -> dict[str, Any]:
+        return {
+            "type": "exam.finalizing",
+            "data": {
+                "answered_question_indices": self._answered_question_indices(),
+                "total_questions": len(self._questions),
             },
         }
 

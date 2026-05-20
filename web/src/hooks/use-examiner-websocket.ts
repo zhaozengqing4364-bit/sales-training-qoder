@@ -65,7 +65,13 @@ export interface GradedQuestion {
 }
 
 export type ExamConnectionState = "connecting" | "connected" | "reconnecting" | "failed";
-export type ExamPhase = "idle" | "ready" | "answering" | "feedback" | "completed";
+export type ExamPhase =
+  | "idle"
+  | "ready"
+  | "answering"
+  | "feedback"
+  | "finalizing"
+  | "completed";
 export type FeatureFlagStatus = "loading" | "enabled" | "disabled";
 
 export interface ExamState {
@@ -219,7 +225,7 @@ export function useExaminerWebSocket(sessionId: string) {
             const data = msg.data as ExamQuestionData;
             setState((prev) => ({
               ...prev,
-              examPhase: "answering",
+              examPhase: prev.examPhase === "finalizing" ? "finalizing" : "answering",
               currentQuestion: {
                 ...data,
                 question_type: normalizeExamQuestionType(data.question_type),
@@ -263,6 +269,15 @@ export function useExaminerWebSocket(sessionId: string) {
               ...prev,
               answeredQuestionIndices: data.answered_question_indices ?? [],
               questionIndex: data.current_question_index ?? prev.questionIndex,
+            }));
+            break;
+          }
+
+          case "exam.finalizing": {
+            setState((prev) => ({
+              ...prev,
+              examPhase: "finalizing",
+              error: null,
             }));
             break;
           }
@@ -317,9 +332,12 @@ export function useExaminerWebSocket(sessionId: string) {
       };
       wsRef.current.send(JSON.stringify(message));
       const answeredIndex = current.currentQuestion.question_index;
+      const isLastQuestion =
+        current.totalQuestions > 0 &&
+        answeredIndex === current.totalQuestions - 1;
       setState((prev) => ({
         ...prev,
-        examPhase: "answering",
+        examPhase: isLastQuestion ? ("finalizing" as const) : ("answering" as const),
         error: null,
         answeredQuestionIndices: prev.answeredQuestionIndices.includes(answeredIndex)
           ? prev.answeredQuestionIndices
@@ -331,14 +349,15 @@ export function useExaminerWebSocket(sessionId: string) {
 
   const sendNavigate = useCallback((questionIndex: number) => {
     const current = stateRef.current;
-    if (
-      wsRef.current?.readyState !== WebSocket.OPEN ||
-      current.examPhase === "completed" ||
-      questionIndex < 0 ||
-      questionIndex >= current.totalQuestions
-    ) {
-      return;
-    }
+      if (
+        wsRef.current?.readyState !== WebSocket.OPEN ||
+        current.examPhase === "completed" ||
+        current.examPhase === "finalizing" ||
+        questionIndex < 0 ||
+        questionIndex >= current.totalQuestions
+      ) {
+        return;
+      }
 
     wsRef.current.send(
       JSON.stringify({

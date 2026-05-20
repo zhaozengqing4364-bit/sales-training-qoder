@@ -324,10 +324,9 @@ describe("ExamPage", () => {
     const submitBtn = screen.getByRole("button", { name: "提交答案" });
     fireEvent.click(submitBtn);
 
-    // Clicking submit should open confirmation, NOT call sendAnswer
+    // Clicking submit should open inline confirmation, NOT call sendAnswer
     expect(sendAnswerMock).not.toHaveBeenCalled();
-    expect(screen.getByText("提交答案")).toBeTruthy();
-    expect(screen.getByText(/提交后不可修改/)).toBeTruthy();
+    expect(screen.getByText(/确认提交本题答案/)).toBeTruthy();
 
     // Confirm the submission
     fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
@@ -365,7 +364,7 @@ describe("ExamPage", () => {
     fireEvent.click(submitBtn);
 
     // Cancel the submission
-    fireEvent.click(screen.getByRole("button", { name: "继续作答" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
     // sendAnswer should never be called
     expect(sendAnswerMock).not.toHaveBeenCalled();
@@ -480,12 +479,44 @@ describe("ExamPage", () => {
     fireEvent.change(textarea, { target: { value: "Double-enter answer" } });
 
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
-    expect(screen.getByText(/提交后不可修改/)).toBeTruthy();
+    expect(screen.getByText(/确认提交本题答案/)).toBeTruthy();
     expect(sendAnswerMock).not.toHaveBeenCalled();
 
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
     expect(sendAnswerMock).toHaveBeenCalledWith("Double-enter answer");
     expect(sendAnswerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("last question confirm submit shows finalizing UI and does not double-send", async () => {
+    const sendAnswerMock = vi.fn();
+    useExaminerWebSocketMock.mockReturnValue(
+      buildExamHookMock({
+        examPhase: "answering",
+        questionIndex: 19,
+        totalQuestions: 20,
+        answeredQuestionIndices: Array.from({ length: 19 }, (_, i) => i),
+        currentQuestion: {
+          question_index: 19,
+          question_id: "q-020",
+          title: "Q20",
+          stem: "最后一题",
+          remaining_seconds: 120,
+        },
+        sendAnswer: sendAnswerMock,
+      }),
+    );
+
+    render(<ExamPage />);
+    await flushPreflightEffects();
+
+    const textarea = screen.getByPlaceholderText("请输入你的答案...");
+    fireEvent.change(textarea, { target: { value: "收尾话术示例" } });
+
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(sendAnswerMock).toHaveBeenCalledTimes(1);
+    expect(sendAnswerMock).toHaveBeenCalledWith("收尾话术示例");
   });
 
   it("seeds return to study from contentId query when return context is missing", async () => {
@@ -596,7 +627,7 @@ describe("ExamPage", () => {
 
     // Confirmation dialog should appear, sendAnswer should NOT have been called
     expect(sendAnswerMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/提交后不可修改/)).toBeTruthy();
+    expect(screen.getByText(/确认提交本题答案/)).toBeTruthy();
 
     // Confirm
     fireEvent.click(screen.getByRole("button", { name: "确认提交" }));

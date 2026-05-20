@@ -106,8 +106,11 @@ async def test_should_emit_completed_after_final_answer() -> None:
         }
     )
 
-    assert [message["type"] for message in messages] == ["exam.completed"]
-    assert messages[0]["data"] == {
+    assert [message["type"] for message in messages] == [
+        "exam.finalizing",
+        "exam.completed",
+    ]
+    assert messages[1]["data"] == {
         "session_id": "session-1",
         "status": "completed",
         "answered_count": 1,
@@ -150,8 +153,10 @@ async def test_should_record_off_index_answer_without_advancing_current_question
     assert off_index[0]["type"] == "exam.progress"
     assert off_index[0]["data"]["answered_question_indices"] == [1]
     assert scoring_calls == 0
-    assert accepted[0]["type"] == "exam.question"
-    assert accepted[0]["data"]["question_index"] == 1
+    assert accepted[0]["type"] == "exam.progress"
+    assert accepted[0]["data"]["answered_question_indices"] == [0, 1]
+    assert accepted[1]["type"] == "exam.question"
+    assert accepted[1]["data"]["question_index"] == 1
 
 
 @pytest.mark.asyncio
@@ -179,7 +184,8 @@ async def test_should_ignore_duplicate_answer_without_rescoring() -> None:
         {"type": "exam.answer", "data": {"question_index": 0, "answer_text": "重复"}}
     )
 
-    assert first[0]["type"] == "exam.question"
+    assert first[0]["type"] == "exam.progress"
+    assert first[1]["type"] == "exam.question"
     assert duplicate[0]["type"] == "exam.progress"
     assert duplicate[0]["data"]["answered_question_indices"] == [0]
     assert scoring_calls == 0
@@ -199,9 +205,10 @@ async def test_should_navigate_to_requested_question() -> None:
         {"type": "exam.navigate", "data": {"question_index": 1}}
     )
 
-    assert messages[0]["type"] == "exam.question"
-    assert messages[0]["data"]["question_index"] == 1
-    assert messages[0]["data"]["title"] == "Q2"
+    assert messages[0]["type"] == "exam.progress"
+    assert messages[1]["type"] == "exam.question"
+    assert messages[1]["data"]["question_index"] == 1
+    assert messages[1]["data"]["title"] == "Q2"
 
 
 @pytest.mark.asyncio
@@ -246,8 +253,9 @@ async def test_should_degrade_scoring_exception_with_stable_reason() -> None:
         {"type": "exam.answer", "data": {"question_index": 0, "answer_text": "回答"}}
     )
 
-    assert messages[0]["type"] == "exam.completed"
-    assert messages[0]["data"]["reason"] == "all_questions_answered"
+    assert messages[0]["type"] == "exam.finalizing"
+    assert messages[1]["type"] == "exam.completed"
+    assert messages[1]["data"]["reason"] == "all_questions_answered"
     assert runtime.serialize_state()["answers"] == [
         {
             "question_index": 0,
