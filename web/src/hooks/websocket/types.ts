@@ -195,6 +195,8 @@ export interface UsePracticeWebSocketOptions {
     agentId?: string;
     personaId?: string;
     voiceMode?: "legacy" | "stepfun_realtime";
+    /** Wait until runtime lock is ready before opening the socket (default: true). */
+    connectEnabled?: boolean;
     onMessage?: (message: WSMessage) => void;
     onError?: (error: string) => void;
     onTTSAudio?: (data: TTSAudioData) => void;

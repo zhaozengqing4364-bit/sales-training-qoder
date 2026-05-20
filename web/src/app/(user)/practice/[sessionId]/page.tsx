@@ -199,11 +199,32 @@ export default function PracticeSessionPage() {
         [searchParamsString],
     );
 
-    const [lockedScenarioType, setLockedScenarioType] = React.useState<"sales" | "presentation">(queryScenarioType);
-    const [lockedVoiceMode, setLockedVoiceMode] = React.useState<"legacy" | "stepfun_realtime">(queryVoiceMode);
-    const [lockedAgentId, setLockedAgentId] = React.useState<string | undefined>(queryAgentId);
-    const [lockedPersonaId, setLockedPersonaId] = React.useState<string | undefined>(queryPersonaId);
-    const [lockedPresentationId, setLockedPresentationId] = React.useState<string | undefined>(queryPresentationId);
+    const {
+        lockedScenarioType,
+        lockedVoiceMode,
+        lockedAgentId,
+        lockedPersonaId,
+        lockedPresentationId,
+        focusIntent,
+        sessionMetaError,
+        isRuntimeLockReady,
+    } = usePracticeRuntimeLock({
+        sessionId,
+        query: {
+            scenarioType: queryScenarioType,
+            voiceMode: queryVoiceMode,
+            agentId: queryAgentId,
+            personaId: queryPersonaId,
+            presentationId: queryPresentationId,
+        },
+        searchParams: runtimeSearchParams,
+        onRewriteQuery: router.replace,
+    });
+
+    const canOpenPracticeSocket = isRuntimeLockReady && (
+        lockedScenarioType !== "sales"
+        || (Boolean(lockedAgentId) && Boolean(lockedPersonaId))
+    );
 
     const [isPanelOpen, setIsPanelOpen] = React.useState(false);
     const [sessionTime, setSessionTime] = React.useState(0);
@@ -248,6 +269,7 @@ export default function PracticeSessionPage() {
         agentId: lockedAgentId,
         personaId: lockedPersonaId,
         voiceMode: lockedVoiceMode,
+        connectEnabled: canOpenPracticeSocket,
     });
 
     // 音频录制
@@ -295,47 +317,6 @@ export default function PracticeSessionPage() {
         enabled: true,
         mediaStream: stream,
     });
-
-    const {
-        lockedScenarioType: runtimeScenarioType,
-        lockedVoiceMode: runtimeVoiceMode,
-        lockedAgentId: runtimeAgentId,
-        lockedPersonaId: runtimePersonaId,
-        lockedPresentationId: runtimePresentationId,
-        focusIntent,
-        sessionMetaError,
-    } = usePracticeRuntimeLock({
-        sessionId,
-        query: {
-            scenarioType: queryScenarioType,
-            voiceMode: queryVoiceMode,
-            agentId: queryAgentId,
-            personaId: queryPersonaId,
-            presentationId: queryPresentationId,
-        },
-        searchParams: runtimeSearchParams,
-        onRewriteQuery: router.replace,
-    });
-
-    React.useEffect(() => {
-        setLockedScenarioType(runtimeScenarioType);
-    }, [runtimeScenarioType]);
-
-    React.useEffect(() => {
-        setLockedVoiceMode(runtimeVoiceMode);
-    }, [runtimeVoiceMode]);
-
-    React.useEffect(() => {
-        setLockedAgentId(runtimeAgentId);
-    }, [runtimeAgentId]);
-
-    React.useEffect(() => {
-        setLockedPersonaId(runtimePersonaId);
-    }, [runtimePersonaId]);
-
-    React.useEffect(() => {
-        setLockedPresentationId(runtimePresentationId);
-    }, [runtimePresentationId]);
 
     // 计时器：以绝对开始时间计算，避免重连时归零或丢失时长。
     React.useEffect(() => {

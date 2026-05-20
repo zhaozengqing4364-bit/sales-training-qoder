@@ -26,6 +26,32 @@ export function maskWsUrlToken(url: string): string {
     return url.replace(/([?&]token=)[^&]+/i, "$1***");
 }
 
+const FATAL_WS_CLOSE_CODES = new Set([
+    4000,
+    4001,
+    4003,
+    4400,
+    4409,
+    4410,
+    4411,
+    4412,
+]);
+
+const FATAL_WS_CLOSE_USER_MESSAGES: Record<number, string> = {
+    4000: "未配置或无效的 StepFun 语音密钥，无法使用实时语音模式。",
+    4001: "登录状态无效，请重新登录后再进入练习。",
+    4003: "无权访问该演练会话。",
+    4400: "会话 ID 无效，请返回训练入口重新进入。",
+    4409: "会话类型不匹配，请从正确入口进入练习。",
+    4410: "知识库未绑定，请联系管理员配置后再练。",
+    4411: "会话缺少智能体或客户画像，请返回入口重新创建会话。",
+    4412: "旧版语音模式已停用，请使用实时语音模式。",
+};
+
+export function isFatalWebSocketCloseCode(code: number): boolean {
+    return FATAL_WS_CLOSE_CODES.has(code);
+}
+
 export function toCloseReasonMessage(reason: string): string | null {
     const normalized = reason.trim().toLowerCase();
     if (!normalized) {
@@ -40,8 +66,83 @@ export function toCloseReasonMessage(reason: string): string | null {
     return reason.trim();
 }
 
+export function resolveWebSocketCloseUserMessage(
+    reason: string,
+    code?: number,
+): string | null {
+    if (typeof code === "number" && FATAL_WS_CLOSE_USER_MESSAGES[code]) {
+        return FATAL_WS_CLOSE_USER_MESSAGES[code];
+    }
+    return toCloseReasonMessage(reason);
+}
+
 export function nextReconnectDelay(attempt: number): number {
     return Math.min(1000 * Math.pow(2, attempt), 30000);
+}
+
+export const PRACTICE_SESSION_COOKIE_NAME = "app_session";
+
+const ABNORMAL_CLOSE_BURST_WINDOW_MS = 15_000;
+const ABNORMAL_CLOSE_BURST_LIMIT = 4;
+
+function readBrowserCookie(name: string): string | null {
+    if (typeof document === "undefined") {
+        return null;
+    }
+
+    const encodedName = `${encodeURIComponent(name)}=`;
+    const cookieEntry = document.cookie
+        .split(";")
+        .map((item) => item.trim())
+        .find((item) => item.startsWith(encodedName));
+
+    if (!cookieEntry) {
+        return null;
+    }
+
+    const cookieValue = cookieEntry.slice(encodedName.length);
+    if (!cookieValue) {
+        return null;
+    }
+
+    try {
+        return decodeURIComponent(cookieValue);
+    } catch {
+        return cookieValue;
+    }
+}
+
+/** Prefer session cookie; fall back to legacy localStorage token for dev compatibility. */
+export function resolvePracticeWebSocketAuthToken(): string | null {
+    const sessionCookie = readBrowserCookie(PRACTICE_SESSION_COOKIE_NAME);
+    if (sessionCookie) {
+        return sessionCookie;
+    }
+
+    if (typeof localStorage === "undefined") {
+        return null;
+    }
+
+    const legacyToken = localStorage.getItem("token")?.trim();
+    return legacyToken || null;
+}
+
+export function shouldTreatAsAbnormalCloseBurst(
+    closeCode: number,
+    recentCloseTimestampsMs: number[],
+    nowMs: number = Date.now(),
+): boolean {
+    if (closeCode !== 1006) {
+        return false;
+    }
+
+    const recent = recentCloseTimestampsMs.filter(
+        (timestamp) => nowMs - timestamp < ABNORMAL_CLOSE_BURST_WINDOW_MS,
+    );
+    recent.push(nowMs);
+    recentCloseTimestampsMs.length = 0;
+    recentCloseTimestampsMs.push(...recent);
+    return recent.length >= ABNORMAL_CLOSE_BURST_LIMIT;
 }
 
 export function buildPracticeWebSocketUrl(input: {
@@ -52,11 +153,15 @@ export function buildPracticeWebSocketUrl(input: {
     personaId?: string;
     voiceMode?: string;
     traceId: string;
+    authToken?: string | null;
 }): string {
     let url = `${input.baseUrl}/ws/${input.scenarioType}?session_id=${input.sessionId}`;
     if (input.agentId) url += `&agent_id=${input.agentId}`;
     if (input.personaId) url += `&persona_id=${input.personaId}`;
     if (input.voiceMode) url += `&voice_mode=${input.voiceMode}`;
+    if (input.authToken) {
+        url += `&token=${encodeURIComponent(input.authToken)}`;
+    }
     url += `&trace_id=${input.traceId}`;
     return url;
 }

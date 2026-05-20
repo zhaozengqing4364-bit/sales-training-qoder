@@ -209,6 +209,33 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect((result.current as unknown as { connectionState?: string }).connectionState).toBe("reconnecting");
     });
 
+    it("fails fast after repeated abnormal close bursts", () => {
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-burst",
+                scenarioType: "sales",
+            }),
+        );
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+            const ws = MockWebSocket.instances.at(-1);
+            expect(ws).toBeDefined();
+
+            act(() => {
+                ws?.emitClose(1006, `burst-${attempt}`);
+            });
+
+            if (attempt < 3) {
+                act(() => {
+                    vi.advanceTimersByTime(Math.min(1000 * Math.pow(2, attempt), 30000));
+                });
+            }
+        }
+
+        expect(result.current.connectionState).toBe("failed");
+        expect(result.current.error).toContain("无法稳定连接");
+    });
+
     it("switches to failed after exhausting reconnect retries", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({
@@ -222,7 +249,7 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
             expect(ws).toBeDefined();
 
             act(() => {
-                ws?.emitClose(1006, `abnormal-${attempt}`);
+                ws?.emitClose(1011, `abnormal-${attempt}`);
             });
 
             if (attempt < 5) {
@@ -264,7 +291,7 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
             expect(ws).toBeDefined();
 
             act(() => {
-                ws?.emitClose(1006, `abnormal-${attempt}`);
+                ws?.emitClose(1011, `abnormal-${attempt}`);
             });
 
             if (attempt < 5) {
@@ -285,7 +312,7 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(retryWs).toBeDefined();
 
         act(() => {
-            retryWs?.emitClose(1006, "manual-retry-failed");
+            retryWs?.emitClose(1011, "manual-retry-failed");
         });
 
         expect((result.current as unknown as { connectionState?: string }).connectionState).toBe("reconnecting");
@@ -942,6 +969,53 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(MockWebSocket.instances).toHaveLength(1);
     });
 
+    it("stops auto-reconnect and surfaces a fatal close reason for agent/persona lock failures", () => {
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-fatal-close",
+                scenarioType: "sales",
+                agentId: "agent-1",
+                personaId: "persona-1",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            ws?.emitClose(4411, "AGENT_PERSONA_REQUIRED");
+        });
+
+        expect(result.current.connectionState).toBe("failed");
+        expect(result.current.error).toContain("智能体或客户画像");
+
+        act(() => {
+            vi.advanceTimersByTime(30000);
+        });
+
+        expect(MockWebSocket.instances).toHaveLength(1);
+    });
+
+    it("does not open a socket or show failed state until connectEnabled becomes true", () => {
+        const { rerender, result } = renderHook(
+            (props: { connectEnabled: boolean }) =>
+                usePracticeWebSocket({
+                    sessionId: "session-gated-connect",
+                    scenarioType: "sales",
+                    connectEnabled: props.connectEnabled,
+                }),
+            { initialProps: { connectEnabled: false } },
+        );
+
+        expect(MockWebSocket.instances).toHaveLength(0);
+        expect(result.current.connectionState).toBe("connecting");
+        expect(result.current.error).toBeNull();
+
+        rerender({ connectEnabled: true });
+
+        expect(MockWebSocket.instances).toHaveLength(1);
+    });
+
     it("does not reconnect when streaming player reference changes", () => {
         unstableStreamingPlayerMode = true;
 
@@ -969,7 +1043,48 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(MockWebSocket.instances).toHaveLength(1);
     });
 
-    it("does not append auth token query params to websocket url", () => {
+    it("ignores stale close events from a replaced transport", () => {
+        const { rerender, result } = renderHook(
+            (props: { sessionId: string }) =>
+                usePracticeWebSocket({
+                    sessionId: props.sessionId,
+                    scenarioType: "sales",
+                }),
+            { initialProps: { sessionId: "session-old" } },
+        );
+
+        const oldWs = MockWebSocket.instances.at(-1);
+        expect(oldWs).toBeDefined();
+
+        act(() => {
+            if (!oldWs) return;
+            oldWs.readyState = MockWebSocket.OPEN;
+            oldWs.onopen?.(new Event("open"));
+        });
+        expect(result.current.connectionState).toBe("connected");
+
+        rerender({ sessionId: "session-new" });
+        const newWs = MockWebSocket.instances.at(-1);
+        expect(newWs).toBeDefined();
+        expect(newWs).not.toBe(oldWs);
+
+        act(() => {
+            if (!newWs) return;
+            newWs.readyState = MockWebSocket.OPEN;
+            newWs.onopen?.(new Event("open"));
+        });
+
+        act(() => {
+            oldWs?.emitClose(1006, "late-close-from-old-socket");
+            vi.advanceTimersByTime(30000);
+        });
+
+        expect(result.current.connectionState).toBe("connected");
+        expect(result.current.error).toBeNull();
+        expect(MockWebSocket.instances).toHaveLength(2);
+    });
+
+    it("appends legacy auth token query params when no session cookie is present", () => {
         localStorage.setItem("token", "legacy-token");
 
         renderHook(() =>
@@ -988,7 +1103,7 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(ws?.url).toContain("agent_id=agent-1");
         expect(ws?.url).toContain("persona_id=persona-1");
         expect(ws?.url).toContain("voice_mode=legacy");
-        expect(ws?.url).not.toContain("token=");
+        expect(ws?.url).toContain("token=legacy-token");
     });
 
     it("includes a request trace id in the websocket url", () => {

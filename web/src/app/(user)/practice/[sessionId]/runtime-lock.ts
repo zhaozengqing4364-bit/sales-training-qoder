@@ -49,6 +49,7 @@ export interface UsePracticeRuntimeLockResult {
     lockedPresentationId?: string;
     focusIntent: RetryFocusIntent | null;
     sessionMetaError: string | null;
+    isRuntimeLockReady: boolean;
 }
 
 export function normalizeVoiceMode(value: string | null | undefined): VoiceMode {
@@ -140,6 +141,7 @@ export function usePracticeRuntimeLock({
         lockedPresentationId: queryPresentationId,
         focusIntent: null,
         sessionMetaError: null,
+        isRuntimeLockReady: false,
     });
 
     React.useEffect(() => {
@@ -184,6 +186,7 @@ export function usePracticeRuntimeLock({
                     lockedPresentationId: nextState.lockedPresentationId,
                     focusIntent: nextState.focusIntent,
                     sessionMetaError: null,
+                    isRuntimeLockReady: true,
                 });
 
                 if (nextState.rewriteHref) {
@@ -202,6 +205,7 @@ export function usePracticeRuntimeLock({
                 setState((current) => ({
                     ...current,
                     sessionMetaError: "会话配置加载失败，已使用入口参数尝试连接。",
+                    isRuntimeLockReady: true,
                 }));
             }
         };

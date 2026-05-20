@@ -352,6 +352,8 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[PRESENTATION_THUMBNAIL_NOT_FOUND]": "演示页缩略图不存在。",
     "[PRESENTATION_REPLACE_BLOCKED_ACTIVE_SESSION]": "当前有进行中的演练正在使用该标准PPT，请结束后再替换。",
     "[VOICE_RUNTIME_PROFILE_NOT_FOUND]": "运行时配置不存在，请刷新后重试。",
+    "[SESSION_CREATE_FAILED]": "会话创建失败，请稍后重试或联系管理员。",
+    "[LEGACY_SALES_VOICE_MODE_DISABLED]": "销售对练仅支持实时语音模式，请在设置中选择 StepFun 实时语音后重试。",
     "[REPORT_NOT_FOUND]": "目标报告尚未生成或已不存在。",
     "[REPORT_FETCH_FAILED]": "报告暂时无法读取，请稍后重试。",
     "[REPORT_GENERATION_FAILED]": "报告生成失败，请稍后重试。",

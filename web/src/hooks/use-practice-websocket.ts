@@ -36,7 +36,7 @@
  *     this hook instead of rebuilding websocket lifecycle or backpressure logic locally.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     useVoiceSpeedPreference,
 } from "./use-voice-speed-preference";
@@ -67,9 +67,12 @@ import {
     buildPracticeWebSocketUrl,
     createPendingMessageQueue,
     deriveConnectionFlags,
+    isFatalWebSocketCloseCode,
     maskWsUrlToken,
     nextReconnectDelay,
-    toCloseReasonMessage,
+    resolvePracticeWebSocketAuthToken,
+    resolveWebSocketCloseUserMessage,
+    shouldTreatAsAbnormalCloseBurst,
 } from "./websocket/transport";
 
 // ── Constants ──
@@ -97,12 +100,41 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         onMessage, onError, onTTSAudio, onTTSChunk,
         useStreamingTTS = true,
         voiceMode = "legacy",
+        connectEnabled = true,
     } = options;
     const { voiceSpeedPreference } = useVoiceSpeedPreference();
+
+    const connectParamsRef = useRef({
+        sessionId,
+        scenarioType,
+        agentId,
+        personaId,
+        voiceMode,
+    });
+    connectParamsRef.current = {
+        sessionId,
+        scenarioType,
+        agentId,
+        personaId,
+        voiceMode,
+    };
+
+    const runtimeConnectKey = useMemo(
+        () => [
+            sessionId,
+            scenarioType,
+            agentId ?? "",
+            personaId ?? "",
+            voiceMode,
+        ].join("|"),
+        [sessionId, scenarioType, agentId, personaId, voiceMode],
+    );
 
     // ── Core refs ──
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectAttempts = useRef(0);
+    const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const abnormalCloseTimestampsRef = useRef<number[]>([]);
     const isConnectingRef = useRef(false);
     const manualDisconnectRef = useRef(false);
     const pendingMessagesRef = useRef(createPendingMessageQueue(MAX_PENDING_OUTGOING_MESSAGES));
@@ -288,6 +320,29 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         }
         pendingMessagesRef.current.clear();
     }, []);
+
+    const clearReconnectTimer = useCallback(() => {
+        if (reconnectTimerRef.current !== null) {
+            clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+        }
+    }, []);
+
+    const teardownTransport = useCallback(() => {
+        clearReconnectTimer();
+        isConnectingRef.current = false;
+        if (!wsRef.current) {
+            return;
+        }
+
+        manualDisconnectRef.current = true;
+        try {
+            wsRef.current.close(1000, "Transport replaced");
+        } catch {
+            // Ignore close races while the socket is still handshaking.
+        }
+        wsRef.current = null;
+    }, [clearReconnectTimer]);
 
     const resetRealtimeRuntimeState = useCallback(() => {
         currentStreamIdRef.current = null;
@@ -637,25 +692,34 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     handleMessageRef.current = handleMessage;
 
     // ── Connection management ──
-    const buildWsUrl = useCallback(() => {
-        return buildPracticeWebSocketUrl({
-            baseUrl: WS_BASE_URL,
-            scenarioType,
-            sessionId,
-            agentId,
-            personaId,
-            voiceMode,
-            traceId: getSharedTraceId(),
-        });
-    }, [sessionId, scenarioType, agentId, personaId, voiceMode]);
-
     const connect = useCallback(() => {
+        const {
+            sessionId: activeSessionId,
+            scenarioType: activeScenarioType,
+            agentId: activeAgentId,
+            personaId: activePersonaId,
+            voiceMode: activeVoiceMode,
+        } = connectParamsRef.current;
+
         if (isConnectingRef.current) return;
         if (wsRef.current?.readyState === WebSocket.OPEN ||
             wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
+        clearReconnectTimer();
+
+        if (wsRef.current) {
+            manualDisconnectRef.current = true;
+            try {
+                wsRef.current.close(1000, "Reconnecting");
+            } catch {
+                // Ignore close races while the socket is still handshaking.
+            }
+            wsRef.current = null;
+        }
+
         if (connectionStateRef.current === "failed") {
             reconnectAttempts.current = 0;
+            abnormalCloseTimestampsRef.current = [];
         }
 
         manualDisconnectRef.current = false;
@@ -664,13 +728,22 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             reconnectAttempts.current > 0 ? "reconnecting" : "connecting";
         applyConnectionState(connectingState, null);
 
-        const url = buildWsUrl();
+        const url = buildPracticeWebSocketUrl({
+            baseUrl: WS_BASE_URL,
+            scenarioType: activeScenarioType,
+            sessionId: activeSessionId,
+            agentId: activeAgentId,
+            personaId: activePersonaId,
+            voiceMode: activeVoiceMode,
+            traceId: getSharedTraceId(),
+            authToken: resolvePracticeWebSocketAuthToken(),
+        });
         debug.log("[PracticeWS] Connecting", {
-            sessionId,
-            scenarioType,
-            voiceMode,
-            agentId: agentId || null,
-            personaId: personaId || null,
+            sessionId: activeSessionId,
+            scenarioType: activeScenarioType,
+            voiceMode: activeVoiceMode,
+            agentId: activeAgentId || null,
+            personaId: activePersonaId || null,
             reconnectAttempt: reconnectAttempts.current,
             url: maskWsUrlToken(url),
             debugEnabled: debug.enabled(),
@@ -678,12 +751,15 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         const ws = new WebSocket(url);
 
         ws.onopen = () => {
+            const { sessionId: activeSessionId, scenarioType: activeScenarioType, voiceMode: activeVoiceMode } =
+                connectParamsRef.current;
             debug.log("[PracticeWS] WebSocket connected", {
-                sessionId,
-                scenarioType,
-                voiceMode,
+                sessionId: activeSessionId,
+                scenarioType: activeScenarioType,
+                voiceMode: activeVoiceMode,
             });
             reconnectAttempts.current = 0;
+            abnormalCloseTimestampsRef.current = [];
             isConnectingRef.current = false;
             applyConnectionState("connected", null);
             flushPendingMessages();
@@ -696,8 +772,9 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         };
 
         ws.onerror = () => {
+            const { sessionId: activeSessionId } = connectParamsRef.current;
             debug.warn("[PracticeWS] WebSocket error event (details usually unavailable, wait for onclose)", {
-                sessionId,
+                sessionId: activeSessionId,
                 readyState: ws.readyState,
                 reconnectAttempt: reconnectAttempts.current,
             });
@@ -714,28 +791,40 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         };
 
         ws.onclose = (event) => {
-            if (wsRef.current === ws) {
-                wsRef.current = null;
+            const { sessionId: activeSessionId } = connectParamsRef.current;
+            if (wsRef.current !== ws) {
+                return;
             }
+            wsRef.current = null;
             isConnectingRef.current = false;
 
             if (manualDisconnectRef.current) {
                 return;
             }
 
-            const closeReasonText = toCloseReasonMessage(event.reason || "");
+            const closeReasonText = resolveWebSocketCloseUserMessage(
+                event.reason || "",
+                event.code,
+            );
+            const burstFailure = shouldTreatAsAbnormalCloseBurst(
+                event.code,
+                abnormalCloseTimestampsRef.current,
+            );
             const shouldRetry =
                 reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS
                 && event.code !== 1000
-                && event.code !== 1001;
+                && event.code !== 1001
+                && !isFatalWebSocketCloseCode(event.code)
+                && !burstFailure;
 
             debug.warn("[PracticeWS] WebSocket closed", {
-                sessionId,
+                sessionId: activeSessionId,
                 code: event.code,
                 reason: event.reason,
                 reasonHint: closeReasonText,
                 wasClean: event.wasClean,
                 shouldRetry,
+                burstFailure,
                 reconnectAttempt: reconnectAttempts.current,
             });
 
@@ -748,7 +837,9 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 const delay = nextReconnectDelay(reconnectAttempts.current);
                 reconnectAttempts.current++;
                 debug.log(`[PracticeWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
-                setTimeout(() => {
+                clearReconnectTimer();
+                reconnectTimerRef.current = setTimeout(() => {
+                    reconnectTimerRef.current = null;
                     if (!manualDisconnectRef.current) {
                         connect();
                     }
@@ -756,41 +847,42 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 return;
             }
 
+            clearReconnectTimer();
             resetRealtimeRuntimeState();
             applyConnectionState(
                 "failed",
-                closeReasonText || "连接失败，请点击“重新连接”",
+                burstFailure
+                    ? "无法稳定连接到语音服务，请刷新页面或稍后重试。"
+                    : closeReasonText || "连接失败，请点击“重新连接”",
             );
         };
 
         wsRef.current = ws;
     }, [
-        agentId,
         applyConnectionState,
-        buildWsUrl,
-        personaId,
+        clearReconnectTimer,
         flushPendingMessages,
         resetRealtimeRuntimeState,
-        scenarioType,
         sendMessage,
-        sessionId,
-        voiceMode,
     ]);
 
     const disconnect = useCallback(() => {
         manualDisconnectRef.current = true;
         debug.log("[PracticeWS] Disconnect requested by user", { sessionId });
-        isConnectingRef.current = false;
         reconnectAttempts.current = 0;
+        abnormalCloseTimestampsRef.current = [];
         clearInterimTranscriptThrottle();
         resetRealtimeRuntimeState();
         pendingMessagesRef.current.clear();
         applyConnectionState("failed", null);
-        if (wsRef.current) {
-            wsRef.current.close(1000, "User disconnected");
-            wsRef.current = null;
-        }
-    }, [applyConnectionState, clearInterimTranscriptThrottle, resetRealtimeRuntimeState, sessionId]);
+        teardownTransport();
+    }, [
+        applyConnectionState,
+        clearInterimTranscriptThrottle,
+        resetRealtimeRuntimeState,
+        sessionId,
+        teardownTransport,
+    ]);
 
     // ── Interrupt ──
     /**
@@ -846,13 +938,20 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     ]);
 
     // ── Auto-connect effect ──
-    // Reconnect automatically if session runtime lock (scenario/voice mode) changes.
+    // Runtime lock changes should replace transport without entering the failed state.
     useEffect(() => {
+        if (!connectEnabled) {
+            if (wsRef.current) {
+                disconnect();
+            }
+            return;
+        }
+
         connect();
         return () => {
-            disconnect();
+            teardownTransport();
         };
-    }, [connect, disconnect]);
+    }, [runtimeConnectKey, connectEnabled, connect, disconnect, teardownTransport]);
 
     // ── Public API ──
     return {

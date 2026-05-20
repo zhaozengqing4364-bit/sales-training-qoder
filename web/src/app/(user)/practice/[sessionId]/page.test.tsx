@@ -189,6 +189,17 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
 
         usePracticeWebSocketMock.mockReturnValue(buildPracticeWebSocketMock());
 
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+            isRuntimeLockReady: true,
+        });
+
         useAudioRecorderMock.mockReturnValue(buildAudioRecorderMock());
 
         usePracticeSessionLifecycleMock.mockReturnValue({

@@ -4,11 +4,12 @@ import {
     buildPracticeWebSocketUrl,
     createPendingMessageQueue,
     nextReconnectDelay,
+    shouldTreatAsAbnormalCloseBurst,
     toCloseReasonMessage,
 } from "./transport";
 
 describe("websocket transport helpers", () => {
-    it("builds the runtime websocket url from transport inputs without auth token query params", () => {
+    it("builds the runtime websocket url from transport inputs", () => {
         const url = buildPracticeWebSocketUrl({
             baseUrl: "ws://localhost:3444/api/v1",
             scenarioType: "presentation",
@@ -23,6 +24,28 @@ describe("websocket transport helpers", () => {
             "ws://localhost:3444/api/v1/ws/presentation?session_id=session-1&agent_id=agent-1&persona_id=persona-1&voice_mode=stepfun_realtime&trace_id=trace-1",
         );
         expect(url).not.toContain("token=");
+    });
+
+    it("appends auth token query param when a session token is available", () => {
+        const url = buildPracticeWebSocketUrl({
+            baseUrl: "ws://localhost:3444",
+            scenarioType: "sales",
+            sessionId: "session-1",
+            traceId: "trace-1",
+            authToken: "session-cookie-token",
+        });
+
+        expect(url).toContain("token=session-cookie-token");
+    });
+
+    it("stops retrying after repeated abnormal close bursts", () => {
+        const recent: number[] = [];
+        const now = Date.now();
+
+        expect(shouldTreatAsAbnormalCloseBurst(1006, recent, now)).toBe(false);
+        expect(shouldTreatAsAbnormalCloseBurst(1006, recent, now + 100)).toBe(false);
+        expect(shouldTreatAsAbnormalCloseBurst(1006, recent, now + 200)).toBe(false);
+        expect(shouldTreatAsAbnormalCloseBurst(1006, recent, now + 300)).toBe(true);
     });
 
     it("only queues handshake-safe outbound messages and keeps high priority at the front", () => {
