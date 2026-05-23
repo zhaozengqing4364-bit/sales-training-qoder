@@ -7,13 +7,16 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Persona
+from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.schemas import (
     CaseItemCreate,
     RoleProfileCreate,
     RoleProfileResponse,
 )
 from curriculum_practice.services.content_assets import (
+    ContentAssetAlreadyDraftError,
     ContentAssetPublishError,
+    ContentAssetReferencedByTemplatesError,
     ContentAssetService,
     case_item_content_hash,
     role_profile_content_hash,
@@ -213,16 +216,193 @@ async def test_should_validate_and_publish_role_profile_with_persona_ref(
 
 
 @pytest.mark.asyncio
-async def test_should_reject_role_profile_publish_when_persona_ref_is_unavailable(
+async def test_should_reject_role_profile_create_when_persona_ref_is_unavailable(
     test_db: AsyncSession,
 ) -> None:
     payload = _role_profile_payload(persona_ref=str(uuid.uuid4()))
     payload["content_hash"] = role_profile_content_hash(payload)
     schema = RoleProfileCreate.model_validate(payload)
     service = ContentAssetService(test_db)
+
+    with pytest.raises(ContentAssetPublishError) as exc_info:
+        await service.create_role_profile(schema, actor_id="admin-1")
+
+    assert exc_info.value.reason_code == "persona_ref_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_role_profile_update_when_persona_ref_is_unavailable(
+    test_db: AsyncSession,
+) -> None:
+    payload = _role_profile_payload()
+    payload["content_hash"] = role_profile_content_hash(payload)
+    schema = RoleProfileCreate.model_validate(payload)
+    service = ContentAssetService(test_db)
     role_profile = await service.create_role_profile(schema, actor_id="admin-1")
+    invalid_payload = _role_profile_payload(persona_ref=str(uuid.uuid4()))
+    invalid_payload["content_hash"] = role_profile_content_hash(invalid_payload)
+    invalid_schema = RoleProfileCreate.model_validate(invalid_payload)
+
+    with pytest.raises(ContentAssetPublishError) as exc_info:
+        await service.update_role_profile(role_profile, invalid_schema, actor_id="admin-1")
+
+    assert exc_info.value.reason_code == "persona_ref_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_role_profile_publish_when_persona_ref_is_unavailable(
+    test_db: AsyncSession,
+) -> None:
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="Later Inactive Persona",
+        description="persona deactivated before publish",
+        category="customer",
+        system_prompt="Act as a careful customer.",
+        status="active",
+    )
+    test_db.add(persona)
+    await test_db.commit()
+    payload = _role_profile_payload(persona_ref=persona.id)
+    payload["content_hash"] = role_profile_content_hash(payload)
+    schema = RoleProfileCreate.model_validate(payload)
+    service = ContentAssetService(test_db)
+    role_profile = await service.create_role_profile(schema, actor_id="admin-1")
+    persona.status = "inactive"
+    await test_db.commit()
 
     with pytest.raises(ContentAssetPublishError) as exc_info:
         await service.publish_role_profile(role_profile, actor_id="admin-1")
 
     assert exc_info.value.reason_code == "persona_ref_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_should_duplicate_case_item_as_new_draft_with_recomputed_hash(
+    test_db: AsyncSession,
+) -> None:
+    payload = _case_item_payload()
+    payload["content_hash"] = case_item_content_hash(payload)
+    service = ContentAssetService(test_db)
+    source = await service.create_case_item(
+        CaseItemCreate.model_validate(payload), actor_id="admin-1"
+    )
+    published = await service.publish_case_item(source, actor_id="admin-1")
+
+    duplicate = await service.duplicate_case_item(published, actor_id="admin-1")
+
+    assert duplicate.case_item_id != published.case_item_id
+    assert duplicate.status == "draft"
+    assert duplicate.customer_role.endswith("(副本)")
+    assert duplicate.content_hash != published.content_hash
+
+
+@pytest.mark.asyncio
+async def test_should_duplicate_role_profile_without_voice_fields(
+    test_db: AsyncSession,
+) -> None:
+    payload = _role_profile_payload()
+    payload["content_hash"] = role_profile_content_hash(payload)
+    service = ContentAssetService(test_db)
+    source = await service.create_role_profile(
+        RoleProfileCreate.model_validate(payload), actor_id="admin-1"
+    )
+    source.voice_id = "voice-1"
+    source.voice_sample_url = "https://example/voice.wav"
+    source.content_hash = role_profile_content_hash(
+        {
+            "role_type": source.role_type,
+            "role_name": source.role_name,
+            "persona_ref": source.persona_ref,
+            "communication_style": source.communication_style,
+            "pressure_level": source.pressure_level,
+            "knowledge_boundary": source.knowledge_boundary,
+            "behavior_rules": source.behavior_rules,
+            "voice_style_hint": source.voice_style_hint,
+            "voice_id": source.voice_id,
+            "voice_sample_url": source.voice_sample_url,
+        }
+    )
+    await test_db.commit()
+    published = await service.publish_role_profile(source, actor_id="admin-1")
+
+    duplicate = await service.duplicate_role_profile(published, actor_id="admin-1")
+
+    assert duplicate.role_profile_id != published.role_profile_id
+    assert duplicate.status == "draft"
+    assert duplicate.role_name.endswith("(副本)")
+    assert duplicate.voice_id is None
+    assert duplicate.voice_sample_url is None
+
+
+@pytest.mark.asyncio
+async def test_should_unpublish_case_item_when_no_template_references(
+    test_db: AsyncSession,
+) -> None:
+    payload = _case_item_payload()
+    payload["content_hash"] = case_item_content_hash(payload)
+    service = ContentAssetService(test_db)
+    case_item = await service.create_case_item(
+        CaseItemCreate.model_validate(payload), actor_id="admin-1"
+    )
+    published = await service.publish_case_item(case_item, actor_id="admin-1")
+
+    unpublished = await service.unpublish_case_item(
+        published, actor_id="admin-1", acknowledge=False
+    )
+
+    assert unpublished.status == "draft"
+    assert unpublished.published_at is None
+
+
+@pytest.mark.asyncio
+async def test_should_reject_unpublish_case_item_when_referenced_without_acknowledge(
+    test_db: AsyncSession,
+) -> None:
+    payload = _case_item_payload()
+    payload["content_hash"] = case_item_content_hash(payload)
+    service = ContentAssetService(test_db)
+    case_item = await service.create_case_item(
+        CaseItemCreate.model_validate(payload), actor_id="admin-1"
+    )
+    published = await service.publish_case_item(case_item, actor_id="admin-1")
+    test_db.add(
+        PracticeTemplate(
+            template_id=str(uuid.uuid4()),
+            name="引用模板",
+            scenario_type="sales",
+            mode="customer_roleplay",
+            agent_id=str(uuid.uuid4()),
+            persona_id=str(uuid.uuid4()),
+            runtime_profile_id=str(uuid.uuid4()),
+            scoring_ruleset_id=str(uuid.uuid4()),
+            knowledge_base_refs=[],
+            case_item_id=published.case_item_id,
+            status="published",
+        )
+    )
+    await test_db.commit()
+
+    with pytest.raises(ContentAssetReferencedByTemplatesError) as exc_info:
+        await service.unpublish_case_item(
+            published, actor_id="admin-1", acknowledge=False
+        )
+
+    assert exc_info.value.referencing_templates[0]["name"] == "引用模板"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_unpublish_when_case_item_already_draft(
+    test_db: AsyncSession,
+) -> None:
+    payload = _case_item_payload()
+    payload["content_hash"] = case_item_content_hash(payload)
+    service = ContentAssetService(test_db)
+    case_item = await service.create_case_item(
+        CaseItemCreate.model_validate(payload), actor_id="admin-1"
+    )
+
+    with pytest.raises(ContentAssetAlreadyDraftError):
+        await service.unpublish_case_item(
+            case_item, actor_id="admin-1", acknowledge=False
+        )

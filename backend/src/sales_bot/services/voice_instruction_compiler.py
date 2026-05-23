@@ -210,6 +210,21 @@ class VoiceInstructionCompiler:
         if not has_pressure_context:
             return ""
 
+        challenge_premature_pitch = cls._to_bool(
+            follow_up_behavior.get("challenge_premature_pitch")
+            if "challenge_premature_pitch" in follow_up_behavior
+            else customer_pressure.get("challenge_premature_pitch"),
+            False,
+        )
+        hidden_information_disclosure = (
+            str(
+                follow_up_behavior.get("hidden_information_disclosure")
+                or customer_pressure.get("hidden_information_disclosure")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
         revisit_on_evasion = cls._to_bool(
             follow_up_behavior.get("revisit_on_evasion")
             if "revisit_on_evasion" in follow_up_behavior
@@ -228,6 +243,20 @@ class VoiceInstructionCompiler:
             "当销售只给口号、功能点或模糊承诺时，必须继续追问量化收益、预算合理性、价格依据、竞品差异、实施风险或案例证据。",
         ]
 
+        if hidden_information_disclosure in {
+            "question_triggered",
+            "only_disclose_when_asked_relevant_question",
+        }:
+            lines.append(
+                "隐藏信息只能在销售问到对应主题后分阶段披露；不要主动完整列出公司现状、系统清单、痛点、预算、决策链、历史项目或成功指标。"
+            )
+            lines.append(
+                "如果销售只问“你们关注什么/产品针对什么”，先要求对方说明为什么需要这些信息，最多披露一个表层顾虑。"
+            )
+        if challenge_premature_pitch:
+            lines.append(
+                "如果销售未确认现状就介绍产品、方案或效果，必须先质疑适配性：你还没了解我们现状，为什么认为适合？"
+            )
         if question_strategy == "single_issue" or not question_strategy:
             lines.append(
                 "每次只选择一个最关键的主问题继续施压，直到销售给出可验证信息。"

@@ -4,11 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AdminLearningContentsPage from "./page";
 import type { LearningContent } from "@/lib/api/types";
 
+const pushMock = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock }) }));
 vi.mock("next/link", () => ({
     default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
-        <a href={href} {...props}>
-            {children}
-        </a>
+        <a href={href} {...props}>{children}</a>
     ),
 }));
 
@@ -164,21 +164,18 @@ describe("AdminLearningContentsPage", () => {
         expect(link.getAttribute("href")).toBe("/admin/learning-contents/content-1");
     });
 
-    it("creates a draft learning content from the admin list page", async () => {
+
+    it("navigates to /new when clicking 新建内容", async () => {
         render(<AdminLearningContentsPage />);
         await screen.findByText(/暂无学习内容/);
+        fireEvent.click(screen.getByRole("button", { name: /新建内容/ }));
+        expect(pushMock).toHaveBeenCalledWith("/admin/learning-contents/new");
+    });
 
-        fireEvent.change(screen.getByLabelText("标题"), { target: { value: "新学习内容" } });
-        fireEvent.change(screen.getByLabelText("摘要"), { target: { value: "用于训练闭环" } });
-        fireEvent.change(screen.getByLabelText("负责人"), { target: { value: "curriculum-team" } });
-        fireEvent.click(screen.getByRole("button", { name: "创建内容" }));
-
-        await waitFor(() => {
-            expect(createMock).toHaveBeenCalledWith(
-                expect.objectContaining({ title: "新学习内容", summary: "用于训练闭环", owner: "curriculum-team" }),
-            );
-        });
-        expect(screen.getByText(/创建完成/)).toBeTruthy();
+    it("does not render inline create form on index page", async () => {
+        render(<AdminLearningContentsPage />);
+        await screen.findByText(/暂无学习内容/);
+        expect(screen.queryByRole("button", { name: "创建内容" })).toBeNull();
     });
 
     it("confirms before deleting a draft learning content from the admin list page", async () => {

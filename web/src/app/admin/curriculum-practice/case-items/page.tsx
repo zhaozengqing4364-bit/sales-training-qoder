@@ -1,5 +1,7 @@
-import { AdminContentAssetsPage } from "../content-assets-page";
+"use client";
+
+import { ContentAssetIndex } from "@/components/admin/curriculum-practice/content-asset-index";
 
 export default function AdminCaseItemsPage() {
-    return <AdminContentAssetsPage assetType="case-item" />;
+    return <ContentAssetIndex assetType="case-item" />;
 }

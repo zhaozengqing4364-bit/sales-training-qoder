@@ -12,6 +12,7 @@ Before writing frontend code, read the guides relevant to your change:
 |-------------|------------|
 | Any frontend work | This index + `web/AGENTS.md` |
 | App Router pages / layouts | `web/src/app/AGENTS.md` |
+| Admin pages / new admin modules | [Admin Console Patterns](./admin-console-patterns.md) |
 | UI patterns / Radix / Tailwind | [Component Guidelines](./component-guidelines.md) |
 | New hooks / WebSocket client | [Hook Guidelines](./hook-guidelines.md) |
 | State / data fetching | [State Management](./state-management.md) |
@@ -35,6 +36,7 @@ Also read `.kiro/steering/frontend-principles.md` for UX constitution (no error 
 | Guide | Description | Status |
 |-------|-------------|--------|
 | [Directory Structure](./directory-structure.md) | App Router, components, hooks, lib | Ready |
+| [Admin Console Patterns](./admin-console-patterns.md) | Intent-based admin routes, layout, compliance gaps | Ready |
 | [Component Guidelines](./component-guidelines.md) | UI primitives, Radix, Tailwind glass | Ready |
 | [Hook Guidelines](./hook-guidelines.md) | Custom hooks, WebSocket modules | Ready |
 | [State Management](./state-management.md) | useEffect + api (most pages), React Query (auth), Zustand (sidebar) | Ready |

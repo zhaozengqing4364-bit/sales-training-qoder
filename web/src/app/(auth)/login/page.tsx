@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { REMEMBER_EMAIL_STORAGE_KEY } from "@/lib/auth/clear-client-auth-state";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
@@ -42,8 +43,6 @@ const AUTH_ERROR_MESSAGE_MAP: Record<string, string> = {
     "wecom-user-disabled": "当前企业微信账号已被停用，请联系管理员。",
     "wecom-callback-failed": "企业微信登录失败，请稍后重试。",
 };
-const REMEMBER_EMAIL_STORAGE_KEY = "qoder.login.rememberEmail.v1";
-
 function toProviderStatus(input: unknown, fallbackMessage: string): ProviderStatus {
     const record = input && typeof input === "object" ? input as Record<string, unknown> : {};
     return {

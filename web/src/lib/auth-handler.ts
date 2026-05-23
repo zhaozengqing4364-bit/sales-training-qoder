@@ -1,3 +1,4 @@
+import { clearClientAuthState } from "./auth/clear-client-auth-state";
 import { debug } from "./debug";
 /**
  * Auth Handler - Centralized authentication event management
@@ -14,6 +15,10 @@ interface LogoutOptions {
     redirectTo?: string | null;
     notify?: boolean;
     navigationMode?: AuthNavigationMode;
+    /** Clear browser-persisted learner/auth artifacts (default: true). */
+    clearClientState?: boolean;
+    /** Force a full document navigation instead of the SPA router seam. */
+    hardRedirect?: boolean;
 }
 
 type InterruptiveUiCategory =
@@ -316,15 +321,32 @@ class AuthHandler {
      * Handle logout side effects and redirect.
      */
     logout(message: string = "已退出登录", options: LogoutOptions = {}): void {
-        const { redirectTo = null, notify = true, navigationMode = "replace" } = options;
+        const {
+            redirectTo = null,
+            notify = true,
+            navigationMode = "replace",
+            clearClientState = true,
+            hardRedirect = false,
+        } = options;
+
+        if (clearClientState) {
+            clearClientAuthState();
+        }
 
         if (notify) {
             this.notify(message);
         }
 
-        if (redirectTo) {
-            this.navigate(redirectTo, navigationMode);
+        if (!redirectTo) {
+            return;
         }
+
+        if (hardRedirect && typeof window !== "undefined") {
+            window.location.replace(redirectTo);
+            return;
+        }
+
+        this.navigate(redirectTo, navigationMode);
     }
 
     /**
@@ -355,6 +377,17 @@ class AuthHandler {
      */
     unauthorized(): void {
         this.logout("权限不足，请重新登录", { redirectTo: null });
+    }
+
+    /** Reset singleton timers/cooldowns between unit tests. */
+    resetStateForTests(): void {
+        if (this.sessionExpiredTimer !== null && typeof window !== "undefined") {
+            window.clearTimeout(this.sessionExpiredTimer);
+        }
+        this.sessionExpiredTimer = null;
+        this.pendingNavigation = null;
+        this.lastNotifyMessage = null;
+        this.lastNotifyTime = 0;
     }
 }
 

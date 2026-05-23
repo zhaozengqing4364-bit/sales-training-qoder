@@ -97,6 +97,7 @@ export default function AgentPersonaSelectPage() {
     const searchParams = useSearchParams();
     const agentId = params.agentId as string;
     const requestedPersonaId = searchParams.get("persona_id");
+    const practiceTemplateId = searchParams.get("practice_template_id");
     const focusIntent = useMemo(() => parseFocusIntent(searchParams.get("focus_intent")), [searchParams]);
     const { trainingPreferences, saveTrainingPreferences } = useTrainingPreferences();
     const shouldUseRememberedDefaults = !focusIntent;
@@ -245,6 +246,7 @@ export default function AgentPersonaSelectPage() {
                 scenario_type: scenarioType,
                 presentation_id: scenarioType === "presentation" ? selectedPresentationId : undefined,
                 voice_mode: voiceMode,
+                practice_template_id: practiceTemplateId || undefined,
                 focus_intent: scenarioType === "sales" && focusIntent ? focusIntent : undefined,
             } as const;
 
@@ -280,8 +282,11 @@ export default function AgentPersonaSelectPage() {
                 scenarioType === "presentation" && selectedPresentationId
                     ? `&presentation_id=${encodeURIComponent(selectedPresentationId)}`
                     : "";
+            const templateParam = practiceTemplateId
+                ? `&practice_template_id=${encodeURIComponent(practiceTemplateId)}`
+                : "";
             router.push(
-                `/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}&scenario_type=${scenarioType}&voice_mode=${voiceMode}${presentationParam}`,
+                `/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}&scenario_type=${scenarioType}&voice_mode=${voiceMode}${presentationParam}${templateParam}`,
             );
         } catch (error) {
             debug.error("Failed to create session:", error);

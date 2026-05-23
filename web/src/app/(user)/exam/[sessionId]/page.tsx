@@ -32,6 +32,7 @@ import {
   type GradedQuestion,
 } from "@/hooks/use-examiner-websocket";
 import { examQuestionTypeLabel } from "@/lib/exam-question-type";
+import { formatRuntimeLifecycleState } from "@/lib/runtime-lifecycle-labels";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);

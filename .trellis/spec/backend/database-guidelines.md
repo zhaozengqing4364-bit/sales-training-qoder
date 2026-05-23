@@ -118,3 +118,94 @@ Integration tests use in-memory SQLite:
 cd backend && alembic upgrade head
 cd backend && pytest tests/integration/
 ```
+
+---
+
+## Operational Seed Scripts
+
+Use `backend/scripts/` for idempotent, operator-run seed scripts that create demo or training configuration data without changing schema. These scripts are **data/config writers**, not migration authority.
+
+### 1. Scope / Trigger
+
+- Trigger: adding a runnable seed command such as `PYTHONPATH=src uv run python scripts/seed_<name>.py`.
+- Scope: create or update existing ORM records needed for local demos, training samples, or admin-config bootstraps.
+- Not scope: schema changes, production migrations, or one-off hidden manual SQL.
+
+### 2. Signatures
+
+Seed scripts must expose:
+
+```bash
+PYTHONPATH=src uv run python scripts/seed_<name>.py
+PYTHONPATH=src uv run python scripts/seed_<name>.py --verify-only
+```
+
+Python entrypoint shape:
+
+```python
+async def run(verify_only: bool) -> tuple[int, dict[str, object]]: ...
+def parse_args() -> argparse.Namespace: ...
+def main() -> None: ...
+```
+
+### 3. Contracts
+
+- Use `AsyncSessionLocal()` and SQLAlchemy 2.0 `select()` / `execute()` only.
+- Scripts must be idempotent: first run creates records, second run updates existing records rather than duplicating them.
+- `--verify-only` must not create or update records.
+- Output must be a single JSON object written to stdout with:
+  - `ok: bool`
+  - `verify_only: bool`
+  - `changes: {created: int, updated: int}`
+  - `ids: {...}` for created/verified primary IDs
+  - `counts: {...}` for core asset counts
+  - `keys: {...}` for operator-facing lookup keys such as emails, versions, template names
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+|---|---|
+| Missing expected record in `--verify-only` | Exit `1`, output `{"ok": false, "errors": [...]}` |
+| Required asset not published/active | Exit `1`, explain the failed asset/state |
+| Required child count mismatch | Exit `1`, include expected vs actual count |
+| Relationship mismatch | Exit `1`, name the mismatched field |
+| Successful seed or verify | Exit `0`, output summary JSON |
+
+### 5. Good/Base/Bad Cases
+
+- Good: seed creates a complete linked sample, then `--verify-only` confirms assets and relationships.
+- Base: rerunning the seed returns `created=0` and updates the existing records.
+- Bad: seed uses generated names without stable lookup keys, making reruns duplicate records.
+
+### 6. Tests Required
+
+- Minimum: `python3 -m py_compile scripts/seed_<name>.py` and `uv run ruff check scripts/seed_<name>.py`.
+- If a writable dev database is available: run the script, rerun it once for idempotency, then run `--verify-only`.
+- For reusable seed frameworks, add integration tests around the upsert/verify functions.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+record = Model(name="Demo")
+db.add(record)
+await db.commit()
+```
+
+This duplicates data on every run and has no verification mode.
+
+#### Correct
+
+```python
+record = await _first(db, select(Model).where(Model.name == NAME))
+if record is None:
+    record = Model(id=_uuid(), name=NAME)
+    db.add(record)
+    counters["created"] += 1
+else:
+    counters["updated"] += 1
+record.status = "published"
+```
+
+Stable lookup keys make the script safe to rerun and easy to verify.

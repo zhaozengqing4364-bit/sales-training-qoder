@@ -122,10 +122,11 @@ async def _reject_sales_websocket(
     reason: str,
     log_message: str,
     session_id: str | None = None,
+    mark_runtime_failed: bool = True,
     **log_fields: Any,
 ) -> None:
     logger.warning(log_message, **log_fields)
-    if session_id:
+    if session_id and mark_runtime_failed:
         await mark_session_runtime_failed(
             session_id,
             failure_code=reason,
@@ -186,13 +187,7 @@ async def _handle_sales_websocket(
         await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
         return
 
-    from common.services.runtime_gate import RuntimeGate
-
-    async with AsyncSessionLocal() as db:
-        kb_lock_unbound = await RuntimeGate(db).is_kb_lock_unbound_for_session_id(
-            resolved_session_id
-        )
-    if kb_lock_unbound:
+    if await _is_kb_lock_unbound_session(resolved_session_id):
         logger.warning(
             "Rejected /ws/sales connection due to KB lock without bound knowledge base",
             session_id=resolved_session_id,
@@ -251,6 +246,7 @@ async def _handle_sales_websocket(
             reason="Unauthorized",
             log_message="Rejected /ws/sales connection due to invalid token",
             session_id=resolved_session_id,
+            mark_runtime_failed=False,
         )
         return
 
@@ -266,6 +262,7 @@ async def _handle_sales_websocket(
             reason="ACCESS_DENIED",
             log_message="Rejected /ws/sales connection due to owner mismatch",
             session_id=resolved_session_id,
+            mark_runtime_failed=False,
             request_user_id=user_id,
             session_owner_id=session_owner_id,
         )
@@ -296,6 +293,14 @@ async def _handle_sales_websocket(
         token=auth_token,
         trace_id=normalize_trace_id(trace_id),
     )
+
+
+async def _is_kb_lock_unbound_session(session_id: str) -> bool:
+    """Evaluate the sales KB lock through the shared runtime gate authority."""
+    from common.services.runtime_gate import RuntimeGate
+
+    async with AsyncSessionLocal() as db:
+        return await RuntimeGate(db).is_kb_lock_unbound_for_session_id(session_id)
 
 
 def _resolve_ws_token(websocket: WebSocket, query_token: str) -> str:

@@ -7,14 +7,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
-from common.db.models import Scenario, User
+from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
 from curriculum_practice.models import (
@@ -59,10 +58,14 @@ from curriculum_practice.schemas import (
     RoleProfileResponse,
     RoleProfileVoiceCloneRequest,
     RoleProfileVoiceCloneResponse,
+    TemplateReferenceListResponse,
+    UnpublishAcknowledgeRequest,
 )
 from curriculum_practice.services.content_assets import (
+    ContentAssetAlreadyDraftError,
     ContentAssetNotEditableError,
     ContentAssetPublishError,
+    ContentAssetReferencedByTemplatesError,
     ContentAssetService,
 )
 from curriculum_practice.services.examiner_agents import (
@@ -93,6 +96,9 @@ from curriculum_practice.services.practice_templates import (
     serialize_template,
 )
 from curriculum_practice.services.question_generation import QuestionGenerationService
+from curriculum_practice.services.roleplay_runtime_dossier_preview import (
+    RoleplayRuntimeDossierPreviewService,
+)
 from curriculum_practice.services.test_bank import (
     SERVER_ERROR as TEST_BANK_SERVICE_FAILED,
 )
@@ -419,6 +425,18 @@ async def start_my_study_exam(
         )
     except ValueError as exc:
         error_code = str(exc)
+        if error_code == "[TEMPLATE_EXAMINER_NOT_BOUND]":
+            return _api_error(
+                error_code,
+                status_code=409,
+                message="该学习内容未绑定已发布的课程模板或 AI 考官，请联系管理员配置。",
+            )
+        if error_code == "[EXAMINER_AGENT_NOT_FOUND]":
+            return _api_error(
+                error_code,
+                status_code=409,
+                message="课程模板绑定的 AI 考官不存在或未发布，请联系管理员检查配置。",
+            )
         if error_code == "[EXAMINER_AGENT_NOT_AVAILABLE]":
             return _api_error(
                 error_code,
@@ -1497,6 +1515,86 @@ async def archive_examiner_agent(
     return _success(_serialize_examiner_agent(result.value))
 
 
+@router.get("/examiner-agents/{examiner_agent_id}/template-references", response_model=None)
+async def get_examiner_agent_template_references(
+    examiner_agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ExaminerAgentService(db)
+    agent_result = await service.get_agent(examiner_agent_id)
+    if not agent_result.is_success or agent_result.value is None:
+        return _examiner_agent_result_error(agent_result.fallback)
+    references_result = await service.list_template_references(
+        examiner_agent_id=examiner_agent_id
+    )
+    if not references_result.is_success or references_result.value is None:
+        return _examiner_agent_result_error(references_result.fallback)
+    payload = TemplateReferenceListResponse(
+        items=references_result.value,
+        total=len(references_result.value),
+    )
+    return _success(payload.model_dump())
+
+
+@router.post("/examiner-agents/{examiner_agent_id}/duplicate", response_model=None)
+async def duplicate_examiner_agent(
+    examiner_agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ExaminerAgentService(db)
+    agent_result = await service.get_agent(examiner_agent_id)
+    if not agent_result.is_success or agent_result.value is None:
+        return _examiner_agent_result_error(agent_result.fallback)
+    result = await service.duplicate_agent(
+        agent_result.value, actor_id=str(current_user.user_id)
+    )
+    if not result.is_success or result.value is None:
+        return _examiner_agent_result_error(result.fallback)
+    return _success(_serialize_examiner_agent(result.value))
+
+
+@router.post("/examiner-agents/{examiner_agent_id}/unpublish", response_model=None)
+async def unpublish_examiner_agent(
+    examiner_agent_id: str,
+    payload: UnpublishAcknowledgeRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ExaminerAgentService(db)
+    agent_result = await service.get_agent(examiner_agent_id)
+    if not agent_result.is_success or agent_result.value is None:
+        return _examiner_agent_result_error(agent_result.fallback)
+    result = await service.unpublish_agent(
+        agent_result.value,
+        actor_id=str(current_user.user_id),
+        acknowledge=bool(payload and payload.acknowledge),
+    )
+    if result.is_success and isinstance(result.value, ExaminerAgent):
+        return _success(_serialize_examiner_agent(result.value))
+    if result.fallback == "[EXAMINER_AGENT_REFERENCED_BY_PUBLISHED_TEMPLATES]":
+        references = result.value if isinstance(result.value, list) else []
+        return JSONResponse(
+            status_code=409,
+            content=error_response(
+                "[EXAMINER_AGENT_REFERENCED_BY_PUBLISHED_TEMPLATES]",
+                message="ExaminerAgent is referenced by published templates.",
+            )
+            | {"details": {"referencing_templates": references}},
+        )
+    return _examiner_agent_result_error(result.fallback)
+
+
 @router.post("/examiner-agents/{examiner_agent_id}/simulate", response_model=None)
 async def simulate_examiner_agent(
     examiner_agent_id: str,
@@ -1575,6 +1673,30 @@ async def get_practice_template(
     if template is None:
         return _not_found()
     return _success(serialize_template(template))
+
+
+@router.get("/templates/{template_id}/runtime-dossier-preview", response_model=None)
+async def get_practice_template_runtime_dossier_preview(
+    template_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    try:
+        preview = await RoleplayRuntimeDossierPreviewService(db).build_preview(
+            template_id
+        )
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[PRACTICE_TEMPLATE_RUNTIME_DOSSIER_PREVIEW_FAILED]",
+            message="PracticeTemplate runtime dossier 预览生成失败。",
+            exc=exc,
+        )
+    if preview is None:
+        return _not_found()
+    return _success(preview)
 
 
 @router.put("/templates/{template_id}", response_model=None)
@@ -1836,6 +1958,111 @@ async def archive_case_item(
         )
 
 
+@router.get("/case-items/{case_item_id}/template-references", response_model=None)
+async def get_case_item_template_references(
+    case_item_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_case_item(case_item_id)
+    if item is None:
+        return _case_item_not_found()
+    references = await service.list_template_references(
+        asset_type="case_item",
+        asset_id=case_item_id,
+    )
+    payload = TemplateReferenceListResponse(
+        items=references,
+        total=len(references),
+    )
+    return _success(payload.model_dump())
+
+
+@router.post("/case-items/{case_item_id}/duplicate", response_model=None)
+async def duplicate_case_item(
+    case_item_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_case_item(case_item_id)
+    if item is None:
+        return _case_item_not_found()
+    try:
+        duplicate = await service.duplicate_case_item(
+            item, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_case_item(duplicate))
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[CASE_ITEM_DUPLICATE_FAILED]",
+            message="CaseItem 复制失败。",
+            exc=exc,
+        )
+
+
+@router.post("/case-items/{case_item_id}/unpublish", response_model=None)
+async def unpublish_case_item(
+    case_item_id: str,
+    payload: UnpublishAcknowledgeRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_case_item(case_item_id)
+    if item is None:
+        return _case_item_not_found()
+    try:
+        unpublished = await service.unpublish_case_item(
+            item,
+            actor_id=str(current_user.user_id),
+            acknowledge=bool(payload and payload.acknowledge),
+        )
+        return _success(_serialize_case_item(unpublished))
+    except ContentAssetAlreadyDraftError:
+        await db.rollback()
+        return _api_error(
+            "[CASE_ITEM_ALREADY_DRAFT]",
+            status_code=409,
+            message="Only published CaseItem records can be unpublished.",
+        )
+    except ContentAssetNotEditableError:
+        await db.rollback()
+        return _api_error(
+            "[CASE_ITEM_NOT_EDITABLE]",
+            status_code=409,
+            message="Archived CaseItem records cannot be unpublished.",
+        )
+    except ContentAssetReferencedByTemplatesError as exc:
+        await db.rollback()
+        return JSONResponse(
+            status_code=409,
+            content=error_response(
+                "[CASE_ITEM_REFERENCED_BY_PUBLISHED_TEMPLATES]",
+                message="CaseItem is referenced by published templates.",
+            )
+            | {"details": {"referencing_templates": exc.referencing_templates}},
+        )
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[CASE_ITEM_UNPUBLISH_FAILED]",
+            message="CaseItem 退回草稿失败。",
+            exc=exc,
+        )
+
+
 @router.get("/role-profiles", response_model=None)
 async def list_role_profiles(
     status: str | None = Query(default=None, pattern="^(draft|published|archived)$"),
@@ -1870,6 +2097,16 @@ async def create_role_profile(
             payload, actor_id=str(current_user.user_id)
         )
         return _success(_serialize_role_profile(item))
+    except ContentAssetPublishError as exc:
+        await db.rollback()
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "[ROLE_PROFILE_CREATE_FAILED]",
+                message=str(exc),
+            )
+            | {"details": {"reason_code": exc.reason_code}},
+        )
     except SQLAlchemyError as exc:
         await db.rollback()
         return build_server_error(
@@ -1919,6 +2156,16 @@ async def update_role_profile(
             "[ROLE_PROFILE_NOT_EDITABLE]",
             status_code=409,
             message="Only draft RoleProfile records can be edited.",
+        )
+    except ContentAssetPublishError as exc:
+        await db.rollback()
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "[ROLE_PROFILE_UPDATE_FAILED]",
+                message=str(exc),
+            )
+            | {"details": {"reason_code": exc.reason_code}},
         )
     except SQLAlchemyError as exc:
         await db.rollback()
@@ -2045,5 +2292,110 @@ async def archive_role_profile(
         return build_server_error(
             "[ROLE_PROFILE_ARCHIVE_FAILED]",
             message="RoleProfile 归档失败。",
+            exc=exc,
+        )
+
+
+@router.get("/role-profiles/{role_profile_id}/template-references", response_model=None)
+async def get_role_profile_template_references(
+    role_profile_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_role_profile(role_profile_id)
+    if item is None:
+        return _role_profile_not_found()
+    references = await service.list_template_references(
+        asset_type="role_profile",
+        asset_id=role_profile_id,
+    )
+    payload = TemplateReferenceListResponse(
+        items=references,
+        total=len(references),
+    )
+    return _success(payload.model_dump())
+
+
+@router.post("/role-profiles/{role_profile_id}/duplicate", response_model=None)
+async def duplicate_role_profile(
+    role_profile_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_role_profile(role_profile_id)
+    if item is None:
+        return _role_profile_not_found()
+    try:
+        duplicate = await service.duplicate_role_profile(
+            item, actor_id=str(current_user.user_id)
+        )
+        return _success(_serialize_role_profile(duplicate))
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[ROLE_PROFILE_DUPLICATE_FAILED]",
+            message="RoleProfile 复制失败。",
+            exc=exc,
+        )
+
+
+@router.post("/role-profiles/{role_profile_id}/unpublish", response_model=None)
+async def unpublish_role_profile(
+    role_profile_id: str,
+    payload: UnpublishAcknowledgeRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = ContentAssetService(db)
+    item = await service.get_role_profile(role_profile_id)
+    if item is None:
+        return _role_profile_not_found()
+    try:
+        unpublished = await service.unpublish_role_profile(
+            item,
+            actor_id=str(current_user.user_id),
+            acknowledge=bool(payload and payload.acknowledge),
+        )
+        return _success(_serialize_role_profile(unpublished))
+    except ContentAssetAlreadyDraftError:
+        await db.rollback()
+        return _api_error(
+            "[ROLE_PROFILE_ALREADY_DRAFT]",
+            status_code=409,
+            message="Only published RoleProfile records can be unpublished.",
+        )
+    except ContentAssetNotEditableError:
+        await db.rollback()
+        return _api_error(
+            "[ROLE_PROFILE_NOT_EDITABLE]",
+            status_code=409,
+            message="Archived RoleProfile records cannot be unpublished.",
+        )
+    except ContentAssetReferencedByTemplatesError as exc:
+        await db.rollback()
+        return JSONResponse(
+            status_code=409,
+            content=error_response(
+                "[ROLE_PROFILE_REFERENCED_BY_PUBLISHED_TEMPLATES]",
+                message="RoleProfile is referenced by published templates.",
+            )
+            | {"details": {"referencing_templates": exc.referencing_templates}},
+        )
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[ROLE_PROFILE_UNPUBLISH_FAILED]",
+            message="RoleProfile 退回草稿失败。",
             exc=exc,
         )

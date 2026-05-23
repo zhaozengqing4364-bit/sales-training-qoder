@@ -65,11 +65,15 @@ class ConnectionManager:
     ) -> None:
         """Accept and track connection"""
         await websocket.accept()
+        previous_websocket: WebSocket | None = None
         async with self._lock:
             if scenario not in self.active_connections:
                 self.active_connections[scenario] = {}
+            previous_websocket = self.active_connections[scenario].get(session_id)
             self.active_connections[scenario][session_id] = websocket
         logger.info(f"WebSocket connected: scenario={scenario}, session={session_id}")
+        if previous_websocket is not None and previous_websocket is not websocket:
+            await self._close_replaced_websocket(previous_websocket)
 
         # Send acknowledgment
         await self.send_json(
@@ -80,6 +84,15 @@ class ConnectionManager:
                 "data": {"session_id": session_id},
             },
         )
+
+    async def _close_replaced_websocket(self, websocket: WebSocket) -> None:
+        """Close stale duplicate sockets for the same scenario/session pair."""
+        if websocket.client_state == WebSocketState.DISCONNECTED:
+            return
+        try:
+            await websocket.close(code=1012)
+        except RuntimeError:
+            pass
 
     async def disconnect(self, scenario: str, session_id: str) -> None:
         """Remove connection from tracking"""

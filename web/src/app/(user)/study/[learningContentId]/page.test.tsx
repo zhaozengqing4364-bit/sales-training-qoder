@@ -90,7 +90,7 @@ describe("StudyPage", () => {
         render(<StudyPage />);
 
         await screen.findByRole("heading", { name: "销售异议处理" });
-        fireEvent.click(screen.getByRole("button", { name: /返回学习路径/ }));
+        fireEvent.click(screen.getAllByRole("button", { name: /返回学习路径/ })[0]);
 
         expect(pushMock).toHaveBeenCalledWith("/learning-path");
     });
@@ -174,8 +174,8 @@ describe("StudyPage", () => {
         render(<StudyPage />);
 
         expect(await screen.findByText("学习完成")).toBeTruthy();
-        expect(screen.getByText("你已阅读完所有章节。现在可以进入 AI 考官考核。")).toBeTruthy();
-        fireEvent.click(screen.getByRole("button", { name: /开始 AI 考核/ }));
+        expect(screen.getByText("你已阅读完所有章节，也可以直接进入 AI 考官考核。")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: /^开始 AI 考核$/ }));
 
         expect(startExamMock).toHaveBeenCalledWith("content-1");
         await waitFor(() => {
@@ -183,6 +183,28 @@ describe("StudyPage", () => {
                 "/exam/exam-session-1?contentId=content-1",
             );
         });
+    });
+
+    it("shows exam startup errors next to the completion action", async () => {
+        const completedContent = {
+            ...makeContent(),
+            progress: {
+                completed_chapter_ids: ["chapter-1", "chapter-2"],
+                completed_count: 2,
+                total_chapters: 2,
+                is_completed: true,
+                state: "completed" as const,
+                primary_cta: "参加考试",
+            },
+        };
+        getContentMock.mockResolvedValue(completedContent);
+        startExamMock.mockRejectedValue(new Error("examiner not bound"));
+        render(<StudyPage />);
+
+        expect(await screen.findByText("学习完成")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: /^开始 AI 考核$/ }));
+
+        expect((await screen.findByRole("alert")).textContent).toMatch(/启动考试失败/);
     });
 
     it("renders empty state when content has no chapters", async () => {
@@ -240,5 +262,49 @@ describe("StudyPage", () => {
 
         expect(await screen.findByText("识别常见的四种异议类型。")).toBeTruthy();
         expect(screen.queryByRole("button", { name: /下一章/ })).toBeNull();
+    });
+
+    it("shows a locked next step on the last chapter until all chapters are complete", async () => {
+        getContentMock.mockResolvedValue(makeContent());
+        render(<StudyPage />);
+
+        await screen.findByText("先确认客户背景。");
+        fireEvent.click(screen.getByRole("button", { name: /下一章/ }));
+
+        expect(await screen.findByText("识别常见的四种异议类型。")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "完成全部章节后解锁下一步" })).toBeTruthy();
+        expect(screen.getByText("需要完成全部章节后才能进入 AI 考官考核。")).toBeTruthy();
+        expect(screen.getByRole("button", { name: /上一章：开场技巧/ })).toBeTruthy();
+        expect(screen.getAllByRole("button", { name: /返回学习路径/ }).length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("starts the exam from the last chapter bottom action when all chapters are complete", async () => {
+        const completedContent = {
+            ...makeContent(),
+            progress: {
+                completed_chapter_ids: ["chapter-1", "chapter-2"],
+                completed_count: 2,
+                total_chapters: 2,
+                is_completed: true,
+                state: "completed" as const,
+                primary_cta: "参加考试",
+            },
+        };
+        getContentMock.mockResolvedValue(completedContent);
+        startExamMock.mockResolvedValue({ session_id: "exam-session-1", examiner_agent_id: "examiner-1" });
+        render(<StudyPage />);
+
+        await screen.findByText("先确认客户背景。");
+        fireEvent.click(screen.getByRole("button", { name: /下一章/ }));
+        expect(await screen.findByText("全部章节已完成，可以进入 AI 考官考核。")).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: /下一步：开始 AI 考核/ }));
+
+        expect(startExamMock).toHaveBeenCalledWith("content-1");
+        await waitFor(() => {
+            expect(pushMock).toHaveBeenCalledWith(
+                "/exam/exam-session-1?contentId=content-1",
+            );
+        });
     });
 });

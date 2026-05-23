@@ -325,6 +325,7 @@ async def test_handle_client_text_persists_user_message_before_create_response()
         return_value={"score_snapshot": {"overall_score": 82}}
     )
     handler._prepare_grounding_context = AsyncMock()
+    handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
     handler._send_upstream = AsyncMock()
     handler._create_response = AsyncMock()
 
@@ -374,6 +375,7 @@ async def test_audio_chunk_backpressure_delegates_to_transport_and_drops_audio_a
     handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
     handler.session_status = "in_progress"
     handler._ensure_input_allowed = AsyncMock(return_value=True)
+    handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
     handler._send_upstream = AsyncMock()
 
     await handler._handle_client_text(
@@ -403,6 +405,7 @@ async def test_audio_chunk_delegates_sent_audio_to_audio_flow_without_payload_ch
     handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
     handler.session_status = "in_progress"
     handler._ensure_input_allowed = AsyncMock(return_value=True)
+    handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
     handler._send_upstream = AsyncMock()
 
     await handler._handle_client_text(
@@ -421,6 +424,152 @@ async def test_audio_chunk_delegates_sent_audio_to_audio_flow_without_payload_ch
     )
     assert handler._audio_flow.get_input_buffer() == ["base64-audio"]
     assert handler._has_uncommitted_audio is True
+
+
+def test_summarize_pcm16_payload_returns_aggregate_audio_quality_only():
+    payload = b"".join(
+        sample.to_bytes(2, byteorder="little", signed=True)
+        for sample in (0, 1000, -1000, 32767, -32768)
+    )
+
+    stats = StepFunRealtimeHandler._summarize_pcm16_payload(payload)
+
+    assert stats == {
+        "sample_count": 5,
+        "rms": 20733.64,
+        "peak_abs": 32768,
+        "zero_ratio": 0.2,
+        "payload_bytes": 10,
+        "odd_byte_truncated": False,
+    }
+    assert "payload" not in stats
+    assert "samples" not in stats
+
+
+@pytest.mark.asyncio
+async def test_binary_audio_quality_is_logged_and_reset_after_commit():
+    transport = SimpleNamespace(
+        decide_backpressure=MagicMock(
+            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
+        )
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
+    handler.session_status = "in_progress"
+    handler._ensure_input_allowed = AsyncMock(return_value=True)
+    handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
+    handler._send_upstream = AsyncMock()
+    handler._schedule_response_after_commit = AsyncMock()
+    handler._log_latency_debug = MagicMock()
+    payload = b"".join(
+        sample.to_bytes(2, byteorder="little", signed=True)
+        for sample in (0, 1000, -1000, 32767, -32768)
+    )
+
+    await handler._handle_binary_frame(
+        bytes([StepFunRealtimeHandler.BINARY_AUDIO_CHUNK]) + payload
+    )
+    await handler._commit_and_respond()
+
+    handler._send_upstream.assert_any_await(
+        {
+            "type": "input_audio_buffer.append",
+            "audio": "AADoAxj8/38AgA==",
+        }
+    )
+    handler._send_upstream.assert_any_await({"type": "input_audio_buffer.commit"})
+    assert handler._has_uncommitted_audio is False
+    assert handler._summarize_pending_input_audio_quality() == {
+        "audio_quality_frame_count": 0,
+        "audio_quality_payload_bytes": 0,
+        "audio_quality_sample_count": 0,
+        "audio_quality_rms": 0.0,
+        "audio_quality_peak_abs": 0,
+        "audio_quality_zero_ratio": 0.0,
+        "audio_quality_odd_payload_frames": 0,
+    }
+
+    commit_call = next(
+        call_item
+        for call_item in handler._log_latency_debug.call_args_list
+        if call_item.args == ("audio_commit_requested",)
+    )
+    assert commit_call.kwargs["binary_frame_count"] == 1
+    assert commit_call.kwargs["audio_quality_frame_count"] == 1
+    assert commit_call.kwargs["audio_quality_payload_bytes"] == 10
+    assert commit_call.kwargs["audio_quality_sample_count"] == 5
+    assert commit_call.kwargs["audio_quality_rms"] == 20733.64
+    assert commit_call.kwargs["audio_quality_peak_abs"] == 32768
+    assert commit_call.kwargs["audio_quality_zero_ratio"] == 0.2
+
+
+@pytest.mark.asyncio
+async def test_binary_audio_quality_debug_log_does_not_duplicate_payload_bytes():
+    transport = SimpleNamespace(
+        decide_backpressure=MagicMock(
+            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.ALLOW)
+        )
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
+    handler.session_status = "in_progress"
+    handler._ensure_input_allowed = AsyncMock(return_value=True)
+    handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
+    handler._send_upstream = AsyncMock()
+    handler._log_latency_debug = MagicMock()
+    payload = b"".join(
+        sample.to_bytes(2, byteorder="little", signed=True)
+        for sample in (0, 1000, -1000, 32767, -32768)
+    )
+
+    for _ in range(20):
+        await handler._handle_binary_frame(
+            bytes([StepFunRealtimeHandler.BINARY_AUDIO_CHUNK]) + payload
+        )
+
+    received_call = next(
+        call_item
+        for call_item in handler._log_latency_debug.call_args_list
+        if call_item.args == ("audio_binary_received",)
+    )
+    assert received_call.kwargs["frame_count"] == 20
+    assert received_call.kwargs["payload_bytes"] == 10
+    assert received_call.kwargs["sample_count"] == 5
+    assert received_call.kwargs["rms"] == 20733.64
+    assert received_call.kwargs["peak_abs"] == 32768
+    assert received_call.kwargs["zero_ratio"] == 0.2
+
+
+@pytest.mark.asyncio
+async def test_binary_audio_quality_does_not_count_backpressure_dropped_audio():
+    transport = SimpleNamespace(
+        decide_backpressure=MagicMock(
+            return_value=StepFunBackpressureResult(status=StepFunBackpressureStatus.DROP)
+        )
+    )
+    handler = StepFunRealtimeHandler(stepfun_transport=cast(Any, transport))
+    handler.session_status = "in_progress"
+    handler._ensure_input_allowed = AsyncMock(return_value=True)
+    handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
+    handler._send_upstream = AsyncMock()
+    payload = b"".join(
+        sample.to_bytes(2, byteorder="little", signed=True)
+        for sample in (0, 1000, -1000, 32767, -32768)
+    )
+
+    await handler._handle_binary_frame(
+        bytes([StepFunRealtimeHandler.BINARY_AUDIO_CHUNK]) + payload
+    )
+
+    transport.decide_backpressure.assert_called_once()
+    handler._send_upstream.assert_not_awaited()
+    assert handler._summarize_pending_input_audio_quality() == {
+        "audio_quality_frame_count": 0,
+        "audio_quality_payload_bytes": 0,
+        "audio_quality_sample_count": 0,
+        "audio_quality_rms": 0.0,
+        "audio_quality_peak_abs": 0,
+        "audio_quality_zero_ratio": 0.0,
+        "audio_quality_odd_payload_frames": 0,
+    }
 
 
 @pytest.mark.asyncio
@@ -513,6 +662,161 @@ async def test_handle_upstream_transcription_completed_persists_user_message_aft
     )
     handler._prepare_grounding_context.assert_awaited_once_with("这是新一轮语音文本")
     handler._create_response_from_pending_commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_transcription_completed_extracts_nested_content_transcript():
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 1
+
+    handler._send_transcript = AsyncMock()
+    handler._analyze_and_emit_sales_stage = AsyncMock(return_value="discovery")
+    handler._run_realtime_feedback = AsyncMock(return_value={})
+    handler._persist_message = AsyncMock()
+    handler._prepare_grounding_context = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock(return_value=True)
+
+    await handler._handle_upstream_event(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item": {
+                "id": "item-1",
+                "content": [
+                    {
+                        "type": "input_audio",
+                        "transcript": "我想了解一下你们现在售前新人培训怎么做。",
+                    }
+                ],
+            },
+        }
+    )
+
+    handler._send_transcript.assert_awaited_once_with(
+        "我想了解一下你们现在售前新人培训怎么做。",
+        is_final=True,
+    )
+    handler._persist_message.assert_awaited_once_with(
+        turn_number=2,
+        role="user",
+        content="我想了解一下你们现在售前新人培训怎么做。",
+        sales_stage="discovery",
+        analysis_data={},
+    )
+    handler._prepare_grounding_context.assert_awaited_once_with(
+        "我想了解一下你们现在售前新人培训怎么做。"
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_transcription_completed_extracts_nested_transcript_field():
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 1
+
+    handler._send_transcript = AsyncMock()
+    handler._analyze_and_emit_sales_stage = AsyncMock(return_value="discovery")
+    handler._run_realtime_feedback = AsyncMock(return_value={})
+    handler._persist_message = AsyncMock()
+    handler._prepare_grounding_context = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock(return_value=True)
+
+    await handler._handle_upstream_event(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "event_id": "event-1",
+            "item_id": "item-1",
+            "content_index": 0,
+            "transcript": {"text": "我是来了解你们售前培训现状的。"},
+        }
+    )
+
+    handler._send_transcript.assert_awaited_once_with(
+        "我是来了解你们售前培训现状的。",
+        is_final=True,
+    )
+    handler._persist_message.assert_awaited_once_with(
+        turn_number=2,
+        role="user",
+        content="我是来了解你们售前培训现状的。",
+        sales_stage="discovery",
+        analysis_data={},
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_transcription_completed_falls_back_to_created_item_transcript():
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 1
+
+    handler._send_transcript = AsyncMock()
+    handler._analyze_and_emit_sales_stage = AsyncMock(return_value="discovery")
+    handler._run_realtime_feedback = AsyncMock(return_value={})
+    handler._persist_message = AsyncMock()
+    handler._prepare_grounding_context = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock(return_value=True)
+
+    await handler._handle_upstream_event(
+        {
+            "type": "conversation.item.created",
+            "item": {
+                "id": "item-1",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_audio",
+                        "audio": {
+                            "transcript": "我想先了解你们目前售前新人培养的流程。",
+                        },
+                    }
+                ],
+            },
+        }
+    )
+    await handler._handle_upstream_event(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item-1",
+            "content_index": 0,
+            "transcript": "",
+        }
+    )
+
+    handler._send_transcript.assert_awaited_once_with(
+        "我想先了解你们目前售前新人培养的流程。",
+        is_final=True,
+    )
+    handler._persist_message.assert_awaited_once_with(
+        turn_number=2,
+        role="user",
+        content="我想先了解你们目前售前新人培养的流程。",
+        sales_stage="discovery",
+        analysis_data={},
+    )
+    handler._prepare_grounding_context.assert_awaited_once_with(
+        "我想先了解你们目前售前新人培养的流程。"
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_transcription_completed_logs_empty_transcript_shape():
+    handler = StepFunRealtimeHandler()
+    handler._latest_input_transcript_delta = ""
+    handler._log_latency_debug = MagicMock()
+
+    await handler._handle_upstream_transcription_completed(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item-empty",
+            "content_index": 0,
+            "transcript": "   ",
+        }
+    )
+
+    handler._log_latency_debug.assert_called_once()
+    args, kwargs = handler._log_latency_debug.call_args
+    assert args == ("transcription_completed_empty_text",)
+    assert kwargs["transcript_shape"] == {"type": "str", "length": 3, "blank": True}
+    assert kwargs["transcript_string_length"] == 3
+    assert kwargs["transcript_blank"] is True
 
 
 @pytest.mark.asyncio
@@ -748,8 +1052,76 @@ async def test_recover_upstream_after_disconnect_clears_stale_turn_runtime_state
     assert handler._awaiting_transcription_after_commit is False
     assert handler._allow_late_transcription_response is False
     assert handler._has_uncommitted_audio is False
+
+
+@pytest.mark.asyncio
+async def test_ensure_upstream_ready_refreshes_stale_connection_before_input(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler.running = True
+    handler.session_status = "in_progress"
+    handler.upstream_ws = object()
+    handler._upstream_connected_at = 10.0
+    handler._upstream_last_activity_at = 10.0
+    handler._upstream_proactive_refresh_idle_seconds = 45.0
+    handler._active_response = RealtimeResponseState(
+        request_id=7,
+        stream_id="stream-stale-before-input",
+    )
+    handler._pending_grounding_context = "stale grounding"
+    handler._pending_blocked_response_text = "stale blocked"
+    handler._has_uncommitted_audio = True
+
+    monkeypatch.setattr(
+        stepfun_module.asyncio,
+        "get_running_loop",
+        lambda: SimpleNamespace(time=lambda: 60.0),
+    )
+    handler._close_upstream = AsyncMock()
+    handler._connect_upstream = AsyncMock()
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._send_status = AsyncMock()
+
+    ready = await handler._ensure_upstream_ready_for_input("text")
+
+    assert ready is True
+    handler._close_upstream.assert_awaited_once()
+    handler._connect_upstream.assert_awaited_once()
     handler._cancel_pending_response_after_commit.assert_awaited_once()
     handler._send_status.assert_awaited_once_with("listening")
+    assert handler._active_response is None
+    assert handler._pending_grounding_context == ""
+    assert handler._pending_blocked_response_text == ""
+    assert handler._has_uncommitted_audio is False
+
+
+@pytest.mark.asyncio
+async def test_ensure_upstream_ready_keeps_recent_connection(monkeypatch):
+    handler = StepFunRealtimeHandler()
+    handler.running = True
+    handler.upstream_ws = object()
+    handler._upstream_connected_at = 10.0
+    handler._upstream_last_activity_at = 58.0
+    handler._upstream_proactive_refresh_idle_seconds = 45.0
+
+    monkeypatch.setattr(
+        stepfun_module.asyncio,
+        "get_running_loop",
+        lambda: SimpleNamespace(time=lambda: 60.0),
+    )
+    handler._close_upstream = AsyncMock()
+    handler._connect_upstream = AsyncMock()
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._send_status = AsyncMock()
+
+    ready = await handler._ensure_upstream_ready_for_input("audio_chunk")
+
+    assert ready is True
+    handler._close_upstream.assert_not_awaited()
+    handler._connect_upstream.assert_not_awaited()
+    handler._cancel_pending_response_after_commit.assert_not_awaited()
+    handler._send_status.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1010,12 +1382,13 @@ async def test_prepare_grounding_context_forces_retrieval_when_kb_bound_and_inte
 
 
 @pytest.mark.asyncio
-async def test_prepare_grounding_context_blocks_any_bound_kb_query_when_retrieval_empty():
+async def test_prepare_grounding_context_allows_generation_when_kb_lock_off_and_retrieval_empty():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
         "knowledge_base_ids": ["kb-1"],
         "tool_policy": {
             "enable_internal_retrieval": True,
+            "require_kb_grounding": False,
             "retrieval_top_k": 3,
         },
     }
@@ -1029,34 +1402,76 @@ async def test_prepare_grounding_context_blocks_any_bound_kb_query_when_retrieva
 
     await handler._prepare_grounding_context("我们的产品线有哪些")
 
+    assert handler._pending_blocked_response_text == ""
+    assert handler._pending_grounding_context == ""
+
+
+@pytest.mark.asyncio
+async def test_prepare_grounding_context_blocks_bound_kb_query_when_retrieval_empty_and_lock_on():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "require_kb_grounding": True,
+            "enable_internal_retrieval": True,
+        },
+    }
+    handler._record_kb_lock_decision = AsyncMock()
+    cast(Any, handler)._grounding_pipeline = SimpleNamespace(
+        evaluate=AsyncMock(
+            return_value=SimpleNamespace(
+                allow_generation=False,
+                status="blocked_empty",
+                user_message=(
+                    "当前内部知识库没有足够依据回答这个问题，"
+                    "请补充更具体的关键词、版本信息或业务场景。"
+                ),
+                result_count=0,
+                retrieval_mode="",
+                error_detail="",
+                duration_ms=1.0,
+                phase_breakdown={},
+            )
+        ),
+    )
+
+    await handler._prepare_grounding_context("我们的产品线有哪些")
+
     assert handler._pending_grounding_context == ""
     assert "没有足够依据" in handler._pending_blocked_response_text
     assert "更具体的关键词" in handler._pending_blocked_response_text
 
 
 @pytest.mark.asyncio
-async def test_prepare_grounding_context_blocks_any_bound_kb_query_when_kb_not_ready():
+async def test_prepare_grounding_context_blocks_bound_kb_query_when_kb_not_ready_and_lock_on():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {
         "knowledge_base_ids": ["kb-1"],
         "tool_policy": {
+            "require_kb_grounding": True,
             "enable_internal_retrieval": True,
-            "retrieval_top_k": 3,
         },
     }
-    handler._tool_search_internal_knowledge = AsyncMock(
-        return_value={
-            "count": 0,
-            "results": [],
-            "message": "内部知识库文档尚未处理完成，请稍后重试",
-        }
+    handler._record_kb_lock_decision = AsyncMock()
+    cast(Any, handler)._grounding_pipeline = SimpleNamespace(
+        evaluate=AsyncMock(
+            return_value=SimpleNamespace(
+                allow_generation=False,
+                status="blocked_not_ready",
+                user_message="当前会话已开启知识库强制模式，但知识库文档尚未处理完成。请稍后重试。",
+                result_count=0,
+                retrieval_mode="",
+                error_detail="",
+                duration_ms=1.0,
+                phase_breakdown={},
+            )
+        ),
     )
 
     await handler._prepare_grounding_context("请介绍实习专家产品名录")
 
     assert handler._pending_grounding_context == ""
-    assert "没有足够依据" in handler._pending_blocked_response_text
-    assert "更具体的关键词" in handler._pending_blocked_response_text
+    assert "知识库强制模式" in handler._pending_blocked_response_text
 
 
 @pytest.mark.asyncio
@@ -1304,6 +1719,39 @@ def test_enforce_tool_policy_guardrails_respects_explicit_persona_disable(
     assert changed is True
     assert handler._effective_policy["tool_policy"]["require_kb_grounding"] is False
     assert "kb_lock_legacy_snapshot_backfill" not in handler._effective_policy["source"]
+
+
+def test_enforce_tool_policy_guardrails_keeps_kb_lock_off_when_snapshot_kb_only(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-explicit-disable-1"],
+        "tool_policy": {
+            "require_kb_grounding": False,
+            "retrieval_priority": "kb_only",
+            "network_access_mode": "off",
+            "enable_internal_retrieval": True,
+            "enable_web_search": False,
+        },
+        "persona_policy": {
+            "tool_policy": {"require_kb_grounding": False},
+        },
+        "source": {},
+        "instructions": "角色设定",
+    }
+    monkeypatch.setenv("PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND", "true")
+
+    changed = handler._enforce_tool_policy_guardrails()
+
+    tool_policy = handler._effective_policy["tool_policy"]
+    assert tool_policy["require_kb_grounding"] is False
+    assert tool_policy["retrieval_priority"] == "kb_first"
+    assert changed is True
+    assert (
+        handler._effective_policy["source"]["kb_lock_legacy_snapshot_backfill"]
+        == "kb_only_downgraded_to_kb_first_when_lock_disabled"
+    )
 
 
 @pytest.mark.asyncio
@@ -1574,11 +2022,13 @@ async def test_commit_and_respond_ignores_duplicate_without_new_audio():
     handler = StepFunRealtimeHandler()
     handler._send_upstream = AsyncMock()
     handler._schedule_response_after_commit = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock(return_value=True)
 
     handler._has_uncommitted_audio = False
     await handler._commit_and_respond()
     handler._send_upstream.assert_not_awaited()
     handler._schedule_response_after_commit.assert_not_awaited()
+    handler._create_response_from_pending_commit.assert_not_awaited()
 
     handler._has_uncommitted_audio = True
     await handler._commit_and_respond()
@@ -1586,11 +2036,13 @@ async def test_commit_and_respond_ignores_duplicate_without_new_audio():
         {"type": "input_audio_buffer.commit"}
     )
     handler._schedule_response_after_commit.assert_awaited_once()
+    handler._create_response_from_pending_commit.assert_not_awaited()
     assert handler._has_uncommitted_audio is False
 
     await handler._commit_and_respond()
     assert handler._send_upstream.await_count == 1
     assert handler._schedule_response_after_commit.await_count == 1
+    handler._create_response_from_pending_commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -2113,6 +2565,34 @@ async def test_pending_response_timeout_fallback_suppresses_blocked_copy_when_tr
     handler._cancel_pending_response_after_commit.assert_awaited_once()
     handler._send_status.assert_awaited_once_with("listening")
     handler._create_response_from_pending_commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pending_response_timeout_fallback_creates_response_without_transcript_when_kb_lock_off(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"require_kb_grounding": False},
+    }
+    handler._awaiting_transcription_after_commit = True
+    handler._pending_response_after_commit = True
+    handler._record_kb_lock_decision = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock(return_value=True)
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._send_status = AsyncMock()
+
+    monkeypatch.setattr(stepfun_module, "PENDING_RESPONSE_FALLBACK_SECONDS", 0.0)
+    monkeypatch.setattr(stepfun_module, "TRANSCRIPTION_WAIT_GRACE_SECONDS", 0.0)
+    monkeypatch.setattr(stepfun_module, "GROUNDING_WAIT_GRACE_SECONDS", 0.0)
+
+    await handler._pending_response_timeout_fallback()
+
+    handler._create_response_from_pending_commit.assert_awaited_once()
+    handler._cancel_pending_response_after_commit.assert_not_awaited()
+    handler._send_status.assert_not_awaited()
+    handler._record_kb_lock_decision.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -3354,6 +3834,39 @@ async def test_flush_active_response_emits_runtime_answer_diagnostics_and_citati
         == "实习专家产品手册"
     )
     handler._persist_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_flush_active_response_preserves_full_transcript_without_question_trim():
+    handler = StepFunRealtimeHandler()
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._persist_message = AsyncMock()
+    handler._sales_stage_context = None
+    handler._feedback_context = None
+    handler.turn_count = 1
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        stream_id="stream-1",
+    )
+    full_text = (
+        "浩哥，您提到产品风险，我能理解您对这个很在意。"
+        "能简单说说您目前遇到的具体情况吗？"
+        "另外也可以先说说预算范围和决策节奏。"
+    )
+    handler._active_response.text_parts = [full_text]
+
+    await handler._flush_active_response(
+        {"type": "response.done", "response": {"id": "resp-1"}}
+    )
+
+    sent_payload = handler.manager.send_json.await_args_list[0].args[1]
+    assert sent_payload["data"]["text"] == full_text
+    persist_args = handler._persist_message.await_args
+    assert persist_args is not None
+    assert persist_args.kwargs["content"] == full_text
 
 
 def test_enforce_tool_policy_guardrails_disables_web_search_without_kb():

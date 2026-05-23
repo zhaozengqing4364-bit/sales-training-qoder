@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
+import { AdminPageHeader, PolicyPageShell } from "@/components/admin/admin-layout-shells";
 import { api } from "@/lib/api/client";
 import type {
   PresentationAIPolicy,
@@ -207,28 +208,30 @@ export default function PresentationAIPolicyPage() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">PPT AI 策略</h1>
-          <p className="text-slate-500 mt-1">默认只保留关键开关。高级参数在下方折叠面板中配置。</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="rounded-full" onClick={() => void loadPolicy()} disabled={isLoading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            刷新
-          </Button>
-          <Button
-            className="rounded-full bg-slate-900 text-white"
-            onClick={() => void savePolicy()}
-            disabled={isSaving || isLoading}
-          >
-            {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            保存策略
-          </Button>
-        </div>
-      </div>
-
+    <PolicyPageShell
+      header={(
+        <AdminPageHeader
+          title="PPT AI 策略"
+          description="默认只保留关键开关。高级参数在下方折叠面板中配置。"
+          primaryAction={(
+            <Button
+              className="rounded-full bg-slate-900 text-white"
+              onClick={() => void savePolicy()}
+              disabled={isSaving || isLoading}
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              保存策略
+            </Button>
+          )}
+          secondaryActions={(
+            <Button variant="outline" className="rounded-full" onClick={() => void loadPolicy()} disabled={isLoading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              刷新
+            </Button>
+          )}
+        />
+      )}
+    >
       <GlassCard className="p-6 space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
@@ -600,6 +603,6 @@ export default function PresentationAIPolicyPage() {
           </GlassCard>
         </div>
       </details>
-    </div>
+    </PolicyPageShell>
   );
 }

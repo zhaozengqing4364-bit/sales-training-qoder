@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -10,6 +11,7 @@ from training_runtime.stepfun_transport import (
     StepFunHealthStatus,
     StepFunSendStatus,
     StepFunTransport,
+    resolve_stepfun_upstream_status_message,
 )
 
 
@@ -24,6 +26,14 @@ class RecordingWebSocket:
 
     async def send_json(self, payload: dict[str, object]) -> None:
         self.messages.append(payload)
+
+
+class SendOnlyWebSocket:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    async def send(self, message: str) -> None:
+        self.messages.append(message)
 
 
 class SendRaisesOSErrorWebSocket:
@@ -51,6 +61,19 @@ async def test_should_ignore_safe_close_errors_when_upstream_is_already_closed()
     transport = StepFunTransport()
 
     await transport.close(CloseRaisesRuntimeErrorWebSocket())
+
+
+@pytest.mark.asyncio
+async def test_should_fallback_to_send_when_upstream_has_no_send_json() -> None:
+    transport = StepFunTransport()
+    websocket = SendOnlyWebSocket()
+    payload = {"type": "session.update", "session": {"voice": "demo"}}
+
+    result = await transport.send_json(websocket, payload)
+
+    assert result.status == StepFunSendStatus.SENT
+    assert len(websocket.messages) == 1
+    assert json.loads(websocket.messages[0]) == payload
 
 
 @pytest.mark.asyncio
@@ -115,6 +138,11 @@ def test_should_drop_audio_append_when_pending_bytes_exceed_backpressure_waterma
     )
 
     assert result.status == StepFunBackpressureStatus.DROP
+
+
+def test_resolve_stepfun_upstream_status_message_for_billing_errors() -> None:
+    assert "402" in resolve_stepfun_upstream_status_message(402)
+    assert "STEPFUN_API_KEY" in resolve_stepfun_upstream_status_message(401)
 
 
 @pytest.mark.parametrize(

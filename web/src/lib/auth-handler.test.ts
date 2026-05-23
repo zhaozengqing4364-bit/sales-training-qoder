@@ -5,6 +5,9 @@ import { authHandler, interruptiveUiInventory } from "./auth-handler";
 describe("authHandler", () => {
     beforeEach(() => {
         vi.restoreAllMocks();
+        vi.useRealTimers();
+        vi.setSystemTime(Date.now() + 5_000);
+        authHandler.resetStateForTests();
     });
 
     it("notifies listeners and schedules a router-aware redirect when session expires", () => {
@@ -13,11 +16,9 @@ describe("authHandler", () => {
         const navigateMock = vi.fn();
         const unsubscribe = authHandler.subscribe(listener);
         const unregisterNavigator = authHandler.setNavigator(navigateMock);
-        const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
 
         authHandler.sessionExpired();
 
-        expect(removeItemSpy).not.toHaveBeenCalled();
         expect(listener).toHaveBeenCalledWith("登录已过期，请重新登录");
         expect(navigateMock).not.toHaveBeenCalled();
 
@@ -32,7 +33,6 @@ describe("authHandler", () => {
 
     it("holds the auth redirect on the shared seam until the router bridge is available", () => {
         vi.useFakeTimers();
-        vi.setSystemTime(new Date(Date.now() + 2_000));
         const listener = vi.fn();
         const navigateMock = vi.fn();
         const unsubscribe = authHandler.subscribe(listener);
@@ -99,17 +99,42 @@ describe("authHandler", () => {
         vi.useRealTimers();
     });
 
-    it("supports silent logout without emitting toast event or clearing local storage", () => {
+    it("clears user-scoped browser storage on logout by default", () => {
+        localStorage.setItem("qoder.login.rememberEmail.v1", "learner@example.com");
+        localStorage.setItem("training_preferences_v1", "{}");
+        localStorage.setItem("theme", "dark");
+
+        authHandler.logout("已退出登录", { notify: false, redirectTo: null });
+
+        expect(localStorage.getItem("qoder.login.rememberEmail.v1")).toBeNull();
+        expect(localStorage.getItem("training_preferences_v1")).toBeNull();
+        expect(localStorage.getItem("theme")).toBe("dark");
+    });
+
+    it("supports silent logout without emitting toast event when client clearing is disabled", () => {
         const listener = vi.fn();
         const unsubscribe = authHandler.subscribe(listener);
         const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
 
-        authHandler.logout("silent", { notify: false });
+        authHandler.logout("silent", { notify: false, clearClientState: false });
 
         expect(removeItemSpy).not.toHaveBeenCalled();
         expect(listener).not.toHaveBeenCalled();
 
         unsubscribe();
+    });
+
+    it("uses a hard redirect when requested", () => {
+        const assignMock = vi.fn();
+        vi.stubGlobal("location", { replace: assignMock });
+
+        authHandler.logout("已退出登录", {
+            redirectTo: "/login",
+            notify: false,
+            hardRedirect: true,
+        });
+
+        expect(assignMock).toHaveBeenCalledWith("/login");
     });
 
     it("tracks cleaned-up interruptive UI seams and the remaining allowed exceptions for slice s02", () => {

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { JsonEditorWithValidation } from "@/components/ui/json-editor-with-validation";
+import { AdminPageHeader, PolicyPageShell } from "@/components/admin/admin-layout-shells";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     BusinessRuleConfigRecord,
@@ -327,7 +328,22 @@ export function GovernedBusinessRulePage({
     }
 
     return (
-        <div className="space-y-8 pb-20">
+        <PolicyPageShell
+            header={(
+                <AdminPageHeader
+                    title={title}
+                    description={description}
+                    primaryAction={(
+                        <Badge variant={activeConfig?.enabled === false ? "orange" : "green"}>
+                            {activeConfig?.enabled === false ? "已禁用" : "已治理"}
+                        </Badge>
+                    )}
+                    secondaryActions={(
+                        <Button variant="outline" onClick={loadRule}>刷新配置</Button>
+                    )}
+                />
+            )}
+        >
             <ConfirmDialog
                 open={!!confirmAction}
                 onOpenChange={(open) => {
@@ -343,21 +359,9 @@ export function GovernedBusinessRulePage({
                 isLoading={busyAction === "publish" || busyAction === "rollback"}
             />
 
-            <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="text-3xl font-black tracking-tight text-slate-900">{title}</h1>
-                        <Badge variant={activeConfig?.enabled === false ? "orange" : "green"}>
-                            {activeConfig?.enabled === false ? "已禁用" : "已治理"}
-                        </Badge>
-                    </div>
-                    <p className="mt-2 max-w-3xl text-sm text-slate-600">{description}</p>
-                    <p className="mt-2 max-w-3xl text-xs text-slate-500">
-                        配置标识：{configKey} · 读取位置：{data?.definition.read_path || "未返回"} · 权限：{data?.definition.permission || "未返回"}
-                    </p>
-                </div>
-                <Button variant="outline" onClick={loadRule}>刷新配置</Button>
-            </header>
+            <p className="text-xs text-slate-500">
+                配置标识：{configKey} · 读取位置：{data?.definition.read_path || "未返回"} · 权限：{data?.definition.permission || "未返回"}
+            </p>
 
             <div className="grid gap-4 lg:grid-cols-3">
                 <GlassCard className="p-5">
@@ -503,6 +507,6 @@ export function GovernedBusinessRulePage({
                     </div>
                 )}
             </GlassCard>
-        </div>
+        </PolicyPageShell>
     );
 }

@@ -69,7 +69,7 @@ describe("AppProviders auth query bridge", () => {
             authHandler.logout("auth-cache-clear-test");
         });
 
-        expect(observedQueryClient?.getQueryData(currentUserQueryKey)).toBeNull();
+        expect(observedQueryClient?.getQueryData(currentUserQueryKey)).toBeUndefined();
         expect(pushMock).not.toHaveBeenCalled();
         expect(replaceMock).not.toHaveBeenCalled();
     });

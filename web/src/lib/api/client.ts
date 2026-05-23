@@ -95,6 +95,7 @@ import {
     PracticeTemplateListResponse,
     PracticeTemplateMutationRequest,
     PracticeTemplateRecord,
+    PracticeTemplateRuntimeDossierPreview,
     PracticeTemplateErrorDetails,
     CaseItemListResponse,
     CaseItemMutationRequest,
@@ -205,6 +206,8 @@ import {
     ExaminerAgentSimulationResponse,
     ExaminerAgentSimulationRequest,
     ExaminerAgentErrorDetails,
+    ContentAssetErrorDetails,
+    TemplateReferenceListResponse,
     LearnerLevel,
     LearnerProfile,
 } from "./types";
@@ -467,6 +470,16 @@ export function getExaminerAgentErrorDetails(error: unknown): ExaminerAgentError
         return null;
     }
     return error.details as ExaminerAgentErrorDetails;
+}
+
+export function getContentAssetErrorDetails(error: unknown): ContentAssetErrorDetails | null {
+    if (!(error instanceof ApiRequestError)) {
+        return null;
+    }
+    if (!error.details || typeof error.details !== "object" || Array.isArray(error.details)) {
+        return null;
+    }
+    return error.details as ContentAssetErrorDetails;
 }
 
 export function getApiErrorMessage(error: unknown): string {
@@ -2830,6 +2843,12 @@ export const api = {
             );
         },
 
+        getPracticeTemplateRuntimeDossierPreview: async (templateId: string) => {
+            return apiFetch<PracticeTemplateRuntimeDossierPreview>(
+                `/admin/curriculum-practice/templates/${encodeURIComponent(templateId)}/runtime-dossier-preview`,
+            );
+        },
+
         createPracticeTemplate: async (payload: Required<PracticeTemplateMutationRequest>) => {
             return apiFetch<PracticeTemplateRecord>(
                 "/admin/curriculum-practice/templates",
@@ -2903,6 +2922,35 @@ export const api = {
             );
         },
 
+        getCaseItem: async (caseItemId: string) => {
+            return apiFetch<CaseItemRecord>(
+                `/admin/curriculum-practice/case-items/${encodeURIComponent(caseItemId)}`,
+            );
+        },
+
+        duplicateCaseItem: async (caseItemId: string) => {
+            return apiFetch<CaseItemRecord>(
+                `/admin/curriculum-practice/case-items/${encodeURIComponent(caseItemId)}/duplicate`,
+                { method: "POST" },
+            );
+        },
+
+        unpublishCaseItem: async (caseItemId: string, acknowledge = false) => {
+            return apiFetch<CaseItemRecord>(
+                `/admin/curriculum-practice/case-items/${encodeURIComponent(caseItemId)}/unpublish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ acknowledge }),
+                },
+            );
+        },
+
+        getCaseItemTemplateReferences: async (caseItemId: string) => {
+            return apiFetch<TemplateReferenceListResponse>(
+                `/admin/curriculum-practice/case-items/${encodeURIComponent(caseItemId)}/template-references`,
+            );
+        },
+
         listRoleProfiles: async (filters?: { status?: string; query?: string }) => {
             const searchParams = new URLSearchParams();
             if (filters?.status && filters.status !== "all") searchParams.set("status", filters.status);
@@ -2952,6 +3000,35 @@ export const api = {
             );
         },
 
+        getRoleProfile: async (roleProfileId: string) => {
+            return apiFetch<RoleProfileRecord>(
+                `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}`,
+            );
+        },
+
+        duplicateRoleProfile: async (roleProfileId: string) => {
+            return apiFetch<RoleProfileRecord>(
+                `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}/duplicate`,
+                { method: "POST" },
+            );
+        },
+
+        unpublishRoleProfile: async (roleProfileId: string, acknowledge = false) => {
+            return apiFetch<RoleProfileRecord>(
+                `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}/unpublish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ acknowledge }),
+                },
+            );
+        },
+
+        getRoleProfileTemplateReferences: async (roleProfileId: string) => {
+            return apiFetch<TemplateReferenceListResponse>(
+                `/admin/curriculum-practice/role-profiles/${encodeURIComponent(roleProfileId)}/template-references`,
+            );
+        },
+
         listExaminerAgents: async (status?: string) => {
             const searchParams = new URLSearchParams();
             if (status && status !== "all") searchParams.set("status", status);
@@ -2998,6 +3075,29 @@ export const api = {
             return apiFetch<ExaminerAgentRecord>(
                 `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}/archive`,
                 { method: "POST" },
+            );
+        },
+
+        duplicateExaminerAgent: async (examinerAgentId: string) => {
+            return apiFetch<ExaminerAgentRecord>(
+                `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}/duplicate`,
+                { method: "POST" },
+            );
+        },
+
+        unpublishExaminerAgent: async (examinerAgentId: string, acknowledge = false) => {
+            return apiFetch<ExaminerAgentRecord>(
+                `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}/unpublish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ acknowledge }),
+                },
+            );
+        },
+
+        getExaminerAgentTemplateReferences: async (examinerAgentId: string) => {
+            return apiFetch<TemplateReferenceListResponse>(
+                `/admin/curriculum-practice/examiner-agents/${encodeURIComponent(examinerAgentId)}/template-references`,
             );
         },
 

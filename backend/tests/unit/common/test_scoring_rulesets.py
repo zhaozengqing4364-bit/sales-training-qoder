@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
 
 from common.effectiveness.scoring_rulesets import (
+    SCORING_RULESET_SCHEMA_VERSION,
     SCORING_RULESET_SCORE_BASIS,
     ScoringDimensionRule,
     ScoringRulesetDefinition,
@@ -94,6 +96,66 @@ def test_ruleset_definition_rejects_unknown_dimension_for_scenario() -> None:
             scenario_type="sales",
             dimensions=[bad_dimension, *default_definition.dimensions[1:]],
         )
+
+
+def test_ruleset_definition_accepts_governed_roleplay_metadata() -> None:
+    default_definition = ScoringRulesetService.build_default_definition("sales")
+
+    definition = ScoringRulesetDefinition(
+        scenario_type="sales",
+        dimensions=default_definition.dimensions,
+        hidden_information_coverage=[
+            {
+                "key": "decision_chain",
+                "name": "决策链",
+                "expected_trigger": "询问谁负责、谁审批、谁参与推进",
+                "evidence": "销售 VP 和 HR 培训负责人参与后续试点评审",
+                "dimension": "evidence_usage",
+            }
+        ],
+        deductions=["未确认客户现状就讲产品"],
+        passing_score=70,
+        rubric="先问清现状，再映射价值。",
+        roleplay_contract_version="presales-cio-first-visit-roleplay-contract-v1",
+    )
+
+    payload = definition.model_dump(mode="json")
+
+    assert payload["schema_version"] == SCORING_RULESET_SCHEMA_VERSION
+    assert payload["hidden_information_coverage"][0]["key"] == "decision_chain"
+    assert payload["deductions"] == ["未确认客户现状就讲产品"]
+    assert payload["passing_score"] == 70
+    assert (
+        payload["roleplay_contract_version"]
+        == "presales-cio-first-visit-roleplay-contract-v1"
+    )
+
+
+def test_view_from_model_falls_back_when_legacy_definition_is_invalid() -> None:
+    row = SimpleNamespace(
+        ruleset_id="legacy-ruleset-1",
+        scenario_type="sales",
+        version="legacy-freeform-v1",
+        display_name="Legacy Freeform Ruleset",
+        description="old freeform row",
+        status="published",
+        definition_json={"scenario_type": "sales"},
+        is_active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+        published_at=datetime.now(UTC),
+    )
+
+    view = ScoringRulesetService.view_from_model(row)  # type: ignore[arg-type]
+
+    assert view.ruleset_id == "legacy-ruleset-1"
+    assert view.version == "legacy-freeform-v1"
+    assert view.status == "published"
+    assert view.is_active is True
+    assert view.source == "admin"
+    assert view.definition.schema_version == SCORING_RULESET_SCHEMA_VERSION
+    assert view.definition.scenario_type == "sales"
+    assert view.definition.dimensions
 
 
 def test_dry_run_compare_uses_candidate_weights_without_mutating_history() -> None:

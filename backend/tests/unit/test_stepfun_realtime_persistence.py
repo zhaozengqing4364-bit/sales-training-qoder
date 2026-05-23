@@ -9,9 +9,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-import common.api.practice as practice_api
 from common.db.models import PracticeSession
 from common.error_handling.result import Result
+from common.services import practice_session_service as practice_service
+from common.services.practice_session_service import (
+    PracticeSessionLifecycleApplicationService,
+)
 from common.websocket.session_state_service import SessionStateSnapshot
 from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
@@ -488,7 +491,7 @@ async def test_sync_sales_realtime_terminal_evidence_uses_latest_message_score_s
         )
     )
 
-    source = await practice_api._sync_sales_realtime_terminal_evidence(
+    source = await practice_service._sync_sales_realtime_terminal_evidence(
         session_id=session.session_id,
         session=session,
         db=db,
@@ -535,25 +538,31 @@ async def test_prepare_terminal_lifecycle_result_marks_stepfun_session_not_evalu
     logger_info = MagicMock()
 
     monkeypatch.setattr(
-        practice_api,
+        practice_service,
         "_sync_sales_realtime_terminal_evidence",
         sync_evidence_mock,
     )
-    monkeypatch.setattr(practice_api.summary_service, "generate_summary", summary_mock)
-    monkeypatch.setattr(practice_api.sales_bot_service, "end_session", cleanup_mock)
     monkeypatch.setattr(
-        practice_api,
-        "_ensure_effectiveness_snapshot",
+        practice_service.summary_service,
+        "generate_summary",
+        summary_mock,
+    )
+    monkeypatch.setattr(practice_service.sales_bot_service, "end_session", cleanup_mock)
+    monkeypatch.setattr(
+        practice_service,
+        "ensure_effectiveness_snapshot",
         lambda current_session: current_session.effectiveness_snapshot,
     )
-    monkeypatch.setattr(practice_api.logger, "info", logger_info)
+    monkeypatch.setattr(practice_service.logger, "info", logger_info)
+    lifecycle_app = PracticeSessionLifecycleApplicationService(
+        MagicMock(),
+        lifecycle_service=lifecycle_service,
+    )
 
-    result = await practice_api._prepare_terminal_lifecycle_result(
+    result = await lifecycle_app._prepare_terminal_lifecycle_result(
         session_id=session_id,
         session=session,
         scenario_type="sales",
-        lifecycle_service=lifecycle_service,
-        db=MagicMock(),
     )
 
     assert result.summary is None

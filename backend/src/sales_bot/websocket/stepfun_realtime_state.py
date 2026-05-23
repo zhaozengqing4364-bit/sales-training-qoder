@@ -100,11 +100,19 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     _pending_response_after_commit: bool
     _awaiting_transcription_after_commit: bool
     _allow_late_transcription_response: bool
+    _received_binary_audio_frame_count: int
     _pending_response_timeout_task: asyncio.Task[Any] | None
     _pending_response_generation: int
     _pending_response_lock: asyncio.Lock
     _pending_tool_followup_response: bool
     _has_uncommitted_audio: bool
+    _input_audio_quality_sample_count: int
+    _input_audio_quality_sum_squares: int
+    _input_audio_quality_peak_abs: int
+    _input_audio_quality_zero_count: int
+    _input_audio_quality_frame_count: int
+    _input_audio_quality_payload_bytes: int
+    _input_audio_quality_odd_payload_frames: int
     _grounding_preparation_in_progress: bool
     _last_final_transcript_text: str
     _last_final_transcript_turn: int | None
@@ -125,6 +133,7 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     _upstream_keepalive_enabled: bool
     _upstream_keepalive_interval_seconds: float
     _upstream_keepalive_pong_timeout_seconds: float
+    _upstream_proactive_refresh_idle_seconds: float
     _upstream_keepalive_task: asyncio.Task[Any] | None
     _upstream_connected_at: float
     _upstream_last_activity_at: float

@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend task entry point: seed/database implementation must follow backend guidelines."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Implementation will write database seed/config data using SQLAlchemy async patterns."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Implementation must run focused verification and avoid forbidden patterns."}
+{"file":".trellis/tasks/05-21-presales-cio-closed-loop/research/codebase-surfaces.md","reason":"Maps existing Agent/Persona/Knowledge/TestBank/Scoring/Learning surfaces for the scenario."}
+{"file":".trellis/tasks/05-21-presales-cio-closed-loop/research/scenario-build-plan.md","reason":"Defines the manufacturing CIO scenario assets, rubric, path, and acceptance checklist."}

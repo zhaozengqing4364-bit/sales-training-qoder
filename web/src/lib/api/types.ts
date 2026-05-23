@@ -455,6 +455,39 @@ export interface PracticeTemplateListResponse {
     total: number;
 }
 
+export type RuntimeDossierStatus = "passed" | "failed" | "warning" | string;
+
+export interface RuntimeDossierConsistencyCheck {
+    key: string;
+    status: RuntimeDossierStatus;
+    message: string;
+    details?: Record<string, unknown>;
+}
+
+export interface RuntimeDossierConsistency {
+    status: RuntimeDossierStatus;
+    checks: RuntimeDossierConsistencyCheck[];
+}
+
+export interface RuntimeDossierProbeResult {
+    key: string;
+    prompt: string;
+    expected_behavior: string;
+    status: RuntimeDossierStatus;
+    matched_evidence: string[];
+    source_assets: string[];
+}
+
+export interface PracticeTemplateRuntimeDossierPreview {
+    template_id: string;
+    name: string;
+    generated_at: string;
+    summary: Record<string, unknown>;
+    sections: Record<string, Record<string, unknown>>;
+    consistency: RuntimeDossierConsistency;
+    probes: RuntimeDossierProbeResult[];
+}
+
 export interface PracticeTemplateErrorDetails {
     gate_results?: PracticeTemplateGateResult[];
 }
@@ -497,6 +530,21 @@ export interface CaseItemRecord {
 export interface CaseItemListResponse {
     items: CaseItemRecord[];
     total: number;
+}
+
+export interface TemplateReferenceItem {
+    template_id: string;
+    name: string;
+    status: string;
+}
+
+export interface TemplateReferenceListResponse {
+    items: TemplateReferenceItem[];
+    total: number;
+}
+
+export interface ContentAssetErrorDetails {
+    referencing_templates?: TemplateReferenceItem[];
 }
 
 export interface CaseItemMutationRequest {
@@ -4283,4 +4331,5 @@ export interface ExaminerAgentSimulationRequest {
 
 export interface ExaminerAgentErrorDetails {
     gate_results?: ExaminerAgentGateResult[];
+    referencing_templates?: TemplateReferenceItem[];
 }

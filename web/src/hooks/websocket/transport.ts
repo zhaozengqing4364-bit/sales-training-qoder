@@ -129,6 +129,15 @@ export function resolvePracticeWebSocketAuthToken(): string | null {
     return legacyToken || null;
 }
 
+/** First handshake never completed — retrying usually means backend down or uvicorn --reload. */
+export function shouldFailFastOnHandshake1006(
+    closeCode: number,
+    hasOpenedOnce: boolean,
+    reconnectAttempt: number,
+): boolean {
+    return closeCode === 1006 && !hasOpenedOnce && reconnectAttempt === 0;
+}
+
 export function shouldTreatAsAbnormalCloseBurst(
     closeCode: number,
     recentCloseTimestampsMs: number[],

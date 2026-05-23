@@ -74,8 +74,25 @@ def test_tool_policy_resolver_keeps_bound_kb_internal_only():
 
     assert resolved["enable_internal_retrieval"] is True
     assert resolved["enable_web_search"] is False
-    assert resolved["retrieval_priority"] == "kb_only"
+    assert resolved["retrieval_priority"] == "balanced"
     assert source["tool_policy_enforcement"] == "kb_internal_only"
+
+
+def test_tool_policy_resolver_kb_only_only_when_kb_lock_enabled():
+    source: dict[str, str] = {}
+    resolved = ToolPolicyResolver.apply_runtime_enforcement(
+        {
+            **DEFAULT_TOOL_POLICY,
+            "require_kb_grounding": True,
+            "retrieval_priority": "kb_first",
+        },
+        has_bound_knowledge_base=True,
+        source=source,
+    )
+
+    assert resolved["require_kb_grounding"] is True
+    assert resolved["retrieval_priority"] == "kb_only"
+    assert source["tool_policy_enforcement"] == "kb_lock_enforced"
 
 
 @pytest.mark.asyncio
@@ -341,6 +358,7 @@ async def test_resolve_effective_policy_respects_explicit_disable_kb_lock(
     )
 
     assert effective["tool_policy"]["require_kb_grounding"] is False
+    assert effective["tool_policy"]["retrieval_priority"] == "kb_first"
     assert effective["source"]["tool_policy_enforcement"] == "kb_internal_only"
     assert "kb_lock_default" not in effective["source"]
 

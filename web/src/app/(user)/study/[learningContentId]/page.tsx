@@ -89,6 +89,8 @@ export default function StudyPage() {
         currentChapterIndex >= 0 && currentChapterIndex < sortedChapters.length - 1
             ? sortedChapters[currentChapterIndex + 1]
             : null;
+    const previousChapter =
+        currentChapterIndex > 0 ? sortedChapters[currentChapterIndex - 1] : null;
 
     const loadContent = useCallback(async () => {
         setIsLoading(true);
@@ -201,7 +203,10 @@ export default function StudyPage() {
     }
 
     const isCompleted = progress?.is_completed ?? false;
-    const showExamCTA = progress?.state === "completed";
+    const selectedChapterCompleted = selectedChapter
+        ? completedIds.has(selectedChapter.chapter_id)
+        : false;
+    const isLastChapter = selectedChapter !== null && nextChapter === null;
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -308,33 +313,85 @@ export default function StudyPage() {
                                 </div>
                             ) : null}
 
-                            <div className="mt-6 flex items-center gap-3 border-t border-slate-100 pt-4">
-                                {completedIds.has(selectedChapter.chapter_id) ? (
-                                    <span className="text-sm text-slate-400">本章已完成</span>
-                                ) : (
-                                    <Button
-                                        onClick={() => void handleCompleteChapter(selectedChapter.chapter_id)}
-                                        disabled={completingId === selectedChapter.chapter_id}
-                                        isLoading={completingId === selectedChapter.chapter_id}
-                                        className="rounded-full"
-                                    >
-                                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                                        标记完成
-                                    </Button>
-                                )}
-                            </div>
-
-                            {nextChapter ? (
-                                <div className="mt-4 border-t border-slate-100 pt-4">
-                                    <Button
-                                        onClick={() => setSelectedChapterId(nextChapter.chapter_id)}
-                                        className="rounded-full"
-                                    >
-                                        <ArrowRight className="mr-2 h-4 w-4" />
-                                        下一章：{nextChapter.title}
-                                    </Button>
+                            {examError && isLastChapter ? (
+                                <div role="alert" className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                    {examError}
                                 </div>
                             ) : null}
+
+                            <div className="mt-6 border-t border-slate-100 pt-4">
+                                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => router.push("/learning-path")}
+                                            className="rounded-full"
+                                        >
+                                            <ArrowLeft className="mr-2 h-4 w-4" />
+                                            返回学习路径
+                                        </Button>
+                                        {previousChapter ? (
+                                            <Button
+                                                variant="secondary"
+                                                onClick={() => setSelectedChapterId(previousChapter.chapter_id)}
+                                                className="rounded-full"
+                                            >
+                                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                                上一章：{previousChapter.title}
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                                        {selectedChapterCompleted ? (
+                                            <span className="rounded-full bg-slate-50 px-4 py-2 text-sm text-slate-500">
+                                                本章已完成
+                                            </span>
+                                        ) : (
+                                            <Button
+                                                onClick={() => void handleCompleteChapter(selectedChapter.chapter_id)}
+                                                disabled={completingId === selectedChapter.chapter_id}
+                                                isLoading={completingId === selectedChapter.chapter_id}
+                                                className="rounded-full"
+                                            >
+                                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                                标记完成
+                                            </Button>
+                                        )}
+                                        {nextChapter ? (
+                                            <Button
+                                                onClick={() => setSelectedChapterId(nextChapter.chapter_id)}
+                                                className="rounded-full"
+                                            >
+                                                <ArrowRight className="mr-2 h-4 w-4" />
+                                                下一章：{nextChapter.title}
+                                            </Button>
+                                        ) : isCompleted ? (
+                                            <Button
+                                                onClick={() => void handleStartExam()}
+                                                disabled={isStartingExam}
+                                                isLoading={isStartingExam}
+                                                className="rounded-full"
+                                            >
+                                                <ArrowRight className="mr-2 h-4 w-4" />
+                                                下一步：开始 AI 考核
+                                            </Button>
+                                        ) : (
+                                            <Button variant="secondary" disabled className="rounded-full">
+                                                完成全部章节后解锁下一步
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                                {isLastChapter && isCompleted ? (
+                                    <p className="mt-3 text-sm text-emerald-700">
+                                        全部章节已完成，可以进入 AI 考官考核。
+                                    </p>
+                                ) : isLastChapter ? (
+                                    <p className="mt-3 text-sm text-slate-500">
+                                        需要完成全部章节后才能进入 AI 考官考核。
+                                    </p>
+                                ) : null}
+                            </div>
                         </GlassCard>
                     ) : (
                         <GlassCard className="p-8 text-center">
@@ -342,13 +399,13 @@ export default function StudyPage() {
                         </GlassCard>
                     )}
 
-                    {showExamCTA && (
+                    {isCompleted && !isLastChapter ? (
                         <GlassCard className="p-6 border border-emerald-100 bg-emerald-50/80">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <h3 className="text-lg font-bold text-emerald-800">学习完成</h3>
                                     <p className="text-sm text-emerald-600">
-                                        你已阅读完所有章节。现在可以进入 AI 考官考核。
+                                        你已阅读完所有章节，也可以直接进入 AI 考官考核。
                                     </p>
                                     {examError ? (
                                         <div role="alert" className="mt-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -366,7 +423,7 @@ export default function StudyPage() {
                                 </Button>
                             </div>
                         </GlassCard>
-                    )}
+                    ) : null}
                 </div>
             </div>
         </div>

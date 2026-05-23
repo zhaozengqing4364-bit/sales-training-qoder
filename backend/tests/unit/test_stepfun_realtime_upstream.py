@@ -31,6 +31,7 @@ class FakeUpstream(StepFunRealtimeUpstreamMixin):
     def __init__(self, transport: FakeTransport, upstream_ws: Any | None) -> None:
         self._stepfun_transport = transport
         self.upstream_ws = upstream_ws
+        self.session_id = "session-1"
         self.activity_marks = 0
 
     def _mark_upstream_activity(self) -> None:
@@ -76,9 +77,14 @@ class CommitRespondingUpstream(FakeUpstream):
         self.session_id = "session-1"
         self._has_uncommitted_audio = False
         self.scheduled_responses = 0
+        self.created_responses = 0
 
     async def _schedule_response_after_commit(self) -> None:
         self.scheduled_responses += 1
+
+    async def _create_response_from_pending_commit(self) -> bool:
+        self.created_responses += 1
+        return True
 
 
 class AudioForwardingUpstream(FakeUpstream):
@@ -98,6 +104,24 @@ class AudioForwardingUpstream(FakeUpstream):
 
     async def _send_status(self, status: str) -> None:
         self.statuses.append(status)
+
+
+class IdleTimeoutRecoveringUpstream(FakeUpstream):
+    def __init__(self, transport: FakeTransport, upstream_ws: Any | None) -> None:
+        super().__init__(transport, upstream_ws)
+        self.session_id = "session-1"
+        self.recover_calls: list[str] = []
+        self.sent_errors: list[tuple[str, str]] = []
+
+    def _compute_upstream_ws_lifetime_ms(self) -> float | None:
+        return 61000.0
+
+    async def _refresh_upstream_for_next_input(self, reason: str) -> bool:
+        self.recover_calls.append(reason)
+        return True
+
+    async def _send_error(self, code: str, message: str) -> None:
+        self.sent_errors.append((code, message))
 
 
 class FakeVoiceRuntimeProfile:
@@ -207,6 +231,7 @@ async def test_upstream_commit_and_respond_commits_audio_flow_input() -> None:
     assert transport.calls[0][1] == {"type": "input_audio_buffer.commit"}
     assert upstream._has_uncommitted_audio is False
     assert upstream.scheduled_responses == 1
+    assert upstream.created_responses == 0
 
 
 @pytest.mark.asyncio
@@ -232,6 +257,24 @@ async def test_upstream_forward_audio_delta_appends_output_audio_without_payload
         "playback_rate": 1.25,
     }
     assert audio_flow.output_audio == ["AAECAw=="]
+
+
+@pytest.mark.asyncio
+async def test_upstream_idle_timeout_error_refreshes_connection_before_forwarding_error() -> None:
+    transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
+    upstream = IdleTimeoutRecoveringUpstream(transport, object())
+
+    await upstream._handle_upstream_error(
+        {"type": "error", "error": {"message": "too long without operation"}}
+    )
+
+    assert upstream.recover_calls == ["upstream_idle_timeout_error"]
+    assert upstream.sent_errors == [
+        (
+            "[STEPFUN_UPSTREAM_RECOVERED]",
+            "Realtime 上游连接已从空闲超时中恢复，请重新发送这一轮内容。",
+        )
+    ]
 
 
 def test_upstream_builds_tools_through_tool_execution_module() -> None:

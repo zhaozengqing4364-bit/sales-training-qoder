@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
+import { AdminPageHeader, PolicyPageShell } from "@/components/admin/admin-layout-shells";
 import { api, ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
 import type {
     AdminAiGovernanceExplainabilityResponse,
@@ -287,20 +288,17 @@ export default function AdminGovernancePage() {
     };
 
     return (
-        <div className="space-y-8 pb-20">
-            <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <h1 className="text-3xl font-black tracking-tight text-slate-900">治理矩阵</h1>
-                    <p className="mt-2 max-w-3xl text-sm text-slate-600">
-                        查看 admin route 权限矩阵、support redaction boundary 和系统设置 backlog。
-                        这里是治理态势面，不是设置编辑面。
-                    </p>
-                </div>
-                {activeTab === "governance" ? (
-                    <Button variant="outline" onClick={loadGovernance}>刷新治理信息</Button>
-                ) : null}
-            </header>
-
+        <PolicyPageShell
+            header={(
+                <AdminPageHeader
+                    title="治理矩阵"
+                    description="查看 admin route 权限矩阵、support redaction boundary 和系统设置 backlog。这里是治理态势面，不是设置编辑面。"
+                    secondaryActions={activeTab === "governance" ? (
+                        <Button variant="outline" onClick={loadGovernance}>刷新治理信息</Button>
+                    ) : undefined}
+                />
+            )}
+        >
             <nav className="flex gap-1 rounded-2xl border border-slate-200 bg-slate-100/80 p-1">
                 <button
                     type="button"
@@ -444,6 +442,6 @@ export default function AdminGovernancePage() {
                     {renderExplainabilityContent()}
                 </div>
             )}
-        </div>
+        </PolicyPageShell>
     );
 }

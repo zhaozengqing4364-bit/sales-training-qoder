@@ -4,6 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
+- **[AGENTS.md](../../AGENTS.md)** — L0 工程宪章（原则、AI 协作、运行时守则）。
 - **`CONTEXT.md`** at the repo root if it exists.
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in.
 

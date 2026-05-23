@@ -164,6 +164,33 @@ def test_compile_base_contract_uses_structured_customer_pressure_contract():
     assert "你拿什么证明这个 ROI 不是口号" in compiled.base_instructions
 
 
+def test_compile_base_contract_adds_question_triggered_disclosure_rules():
+    policy = {
+        "persona_policy": {
+            "system_prompt": "你是制造业 CIO，掌握复杂公司背景。",
+        },
+        "customer_pressure": {
+            "hidden_information_disclosure": "question_triggered",
+            "challenge_premature_pitch": True,
+            "question_strategy": "single_issue",
+            "objection_axes": ["integration_risk"],
+        },
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "require_kb_grounding": False,
+            "max_questions_per_turn": 1,
+        },
+    }
+
+    compiled = VoiceInstructionCompiler.compile_base_contract(policy=policy)
+
+    assert "隐藏信息只能在销售问到对应主题后分阶段披露" in compiled.base_instructions
+    assert "不要主动完整列出公司现状" in compiled.base_instructions
+    assert "最多披露一个表层顾虑" in compiled.base_instructions
+    assert "你还没了解我们现状，为什么认为适合" in compiled.base_instructions
+    assert "每次只选择一个最关键的主问题" in compiled.base_instructions
+
+
 def test_enforce_question_limit_trims_extra_questions_without_appending_template_copy():
     text = "你知道实习是什么吗？它有哪些功能？适合谁用？"
 

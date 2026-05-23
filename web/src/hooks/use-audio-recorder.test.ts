@@ -112,6 +112,72 @@ function int16ArrayToBase64(int16Array: Int16Array): string {
   return btoa(binary)
 }
 
+function summarizeFloatAudio(samples: Float32Array) {
+  if (samples.length === 0) {
+    return {
+      sampleCount: 0,
+      maxAbs: 0,
+      rms: 0,
+      zeroRatio: 0,
+    }
+  }
+
+  let maxAbs = 0
+  let sumSquares = 0
+  let zeroCount = 0
+  for (let i = 0; i < samples.length; i++) {
+    const sample = samples[i]
+    const abs = Math.abs(sample)
+    if (abs > maxAbs) {
+      maxAbs = abs
+    }
+    if (sample === 0) {
+      zeroCount++
+    }
+    sumSquares += sample * sample
+  }
+
+  return {
+    sampleCount: samples.length,
+    maxAbs: Number(maxAbs.toFixed(4)),
+    rms: Number(Math.sqrt(sumSquares / samples.length).toFixed(4)),
+    zeroRatio: Number((zeroCount / samples.length).toFixed(4)),
+  }
+}
+
+function summarizePCM16Audio(samples: Int16Array) {
+  if (samples.length === 0) {
+    return {
+      sampleCount: 0,
+      peakAbs: 0,
+      rms: 0,
+      zeroRatio: 0,
+    }
+  }
+
+  let peakAbs = 0
+  let sumSquares = 0
+  let zeroCount = 0
+  for (let i = 0; i < samples.length; i++) {
+    const sample = samples[i]
+    const abs = Math.abs(sample)
+    if (abs > peakAbs) {
+      peakAbs = abs
+    }
+    if (sample === 0) {
+      zeroCount++
+    }
+    sumSquares += sample * sample
+  }
+
+  return {
+    sampleCount: samples.length,
+    peakAbs,
+    rms: Number(Math.sqrt(sumSquares / samples.length).toFixed(2)),
+    zeroRatio: Number((zeroCount / samples.length).toFixed(4)),
+  }
+}
+
 describe('Audio Processing Utilities', () => {
   describe('resample', () => {
     it('should return same data when sample rates match', () => {
@@ -186,6 +252,34 @@ describe('Audio Processing Utilities', () => {
       const decoded = new Int16Array(bytes.buffer)
       
       expect(decoded).toEqual(input)
+    })
+  })
+
+  describe('audio quality summaries', () => {
+    it('summarizes Float32 audio without exposing raw samples', () => {
+      const result = summarizeFloatAudio(new Float32Array([0, 0.5, -0.5, 1]))
+
+      expect(result).toEqual({
+        sampleCount: 4,
+        maxAbs: 1,
+        rms: 0.6124,
+        zeroRatio: 0.25,
+      })
+      expect(result).not.toHaveProperty('samples')
+      expect(result).not.toHaveProperty('payload')
+    })
+
+    it('summarizes PCM16 audio without exposing raw samples', () => {
+      const result = summarizePCM16Audio(new Int16Array([0, 1000, -1000, 32767, -32768]))
+
+      expect(result).toEqual({
+        sampleCount: 5,
+        peakAbs: 32768,
+        rms: 20733.64,
+        zeroRatio: 0.2,
+      })
+      expect(result).not.toHaveProperty('samples')
+      expect(result).not.toHaveProperty('payload')
     })
   })
 })

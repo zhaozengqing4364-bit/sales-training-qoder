@@ -20,7 +20,12 @@ import { RunHistory } from "./run-history/run-history";
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function KnowledgeAnswerConsole() {
+interface KnowledgeAnswerConsoleProps {
+    /** When true, hides save controls and disables editing (KB detail preview). */
+    readOnly?: boolean;
+}
+
+export function KnowledgeAnswerConsole({ readOnly = false }: KnowledgeAnswerConsoleProps) {
     const toast = useToast();
 
     /* ── State ── */
@@ -55,6 +60,7 @@ export function KnowledgeAnswerConsole() {
 
     /* ── Save global config ── */
     const handleSave = async () => {
+        if (readOnly) return;
         if (!selectedVersionId) {
             toast.error("请先选择一个版本");
             return;
@@ -77,19 +83,26 @@ export function KnowledgeAnswerConsole() {
     return (
         <div className="space-y-6">
             <div>
-                <h2 className="text-lg font-bold text-slate-900">知识问答配置（全局）</h2>
-                <p className="mt-1 text-sm text-slate-500">当前作用于知识问答引擎的全局 active 配置，入口挂在知识库详情页，便于联动排查。</p>
+                <h2 className="text-lg font-bold text-slate-900">
+                    {readOnly ? "全局检索策略预览（只读）" : "知识问答配置（全局）"}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                    {readOnly
+                        ? "此处仅预览当前全局 active 配置。修改请前往检索策略页，避免误以为在编辑当前知识库专属策略。"
+                        : "当前作用于全部知识库检索的全局 active 配置。"}
+                </p>
             </div>
 
             {/* 1. Overview */}
             <ConfigOverview config={config} />
 
             {/* 2. Version selector row */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className={`flex flex-wrap items-center gap-3 ${readOnly ? "pointer-events-none opacity-80" : ""}`}>
                 <select
                     aria-label="切换 active config version"
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
                     value={selectedVersionId}
+                    disabled={readOnly}
                     onChange={(e) => setSelectedVersionId(e.target.value)}
                 >
                     <option value="">选择版本…</option>
@@ -101,46 +114,54 @@ export function KnowledgeAnswerConsole() {
                     ))}
                 </select>
 
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full"
-                    onClick={() => setShowVersionManager(true)}
-                >
-                    <Settings2 className="mr-1.5 h-3.5 w-3.5" />
-                    管理版本
-                </Button>
+                {!readOnly ? (
+                    <>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full"
+                            onClick={() => setShowVersionManager(true)}
+                        >
+                            <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+                            管理版本
+                        </Button>
 
-                <Button
-                    size="sm"
-                    className="rounded-full"
-                    disabled={isSaving || !selectedVersionId}
-                    onClick={handleSave}
-                >
-                    {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                    保存全局配置
-                </Button>
+                        <Button
+                            size="sm"
+                            className="rounded-full"
+                            disabled={isSaving || !selectedVersionId}
+                            onClick={handleSave}
+                        >
+                            {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                            保存全局配置
+                        </Button>
+                    </>
+                ) : null}
             </div>
 
-            {/* 3. Pipeline tabs */}
-            <PipelineTabs versionId={selectedVersionId || null} />
+            <div className={readOnly ? "pointer-events-none select-none opacity-90" : ""}>
+                {/* 3. Pipeline tabs */}
+                <PipelineTabs versionId={selectedVersionId || null} />
 
-            {/* 4. Collapsible: Debug panel */}
-            <CollapsibleSection title="调试面板" open={debugOpen} onToggle={() => setDebugOpen(!debugOpen)}>
-                <DebugPanel />
-            </CollapsibleSection>
+                {/* 4. Collapsible: Debug panel */}
+                <CollapsibleSection title="调试面板" open={debugOpen} onToggle={() => setDebugOpen(!debugOpen)}>
+                    <DebugPanel />
+                </CollapsibleSection>
 
-            {/* 5. Collapsible: Run history */}
-            <CollapsibleSection title="运行记录" open={historyOpen} onToggle={() => setHistoryOpen(!historyOpen)}>
-                <RunHistory />
-            </CollapsibleSection>
+                {/* 5. Collapsible: Run history */}
+                <CollapsibleSection title="运行记录" open={historyOpen} onToggle={() => setHistoryOpen(!historyOpen)}>
+                    <RunHistory />
+                </CollapsibleSection>
+            </div>
 
             {/* Version manager modal */}
-            <VersionManager
-                open={showVersionManager}
-                onOpenChange={setShowVersionManager}
-                onVersionChange={loadData}
-            />
+            {!readOnly ? (
+                <VersionManager
+                    open={showVersionManager}
+                    onOpenChange={setShowVersionManager}
+                    onVersionChange={loadData}
+                />
+            ) : null}
         </div>
     );
 }

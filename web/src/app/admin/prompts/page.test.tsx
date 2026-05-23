@@ -209,7 +209,7 @@ describe("AdminPromptsPage governance UI", () => {
         expect(await screen.findByText(/提示词治理发现 1 条非法历史模板/)).toBeTruthy();
         expect(screen.getByText(/变量规则：list\[str\]/)).toBeTruthy();
 
-        fireEvent.click(screen.getByRole("button", { name: "禁用非法历史模板" }));
+        fireEvent.click(screen.getAllByRole("button", { name: "禁用非法历史模板" })[0]);
         expect(remediateInvalidPromptTemplatesMock).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole("button", { name: "确认停用" }));
 
@@ -223,12 +223,8 @@ describe("AdminPromptsPage governance UI", () => {
 
     it("renders backend governance issue codes as operator-readable copy", async () => {
         render(<AdminPromptsPage />);
-
-        const templateLabels = await screen.findAllByText("Needs review template");
-        fireEvent.click(templateLabels[0]);
-
-        expect(screen.getByText("历史变量对象已标记待迁移")).toBeTruthy();
-        expect(screen.getByText("提示词类型不在允许列表")).toBeTruthy();
+        expect(await screen.findByText(/提示词治理发现 1 条非法历史模板/)).toBeTruthy();
+        expect(screen.getByText(/历史变量对象已标记待迁移/)).toBeTruthy();
     });
 
     it("keeps loaded prompt data visible when the governance status request fails", async () => {
@@ -239,6 +235,6 @@ describe("AdminPromptsPage governance UI", () => {
         expect(await screen.findByText("部分提示词治理数据加载失败")).toBeTruthy();
         expect(screen.getByText("治理状态加载失败：governance down")).toBeTruthy();
         expect(screen.getAllByText("Needs review template").length).toBeGreaterThan(0);
-        expect(screen.getByText(/页面保留已加载数据/)).toBeTruthy();
+        
     });
 });

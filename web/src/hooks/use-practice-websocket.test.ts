@@ -92,7 +92,7 @@ function emitJsonMessage(ws: MockWebSocket, payload: unknown) {
 
 describe("usePracticeWebSocket reconnect lifecycle", () => {
     beforeEach(() => {
-        vi.useFakeTimers();
+        vi.useFakeTimers({ shouldAdvanceTime: true });
         MockWebSocket.instances = [];
         unstableStreamingPlayerMode = false;
         mockAudioQueueRef.current = [];
@@ -191,7 +191,7 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         }));
     });
 
-    it("switches to reconnecting when abnormal close triggers retry", () => {
+    it("switches to reconnecting when abnormal close triggers retry after a successful open", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({
                 sessionId: "session-1",
@@ -203,10 +203,35 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(ws).toBeDefined();
 
         act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+        });
+
+        act(() => {
             ws?.emitClose(1006, "abnormal-close");
         });
 
         expect((result.current as unknown as { connectionState?: string }).connectionState).toBe("reconnecting");
+    });
+
+    it("fails fast when handshake closes with 1006 before open", () => {
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-handshake-fail",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            ws?.emitClose(1006, "");
+        });
+
+        expect(result.current.connectionState).toBe("failed");
+        expect(result.current.error).toContain("无法建立语音连接（1006）");
     });
 
     it("fails fast after repeated abnormal close bursts", () => {
@@ -218,18 +243,26 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         );
 
         for (let attempt = 0; attempt < 4; attempt += 1) {
+            if (attempt > 0) {
+                act(() => {
+                    vi.advanceTimersByTime(Math.min(1000 * Math.pow(2, attempt - 1), 30000));
+                });
+            }
+
             const ws = MockWebSocket.instances.at(-1);
             expect(ws).toBeDefined();
+
+            if (attempt === 0) {
+                act(() => {
+                    if (!ws) return;
+                    ws.readyState = MockWebSocket.OPEN;
+                    ws.onopen?.(new Event("open"));
+                });
+            }
 
             act(() => {
                 ws?.emitClose(1006, `burst-${attempt}`);
             });
-
-            if (attempt < 3) {
-                act(() => {
-                    vi.advanceTimersByTime(Math.min(1000 * Math.pow(2, attempt), 30000));
-                });
-            }
         }
 
         expect(result.current.connectionState).toBe("failed");
@@ -397,7 +430,7 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
             data: {
                 audio: "buffered-audio-during-backpressure",
                 interrupt: false,
-                sample_rate: 16000,
+                sample_rate: 24000,
             },
         });
     });

@@ -12,6 +12,7 @@ import inspect
 import json
 import os
 import re
+import struct
 import sys
 import time
 import uuid
@@ -335,6 +336,9 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
         has_explicit_persona_kb_lock_flag = self._has_explicit_persona_kb_lock_flag(
             policy
         )
+        persona_kb_lock_explicitly_disabled = (
+            self._is_persona_kb_lock_explicitly_disabled(policy)
+        )
         auto_kb_lock_default_applied = False
         if (
             not require_kb_grounding
@@ -400,20 +404,34 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
             retrieval_priority = "kb_only"
             changed = True
 
+        source = policy.get("source")
+        if not isinstance(source, dict):
+            source = {}
+            changed = True
+
+        if (
+            has_bound_knowledge_base
+            and persona_kb_lock_explicitly_disabled
+            and retrieval_priority == "kb_only"
+        ):
+            tool_policy["retrieval_priority"] = "kb_first"
+            retrieval_priority = "kb_first"
+            source.setdefault(
+                "kb_lock_legacy_snapshot_backfill",
+                "kb_only_downgraded_to_kb_first_when_lock_disabled",
+            )
+            changed = True
+
         # `kb_only` must be equivalent to strict KB lock, otherwise model can still
         # generate from parametric memory when retrieval misses or is weak.
         if (
             has_bound_knowledge_base
             and retrieval_priority == "kb_only"
             and not require_kb_grounding
+            and not persona_kb_lock_explicitly_disabled
         ):
             require_kb_grounding = True
             tool_policy["require_kb_grounding"] = True
-            changed = True
-
-        source = policy.get("source")
-        if not isinstance(source, dict):
-            source = {}
             changed = True
         if auto_kb_lock_default_applied:
             source.setdefault("kb_lock_default", "auto_enabled_when_kb_bound")
@@ -1107,6 +1125,8 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
         if msg_type == "audio_chunk":
             if not await self._ensure_input_allowed("audio_chunk"):
                 return
+            if not await self._ensure_upstream_ready_for_input("audio_chunk"):
+                return
             interrupt = data.get("interrupt", False)
             if interrupt:
                 await self._handle_interrupt("user_speaking")
@@ -1123,6 +1143,8 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
         elif msg_type == "audio_end":
             if not await self._ensure_input_allowed("audio_end"):
                 return
+            if not await self._ensure_upstream_ready_for_input("audio_end"):
+                return
             await self._commit_and_respond()
 
         elif msg_type == "user_speaking":
@@ -1138,6 +1160,8 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
             text = self._extract_text_payload(data)
             if text:
                 if not await self._ensure_input_allowed("text"):
+                    return
+                if not await self._ensure_upstream_ready_for_input("text"):
                     return
                 turn_number = self.turn_count + 1
                 sales_stage = await self._analyze_and_emit_sales_stage(
@@ -1272,11 +1296,129 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
 
         if not await self._ensure_input_allowed("audio_chunk_binary"):
             return
+        if not await self._ensure_upstream_ready_for_input("audio_chunk_binary"):
+            return
+
+        self._received_binary_audio_frame_count += 1
+        quality_stats = self._summarize_pcm16_payload(payload)
+        if self._received_binary_audio_frame_count % 20 == 0:
+            self._log_latency_debug(
+                "audio_binary_received",
+                frame_count=self._received_binary_audio_frame_count,
+                **quality_stats,
+            )
 
         audio_b64 = base64.b64encode(payload).decode("utf-8")
         upstream_payload = {"type": "input_audio_buffer.append", "audio": audio_b64}
         if self._should_drop_upstream_for_backpressure(upstream_payload):
             return
+        self._record_input_audio_quality(payload)
         await self._send_upstream(upstream_payload)
         self._audio_flow.append_input_audio(audio_b64)
         self._has_uncommitted_audio = True
+
+    @staticmethod
+    def _summarize_pcm16_payload(payload: bytes) -> dict[str, Any]:
+        """Return aggregate PCM16 diagnostics without exposing raw audio."""
+        even_length = len(payload) - (len(payload) % 2)
+        if even_length <= 0:
+            return {
+                "sample_count": 0,
+                "rms": 0.0,
+                "peak_abs": 0,
+                "zero_ratio": 0.0,
+                "payload_bytes": len(payload),
+                "odd_byte_truncated": bool(payload),
+            }
+
+        sample_count = even_length // 2
+        sum_squares = 0
+        peak_abs = 0
+        zero_count = 0
+        for (sample,) in struct.iter_unpack("<h", payload[:even_length]):
+            sample_abs = abs(sample)
+            if sample_abs > peak_abs:
+                peak_abs = sample_abs
+            if sample == 0:
+                zero_count += 1
+            sum_squares += sample * sample
+
+        return {
+            "sample_count": sample_count,
+            "rms": round((sum_squares / sample_count) ** 0.5, 2),
+            "peak_abs": peak_abs,
+            "zero_ratio": round(zero_count / sample_count, 4),
+            "payload_bytes": len(payload),
+            "odd_byte_truncated": len(payload) != even_length,
+        }
+
+    def _record_input_audio_quality(self, payload: bytes) -> dict[str, Any]:
+        """Accumulate turn-scoped PCM16 quality diagnostics."""
+        stats = self._summarize_pcm16_payload(payload)
+        sample_count = int(stats["sample_count"])
+        if sample_count <= 0:
+            self._input_audio_quality_odd_payload_frames += int(
+                bool(stats["odd_byte_truncated"])
+            )
+            return stats
+
+        rms = float(stats["rms"])
+        self._input_audio_quality_sample_count += sample_count
+        self._input_audio_quality_sum_squares += int(round(rms * rms * sample_count))
+        self._input_audio_quality_peak_abs = max(
+            self._input_audio_quality_peak_abs,
+            int(stats["peak_abs"]),
+        )
+        self._input_audio_quality_zero_count += int(
+            round(float(stats["zero_ratio"]) * sample_count)
+        )
+        self._input_audio_quality_frame_count += 1
+        self._input_audio_quality_payload_bytes += len(payload)
+        self._input_audio_quality_odd_payload_frames += int(
+            bool(stats["odd_byte_truncated"])
+        )
+        return stats
+
+    def _summarize_pending_input_audio_quality(self) -> dict[str, Any]:
+        """Return cumulative PCM16 diagnostics for the pending user utterance."""
+        sample_count = self._input_audio_quality_sample_count
+        if sample_count <= 0:
+            return {
+                "audio_quality_frame_count": self._input_audio_quality_frame_count,
+                "audio_quality_payload_bytes": self._input_audio_quality_payload_bytes,
+                "audio_quality_sample_count": 0,
+                "audio_quality_rms": 0.0,
+                "audio_quality_peak_abs": 0,
+                "audio_quality_zero_ratio": 0.0,
+                "audio_quality_odd_payload_frames": (
+                    self._input_audio_quality_odd_payload_frames
+                ),
+            }
+
+        return {
+            "audio_quality_frame_count": self._input_audio_quality_frame_count,
+            "audio_quality_payload_bytes": self._input_audio_quality_payload_bytes,
+            "audio_quality_sample_count": sample_count,
+            "audio_quality_rms": round(
+                (self._input_audio_quality_sum_squares / sample_count) ** 0.5,
+                2,
+            ),
+            "audio_quality_peak_abs": self._input_audio_quality_peak_abs,
+            "audio_quality_zero_ratio": round(
+                self._input_audio_quality_zero_count / sample_count,
+                4,
+            ),
+            "audio_quality_odd_payload_frames": (
+                self._input_audio_quality_odd_payload_frames
+            ),
+        }
+
+    def _reset_input_audio_quality(self) -> None:
+        """Reset pending user-utterance PCM16 diagnostics."""
+        self._input_audio_quality_sample_count = 0
+        self._input_audio_quality_sum_squares = 0
+        self._input_audio_quality_peak_abs = 0
+        self._input_audio_quality_zero_count = 0
+        self._input_audio_quality_frame_count = 0
+        self._input_audio_quality_payload_bytes = 0
+        self._input_audio_quality_odd_payload_frames = 0

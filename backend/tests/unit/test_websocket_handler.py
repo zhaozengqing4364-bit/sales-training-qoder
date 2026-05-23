@@ -47,6 +47,26 @@ class TestConnectionManager:
         assert sent_data["type"] == "connected"
         assert sent_data["data"]["session_id"] == "test-session"
 
+    async def test_connect_closes_replaced_duplicate_socket(self, manager):
+        """Verify reconnecting the same session closes the stale socket."""
+        old_websocket = Mock()
+        old_websocket.accept = AsyncMock()
+        old_websocket.send_json = AsyncMock()
+        old_websocket.close = AsyncMock()
+        old_websocket.client_state = None
+        new_websocket = Mock()
+        new_websocket.accept = AsyncMock()
+        new_websocket.send_json = AsyncMock()
+        new_websocket.close = AsyncMock()
+        new_websocket.client_state = None
+
+        await manager.connect(old_websocket, "sales", "session-1")
+        await manager.connect(new_websocket, "sales", "session-1")
+
+        old_websocket.close.assert_awaited_once_with(code=1012)
+        new_websocket.close.assert_not_awaited()
+        assert manager.active_connections["sales"]["session-1"] is new_websocket
+
     async def test_disconnect_removes_tracking(self, manager, mock_websocket):
         """Verify connection is removed after disconnect"""
         manager.active_connections["presentation"]["test-session"] = mock_websocket

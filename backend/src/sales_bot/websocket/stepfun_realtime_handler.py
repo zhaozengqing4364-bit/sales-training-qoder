@@ -154,6 +154,7 @@ from training_runtime import (
 from training_runtime.stepfun_transport import StepFunBackpressurePolicy
 from training_runtime.stepfun_transport import StepFunBackpressureStatus
 from training_runtime.stepfun_transport import StepFunHealthStatus
+from training_runtime.stepfun_transport import StepFunUpstreamConnectError
 
 logger = get_logger(__name__)
 
@@ -174,6 +175,7 @@ DEFAULT_UPSTREAM_AUTO_RECOVER_MAX_DELAY_MS = 5000
 DEFAULT_UPSTREAM_KEEPALIVE_ENABLED = True
 DEFAULT_UPSTREAM_KEEPALIVE_INTERVAL_MS = 20000
 DEFAULT_UPSTREAM_KEEPALIVE_PONG_TIMEOUT_MS = 5000
+DEFAULT_UPSTREAM_PROACTIVE_REFRESH_IDLE_MS = 45000
 DEFAULT_AUDIO_BACKPRESSURE_HIGH_WATERMARK_BYTES = 512 * 1024
 TERMINAL_SESSION_STATUSES = {"scoring", "completed"}
 
@@ -312,6 +314,15 @@ class StepFunRealtimeHandler(
         self._stepfun_input_transcription_model = str(
             os.getenv("STEPFUN_REALTIME_INPUT_TRANSCRIPTION_MODEL", "")
         ).strip()
+        if (
+            self._stepfun_input_transcription_enabled
+            and not self._stepfun_input_transcription_model
+        ):
+            logger.warning(
+                "StepFun input transcription model is not configured; "
+                "upstream ASR may return empty transcripts",
+                input_transcription_language=self._stepfun_input_transcription_language,
+            )
         self._stepfun_instructions = os.getenv("STEPFUN_REALTIME_INSTRUCTIONS", "")
         self._instruction_contract_hash = build_instruction_contract_hash(
             self._stepfun_instructions
@@ -376,6 +387,8 @@ class StepFunRealtimeHandler(
         self._pending_response_lock = asyncio.Lock()
         self._pending_tool_followup_response = False
         self._has_uncommitted_audio = False
+        self._received_binary_audio_frame_count = 0
+        self._reset_input_audio_quality()
         self._grounding_preparation_in_progress = False
         self._last_final_transcript_text = ""
         self._last_final_transcript_turn: int | None = None
@@ -448,6 +461,14 @@ class StepFunRealtimeHandler(
                 default_ms=DEFAULT_UPSTREAM_KEEPALIVE_PONG_TIMEOUT_MS,
                 min_ms=500,
                 max_ms=15000,
+            )
+        )
+        self._upstream_proactive_refresh_idle_seconds = (
+            self._resolve_upstream_auto_recover_delay_seconds_from_env(
+                "STEPFUN_UPSTREAM_PROACTIVE_REFRESH_IDLE_MS",
+                default_ms=DEFAULT_UPSTREAM_PROACTIVE_REFRESH_IDLE_MS,
+                min_ms=0,
+                max_ms=120000,
             )
         )
         self._upstream_keepalive_task: asyncio.Task | None = None
@@ -826,6 +847,13 @@ class StepFunRealtimeHandler(
         )
 
         await self.manager.connect(websocket, self.scenario, session_id)
+        logger.info(
+            "practice_ws_session_start",
+            session_id=session_id,
+            user_id=self.user_id,
+            voice_mode="stepfun_realtime",
+            connection_epoch=self._connection_epoch,
+        )
 
         if not self._stepfun_api_key:
             await self._send_error(
@@ -893,13 +921,47 @@ class StepFunRealtimeHandler(
             logger.info(f"StepFun WS disconnected: session={session_id}")
         except asyncio.CancelledError:
             logger.info(f"StepFun WS cancelled: session={session_id}")
+        except StepFunUpstreamConnectError as exc:
+            self._record_disconnect_reason("stepfun_upstream_rejected")
+            logger.error(
+                "StepFun upstream handshake rejected",
+                session_id=session_id,
+                status_code=exc.status_code,
+                error=str(exc),
+            )
+            await self._send_error("[STEPFUN_UPSTREAM_REJECTED]", str(exc))
+        except AttributeError as exc:
+            self._record_disconnect_reason("upstream_transport_mismatch")
+            logger.error(
+                "practice_ws_session_error",
+                session_id=session_id,
+                error_type=type(exc).__name__,
+                error=str(exc),
+                exc_info=True,
+            )
+            await self._send_error(
+                "[STEPFUN_TRANSPORT_ERROR]",
+                "StepFun 上游协议不兼容（缺少 send/send_json），请更新后端后重试。",
+            )
         except (RuntimeError, ValueError, OSError) as e:
             self._record_disconnect_reason("runtime_error")
-            logger.error(f"StepFun WS error: {e}", exc_info=True)
+            logger.error(
+                "practice_ws_session_error",
+                session_id=session_id,
+                error_type=type(e).__name__,
+                error=str(e),
+                exc_info=True,
+            )
             await self._send_error(
                 "[STEPFUN_CONNECTION_ERROR]", "Realtime 语音连接失败"
             )
         finally:
+            logger.info(
+                "practice_ws_session_end",
+                session_id=session_id,
+                disconnect_reason=self._last_disconnect_reason,
+                connection_epoch=self._connection_epoch,
+            )
             self.running = False
             await self._cancel_pending_response_after_commit()
             warmup_task = self._kb_lock_warmup_task
@@ -991,6 +1053,13 @@ class StepFunRealtimeHandler(
             kb_bound=has_bound_knowledge_base,
             network_access_mode=str(tool_policy.get("network_access_mode") or ""),
             input_transcription_enabled=self._stepfun_input_transcription_enabled,
+            input_transcription_language=self._stepfun_input_transcription_language,
+            input_transcription_model_configured=bool(
+                self._stepfun_input_transcription_model
+            ),
+            input_transcription_model=self._stepfun_input_transcription_model,
+            input_audio_format=self._stepfun_input_audio_format,
+            output_audio_format=self._stepfun_output_audio_format,
         )
         return StepFunSessionConfig(
             voice=selected_voice,

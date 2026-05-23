@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from hashlib import sha256
 from json import dumps
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Persona
-from curriculum_practice.models import CaseItem, RoleProfile
+from curriculum_practice.models import CaseItem, PracticeTemplate, RoleProfile
 from curriculum_practice.schemas import CaseItemCreate, RoleProfileCreate
 from curriculum_practice.services.voice_clone import VoiceCloneResult, VoiceCloneService
 
@@ -41,6 +42,16 @@ class ContentAssetPublishError(ValueError):
 
 class ContentAssetNotEditableError(ValueError):
     pass
+
+
+class ContentAssetAlreadyDraftError(ValueError):
+    pass
+
+
+class ContentAssetReferencedByTemplatesError(ValueError):
+    def __init__(self, templates: list[dict[str, str]]) -> None:
+        self.referencing_templates = templates
+        super().__init__("Content asset is referenced by published templates.")
 
 
 class ContentAssetService:
@@ -126,6 +137,7 @@ class ContentAssetService:
     async def create_role_profile(
         self, payload: RoleProfileCreate, *, actor_id: str | None
     ) -> RoleProfile:
+        await self._ensure_persona_ref_available(payload.persona_ref)
         item = RoleProfile(
             **payload.model_dump(), created_by=actor_id, updated_by=actor_id
         )
@@ -139,6 +151,7 @@ class ContentAssetService:
     ) -> RoleProfile:
         if item.status != "draft":
             raise ContentAssetNotEditableError
+        await self._ensure_persona_ref_available(payload.persona_ref)
         for field, value in payload.model_dump().items():
             setattr(item, field, value)
         item.updated_by = actor_id
@@ -214,13 +227,7 @@ class ContentAssetService:
                 "content_hash_mismatch",
                 "RoleProfile content_hash does not match current content.",
             )
-        if item.persona_ref:
-            persona = await self._db.get(Persona, item.persona_ref)
-            if persona is None or persona.status != "active":
-                raise ContentAssetPublishError(
-                    "persona_ref_unavailable",
-                    "RoleProfile persona_ref must point to an active Persona.",
-                )
+        await self._ensure_persona_ref_available(item.persona_ref)
         item.status = "published"
         item.published_by = actor_id
         item.published_at = datetime.now(UTC)
@@ -228,6 +235,131 @@ class ContentAssetService:
         await self._db.commit()
         await self._db.refresh(item)
         return item
+
+    async def duplicate_case_item(
+        self, item: CaseItem, *, actor_id: str | None
+    ) -> CaseItem:
+        payload = _case_item_payload(item)
+        payload["customer_role"] = _copy_suffix(item.customer_role)
+        content_hash = case_item_content_hash(payload)
+        duplicate = CaseItem(
+            case_item_id=str(uuid.uuid4()),
+            industry=item.industry,
+            company_profile=item.company_profile,
+            customer_role=str(payload["customer_role"]),
+            pain_points=list(item.pain_points or []),
+            objections=list(item.objections or []),
+            hidden_information=item.hidden_information,
+            success_criteria=list(item.success_criteria or []),
+            allowed_disclosure_policy=item.allowed_disclosure_policy or {},
+            version=1,
+            content_hash=content_hash,
+            status="draft",
+            created_by=actor_id,
+            updated_by=actor_id,
+        )
+        self._db.add(duplicate)
+        await self._db.commit()
+        await self._db.refresh(duplicate)
+        return duplicate
+
+    async def duplicate_role_profile(
+        self, item: RoleProfile, *, actor_id: str | None
+    ) -> RoleProfile:
+        payload = _role_profile_payload(item)
+        payload["role_name"] = _copy_suffix(item.role_name)
+        content_hash = role_profile_content_hash(payload)
+        duplicate = RoleProfile(
+            role_profile_id=str(uuid.uuid4()),
+            role_type=item.role_type,
+            role_name=str(payload["role_name"]),
+            persona_ref=item.persona_ref,
+            communication_style=item.communication_style,
+            pressure_level=item.pressure_level,
+            knowledge_boundary=list(item.knowledge_boundary or []),
+            behavior_rules=list(item.behavior_rules or []),
+            voice_style_hint=item.voice_style_hint,
+            version=1,
+            content_hash=content_hash,
+            status="draft",
+            created_by=actor_id,
+            updated_by=actor_id,
+        )
+        self._db.add(duplicate)
+        await self._db.commit()
+        await self._db.refresh(duplicate)
+        return duplicate
+
+    async def unpublish_case_item(
+        self, item: CaseItem, *, actor_id: str | None, acknowledge: bool = False
+    ) -> CaseItem:
+        return await self._unpublish_content_asset(
+            item,
+            asset_type="case_item",
+            asset_id=str(item.case_item_id),
+            actor_id=actor_id,
+            acknowledge=acknowledge,
+        )
+
+    async def unpublish_role_profile(
+        self, item: RoleProfile, *, actor_id: str | None, acknowledge: bool = False
+    ) -> RoleProfile:
+        return await self._unpublish_content_asset(
+            item,
+            asset_type="role_profile",
+            asset_id=str(item.role_profile_id),
+            actor_id=actor_id,
+            acknowledge=acknowledge,
+        )
+
+    async def list_template_references(
+        self,
+        *,
+        asset_type: Literal["case_item", "role_profile", "examiner_agent"],
+        asset_id: str,
+    ) -> list[dict[str, str]]:
+        return await list_published_template_references(
+            self._db,
+            asset_type=asset_type,
+            asset_id=asset_id,
+        )
+
+    async def _unpublish_content_asset(
+        self,
+        item: CaseItem | RoleProfile,
+        *,
+        asset_type: Literal["case_item", "role_profile"],
+        asset_id: str,
+        actor_id: str | None,
+        acknowledge: bool,
+    ) -> CaseItem | RoleProfile:
+        if item.status == "draft":
+            raise ContentAssetAlreadyDraftError
+        if item.status == "archived":
+            raise ContentAssetNotEditableError
+        references = await self.list_template_references(
+            asset_type=asset_type,
+            asset_id=asset_id,
+        )
+        if references and not acknowledge:
+            raise ContentAssetReferencedByTemplatesError(references)
+        item.status = "draft"
+        item.published_at = None
+        item.published_by = None
+        item.updated_by = actor_id
+        await self._db.commit()
+        await self._db.refresh(item)
+        return item
+
+    async def _ensure_persona_ref_available(self, persona_ref: str | None) -> None:
+        if not persona_ref:
+            return
+        persona = await self._db.get(Persona, persona_ref)
+        if persona is None or persona.status != "active":
+            raise ContentAssetPublishError(
+                "persona_ref_unavailable",
+                "RoleProfile persona_ref must point to an active Persona.",
+            )
 
     async def read_snapshot_reference(
         self, asset_type: str, asset_id: str
@@ -253,6 +385,42 @@ class ContentAssetService:
                 "content_hash": item.content_hash,
             }
         return None
+
+
+async def list_published_template_references(
+    db: AsyncSession,
+    *,
+    asset_type: Literal["case_item", "role_profile", "examiner_agent"],
+    asset_id: str,
+) -> list[dict[str, str]]:
+    column_map = {
+        "case_item": PracticeTemplate.case_item_id,
+        "role_profile": PracticeTemplate.role_profile_id,
+        "examiner_agent": PracticeTemplate.examiner_agent_id,
+    }
+    column = column_map[asset_type]
+    result = await db.execute(
+        select(PracticeTemplate).where(
+            column == asset_id,
+            PracticeTemplate.status == "published",
+        )
+    )
+    return [
+        {
+            "template_id": str(template.template_id),
+            "name": str(template.name),
+            "status": str(template.status),
+        }
+        for template in result.scalars().all()
+    ]
+
+
+def _copy_suffix(value: str) -> str:
+    suffix = " (副本)"
+    trimmed = value.strip()
+    if trimmed.endswith(suffix):
+        return trimmed
+    return f"{trimmed}{suffix}"
 
 
 def case_item_content_hash(payload: object) -> str:

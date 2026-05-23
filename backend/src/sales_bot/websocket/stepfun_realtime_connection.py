@@ -235,6 +235,7 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
         self._awaiting_transcription_after_commit = False
         self._allow_late_transcription_response = False
         self._has_uncommitted_audio = False
+        self._reset_input_audio_quality()
         self._active_response = None
         self._function_call_states.clear()
         self._executed_call_ids.clear()
@@ -277,6 +278,17 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
         if not isinstance(persona_tool_policy, dict):
             return False
         return "require_kb_grounding" in persona_tool_policy
+
+    def _is_persona_kb_lock_explicitly_disabled(self, policy: dict[str, Any]) -> bool:
+        if not self._has_explicit_persona_kb_lock_flag(policy):
+            return False
+        persona_policy = policy.get("persona_policy")
+        if not isinstance(persona_policy, dict):
+            return False
+        persona_tool_policy = persona_policy.get("tool_policy")
+        if not isinstance(persona_tool_policy, dict):
+            return False
+        return not bool(persona_tool_policy.get("require_kb_grounding", False))
 
     def _is_kb_lock_required_for_current_policy(self) -> bool:
         tool_policy = self._effective_policy.get("tool_policy")
@@ -466,6 +478,65 @@ class StepFunRealtimeConnectionMixin(StepFunRealtimeStateBase):
             delay_ms = default_ms
         delay_ms = max(min_ms, min(max_ms, delay_ms))
         return delay_ms / 1000.0
+
+    def _upstream_idle_seconds(self) -> float | None:
+        last_activity_at = max(
+            self._upstream_last_activity_at,
+            self._upstream_connected_at,
+        )
+        if self.upstream_ws is None or last_activity_at <= 0:
+            return None
+        return max(0.0, asyncio.get_running_loop().time() - last_activity_at)
+
+    def _should_refresh_upstream_before_input(self) -> bool:
+        if self.upstream_ws is None:
+            return True
+        idle_threshold = self._upstream_proactive_refresh_idle_seconds
+        if idle_threshold <= 0:
+            return False
+        idle_seconds = self._upstream_idle_seconds()
+        return idle_seconds is not None and idle_seconds >= idle_threshold
+
+    async def _refresh_upstream_for_next_input(self, reason: str) -> bool:
+        if not self.running:
+            return False
+        try:
+            idle_seconds = self._upstream_idle_seconds()
+            await self._close_upstream()
+            await self._connect_upstream()
+            await self._cancel_pending_response_after_commit()
+            self._reset_turn_runtime_state()
+            await self._send_status(
+                "listening" if self.session_status == "in_progress" else "idle"
+            )
+            logger.info(
+                "StepFun upstream refreshed before input",
+                session_id=self.session_id,
+                reason=reason,
+                idle_ms=round((idle_seconds or 0.0) * 1000, 1),
+            )
+            return True
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "StepFun upstream refresh before input failed",
+                session_id=self.session_id,
+                reason=reason,
+                error=str(exc),
+            )
+            await self._send_error(
+                "[STEPFUN_UPSTREAM_REFRESH_FAILED]",
+                "Realtime 上游连接刷新失败，请点击重新连接后再试。",
+            )
+            return False
+
+    async def _ensure_upstream_ready_for_input(self, msg_type: str) -> bool:
+        if not self._should_refresh_upstream_before_input():
+            return True
+        return await self._refresh_upstream_for_next_input(
+            reason=f"before_{msg_type}",
+        )
 
     async def _touch_session_activity(self) -> None:
         """Refresh SessionManager activity for reconnect/timeout decisions."""

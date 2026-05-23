@@ -124,7 +124,7 @@ type ConnectionState =
   "timestamp": "2025-01-11T10:00:00Z",
   "data": {
     "audio": "base64_encoded_audio_data",
-    "sample_rate": 16000,
+    "sample_rate": 24000,
     "interrupt": false
   }
 }
@@ -133,7 +133,7 @@ type ConnectionState =
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | audio | string | ✅ | Base64 编码的 16-bit PCM 音频数据 |
-| sample_rate | number | ❌ | 采样率，默认 16000 |
+| sample_rate | number | ❌ | 采样率，默认 24000 |
 | interrupt | boolean | ❌ | 是否打断当前 AI 播放 |
 
 ### audio_end (✅ 已实现)

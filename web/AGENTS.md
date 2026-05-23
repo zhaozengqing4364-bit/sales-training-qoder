@@ -47,3 +47,7 @@ Concise guide for the Next.js/React frontend. Read this before touching `web/`.
 Enter the route-group AGENTS before page-level work:
 
 - `web/src/app/AGENTS.md` — App Router specifics, page conventions, and route-group rules
+- `.trellis/spec/frontend/admin-console-patterns.md` — admin intent-based routes, layout, and compliance (read before new admin modules)
+- `web/src/components/AGENTS.md` — UI primitives & domain widgets
+- `web/src/hooks/AGENTS.md` — WebSocket & media hooks
+- `web/src/lib/AGENTS.md` — API façade, auth, query, support copy

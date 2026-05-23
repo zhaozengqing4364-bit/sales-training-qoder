@@ -72,13 +72,93 @@ interface UseAudioRecorderOptions {
     forceScriptProcessor?: boolean;
 }
 
+interface FloatAudioStats {
+    sampleCount: number;
+    maxAbs: number;
+    rms: number;
+    zeroRatio: number;
+}
+
+interface PCM16AudioStats {
+    sampleCount: number;
+    peakAbs: number;
+    rms: number;
+    zeroRatio: number;
+}
+
+function summarizeFloatAudio(samples: Float32Array): FloatAudioStats {
+    if (samples.length === 0) {
+        return {
+            sampleCount: 0,
+            maxAbs: 0,
+            rms: 0,
+            zeroRatio: 0,
+        };
+    }
+
+    let maxAbs = 0;
+    let sumSquares = 0;
+    let zeroCount = 0;
+    for (let i = 0; i < samples.length; i++) {
+        const sample = samples[i];
+        const abs = Math.abs(sample);
+        if (abs > maxAbs) {
+            maxAbs = abs;
+        }
+        if (sample === 0) {
+            zeroCount++;
+        }
+        sumSquares += sample * sample;
+    }
+
+    return {
+        sampleCount: samples.length,
+        maxAbs: Number(maxAbs.toFixed(4)),
+        rms: Number(Math.sqrt(sumSquares / samples.length).toFixed(4)),
+        zeroRatio: Number((zeroCount / samples.length).toFixed(4)),
+    };
+}
+
+function summarizePCM16Audio(samples: Int16Array): PCM16AudioStats {
+    if (samples.length === 0) {
+        return {
+            sampleCount: 0,
+            peakAbs: 0,
+            rms: 0,
+            zeroRatio: 0,
+        };
+    }
+
+    let peakAbs = 0;
+    let sumSquares = 0;
+    let zeroCount = 0;
+    for (let i = 0; i < samples.length; i++) {
+        const sample = samples[i];
+        const abs = Math.abs(sample);
+        if (abs > peakAbs) {
+            peakAbs = abs;
+        }
+        if (sample === 0) {
+            zeroCount++;
+        }
+        sumSquares += sample * sample;
+    }
+
+    return {
+        sampleCount: samples.length,
+        peakAbs,
+        rms: Number(Math.sqrt(sumSquares / samples.length).toFixed(2)),
+        zeroRatio: Number((zeroCount / samples.length).toFixed(4)),
+    };
+}
+
 export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     const { 
         onAudioData,
         onAudioDataBinary,
         onAudioEnd, 
         onSpeakingChange, 
-        targetSampleRate = 16000,
+        targetSampleRate = 24000,
         bufferSize = 1024,  // Default 1024 samples for ~21ms latency at 48kHz
         forceScriptProcessor = false
     } = options;
@@ -92,6 +172,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     const audioContextRef = useRef<AudioContext | null>(null);
     const processorRef = useRef<ScriptProcessorNode | null>(null);
     const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+    const silentOutputGainRef = useRef<GainNode | null>(null);
     const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const isRecordingRef = useRef(false);
     const streamRef = useRef<MediaStream | null>(null);
@@ -316,6 +397,19 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             // 转换为 PCM
             const pcmData = floatTo16BitPCM(resampledData);
             
+            // 每 20 个块记录一次
+            if (chunkCount % 20 === 0) {
+                debug.log("[AudioRecorder:chunk_quality]", {
+                    chunkCount,
+                    inputSampleRate: inputSampleRateRef.current,
+                    targetSampleRate,
+                    source: summarizeFloatAudio(audioData),
+                    resampled: summarizeFloatAudio(resampledData),
+                    pcm16: summarizePCM16Audio(pcmData),
+                    transport: onAudioDataBinaryRef.current ? "binary" : "base64",
+                });
+            }
+
             // v1-13: Prefer binary callback (skips Base64 entirely)
             if (onAudioDataBinaryRef.current) {
                 onAudioDataBinaryRef.current(pcmData);
@@ -323,16 +417,6 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
                 // Legacy Base64 path
                 const base64 = int16ArrayToBase64(pcmData);
                 onAudioDataRef.current?.(base64);
-            }
-            
-            // 每 20 个块记录一次
-            if (chunkCount % 20 === 0) {
-                let maxAmp = 0;
-                for (let i = 0; i < audioData.length; i++) {
-                    const abs = Math.abs(audioData[i]);
-                    if (abs > maxAmp) maxAmp = abs;
-                }
-                debug.log(`[AudioRecorder] Chunk #${chunkCount}: max=${maxAmp.toFixed(4)}`);
             }
         } catch (err) {
             debug.error("[AudioRecorder] Failed to process audio data:", err);
@@ -398,8 +482,11 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             
             // Connect the audio graph
             source.connect(workletNode);
-            // Note: We don't connect to destination to avoid feedback
-            // workletNode.connect(audioContext.destination);
+            const silentOutputGain = audioContext.createGain();
+            silentOutputGain.gain.value = 0;
+            workletNode.connect(silentOutputGain);
+            silentOutputGain.connect(audioContext.destination);
+            silentOutputGainRef.current = silentOutputGain;
             
             debug.log("[AudioRecorder] AudioWorklet setup complete");
             return true;
@@ -552,6 +639,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             workletNodeRef.current.port.close();
             workletNodeRef.current = null;
         }
+        if (silentOutputGainRef.current) {
+            silentOutputGainRef.current.disconnect();
+            silentOutputGainRef.current = null;
+        }
         
         // 清理 ScriptProcessor 节点
         if (processorRef.current) {
@@ -593,6 +684,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             workletNodeRef.current.disconnect();
             workletNodeRef.current.port.close();
             workletNodeRef.current = null;
+        }
+        if (silentOutputGainRef.current) {
+            silentOutputGainRef.current.disconnect();
+            silentOutputGainRef.current = null;
         }
         if (processorRef.current) {
             processorRef.current.disconnect();

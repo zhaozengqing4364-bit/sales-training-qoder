@@ -255,7 +255,8 @@ export default function PersonasPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">角色管理</h1>
-                    <p className="text-slate-500 mt-1">管理不同场景下的 AI 角色配置</p>
+                    <p className="text-slate-500 mt-1">平台 AI 人格（实时对练）</p>
+                    <p className="text-sm text-slate-400 mt-0.5">管理提示词、知识库绑定与压力模型；与「客户角色库」课程画像不同</p>
                 </div>
                 <div className="flex gap-3">
                     <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

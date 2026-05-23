@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Save, Trash2, RefreshCw, Sparkles } from "lucide-react";
 
 import { AssetGovernanceOverview, AssetGovernanceSummaryCard, type AssetGovernanceSummary } from "@/components/admin/asset-governance";
+import { AdminPageHeader, PolicyPageShell } from "@/components/admin/admin-layout-shells";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -318,7 +319,31 @@ export default function VoiceRuntimePage() {
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <PolicyPageShell
+            header={(
+                <AdminPageHeader
+                    title="语音运行时策略"
+                    description="管理 Realtime / 经典模式与底层运行参数。业务提示词已迁移到角色中心。"
+                    primaryAction={(
+                        <Button className="rounded-full bg-slate-900 text-white" onClick={handleCreateNew}>
+                            <Plus className="w-4 h-4 mr-2" />
+                            新建配置
+                        </Button>
+                    )}
+                    secondaryActions={(
+                        <>
+                            <Button variant="outline" className="rounded-full" onClick={() => void loadProfiles()} disabled={isLoading}>
+                                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                                刷新
+                            </Button>
+                            <Button variant="outline" className="rounded-full" onClick={handleCopySelected} disabled={!selectedProfile}>
+                                复制当前配置
+                            </Button>
+                        </>
+                    )}
+                />
+            )}
+        >
             <ConfirmDialog
                 open={!!deleteTarget}
                 onOpenChange={(open) => {
@@ -331,26 +356,6 @@ export default function VoiceRuntimePage() {
                 onConfirm={handleDelete}
                 isLoading={isSaving}
             />
-
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-black text-slate-900 tracking-tight">语音运行时策略</h1>
-                    <p className="text-slate-500 mt-1">管理 Realtime / 经典模式与底层运行参数。业务提示词已迁移到角色中心。</p>
-                </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" className="rounded-full" onClick={() => void loadProfiles()} disabled={isLoading}>
-                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-                        刷新
-                    </Button>
-                    <Button className="rounded-full bg-slate-900 text-white" onClick={handleCreateNew}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        新建配置
-                    </Button>
-                    <Button variant="outline" className="rounded-full" onClick={handleCopySelected} disabled={!selectedProfile}>
-                        复制当前配置
-                    </Button>
-                </div>
-            </div>
 
             <AssetGovernanceOverview assetType="runtime_profile" items={profiles} />
 
@@ -782,6 +787,6 @@ export default function VoiceRuntimePage() {
                     </div>
                 </GlassCard>
             </div>
-        </div>
+        </PolicyPageShell>
     );
 }

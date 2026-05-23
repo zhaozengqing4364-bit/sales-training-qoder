@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { JsonEditorWithValidation } from "@/components/ui/json-editor-with-validation";
+import { AdminPageHeader, PolicyPageShell } from "@/components/admin/admin-layout-shells";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     ScoringRulesetAuditEntry,
@@ -325,7 +326,22 @@ export default function AdminScoringRulesetsPage() {
     }
 
     return (
-        <div className="space-y-8 pb-20">
+        <PolicyPageShell
+            header={(
+                <AdminPageHeader
+                    title="评分规则集"
+                    description="管理训练评分 ruleset 的草稿、试运行、发布和回滚。评分权重、证据门槛和不可评估原因都保存在后端 ruleset definition 中。"
+                    primaryAction={(
+                        <Badge variant={active?.source === "default" ? "orange" : "green"}>
+                            {active?.source === "default" ? "default fallback" : "admin active"}
+                        </Badge>
+                    )}
+                    secondaryActions={(
+                        <Button variant="outline" onClick={() => loadRulesets(scenarioType)}>刷新规则集</Button>
+                    )}
+                />
+            )}
+        >
             <ConfirmDialog
                 open={!!confirmAction}
                 onOpenChange={(open) => {
@@ -343,23 +359,9 @@ export default function AdminScoringRulesetsPage() {
                 isLoading={busyAction === "publish" || busyAction === "rollback"}
             />
 
-            <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="text-3xl font-black tracking-tight text-slate-900">评分规则集</h1>
-                        <Badge variant={active?.source === "default" ? "orange" : "green"}>
-                            {active?.source === "default" ? "default fallback" : "admin active"}
-                        </Badge>
-                    </div>
-                    <p className="mt-2 max-w-3xl text-sm text-slate-600">
-                        管理训练评分 ruleset 的草稿、试运行、发布和回滚。评分权重、证据门槛和不可评估原因都保存在后端 ruleset definition 中。
-                    </p>
-                    <p className="mt-2 text-xs text-slate-500">
-                        API: /api/v1/evaluation/admin/scoring-rulesets · 权限：admin only · 发布/回滚写入 SystemLog 审计。
-                    </p>
-                </div>
-                <Button variant="outline" onClick={() => loadRulesets(scenarioType)}>刷新规则集</Button>
-            </header>
+            <p className="text-xs text-slate-500">
+                API: /api/v1/evaluation/admin/scoring-rulesets · 权限：admin only · 发布/回滚写入 SystemLog 审计。
+            </p>
 
             <div className="grid gap-4 lg:grid-cols-3">
                 <GlassCard className="p-5">
@@ -562,6 +564,6 @@ export default function AdminScoringRulesetsPage() {
                     )}
                 </div>
             </GlassCard>
-        </div>
+        </PolicyPageShell>
     );
 }

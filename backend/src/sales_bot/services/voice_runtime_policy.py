@@ -134,8 +134,15 @@ class ToolPolicyResolver:
         else:
             resolved["enable_internal_retrieval"] = True
             resolved["enable_web_search"] = False
-            resolved["retrieval_priority"] = "kb_only"
-            source_updates["tool_policy_enforcement"] = "kb_internal_only"
+            if not resolved["require_kb_grounding"]:
+                priority = (
+                    str(resolved.get("retrieval_priority") or "kb_first")
+                    .strip()
+                    .lower()
+                )
+                if priority == "kb_only":
+                    resolved["retrieval_priority"] = "kb_first"
+                source_updates["tool_policy_enforcement"] = "kb_internal_only"
 
         if resolved["require_kb_grounding"]:
             resolved["enable_internal_retrieval"] = True

@@ -33,21 +33,35 @@ def test_sales_legacy_handler_modules_stay_deleted() -> None:
     assert importlib.util.find_spec("sales_bot.websocket.simple_handler") is None
 
 
+def patch_kb_lock_gate(
+    monkeypatch: pytest.MonkeyPatch, *, is_unbound: bool
+) -> AsyncMock:
+    kb_lock_gate = AsyncMock(return_value=is_unbound)
+    monkeypatch.setattr(
+        sales_router,
+        "_is_kb_lock_unbound_session",
+        kb_lock_gate,
+    )
+    return kb_lock_gate
+
+
 @pytest.mark.asyncio
 async def test_handle_sales_websocket_rejects_when_kb_lock_unbound(monkeypatch):
     websocket = MagicMock()
     websocket.accept = AsyncMock()
     websocket.close = AsyncMock()
+    mark_runtime_failed = AsyncMock()
 
     monkeypatch.setattr(
         sales_router,
         "_resolve_session_runtime",
         AsyncMock(return_value=("sales", "stepfun_realtime", None, None)),
     )
+    patch_kb_lock_gate(monkeypatch, is_unbound=True)
     monkeypatch.setattr(
         sales_router,
-        "_is_kb_lock_unbound_session",
-        AsyncMock(return_value=True),
+        "mark_session_runtime_failed",
+        mark_runtime_failed,
     )
 
     handle_stepfun = AsyncMock()
@@ -65,73 +79,45 @@ async def test_handle_sales_websocket_rejects_when_kb_lock_unbound(monkeypatch):
 
     websocket.accept.assert_awaited_once()
     websocket.close.assert_awaited_once_with(code=4410, reason="KB_LOCK_UNBOUND")
+    mark_runtime_failed.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        failure_code="KB_LOCK_UNBOUND",
+        source="sales_websocket_reject",
+    )
     handle_stepfun.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_kb_lock_unbound_session_recomputes_effective_policy_when_snapshot_tampered(
-    monkeypatch,
-):
-    """A persisted snapshot cannot disable connection-time KB-lock enforcement."""
-
-    class DummySession:
-        def __init__(self):
-            self.voice_policy_snapshot = {
-                "tool_policy": {"require_kb_grounding": False},
-                "knowledge_base_ids": [],
-            }
-            self.agent_id = "agent-1"
-            self.persona_id = "persona-1"
-            self.voice_mode = "stepfun_realtime"
-            self.voice_runtime_profile_id = "profile-1"
-
-    session = DummySession()
-
-    class DummyResult:
-        def scalar_one_or_none(self):
-            return session
+async def test_kb_lock_unbound_session_uses_runtime_gate_authority(monkeypatch):
+    """Sales websocket KB-lock enforcement stays on the shared RuntimeGate seam."""
 
     class DummyDbSessionContext:
-        committed = False
-
         async def __aenter__(self):
             return self
 
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def execute(self, _stmt):
-            return DummyResult()
-
-        async def commit(self):
-            self.committed = True
-
     db_context = DummyDbSessionContext()
+    gate_calls: list[object] = []
 
-    class DummyPolicyService:
-        def __init__(self, _db):
-            pass
+    class DummyRuntimeGate:
+        def __init__(self, db):
+            gate_calls.append(db)
 
-        async def resolve_effective_policy(self, **kwargs):
-            assert kwargs == {
-                "agent_id": "agent-1",
-                "persona_id": "persona-1",
-                "voice_mode_override": "stepfun_realtime",
-                "runtime_profile_override": "profile-1",
-            }
-            return {
-                "tool_policy": {"require_kb_grounding": True},
-                "knowledge_base_ids": [],
-            }
+        async def is_kb_lock_unbound_for_session_id(self, session_id: str) -> bool:
+            assert session_id == "session-1"
+            return True
+
+    import common.services.runtime_gate as runtime_gate_module
 
     monkeypatch.setattr(sales_router, "AsyncSessionLocal", lambda: db_context)
-    monkeypatch.setattr(sales_router, "VoiceRuntimePolicyService", DummyPolicyService)
+    monkeypatch.setattr(runtime_gate_module, "RuntimeGate", DummyRuntimeGate)
 
     is_unbound = await sales_router._is_kb_lock_unbound_session("session-1")
 
     assert is_unbound is True
-    assert db_context.committed is True
-    assert session.voice_policy_snapshot["tool_policy"]["require_kb_grounding"] is True
+    assert gate_calls == [db_context]
 
 
 @pytest.mark.asyncio
@@ -147,13 +133,15 @@ async def test_handle_sales_websocket_rejects_invalid_token_before_runtime_conne
         "_resolve_session_runtime",
         AsyncMock(return_value=("sales", "stepfun_realtime", "agent-1", "persona-1")),
     )
-    monkeypatch.setattr(
-        sales_router,
-        "_is_kb_lock_unbound_session",
-        AsyncMock(return_value=False),
-    )
+    patch_kb_lock_gate(monkeypatch, is_unbound=False)
     monkeypatch.setattr(sales_router, "_resolve_ws_token", lambda *_args, **_kwargs: "invalid-token")
     monkeypatch.setattr(sales_router, "_extract_user_id_from_token", lambda _token: None)
+    mark_runtime_failed = AsyncMock()
+    monkeypatch.setattr(
+        sales_router,
+        "mark_session_runtime_failed",
+        mark_runtime_failed,
+    )
 
     handle_stepfun = AsyncMock()
     monkeypatch.setattr(sales_router, "_handle_stepfun_realtime_connection", handle_stepfun)
@@ -170,6 +158,7 @@ async def test_handle_sales_websocket_rejects_invalid_token_before_runtime_conne
 
     websocket.accept.assert_awaited_once()
     websocket.close.assert_awaited_once_with(code=4001, reason="Unauthorized")
+    mark_runtime_failed.assert_not_awaited()
     handle_stepfun.assert_not_awaited()
 
 
@@ -180,16 +169,18 @@ async def test_handle_sales_websocket_rejects_legacy_mode_before_runtime_connect
     websocket = MagicMock()
     websocket.accept = AsyncMock()
     websocket.close = AsyncMock()
+    mark_runtime_failed = AsyncMock()
 
     monkeypatch.setattr(
         sales_router,
         "_resolve_session_runtime",
         AsyncMock(return_value=("sales", "legacy", "agent-1", "persona-1")),
     )
+    patch_kb_lock_gate(monkeypatch, is_unbound=False)
     monkeypatch.setattr(
         sales_router,
-        "_is_kb_lock_unbound_session",
-        AsyncMock(return_value=False),
+        "mark_session_runtime_failed",
+        mark_runtime_failed,
     )
     handle_stepfun = AsyncMock()
     monkeypatch.setattr(sales_router, "_handle_stepfun_realtime_connection", handle_stepfun)
@@ -209,6 +200,11 @@ async def test_handle_sales_websocket_rejects_legacy_mode_before_runtime_connect
         code=4412,
         reason="LEGACY_SALES_RUNTIME_DISABLED",
     )
+    mark_runtime_failed.assert_awaited_once_with(
+        "11111111-1111-1111-1111-111111111111",
+        failure_code="LEGACY_SALES_RUNTIME_DISABLED",
+        source="sales_websocket_reject",
+    )
     handle_stepfun.assert_not_awaited()
 
 
@@ -225,11 +221,7 @@ async def test_handle_sales_websocket_rejects_non_owner_before_stepfun_connect(
         "_resolve_session_runtime",
         AsyncMock(return_value=("sales", "stepfun_realtime", "agent-1", "persona-1")),
     )
-    monkeypatch.setattr(
-        sales_router,
-        "_is_kb_lock_unbound_session",
-        AsyncMock(return_value=False),
-    )
+    patch_kb_lock_gate(monkeypatch, is_unbound=False)
     monkeypatch.setattr(sales_router, "_resolve_ws_token", lambda *_args, **_kwargs: "valid-token")
     monkeypatch.setattr(sales_router, "_extract_user_id_from_token", lambda _token: "outsider-user")
     monkeypatch.setattr(
@@ -239,6 +231,12 @@ async def test_handle_sales_websocket_rejects_non_owner_before_stepfun_connect(
         raising=False,
     )
     monkeypatch.setattr(sales_router, "_is_admin_user_id", AsyncMock(return_value=False))
+    mark_runtime_failed = AsyncMock()
+    monkeypatch.setattr(
+        sales_router,
+        "mark_session_runtime_failed",
+        mark_runtime_failed,
+    )
 
     handle_stepfun = AsyncMock()
     monkeypatch.setattr(sales_router, "_handle_stepfun_realtime_connection", handle_stepfun)
@@ -255,4 +253,5 @@ async def test_handle_sales_websocket_rejects_non_owner_before_stepfun_connect(
 
     websocket.accept.assert_awaited_once()
     websocket.close.assert_awaited_once_with(code=4003, reason="ACCESS_DENIED")
+    mark_runtime_failed.assert_not_awaited()
     handle_stepfun.assert_not_awaited()

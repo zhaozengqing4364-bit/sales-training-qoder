@@ -13,11 +13,8 @@ function AuthQueryBridge() {
 
     useEffect(() => {
         return authHandler.subscribe(() => {
-            void queryClient.cancelQueries({ queryKey: currentUserQueryKey });
-            queryClient.setQueriesData(
-                { queryKey: currentUserQueryKey, exact: true },
-                null,
-            );
+            void queryClient.cancelQueries();
+            queryClient.clear();
         });
     }, [queryClient]);
 

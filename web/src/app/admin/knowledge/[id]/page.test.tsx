@@ -1,7 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import KnowledgeDetailPage from "./page";
+import KnowledgeHubPage from "./page";
+import { KnowledgeDetailProvider } from "@/components/admin/knowledge/knowledge-detail-context";
+import { KnowledgeDocumentsPanel } from "@/components/admin/knowledge/knowledge-documents-panel";
+import { KnowledgeDictionaryPanel } from "@/components/admin/knowledge/knowledge-dictionary-panel";
+import { KnowledgeSearchDiagnostics } from "@/components/admin/knowledge/knowledge-search-diagnostics";
+
+function renderWithKnowledgeDetail(ui: React.ReactElement) {
+    return render(<KnowledgeDetailProvider>{ui}</KnowledgeDetailProvider>);
+}
+
 
 const {
     backMock,
@@ -336,9 +345,9 @@ describe("KnowledgeDetailPage", () => {
     });
 
     it("accepts xlsx/xls uploads and submits spreadsheet files to the admin API", async () => {
-        const { container } = render(<KnowledgeDetailPage />);
+        const { container } = renderWithKnowledgeDetail(<KnowledgeDocumentsPanel />);
 
-        await screen.findByText("石犀产品资料库");
+        await screen.findByText("文档列表");
 
         const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement | null;
         expect(fileInput).toBeTruthy();
@@ -361,7 +370,7 @@ describe("KnowledgeDetailPage", () => {
     });
 
     it("manages knowledge dictionary entries from the KB detail page", async () => {
-        render(<KnowledgeDetailPage />);
+        renderWithKnowledgeDetail(<KnowledgeDictionaryPanel />);
 
         await screen.findByText("知识库词典");
         expect(screen.getByText("石犀科技")).toBeTruthy();
@@ -438,9 +447,9 @@ describe("KnowledgeDetailPage", () => {
             });
         });
 
-        const { container } = render(<KnowledgeDetailPage />);
+        const { container } = renderWithKnowledgeDetail(<KnowledgeDocumentsPanel />);
 
-        await screen.findByText("石犀产品资料库");
+        await screen.findByText("文档列表");
         const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement | null;
         expect(fileInput).toBeTruthy();
 
@@ -481,28 +490,23 @@ describe("KnowledgeDetailPage", () => {
         expect(screen.getByText(/成功 3 · 失败 1/)).toBeTruthy();
     });
 
-    it("shows the global knowledge-answer config console and allows switching active version", async () => {
-        render(<KnowledgeDetailPage />);
+    it("shows read-only global retrieval preview and links to retrieval strategies", async () => {
+        renderWithKnowledgeDetail(<KnowledgeHubPage />);
 
-        await screen.findByText("知识问答配置（全局）");
-        expect(screen.getByText("当前作用于知识问答引擎的全局 active 配置，入口挂在知识库详情页，便于联动排查。"));
-        expect((await screen.findAllByText(/rollout-v1/)).length).toBeGreaterThan(0);
-        expect(await screen.findByText("database")).toBeTruthy();
-        expect(screen.queryByText(/DUAL_RUN/i)).toBeNull();
-        expect(screen.queryByText(/ENABLED/i)).toBeNull();
-
-        const selector = screen.getByLabelText("切换 active config version");
-        fireEvent.change(selector, { target: { value: "cfg-2" } });
-        fireEvent.click(screen.getByRole("button", { name: "保存全局配置" }));
-
-        await waitFor(() => {
-            expect(updateKnowledgeAnswerAdminConfigMock).toHaveBeenCalledWith({ config_version_id: "cfg-2" });
-        });
-        expect(successToastMock).toHaveBeenCalled();
+        await screen.findByText(/用于管理员诊断产品资料/);
+        expect(screen.getAllByText("全局检索策略预览（只读）").length).toBeGreaterThan(0);
+        expect(screen.getByText(/修改检索管线请前往/)).toBeTruthy();
+        const retrievalLinks = screen.getAllByRole("link", { name: "检索策略" });
+        expect(retrievalLinks.some((link) => link.getAttribute("href") === "/admin/retrieval-strategies")).toBe(true);
+        expect(screen.getByRole("link", { name: "全局检索策略" }).getAttribute("href")).toBe(
+            "/admin/retrieval-strategies",
+        );
+        expect(screen.queryByRole("button", { name: "保存全局配置" })).toBeNull();
+        expect(updateKnowledgeAnswerAdminConfigMock).not.toHaveBeenCalled();
     }, 10000);
 
     it("shows the global recent knowledge-answer runs section", async () => {
-        render(<KnowledgeDetailPage />);
+        renderWithKnowledgeDetail(<KnowledgeHubPage />);
 
         await screen.findByText("最近知识问答运行（全局）");
         expect(screen.getByText("当前展示的是全局最近运行记录，不保证只来自本知识库；请结合本页搜索诊断一起排查。"));
@@ -543,7 +547,7 @@ describe("KnowledgeDetailPage", () => {
     });
 
     it("resets to page 1 on filter apply and shows empty state for no matching runs", async () => {
-        render(<KnowledgeDetailPage />);
+        renderWithKnowledgeDetail(<KnowledgeHubPage />);
         await screen.findByText("最近知识问答运行（全局）");
         await screen.findByText("请介绍一下石犀科技");
 
@@ -577,7 +581,7 @@ describe("KnowledgeDetailPage", () => {
     });
 
     it("requests the next page from the server when pagination advances", async () => {
-        render(<KnowledgeDetailPage />);
+        renderWithKnowledgeDetail(<KnowledgeHubPage />);
         await screen.findByText("最近知识问答运行（全局）");
         await screen.findByText("请介绍一下石犀科技");
 
@@ -621,7 +625,7 @@ describe("KnowledgeDetailPage", () => {
     });
 
     it("clears filters and reloads page 1 with unfiltered recent runs", async () => {
-        render(<KnowledgeDetailPage />);
+        renderWithKnowledgeDetail(<KnowledgeHubPage />);
         await screen.findByText("最近知识问答运行（全局）");
         await screen.findByText("请介绍一下石犀科技");
 
@@ -670,7 +674,7 @@ describe("KnowledgeDetailPage", () => {
     });
 
     it("shows an inline reprocess action for failed documents", async () => {
-        render(<KnowledgeDetailPage />);
+        renderWithKnowledgeDetail(<KnowledgeDocumentsPanel />);
 
         await screen.findByText("签约案例.xlsx");
 
@@ -684,9 +688,9 @@ describe("KnowledgeDetailPage", () => {
     });
 
     it("runs search diagnostics and renders matched knowledge evidence", async () => {
-        render(<KnowledgeDetailPage />);
+        renderWithKnowledgeDetail(<KnowledgeSearchDiagnostics />);
 
-        await screen.findByText("石犀产品资料库");
+        await screen.findByText("搜索诊断");
 
         const queryInput = await screen.findByLabelText("知识库搜索诊断");
         fireEvent.change(queryInput, { target: { value: "产品价格" } });

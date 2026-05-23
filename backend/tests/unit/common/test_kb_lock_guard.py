@@ -349,7 +349,7 @@ async def test_evaluate_kb_lock_decision_coach_mode_blocks_product_overview_on_e
     assert decision.user_message
 
 
-def test_evaluate_retrieval_grounding_decision_blocks_bound_kb_query_without_evidence():
+def test_evaluate_retrieval_grounding_decision_allows_generation_when_kb_lock_disabled():
     decision = evaluate_retrieval_grounding_decision(
         query="我这轮话术应该怎么讲更清楚？",
         effective_policy={
@@ -357,6 +357,32 @@ def test_evaluate_retrieval_grounding_decision_blocks_bound_kb_query_without_evi
             "tool_policy": {
                 "enable_internal_retrieval": True,
                 "require_kb_grounding": False,
+            },
+        },
+        retrieval_payload={
+            "count": 0,
+            "results": [],
+            "message": "未命中",
+            "_answerability": {
+                "answerability": "insufficient",
+                "source_status": "miss",
+            },
+        },
+    )
+
+    assert decision.allow_generation is True
+    assert decision.status == "no_context"
+    assert decision.user_message == ""
+
+
+def test_evaluate_retrieval_grounding_decision_blocks_bound_kb_query_without_evidence_when_lock_on():
+    decision = evaluate_retrieval_grounding_decision(
+        query="我这轮话术应该怎么讲更清楚？",
+        effective_policy={
+            "knowledge_base_ids": ["kb-1"],
+            "tool_policy": {
+                "enable_internal_retrieval": True,
+                "require_kb_grounding": True,
             },
         },
         retrieval_payload={

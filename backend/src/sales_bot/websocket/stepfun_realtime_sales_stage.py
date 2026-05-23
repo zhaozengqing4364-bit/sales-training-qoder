@@ -398,6 +398,13 @@ class StepFunRealtimeSalesStageMixin(StepFunRealtimeStateBase):
 
     async def _send_transcript(self, text: str, is_final: bool) -> None:
         """Send ASR transcript in existing frontend message format."""
+        log_latency_debug = getattr(self, "_log_latency_debug", None)
+        if callable(log_latency_debug):
+            log_latency_debug(
+                "transcript_sent_to_frontend",
+                is_final=is_final,
+                text_length=len(text or ""),
+            )
         await self.manager.send_json(
             self.websocket,
             build_asr_transcript_event(text=text, is_final=is_final),

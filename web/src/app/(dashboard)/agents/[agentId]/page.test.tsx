@@ -145,6 +145,7 @@ describe("AgentPersonaSelectPage", () => {
         searchParamsMock.mockReturnValue(new URLSearchParams({
             persona_id: "persona-strong",
             focus_intent: JSON.stringify(focusIntent),
+            practice_template_id: "template-cio",
         }));
         getAgentWithPersonasMock.mockResolvedValueOnce({
             id: "agent-1",
@@ -188,10 +189,11 @@ describe("AgentPersonaSelectPage", () => {
             scenario_type: "sales",
             presentation_id: undefined,
             voice_mode: "stepfun_realtime",
+            practice_template_id: "template-cio",
             focus_intent: focusIntent,
         });
         expect(pushMock).toHaveBeenCalledWith(
-            "/practice/session-123?agent_id=agent-1&persona_id=persona-strong&scenario_type=sales&voice_mode=stepfun_realtime",
+            "/practice/session-123?agent_id=agent-1&persona_id=persona-strong&scenario_type=sales&voice_mode=stepfun_realtime&practice_template_id=template-cio",
         );
     });
 
@@ -238,6 +240,7 @@ describe("AgentPersonaSelectPage", () => {
             scenario_type: "sales",
             presentation_id: undefined,
             voice_mode: "legacy",
+            practice_template_id: undefined,
             focus_intent: undefined,
         });
         expect(pushMock).toHaveBeenCalledWith(
@@ -294,6 +297,7 @@ describe("AgentPersonaSelectPage", () => {
             scenario_type: "sales",
             presentation_id: undefined,
             voice_mode: "legacy",
+            practice_template_id: undefined,
             focus_intent: undefined,
         });
     });
@@ -324,6 +328,7 @@ describe("AgentPersonaSelectPage", () => {
             scenario_type: "presentation",
             presentation_id: "ppt-1",
             voice_mode: "legacy",
+            practice_template_id: undefined,
         });
     });
 
@@ -385,6 +390,7 @@ describe("AgentPersonaSelectPage", () => {
             scenario_type: "presentation",
             presentation_id: "ppt-1",
             voice_mode: "stepfun_realtime",
+            practice_template_id: undefined,
         });
         expect(pushMock).toHaveBeenCalledWith(
             "/practice/session-123?agent_id=agent-1&persona_id=persona-1&scenario_type=presentation&voice_mode=stepfun_realtime&presentation_id=ppt-1",

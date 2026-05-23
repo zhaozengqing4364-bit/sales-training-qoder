@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from hashlib import sha256
 from json import dumps
@@ -20,6 +21,10 @@ from curriculum_practice.schemas import (
     GateResult,
     LearnerLevel,
     PublishGateDecision,
+)
+from curriculum_practice.services.content_assets import (
+    _copy_suffix,
+    list_published_template_references,
 )
 
 SERVER_ERROR = "[EXAMINER_AGENT_SERVICE_FAILED]"
@@ -98,6 +103,66 @@ class ExaminerAgentService:
         agent.status = "archived"
         agent.updated_by = actor_id
         return await self._commit_agent(agent)
+
+    async def duplicate_agent(
+        self, agent: ExaminerAgent, *, actor_id: str | None
+    ) -> Result[ExaminerAgent]:
+        duplicate = ExaminerAgent(
+            examiner_agent_id=str(uuid.uuid4()),
+            name=_copy_suffix(agent.name),
+            description=agent.description,
+            question_source_ids=list(agent.question_source_ids or []),
+            learner_level_strategy=dict(agent.learner_level_strategy or {}),
+            scoring_policy_id=agent.scoring_policy_id,
+            timeout_config=dict(agent.timeout_config or {}),
+            safety_config=dict(agent.safety_config or {}),
+            prompt_config=dict(agent.prompt_config or {}),
+            simulation_config=dict(agent.simulation_config or {}),
+            status="draft",
+            version=1,
+            content_hash=None,
+            created_by=actor_id,
+            updated_by=actor_id,
+        )
+        self._db.add(duplicate)
+        return await self._commit_agent(duplicate)
+
+    async def unpublish_agent(
+        self, agent: ExaminerAgent, *, actor_id: str | None, acknowledge: bool = False
+    ) -> Result[ExaminerAgent]:
+        if agent.status == "draft":
+            return Result.fail("[EXAMINER_AGENT_ALREADY_DRAFT]")
+        if agent.status == "archived":
+            return Result.fail("[EXAMINER_AGENT_NOT_EDITABLE]")
+        references = await list_published_template_references(
+            self._db,
+            asset_type="examiner_agent",
+            asset_id=str(agent.examiner_agent_id),
+        )
+        if references and not acknowledge:
+            return Result(
+                value=references,
+                fallback="[EXAMINER_AGENT_REFERENCED_BY_PUBLISHED_TEMPLATES]",
+                is_success=False,
+            )
+        agent.status = "draft"
+        agent.published_at = None
+        agent.published_by = None
+        agent.updated_by = actor_id
+        return await self._commit_agent(agent)
+
+    async def list_template_references(
+        self, *, examiner_agent_id: str
+    ) -> Result[list[dict[str, str]]]:
+        try:
+            references = await list_published_template_references(
+                self._db,
+                asset_type="examiner_agent",
+                asset_id=examiner_agent_id,
+            )
+        except SQLAlchemyError:
+            return Result.fail(SERVER_ERROR)
+        return Result.ok(references)
 
     async def simulate_agent(
         self, agent: ExaminerAgent, payload: ExaminerAgentSimulationRequest

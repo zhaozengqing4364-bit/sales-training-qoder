@@ -10,4 +10,7 @@ if [ ! -f "$DEV_UP_SCRIPT" ]; then
   exit 1
 fi
 
+# 演练 WebSocket 在 uvicorn --reload 下易被 worker 重启掐断（关闭码 1006）。
+export BACKEND_UVICORN_RELOAD="${BACKEND_UVICORN_RELOAD:-0}"
+
 exec bash "$DEV_UP_SCRIPT" "$@"

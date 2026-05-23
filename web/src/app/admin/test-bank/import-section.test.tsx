@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import TestBankPage from "./page";
+import TestBankImportPage from "./import/page";
 
 const {
     listCategoriesMock,
@@ -11,6 +11,8 @@ const {
     importQuestionsMock: vi.fn(),
     getImportJobMock: vi.fn(),
 }));
+
+vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }));
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn() }),
@@ -63,6 +65,7 @@ vi.mock("lucide-react", () => ({
     Archive: () => <span>archive</span>,
     X: () => <span>x</span>,
     Upload: () => <span>upload</span>,
+    ArrowLeft: () => <span>back</span>,
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -89,7 +92,7 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
-describe("TestBankPage import section", () => {
+describe("TestBankImportPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         listCategoriesMock.mockResolvedValue({
@@ -116,12 +119,8 @@ describe("TestBankPage import section", () => {
             },
         });
 
-        render(<TestBankPage />);
-        await waitFor(() => {
-            expect(listCategoriesMock).toHaveBeenCalled();
-        });
-
-        const fileInput = screen.getByTestId("import-file-input");
+        render(<TestBankImportPage />);
+const fileInput = screen.getByTestId("import-file-input");
         const file = createFile("test.csv", "title,stem,category_id\ntest,stem,cat-1", "text/csv");
 
         fireEvent.change(fileInput, { target: { files: [file] } });
@@ -131,7 +130,7 @@ describe("TestBankPage import section", () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText("导入完成")).toBeTruthy();
+            expect(screen.getByText(/导入完成/)).toBeTruthy();
         });
 
         expect(screen.getByText("5")).toBeTruthy();
@@ -152,12 +151,8 @@ describe("TestBankPage import section", () => {
             },
         });
 
-        render(<TestBankPage />);
-        await waitFor(() => {
-            expect(listCategoriesMock).toHaveBeenCalled();
-        });
-
-        const fileInput = screen.getByTestId("import-file-input");
+        render(<TestBankImportPage />);
+const fileInput = screen.getByTestId("import-file-input");
         const file = createFile("test.csv", "title,stem\ntest,stem", "text/csv");
 
         fireEvent.change(fileInput, { target: { files: [file] } });
@@ -177,12 +172,8 @@ describe("TestBankPage import section", () => {
     });
 
     it("rejects invalid file extension", async () => {
-        render(<TestBankPage />);
-        await waitFor(() => {
-            expect(listCategoriesMock).toHaveBeenCalled();
-        });
-
-        const fileInput = screen.getByTestId("import-file-input");
+        render(<TestBankImportPage />);
+const fileInput = screen.getByTestId("import-file-input");
         const file = createFile("test.pdf", "content", "application/pdf");
 
         fireEvent.change(fileInput, { target: { files: [file] } });
@@ -195,12 +186,8 @@ describe("TestBankPage import section", () => {
     });
 
     it("rejects oversize file (>10MB)", async () => {
-        render(<TestBankPage />);
-        await waitFor(() => {
-            expect(listCategoriesMock).toHaveBeenCalled();
-        });
-
-        const fileInput = screen.getByTestId("import-file-input");
+        render(<TestBankImportPage />);
+const fileInput = screen.getByTestId("import-file-input");
 
         // Create a mock File with >10MB size
         const largeContent = "x".repeat(1024); // 1KB
@@ -218,12 +205,8 @@ describe("TestBankPage import section", () => {
     });
 
     it("rejects empty file", async () => {
-        render(<TestBankPage />);
-        await waitFor(() => {
-            expect(listCategoriesMock).toHaveBeenCalled();
-        });
-
-        const fileInput = screen.getByTestId("import-file-input");
+        render(<TestBankImportPage />);
+const fileInput = screen.getByTestId("import-file-input");
         const file = createFile("empty.csv", "", "text/csv");
 
         fireEvent.change(fileInput, { target: { files: [file] } });
@@ -242,12 +225,8 @@ describe("TestBankPage import section", () => {
             result: { imported: 1, failed: 0, errors: [] },
         });
 
-        render(<TestBankPage />);
-        await waitFor(() => {
-            expect(listCategoriesMock).toHaveBeenCalled();
-        });
-
-        const fileInput = screen.getByTestId("import-file-input");
+        render(<TestBankImportPage />);
+const fileInput = screen.getByTestId("import-file-input");
         const file = createFile("questions.jsonl", '{"title":"test"}\n', "application/jsonl");
 
         fireEvent.change(fileInput, { target: { files: [file] } });

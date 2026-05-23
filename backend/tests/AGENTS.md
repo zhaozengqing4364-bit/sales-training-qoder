@@ -48,6 +48,11 @@ pytest tests/performance/ -m performance
 - Integration tests use the in-memory SQLite engine from `conftest.py`
 - Contract tests verify responses against `docs/api-contract/`
 - Performance tests assert explicit latency bounds and include `@pytest.mark.performance`
+- Unit tests mirror `src/` domain layout (`unit/sales_bot/`, `unit/evaluation/`, `unit/prompt_templates/`, etc.)
+
+## Domain AGENTS Routing
+
+When testing a specific domain, read its AGENTS.md first — see `backend/AGENTS.md` Child Routing.
 
 ## Orientation Note
 

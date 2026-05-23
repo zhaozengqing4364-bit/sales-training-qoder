@@ -8,6 +8,9 @@ LOG_DIR="${DEV_DIR}/logs"
 PID_DIR="${DEV_DIR}/pids"
 
 BACKEND_PORT="${BACKEND_PORT:-3444}"
+# 0 = 稳定模式（推荐，避免 WebSocket 1006）；1 = uvicorn --reload
+BACKEND_UVICORN_RELOAD="${BACKEND_UVICORN_RELOAD:-0}"
+LOG_LEVEL="${LOG_LEVEL:-}"
 FRONTEND_PORT="${FRONTEND_PORT:-3445}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 REDIS_PORT="${REDIS_PORT:-6379}"
@@ -199,6 +202,8 @@ resolve_effective_env() {
   backend_db_env="$(dotenv_get "${backend_env}" "DATABASE_URL")"
   local backend_redis_env
   backend_redis_env="$(dotenv_get "${backend_env}" "REDIS_URL")"
+  local backend_log_level_env
+  backend_log_level_env="$(dotenv_get "${backend_env}" "LOG_LEVEL")"
 
   local web_api_env
   web_api_env="$(dotenv_get "${web_env_local}" "NEXT_PUBLIC_API_URL")"
@@ -207,6 +212,7 @@ resolve_effective_env() {
 
   EFFECTIVE_DATABASE_URL="${DATABASE_URL:-${backend_db_env:-${BACKEND_DATABASE_URL_DEFAULT}}}"
   EFFECTIVE_REDIS_URL="${REDIS_URL:-${backend_redis_env:-${BACKEND_REDIS_URL_DEFAULT}}}"
+  LOG_LEVEL="${LOG_LEVEL:-${backend_log_level_env:-ERROR}}"
   EFFECTIVE_FRONTEND_API_URL="${NEXT_PUBLIC_API_URL:-${web_api_env:-${FRONTEND_API_URL_DEFAULT}}}"
   EFFECTIVE_FRONTEND_WS_URL="${NEXT_PUBLIC_WS_URL:-${web_ws_env:-${FRONTEND_WS_URL_DEFAULT}}}"
 }
@@ -390,14 +396,27 @@ start_backend() {
   local python_bin
   python_bin="$(resolve_python_bin)" || die "未找到 Python 解释器，请先配置后端环境"
 
-  log "启动 Backend (端口 ${BACKEND_PORT})，Python: ${python_bin}"
+  local uvicorn_args=(
+    src.main:app
+    --port "${BACKEND_PORT}"
+    --log-level "$(printf '%s' "${LOG_LEVEL}" | tr '[:upper:]' '[:lower:]')"
+    --no-access-log
+  )
+  local reload_mode="稳定模式（无 --reload）"
+  if [[ "${BACKEND_UVICORN_RELOAD}" == "1" ]]; then
+    uvicorn_args=(--reload "${uvicorn_args[@]}")
+    reload_mode="热重载（--reload）"
+  fi
+
+  log "启动 Backend (端口 ${BACKEND_PORT})，Python: ${python_bin}，${reload_mode}，LOG_LEVEL=${LOG_LEVEL}"
   (
     cd "${ROOT_DIR}/backend"
     nohup env \
       DATABASE_URL="${EFFECTIVE_DATABASE_URL}" \
       REDIS_URL="${EFFECTIVE_REDIS_URL}" \
+      LOG_LEVEL="${LOG_LEVEL}" \
       PYTHONPATH="${ROOT_DIR}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
-      "${python_bin}" -m uvicorn src.main:app --reload --port "${BACKEND_PORT}" \
+      "${python_bin}" -m uvicorn "${uvicorn_args[@]}" \
       >"${LOG_DIR}/backend.log" 2>&1 &
     echo $! > "${PID_DIR}/backend.pid"
   )
@@ -440,6 +459,7 @@ print_summary() {
 - Frontend: http://localhost:${FRONTEND_PORT}
 - Backend API: http://localhost:${BACKEND_PORT}/api/v1
 - Backend Docs: http://localhost:${BACKEND_PORT}/docs
+- Backend reload: $([[ "${BACKEND_UVICORN_RELOAD}" == "1" ]] && echo "开启（--reload）" || echo "关闭（稳定模式，适合语音 WebSocket）")
 - DATABASE_URL: ${EFFECTIVE_DATABASE_URL}
 - REDIS_URL: ${EFFECTIVE_REDIS_URL}
 

@@ -274,6 +274,7 @@ function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
             authHandler.logout("已退出登录", {
                 redirectTo: "/login",
                 notify: false,
+                hardRedirect: true,
             });
         }
     };

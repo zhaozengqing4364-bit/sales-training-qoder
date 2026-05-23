@@ -1,34 +1,53 @@
 # App Router Guide — `web/src/app/`
 
-Scope: Next.js App Router pages and layouts only. For component/UI rules, see `.kiro/steering/frontend-principles.md`.
+Scope: Next.js App Router pages and layouts. UI rules: `.kiro/steering/frontend-principles.md`.
 
 ## Route-Group Map
 
-- `(auth)/` — Unauthenticated surface (`login/`, `forgot-password/`, `reset-password/`). No shell layout; minimal wrappers.
-- `(dashboard)/` — Authenticated learner dashboard surface (`page.tsx`, `training/`, `history/`, `leaderboard/`, `profile/`, `support/`, `agents/`). Wrapped by `layout.tsx` → `DashboardShell` + `requireServerSession`.
-- `(user)/practice/[sessionId]/` — Dense learner practice surface. The heaviest route-local code lives here (page, replay, report, hooks, tests).
-- `admin/` — Dense operator surface. Wrapped by `layout.tsx` → `AdminShell` with `requiredRoles: ["admin"]`. Contains `analytics/`, `agents/`, `knowledge/`, `personas/`, `presentations/`, `prompts/`, `rag-profiles/`, `records/`, `retrieval-strategies/`, `settings/`, `users/`, `voice-runtime/`.
+- `(auth)/` — `login/`, `forgot-password/`, `reset-password/`. No shell.
+- `(dashboard)/` — Learner dashboard: `/`, `training/` (sales + presentation), `history/`, `leaderboard/`, `profile/`, `support/` (+ `support/runtime/`), `agents/[agentId]/`. `DashboardShell` + `requireServerSession`.
+- `(user)/` — Dense learner flows:
+  - `practice/[sessionId]/` — live practice, `replay/`, `report/` (route-local hooks/tests encouraged)
+  - `exam/[sessionId]/` — examiner session + `report/`
+  - `learning-path/` — curriculum path entry
+  - `study/[learningContentId]/` — chapter study surface
+  - `layout.tsx` — session gate only; `practice/layout.tsx` — practice chrome
+- `admin/` — Operator console (`AdminShell`, `requiredRoles: ["admin"]`). Nav source of truth: `components/layout/admin-sidebar.tsx`.
+  - **Assets**: `agents/`, `personas/`, `knowledge/`, `retrieval-strategies/`, `presentations/`, `curriculum-practice/` (`case-items/`, `role-profiles/`, `templates/`, `examiner-agents/` via shared `content-asset-index.tsx`), `learning-contents/`, `test-bank/`
+  - **Policy**: `prompts/`, `business-rules/` (sales-combinations, growth-achievements, ai-coach, next-practice-recommendations, objection-ledger), `scoring-rulesets/`, `governance/`, `voice-runtime/`, `presentation-ai/`, `rag-profiles/` (linked from knowledge, not sidebar)
+  - **Analytics**: `records/`, `analytics/`, `analytics/curriculum/`, `supervisor-training/`
+  - **Org & system**: `users/`, `settings/`, `logs/`
+- `test-mic/` — dev mic check (outside groups)
+
+## Admin Console Patterns
+
+Before adding or refactoring admin pages, read [`.trellis/spec/frontend/admin-console-patterns.md`](../../.trellis/spec/frontend/admin-console-patterns.md). Five hard rules:
+
+1. **List = Index only** — no full create/edit forms on list pages.
+2. **Import ≠ View** — bulk import gets its own route (`/import`); no inline upload on list or detail.
+3. **Detail vs Edit** — separate by tab or route; complex entities need read-only overview + edit surface.
+4. **Sub-resources → sub-routes** — documents, diagnostics, bindings, etc. not stacked on one `[id]` page.
+5. **Policy vs Assets** — edit global policy in 策略中心; asset pages bind/reference + read-only preview only (`retrieval-strategies` is the reference).
 
 ## Layout Boundaries
 
-Layouts in this tree are authorization + shell boundaries. Do not add heavy data fetching in them.
-
-- `layout.tsx` (root) — global providers, background, metadata.
-- `(dashboard)/layout.tsx` — `DashboardShell` + session gate.
-- `admin/layout.tsx` — `AdminShell` + admin role gate.
-- `(user)/practice/layout.tsx` — practice-specific chrome.
+- Root `layout.tsx` — providers, `bg-slate-50`, metadata
+- `(dashboard)/layout.tsx` — `DashboardShell`
+- `admin/layout.tsx` — `AdminShell` + admin role
+- `(user)/layout.tsx` — `requireServerSession` only
+- `(user)/practice/layout.tsx` — practice-specific chrome
 
 ## Local Conventions
 
-- **Co-location encouraged**: route-local hooks, tests, and small utilities live next to the pages that use them (e.g., `use-practice-recording-hotkeys.ts`, `page.test.tsx`, `runtime-lock.ts`).
-- **No `route.ts` handlers** in this tree; API calls go to `backend/` via `web/src/lib/api/`.
-- **Error/loading states** are owned per segment (`error.tsx`, `loading.tsx`). Mirror siblings when adding new routes.
-- **Tests** at route level validate shell behavior and page render, not full integration.
+- Co-locate route hooks, tests, utilities (`page.test.tsx`, `use-*.ts`, `runtime-lock.ts`)
+- No `route.ts`; call backend via `@/lib/api/client`
+- Mirror sibling `error.tsx` / `loading.tsx` when adding segments
+- Route tests: shell/render contracts, not full integration
 
 ## Where to Look
 
-- Dashboard logic & learner entry: `(dashboard)/page.tsx`
-- Practice session (dense learner UX): `(user)/practice/[sessionId]/page.tsx`
-- Admin entry: `admin/page.tsx`
-- Shared shell components: `web/src/components/layout/`
-- Detailed frontend rules: `.kiro/steering/frontend-principles.md`
+- Learner home: `(dashboard)/page.tsx`
+- Practice session: `(user)/practice/[sessionId]/page.tsx`
+- Exam: `(user)/exam/[sessionId]/page.tsx`
+- Admin home: `admin/page.tsx`
+- Shells: `web/src/components/layout/`

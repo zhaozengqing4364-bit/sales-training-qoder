@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"Check agent needs backend verification expectations."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check idempotent seed/database behavior and async SQLAlchemy compliance."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check lint/type/test expectations and forbidden patterns."}
+{"file":".trellis/tasks/05-21-presales-cio-closed-loop/research/codebase-surfaces.md","reason":"Check implementation uses existing configuration surfaces instead of inventing new framework."}
+{"file":".trellis/tasks/05-21-presales-cio-closed-loop/research/scenario-build-plan.md","reason":"Check all required scenario assets and acceptance criteria are covered."}

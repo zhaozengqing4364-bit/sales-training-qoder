@@ -459,7 +459,7 @@ def evaluate_retrieval_grounding_decision(
     result_count = max(0, int(retrieval_payload.get("count") or 0))
 
     if result_count <= 0:
-        if has_bound_knowledge_base:
+        if has_bound_knowledge_base and kb_lock_required:
             return RetrievalGroundingDecision(
                 allow_generation=False,
                 status="blocked_empty",
@@ -484,7 +484,7 @@ def evaluate_retrieval_grounding_decision(
 
     grounding_context = _build_grounding_context(normalized_query, retrieval_payload)
     if not grounding_context:
-        if has_bound_knowledge_base:
+        if has_bound_knowledge_base and kb_lock_required:
             return RetrievalGroundingDecision(
                 allow_generation=False,
                 status="blocked_empty",
@@ -514,6 +514,7 @@ def evaluate_retrieval_grounding_decision(
 
     if (
         has_bound_knowledge_base
+        and kb_lock_required
         and answerability_mode in {"ungrounded", "blocked"}
     ):
         return RetrievalGroundingDecision(
@@ -525,7 +526,7 @@ def evaluate_retrieval_grounding_decision(
             diagnostics=diagnostics,
             result_count=result_count,
         )
-    if answerability_mode == "blocked":
+    if answerability_mode == "blocked" and kb_lock_required:
         return RetrievalGroundingDecision(
             allow_generation=False,
             status="blocked_answerability",

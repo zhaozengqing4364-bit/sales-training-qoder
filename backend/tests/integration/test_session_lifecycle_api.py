@@ -14,7 +14,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-import common.api.practice as practice_api
+import common.api.practice as practice_route
 import evaluation.services.report_generation_trigger as trigger_module
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
@@ -24,6 +24,7 @@ from common.db.session_lifecycle import (
     SessionLifecycleService,
 )
 from common.error_handling.result import Result
+from common.services import practice_session_service as practice_service
 from common.websocket.session_manager import get_session_manager
 from evaluation.services.report_generation_trigger import trigger_report_generation
 
@@ -96,8 +97,12 @@ def _stub_sales_end_dependencies(monkeypatch: pytest.MonkeyPatch):
         )
     )
     cleanup_mock = AsyncMock(return_value=Result.ok({"session_id": "stub-session"}))
-    monkeypatch.setattr(practice_api.summary_service, "generate_summary", summary_mock)
-    monkeypatch.setattr(practice_api.sales_bot_service, "end_session", cleanup_mock)
+    monkeypatch.setattr(
+        practice_service.summary_service,
+        "generate_summary",
+        summary_mock,
+    )
+    monkeypatch.setattr(practice_service.sales_bot_service, "end_session", cleanup_mock)
     return summary_mock, cleanup_mock
 
 
@@ -276,7 +281,7 @@ async def test_lifecycle_api_end_triggers_report_on_first_terminal_transition(
     summary_mock, cleanup_mock = _stub_sales_end_dependencies(monkeypatch)
     report_trigger_mock = AsyncMock()
     monkeypatch.setattr(
-        practice_api.SessionLifecycleService,
+        SessionLifecycleService,
         "trigger_report_generation_if_needed",
         report_trigger_mock,
     )
@@ -315,7 +320,7 @@ async def test_sales_end_response_stays_scoring_but_background_finalization_can_
     summary_mock, cleanup_mock = _stub_sales_end_dependencies(monkeypatch)
     report_trigger_mock = AsyncMock()
     monkeypatch.setattr(
-        practice_api.SessionLifecycleService,
+        SessionLifecycleService,
         "trigger_report_generation_if_needed",
         report_trigger_mock,
     )
@@ -426,7 +431,7 @@ async def test_lifecycle_api_end_presentation_completes_without_scoring_handoff(
 ):
     report_trigger_mock = AsyncMock()
     monkeypatch.setattr(
-        practice_api.SessionLifecycleService,
+        SessionLifecycleService,
         "trigger_report_generation_if_needed",
         report_trigger_mock,
     )
@@ -447,7 +452,7 @@ async def test_lifecycle_api_end_presentation_completes_without_scoring_handoff(
         return Result.ok(session)
 
     monkeypatch.setattr(
-        practice_api.PresentationCoachService,
+        practice_service.PresentationCoachService,
         "end_session",
         _stub_presentation_end,
     )
@@ -647,7 +652,7 @@ async def test_lifecycle_api_end_is_idempotent_and_logs_unified_terminal_context
 
     summary_mock, cleanup_mock = _stub_sales_end_dependencies(monkeypatch)
     info_spy = MagicMock()
-    monkeypatch.setattr(practice_api.logger, "info", info_spy)
+    monkeypatch.setattr(practice_route.logger, "info", info_spy)
 
     close_calls: list[tuple[int, str]] = []
     handler = SimpleNamespace(

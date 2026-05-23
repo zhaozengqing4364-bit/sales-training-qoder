@@ -62,7 +62,7 @@ function nextTaskHref(nextTask: LearningPathNextTask): string {
 type StageAction = {
     href: string;
     label: string;
-    variant: "default" | "outline";
+    variant: "primary" | "outline";
 };
 
 function stageEntryHref(stage: LearningPathStage): string | null {
@@ -80,7 +80,11 @@ function stageEntryHref(stage: LearningPathStage): string | null {
         });
     }
     if (stage.stage_type === "practice" && stage.agent_id) {
-        return `/agents/${encodeURIComponent(stage.agent_id)}`;
+        const params = new URLSearchParams();
+        if (stage.asset_id) {
+            params.set("practice_template_id", stage.asset_id);
+        }
+        return `/agents/${encodeURIComponent(stage.agent_id)}${params.toString() ? `?${params.toString()}` : ""}`;
     }
     return null;
 }
@@ -115,7 +119,7 @@ function buildStageActions(stage: LearningPathStage): StageAction[] {
     }
 
     if (stage.state === "failed" || stage.state === "retraining_required") {
-        actions.push({ href: entryHref, label: stageRetryLabel(stage), variant: "default" });
+        actions.push({ href: entryHref, label: stageRetryLabel(stage), variant: "primary" });
         return actions;
     }
 
@@ -124,7 +128,7 @@ function buildStageActions(stage: LearningPathStage): StageAction[] {
         return actions;
     }
 
-    actions.push({ href: entryHref, label: stagePrimaryLabel(stage), variant: "default" });
+    actions.push({ href: entryHref, label: stagePrimaryLabel(stage), variant: "primary" });
     return actions;
 }
 

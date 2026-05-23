@@ -28,6 +28,7 @@ import {
     practiceUxConfig,
 } from "@/lib/practice-ux-config";
 import { formatGoalTypeLabel, formatIssueTypeLabel } from "@/lib/session-evidence";
+import { formatRuntimeLifecycleState } from "@/lib/runtime-lifecycle-labels";
 import { PracticeHeader } from "./PracticeHeader";
 
 const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
@@ -331,21 +332,47 @@ export default function PracticeSessionPage() {
         requestPermission,
     } = useAudioRecorder({
         onAudioData: (base64Audio) => {
-            if (isConnected) {
-                // 流式发送音频数据
-                sendAudio(base64Audio);
+            if (!isConnected) {
+                debug.warn("[PracticeRecording:base64_audio_not_sent]", {
+                    reason: "not_connected",
+                    sessionId,
+                    connectionState,
+                    sessionStatus,
+                    payloadLength: base64Audio.length,
+                });
+                return;
             }
+
+            // 流式发送音频数据
+            sendAudio(base64Audio);
         },
         onAudioDataBinary: (pcmData) => {
-            if (isConnected) {
-                sendAudioBinary(pcmData);
+            if (!isConnected) {
+                debug.warn("[PracticeRecording:binary_audio_not_sent]", {
+                    reason: "not_connected",
+                    sessionId,
+                    connectionState,
+                    sessionStatus,
+                    payloadSamples: pcmData.length,
+                });
+                return;
             }
+
+            sendAudioBinary(pcmData);
         },
         onAudioEnd: () => {
-            if (isConnected) {
-                // 发送音频结束信号
-                sendAudioEnd();
+            if (!isConnected) {
+                debug.warn("[PracticeRecording:audio_end_not_sent]", {
+                    reason: "not_connected",
+                    sessionId,
+                    connectionState,
+                    sessionStatus,
+                });
+                return;
             }
+
+            // 发送音频结束信号
+            sendAudioEnd();
         },
         onSpeakingChange: (speaking) => {
             if (isConnected && speaking) {
@@ -618,12 +645,19 @@ export default function PracticeSessionPage() {
 
         if (wsError || connectionState === "failed" || connectionState === "reconnecting") {
             const isFailed = connectionState === "failed";
+            const isWaitingPreflight = connectionState === "connecting"
+                && runtimePreflight.status === "loading";
+            if (isWaitingPreflight) {
+                return faults;
+            }
             faults.push({
                 id: "connection",
                 severity: isFailed ? "error" : "warning",
                 title: isFailed ? "连接失败" : "连接恢复中",
                 message: wsError || (isFailed ? "实时连接失败。" : "网络波动，正在自动重连。"),
-                guidance: isFailed ? "点击重新连接恢复会话；如果仍失败，可刷新页面后重新进入。" : "自动重连期间请先不要结束页面，系统会尽量恢复当前会话。",
+                guidance: isFailed
+                    ? "点击重新连接恢复会话；如果仍失败，可刷新页面后重新进入。"
+                    : "自动重连期间请先不要结束页面。若关闭码为 1006，请确认后端 3444 已启动且未在 --reload；若为 4001/4410/4411，请返回入口重开或重新登录。",
                 action: isFailed ? (
                     <Button
                         size="sm"
@@ -813,6 +847,13 @@ export default function PracticeSessionPage() {
     });
     const canRecord = recordingStateMachine.canRecord;
     const canRequestPermission = recordingStateMachine.canRequestPermission;
+    const [recordingBlockedHint, setRecordingBlockedHint] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (canRecord || canRequestPermission) {
+            setRecordingBlockedHint(null);
+        }
+    }, [canRecord, canRequestPermission]);
 
     const stopRecordingAndUpload = React.useCallback(() => {
         if (!recordingStateMachine.beginTransition("stopping")) {
@@ -832,8 +873,19 @@ export default function PracticeSessionPage() {
         debug.log('[Recording] toggleRecording intent:', intent.action, 'isRecording:', isRecordingRef.current, 'aiIsBusy:', aiIsBusyRef.current, 'hasPermission:', hasPermission);
 
         if (intent.action === "blocked") {
+            const blockedMessage = intent.reason === "connection"
+                ? "连接未就绪，请等待“已连接”后再录音。"
+                : intent.reason === "session_status"
+                ? "会话尚未进入进行中，请稍候或点击顶部“开始/继续”。"
+                : intent.reason === "lifecycle"
+                ? "正在更新会话状态，请稍后再试。"
+                : "录音操作处理中，请稍后再试。";
+            setRecordingBlockedHint(blockedMessage);
+            debug.warn("[Recording] toggle blocked", intent);
             return;
         }
+
+        setRecordingBlockedHint(null);
 
         if (intent.action === "stop") {
             stopRecordingAndUpload();
@@ -1183,6 +1235,12 @@ export default function PracticeSessionPage() {
                                 </div>
                             ))}
                         </div>
+
+                        {recordingBlockedHint && (
+                            <p className="text-xs font-medium text-amber-700">
+                                {recordingBlockedHint}
+                            </p>
+                        )}
 
                         <p className="text-xs text-slate-500 font-medium">
                             {connectionState === "failed"

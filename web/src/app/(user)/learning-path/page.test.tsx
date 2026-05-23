@@ -72,6 +72,20 @@ describe("LearningPathPage", () => {
                     retry_action: null,
                 },
                 {
+                    template_stage_key: "template_stage_practice",
+                    name: "产品角色对练",
+                    state: "available",
+                    stage_type: "practice",
+                    asset_id: "template-product",
+                    agent_id: "agent-product",
+                    prerequisites: [{ template_stage_key: "template_stage_product", required_result: "completed" }],
+                    completion_policy: { min_score: 7 },
+                    result: null,
+                    report_url: null,
+                    failure_reason: null,
+                    retry_action: null,
+                },
+                {
                     template_stage_key: "template_stage_review",
                     name: "主管认证复核",
                     state: "pending_review",
@@ -92,8 +106,8 @@ describe("LearningPathPage", () => {
         expect(await screen.findByText("我的学习路径")).toBeTruthy();
         expect(screen.getByText("产品证据表达")).toBeTruthy();
         expect(screen.getByText("主管认证复核")).toBeTruthy();
-        expect(screen.getByText("前置条件：产品证据表达")).toBeTruthy();
-        expect(screen.getByText("完成标准：最低 7 分")).toBeTruthy();
+        expect(screen.getAllByText("前置条件：产品证据表达").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("完成标准：最低 7 分").length).toBeGreaterThan(0);
         expect(screen.getByText(/最高得分：8/)).toBeTruthy();
         expect(screen.getByText(/通过：已通过/)).toBeTruthy();
     });
@@ -243,6 +257,15 @@ describe("LearningPathPage", () => {
         expect(await screen.findByText("产品知识学习")).toBeTruthy();
         expect(screen.getByRole("link", { name: "去学习" }).getAttribute("href")).toBe(
             "/study/content-lesson-1?from=learning-path",
+        );
+    });
+
+    it("links practice stages through the template-backed agent entry", async () => {
+        render(<LearningPathPage />);
+
+        expect(await screen.findByText("产品角色对练")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "开始对练" }).getAttribute("href")).toBe(
+            "/agents/agent-product?practice_template_id=template-product",
         );
     });
 

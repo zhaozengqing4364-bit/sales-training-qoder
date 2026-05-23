@@ -15,6 +15,9 @@ High-level routing map for major subdomains:
 - `effectiveness/` — Scoring and effectiveness evaluation primitives
 - `knowledge/` — Vector storage, document ingestion, and retrieval helpers (ChromaDB)
 - `knowledge_engine/` — Higher-level knowledge orchestration and query planning
+- `effectiveness/` — Scoring rulesets, methodology, canonical evaluation
+- `growth/` — Growth service and safety policies
+- `training_tasks/` — Training task services
 - `services/` — Shared service facades used across multiple domains
 - `storage/` — File/blob storage abstractions and helpers
 - `websocket/` — Base WebSocket handlers and connection management utilities
@@ -38,5 +41,7 @@ High-level routing map for major subdomains:
 ## Entry Points You Will Touch
 
 - `backend/src/common/db/models.py` — Shared SQLAlchemy models
+- `backend/src/common/db/session_lifecycle.py` — Session lifecycle transitions
 - `backend/src/common/api/practice.py` — Cross-domain practice APIs
 - `backend/src/common/websocket/base_handler.py` — Base WebSocket handler
+- `backend/src/common/conversation/runtime_diagnostics.py` — Runtime diagnostics

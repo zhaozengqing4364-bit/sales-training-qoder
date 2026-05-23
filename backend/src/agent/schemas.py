@@ -13,7 +13,7 @@ References:
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from common.db.schemas import AssetGovernanceSummary
 
@@ -200,6 +200,23 @@ class AgentPublishResponse(BaseModel):
 # ========== Persona Schemas ==========
 
 
+def normalize_persona_traits(raw: Any) -> dict[str, str]:
+    """Coerce legacy list-valued trait entries to strings for API responses."""
+
+    if not isinstance(raw, dict):
+        return {}
+    normalized: dict[str, str] = {}
+    for key, value in raw.items():
+        trait_key = str(key)
+        if isinstance(value, list):
+            normalized[trait_key] = "、".join(str(item) for item in value if str(item).strip())
+        elif value is None:
+            normalized[trait_key] = ""
+        else:
+            normalized[trait_key] = str(value)
+    return normalized
+
+
 class PersonaBase(BaseModel):
     """Base Persona fields for create/update"""
 
@@ -270,6 +287,11 @@ class PersonaResponse(PersonaBase):
     id: str
     system_prompt: str
     traits: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("traits", mode="before")
+    @classmethod
+    def _normalize_traits(cls, value: Any) -> dict[str, str]:
+        return normalize_persona_traits(value)
     knowledge_base_ids: list[str] = Field(default_factory=list)
     persona_policy: dict[str, Any] = Field(default_factory=dict)
     behavior_config: dict[str, Any] = Field(default_factory=dict)

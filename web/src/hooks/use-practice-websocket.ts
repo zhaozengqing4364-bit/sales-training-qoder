@@ -72,8 +72,10 @@ import {
     nextReconnectDelay,
     resolvePracticeWebSocketAuthToken,
     resolveWebSocketCloseUserMessage,
+    shouldFailFastOnHandshake1006,
     shouldTreatAsAbnormalCloseBurst,
 } from "./websocket/transport";
+import { logPracticeWsDiagnostic } from "./websocket/practice-ws-diagnostics";
 
 // ── Constants ──
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -81,17 +83,40 @@ const MAX_LOCAL_BUFFER_SIZE = 200; // ~4 seconds of audio at 20ms chunks
 const INTERIM_TRANSCRIPT_THROTTLE_MS = 80;
 const MAX_CHAT_MESSAGES = 200;
 const MAX_PENDING_OUTGOING_MESSAGES = 80;
+const REALTIME_INPUT_SAMPLE_RATE = 24000;
 
 // v1-13: Binary frame type constants (must match backend)
 const BINARY_AUDIO_CHUNK = 0x01;
 const BINARY_AUDIO_INTERRUPT = 0x02;
 type OutgoingMessagePriority = "high" | "normal";
 
+type AudioDropReason =
+    | "socket_not_open"
+    | "connection_not_connected"
+    | "session_not_in_progress";
+
 /** v1-13: Convert Int16Array PCM to Base64 string (used only during backpressure fallback). */
 function pcmToBase64(pcmData: Int16Array): string {
     const bytes = new Uint8Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength);
     const binary = String.fromCharCode(...bytes);
     return btoa(binary);
+}
+
+function getAudioDropReason(
+    ws: WebSocket | null,
+    connectionState: ConnectionState,
+    sessionStatus: PracticeState["sessionStatus"],
+): AudioDropReason | null {
+    if (ws?.readyState !== WebSocket.OPEN) {
+        return "socket_not_open";
+    }
+    if (connectionState !== "connected") {
+        return "connection_not_connected";
+    }
+    if (sessionStatus !== "in_progress") {
+        return "session_not_in_progress";
+    }
+    return null;
 }
 
 export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
@@ -135,9 +160,13 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     const reconnectAttempts = useRef(0);
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const abnormalCloseTimestampsRef = useRef<number[]>([]);
+    const hasOpenedOnceRef = useRef(false);
+    const transportGenerationRef = useRef(0);
     const isConnectingRef = useRef(false);
     const manualDisconnectRef = useRef(false);
     const pendingMessagesRef = useRef(createPendingMessageQueue(MAX_PENDING_OUTGOING_MESSAGES));
+    const sentBinaryAudioFrameCountRef = useRef(0);
+    const droppedAudioFrameCountRef = useRef(0);
 
     // ── State ──
     const [state, setState] = useState<PracticeState>(INITIAL_PRACTICE_STATE);
@@ -335,6 +364,12 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             return;
         }
 
+        logPracticeWsDiagnostic("transport_teardown", {
+            sessionId,
+            transportGeneration: transportGenerationRef.current,
+            readyState: wsRef.current.readyState,
+            trigger: manualDisconnectRef.current ? "manual" : "replace",
+        });
         manualDisconnectRef.current = true;
         try {
             wsRef.current.close(1000, "Transport replaced");
@@ -342,7 +377,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             // Ignore close races while the socket is still handshaking.
         }
         wsRef.current = null;
-    }, [clearReconnectTimer]);
+    }, [clearReconnectTimer, sessionId]);
 
     const resetRealtimeRuntimeState = useCallback(() => {
         currentStreamIdRef.current = null;
@@ -478,7 +513,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             }
 
             if (index < chunksToSend.length && !isBackpressureActiveRef.current) {
-                sendMessage("audio_chunk", { audio: chunksToSend[index], sample_rate: 16000, interrupt: false });
+                sendMessage("audio_chunk", { audio: chunksToSend[index], sample_rate: REALTIME_INPUT_SAMPLE_RATE, interrupt: false });
                 index++;
                 setTimeout(sendNext, 10);
             } else if (index < chunksToSend.length && isBackpressureActiveRef.current) {
@@ -521,11 +556,24 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
      * With backpressure awareness. Falls back to buffering when backpressure active.
      */
     const sendAudioBinary = useCallback((pcmData: Int16Array, interrupt = false) => {
-        if (
-            wsRef.current?.readyState !== WebSocket.OPEN
-            || state.connectionState !== "connected"
-            || state.sessionStatus !== "in_progress"
-        ) {
+        const dropReason = getAudioDropReason(
+            wsRef.current,
+            state.connectionState,
+            state.sessionStatus,
+        );
+        if (dropReason) {
+            droppedAudioFrameCountRef.current += 1;
+            if (droppedAudioFrameCountRef.current <= 3 || droppedAudioFrameCountRef.current % 20 === 0) {
+                debug.warn("[PracticeWS:audio_binary_dropped]", {
+                    reason: dropReason,
+                    frameCount: droppedAudioFrameCountRef.current,
+                    payloadSamples: pcmData.length,
+                    sessionId,
+                    readyState: wsRef.current?.readyState ?? null,
+                    connectionState: state.connectionState,
+                    sessionStatus: state.sessionStatus,
+                });
+            }
             return;
         }
 
@@ -551,7 +599,18 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
 
         setState(prev => (prev.isNetworkSlow ? { ...prev, isNetworkSlow: false } : prev));
         sendBinaryFrame(BINARY_AUDIO_CHUNK, payload);
-    }, [sendBinaryFrame, state.connectionState, state.sessionStatus]);
+        sentBinaryAudioFrameCountRef.current += 1;
+        if (sentBinaryAudioFrameCountRef.current % 20 === 0) {
+            debug.log("[PracticeWS:audio_binary_sent]", {
+                frameCount: sentBinaryAudioFrameCountRef.current,
+                payloadBytes: payload.byteLength,
+                sampleRate: REALTIME_INPUT_SAMPLE_RATE,
+                sessionId,
+                connectionState: state.connectionState,
+                sessionStatus: state.sessionStatus,
+            });
+        }
+    }, [sendBinaryFrame, sessionId, state.connectionState, state.sessionStatus]);
 
     /**
      * Send audio data with backpressure awareness (legacy Base64 JSON path).
@@ -559,16 +618,29 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
      * Requirements: Voice Practice Optimization P0-2
      */
     const sendAudio = useCallback((audioData: string, interrupt = false) => {
-        if (
-            wsRef.current?.readyState !== WebSocket.OPEN
-            || state.connectionState !== "connected"
-            || state.sessionStatus !== "in_progress"
-        ) {
+        const dropReason = getAudioDropReason(
+            wsRef.current,
+            state.connectionState,
+            state.sessionStatus,
+        );
+        if (dropReason) {
+            droppedAudioFrameCountRef.current += 1;
+            if (droppedAudioFrameCountRef.current <= 3 || droppedAudioFrameCountRef.current % 20 === 0) {
+                debug.warn("[PracticeWS:audio_chunk_dropped]", {
+                    reason: dropReason,
+                    frameCount: droppedAudioFrameCountRef.current,
+                    payloadLength: audioData.length,
+                    sessionId,
+                    readyState: wsRef.current?.readyState ?? null,
+                    connectionState: state.connectionState,
+                    sessionStatus: state.sessionStatus,
+                });
+            }
             return;
         }
 
         if (interrupt) {
-            sendMessage("audio_chunk", { audio: audioData, sample_rate: 16000, interrupt: true });
+            sendMessage("audio_chunk", { audio: audioData, sample_rate: REALTIME_INPUT_SAMPLE_RATE, interrupt: true });
             return;
         }
 
@@ -586,7 +658,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         }
 
         setState(prev => (prev.isNetworkSlow ? { ...prev, isNetworkSlow: false } : prev));
-        sendMessage("audio_chunk", { audio: audioData, sample_rate: 16000, interrupt: false });
+        sendMessage("audio_chunk", { audio: audioData, sample_rate: REALTIME_INPUT_SAMPLE_RATE, interrupt: false });
     }, [sendMessage, state.connectionState, state.sessionStatus]);
 
     const sendAudioEnd = useCallback(() => {
@@ -723,6 +795,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         }
 
         manualDisconnectRef.current = false;
+        hasOpenedOnceRef.current = false;
         isConnectingRef.current = true;
         const connectingState: ConnectionState =
             reconnectAttempts.current > 0 ? "reconnecting" : "connecting";
@@ -738,6 +811,18 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             traceId: getSharedTraceId(),
             authToken: resolvePracticeWebSocketAuthToken(),
         });
+        const transportGeneration = transportGenerationRef.current + 1;
+        transportGenerationRef.current = transportGeneration;
+        logPracticeWsDiagnostic("connect_requested", {
+            sessionId: activeSessionId,
+            scenarioType: activeScenarioType,
+            voiceMode: activeVoiceMode,
+            reconnectAttempt: reconnectAttempts.current,
+            runtimeConnectKey,
+            connectEnabled,
+            transportGeneration,
+            trigger: reconnectAttempts.current > 0 ? "reconnect" : "initial",
+        });
         debug.log("[PracticeWS] Connecting", {
             sessionId: activeSessionId,
             scenarioType: activeScenarioType,
@@ -745,6 +830,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             agentId: activeAgentId || null,
             personaId: activePersonaId || null,
             reconnectAttempt: reconnectAttempts.current,
+            transportGeneration,
             url: maskWsUrlToken(url),
             debugEnabled: debug.enabled(),
         });
@@ -753,13 +839,23 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         ws.onopen = () => {
             const { sessionId: activeSessionId, scenarioType: activeScenarioType, voiceMode: activeVoiceMode } =
                 connectParamsRef.current;
+            logPracticeWsDiagnostic("connect_open", {
+                sessionId: activeSessionId,
+                scenarioType: activeScenarioType,
+                voiceMode: activeVoiceMode,
+                reconnectAttempt: reconnectAttempts.current,
+                transportGeneration,
+                connectionState: "connected",
+            });
             debug.log("[PracticeWS] WebSocket connected", {
                 sessionId: activeSessionId,
                 scenarioType: activeScenarioType,
                 voiceMode: activeVoiceMode,
+                transportGeneration,
             });
             reconnectAttempts.current = 0;
             abnormalCloseTimestampsRef.current = [];
+            hasOpenedOnceRef.current = true;
             isConnectingRef.current = false;
             applyConnectionState("connected", null);
             flushPendingMessages();
@@ -773,10 +869,17 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
 
         ws.onerror = () => {
             const { sessionId: activeSessionId } = connectParamsRef.current;
+            logPracticeWsDiagnostic("connect_error", {
+                sessionId: activeSessionId,
+                reconnectAttempt: reconnectAttempts.current,
+                transportGeneration,
+                readyState: ws.readyState,
+            });
             debug.warn("[PracticeWS] WebSocket error event (details usually unavailable, wait for onclose)", {
                 sessionId: activeSessionId,
                 readyState: ws.readyState,
                 reconnectAttempt: reconnectAttempts.current,
+                transportGeneration,
             });
             isConnectingRef.current = false;
             if (ws.readyState === WebSocket.CLOSED) {
@@ -806,6 +909,11 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 event.reason || "",
                 event.code,
             );
+            const handshakeFailFast = shouldFailFastOnHandshake1006(
+                event.code,
+                hasOpenedOnceRef.current,
+                reconnectAttempts.current,
+            );
             const burstFailure = shouldTreatAsAbnormalCloseBurst(
                 event.code,
                 abnormalCloseTimestampsRef.current,
@@ -815,8 +923,24 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 && event.code !== 1000
                 && event.code !== 1001
                 && !isFatalWebSocketCloseCode(event.code)
-                && !burstFailure;
+                && !burstFailure
+                && !handshakeFailFast;
 
+            const nextReconnectAttempt = reconnectAttempts.current + (shouldRetry ? 1 : 0);
+            logPracticeWsDiagnostic("connect_close", {
+                sessionId: activeSessionId,
+                closeCode: event.code,
+                closeReason: event.reason,
+                wasClean: event.wasClean,
+                shouldRetry,
+                burstFailure,
+                handshakeFailFast,
+                hasOpenedOnce: hasOpenedOnceRef.current,
+                reconnectAttempt: reconnectAttempts.current,
+                nextReconnectAttempt: shouldRetry ? nextReconnectAttempt : reconnectAttempts.current,
+                transportGeneration,
+                connectionState: shouldRetry ? "reconnecting" : "failed",
+            });
             debug.warn("[PracticeWS] WebSocket closed", {
                 sessionId: activeSessionId,
                 code: event.code,
@@ -825,17 +949,27 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 wasClean: event.wasClean,
                 shouldRetry,
                 burstFailure,
+                handshakeFailFast,
+                hasOpenedOnce: hasOpenedOnceRef.current,
                 reconnectAttempt: reconnectAttempts.current,
+                transportGeneration,
             });
 
             if (shouldRetry) {
                 resetRealtimeRuntimeState();
-                applyConnectionState(
-                    "reconnecting",
-                    closeReasonText || "连接中断，正在重连...",
-                );
+                const retryMessage = closeReasonText
+                    ? `${closeReasonText}（关闭码 ${event.code}）`
+                    : `连接中断，正在重连…（关闭码 ${event.code}）`;
+                applyConnectionState("reconnecting", retryMessage);
                 const delay = nextReconnectDelay(reconnectAttempts.current);
                 reconnectAttempts.current++;
+                logPracticeWsDiagnostic("reconnect_scheduled", {
+                    sessionId: activeSessionId,
+                    reconnectAttempt: reconnectAttempts.current,
+                    delayMs: delay,
+                    closeCode: event.code,
+                    transportGeneration,
+                });
                 debug.log(`[PracticeWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
                 clearReconnectTimer();
                 reconnectTimerRef.current = setTimeout(() => {
@@ -851,9 +985,11 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             resetRealtimeRuntimeState();
             applyConnectionState(
                 "failed",
-                burstFailure
-                    ? "无法稳定连接到语音服务，请刷新页面或稍后重试。"
-                    : closeReasonText || "连接失败，请点击“重新连接”",
+                handshakeFailFast
+                    ? "无法建立语音连接（1006）。请确认后端 3444 已启动，且不要使用 uvicorn --reload；保存代码会反复掐断 WebSocket。"
+                    : burstFailure
+                        ? "无法稳定连接到语音服务，请刷新页面或稍后重试。"
+                        : closeReasonText || "连接失败，请点击“重新连接”",
             );
         };
 
@@ -861,8 +997,10 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     }, [
         applyConnectionState,
         clearReconnectTimer,
+        connectEnabled,
         flushPendingMessages,
         resetRealtimeRuntimeState,
+        runtimeConnectKey,
         sendMessage,
     ]);
 
@@ -941,17 +1079,41 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     // Runtime lock changes should replace transport without entering the failed state.
     useEffect(() => {
         if (!connectEnabled) {
-            if (wsRef.current) {
-                disconnect();
-            }
+            logPracticeWsDiagnostic("connect_disabled", {
+                sessionId,
+                runtimeConnectKey,
+                connectEnabled: false,
+                transportGeneration: transportGenerationRef.current,
+            });
+            manualDisconnectRef.current = true;
+            reconnectAttempts.current = 0;
+            abnormalCloseTimestampsRef.current = [];
+            clearReconnectTimer();
+            teardownTransport();
+            applyConnectionState("connecting", null);
             return;
         }
 
+        logPracticeWsDiagnostic("runtime_key_changed", {
+            sessionId,
+            runtimeConnectKey,
+            connectEnabled: true,
+            transportGeneration: transportGenerationRef.current,
+        });
+        manualDisconnectRef.current = false;
         connect();
         return () => {
             teardownTransport();
         };
-    }, [runtimeConnectKey, connectEnabled, connect, disconnect, teardownTransport]);
+    }, [
+        runtimeConnectKey,
+        connectEnabled,
+        sessionId,
+        applyConnectionState,
+        clearReconnectTimer,
+        connect,
+        teardownTransport,
+    ]);
 
     // ── Public API ──
     return {

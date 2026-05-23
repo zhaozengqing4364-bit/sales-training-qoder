@@ -33,13 +33,7 @@ class ExaminerSessionAssembler:
         user_id: str,
         learning_content_id: str,
     ) -> ExaminerSessionCreateResult:
-        agent, used_fallback = await self._resolve_examiner_agent(learning_content_id)
-        if used_fallback:
-            logger.warning(
-                "Fell back to latest published examiner agent for study exam",
-                learning_content_id=learning_content_id,
-                examiner_agent_id=str(agent.examiner_agent_id),
-            )
+        agent = await self._resolve_examiner_agent(learning_content_id)
 
         questions = await self._load_published_questions(agent)
         scenario = await self._get_or_create_exam_scenario()
@@ -67,7 +61,7 @@ class ExaminerSessionAssembler:
     async def _resolve_examiner_agent(
         self,
         learning_content_id: str,
-    ) -> tuple[ExaminerAgent, bool]:
+    ) -> ExaminerAgent:
         template_result = await self._db.execute(
             select(PracticeTemplate)
             .where(
@@ -79,21 +73,22 @@ class ExaminerSessionAssembler:
             .limit(1)
         )
         template = template_result.scalar_one_or_none()
-        if template is not None and template.examiner_agent_id:
-            agent = await self._db.get(ExaminerAgent, str(template.examiner_agent_id))
-            if agent is not None and getattr(agent, "status", None) == "published":
-                return agent, False
+        if template is None or not template.examiner_agent_id:
+            logger.warning(
+                "No published practice template with examiner binding",
+                learning_content_id=learning_content_id,
+            )
+            raise ValueError("[TEMPLATE_EXAMINER_NOT_BOUND]")
 
-        agent_result = await self._db.execute(
-            select(ExaminerAgent)
-            .where(ExaminerAgent.status == "published")
-            .order_by(ExaminerAgent.updated_at.desc())
-            .limit(1)
-        )
-        agent = agent_result.scalar_one_or_none()
-        if agent is None:
-            raise ValueError("[EXAMINER_AGENT_NOT_AVAILABLE]")
-        return agent, True
+        agent = await self._db.get(ExaminerAgent, str(template.examiner_agent_id))
+        if agent is None or getattr(agent, "status", None) != "published":
+            logger.warning(
+                "Template-bound examiner agent unavailable",
+                learning_content_id=learning_content_id,
+                examiner_agent_id=str(template.examiner_agent_id),
+            )
+            raise ValueError("[EXAMINER_AGENT_NOT_FOUND]")
+        return agent
 
     async def _load_published_questions(
         self,

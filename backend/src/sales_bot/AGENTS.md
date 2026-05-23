@@ -34,6 +34,8 @@ backend/src/sales_bot/
 - `websocket/stepfun_realtime_handler.py` is the largest source file in the repo.
 - `websocket/components/` contains a dense concentration of StepFun-specific helpers (message helpers, knowledge helpers, function-call helpers, tool helpers, event payloads, runtime metrics, upstream router, TTS component, capability processor, score processor, objection ledger, message persistence).
 - The removed legacy Sales runtime must stay absent; Sales voice practice uses the StepFun realtime path.
+- Do not reintroduce `websocket/sales_handler.py.deprecated` or modules listed in `training_runtime/plugins.py` `LEGACY_SALES_HANDLER_MODULES`.
+- Runtime plugin dispatch crosses into `backend/src/training_runtime/AGENTS.md`.
 
 ## Local Cautions
 
@@ -47,5 +49,6 @@ backend/src/sales_bot/
 
 - Backend coding rules: `.kiro/steering/backend-principles.md`
 - Shared platform/kernel: `backend/src/common/AGENTS.md`
+- Training runtime: `backend/src/training_runtime/AGENTS.md`
 - Backend domain router: `backend/AGENTS.md`
 - API contracts: `docs/api-contract/`

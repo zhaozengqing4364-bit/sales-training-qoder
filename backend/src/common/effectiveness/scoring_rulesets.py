@@ -98,6 +98,18 @@ class ScoringMinimumEvidence(BaseModel):
     require_stage_evidence: bool = False
 
 
+class ScoringHiddenInformationCoverageRule(BaseModel):
+    """Roleplay-specific hidden information coverage criteria."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(..., min_length=1, max_length=120)
+    name: str | None = Field(default=None, max_length=120)
+    expected_trigger: str | None = Field(default=None, max_length=500)
+    evidence: str | None = Field(default=None, max_length=1000)
+    dimension: str | None = Field(default=None, max_length=120)
+
+
 class ScoringRulesetDefinition(BaseModel):
     """Versionable scoring ruleset definition for sales or presentation reports."""
 
@@ -117,6 +129,13 @@ class ScoringRulesetDefinition(BaseModel):
     not_evaluable_reasons: dict[str, str] = Field(
         default_factory=_default_not_evaluable_reasons
     )
+    passing_score: float | None = Field(default=None, ge=0, le=100)
+    rubric: str | None = Field(default=None, max_length=3000)
+    hidden_information_coverage: list[ScoringHiddenInformationCoverageRule] = Field(
+        default_factory=list
+    )
+    deductions: list[str] = Field(default_factory=list, max_length=100)
+    roleplay_contract_version: str | None = Field(default=None, max_length=120)
 
     @model_validator(mode="after")
     def validate_dimension_contract(self) -> ScoringRulesetDefinition:
@@ -247,15 +266,26 @@ class ScoringRulesetService:
             source="default",
         )
 
-    @staticmethod
-    def view_from_model(row: ScoringRuleset) -> ScoringRulesetView:
+    @classmethod
+    def view_from_model(cls, row: ScoringRuleset) -> ScoringRulesetView:
         row_any = cast(Any, row)
-        definition = ScoringRulesetDefinition.model_validate(
-            row_any.definition_json or {}
-        )
+        normalized = _normalize_scenario_type(str(row_any.scenario_type))
+        try:
+            definition = ScoringRulesetDefinition.model_validate(
+                row_any.definition_json or {}
+            )
+        except ValueError as exc:
+            logger.warning(
+                "scoring_ruleset_definition_invalid_using_list_fallback",
+                scenario_type=normalized,
+                ruleset_id=str(row_any.ruleset_id),
+                version=str(row_any.version),
+                error=str(exc),
+            )
+            definition = cls.build_default_definition(normalized)
         return ScoringRulesetView(
             ruleset_id=str(row_any.ruleset_id),
-            scenario_type=_normalize_scenario_type(str(row_any.scenario_type)),
+            scenario_type=normalized,
             version=str(row_any.version),
             display_name=str(row_any.display_name),
             description=row_any.description,
@@ -908,6 +938,7 @@ __all__ = [
     "SCORING_RULESET_SCORE_BASIS",
     "SCORING_RULESETS_BUNDLE_KEY",
     "ScoringDimensionRule",
+    "ScoringHiddenInformationCoverageRule",
     "ScoringMinimumEvidence",
     "ScoringRulesetDefinition",
     "ScoringRulesetService",

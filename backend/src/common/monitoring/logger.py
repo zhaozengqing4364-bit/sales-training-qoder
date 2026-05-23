@@ -265,6 +265,8 @@ def configure_logging(log_level: str = "INFO") -> None:
         format="%(message)s",
         level=getattr(logging, log_level),
     )
+    for noisy_logger in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+        logging.getLogger(noisy_logger).setLevel(getattr(logging, log_level))
 
     # Configure structlog
     structlog.configure(

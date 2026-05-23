@@ -25,6 +25,7 @@ PracticeTemplateMode = Literal[
     "mixed_path",
 ]
 GateStatus = Literal["passed", "failed", "warning"]
+RuntimeDossierStatus = Literal["passed", "failed", "warning"]
 CurriculumAssetType = Literal[
     "practice_template",
     "curriculum",
@@ -377,6 +378,23 @@ class CaseItemResponse(CaseItemBase):
 class CaseItemListResponse(BaseModel):
     items: list[CaseItemResponse]
     total: int
+
+
+class TemplateReferenceItem(BaseModel):
+    template_id: str
+    name: str
+    status: str
+
+
+class TemplateReferenceListResponse(BaseModel):
+    items: list[TemplateReferenceItem]
+    total: int
+
+
+class UnpublishAcknowledgeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    acknowledge: bool = False
 
 
 class RoleProfileBase(BaseModel):
@@ -790,3 +808,34 @@ class PracticeTemplateResponse(BaseModel):
 class PracticeTemplateListResponse(BaseModel):
     items: list[PracticeTemplateResponse]
     total: int
+
+
+class RuntimeDossierConsistencyCheck(BaseModel):
+    key: str
+    status: RuntimeDossierStatus
+    message: str
+    details: dict[str, object] = Field(default_factory=dict)
+
+
+class RuntimeDossierConsistency(BaseModel):
+    status: RuntimeDossierStatus
+    checks: list[RuntimeDossierConsistencyCheck]
+
+
+class RuntimeDossierProbeResult(BaseModel):
+    key: str
+    prompt: str
+    expected_behavior: str
+    status: RuntimeDossierStatus
+    matched_evidence: list[str] = Field(default_factory=list)
+    source_assets: list[str] = Field(default_factory=list)
+
+
+class PracticeTemplateRuntimeDossierPreview(BaseModel):
+    template_id: str
+    name: str
+    generated_at: str
+    summary: dict[str, object]
+    sections: dict[str, dict[str, object]]
+    consistency: RuntimeDossierConsistency
+    probes: list[RuntimeDossierProbeResult]

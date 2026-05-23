@@ -77,7 +77,6 @@ from sales_bot.services.transcript_normalization import (
 from sales_bot.services.voice_instruction_compiler import (
     VoiceInstructionCompiler,
     build_instruction_contract_hash,
-    enforce_question_limit,
 )
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 from sales_bot.websocket.components.objection_ledger_helpers import (
@@ -193,11 +192,23 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                 session_id=self.session_id,
             )
             return
+        log_latency_debug = getattr(self, "_log_latency_debug", None)
+        if callable(log_latency_debug):
+            log_latency_debug(
+                "audio_commit_requested",
+                binary_frame_count=getattr(
+                    self,
+                    "_received_binary_audio_frame_count",
+                    0,
+                ),
+                **self._summarize_pending_input_audio_quality(),
+            )
         await self._send_upstream({"type": "input_audio_buffer.commit"})
         audio_flow = getattr(self, "_audio_flow", None)
         if audio_flow is not None:
             audio_flow.commit_input_audio()
         self._has_uncommitted_audio = False
+        self._reset_input_audio_quality()
         await self._schedule_response_after_commit()
 
     async def _prepare_grounding_context(self, query: str) -> None:
@@ -569,18 +580,21 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
 
                 self._pending_grounding_context = ""
                 self._pending_blocked_response_text = ""
-                await self._cancel_pending_response_after_commit()
-                self._allow_late_transcription_response = True
 
                 if self._is_kb_lock_required_for_current_policy():
+                    await self._cancel_pending_response_after_commit()
+                    self._allow_late_transcription_response = True
                     await self._record_kb_lock_decision(
                         status="transcription_timeout_suppressed",
                         blocked=False,
                     )
-                else:
-                    self._log_grounding_debug("timeout_suppressed_without_transcript")
+                    await self._send_status("listening")
+                    return
 
-                await self._send_status("listening")
+                self._log_grounding_debug("timeout_create_response_without_transcript")
+                await self._create_response_from_pending_commit(
+                    expected_generation=expected_generation
+                )
                 return
             if self._grounding_preparation_in_progress:
                 self._log_grounding_debug("timeout_waiting_for_prefetch")
@@ -943,6 +957,28 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
 
         return False
 
+    def _is_upstream_idle_timeout_error(self, event: dict[str, Any]) -> bool:
+        reason = extract_error_message(event).strip()
+        return self._is_upstream_idle_timeout_disconnect(
+            close_code=None,
+            close_reason=reason,
+            ws_lifetime_ms=self._compute_upstream_ws_lifetime_ms(),
+        )
+
+    async def _recover_upstream_after_idle_timeout_error(self, event: dict[str, Any]) -> bool:
+        if not self._is_upstream_idle_timeout_error(event):
+            return False
+        recovered = await self._refresh_upstream_for_next_input(
+            reason="upstream_idle_timeout_error",
+        )
+        if recovered:
+            logger.info(
+                "StepFun upstream recovered from idle timeout error",
+                session_id=self.session_id,
+                error_message=extract_error_message(event),
+            )
+        return recovered
+
     async def sync_lifecycle_transition(
         self, transition: SessionLifecycleTransition
     ) -> None:
@@ -1034,6 +1070,11 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         await self._handle_emotion_event(event)
         await self._handle_thinking_event(event)
         route = classify_upstream_event(event_type)
+        self._log_latency_debug(
+            "upstream_event_received",
+            event_type=event_type,
+            route=str(route),
+        )
 
         if route == UpstreamEventRoute.IGNORE:
             return
@@ -1081,9 +1122,17 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             return
 
     async def _handle_upstream_conversation_item_created(self, event: dict) -> None:
-        """Track function-call state created by upstream model."""
+        """Track function-call state and user-item transcript hints from upstream."""
         function_call = extract_function_call_from_item_created(event)
         if not function_call:
+            transcript = self._extract_final_transcript_text(event)
+            if transcript:
+                self._latest_input_transcript_delta = transcript
+                self._log_latency_debug(
+                    "conversation_item_created_transcript_cached",
+                    transcript_length=len(transcript),
+                    item_role=self._extract_conversation_item_role(event),
+                )
             return
 
         call_id, name = function_call
@@ -1308,11 +1357,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         response_text = self._extract_response_text(response_done_event)
         if not response_text:
             response_text = "".join(response_state.text_parts).strip()
-        response_text = enforce_question_limit(
-            response_text,
-            self._get_max_questions_per_turn(),
-        )
-        response_text = self._apply_answerability_output_guard(response_text)
+        # Keep transcript verbatim for chat UI parity with streamed audio (no post-hoc truncation).
 
         if response_text:
             await self._persist_message(
@@ -1628,62 +1673,155 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                     transcript_length=len(transcript),
                 )
         if not transcript:
+            self._log_latency_debug(
+                "transcription_completed_empty_text",
+                event_keys=sorted(str(key) for key in event.keys()),
+                transcript_shape=self._summarize_payload_shape(event.get("transcript")),
+                transcript_string_length=(
+                    len(event.get("transcript"))
+                    if isinstance(event.get("transcript"), str)
+                    else None
+                ),
+                transcript_blank=(
+                    not event.get("transcript").strip()
+                    if isinstance(event.get("transcript"), str)
+                    else None
+                ),
+                item_keys=self._extract_dict_keys(event.get("item")),
+                content_item_keys=self._extract_list_item_keys(event.get("content")),
+                item_content_keys=self._extract_list_item_keys(
+                    event.get("item", {}).get("content")
+                    if isinstance(event.get("item"), dict)
+                    else None
+                ),
+            )
             return
+        self._log_latency_debug(
+            "transcription_completed_text_extracted",
+            transcript_length=len(transcript),
+        )
         await self._handle_final_user_transcript(transcript)
 
     def _extract_final_transcript_text(self, event: dict) -> str:
         """Extract final transcript from upstream payload variations."""
-        direct_candidates = (
-            event.get("transcript"),
-            event.get("text"),
-            event.get("audio_transcript"),
-            event.get("stash"),
-            event.get("delta"),
-        )
-        for candidate in direct_candidates:
-            if isinstance(candidate, str) and candidate.strip():
-                return candidate.strip()
-
-        item = event.get("item")
-        if isinstance(item, dict):
-            item_candidates = (
-                item.get("transcript"),
-                item.get("text"),
-                item.get("audio_transcript"),
-                item.get("stash"),
-            )
-            for candidate in item_candidates:
-                if isinstance(candidate, str) and candidate.strip():
-                    return candidate.strip()
-
-        return ""
+        return self._extract_text_from_transcription_payload(event).strip()
 
     def _extract_transcription_delta_text(self, event: dict) -> str:
         """Extract interim transcript text from upstream payload variations."""
-        direct_candidates = (
-            event.get("delta"),
-            event.get("text"),
-            event.get("stash"),
-            event.get("audio_transcript"),
+        return self._extract_text_from_transcription_payload(event)
+
+    def _extract_text_from_transcription_payload(self, payload: Any) -> str:
+        """Extract transcript text from StepFun/OpenAI-style nested ASR payloads."""
+        text_keys = (
+            "transcript",
+            "text",
+            "audio_transcript",
+            "stash",
+            "delta",
         )
-        for candidate in direct_candidates:
+        container_keys = (
+            "item",
+            "content",
+            "parts",
+            "part",
+            "transcription",
+            "input_audio_transcription",
+            "audio",
+        )
+        return self._extract_text_from_keys(
+            payload,
+            text_keys=text_keys,
+            container_keys=container_keys,
+            max_depth=5,
+        )
+
+    def _extract_text_from_keys(
+        self,
+        payload: Any,
+        *,
+        text_keys: tuple[str, ...],
+        container_keys: tuple[str, ...],
+        max_depth: int,
+    ) -> str:
+        if max_depth < 0:
+            return ""
+        if isinstance(payload, str):
+            return payload if payload.strip() else ""
+        if isinstance(payload, list):
+            for item in payload:
+                extracted = self._extract_text_from_keys(
+                    item,
+                    text_keys=text_keys,
+                    container_keys=container_keys,
+                    max_depth=max_depth - 1,
+                )
+                if extracted.strip():
+                    return extracted
+            return ""
+        if not isinstance(payload, dict):
+            return ""
+
+        for key in text_keys:
+            candidate = payload.get(key)
             if isinstance(candidate, str) and candidate.strip():
                 return candidate
+            if isinstance(candidate, (dict, list)):
+                extracted = self._extract_text_from_keys(
+                    candidate,
+                    text_keys=text_keys,
+                    container_keys=container_keys,
+                    max_depth=max_depth - 1,
+                )
+                if extracted.strip():
+                    return extracted
 
-        item = event.get("item")
-        if isinstance(item, dict):
-            item_candidates = (
-                item.get("delta"),
-                item.get("text"),
-                item.get("stash"),
-                item.get("audio_transcript"),
-                item.get("transcript"),
+        for key in container_keys:
+            if key not in payload:
+                continue
+            extracted = self._extract_text_from_keys(
+                payload.get(key),
+                text_keys=text_keys,
+                container_keys=container_keys,
+                max_depth=max_depth - 1,
             )
-            for candidate in item_candidates:
-                if isinstance(candidate, str) and candidate.strip():
-                    return candidate
-
+            if extracted.strip():
+                return extracted
         return ""
+
+    def _extract_dict_keys(self, payload: Any) -> list[str]:
+        if not isinstance(payload, dict):
+            return []
+        return sorted(str(key) for key in payload.keys())
+
+    def _extract_list_item_keys(self, payload: Any) -> list[list[str]]:
+        if not isinstance(payload, list):
+            return []
+        keys: list[list[str]] = []
+        for item in payload[:3]:
+            keys.append(self._extract_dict_keys(item))
+        return keys
+
+    def _summarize_payload_shape(self, payload: Any) -> dict[str, Any]:
+        if isinstance(payload, str):
+            return {"type": "str", "length": len(payload), "blank": not payload.strip()}
+        if isinstance(payload, dict):
+            return {"type": "dict", "keys": self._extract_dict_keys(payload)}
+        if isinstance(payload, list):
+            return {
+                "type": "list",
+                "length": len(payload),
+                "item_keys": self._extract_list_item_keys(payload),
+            }
+        if payload is None:
+            return {"type": "none"}
+        return {"type": type(payload).__name__}
+
+    def _extract_conversation_item_role(self, event: dict) -> str:
+        item = event.get("item")
+        if not isinstance(item, dict):
+            return ""
+        role = item.get("role")
+        return str(role or "")
 
     def _merge_transcription_delta_text(self, previous: str, incoming: str) -> str:
         """Merge transcript chunks for both append-style and snapshot-style events."""
@@ -1771,6 +1909,12 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             await self._send_error(
                 "[STEPFUN_VOICE_UNAVAILABLE]",
                 "当前角色音色不可用，将在下次初始化时回退到默认音色。",
+            )
+            return
+        if await self._recover_upstream_after_idle_timeout_error(event):
+            await self._send_error(
+                "[STEPFUN_UPSTREAM_RECOVERED]",
+                "Realtime 上游连接已从空闲超时中恢复，请重新发送这一轮内容。",
             )
             return
         await self._send_error("[STEPFUN_API_ERROR]", extract_error_message(event))
@@ -2113,6 +2257,18 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         """Send one event to StepFun upstream."""
         if self.upstream_ws is None:
             return
+        event_type = str(payload.get("type") or "")
         result = await self._stepfun_transport.send_json(self.upstream_ws, payload)
         if result.status == StepFunSendStatus.SENT:
             self._mark_upstream_activity()
+            return
+        logger.error(
+            "stepfun_upstream_send_rejected",
+            session_id=self.session_id,
+            event_type=event_type,
+            error_type=result.error_type,
+        )
+        if event_type == "session.update":
+            raise RuntimeError(
+                f"StepFun session.update failed ({result.error_type or 'unknown'})"
+            )

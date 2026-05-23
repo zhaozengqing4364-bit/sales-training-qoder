@@ -6,6 +6,7 @@ import {
     isFatalWebSocketCloseCode,
     nextReconnectDelay,
     resolveWebSocketCloseUserMessage,
+    shouldFailFastOnHandshake1006,
     shouldTreatAsAbnormalCloseBurst,
     toCloseReasonMessage,
 } from "./transport";
@@ -48,6 +49,13 @@ describe("websocket transport helpers", () => {
         expect(shouldTreatAsAbnormalCloseBurst(1006, recent, now + 100)).toBe(false);
         expect(shouldTreatAsAbnormalCloseBurst(1006, recent, now + 200)).toBe(false);
         expect(shouldTreatAsAbnormalCloseBurst(1006, recent, now + 300)).toBe(true);
+    });
+
+    it("fails fast on pre-open 1006 handshakes", () => {
+        expect(shouldFailFastOnHandshake1006(1006, false, 0)).toBe(true);
+        expect(shouldFailFastOnHandshake1006(1006, false, 1)).toBe(false);
+        expect(shouldFailFastOnHandshake1006(1006, true, 0)).toBe(false);
+        expect(shouldFailFastOnHandshake1006(1000, false, 0)).toBe(false);
     });
 
     it("only queues handshake-safe outbound messages and keeps high priority at the front", () => {
