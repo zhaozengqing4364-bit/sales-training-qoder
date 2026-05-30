@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { MobileQuickActions } from "@/components/layout/mobile-quick-actions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import { HistorySessionSummary, TrainingCategory } from "@/lib/api/types";
 import {
@@ -239,6 +240,24 @@ export default function TrainingCategoriesPage() {
                     </div>
                 </div>
             </div>
+
+            <GlassCard className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-slate-700" />
+                        <h2 className="text-xl font-bold text-slate-900">销售训练 MVP</h2>
+                    </div>
+                    <p className="text-sm text-slate-500">
+                        独立完成做题、上传语音作业、AI 评分与结果查看。该入口不依赖训练分类接口配置。
+                    </p>
+                </div>
+                <Link href="/sales-trainer">
+                    <Button className="rounded-full bg-slate-900 text-white">
+                        进入销售训练
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                </Link>
+            </GlassCard>
 
             {isDegraded && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

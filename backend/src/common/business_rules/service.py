@@ -15,6 +15,7 @@ from common.business_rules.defaults import (
     ADMIN_SETTINGS_NOTIFICATIONS_KEY,
     ADMIN_SETTINGS_SECURITY_KEY,
     OBJECTION_LEDGER_RULES_KEY,
+    ROLEPLAY_SITUATION_PACKS_KEY,
     SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
     get_default_business_rule_value,
@@ -65,6 +66,7 @@ class BusinessRuleResolution:
     value: dict[str, Any]
     source: str
     config_id: str | None = None
+    config_version_id: str | None = None
     version: int | None = None
     status: str | None = None
     fallback_reason: str | None = None
@@ -76,6 +78,7 @@ class BusinessRuleResolution:
             "value": deepcopy(self.value),
             "source": self.source,
             "config_id": self.config_id,
+            "config_version_id": self.config_version_id,
             "version": self.version,
             "status": self.status,
             "fallback_reason": self.fallback_reason,
@@ -815,6 +818,22 @@ class BusinessRuleConfigService:
                 "ruleset_version": value.get("version"),
                 "family_count": family_count,
                 "ack_pattern_count": len(value.get("ack_patterns") or []),
+                "admin_entry": get_business_rule_definition(key).admin_entry,
+                "fallback_policy": get_business_rule_definition(key).fallback_policy,
+            }
+        if key == ROLEPLAY_SITUATION_PACKS_KEY:
+            packs = [item for item in value.get("packs", []) if isinstance(item, dict)]
+            published = [
+                item for item in packs if str(item.get("status") or "") == "published"
+            ]
+            return {
+                "enabled": value.get("enabled") is not False,
+                "ruleset_version": value.get("version"),
+                "pack_count": len(packs),
+                "published_pack_count": len(published),
+                "published_codes": sorted(
+                    str(item.get("code")) for item in published if item.get("code")
+                ),
                 "admin_entry": get_business_rule_definition(key).admin_entry,
                 "fallback_policy": get_business_rule_definition(key).fallback_policy,
             }

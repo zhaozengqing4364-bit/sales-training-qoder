@@ -1,0 +1,81 @@
+name: Roleplay Contract Eval
+
+on:
+  pull_request:
+    paths:
+      - "backend/src/curriculum_practice/services/roleplay_contracts.py"
+      - "backend/src/sales_bot/services/voice_instruction_compiler.py"
+      - "backend/src/sales_bot/services/roleplay_compliance_checker.py"
+      - "backend/src/sales_bot/websocket/stepfun_realtime_*.py"
+      - "backend/src/common/business_rules/defaults.py"
+      - "backend/src/common/business_rules/validators.py"
+      - "backend/src/curriculum_practice/services/roleplay/**"
+      - "backend/src/admin/config_assets/**"
+      - "backend/src/evaluation/services/roleplay_contract_eval.py"
+      - "backend/tests/fixtures/roleplay_contract_eval_cases.json"
+      - "backend/scripts/run_roleplay_contract_eval.py"
+      - "backend/scripts/repair_runtime_snapshots.py"
+      - "backend/src/common/services/session_runtime_repair_service.py"
+      - ".github/workflows/roleplay-contract-eval.yml"
+  push:
+    branches: [main, 001-ai-practice-system]
+    paths:
+      - "backend/src/curriculum_practice/services/roleplay_contracts.py"
+      - "backend/src/sales_bot/services/voice_instruction_compiler.py"
+      - "backend/src/sales_bot/services/roleplay_compliance_checker.py"
+      - "backend/src/sales_bot/websocket/stepfun_realtime_*.py"
+      - "backend/src/common/business_rules/defaults.py"
+      - "backend/src/common/business_rules/validators.py"
+      - "backend/src/curriculum_practice/services/roleplay/**"
+      - "backend/src/admin/config_assets/**"
+      - "backend/src/evaluation/services/roleplay_contract_eval.py"
+      - "backend/tests/fixtures/roleplay_contract_eval_cases.json"
+      - "backend/scripts/run_roleplay_contract_eval.py"
+      - "backend/scripts/repair_runtime_snapshots.py"
+      - "backend/src/common/services/session_runtime_repair_service.py"
+      - ".github/workflows/roleplay-contract-eval.yml"
+  schedule:
+    - cron: "17 19 * * *"
+  workflow_dispatch:
+
+jobs:
+  roleplay-contract-eval:
+    name: roleplay-contract-eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/pyproject.toml
+
+      - name: Install backend dependencies
+        run: |
+          python -m venv backend/venv
+          backend/venv/bin/pip install --upgrade pip
+          backend/venv/bin/pip install -r backend/requirements.txt
+
+      - name: Run deterministic Roleplay Contract eval release gate
+        run: |
+          cd backend
+          venv/bin/python scripts/run_roleplay_contract_eval.py \
+            --output-json test-results/roleplay-contract-eval.json \
+            --output-junit test-results/roleplay-contract-eval.junit.xml \
+            --enable-llm-grader
+
+      - name: Upload Roleplay Contract eval artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roleplay-contract-eval
+          path: |
+            backend/test-results/roleplay-contract-eval.json
+            backend/test-results/roleplay-contract-eval.junit.xml

@@ -60,8 +60,17 @@ rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" do
 |---|---:|---|
 | token 缺失或无效 | `4001` | `Unauthorized` |
 | session owner 不匹配且当前用户不是 admin | `4003` | `ACCESS_DENIED` |
+| session 与 websocket runtime 类型不匹配 | `4409` | `SESSION_SCENARIO_MISMATCH` |
 | knowledge-base lock 未绑定知识库 | `4410` | `KB_LOCK_UNBOUND` |
 | sales session 缺少 agent/persona runtime lock | `4411` | `AGENT_PERSONA_REQUIRED` |
+| sales session 仍指向已停用 legacy runtime | `4412` | `LEGACY_SALES_RUNTIME_DISABLED` |
+| presentation runtime 未完成配置 | `4413` | `PRESENTATION_NOT_CONFIGURED` |
+| sales / presentation session 缺少冻结 voice policy snapshot | `4413` | `VOICE_POLICY_SNAPSHOT_MISSING` |
+| 课程 snapshot runtime identity 与 session 字段不一致 | `4413` | `CURRICULUM_RUNTIME_IDENTITY_MISMATCH` |
+| 课程 frozen snapshot 与资产版本/hash 不一致 | `4413` | `CURRICULUM_RUNTIME_SNAPSHOT_STALE` |
+| examiner snapshot 缺失 | `4413` | `EXAMINER_RUNTIME_SNAPSHOT_MISSING` |
+| examiner runtime 配置缺失 | `4413` | `EXAMINER_RUNTIME_CONFIG_MISSING` |
+| examiner frozen snapshot 与资产版本/hash 不一致 | `4413` | `EXAMINER_RUNTIME_SNAPSHOT_STALE` |
 
 这些拒连信号是当前 websocket authority 的一部分：调用方必须把 close code / reason 当作稳定诊断面，而不是把所有拒连都视为网络波动。
 

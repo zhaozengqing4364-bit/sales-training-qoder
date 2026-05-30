@@ -4,6 +4,14 @@ from typing import Any
 
 import pytest
 
+from curriculum_practice.services.roleplay_contracts import (
+    RoleplayContractCompiler,
+    initial_roleplay_disclosure_state,
+)
+from prompt_templates.compiled_contract import (
+    build_turn_instruction_hash,
+    compose_turn_instruction_text,
+)
 from sales_bot.websocket.stepfun_realtime_upstream import StepFunRealtimeUpstreamMixin
 from sales_bot.websocket.stepfun_runtime_types import RealtimeResponseState
 from training_runtime.stepfun_transport import StepFunSendResult, StepFunSendStatus
@@ -127,13 +135,37 @@ class IdleTimeoutRecoveringUpstream(FakeUpstream):
 class FakeVoiceRuntimeProfile:
     instructions = "profile base instructions"
     instruction_contract_hash = "profile-contract-hash"
+    role_anchor_text = ""
 
-    def __init__(self) -> None:
+    def __init__(self, *, role_anchor_text: str = "") -> None:
+        self.role_anchor_text = role_anchor_text
         self.compile_calls: list[dict[str, Any]] = []
 
-    def compile_instructions(self, *, grounding_context: str = "") -> str:
-        self.compile_calls.append({"grounding_context": grounding_context})
-        return f"compiled profile instructions::{grounding_context}"
+    def compile_instructions(
+        self,
+        *,
+        grounding_context: str = "",
+        roleplay_turn_instruction: str = "",
+        role_anchor_text: str | None = None,
+    ) -> str:
+        self.compile_calls.append(
+            {
+                "grounding_context": grounding_context,
+                "roleplay_turn_instruction": roleplay_turn_instruction,
+                "role_anchor_text": role_anchor_text,
+            }
+        )
+        anchor = (
+            self.role_anchor_text
+            if role_anchor_text is None
+            else str(role_anchor_text or "").strip()
+        )
+        return compose_turn_instruction_text(
+            base_instructions=self.instructions,
+            grounding_context=grounding_context,
+            roleplay_turn_instruction=roleplay_turn_instruction,
+            role_anchor_text=anchor,
+        )
 
 
 class ResponseCreatingUpstream(FakeUpstream):
@@ -154,8 +186,10 @@ class ResponseCreatingUpstream(FakeUpstream):
         self._pending_grounding_context = "  grounding ctx  "
         self._stepfun_instructions = "raw base instructions"
         self._instruction_contract_hash = "raw-contract-hash"
+        self._effective_policy = {"runtime_metrics": {}}
         self.statuses: list[str] = []
         self.grounding_debug_calls: list[tuple[str, dict[str, Any]]] = []
+        self.persist_metric_calls = 0
 
     def _active_voice_runtime_profile(self) -> FakeVoiceRuntimeProfile:
         if self.profile is None:
@@ -167,6 +201,59 @@ class ResponseCreatingUpstream(FakeUpstream):
 
     def _log_grounding_debug(self, event: str, **payload: Any) -> None:
         self.grounding_debug_calls.append((event, payload))
+
+    async def _persist_runtime_metrics_to_session(self) -> None:
+        self.persist_metric_calls += 1
+
+
+class RoleplayGuardUpstream(ResponseCreatingUpstream):
+    def __init__(self, transport: FakeTransport, upstream_ws: Any | None) -> None:
+        super().__init__(transport, upstream_ws, None)
+        self.websocket = object()
+        self.manager = FakeManager()
+        self._active_response = RealtimeResponseState(
+            request_id=1,
+            stream_id="stream-roleplay-1",
+            response_id="resp-1",
+        )
+        self._effective_policy = {
+            "roleplay_contract": _first_visit_contract(),
+            "runtime_metrics": {},
+        }
+        self._curriculum_snapshot = {}
+        self._latest_stage_data = {"current_stage": "opening"}
+        self._roleplay_disclosure_state = initial_roleplay_disclosure_state(
+            self._effective_policy["roleplay_contract"]
+        )
+        self._roleplay_regenerate_attempted_for_turn = False
+        self._roleplay_repair_instruction = ""
+        self._latest_knowledge_answer_diagnostics = {}
+        self._stepfun_playback_rate = 1.0
+        self.persist_metric_calls = 0
+
+    async def _persist_runtime_metrics_to_session(self) -> None:
+        self.persist_metric_calls += 1
+
+
+def _first_visit_contract() -> dict[str, Any]:
+    return RoleplayContractCompiler().compile_from_persona_sync(
+        {
+            "id": "persona-1",
+            "persona_policy": {
+                "roleplay_defaults": {
+                    "situation_code": "first_visit",
+                    "relationship_context": {
+                        "prior_interactions": "none",
+                        "has_prior_meeting": False,
+                    },
+                    "visible_information_keys": ["industry", "company_profile"],
+                    "hidden_information_keys": ["hidden_information"],
+                }
+            },
+        },
+        actor_id="actor-1",
+        compiled_at="2026-05-26T00:00:00Z",
+    )
 
 
 @pytest.mark.asyncio
@@ -353,15 +440,26 @@ async def test_upstream_reads_voice_config_from_profile() -> None:
     created = await upstream._create_response()
 
     assert created is True
-    assert profile.compile_calls == [{"grounding_context": "grounding ctx"}]
+    assert profile.compile_calls == [
+        {
+            "grounding_context": "grounding ctx",
+            "roleplay_turn_instruction": "",
+            "role_anchor_text": None,
+        }
+    ]
+    expected_instructions = compose_turn_instruction_text(
+        base_instructions="profile base instructions",
+        grounding_context="grounding ctx",
+    )
     assert transport.calls[0][1] == {
         "type": "response.create",
         "response": {
             "modalities": ["audio", "text"],
-            "instructions": "compiled profile instructions::grounding ctx",
+            "instructions": expected_instructions,
         },
     }
     assert upstream._pending_grounding_context == ""
+    turn_hash = build_turn_instruction_hash(expected_instructions)
     assert upstream.grounding_debug_calls == [
         (
             "response_create",
@@ -370,13 +468,22 @@ async def test_upstream_reads_voice_config_from_profile() -> None:
                 "has_grounding_context": True,
                 "grounding_context_length": len("grounding ctx"),
                 "has_base_instructions": True,
-                "final_instruction_length": len(
-                    "compiled profile instructions::grounding ctx"
-                ),
+                "has_role_anchor": False,
+                "role_anchor_length": 0,
+                "final_instruction_length": len(expected_instructions),
                 "instruction_contract_hash": "profile-contract-hash",
+                "turn_instruction_hash": turn_hash,
             },
         )
     ]
+    metrics = upstream._effective_policy["runtime_metrics"]["roleplay_instruction_hash"]
+    assert upstream.persist_metric_calls == 1
+    assert metrics["latest"]["turn_instruction_hash"] == turn_hash
+    assert metrics["latest"]["instruction_contract_hash"] == "profile-contract-hash"
+    assert metrics["latest"]["final_instruction_length"] == len(expected_instructions)
+    assert metrics["latest"]["role_anchor_length"] == 0
+    assert "instructions" not in metrics["latest"]
+    assert metrics["samples"] == [metrics["latest"]]
 
 
 @pytest.mark.asyncio
@@ -387,14 +494,133 @@ async def test_upstream_falls_back_to_raw_instructions_without_profile() -> None
     created = await upstream._create_response()
 
     assert created is True
+    expected_instructions = compose_turn_instruction_text(
+        base_instructions="raw base instructions",
+        grounding_context="grounding ctx",
+    )
     assert transport.calls[0][1] == {
         "type": "response.create",
         "response": {
             "modalities": ["audio", "text"],
-            "instructions": "raw base instructions\n\n【当前轮内部知识依据】\ngrounding ctx",
+            "instructions": expected_instructions,
         },
     }
     assert upstream._pending_grounding_context == ""
     assert upstream.grounding_debug_calls[0][1]["instruction_contract_hash"] == (
         "raw-contract-hash"
     )
+    assert upstream.grounding_debug_calls[0][1]["turn_instruction_hash"] == (
+        build_turn_instruction_hash(expected_instructions)
+    )
+
+
+@pytest.mark.asyncio
+async def test_upstream_injects_role_anchor_and_records_turn_hash() -> None:
+    transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
+    role_anchor_text = "【角色锚】\n你是制造业 CIO，这是你们首次正式见面。"
+    profile = FakeVoiceRuntimeProfile(role_anchor_text=role_anchor_text)
+    upstream = ResponseCreatingUpstream(transport, object(), profile)
+
+    created = await upstream._create_response()
+
+    assert created is True
+    expected_instructions = compose_turn_instruction_text(
+        base_instructions="profile base instructions",
+        grounding_context="grounding ctx",
+        role_anchor_text=role_anchor_text,
+    )
+    assert role_anchor_text in transport.calls[0][1]["response"]["instructions"]
+    debug_payload = upstream.grounding_debug_calls[0][1]
+    assert debug_payload["has_role_anchor"] is True
+    assert debug_payload["role_anchor_length"] == len(role_anchor_text)
+    assert debug_payload["turn_instruction_hash"] == build_turn_instruction_hash(
+        expected_instructions
+    )
+    assert debug_payload["instruction_contract_hash"] == "profile-contract-hash"
+
+
+@pytest.mark.asyncio
+async def test_upstream_reads_role_anchor_from_effective_policy_without_profile() -> None:
+    transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
+    upstream = ResponseCreatingUpstream(transport, object(), None)
+    role_anchor_text = "【角色锚】\n底线约束。"
+    upstream._effective_policy = {"role_anchor_text": role_anchor_text}
+
+    created = await upstream._create_response()
+
+    assert created is True
+    expected_instructions = compose_turn_instruction_text(
+        base_instructions="raw base instructions",
+        grounding_context="grounding ctx",
+        role_anchor_text=role_anchor_text,
+    )
+    assert transport.calls[0][1]["response"]["instructions"] == expected_instructions
+    debug_payload = upstream.grounding_debug_calls[0][1]
+    assert debug_payload["has_role_anchor"] is True
+    assert debug_payload["turn_instruction_hash"] == build_turn_instruction_hash(
+        expected_instructions
+    )
+
+
+@pytest.mark.asyncio
+async def test_roleplay_stream_guard_cancels_and_regenerates_once() -> None:
+    transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
+    upstream = RoleplayGuardUpstream(transport, object())
+
+    await upstream._handle_upstream_response_text_delta(
+        {"type": "response.text.delta", "delta": "上次拜访我们聊过预算"}
+    )
+
+    sent_payloads = [payload for _, payload in transport.calls]
+    assert {"type": "response.cancel"} in sent_payloads
+    response_creates = [
+        payload for payload in sent_payloads if payload.get("type") == "response.create"
+    ]
+    assert len(response_creates) == 1
+    assert "角色合同修复指令" in response_creates[0]["response"]["instructions"]
+    assert upstream._active_response is not None
+    assert upstream._roleplay_regenerate_attempted_for_turn is True
+    metrics = upstream._effective_policy["runtime_metrics"]["roleplay_compliance"]
+    assert metrics["violation_count"] == 1
+    assert metrics["blocking_violation_count"] == 1
+    assert metrics["cancel_stream_count"] == 1
+    assert metrics["regenerate_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_roleplay_stream_guard_second_violation_repairs_without_retry() -> None:
+    transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
+    upstream = RoleplayGuardUpstream(transport, object())
+    upstream._roleplay_regenerate_attempted_for_turn = True
+
+    await upstream._handle_upstream_response_text_delta(
+        {"type": "response.audio_transcript.delta", "delta": "上次拜访我们聊过预算"}
+    )
+    await upstream._handle_upstream_response_audio_delta(
+        {"type": "response.audio.delta", "delta": "AAECAw=="}
+    )
+
+    sent_payloads = [payload for _, payload in transport.calls]
+    assert sent_payloads == [{"type": "response.cancel"}]
+    assert upstream.manager.sent_json
+    repair_payload = upstream.manager.sent_json[0][1]
+    assert repair_payload["type"] == "tts_audio"
+    assert repair_payload["data"]["roleplay_guard"] is True
+    metrics = upstream._effective_policy["runtime_metrics"]["roleplay_compliance"]
+    assert metrics["violation_count"] == 1
+    assert metrics["blocking_violation_count"] == 1
+    assert metrics["cancel_stream_count"] == 1
+    assert metrics.get("regenerate_count", 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_roleplay_final_guard_replaces_blocking_text_with_repair() -> None:
+    transport = FakeTransport(StepFunSendResult(status=StepFunSendStatus.SENT))
+    upstream = RoleplayGuardUpstream(transport, object())
+
+    repaired = await upstream._apply_roleplay_output_guard("上次拜访我们聊过预算")
+
+    assert "第一次正式沟通" in repaired
+    metrics = upstream._effective_policy["runtime_metrics"]["roleplay_compliance"]
+    assert metrics["violation_count"] == 1
+    assert metrics["blocking_violation_count"] == 1

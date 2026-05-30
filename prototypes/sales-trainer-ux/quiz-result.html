@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>测验结果 · 销售训练原型</title>
+  <link rel="stylesheet" href="_shared.css" />
+  <style>
+    .result-hero {
+      text-align: center;
+      padding: 1.5rem 1.25rem 1.25rem;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 1.5rem;
+      margin-bottom: 0.875rem;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .result-hero--fail {
+      background: linear-gradient(180deg, #fff 0%, #fef2f2 100%);
+      border-color: #fecaca;
+    }
+    .result-hero--pass {
+      background: linear-gradient(180deg, #fff 0%, #f0fdf4 100%);
+      border-color: #bbf7d0;
+    }
+    .result-hero__icon {
+      width: 3rem;
+      height: 3rem;
+      margin: 0 auto 0.75rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: 800;
+    }
+    .result-hero--fail .result-hero__icon {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .result-hero--pass .result-hero__icon {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .result-hero__title {
+      margin: 0 0 0.35rem;
+      font-size: 1.375rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #0f172a;
+    }
+    .result-hero__score {
+      margin: 0 0 0.5rem;
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      color: #0f172a;
+      font-variant-numeric: tabular-nums;
+    }
+    .result-hero__score span {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #64748b;
+    }
+    .threshold-pill {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem 0.5rem;
+      padding: 0.35rem 0.75rem;
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid #e2e8f0;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      color: #475569;
+    }
+    .threshold-pill strong {
+      color: #0f172a;
+    }
+    .result-summary {
+      margin: 0.875rem 0 0;
+      font-size: 0.875rem;
+      line-height: 1.55;
+      color: #475569;
+    }
+    .review-heading {
+      margin: 0 0 0.75rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .q-review {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 1.5rem;
+      padding: 1rem 1.125rem;
+      margin-bottom: 0.625rem;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .q-review__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .q-review__index {
+      margin: 0;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    .q-review__stem {
+      margin: 0 0 0.625rem;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      line-height: 1.5;
+      color: #0f172a;
+    }
+    .q-review__answer {
+      margin: 0 0 0.5rem;
+      font-size: 0.8125rem;
+      color: #64748b;
+    }
+    .q-review__answer em {
+      font-style: normal;
+      font-weight: 600;
+      color: #334155;
+    }
+    .q-review__explain {
+      margin: 0;
+      padding: 0.75rem 0.875rem;
+      background: #f8fafc;
+      border-radius: 0.75rem;
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: #475569;
+    }
+    .q-review__explain strong {
+      color: #0f172a;
+    }
+    .q-review--wrong {
+      border-color: #fecaca;
+    }
+    .q-review--wrong .q-review__explain {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+    }
+    .cta-panel {
+      margin-top: 1rem;
+      padding: 1rem 1.125rem;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 1.5rem;
+    }
+    .cta-panel h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .cta-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .cta-note {
+      margin: 0.75rem 0 0;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <nav class="top-nav" aria-label="原型导航">
+      <a href="index.html">← 训练首页</a>
+      <span class="sep">·</span>
+      <a href="path-home.html">学习路径</a>
+      <span class="sep">·</span>
+      <a href="quiz.html">重新作答</a>
+    </nav>
+
+    <header>
+      <h1 class="page-title">测验结果</h1>
+      <p class="page-subtitle">产品知识测验 · 提交于 2026-05-29 14:32</p>
+    </header>
+
+    <!-- 切换 pass：给 section 加 result-hero--pass，改文案与 badge-pass -->
+    <section class="result-hero result-hero--fail" aria-labelledby="hero-heading">
+      <div class="result-hero__icon" aria-hidden="true">!</div>
+      <h2 class="result-hero__title" id="hero-heading">未通过本关</h2>
+      <p class="result-hero__score" aria-label="得分 72 分，满分 100 分">72<span> / 100</span></p>
+      <p class="threshold-pill" role="status">
+        通过线 <strong>80</strong> 分
+        <span aria-hidden="true">·</span>
+        还差 <strong>8</strong> 分
+      </p>
+      <p class="result-summary">
+        共 12 题，答对 9 题。价值表达与合规场景题较好；竞品对比与异议处理类题目建议结合解析重练后再进入录音演练。
+      </p>
+    </section>
+
+    <section aria-labelledby="review-heading">
+      <h2 class="review-heading" id="review-heading">逐题解析</h2>
+
+      <article class="q-review q-review--wrong">
+        <div class="q-review__head">
+          <p class="q-review__index">第 3 题 · 单选</p>
+          <span class="badge badge-fail">错误</span>
+        </div>
+        <p class="q-review__stem">
+          某金融集团 CIO 表示已有传统 DLP，为什么还需要石犀的数据流动治理平台？下列哪句最能体现客户价值？
+        </p>
+        <p class="q-review__answer">你的答案：<em>A · 我们支持 200+ 种数据源连接器</em></p>
+        <p class="q-review__explain">
+          <strong>解析：</strong>售前应先对齐 DLP 与「流动治理」的差异：DLP 偏静态防泄漏，石犀强调业务场景下的可审计链路与客户可感知收益（审批周期、合规暴露面），避免连接器数量式功能堆砌。
+        </p>
+      </article>
+
+      <article class="q-review">
+        <div class="q-review__head">
+          <p class="q-review__index">第 5 题 · 单选</p>
+          <span class="badge badge-pass">正确</span>
+        </div>
+        <p class="q-review__stem">
+          《数据安全法》要求重要数据处理者建立数据安全管理制度。向 CIO 介绍石犀时，哪一项属于合规侧的可落地表述？
+        </p>
+        <p class="q-review__answer">你的答案：<em>C · 策略、审批、审计在同一平台留痕，便于迎检与追责</em></p>
+        <p class="q-review__explain">
+          <strong>解析：</strong>合规话术应落到「制度可执行、过程可证明」，而非泛泛而谈「我们很安全」。与监管检查、内控审计相关的留痕能力是 CIO 常见关注点。
+        </p>
+      </article>
+
+      <article class="q-review q-review--wrong">
+        <div class="q-review__head">
+          <p class="q-review__index">第 8 题 · 判断</p>
+          <span class="badge badge-fail">错误</span>
+        </div>
+        <p class="q-review__stem">
+          客户说「你们比某某友商贵 30%」，新人可以直接回应「我们功能更多所以贵是正常的」。
+        </p>
+        <p class="q-review__answer">你的答案：<em>正确</em></p>
+        <p class="q-review__explain">
+          <strong>解析：</strong>价格异议应先澄清比较维度（部署范围、人天、运维、合规风险），再用 TCO 或试点 ROI 对话；直接为溢价辩护易触发对抗，不符合石犀售前话术规范。
+        </p>
+      </article>
+
+      <article class="q-review">
+        <div class="q-review__head">
+          <p class="q-review__index">第 11 题 · 单选</p>
+          <span class="badge badge-pass">正确</span>
+        </div>
+        <p class="q-review__stem">
+          首次拜访收尾时，较合适的下一步约定是？
+        </p>
+        <p class="q-review__answer">你的答案：<em>B · 确认下次 30 分钟会议议题（如同行业试点案例 + 痛点复盘）</em></p>
+        <p class="q-review__explain">
+          <strong>解析：</strong>首次拜访宜「轻承诺、明议题」：给出具体时长与议题，比空泛「再联系」或过早推合同更易获得 CIO 时间。
+        </p>
+      </article>
+
+      <p class="muted" style="margin:0.5rem 0 0;text-align:center;">原型仅展示 4 题；正式产品将展开全部 12 题解析。</p>
+    </section>
+
+    <section class="cta-panel" aria-labelledby="cta-heading">
+      <h2 id="cta-heading">下一步怎么做</h2>
+      <div class="cta-stack">
+        <a class="btn btn-primary btn-block" href="quiz.html">重练错题</a>
+        <a class="btn btn-outline btn-block" href="audio-practice.html">进入录音演练</a>
+        <a class="btn btn-outline btn-block" href="path-home.html#unit-4">下一关 · 拜访开场话术</a>
+      </div>
+      <p class="cta-note">达标（≥80 分）后，「下一关」将自动解锁；未达标时建议先重练错题。</p>
+    </section>
+
+    <footer class="footer-disclaimer">
+      UX 原型 · 非生产代码
+    </footer>
+  </main>
+</body>
+</html>

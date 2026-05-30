@@ -46,6 +46,7 @@ from common.services.session_runtime_state_service import (
 )
 from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
+from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.services.session_snapshots import (
     CurriculumSessionSnapshotError,
     apply_curriculum_snapshot_to_session,
@@ -95,6 +96,14 @@ class PracticeSessionUpdateResult:
     session: PracticeSession
     transition: SessionLifecycleTransition | None
     scenario_type: str | None
+
+
+@dataclass(slots=True)
+class PracticeTemplateRuntimeIdentity:
+    template: PracticeTemplate
+    agent_id: str
+    persona_id: str
+    runtime_profile_id: str
 
 
 class PracticeRuntimeDescriptorService:
@@ -173,6 +182,15 @@ class PracticeSessionCreateService:
             scenario_type_value=scenario_type_value,
         )
         agent_id_str, persona_id_str = self._resolve_agent_persona_pair(session_data)
+        template_identity = await self._resolve_template_runtime_identity(
+            session_data=session_data,
+            scenario_type_value=scenario_type_value,
+            requested_agent_id=agent_id_str,
+            requested_persona_id=persona_id_str,
+        )
+        if template_identity is not None:
+            agent_id_str = template_identity.agent_id
+            persona_id_str = template_identity.persona_id
         association_override_config = await self._validate_agent_persona_pair(
             agent_id_str=agent_id_str,
             persona_id_str=persona_id_str,
@@ -187,11 +205,19 @@ class PracticeSessionCreateService:
             await self.runtime_policy_service.resolve_effective_policy(
                 agent_id=agent_id_str,
                 persona_id=persona_id_str,
-                voice_mode_override=session_data.voice_mode,
+                voice_mode_override=(
+                    template_identity.template.voice_mode
+                    if template_identity is not None
+                    else session_data.voice_mode
+                ),
                 runtime_profile_override=(
-                    str(session_data.runtime_profile_id)
-                    if session_data.runtime_profile_id
-                    else None
+                    template_identity.runtime_profile_id
+                    if template_identity is not None
+                    else (
+                        str(session_data.runtime_profile_id)
+                        if session_data.runtime_profile_id
+                        else None
+                    )
                 ),
             )
         )
@@ -320,6 +346,67 @@ class PracticeSessionCreateService:
         if not requested_scenario.is_active:
             raise PracticeServiceError("[SCENARIO_INACTIVE]", status_code=400)
         return requested_scenario
+
+    async def _resolve_template_runtime_identity(
+        self,
+        *,
+        session_data: SessionCreate,
+        scenario_type_value: str,
+        requested_agent_id: str | None,
+        requested_persona_id: str | None,
+    ) -> PracticeTemplateRuntimeIdentity | None:
+        if session_data.practice_template_id is None:
+            return None
+
+        template = await self.db.get(
+            PracticeTemplate,
+            str(session_data.practice_template_id),
+        )
+        if template is None:
+            raise PracticeServiceError("[PRACTICE_TEMPLATE_NOT_FOUND]", status_code=404)
+        if template.status != "published":
+            raise PracticeServiceError(
+                "[PRACTICE_TEMPLATE_NOT_PUBLISHED]",
+                status_code=400,
+            )
+        if template.scenario_type != scenario_type_value:
+            raise PracticeServiceError(
+                "[PRACTICE_TEMPLATE_SCENARIO_TYPE_MISMATCH]",
+                status_code=400,
+            )
+
+        template_agent_id = str(template.agent_id)
+        template_persona_id = str(template.persona_id)
+        template_runtime_profile_id = str(template.runtime_profile_id)
+        requested_runtime_profile_id = (
+            str(session_data.runtime_profile_id)
+            if session_data.runtime_profile_id
+            else None
+        )
+        mismatched_fields: list[str] = []
+        if requested_agent_id and requested_agent_id != template_agent_id:
+            mismatched_fields.append("agent_id")
+        if requested_persona_id and requested_persona_id != template_persona_id:
+            mismatched_fields.append("persona_id")
+        if (
+            requested_runtime_profile_id
+            and requested_runtime_profile_id != template_runtime_profile_id
+        ):
+            mismatched_fields.append("runtime_profile_id")
+        if mismatched_fields:
+            raise PracticeServiceError(
+                "[PRACTICE_TEMPLATE_RUNTIME_IDENTITY_MISMATCH]",
+                status_code=400,
+                message="practice_template_id 已绑定固定 agent/persona/runtime_profile，请使用模板身份创建会话。",
+                details={"mismatched_fields": mismatched_fields},
+            )
+
+        return PracticeTemplateRuntimeIdentity(
+            template=template,
+            agent_id=template_agent_id,
+            persona_id=template_persona_id,
+            runtime_profile_id=template_runtime_profile_id,
+        )
 
     @staticmethod
     def _resolve_agent_persona_pair(

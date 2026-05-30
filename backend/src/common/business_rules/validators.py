@@ -13,12 +13,66 @@ from common.business_rules.defaults import (
     AI_COACH_RULES_KEY,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
     OBJECTION_LEDGER_RULES_KEY,
+    ROLEPLAY_EVAL_RELEASE_GATE_KEY,
+    ROLEPLAY_SITUATION_PACKS_KEY,
     SALES_COMBINATION_RULES_KEY,
     get_business_rule_definition,
 )
 
 _SCORE_FIELDS = {"logic_score", "accuracy_score", "completeness_score"}
 _ACHIEVEMENT_CONDITION_TYPES = {"evaluable_session_count", "max_overall_score"}
+_ROLEPLAY_REQUIRED_PUBLISHED_CODES = {
+    "first_visit",
+    "follow_up",
+    "proposal_review",
+    "price_negotiation",
+    "renewal",
+    "complaint_recovery",
+}
+_ROLEPLAY_ALLOWED_VISIBLE_KEYS = {
+    "industry",
+    "company_profile",
+    "customer_role",
+    "pain_points",
+    "objections",
+    "success_criteria",
+    "hidden_information",
+    "budget",
+    "decision_chain",
+    "competitor_quote",
+    "internal_floor_price",
+    "renewal_risk",
+    "compensation_boundary",
+}
+_ROLEPLAY_RELATIONSHIP_VALUES = {
+    "none",
+    "one_meeting",
+    "multiple_meetings",
+    "existing_customer",
+    "unspecified",
+}
+_ROLEPLAY_PACK_STATUSES = {"draft", "published", "archived"}
+_ROLEPLAY_CONFLICT_STRATEGIES = {
+    "customer_confused_correction",
+    "neutral_clarification",
+    "strict_refusal",
+}
+_ROLEPLAY_VIOLATION_ACTIONS = {
+    "cancel_or_regenerate_once",
+    "regenerate_once",
+    "cancel_stream",
+    "hard_fail",
+    "mark_and_continue",
+    "mark_for_report",
+}
+_ROLEPLAY_POLICY_KEYS = {
+    "relationship_history_contradiction",
+    "hidden_information_leak",
+    "forbidden_topic",
+    "persona_style_drift",
+}
+_ROLEPLAY_EVAL_GATE_MODES = {"blocking", "warn_only", "disabled"}
+_ROLEPLAY_GRADER_MODES = {"blocking", "warn_only", "disabled"}
 
 
 class BusinessRuleValidationError(ValueError):
@@ -41,6 +95,10 @@ def validate_business_rule_value(key: str, value: dict[str, Any]) -> dict[str, A
         return _validate_sales_combination_ruleset(value)
     if key == OBJECTION_LEDGER_RULES_KEY:
         return _validate_objection_ledger_ruleset(value)
+    if key == ROLEPLAY_SITUATION_PACKS_KEY:
+        return _validate_roleplay_situation_packs(value)
+    if key == ROLEPLAY_EVAL_RELEASE_GATE_KEY:
+        return _validate_roleplay_eval_release_gate(value)
     if key == ADMIN_SETTINGS_GENERAL_KEY:
         return _validate_admin_general_settings(value)
     if key == ADMIN_SETTINGS_SECURITY_KEY:
@@ -228,6 +286,45 @@ def _validate_ai_coach_ruleset(value: dict[str, Any]) -> dict[str, Any]:
         "action_label": _required_string(template, "action_label", max_length=80),
         "action_path_template": action_path_template,
     }
+    return normalized
+
+
+def _validate_roleplay_eval_release_gate(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    deterministic_mode = _required_string(
+        normalized,
+        "deterministic_gate_mode",
+        max_length=40,
+    )
+    if deterministic_mode not in _ROLEPLAY_EVAL_GATE_MODES:
+        raise BusinessRuleValidationError(
+            f"unsupported deterministic_gate_mode: {deterministic_mode}"
+        )
+    llm_mode = _required_string(normalized, "llm_grader_mode", max_length=40)
+    if llm_mode not in _ROLEPLAY_GRADER_MODES:
+        raise BusinessRuleValidationError(f"unsupported llm_grader_mode: {llm_mode}")
+    blocking_codes = normalized.get("blocking_violation_codes", [])
+    if not isinstance(blocking_codes, list):
+        raise BusinessRuleValidationError("blocking_violation_codes must be a list")
+    normalized["blocking_violation_codes"] = [
+        _required_string({"code": code}, "code", max_length=120)
+        for code in blocking_codes
+    ]
+    try:
+        retention_days = int(normalized.get("artifact_retention_days", 30))
+    except (TypeError, ValueError) as exc:
+        raise BusinessRuleValidationError(
+            "artifact_retention_days must be an integer"
+        ) from exc
+    if retention_days < 1 or retention_days > 365:
+        raise BusinessRuleValidationError(
+            "artifact_retention_days must be within [1, 365]"
+        )
+    normalized["deterministic_gate_mode"] = deterministic_mode
+    normalized["llm_grader_mode"] = llm_mode
+    normalized["artifact_retention_days"] = retention_days
     return normalized
 
 
@@ -493,6 +590,228 @@ def _validate_objection_ledger_ruleset(value: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _validate_roleplay_situation_packs(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    packs = normalized.get("packs")
+    if not isinstance(packs, list) or not packs:
+        raise BusinessRuleValidationError("packs must be a non-empty list")
+
+    seen_codes: set[str] = set()
+    published_codes: set[str] = set()
+    normalized_packs: list[dict[str, Any]] = []
+    for index, item in enumerate(packs):
+        if not isinstance(item, dict):
+            raise BusinessRuleValidationError(f"packs[{index}] must be an object")
+        pack = _validate_roleplay_situation_pack(item, index=index)
+        code = str(pack["code"])
+        if code in seen_codes:
+            raise BusinessRuleValidationError(f"duplicate roleplay situation code: {code}")
+        seen_codes.add(code)
+        if pack["status"] == "published":
+            published_codes.add(code)
+        normalized_packs.append(pack)
+
+    missing = sorted(_ROLEPLAY_REQUIRED_PUBLISHED_CODES - published_codes)
+    if missing:
+        raise BusinessRuleValidationError(
+            f"missing required published roleplay situation packs: {', '.join(missing)}"
+        )
+    normalized["packs"] = sorted(
+        normalized_packs,
+        key=lambda pack: (pack["code"], pack["version"]),
+    )
+    return normalized
+
+
+def _validate_roleplay_situation_pack(
+    item: dict[str, Any],
+    *,
+    index: int,
+) -> dict[str, Any]:
+    code = _required_string(item, "code", max_length=80)
+    status = _one_of(
+        item.get("status", "draft"),
+        field=f"packs[{index}].status",
+        allowed=_ROLEPLAY_PACK_STATUSES,
+    )
+    relationship = _roleplay_relationship_context(
+        item.get("default_relationship_context"),
+        field=f"packs[{index}].default_relationship_context",
+    )
+    visible_scope = _roleplay_visible_scope(
+        item.get("default_visible_information_scope"),
+        field=f"packs[{index}].default_visible_information_scope",
+    )
+    forbidden_patterns = _string_list(
+        item.get("default_forbidden_claim_patterns"),
+        field=f"packs[{index}].default_forbidden_claim_patterns",
+    )
+    if code == "first_visit" and status == "published" and not forbidden_patterns:
+        raise BusinessRuleValidationError(
+            "first_visit published pack requires default_forbidden_claim_patterns"
+        )
+    if code == "first_visit":
+        if relationship.get("has_prior_meeting") is True:
+            raise BusinessRuleValidationError(
+                "first_visit cannot set has_prior_meeting=true"
+            )
+        summary = relationship.get("meeting_history_summary")
+        if isinstance(summary, str) and summary.strip():
+            raise BusinessRuleValidationError(
+                "first_visit cannot include meeting_history_summary"
+            )
+    if code == "follow_up" and status == "published":
+        prior = relationship.get("prior_interactions")
+        if prior == "none":
+            raise BusinessRuleValidationError(
+                "follow_up cannot set prior_interactions=none"
+            )
+    return {
+        "code": code,
+        "label": _required_string(item, "label", max_length=120),
+        "version": _required_string(item, "version", max_length=120),
+        "status": status,
+        "initial_stage_hint": _optional_string(
+            item,
+            "initial_stage_hint",
+            default="opening",
+            max_length=80,
+        )
+        or "opening",
+        "default_relationship_context": relationship,
+        "default_visible_information_scope": visible_scope,
+        "default_forbidden_claim_patterns": forbidden_patterns,
+        "default_forbidden_topic_codes": _string_list(
+            item.get("default_forbidden_topic_codes"),
+            field=f"packs[{index}].default_forbidden_topic_codes",
+        ),
+        "default_forbidden_stage_codes": _string_list(
+            item.get("default_forbidden_stage_codes"),
+            field=f"packs[{index}].default_forbidden_stage_codes",
+        ),
+        "stage_transition_notes": _string_list(
+            item.get("stage_transition_notes"),
+            field=f"packs[{index}].stage_transition_notes",
+        ),
+        "default_conflict_response_strategy": _one_of(
+            item.get("default_conflict_response_strategy", "neutral_clarification"),
+            field=f"packs[{index}].default_conflict_response_strategy",
+            allowed=_ROLEPLAY_CONFLICT_STRATEGIES,
+        ),
+        "default_behavior_rules_for_prompt_only": _string_list(
+            item.get("default_behavior_rules_for_prompt_only"),
+            field=f"packs[{index}].default_behavior_rules_for_prompt_only",
+        ),
+        "default_disclosure_policy": _roleplay_disclosure_policy(
+            item.get("default_disclosure_policy"),
+            field=f"packs[{index}].default_disclosure_policy",
+        ),
+        "default_runtime_violation_policy": _roleplay_violation_policy(
+            item.get("default_runtime_violation_policy"),
+            field=f"packs[{index}].default_runtime_violation_policy",
+        ),
+        "compatible_practice_modes": _non_empty_string_list(
+            item.get("compatible_practice_modes"),
+            field=f"packs[{index}].compatible_practice_modes",
+        ),
+        "compatible_scenario_types": _non_empty_string_list(
+            item.get("compatible_scenario_types"),
+            field=f"packs[{index}].compatible_scenario_types",
+        ),
+    }
+
+
+def _roleplay_relationship_context(value: Any, *, field: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise BusinessRuleValidationError(f"{field} must be an object")
+    prior = _one_of(
+        value.get("prior_interactions", "unspecified"),
+        field=f"{field}.prior_interactions",
+        allowed=_ROLEPLAY_RELATIONSHIP_VALUES,
+    )
+    summary = value.get("meeting_history_summary")
+    if summary is not None and not isinstance(summary, str):
+        raise BusinessRuleValidationError(f"{field}.meeting_history_summary must be a string or null")
+    if prior == "none" and isinstance(summary, str) and summary.strip():
+        raise BusinessRuleValidationError(
+            f"{field}.meeting_history_summary requires prior_interactions != none"
+        )
+    return {
+        "prior_interactions": prior,
+        "has_prior_meeting": _optional_bool(value.get("has_prior_meeting")),
+        "has_seen_proposal": _optional_bool(value.get("has_seen_proposal")),
+        "has_discussed_budget": _optional_bool(value.get("has_discussed_budget")),
+        "has_existing_partnership": _optional_bool(value.get("has_existing_partnership")),
+        "meeting_history_summary": summary.strip() if isinstance(summary, str) and summary.strip() else None,
+    }
+
+
+def _roleplay_visible_scope(value: Any, *, field: str) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        raise BusinessRuleValidationError(f"{field} must be an object")
+    initial = _string_list(value.get("initial_visible_keys"), field=f"{field}.initial_visible_keys")
+    conditional = _string_list(
+        value.get("conditionally_visible_keys"),
+        field=f"{field}.conditionally_visible_keys",
+    )
+    hidden = _string_list(value.get("hidden_by_default_keys"), field=f"{field}.hidden_by_default_keys")
+    unknown = sorted((set(initial) | set(conditional) | set(hidden)) - _ROLEPLAY_ALLOWED_VISIBLE_KEYS)
+    if unknown:
+        raise BusinessRuleValidationError(
+            f"{field} contains unsupported keys: {', '.join(unknown)}"
+        )
+    overlap = sorted(set(initial) & set(hidden))
+    if overlap:
+        raise BusinessRuleValidationError(
+            f"{field} hidden keys cannot be initially visible: {', '.join(overlap)}"
+        )
+    conditional = list(dict.fromkeys([*conditional, *[key for key in hidden if key not in initial]]))
+    return {
+        "initial_visible_keys": list(dict.fromkeys(initial)),
+        "conditionally_visible_keys": conditional,
+        "hidden_by_default_keys": list(dict.fromkeys(hidden)),
+    }
+
+
+def _roleplay_disclosure_policy(value: Any, *, field: str) -> dict[str, Any]:
+    if value is None:
+        return {"default_hidden": True, "phases": [], "never_disclose_keys": []}
+    if not isinstance(value, dict):
+        raise BusinessRuleValidationError(f"{field} must be an object")
+    phases = value.get("phases", [])
+    if not isinstance(phases, list):
+        raise BusinessRuleValidationError(f"{field}.phases must be a list")
+    return {
+        "default_hidden": True,
+        "phases": [item for item in phases if isinstance(item, dict)],
+        "never_disclose_keys": _string_list(
+            value.get("never_disclose_keys"),
+            field=f"{field}.never_disclose_keys",
+        ),
+    }
+
+
+def _roleplay_violation_policy(value: Any, *, field: str) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise BusinessRuleValidationError(f"{field} must be an object")
+    normalized: dict[str, str] = {}
+    for key in sorted(_ROLEPLAY_POLICY_KEYS):
+        action = _one_of(
+            value.get(key, "mark_for_report"),
+            field=f"{field}.{key}",
+            allowed=_ROLEPLAY_VIOLATION_ACTIONS,
+        )
+        normalized[key] = action
+    unknown = set(value) - _ROLEPLAY_POLICY_KEYS
+    if unknown:
+        raise BusinessRuleValidationError(
+            f"{field} contains unsupported policy keys: {', '.join(sorted(unknown))}"
+        )
+    return normalized
+
+
 def _validate_admin_general_settings(value: dict[str, Any]) -> dict[str, Any]:
     normalized = deepcopy(value)
     normalized["version"] = _required_string(normalized, "version", max_length=120)
@@ -616,6 +935,20 @@ def _one_of(value: Any, *, field: str, allowed: set[str]) -> str:
             f"{field} must be one of {', '.join(sorted(allowed))}"
         )
     return normalized
+
+
+def _optional_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off"}:
+            return False
+    raise BusinessRuleValidationError("boolean field must be true, false, or null")
 
 
 def _non_empty_string_list(value: Any, *, field: str) -> list[str]:

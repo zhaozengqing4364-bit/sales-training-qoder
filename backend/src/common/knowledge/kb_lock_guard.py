@@ -15,6 +15,7 @@ from typing import Any
 from common.db.session import AsyncSessionLocal
 from common.knowledge.internal_searcher import search_internal_knowledge
 from common.knowledge.retrieval_helpers import (
+    is_product_overview_query,
     resolve_grounding_context_limits,
 )
 from common.knowledge.service import KnowledgeService
@@ -393,6 +394,14 @@ def _split_response_sentences(text: str) -> list[str]:
     return cleaned or [normalized]
 
 
+def _is_high_risk_empty_grounding_query(query: str) -> bool:
+    """Return True for product/company intro asks that must not freewheel."""
+    normalized = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", query.lower()))
+    if not normalized or not is_product_overview_query(query):
+        return False
+    return any(token in normalized for token in ("介绍", "是什么", "做什么"))
+
+
 def apply_answerability_output_guard(
     response_text: str,
     diagnostics: dict[str, Any] | None,
@@ -451,6 +460,9 @@ def evaluate_retrieval_grounding_decision(
     kb_lock_required = is_kb_lock_required(tool_policy)
     kb_ids = _normalize_knowledge_base_ids(effective_policy)
     has_bound_knowledge_base = bool(kb_ids)
+    high_risk_empty_grounding_query = _is_high_risk_empty_grounding_query(
+        normalized_query
+    )
     diagnostics = extract_answerability_diagnostics(retrieval_payload)
     answerability_mode = resolve_answerability_mode(
         diagnostics,
@@ -459,7 +471,9 @@ def evaluate_retrieval_grounding_decision(
     result_count = max(0, int(retrieval_payload.get("count") or 0))
 
     if result_count <= 0:
-        if has_bound_knowledge_base and kb_lock_required:
+        if has_bound_knowledge_base and (
+            kb_lock_required or high_risk_empty_grounding_query
+        ):
             return RetrievalGroundingDecision(
                 allow_generation=False,
                 status="blocked_empty",
@@ -484,7 +498,9 @@ def evaluate_retrieval_grounding_decision(
 
     grounding_context = _build_grounding_context(normalized_query, retrieval_payload)
     if not grounding_context:
-        if has_bound_knowledge_base and kb_lock_required:
+        if has_bound_knowledge_base and (
+            kb_lock_required or high_risk_empty_grounding_query
+        ):
             return RetrievalGroundingDecision(
                 allow_generation=False,
                 status="blocked_empty",

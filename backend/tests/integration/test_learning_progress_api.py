@@ -5,13 +5,15 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.auth.service import create_access_token
-from common.db.models import PracticeSession, User
+from common.db.models import PracticeSession, ScoringRuleset, User
 from curriculum_practice.models import (
     ExaminerAgent,
     LearningChapter,
     LearningContent,
     LearningProgress,
+    PracticeTemplate,
     QuestionCategory,
     QuestionItem,
 )
@@ -181,6 +183,61 @@ async def test_should_start_exam_after_all_chapters_completed(
         content_hash="agent-hash",
     )
     test_db.add(agent)
+    runtime_agent = Agent(
+        name="课程模板 Agent",
+        description="agent",
+        category="sales",
+        status="published",
+    )
+    persona = Persona(
+        name="课程模板 Persona",
+        description="persona",
+        category="customer",
+        difficulty="medium",
+        system_prompt="persona prompt",
+        status="active",
+    )
+    runtime_profile = VoiceRuntimeProfile(
+        name="课程模板实时语音",
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    ruleset = ScoringRuleset(
+        scenario_type="sales",
+        version="learning-progress-ruleset",
+        display_name="Learning Progress Ruleset",
+        status="published",
+        definition_json={"dimensions": []},
+        is_active=True,
+    )
+    test_db.add_all([runtime_agent, persona, runtime_profile, ruleset])
+    await test_db.flush()
+    test_db.add(
+        AgentPersona(
+            agent_id=runtime_agent.id,
+            persona_id=persona.id,
+            is_default=True,
+        )
+    )
+    test_db.add(
+        PracticeTemplate(
+            name="课程考核模板",
+            scenario_type="sales",
+            mode="examiner",
+            agent_id=runtime_agent.id,
+            persona_id=persona.id,
+            runtime_profile_id=runtime_profile.id,
+            scoring_ruleset_id=ruleset.ruleset_id,
+            learning_content_id=content.learning_content_id,
+            examiner_agent_id=agent.examiner_agent_id,
+            status="published",
+            version=1,
+            content_hash="exam-template-hash",
+        )
+    )
     test_db.add_all(
         LearningProgress(
             user_id=str(test_user.user_id),
@@ -204,12 +261,12 @@ async def test_should_start_exam_after_all_chapters_completed(
     assert session.status == "in_progress"
     assert session.curriculum_snapshot["kind"] == "curriculum_examiner_session"
     assert session.curriculum_snapshot["learning_content_id"] == content.learning_content_id
-    assert [asset["asset_type"] for asset in session.curriculum_snapshot["content_assets"]] == [
-        "examiner_agent",
-        "question_item",
-    ]
-    assert session.curriculum_snapshot["content_assets"][0]["asset_id"] == agent.examiner_agent_id
-    assert session.curriculum_snapshot["content_assets"][1]["asset_id"] == question.question_id
+    assets = {
+        asset["asset_type"]: asset for asset in session.curriculum_snapshot["content_assets"]
+    }
+    assert assets["learning_content"]["asset_id"] == content.learning_content_id
+    assert assets["examiner_agent"]["asset_id"] == agent.examiner_agent_id
+    assert assets["question_item"]["asset_id"] == question.question_id
 
 
 @pytest.mark.asyncio

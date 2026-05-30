@@ -21,6 +21,7 @@ docs/api-contract/
 ├── release-verification.md # 发布验收 API 契约
 ├── learning-content.md     # 学习内容 API 契约
 ├── test-bank.md            # 题库 API 契约
+├── sales-trainer.md        # 销售训练 MVP API 契约
 └── websocket.md            # WebSocket 消息契约
 ```
 
@@ -124,3 +125,4 @@ docs/api-contract/
 | 2026-02-16 | 新增 Persona 策略健康审计接口与 Voice Runtime 旧写入字段移除说明 | personas, voice-runtime |
 | 2026-04-14 | 新增销售方法论 / rubric contract，明确 canonical kernel 与 realtime/report/read-side 的首轮映射 | effectiveness |
 | 2026-03-14 | 统一契约认证语义为 “Bearer 或 HttpOnly session cookie”，补充训练运行时主语说明 | sessions, replay, agents, personas, analytics, knowledge, support-runtime |
+| 2026-05-28 | 新增销售训练 MVP 基础闭环契约，覆盖 learner/admin 做题、录音上传、转写评分、提示词和操作日志接口 | sales-trainer |

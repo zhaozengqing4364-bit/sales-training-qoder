@@ -7,7 +7,7 @@ export default async function AdminLayout({
     children: React.ReactNode;
 }) {
     const currentUser = await requireServerSession({
-        requiredRoles: ["admin"],
+        requiredRoles: ["admin", "support"],
         unauthorizedRedirectTo: "/",
     });
 

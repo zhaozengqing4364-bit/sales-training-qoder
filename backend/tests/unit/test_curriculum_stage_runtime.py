@@ -10,6 +10,20 @@ def _runtime(*, failure_policy: str = "retry_current") -> CurriculumStageRuntime
         curriculum_plan={
             "stages": [
                 {
+                    "template_stage_key": "live_stage_must_not_be_used",
+                    "order": 1,
+                    "completion_policy": {
+                        "min_score": 10.0,
+                        "min_rounds": 99,
+                        "max_duration_seconds": 999,
+                    },
+                    "failure_policy": "retry_current",
+                }
+            ]
+        },
+        stage_snapshots={
+            "template_stage_opening": {
+                "runtime_payload": {
                     "template_stage_key": "template_stage_opening",
                     "order": 1,
                     "completion_policy": {
@@ -18,8 +32,10 @@ def _runtime(*, failure_policy: str = "retry_current") -> CurriculumStageRuntime
                         "max_duration_seconds": 60,
                     },
                     "failure_policy": failure_policy,
-                },
-                {
+                }
+            },
+            "template_stage_close": {
+                "runtime_payload": {
                     "template_stage_key": "template_stage_close",
                     "order": 2,
                     "completion_policy": {
@@ -28,12 +44,8 @@ def _runtime(*, failure_policy: str = "retry_current") -> CurriculumStageRuntime
                         "max_duration_seconds": 60,
                     },
                     "failure_policy": "allow_skip",
-                },
-            ]
-        },
-        stage_snapshots={
-            "template_stage_opening": {"runtime_payload": {"name": "opening"}},
-            "template_stage_close": {"runtime_payload": {"name": "close"}},
+                }
+            },
         },
         warning_lead_seconds=10,
         grace_seconds=5,

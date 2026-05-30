@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>销售闯关训练 · UX 原型索引</title>
+  <link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+  <div class="page">
+    <div class="container">
+      <div class="stack">
+        <header>
+          <p class="text-label">Sales Trainer UX</p>
+          <h1 class="heading-xl">销售闯关训练</h1>
+          <p class="text-body" style="margin-top: 0.5rem;">
+            路径驱动的销售技能训练原型集。区别于「客户对练」的实时语音演练，本模块聚焦闯关式做题与录音评分，按关卡推进、明确通关标准。
+          </p>
+        </header>
+
+        <section class="card">
+          <h2 class="heading-md" style="margin-bottom: 1rem;">原型页面</h2>
+          <ul class="proto-list">
+            <li>
+              <a class="proto-list__link" href="path-home.html">
+                <p class="proto-list__title">训练路径首页</p>
+                <p class="proto-list__desc">
+                  当前关卡进度（2/5 价值表达）、UsageBar 式进度条、主 CTA、做题+录音清单、可折叠关卡地图。
+                </p>
+                <span class="badge badge--emerald proto-list__tag">Agent A · 核心</span>
+              </a>
+            </li>
+            <li>
+              <a class="proto-list__link" href="level-brief.html">
+                <p class="proto-list__title">关卡任务简报</p>
+                <p class="proto-list__desc">
+                  进入单元前的任务说明：学习目标、通关标准、预计耗时、子任务清单与开始按钮。
+                </p>
+                <span class="badge badge--slate proto-list__tag">Agent A</span>
+              </a>
+            </li>
+            <li>
+              <a class="proto-list__link" href="compare.html">
+                <p class="proto-list__title">现状 vs 提案对比</p>
+                <p class="proto-list__desc">
+                  扁平功能列表 vs 路径驱动闯关的信息架构对比，帮助评审命名与导航变更。
+                </p>
+                <span class="badge badge--slate proto-list__tag">Agent A</span>
+              </a>
+            </li>
+            <li>
+              <a class="proto-list__link" href="quiz-flow.html">
+                <p class="proto-list__title">做题训练流程</p>
+                <p class="proto-list__desc">单题作答、进度指示、提交与结果反馈。（Agent B 交付）</p>
+                <span class="badge badge--amber proto-list__tag">待其他 Agent</span>
+              </a>
+            </li>
+            <li>
+              <a class="proto-list__link" href="audio-flow.html">
+                <p class="proto-list__title">录音评分流程</p>
+                <p class="proto-list__desc">上传录音、转写等待、AI 评分结果页。（Agent C 交付）</p>
+                <span class="badge badge--amber proto-list__tag">待其他 Agent</span>
+              </a>
+            </li>
+          </ul>
+        </section>
+
+        <section class="card card--muted">
+          <h2 class="heading-md" style="margin-bottom: 0.75rem;">设计原则摘要</h2>
+          <ul class="criteria-list">
+            <li>命名：「销售闯关训练」区别于「客户对练」</li>
+            <li>信息架构：路径驱动，非扁平功能列表</li>
+            <li>每关明确通关标准与下一步动作</li>
+            <li>页面背景 slate-50，卡片 white/90 + rounded-3xl</li>
+          </ul>
+        </section>
+      </div>
+
+      <footer class="proto-footer">UX 原型 · 非生产代码</footer>
+    </div>
+  </div>
+</body>
+</html>

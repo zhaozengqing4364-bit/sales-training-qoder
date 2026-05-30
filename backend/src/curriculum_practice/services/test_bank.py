@@ -36,9 +36,17 @@ class TestBankService:
         self._db = db
 
     async def list_categories(self) -> Result[list[QuestionCategory]]:
+        return await self.list_categories_by_scope(usage_scope=None)
+
+    async def list_categories_by_scope(
+        self, *, usage_scope: str | None
+    ) -> Result[list[QuestionCategory]]:
+        stmt = select(QuestionCategory)
+        if usage_scope is not None:
+            stmt = stmt.where(QuestionCategory.usage_scope == usage_scope)
         try:
             result = await self._db.execute(
-                select(QuestionCategory).order_by(
+                stmt.order_by(
                     QuestionCategory.parent_id.asc(),
                     QuestionCategory.order_index.asc(),
                     QuestionCategory.created_at.asc(),
@@ -128,10 +136,13 @@ class TestBankService:
         difficulty: str | None = None,
         status: str | None = None,
         tag: str | None = None,
+        usage_scope: str | None = None,
     ) -> Result[list[QuestionItem]]:
         stmt = select(QuestionItem)
         if category_id:
             stmt = stmt.where(QuestionItem.category_id == category_id)
+        if usage_scope:
+            stmt = stmt.where(QuestionItem.usage_scope == usage_scope)
         if difficulty:
             stmt = stmt.where(QuestionItem.difficulty == difficulty)
         if status:

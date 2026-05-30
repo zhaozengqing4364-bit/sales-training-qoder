@@ -93,7 +93,9 @@ class KnowledgeAnswerabilityEvaluator:
             )
 
         covered_slots = _collect_slot_hits(rows)
-        evidence_supported = _has_query_evidence_support(
+        evidence_supported = _has_profile_evidence_support(
+            profile=profile,
+            covered_slots=covered_slots,
             rows=rows,
             execution_result=execution_result,
         )
@@ -228,6 +230,18 @@ def _collect_slot_hits(rows: list[dict[str, Any]]) -> set[str]:
                 if normalized:
                     covered.add(normalized)
     return covered
+
+
+def _has_profile_evidence_support(
+    *,
+    profile: KnowledgeAnswerabilityProfileConfig,
+    covered_slots: set[str],
+    rows: list[dict[str, Any]],
+    execution_result: KnowledgeHaystackExecutionResult,
+) -> bool:
+    if _has_query_evidence_support(rows=rows, execution_result=execution_result):
+        return True
+    return "guidance" in profile.required_slots and "guidance" in covered_slots
 
 
 def _coverage_ratio(covered_slots: list[str], configured_slots: list[str]) -> float:

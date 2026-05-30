@@ -133,6 +133,27 @@ async def sample_agent_data():
     }
 
 
+async def _link_active_persona(db_session: AsyncSession, agent_id: str) -> None:
+    persona = Persona(
+        name=f"Active Persona {agent_id}",
+        description="active persona",
+        category="customer",
+        difficulty="medium",
+        system_prompt="persona prompt",
+        status="active",
+    )
+    db_session.add(persona)
+    await db_session.flush()
+    db_session.add(
+        AgentPersona(
+            agent_id=agent_id,
+            persona_id=persona.id,
+            is_default=True,
+        )
+    )
+    await db_session.commit()
+
+
 class TestAdminAgentAPI:
     """Tests for Admin Agent API - R1"""
 
@@ -338,7 +359,7 @@ class TestAdminAgentAPI:
             agent = row.scalar_one()
             assert agent.description == new_description
 
-    async def test_publish_agent(self, async_client, auth_headers, sample_agent_data):
+    async def test_publish_agent(self, async_client, auth_headers, sample_agent_data, db_session):
         """Should publish agent - R1.5"""
         # Create agent
         create_response = await async_client.post(
@@ -347,6 +368,7 @@ class TestAdminAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
+        await _link_active_persona(db_session, agent_id)
 
         response = await async_client.post(
             f"/api/v1/admin/agents/{agent_id}/publish",
@@ -419,7 +441,7 @@ class TestAdminAgentAPI:
 class TestUserAgentAPI:
     """Tests for User Agent API - R2"""
 
-    async def test_list_agents_user_only_published(self, async_client, auth_headers, sample_agent_data):
+    async def test_list_agents_user_only_published(self, async_client, auth_headers, sample_agent_data, db_session):
         """Should only return published agents - R2.1"""
         # Create draft agent
         await async_client.post(
@@ -435,6 +457,7 @@ class TestUserAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
+        await _link_active_persona(db_session, agent_id)
         await async_client.post(
             f"/api/v1/admin/agents/{agent_id}/publish",
             headers=auth_headers
@@ -451,7 +474,7 @@ class TestUserAgentAPI:
         assert data["data"]["total"] == 1
         assert data["data"]["agents"][0]["name"] == "Published Agent"
 
-    async def test_get_agent_user_no_system_prompt(self, async_client, auth_headers, sample_agent_data):
+    async def test_get_agent_user_no_system_prompt(self, async_client, auth_headers, sample_agent_data, db_session):
         """Should not include system_prompt in user view - R2.2"""
         # Create and publish agent
         create_response = await async_client.post(
@@ -460,6 +483,7 @@ class TestUserAgentAPI:
             headers=auth_headers
         )
         agent_id = create_response.json()["data"]["id"]
+        await _link_active_persona(db_session, agent_id)
         await async_client.post(
             f"/api/v1/admin/agents/{agent_id}/publish",
             headers=auth_headers

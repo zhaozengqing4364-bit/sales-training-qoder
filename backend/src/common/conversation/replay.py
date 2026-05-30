@@ -26,8 +26,15 @@ from common.conversation.session_evidence import (
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession, SessionStatus
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref_payload
+from common.effectiveness.report_scoring_projection import (
+    ReportScoringProjectionService,
+)
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from curriculum_practice.services.roleplay_contracts import (
+    roleplay_compliance_summary_from_session,
+    roleplay_compliance_timeline_from_session,
+)
 
 logger = get_logger(__name__)
 
@@ -244,6 +251,17 @@ class ReplayService:
             presentation_review = (
                 projection.presentation_review if is_presentation_scenario else None
             )
+            scoring_projection = await ReportScoringProjectionService(self.db).build(
+                evidence_projection=projection,
+                scenario_type=scenario_type,
+            )
+            evidence_completeness = scoring_projection.evidence_completeness
+            canonical_evaluation_kernel = projection.canonical_evaluation_kernel
+            if isinstance(canonical_evaluation_kernel, dict):
+                canonical_evaluation_kernel = {
+                    **canonical_evaluation_kernel,
+                    "scoring_ruleset": scoring_projection.scoring_metadata,
+                }
             main_issue_payload = (
                 None if is_presentation_scenario else main_issue_with_anchor
             )
@@ -312,10 +330,28 @@ class ReplayService:
                     if is_presentation_scenario
                     else projection.not_evaluable_reason
                 ),
-                "evidence_completeness": projection.evidence_completeness,
-                "canonical_evaluation_kernel": projection.canonical_evaluation_kernel,
+                "evidence_completeness": evidence_completeness,
+                "canonical_evaluation_kernel": canonical_evaluation_kernel,
                 "compatibility_readers": projection.compatibility_readers,
                 "presentation_review": presentation_review,
+                "roleplay_compliance_summary": roleplay_compliance_summary_from_session(
+                    curriculum_snapshot=getattr(session, "curriculum_snapshot", None),
+                    voice_policy_snapshot=getattr(
+                        session,
+                        "voice_policy_snapshot",
+                        None,
+                    ),
+                    runtime_state=getattr(session, "runtime_state", None),
+                ),
+                "roleplay_compliance_timeline": roleplay_compliance_timeline_from_session(
+                    voice_policy_snapshot=getattr(
+                        session,
+                        "voice_policy_snapshot",
+                        None,
+                    ),
+                    runtime_state=getattr(session, "runtime_state", None),
+                    include_internal_details=True,
+                ),
             }
 
             # Attach audio-audit read model (graceful — never breaks replay/report)

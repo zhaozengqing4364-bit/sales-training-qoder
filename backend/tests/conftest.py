@@ -14,15 +14,17 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+# Test database URL (SQLite for testing)
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-import agent.models  # noqa: F401  # Register agent/voice-runtime tables on shared Base metadata.
-import curriculum_practice.models  # noqa: F401  # Register curriculum tables for FK targets.
-from common.db.models import Base
-
-# Test database URL (SQLite for testing)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+import agent.models  # noqa: E402,F401  # Register agent/voice-runtime tables on shared Base metadata.
+import curriculum_practice.models  # noqa: E402,F401  # Register curriculum tables for FK targets.
+import sales_trainer.models  # noqa: E402,F401  # Register sales trainer MVP tables.
+from common.db.models import Base  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

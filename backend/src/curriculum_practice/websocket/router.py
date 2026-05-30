@@ -12,7 +12,7 @@ from common.config import settings
 from common.db.models import PracticeSession, User
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
-from common.services.runtime_gate import RuntimeGate
+from common.services.runtime_gate import RuntimeAdmissionDecision, RuntimeGate
 from common.services.session_runtime_lifecycle_hooks import mark_session_runtime_failed
 from common.websocket.session_manager import get_session_manager
 from curriculum_practice.services.examiner_report_service import (
@@ -89,8 +89,9 @@ async def _reject(
     code: int,
     reason: str,
     session_id: str | None = None,
+    mark_runtime_failed: bool = True,
 ) -> None:
-    if session_id:
+    if session_id and mark_runtime_failed:
         await mark_session_runtime_failed(
             session_id,
             failure_code=reason,
@@ -98,6 +99,23 @@ async def _reject(
         )
     await websocket.accept()
     await websocket.close(code=code, reason=reason)
+
+
+async def _reject_admission(
+    websocket: WebSocket,
+    decision: RuntimeAdmissionDecision,
+    *,
+    session_id: str,
+) -> None:
+    reason = decision.close_reason or decision.code or "EXAMINER_RUNTIME_CONFIG_MISSING"
+    if decision.mark_runtime_failed:
+        await mark_session_runtime_failed(
+            session_id,
+            failure_code=reason,
+            source="examiner_websocket_reject",
+        )
+    await websocket.accept()
+    await websocket.close(code=decision.close_code or 4413, reason=reason)
 
 
 async def _resolve_authenticated_user(user_id: str) -> _AuthUser | None:
@@ -179,19 +197,37 @@ async def _handle_examiner_websocket(
         user_id = None
 
     if user_id is None:
-        await _reject(websocket, code=4001, reason="Unauthorized", session_id=resolved_session_id)
+        await _reject(
+            websocket,
+            code=4001,
+            reason="Unauthorized",
+            session_id=resolved_session_id,
+            mark_runtime_failed=False,
+        )
         return
 
     auth_user = await _resolve_authenticated_user(user_id)
     if auth_user is None or not auth_user.is_active:
-        await _reject(websocket, code=4001, reason="Unauthorized", session_id=resolved_session_id)
+        await _reject(
+            websocket,
+            code=4001,
+            reason="Unauthorized",
+            session_id=resolved_session_id,
+            mark_runtime_failed=False,
+        )
         return
 
     session_owner_id, owner_lookup_ok = await _resolve_examiner_session_owner_id(
         resolved_session_id
     )
     if not owner_lookup_ok:
-        await _reject(websocket, code=4003, reason="ACCESS_DENIED", session_id=resolved_session_id)
+        await _reject(
+            websocket,
+            code=4003,
+            reason="ACCESS_DENIED",
+            session_id=resolved_session_id,
+            mark_runtime_failed=False,
+        )
         return
     if (
         session_owner_id
@@ -204,14 +240,25 @@ async def _handle_examiner_websocket(
             request_user_id=auth_user.user_id,
             session_owner_id=session_owner_id,
         )
-        await _reject(websocket, code=4003, reason="ACCESS_DENIED", session_id=resolved_session_id)
+        await _reject(
+            websocket,
+            code=4003,
+            reason="ACCESS_DENIED",
+            session_id=resolved_session_id,
+            mark_runtime_failed=False,
+        )
         return
 
-    async with AsyncSessionLocal() as db:
-        runtime, failure_reason = await RuntimeGate(db).build_examiner_runtime(
-            resolved_session_id,
-            completion_writer=_mark_examiner_report_completed,
+    admission = await _resolve_examiner_admission_decision(resolved_session_id)
+    if admission is not None and not admission.allowed:
+        await _reject_admission(
+            websocket,
+            admission,
+            session_id=resolved_session_id,
         )
+        return
+
+    runtime, failure_reason = await _build_runtime_from_session(resolved_session_id)
     if runtime is None:
         await _reject(
             websocket,
@@ -237,6 +284,26 @@ async def _handle_examiner_websocket(
         await session_manager.unregister_session(resolved_session_id, reason="connection_closed")
 
 
+async def _build_runtime_from_session(
+    session_id: str,
+) -> tuple[ExaminerRuntime | None, str | None]:
+    async with AsyncSessionLocal() as db:
+        return await RuntimeGate(db).build_examiner_runtime(
+            session_id,
+            completion_writer=_mark_examiner_report_completed,
+        )
+
+
+async def _resolve_examiner_admission_decision(
+    session_id: str,
+) -> RuntimeAdmissionDecision | None:
+    async with AsyncSessionLocal() as db:
+        return await RuntimeGate(db).admit_session(
+            session_id,
+            expected_runtime_type="examiner",
+        )
+
+
 async def _mark_examiner_report_completed(
     *,
     session_id: str,
@@ -257,5 +324,3 @@ async def _mark_examiner_report_completed(
                 fallback=persist_result.fallback,
             )
     return examiner_report_frontend_path(session_id)
-
-

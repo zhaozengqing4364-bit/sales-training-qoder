@@ -11,6 +11,7 @@ from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.db.models import PracticeSession, ScoringRuleset, TrainingTask
 from common.knowledge.models import KnowledgeBase
 from common.services.practice_session_service import PracticeServiceError
+from common.services.session_runtime_state_service import read_lifecycle_snapshot
 from common.training_tasks.schemas import (
     TrainingTaskResponse,
     TrainingTaskStartSessionRequest,
@@ -150,7 +151,7 @@ async def test_training_task_start_session_keeps_unbound_legacy_path(
     assert "reconnect" not in data
     assert session.practice_template_id is None
     assert session.curriculum_snapshot is None
-    assert session.runtime_state is None
+    assert read_lifecycle_snapshot(session.runtime_state).state == "runnable"
     assert session.status == "preparing"
 
     refreshed_task = await test_db.get(TrainingTask, task.task_id)
@@ -193,7 +194,7 @@ async def test_training_task_start_session_uses_bound_published_template(
     assert data["practice_template_id"] == template.template_id
     assert data["status"] == "in_progress"
     assert session.practice_template_id == template.template_id
-    assert session.runtime_state is None
+    assert read_lifecycle_snapshot(session.runtime_state).state == "runnable"
     assert session.curriculum_snapshot is not None
     assert session.curriculum_snapshot["practice_template"] == {
         "asset_type": "practice_template",

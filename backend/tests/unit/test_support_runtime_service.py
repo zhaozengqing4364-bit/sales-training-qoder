@@ -15,6 +15,11 @@ from support.services.runtime_status_service import (
     RuntimeSessionRecord,
     RuntimeStatusService,
 )
+from common.config import Settings
+from curriculum_practice.services.roleplay.dual_read_observability import (
+    record_dual_read_mismatch,
+    reset_dual_read_observability_for_tests,
+)
 
 
 def _make_effectiveness_snapshot(
@@ -109,6 +114,7 @@ def _make_record(
     projection_error: str | None = None,
     presentation_review: dict[str, object] | None = None,
     audio_diagnostics: dict[str, object] | None = None,
+    roleplay_diagnostics: dict[str, object] | None = None,
 ) -> RuntimeSessionRecord:
     return RuntimeSessionRecord(
         session=session,
@@ -119,6 +125,7 @@ def _make_record(
         projection_error=projection_error,
         presentation_review=presentation_review,
         audio_diagnostics=audio_diagnostics or {},
+        roleplay_diagnostics=roleplay_diagnostics or {},
     )
 
 
@@ -349,6 +356,122 @@ def test_build_overview_payload_tracks_scoring_separately_from_completed() -> No
     assert overview["release_health"]["warning_count"] == 0
     assert overview["anomaly_summary"]["blocking"] == [{"kind": "stuck_scoring", "count": 1}]
     assert overview["anomaly_summary"]["warning"] == []
+    assert overview["roleplay"]["missing_sessions"] == 3
+
+
+def test_roleplay_governance_payload_tracks_legacy_and_violations() -> None:
+    now = datetime(2026, 3, 24, 12, 0, tzinfo=UTC)
+    ready_session = _make_session(
+        status="completed",
+        start_time=now - timedelta(hours=1),
+        end_time=now - timedelta(minutes=50),
+        scenario_type="sales",
+    )
+    legacy_session = _make_session(
+        status="completed",
+        start_time=now - timedelta(hours=2),
+        end_time=now - timedelta(hours=1, minutes=50),
+        scenario_type="sales",
+    )
+    records = [
+        _make_record(
+            session=ready_session,
+            projection=SimpleNamespace(evaluable=True, not_evaluable_reason=None),
+            roleplay_diagnostics={
+                "summary": {
+                    "status": "ready",
+                    "situation_code": "first_visit",
+                    "violation_count": 2,
+                    "blocking_violation_count": 1,
+                    "regenerate_count": 1,
+                    "cancel_stream_count": 1,
+                    "hidden_leak_prevented_count": 1,
+                    "last_action_at": "2026-03-24T11:10:00+00:00",
+                }
+            },
+        ),
+        _make_record(
+            session=legacy_session,
+            projection=SimpleNamespace(evaluable=True, not_evaluable_reason=None),
+            roleplay_diagnostics={
+                "summary": {
+                    "status": "legacy",
+                    "situation_code": "general_practice",
+                    "violation_count": 0,
+                }
+            },
+        ),
+    ]
+
+    faults = RuntimeStatusService.build_faults_payload(
+        records,
+        now=now,
+        limit=20,
+        supplemental_logs=[],
+    )
+    overview = RuntimeStatusService.build_overview_payload(
+        records,
+        fault_items=faults["items"],
+        now=now,
+        window_hours=24,
+        supplemental_logs=[],
+    )
+
+    by_kind = {item["kind"]: item for item in faults["items"]}
+    assert by_kind["roleplay_blocking_violation"]["severity"] == "warning"
+    assert by_kind["roleplay_contract_legacy"]["severity"] == "warning"
+    roleplay = overview["roleplay"]
+    assert roleplay["ready_sessions"] == 1
+    assert roleplay["legacy_sessions"] == 1
+    assert roleplay["violation_count"] == 2
+    assert roleplay["blocking_violation_count"] == 1
+    assert roleplay["hidden_leak_prevented_count"] == 1
+    assert roleplay["high_violation_situation_packs"] == [
+        {"situation_code": "first_visit", "violation_count": 2}
+    ]
+
+
+def test_config_asset_center_overview_includes_dual_read_observability(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SITUATION_PACK_DUAL_READ", "true")
+    monkeypatch.setattr(
+        "curriculum_practice.services.roleplay.dual_read_observability.settings",
+        Settings(),
+    )
+    reset_dual_read_observability_for_tests()
+    record_dual_read_mismatch(
+        code="first_visit",
+        scope="lookup",
+        phase_a_hash="hash-a",
+        phase_b1_hash="hash-b1",
+    )
+
+    now = datetime(2026, 3, 24, 12, 0, tzinfo=UTC)
+    overview = RuntimeStatusService.build_overview_payload(
+        [],
+        fault_items=[],
+        now=now,
+        window_hours=24,
+        supplemental_logs=[],
+    )
+
+    config_asset_center = overview["config_asset_center"]
+    dual_read = config_asset_center["dual_read"]
+    assert config_asset_center["status"] == "warning"
+    assert dual_read["enabled"] is True
+    assert dual_read["authority"] == "phase_a"
+    assert dual_read["mismatch_count"] == 1
+    assert dual_read["last_mismatch"]["code"] == "first_visit"
+    assert dual_read["last_mismatch"]["phase_a_hash"] == "hash-a"
+    assert dual_read["last_mismatch"]["phase_b1_hash"] == "hash-b1"
+    assert dual_read["sample_mismatches"] == [
+        {
+            "code": "first_visit",
+            "phase_a_hash": "hash-a",
+            "phase_b1_hash": "hash-b1",
+        }
+    ]
 
 
 def test_asset_registry_covers_current_asset_types_and_extracts_refs() -> None:

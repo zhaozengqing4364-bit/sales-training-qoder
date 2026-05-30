@@ -91,7 +91,7 @@ async def _seed_publishable_references(db: AsyncSession) -> None:
                 name="Active Persona",
                 description="persona",
                 category="customer",
-                system_prompt="Act as a customer.",
+                system_prompt="首次拜访需求挖掘，保持谨慎客户语气。",
                 status="active",
             ),
             VoiceRuntimeProfile(
@@ -119,6 +119,43 @@ async def _seed_publishable_references(db: AsyncSession) -> None:
                 vector_collection="sales_kb",
                 status="active",
             ),
+            CaseItem(
+                case_item_id="case-1",
+                industry="金融科技",
+                company_profile="中型支付平台，正在评估企业级销售训练系统。",
+                customer_role="CTO",
+                pain_points=["销售新人上手慢"],
+                objections=["预算紧张"],
+                hidden_information="真实预算已批复，但客户不会主动透露。",
+                success_criteria=["识别预算状态"],
+                allowed_disclosure_policy={
+                    "phases": [
+                        {
+                            "trigger": "询问预算",
+                            "keywords": ["预算"],
+                            "disclose": "预算范围",
+                        }
+                    ],
+                    "roleplay": {"situation_code": "first_visit"},
+                },
+                status="published",
+                version=1,
+                content_hash="sha256:case-1",
+            ),
+            RoleProfile(
+                role_profile_id="role-1",
+                role_type="customer",
+                role_name="谨慎型 CTO",
+                persona_ref=None,
+                communication_style="直接、重视技术细节和风险控制",
+                pressure_level="high",
+                knowledge_boundary=["了解内部预算流程"],
+                behavior_rules=["只回答被直接提问的问题"],
+                voice_style_hint="语速偏快，语调克制",
+                status="published",
+                version=1,
+                content_hash="sha256:role-1",
+            ),
         ]
     )
     await db.commit()
@@ -136,6 +173,8 @@ def _template_payload() -> dict[str, object]:
         "voice_mode": "stepfun_realtime",
         "scoring_ruleset_id": "ruleset-1",
         "knowledge_base_refs": ["kb-1"],
+        "case_item_id": "case-1",
+        "role_profile_id": "role-1",
     }
 
 
@@ -604,6 +643,74 @@ async def test_should_preview_runtime_dossier_before_template_publish(
 
 
 @pytest.mark.asyncio
+async def test_roleplay_situation_pack_admin_surface_lists_detail_and_references(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    await _seed_publishable_references(db_session)
+    template = PracticeTemplate(
+        template_id="template-roleplay-reference",
+        name="引用首访情景的模板",
+        scenario_type="sales",
+        mode="customer_roleplay",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        runtime_profile_id="runtime-1",
+        voice_mode="stepfun_realtime",
+        scoring_ruleset_id="ruleset-1",
+        knowledge_base_refs=["kb-1"],
+        case_item_id="case-1",
+        role_profile_id="role-1",
+        timeout_config={"roleplay": {"situation_code": "first_visit"}},
+        status="draft",
+    )
+    db_session.add(template)
+    await db_session.commit()
+
+    list_response = await async_client.get(
+        "/api/v1/admin/curriculum-practice/roleplay-situation-packs",
+        headers=admin_headers,
+    )
+    detail_response = await async_client.get(
+        "/api/v1/admin/curriculum-practice/roleplay-situation-packs/first_visit",
+        headers=admin_headers,
+    )
+    references_response = await async_client.get(
+        "/api/v1/admin/curriculum-practice/roleplay-situation-packs/first_visit/references",
+        headers=admin_headers,
+    )
+    resolve_response = await async_client.get(
+        "/api/v1/admin/curriculum-practice/roleplay-situation-packs/first_visit/resolve",
+        headers=admin_headers,
+    )
+
+    assert list_response.status_code == 200
+    list_payload = list_response.json()["data"]
+    assert list_payload["config_key"] == "roleplay.situation_packs.ruleset"
+    assert "first_visit" in {item["code"] for item in list_payload["items"]}
+    assert detail_response.status_code == 200
+    detail = detail_response.json()["data"]
+    assert detail["code"] == "first_visit"
+    assert "上次拜访" in detail["default_forbidden_claim_patterns"]
+    assert references_response.status_code == 200
+    references = references_response.json()["data"]
+    assert references["total"] >= 2
+    assert any(
+        item["asset_id"] == "template-roleplay-reference"
+        for item in references["practice_templates"]
+    )
+    assert any(item["asset_id"] == "case-1" for item in references["case_items"])
+    assert resolve_response.status_code == 200
+    resolved = resolve_response.json()["data"]
+    assert resolved["pack"]["code"] == "first_visit"
+    assert resolved["pack"]["status"] == "published"
+    assert "relationship_context" in resolved["pack"]
+    assert "default_relationship_context" not in resolved["pack"]
+    assert resolved["metadata"]["config_key"] == "roleplay.situation_packs.ruleset"
+
+
+@pytest.mark.asyncio
 async def test_should_list_template_with_legacy_curriculum_plan_shape(
     async_client: AsyncClient,
     db_session: AsyncSession,
@@ -666,13 +773,17 @@ async def test_should_return_publish_gate_failure_when_template_reference_is_mis
     assert publish_response.status_code == 400
     payload = publish_response.json()
     assert payload["error"] == "[PRACTICE_TEMPLATE_PUBLISH_GATE_FAILED]"
-    assert [item["reason_code"] for item in payload["details"]["gate_results"]] == [
-        "reference_missing",
-        "reference_missing",
-        "reference_missing",
-        "scoring_rubric_missing",
-        "reference_missing",
+    reason_codes = [
+        item["reason_code"] for item in payload["details"]["gate_results"]
     ]
+    assert reason_codes[:5] == [
+        "reference_missing",
+        "reference_missing",
+        "reference_missing",
+        "rubric_missing",
+        "asset_unpublished",
+    ]
+    assert reason_codes.count("asset_unpublished") == 3
 
 
 @pytest.mark.asyncio
@@ -697,6 +808,21 @@ async def test_should_publish_practice_template_when_gate_passes(
     assert publish_response.status_code == 200
     published = publish_response.json()["data"]
     assert published["status"] == "published"
+    assert published["situation_pack_code"] == "first_visit"
+    assert published["published_asset_refs"]
+    assert published["published_asset_refs"]["persona_ref"]["asset_id"] == "persona-1"
+    assert (
+        published["published_asset_refs"]["situation_pack_ref"]["asset_code"]
+        == "first_visit"
+    )
+    assert (
+        published["published_asset_refs"]["situation_pack_ref"]["source_bundle_key"]
+        == "roleplay.situation_packs.ruleset"
+    )
+    assert (
+        published["published_asset_refs"]["situation_pack_ref"]["snapshot_selector"]
+        == "packs[code=first_visit]"
+    )
     assert published["published_ref"] == {
         "asset_type": "practice_template",
         "asset_id": template_id,

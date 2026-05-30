@@ -6,16 +6,15 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, Scenario, User
-from common.services.runtime_gate import RuntimeGate
 from common.services.runtime_preflight_service import RuntimePreflightService
 from curriculum_practice.models import ExaminerAgent, QuestionItem
+from curriculum_practice.services.roleplay_contracts import RoleplayContractCompiler
 
 
 @pytest.mark.asyncio
 async def test_sales_preflight_rejects_kb_lock_unbound(
     test_db: AsyncSession,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scenario = Scenario(
         scenario_type="sales",
@@ -40,15 +39,6 @@ async def test_sales_preflight_rejects_kb_lock_unbound(
     )
     test_db.add(session)
     await test_db.commit()
-
-    async def _force_kb_unbound(_self, _session: PracticeSession) -> bool:
-        return True
-
-    monkeypatch.setattr(
-        RuntimeGate,
-        "is_kb_lock_unbound",
-        _force_kb_unbound,
-    )
 
     result = await RuntimePreflightService(test_db).evaluate_session(
         str(session.session_id)
@@ -91,6 +81,150 @@ async def test_sales_preflight_rejects_missing_agent_persona(
     assert result is not None
     assert result.runnable is False
     assert result.code == "AGENT_PERSONA_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_sales_preflight_rejects_missing_voice_policy_snapshot(
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    scenario = Scenario(
+        scenario_type="sales",
+        name="销售",
+        persona_prompt="test",
+        is_active=True,
+    )
+    test_db.add(scenario)
+    await test_db.flush()
+    session = PracticeSession(
+        user_id=str(test_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="in_progress",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        voice_mode="stepfun_realtime",
+    )
+    test_db.add(session)
+    await test_db.commit()
+
+    result = await RuntimePreflightService(test_db).evaluate_session(
+        str(session.session_id)
+    )
+
+    assert result is not None
+    assert result.runnable is False
+    assert result.code == "VOICE_POLICY_SNAPSHOT_MISSING"
+    assert result.missing == ["voice_policy_snapshot"]
+
+
+@pytest.mark.asyncio
+async def test_sales_preflight_rejects_curriculum_runtime_identity_mismatch(
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    scenario = Scenario(
+        scenario_type="sales",
+        name="销售",
+        persona_prompt="test",
+        is_active=True,
+    )
+    test_db.add(scenario)
+    await test_db.flush()
+    session = PracticeSession(
+        user_id=str(test_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="in_progress",
+        agent_id="agent-session",
+        persona_id="persona-1",
+        voice_runtime_profile_id="runtime-1",
+        voice_mode="stepfun_realtime",
+        voice_policy_snapshot={"instruction_contract_hash": "voice-hash"},
+        curriculum_snapshot={
+            "snapshot_hash": "snapshot-hash",
+            "runtime": {
+                "agent_id": "agent-snapshot",
+                "persona_id": "persona-1",
+                "runtime_profile_id": "runtime-1",
+                "instruction_contract_hash": "curriculum-hash",
+            },
+        },
+    )
+    test_db.add(session)
+    await test_db.commit()
+
+    result = await RuntimePreflightService(test_db).evaluate_session(
+        str(session.session_id)
+    )
+
+    assert result is not None
+    assert result.runnable is False
+    assert result.code == "CURRICULUM_RUNTIME_IDENTITY_MISMATCH"
+    assert result.snapshot_hash == "snapshot-hash"
+    assert result.instruction_contract_hash == "curriculum-hash"
+    assert result.runtime_identity == {
+        "agent_id": "agent-snapshot",
+        "persona_id": "persona-1",
+        "runtime_profile_id": "runtime-1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_sales_preflight_reports_roleplay_contract_readiness(
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    scenario = Scenario(
+        scenario_type="sales",
+        name="销售",
+        persona_prompt="test",
+        is_active=True,
+    )
+    test_db.add(scenario)
+    await test_db.flush()
+    contract = RoleplayContractCompiler().compile_from_persona_sync(
+        {
+            "id": "persona-1",
+            "persona_policy": {
+                "roleplay_defaults": {
+                    "situation_code": "first_visit",
+                    "relationship_context": {
+                        "prior_interactions": "none",
+                        "has_prior_meeting": False,
+                    },
+                }
+            },
+        },
+        actor_id="actor-1",
+    )
+    session = PracticeSession(
+        user_id=str(test_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="in_progress",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        voice_runtime_profile_id="runtime-1",
+        voice_mode="stepfun_realtime",
+        voice_policy_snapshot={
+            "instruction_contract_hash": "voice-hash",
+            "roleplay_contract": contract,
+        },
+    )
+    test_db.add(session)
+    await test_db.commit()
+
+    result = await RuntimePreflightService(test_db).evaluate_session(
+        str(session.session_id)
+    )
+
+    assert result is not None
+    assert result.runnable is True
+    assert result.roleplay_contract == {
+        "status": "ready",
+        "schema_version": "roleplay_contract_v1",
+        "contract_hash": contract["audit"]["contract_hash"],
+        "situation_code": "first_visit",
+        "blocking_issues": [],
+    }
 
 
 @pytest.mark.asyncio

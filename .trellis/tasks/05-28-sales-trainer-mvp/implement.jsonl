@@ -1,0 +1,9 @@
+{"file":"docs/design/sales-trainer-system.md","reason":"已确认的 MVP 范围、数据契约、实施状态与测试记录真源。"}
+{"file":".trellis/spec/backend/index.md","reason":"后端模块、服务与验证入口总则。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"新增留存字段和迁移的 SQLAlchemy/Alembic 规则。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"上传、转写、授权访问失败语义和 API 响应规则。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端新增功能测试与质量门禁。"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端 API 消费、页面与测试入口总则。"}
+{"file":".trellis/spec/frontend/admin-console-patterns.md","reason":"后台列表、新建、详情/编辑页面路由与交互约束。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"销售训练 API DTO 与客户端门面约束。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端页面、无原生弹窗和浏览器验证要求。"}

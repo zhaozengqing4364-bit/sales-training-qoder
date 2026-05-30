@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, Shield } from "lucide-react";
 
 import { AdminSidebar, AdminSidebarContent } from "@/components/layout/admin-sidebar";
@@ -14,6 +14,17 @@ import { authHandler } from "@/lib/auth-handler";
 import { cn } from "@/lib/utils";
 import type { CurrentUser } from "@/lib/auth/current-user";
 
+const SALES_TRAINER_ADMIN_PREFIX = "/admin/sales-trainer";
+const SALES_TRAINER_MANAGER_ENTRY = "/admin/sales-trainer/units";
+
+function canUseAdminShell(role: string): boolean {
+    return role === "admin" || role === "support";
+}
+
+function isSalesTrainerManagerRole(role: string): boolean {
+    return role === "support";
+}
+
 export function AdminShell({
     children,
     currentUser,
@@ -22,6 +33,7 @@ export function AdminShell({
     currentUser: CurrentUser;
 }) {
     const router = useRouter();
+    const pathname = usePathname();
     const { data: sessionUser, error } = useCurrentUser(currentUser);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { isCollapsed } = useSidebarStore();
@@ -34,10 +46,18 @@ export function AdminShell({
             return;
         }
 
-        if (effectiveUser.role !== "admin") {
+        if (!canUseAdminShell(effectiveUser.role)) {
             router.replace("/");
+            return;
         }
-    }, [authError, effectiveUser.role, router]);
+
+        if (
+            isSalesTrainerManagerRole(effectiveUser.role)
+            && !pathname.startsWith(SALES_TRAINER_ADMIN_PREFIX)
+        ) {
+            router.replace(SALES_TRAINER_MANAGER_ENTRY);
+        }
+    }, [authError, effectiveUser.role, pathname, router]);
 
     useEffect(() => {
         let startX = 0;

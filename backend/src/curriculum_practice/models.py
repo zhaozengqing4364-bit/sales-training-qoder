@@ -44,6 +44,8 @@ class PracticeTemplate(Base):
     timeout_config = Column(JSON, nullable=True)
     curriculum_plan = Column(JSON, nullable=True)
     max_stage_duration_seconds = Column(Integer, nullable=True)
+    situation_pack_code = Column(String(60), nullable=True)
+    published_asset_refs = Column(JSON, nullable=False, default=dict)
     status = Column(String(20), nullable=False, default="draft", index=True)
     version = Column(Integer, nullable=False, default=1)
     content_hash = Column(String(80), nullable=True)
@@ -300,6 +302,7 @@ class QuestionCategory(Base):
     )
     name = Column(String(160), nullable=False)
     description = Column(Text, nullable=True)
+    usage_scope = Column(String(50), nullable=False, default="general", index=True)
     order_index = Column(Integer, nullable=False, default=1)
     created_by = Column(String(36), nullable=True)
     updated_by = Column(String(36), nullable=True)
@@ -316,6 +319,12 @@ class QuestionCategory(Base):
     __table_args__ = (
         CheckConstraint("order_index >= 1", name="ck_question_category_order_index"),
         Index("idx_question_categories_parent_order", "parent_id", "order_index"),
+        Index(
+            "idx_question_categories_scope_parent",
+            "usage_scope",
+            "parent_id",
+            "order_index",
+        ),
     )
 
 
@@ -335,6 +344,7 @@ class QuestionItem(Base):
     scoring_criteria = Column(JSON, nullable=False, default=dict)
     scoring_dimensions = Column(JSON, nullable=False, default=list)
     tags = Column(JSON, nullable=False, default=list)
+    usage_scope = Column(String(50), nullable=False, default="general", index=True)
     difficulty = Column(String(20), nullable=False, default="medium", index=True)
     status = Column(String(20), nullable=False, default="draft", index=True)
     safety_flagged = Column(Boolean, nullable=False, default=False)
@@ -366,6 +376,8 @@ class QuestionItem(Base):
         ),
         Index("idx_question_items_status_updated", "status", "updated_at"),
         Index("idx_question_items_category_status", "category_id", "status"),
+        Index("idx_question_items_scope_status", "usage_scope", "status"),
+        Index("idx_question_items_scope_category", "usage_scope", "category_id"),
     )
 
 
@@ -436,6 +448,54 @@ class LearningProgress(Base):
             name="uq_learning_progress_user_content_chapter",
         ),
         Index("idx_learning_progress_user_content", "user_id", "learning_content_id"),
+    )
+
+
+class SituationPack(Base):
+    __tablename__ = "situation_packs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    code = Column(String(60), nullable=False, unique=True)
+    label = Column(String(120), nullable=False)
+    description = Column(Text, nullable=True)
+    version = Column(String(20), nullable=False, default="v1")
+    content_hash = Column(String(80), nullable=True)
+    status = Column(String(20), nullable=False, default="draft")
+    relationship_context = Column(JSON, nullable=False, default=dict)
+    visible_information_scope = Column(JSON, nullable=False, default=dict)
+    forbidden_claim_patterns = Column(JSON, nullable=False, default=list)
+    forbidden_topic_codes = Column(JSON, nullable=False, default=list)
+    forbidden_stage_codes = Column(JSON, nullable=False, default=list)
+    conflict_response_strategy = Column(
+        String(40), nullable=True, default="neutral_clarification"
+    )
+    behavior_rules_for_prompt_only = Column(JSON, nullable=False, default=list)
+    disclosure_policy = Column(JSON, nullable=False, default=dict)
+    runtime_violation_policy = Column(JSON, nullable=False, default=dict)
+    compatible_practice_modes = Column(
+        JSON, nullable=False, default=lambda: ["customer_roleplay"]
+    )
+    compatible_scenario_types = Column(JSON, nullable=False, default=lambda: ["sales"])
+    created_by = Column(String(36), nullable=True)
+    updated_by = Column(String(36), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_situation_pack_status",
+        ),
+        Index("idx_situation_packs_status", "status"),
+        Index("idx_situation_packs_code", "code"),
     )
 
 

@@ -8,10 +8,15 @@ from common.business_rules.defaults import (
     AI_COACH_RULES_KEY,
     DEFAULT_AI_COACH_RULESET,
     DEFAULT_RECOMMENDATION_RULESET,
+    DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE,
+    DEFAULT_ROLEPLAY_SITUATION_PACKS,
     NEXT_PRACTICE_RECOMMENDATION_KEY,
+    ROLEPLAY_EVAL_RELEASE_GATE_KEY,
+    ROLEPLAY_SITUATION_PACKS_KEY,
     list_business_rule_definitions,
 )
 from common.business_rules.service import BusinessRuleConfigService
+from common.business_rules.validators import BusinessRuleValidationError
 from common.db.models import User
 
 
@@ -156,3 +161,104 @@ async def test_business_rule_seed_defaults_is_idempotent(test_db):
     assert {row.key for row in rows} == {definition.key for definition in definitions}
     assert all(row.status == "published" for row in rows)
     assert {row.version for row in rows} == {1}
+
+
+@pytest.mark.asyncio
+async def test_roleplay_situation_pack_ruleset_validates_and_resolves(test_db):
+    admin = await _admin(test_db)
+    value = deepcopy(DEFAULT_ROLEPLAY_SITUATION_PACKS)
+    value["version"] = "roleplay_situation_packs_custom_v1"
+    value["packs"] = [
+        pack | {"default_forbidden_claim_patterns": [*pack["default_forbidden_claim_patterns"], "老客户"]}
+        if pack["code"] == "first_visit"
+        else pack
+        for pack in value["packs"]
+    ]
+
+    service = BusinessRuleConfigService(test_db)
+    draft = await service.create_or_update_draft(
+        key=ROLEPLAY_SITUATION_PACKS_KEY,
+        value=value,
+        actor_id=str(admin.user_id),
+        reason="tighten first visit patterns",
+    )
+    await service.publish(
+        key=ROLEPLAY_SITUATION_PACKS_KEY,
+        actor_id=str(admin.user_id),
+        config_id=str(draft.id),
+        reason="publish roleplay packs",
+    )
+    await test_db.commit()
+
+    resolution = await service.resolve_active_config(ROLEPLAY_SITUATION_PACKS_KEY)
+
+    assert resolution.source == "database"
+    assert resolution.value["version"] == "roleplay_situation_packs_custom_v1"
+    first_visit = next(
+        pack for pack in resolution.value["packs"] if pack["code"] == "first_visit"
+    )
+    assert "老客户" in first_visit["default_forbidden_claim_patterns"]
+
+
+@pytest.mark.asyncio
+async def test_roleplay_situation_pack_ruleset_rejects_hidden_visible_overlap(test_db):
+    admin = await _admin(test_db)
+    value = deepcopy(DEFAULT_ROLEPLAY_SITUATION_PACKS)
+    first_visit = next(pack for pack in value["packs"] if pack["code"] == "first_visit")
+    first_visit["default_visible_information_scope"]["initial_visible_keys"].append(
+        "hidden_information"
+    )
+
+    with pytest.raises(BusinessRuleValidationError):
+        await BusinessRuleConfigService(test_db).create_or_update_draft(
+            key=ROLEPLAY_SITUATION_PACKS_KEY,
+            value=value,
+            actor_id=str(admin.user_id),
+            reason="invalid overlap",
+        )
+
+
+@pytest.mark.asyncio
+async def test_roleplay_eval_release_gate_config_validates_and_resolves(test_db):
+    admin = await _admin(test_db)
+    value = deepcopy(DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE)
+    value["version"] = "roleplay_eval_release_gate_custom_v1"
+    value["llm_grader_mode"] = "blocking"
+    value["artifact_retention_days"] = 45
+
+    service = BusinessRuleConfigService(test_db)
+    draft = await service.create_or_update_draft(
+        key=ROLEPLAY_EVAL_RELEASE_GATE_KEY,
+        value=value,
+        actor_id=str(admin.user_id),
+        reason="tighten eval release gate",
+    )
+    await service.publish(
+        key=ROLEPLAY_EVAL_RELEASE_GATE_KEY,
+        actor_id=str(admin.user_id),
+        config_id=str(draft.id),
+        reason="publish eval release gate",
+    )
+    await test_db.commit()
+
+    resolution = await service.resolve_active_config(ROLEPLAY_EVAL_RELEASE_GATE_KEY)
+
+    assert resolution.source == "database"
+    assert resolution.value["version"] == "roleplay_eval_release_gate_custom_v1"
+    assert resolution.value["deterministic_gate_mode"] == "blocking"
+    assert resolution.value["llm_grader_mode"] == "blocking"
+
+
+@pytest.mark.asyncio
+async def test_roleplay_eval_release_gate_rejects_invalid_mode(test_db):
+    admin = await _admin(test_db)
+    value = deepcopy(DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE)
+    value["deterministic_gate_mode"] = "silent_ignore"
+
+    with pytest.raises(BusinessRuleValidationError):
+        await BusinessRuleConfigService(test_db).create_or_update_draft(
+            key=ROLEPLAY_EVAL_RELEASE_GATE_KEY,
+            value=value,
+            actor_id=str(admin.user_id),
+            reason="invalid gate mode",
+        )

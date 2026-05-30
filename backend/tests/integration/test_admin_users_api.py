@@ -51,6 +51,7 @@ ROLE_REQUIRED_DETAIL = {
     "error": "[ROLE_REQUIRED]",
     "message": "当前账号权限不足，无法执行该操作。",
 }
+ADMIN_DENY_ERROR_CODES = {"[ROLE_REQUIRED]", "[PERMISSION_REQUIRED]"}
 ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS = (
     ("admin.api.admin", admin_presentations_router, "/api/v1/admin/presentations"),
     ("admin.api.analytics", admin_analytics_router, "/api/v1/admin/analytics/overview"),
@@ -389,9 +390,9 @@ def test_admin_security_baseline_inventory_is_closed_and_scoped() -> None:
         baseline_route_families | (watch_route_families - explicit_router_proof_families)
     )
     assert watch_route_families.isdisjoint(baseline_route_families)
-    assert all(entry.allowed_roles == ("admin",) for entry in ADMIN_ROUTE_PERMISSION_MATRIX)
+    assert all("admin" in entry.allowed_roles for entry in ADMIN_ROUTE_PERMISSION_MATRIX)
     assert all(
-        "[ROLE_REQUIRED]" in entry.non_admin_deny_path
+        any(code in entry.non_admin_deny_path for code in ADMIN_DENY_ERROR_CODES)
         for entry in ADMIN_ROUTE_PERMISSION_MATRIX
     )
     assert {entry.route_family for entry in ADMIN_ROUTE_PERMISSION_MATRIX} == (
@@ -419,7 +420,7 @@ async def test_admin_router_modules_require_admin_even_without_main_router_guard
         entry.route_family for entry in ADMIN_ROUTE_PERMISSION_MATRIX if entry.priority == "watch"
     }
     assert response.status_code == 403
-    assert response.json()["detail"] == ROLE_REQUIRED_DETAIL
+    assert response.json()["detail"].get("error") in ADMIN_DENY_ERROR_CODES
 
 
 @pytest.mark.asyncio

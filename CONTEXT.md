@@ -84,6 +84,77 @@
 
 ---
 
+## 角色扮演情景 (Roleplay Situation)
+
+**定义**：客户对练中的关系史与情景边界配置，描述本轮会谈属于首次拜访、复访、方案评审、价格谈判、续约或投诉安抚等哪一种情境。
+
+**职责范围**：Roleplay Situation 只管关系史事实、允许/禁止事实、可见/隐藏信息范围、冲突响应策略和违规处理策略。
+
+**与 Sales Conversation Stage 的关系**：销售流程阶段仍由 `SalesStageCapability` 维护，Roleplay Situation 不新增第三套 stage。Situation 只能声明 `initial_stage_hint`、`forbidden_stage_codes` 等策略，由运行时 checker 根据 `SalesStageCapability` 的阶段输出判断是否越界。
+
+**配置面**：Situation Pack 短期可由 `BusinessRuleConfig` / `ConfigBundle` ruleset 承载；长期允许演进为一等 `SituationPack` 资产。无论底层存储形态如何，查看、复制、发布、归档、回滚、审计和 Config Center 入口必须复用统一配置治理，不得产生孤立 admin 生命周期。Config Asset Center 的分期落地（Phase A → B1 projection 读权威 → B2 entity 写权威）及 **HITL 审批边界**（SituationPack 发布、Import 冲突、`publish_after_import`、B1 runtime authority 切换的前置条件）见 [ADR 2026-05-27: Config Asset B2 HITL 治理](docs/adr/2026-05-27-config-asset-b2-hitl-governance.md)；B1 切换须满足 #96 定义的 **≥14 日双读零 mismatch** 观察窗后方可人工批准。
+
+**禁止**：
+- 不得用长 prompt 代替结构化 relationship context。
+- 不得让普通 runtime 函数硬编码“首访不能说什么”等业务策略；这些策略必须来自 Situation Pack 或资产结构化字段。
+
+---
+
+## 角色扮演合同 (Roleplay Contract)
+
+**定义**：一次训练运行时的冻结角色合同，由 Persona、RoleProfile、CaseItem、PracticeTemplate、Situation Pack、ScoringRuleset 编译而来，是 prompt 编译、信息披露、输出守门和报告追踪的运行时权威。
+
+**双轨来源**：
+- **课程闭环**：`RuntimeSnapshotService` 在创建会话时写入 `curriculum_snapshot.roleplay_contract`。
+- **平台直练**：`VoiceRuntimePolicyService` 在解析策略时写入 `voice_policy_snapshot.roleplay_contract`。
+
+**运行时消费**：StepFun Realtime 只消费 frozen contract 与当前可见 payload，不从 CaseItem、RoleProfile 或 Persona 重新拼装关系史语义。
+
+**禁止**：
+- 不得在 StepFun runtime 中 fallback 到 latest assets 重建合同。
+- 不得新增并列 prompt compiler；合同渲染进入现有 `VoiceInstructionCompiler`。
+- 不得把 `behavior_rules_for_prompt_only` 当作机器 gate 规则。
+
+---
+
+## 关系上下文 (Relationship Context)
+
+**定义**：客户与学员之间的关系史事实，例如是否首次正式沟通、是否看过方案、是否谈过预算、是否已有合作历史。
+
+**机器可校验字段**：`prior_interactions`、`has_prior_meeting`、`has_seen_proposal`、`has_discussed_budget`、`has_existing_partnership`、`meeting_history_summary`。
+
+**底线**：`first_visit` 必须保持 `has_prior_meeting=false` 且 `meeting_history_summary=null`；`follow_up` 必须有可追溯的 `meeting_history_summary`。
+
+---
+
+## 可见信息范围 (Visible Information Scope)
+
+**定义**：当前情景和阶段允许模型看到的字段集合，例如 `company_profile`、`pain_points`、`objections`。
+
+**使用路径**：`CurriculumRuntimeDossierHydrator` 只按 `roleplay_contract.visible_information_scope.initial_visible_keys` 组装初始 StepFun instructions。
+
+**底线**：hidden information 默认不可见。`hidden_information`、预算、决策链、竞品报价等未命中披露策略前不得进入模型上下文。
+
+---
+
+## 隐藏信息范围 (Hidden Information Scope)
+
+**定义**：默认不可见、必须满足披露策略后才可注入模型的字段集合。
+
+**运行时规则**：披露应按 key 切片记录，不能把完整 `hidden_information` blob 直接注入模型。第一阶段 disclosure trigger 可用确定性规则，LLM judge 不进入 StepFun 热路径。
+
+---
+
+## 角色合同遵守 (Roleplay Compliance)
+
+**定义**：运行时对 Roleplay Contract 遵守情况的检测结果，包括关系史矛盾、隐藏信息泄露、禁止话题、禁止阶段和角色漂移。
+
+**热路径策略**：确定性 checker 负责首层检查；blocking 违规最多触发一次修复或自然降级。LLM judge 只用于离线 eval、发布前回归或模型升级门禁。
+
+**观测字段**：运行时记录 `roleplay_contract_hash`、`situation_code`、`violation_count`、`blocking_violation_count`、`regenerate_count`、`cancel_stream_count`、`legacy_contract_used`。
+
+---
+
 ## 课程训练模板 (PracticeTemplate)
 
 **定义**：课程闭环的 **组装枢纽**，将 Agent、Persona、CaseItem、RoleProfile、LearningContent、ExaminerAgent、评分规则等资产编排为可发布的训练路径。
@@ -137,5 +208,22 @@
 **禁止**：
 - 不得在平台直练路径中读取 `curriculum_snapshot` 作为 prompt 权威。
 - 不得在课程闭环路径中静默 fallback 到「最新已发布」的散落资产（如 ExaminerAgent）。
+
+---
+
+## 角色配置资产分层 (Roleplay Asset Layers)
+
+**定义**：运营口语中的「多个库绑定到一个人格」，在平台里对应**分层配置资产**，运行时由 **Roleplay Contract** 冻结组装，而不是每次从 Persona 长 prompt 临场拼接。
+
+| 口语库名 | 平台术语 | 职责 |
+|----------|----------|------|
+| 背景库 | `KnowledgeBase` + `CaseItem` 结构化字段（`company_profile`、`pain_points` 等） | 行业/公司/痛点等**可引用事实**；KB 供检索，CaseItem 供剧本事实 |
+| 角色库 | `RoleProfile` + `Persona` | 沟通风格、压力、知识边界；Persona 为实时 WS 的 policy 载体，**不是**关系史与隐藏信息的唯一真源 |
+| 情景库 | `Roleplay Situation`（Situation Pack，可由 `BusinessRuleConfig` ruleset 承载，也可演进为一等资产；治理仍接入 ConfigBundle/audit） | 首访/复访等**关系史边界**、可见/隐藏范围、禁止声称、违规策略 |
+| 组装结果 | `Roleplay Contract`（会话快照内冻结） | 开练时编译；运行时 prompt、披露与守门**只读合同**，不读 latest 资产 |
+
+**禁止**：
+- 不得把「多库绑定 Persona」理解为运行时每次从后台最新配置重拼语义（会导致开练后人设漂移）。
+- 不得新建与上表平行的「背景库表/角色库表」替代 `CaseItem` / `RoleProfile` / Situation Pack；Situation Pack 独立实体化必须遵守 ADR 的统一治理约束。
 
 ---

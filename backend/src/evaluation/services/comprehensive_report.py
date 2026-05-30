@@ -23,6 +23,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.llm_service import LLMService
+from common.effectiveness.report_scoring_projection import (
+    report_scoring_metadata_for_view,
+)
 from common.effectiveness.scoring_rulesets import (
     ScoringRulesetService,
     ScoringRulesetView,
@@ -185,9 +188,7 @@ class ComprehensiveReportService:
             ruleset_view = await self._resolve_scoring_ruleset_view(
                 resolved_scenario_type
             )
-            scoring_metadata = ScoringRulesetService.report_metadata_for_view(
-                ruleset_view
-            )
+            scoring_metadata = report_scoring_metadata_for_view(ruleset_view)
             dimension_scores = self._calculate_dimension_scores(
                 stage_results,
                 ruleset_view=ruleset_view,

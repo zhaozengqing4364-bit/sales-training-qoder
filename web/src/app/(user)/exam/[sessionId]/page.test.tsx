@@ -8,11 +8,13 @@ const {
   pushMock,
   useExaminerWebSocketMock,
   featureFlagsGetMock,
+  runtimePreflightMock,
   searchParamsGetMock,
 } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   useExaminerWebSocketMock: vi.fn(),
   featureFlagsGetMock: vi.fn(),
+  runtimePreflightMock: vi.fn(),
   searchParamsGetMock: vi.fn(() => new URLSearchParams()),
 }));
 
@@ -63,6 +65,9 @@ vi.mock("@/lib/api/client", () => ({
   api: {
     featureFlags: {
       get: () => featureFlagsGetMock(),
+    },
+    practice: {
+      getRuntimePreflight: (sessionId: string) => runtimePreflightMock(sessionId),
     },
   },
 }));
@@ -117,6 +122,20 @@ describe("ExamPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     featureFlagsGetMock.mockResolvedValue({ curriculum: { examiner: true } });
+    runtimePreflightMock.mockImplementation(() => {
+      const result = {
+        runnable: true,
+        runtime_lifecycle_state: "runnable",
+        blockers: [],
+        hint: null,
+      };
+      return {
+        then: (resolve: (value: typeof result) => void) => {
+          resolve(result);
+          return { catch: () => undefined };
+        },
+      };
+    });
     useExaminerWebSocketMock.mockReturnValue(buildExamHookMock());
   });
 
@@ -973,7 +992,7 @@ describe("ExamPage", () => {
 
     // Score panel renders in both desktop right panel and mobile GlassSheet (duplicate text)
     expect(screen.getAllByText("答题进度").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("已答 2/5").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("2/5").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("第 1 题").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("第 2 题").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("8 分").length).toBeGreaterThanOrEqual(1);

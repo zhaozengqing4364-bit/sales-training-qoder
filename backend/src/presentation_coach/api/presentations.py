@@ -28,6 +28,7 @@ from common.db.models import (
 )
 from common.db.schemas import (
     ForbiddenWordCreate,
+    PageResponse,
     PresentationDetail,
     PresentationResponse,
     RequiredTalkingPointCreate,
@@ -920,7 +921,7 @@ async def delete_presentation(
     return JSONResponse(status_code=204, content=None)
 
 
-@router.get("/presentations/{presentation_id}/pages")
+@router.get("/presentations/{presentation_id}/pages", response_model=list[PageResponse])
 async def get_presentation_pages(
     presentation_id: str,
     current_user: User = Depends(get_current_user),
@@ -938,7 +939,7 @@ async def get_presentation_pages(
     for page in pages:
         _hydrate_page_thumbnail_url(page, presentation_id)
 
-    return pages
+    return [PageResponse.model_validate(page) for page in pages]
 
 
 @router.get("/presentations/{presentation_id}/pages/{page_number}/thumbnail")

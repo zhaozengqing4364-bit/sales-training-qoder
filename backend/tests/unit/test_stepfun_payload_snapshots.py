@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, Scenario, User
+from curriculum_practice.models import CaseItem, RoleProfile
 from sales_bot.websocket.components.stepfun_function_call_helpers import (
     build_function_call_output_event,
 )
@@ -28,7 +29,11 @@ if "websockets" not in sys.modules:
     class ConnectionClosed(Exception):
         pass
 
+    class InvalidStatus(Exception):
+        pass
+
     setattr(exceptions_stub, "ConnectionClosed", ConnectionClosed)
+    setattr(exceptions_stub, "InvalidStatus", InvalidStatus)
     setattr(websockets_stub, "exceptions", exceptions_stub)
     sys.modules["websockets"] = websockets_stub
     sys.modules["websockets.exceptions"] = exceptions_stub
@@ -113,6 +118,20 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
         name="stepfun_snapshot_scenario",
         is_active=True,
     )
+    case_item = CaseItem(
+        case_item_id="case-v1",
+        industry="制造业",
+        company_profile="客户公司正在扩产，需要降低质检成本。",
+        customer_role="采购总监",
+        pain_points=["返工率高"],
+        objections=["预算紧张"],
+        hidden_information="隐藏预算不能进入 StepFun 初始输入",
+        success_criteria=["确认试点范围"],
+        allowed_disclosure_policy={"phases": [{"trigger": "ask", "disclose": "budget"}]},
+        status="published",
+        version=1,
+        content_hash="sha256:case-v1",
+    )
     session = PracticeSession(
         session_id="session-stepfun-snapshot",
         user_id=user.user_id,
@@ -168,7 +187,7 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
             },
         },
     )
-    test_db.add_all([user, scenario, session])
+    test_db.add_all([user, scenario, case_item, session])
     await test_db.commit()
 
     async def fail_if_latest_policy_is_resolved(*_args: object, **_kwargs: object) -> dict:
@@ -241,7 +260,10 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
     assert session_payload["input_audio_format"] == "pcm16"
     assert session_payload["output_audio_format"] == "pcm16"
     assert "turn_detection" in session_payload
-    assert session_payload["input_audio_transcription"] == {"language": "zh"}
+    assert session_payload["input_audio_transcription"] == {
+        "language": "zh",
+        "model": "step-asr",
+    }
     assert session_payload["instructions"].startswith("snapshot instruction v1")
     assert session_payload["tools"][0]["type"] == "function"
 
@@ -263,6 +285,189 @@ async def test_prd46_stepfun_session_update_payload_uses_snapshot_allowlist_only
         "must not enter StepFun payload",
     ):
         assert forbidden not in serialized_payload
+
+
+@pytest.mark.asyncio
+async def test_stepfun_policy_load_rejects_missing_voice_policy_snapshot(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        user_id="user-stepfun-missing-snapshot",
+        wechat_user_id="stepfun_missing_snapshot_user",
+        name="StepFun Missing Snapshot User",
+        role="user",
+    )
+    scenario = Scenario(
+        scenario_id="scenario-stepfun-missing-snapshot",
+        scenario_type="sales",
+        name="stepfun_missing_snapshot_scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id="session-stepfun-missing-snapshot",
+        user_id=user.user_id,
+        scenario_id=scenario.scenario_id,
+        agent_id="agent-v1",
+        persona_id="persona-v1",
+        voice_mode="stepfun_realtime",
+    )
+    test_db.add_all([user, scenario, session])
+    await test_db.commit()
+
+    monkeypatch.setattr(
+        stepfun_handler_module,
+        "AsyncSessionLocal",
+        lambda: _SessionContext(test_db),
+    )
+    monkeypatch.setattr(
+        StepFunRealtimeHandler,
+        "_refresh_sales_stage_runtime_config",
+        AsyncMock(),
+    )
+
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-stepfun-missing-snapshot"
+
+    with pytest.raises(RuntimeError, match="VOICE_POLICY_SNAPSHOT_MISSING"):
+        await handler._load_effective_policy()
+
+
+@pytest.mark.asyncio
+async def test_stepfun_session_update_injects_curriculum_dossier_from_frozen_refs(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent_upstream: list[dict] = []
+    user = User(
+        user_id="user-stepfun-dossier",
+        wechat_user_id="stepfun_dossier_user",
+        name="StepFun Dossier User",
+        role="user",
+    )
+    scenario = Scenario(
+        scenario_id="scenario-stepfun-dossier",
+        scenario_type="sales",
+        name="stepfun_dossier_scenario",
+        is_active=True,
+    )
+    case_item = CaseItem(
+        case_item_id="case-dossier",
+        industry="制造业",
+        company_profile="客户正在扩产，需要降低质检成本。",
+        customer_role="采购总监",
+        pain_points=["返工率高"],
+        objections=["预算紧张"],
+        hidden_information="隐藏预算不能进入 StepFun 初始输入",
+        success_criteria=["确认试点范围"],
+        allowed_disclosure_policy={"phases": [{"trigger": "ask", "disclose": "budget"}]},
+        status="published",
+        version=1,
+        content_hash="case-dossier-hash",
+    )
+    role_profile = RoleProfile(
+        role_profile_id="role-dossier",
+        role_type="customer",
+        role_name="谨慎采购总监",
+        communication_style="先质疑 ROI，再要求证据。",
+        pressure_level="high",
+        knowledge_boundary=["了解质检流程"],
+        behavior_rules=["追问实施周期"],
+        voice_style_hint="语速偏快",
+        status="published",
+        version=1,
+        content_hash="role-dossier-hash",
+    )
+    session = PracticeSession(
+        session_id="session-stepfun-dossier",
+        user_id=user.user_id,
+        scenario_id=scenario.scenario_id,
+        agent_id="agent-v1",
+        persona_id="persona-v1",
+        voice_mode="stepfun_realtime",
+        voice_policy_snapshot={
+            "voice_mode": "stepfun_realtime",
+            "runtime_profile_id": "runtime-v1",
+            "model_name": "step-audio-2",
+            "voice_name": "qingchunshaonv",
+            "temperature": 0.4,
+            "instructions": "snapshot instruction v1",
+            "instruction_contract_hash": "sha256:instruction-v1",
+            "knowledge_base_ids": [],
+            "tool_policy": {},
+        },
+        curriculum_snapshot={
+            "snapshot_hash": "sha256:snapshot-v1",
+            "runtime": {
+                "agent_id": "agent-v1",
+                "persona_id": "persona-v1",
+                "runtime_profile_id": "runtime-v1",
+                "instruction_contract_hash": "sha256:runtime-v1",
+            },
+            "content_assets": [
+                {
+                    "asset_type": "case_item",
+                    "asset_id": "case-dossier",
+                    "version": 1,
+                    "hash": "case-dossier-hash",
+                    "snapshot_label": "published",
+                },
+                {
+                    "asset_type": "role_profile",
+                    "asset_id": "role-dossier",
+                    "version": 1,
+                    "hash": "role-dossier-hash",
+                    "snapshot_label": "published",
+                },
+            ],
+        },
+    )
+    test_db.add_all([user, scenario, case_item, role_profile, session])
+    await test_db.commit()
+
+    monkeypatch.setattr(
+        stepfun_handler_module,
+        "AsyncSessionLocal",
+        lambda: _SessionContext(test_db),
+    )
+    monkeypatch.setattr(
+        StepFunRealtimeHandler,
+        "_refresh_sales_stage_runtime_config",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        StepFunRealtimeHandler,
+        "_merge_kb_dictionary_into_effective_policy",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        StepFunTransport,
+        "connect",
+        AsyncMock(return_value=object()),
+        raising=False,
+    )
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-stepfun-dossier"
+    handler._send_upstream = AsyncMock(
+        side_effect=lambda payload: sent_upstream.append(copy.deepcopy(payload))
+    )
+    handler._ensure_upstream_keepalive_task = MagicMock()
+    handler._maybe_start_kb_lock_warmup = AsyncMock()
+
+    await handler._load_effective_policy()
+    await handler._connect_upstream()
+
+    instructions = sent_upstream[0]["session"]["instructions"]
+    assert "snapshot instruction v1" in instructions
+    assert "客户正在扩产" in instructions
+    assert "谨慎采购总监" in instructions
+    assert "隐藏预算不能进入 StepFun 初始输入" not in instructions
+    assert (
+        handler._effective_policy["runtime_metrics"]["curriculum_dossier"][
+            "case_item_count"
+        ]
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -401,6 +606,8 @@ async def test_q02_resume_message_routes_to_listening_status_snapshot():
 async def test_q02_text_response_create_failure_emits_stable_error_fallback():
     handler = StepFunRealtimeHandler()
     handler.session_status = "in_progress"
+    handler._ensure_input_allowed = AsyncMock(return_value=True)
+    handler._ensure_upstream_ready_for_input = AsyncMock(return_value=True)
     handler._analyze_and_emit_sales_stage = AsyncMock(return_value="opening")
     handler._run_realtime_feedback = AsyncMock(return_value={})
     handler._persist_message = AsyncMock()

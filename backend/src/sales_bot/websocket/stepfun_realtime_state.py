@@ -32,6 +32,9 @@ class StepFunRealtimeStateBase(BaseWebSocketHandler):
     upstream_ws: Any | None
     _upstream_task: asyncio.Task[Any] | None
     _effective_policy: dict[str, Any]
+    _roleplay_disclosure_state: dict[str, Any]
+    _roleplay_regenerate_attempted_for_turn: bool
+    _roleplay_repair_instruction: str
     _coach_health: str
     _coach_health_reason: str | None
     current_request_id: int

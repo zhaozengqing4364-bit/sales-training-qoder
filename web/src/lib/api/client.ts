@@ -115,6 +115,10 @@ import {
     ConfigBundleVersionListResponse,
     ConfigBundleValueMutationRequest,
     ConfigCenterDomainsResponse,
+    RoleplaySituationPack,
+    RoleplaySituationPackListResponse,
+    RoleplaySituationPackResolveResponse,
+    RoleplaySituationPackReferenceResponse,
     SalesCombinationPreviewResponse,
     SalesCombinationRuleMutationResponse,
     SalesCombinationRuleSet,
@@ -210,11 +214,32 @@ import {
     TemplateReferenceListResponse,
     LearnerLevel,
     LearnerProfile,
+    SalesTrainerAudioScorePrompt,
+    SalesTrainerAudioScorePromptCreateRequest,
+    SalesTrainerAudioScorePromptUpdateRequest,
+    SalesTrainerAudioScoreResult,
+    SalesTrainerAudioSubmission,
+    SalesTrainerAudioSubmissionListResponse,
+    SalesTrainerOperationLog,
+    SalesTrainerQuestionOption,
+    SalesTrainerQuizAttempt,
+    SalesTrainerQuizAttemptCreateRequest,
+    SalesTrainerQuizAnswer,
+    SalesTrainerStatus,
+    SalesTrainerUnit,
+    SalesTrainerUnitConfig,
+    SalesTrainerUnitCreateRequest,
+    SalesTrainerUnitListResponse,
+    SalesTrainerUnitQuestion,
+    SalesTrainerUnitQuestionBinding,
+    SalesTrainerUnitType,
+    SalesTrainerUnitUpdateRequest,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
 import { buildTraceHeaders } from "@/lib/observability/trace-context";
 import {
+    createAdminSalesTrainerDomain,
     createAdminReportDomain,
     createAgentsDomain,
     createAuthDomain,
@@ -224,6 +249,7 @@ import {
     createLearningPathDomain,
     createPracticeDomain,
     createPresentationsDomain,
+    createSalesTrainerDomain,
     createSessionsDomain,
     createTrainingTasksDomain,
 } from "./client-domains";
@@ -367,6 +393,14 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[WECOM_SHARE_NOT_AVAILABLE]": "企业微信分享试点暂未通过治理配置开放。",
     "[SHARE_CONSENT_REQUIRED]": "请先确认同意分享脱敏高光清单。",
     "[HIGHLIGHT_SHARE_INACTIVE]": "分享链接已过期或已撤销。",
+    "[SALES_TRAINER_UNIT_NOT_FOUND]": "训练单元不存在或未发布，请返回列表刷新后重试。",
+    "[SALES_TRAINER_UNIT_TYPE_MISMATCH]": "该单元不是做题训练，请从销售训练路径进入正确关卡。",
+    "[SALES_TRAINER_QUIZ_HAS_NO_QUESTIONS]": "本关尚未配置题目，请联系管理员完成题库绑定。",
+    "[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]": "提交答案与当前题目不匹配，请刷新页面后重新作答。",
+    "[QUIZ_ATTEMPT_NOT_FOUND]": "未找到做题记录，请返回重新提交。",
+    "[SHORT_ANSWER_AI_SCORING_FAILED]": "简答题 AI 批改暂时不可用，请稍后重试；客观题仍可正常提交。",
+    "[SHORT_ANSWER_AI_SCORING_RESPONSE_INVALID]": "简答题 AI 批改结果异常，请稍后重试。",
+    "[SHORT_ANSWER_AI_SCORING_DISABLED]": "简答题暂未开启 AI 批改，请联系管理员。",
 };
 
 type NormalizedApiErrorPayload = {
@@ -425,7 +459,11 @@ function normalizeApiErrorPayload(status: number, payload: unknown): NormalizedA
         ? rawTraceId.trim()
         : undefined;
 
-    return { status, errorCode, message, traceId, details: raw.details };
+    const details = raw.details ?? (
+        detail && Object.keys(detail).length > 0 ? detail : undefined
+    );
+
+    return { status, errorCode, message, traceId, details };
 }
 
 function buildApiErrorDisplayMessage(payload: NormalizedApiErrorPayload): string {
@@ -480,6 +518,37 @@ export function getContentAssetErrorDetails(error: unknown): ContentAssetErrorDe
         return null;
     }
     return error.details as ContentAssetErrorDetails;
+}
+
+export function getPersonaPolicyValidationErrors(error: unknown) {
+    if (!(error instanceof ApiRequestError)) {
+        return null;
+    }
+    if (error.errorCode !== "[PERSONA_POLICY_VALIDATION_FAILED]") {
+        return null;
+    }
+    if (!error.details || typeof error.details !== "object" || Array.isArray(error.details)) {
+        return null;
+    }
+    const errors = (error.details as { errors?: unknown }).errors;
+    if (!Array.isArray(errors)) {
+        return null;
+    }
+    return errors.filter((item): item is {
+        field: string;
+        reason_code: string;
+        message: string;
+    } => {
+        if (!item || typeof item !== "object") {
+            return false;
+        }
+        const record = item as Record<string, unknown>;
+        return Boolean(record.field && record.reason_code);
+    }).map((item) => ({
+        field: String((item as { field: unknown }).field),
+        reason_code: String((item as { reason_code: unknown }).reason_code),
+        message: String((item as { message?: unknown }).message || (item as { reason_code: unknown }).reason_code),
+    }));
 }
 
 export function getApiErrorMessage(error: unknown): string {
@@ -1900,6 +1969,15 @@ const presentationsDomain = createPresentationsDomain({
     normalizePresentationForbiddenWord,
 });
 const adminReportDomain = createAdminReportDomain({ request: apiFetch });
+const salesTrainerDomain = createSalesTrainerDomain({
+    request: apiFetch,
+    upload: apiUpload,
+    resolveApiBaseUrl,
+});
+const adminSalesTrainerDomain = createAdminSalesTrainerDomain({
+    request: apiFetch,
+    resolveApiBaseUrl,
+});
 
 export const api = {
     // Authentication
@@ -1910,6 +1988,7 @@ export const api = {
     learningContents: learningContentsDomain,
     learnerStudy: learnerStudyDomain,
     featureFlags: featureFlagsDomain,
+    salesTrainer: salesTrainerDomain,
 
     testBank: {
         listCategories: async () => {
@@ -2714,6 +2793,7 @@ export const api = {
     // Admin operations
     admin: {
         ...adminReportDomain,
+        salesTrainer: adminSalesTrainerDomain,
         // Business Rule Governance
         getSalesCombinationRuleSets: async () => {
             return apiFetch<SalesCombinationRuleSetListResponse>("/admin/business-rules/sales-combinations");
@@ -3202,7 +3282,10 @@ export const api = {
                 `/admin/config-bundles/${encodeURIComponent(bundleKey)}/drafts`,
                 {
                     method: "POST",
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify({
+                        value: payload.value ?? payload.config_value ?? {},
+                        reason: payload.reason,
+                    }),
                 },
             );
         },
@@ -3215,7 +3298,10 @@ export const api = {
                 `/admin/config-bundles/${encodeURIComponent(bundleKey)}/validate`,
                 {
                     method: "POST",
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify({
+                        value: payload.value ?? payload.config_value ?? {},
+                        reason: payload.reason,
+                    }),
                 },
             );
         },
@@ -3228,7 +3314,10 @@ export const api = {
                 `/admin/config-bundles/${encodeURIComponent(bundleKey)}/preview`,
                 {
                     method: "POST",
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify({
+                        value: payload.value ?? payload.config_value ?? {},
+                        reason: payload.reason,
+                    }),
                 },
             );
         },
@@ -3269,6 +3358,30 @@ export const api = {
                     method: "POST",
                     body: JSON.stringify(payload),
                 },
+            );
+        },
+
+        listRoleplaySituationPacks: async () => {
+            return apiFetch<RoleplaySituationPackListResponse>(
+                "/admin/curriculum-practice/roleplay-situation-packs",
+            );
+        },
+
+        getRoleplaySituationPack: async (code: string) => {
+            return apiFetch<RoleplaySituationPack>(
+                `/admin/curriculum-practice/roleplay-situation-packs/${encodeURIComponent(code)}`,
+            );
+        },
+
+        resolveRoleplaySituationPack: async (code: string) => {
+            return apiFetch<RoleplaySituationPackResolveResponse>(
+                `/admin/curriculum-practice/roleplay-situation-packs/${encodeURIComponent(code)}/resolve`,
+            );
+        },
+
+        getRoleplaySituationPackReferences: async (code: string) => {
+            return apiFetch<RoleplaySituationPackReferenceResponse>(
+                `/admin/curriculum-practice/roleplay-situation-packs/${encodeURIComponent(code)}/references`,
             );
         },
 

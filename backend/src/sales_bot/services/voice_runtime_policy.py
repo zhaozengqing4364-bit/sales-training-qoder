@@ -22,6 +22,18 @@ from agent.services.persona_policy import (
     resolve_persona_policy,
 )
 from common.monitoring.logger import get_logger
+from curriculum_practice.services.asset_resolution import (
+    ASSET_RESOLUTION_DIRECT_PRACTICE_LIVE,
+    build_asset_resolution_payload,
+    build_config_asset_runtime_metadata,
+)
+from curriculum_practice.services.roleplay.situation_pack_repository import (
+    SituationPackRepository,
+)
+from curriculum_practice.services.roleplay_contracts import (
+    RoleplayContractCompileError,
+    RoleplayContractCompiler,
+)
 from sales_bot.services.voice_instruction_compiler import VoiceInstructionCompiler
 
 # Voice policy monitoring integration
@@ -863,10 +875,31 @@ class VoiceRuntimePolicyService:
         policy["network_access_mode"] = tool_policy["network_access_mode"]
         policy["agent_id"] = agent.id if agent else agent_id
         policy["persona_id"] = persona.id if persona else persona_id
+        situation_packs = await SituationPackRepository.from_database(self.db)
+        roleplay_contract, legacy_direct_fallback = (
+            self._compile_direct_practice_roleplay_contract(
+                persona,
+                actor_id=str(agent.id if agent else agent_id or ""),
+                situation_packs=situation_packs,
+            )
+        )
+        policy["roleplay_contract"] = roleplay_contract
+        if legacy_direct_fallback:
+            source["legacy_direct_practice_fallback"] = True
+        policy["role_anchor_text"] = self._compile_role_anchor_text(
+            persona_policy=persona_policy,
+            persona=persona,
+            roleplay_contract=roleplay_contract,
+            situation_packs=situation_packs,
+        )
         source["customer_pressure_source"] = str(
             customer_pressure.get("source") or "none"
         )
         policy["source"] = source
+        policy["asset_resolution"] = build_asset_resolution_payload(
+            mode=ASSET_RESOLUTION_DIRECT_PRACTICE_LIVE,
+            entry="platform_direct_practice",
+        )
         policy["resolved_at"] = datetime.now(UTC).isoformat()
         compiled_contract = VoiceInstructionCompiler.compile_base_contract(
             policy=policy,
@@ -875,7 +908,74 @@ class VoiceRuntimePolicyService:
         )
         policy["instructions"] = compiled_contract.base_instructions
         policy["instruction_contract_hash"] = compiled_contract.contract_hash
+        runtime_metrics = policy.get("runtime_metrics")
+        if not isinstance(runtime_metrics, dict):
+            runtime_metrics = {}
+        else:
+            runtime_metrics = dict(runtime_metrics)
+        runtime_metrics["config_asset_center"] = build_config_asset_runtime_metadata(
+            voice_policy_snapshot=policy,
+        )
+        policy["runtime_metrics"] = runtime_metrics
         return policy
+
+    @staticmethod
+    def _compile_role_anchor_text(
+        *,
+        persona_policy: dict[str, Any],
+        persona: Persona | None,
+        roleplay_contract: dict[str, Any],
+        situation_packs: SituationPackRepository,
+    ) -> str:
+        """Compile per-turn role anchor from persona policy and situation pack."""
+        if "role_anchor" not in persona_policy:
+            return ""
+
+        situation = _as_dict(roleplay_contract.get("situation"))
+        situation_code = str(situation.get("code") or "").strip()
+        if not situation_code:
+            return ""
+
+        pack_dto = situation_packs.get_published(situation_code)
+        if pack_dto is None:
+            return ""
+
+        persona_name = str(getattr(persona, "name", "") or "").strip()
+        return VoiceInstructionCompiler.build_role_anchor(
+            persona_policy,
+            pack_dto,
+            persona_name,
+        )
+
+    def _compile_direct_practice_roleplay_contract(
+        self,
+        persona: Persona | None,
+        *,
+        actor_id: str,
+        situation_packs: SituationPackRepository | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        compiler = RoleplayContractCompiler(situation_packs=situation_packs)
+        try:
+            return (
+                compiler.compile_from_persona_sync(
+                    persona,
+                    actor_id=actor_id,
+                ),
+                False,
+            )
+        except RoleplayContractCompileError as exc:
+            logger.warning(
+                "direct_practice_roleplay_contract_degraded",
+                actor_id=actor_id,
+                reason_code=exc.reason_code,
+            )
+            return (
+                compiler.legacy_contract(
+                    source_track="direct_practice",
+                    actor_id=actor_id,
+                ),
+                True,
+            )
 
     def build_stepfun_tools(
         self, effective_policy: dict[str, Any]

@@ -274,6 +274,9 @@ class StepFunRealtimeHandler(
         self._tool_execution = StepFunToolExecutionModule()
         self._upstream_task: asyncio.Task | None = None
         self._effective_policy: dict[str, Any] = {}
+        self._roleplay_disclosure_state: dict[str, Any] = {}
+        self._roleplay_regenerate_attempted_for_turn = False
+        self._roleplay_repair_instruction = ""
         self._voice_runtime_profile: VoiceRuntimeProfile | None = None
         self._coach_health: str = "healthy"
         self._coach_health_reason: str | None = None
@@ -498,6 +501,8 @@ class StepFunRealtimeHandler(
         """Clear turn-scoped state that must not leak across reconnects or interrupts."""
         self._pending_grounding_context = ""
         self._pending_blocked_response_text = ""
+        self._roleplay_regenerate_attempted_for_turn = False
+        self._roleplay_repair_instruction = ""
         self._latest_input_transcript_delta = ""
         self._pending_tool_followup_response = False
         self._awaiting_transcription_after_commit = False
@@ -708,21 +713,15 @@ class StepFunRealtimeHandler(
         curriculum_snapshot = self._curriculum_snapshot
         if isinstance(curriculum_snapshot, dict):
             stage_snapshots = curriculum_snapshot.get("stage_snapshots")
-            curriculum_plan = curriculum_snapshot.get("curriculum_plan")
             if isinstance(stage_snapshots, dict):
-                return (
-                    curriculum_plan if isinstance(curriculum_plan, dict) else None,
-                    stage_snapshots,
-                )
+                return None, stage_snapshots
         runtime_snapshot = self._effective_policy.get("runtime_snapshot")
-        curriculum_plan = self._effective_policy.get("curriculum_plan")
         stage_snapshots = self._effective_policy.get("stage_snapshots")
         if isinstance(runtime_snapshot, dict):
-            curriculum_plan = runtime_snapshot.get("curriculum_plan") or curriculum_plan
             stage_snapshots = runtime_snapshot.get("stage_snapshots") or stage_snapshots
         if not isinstance(stage_snapshots, dict):
             return None, {}
-        return curriculum_plan if isinstance(curriculum_plan, dict) else None, stage_snapshots
+        return None, stage_snapshots
 
     async def _initialize_curriculum_stage_runtime(
         self, runtime_state: dict[str, Any] | None = None

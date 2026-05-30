@@ -5,6 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from common.effectiveness.report_scoring_projection import (
+    build_report_scoring_projection,
+)
 from common.effectiveness.scoring_rulesets import (
     SCORING_RULESET_SCHEMA_VERSION,
     SCORING_RULESET_SCORE_BASIS,
@@ -202,3 +205,57 @@ def test_dry_run_returns_reason_instead_of_fake_score_when_evidence_missing() ->
     assert result["evaluable"] is False
     assert result["overall_score"] is None
     assert "缺少会话分数" in result["not_evaluable_reason"]
+
+
+def test_report_scoring_projection_centralizes_snapshot_metadata() -> None:
+    projection = _projection()
+    ruleset = _candidate_ruleset()
+
+    result = build_report_scoring_projection(
+        evidence_projection=projection,
+        ruleset_view=ruleset,
+    )
+
+    assert result.evaluable is True
+    assert result.ruleset_version == "sales-v2"
+    assert result.score_basis == SCORING_RULESET_SCORE_BASIS
+    assert result.scoring_metadata == {
+        "ruleset_id": "ruleset-v2",
+        "version": "sales-v2",
+        "scenario_type": "sales",
+        "source": "admin",
+        "score_basis": SCORING_RULESET_SCORE_BASIS,
+    }
+    assert result.evidence_completeness["scoring_ruleset"]["version"] == "sales-v2"
+    assert result.snapshot_metadata == {
+        "ruleset_source": "admin",
+        "ruleset_version": "sales-v2",
+        "score_basis": SCORING_RULESET_SCORE_BASIS,
+        "non_evaluable_reason": None,
+    }
+
+
+def test_report_scoring_projection_non_evaluable_payload_has_no_fake_score() -> None:
+    projection = _projection(complete=False)
+    projection.evidence_completeness.update(
+        {
+            "session_scores": False,
+            "message_scores": 0,
+        }
+    )
+
+    result = build_report_scoring_projection(
+        evidence_projection=projection,
+        ruleset_view=_candidate_ruleset(),
+    )
+    payload = result.build_non_evaluable_payload()
+
+    assert result.evaluable is False
+    assert result.overall_score is None
+    assert payload["evaluable"] is False
+    assert "overall_score" not in payload
+    assert payload["not_evaluable_reason_code"] == "missing_score_evidence"
+    assert payload["ruleset_version"] == "sales-v2"
+    assert result.snapshot_metadata["non_evaluable_reason"] == (
+        "缺少会话分数或实时评分证据，无法按当前评分规则评估。"
+    )

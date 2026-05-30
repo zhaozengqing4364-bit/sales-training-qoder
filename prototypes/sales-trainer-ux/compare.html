@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>现状 vs 提案 · 销售闯关训练</title>
+  <link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+  <div class="page">
+    <div class="container container--wide">
+      <div class="stack">
+        <header>
+          <a class="back-link" href="index.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            返回原型索引
+          </a>
+          <div style="margin-top: 1rem;">
+            <h1 class="heading-xl">现状 vs 提案</h1>
+            <p class="text-body" style="margin-top: 0.5rem;">
+              对比当前「销售训练」扁平入口与「销售闯关训练」路径驱动方案，供产品评审与命名决策。
+            </p>
+          </div>
+        </header>
+
+        <!-- Side-by-side summary cards -->
+        <div class="compare-grid">
+          <article class="compare-col">
+            <div class="compare-col__header compare-col__header--old">
+              <h2 class="compare-col__title">现状 · 销售训练</h2>
+              <p class="compare-col__subtitle">扁平功能列表，与客户对练边界模糊</p>
+            </div>
+            <table class="compare-table">
+              <tr>
+                <th>入口命名</th>
+                <td>销售训练</td>
+              </tr>
+              <tr>
+                <th>信息架构</th>
+                <td>按类型分块：「做题训练」「录音评分」两个独立列表</td>
+              </tr>
+              <tr>
+                <th>进度感知</th>
+                <td class="compare-warn">无路径进度，用户不知「下一步该做什么」</td>
+              </tr>
+              <tr>
+                <th>通关标准</th>
+                <td class="compare-warn">每单元独立，缺少关卡级聚合判定</td>
+              </tr>
+              <tr>
+                <th>与客户对练</th>
+                <td class="compare-warn">同处「训练大厅」，新手易混淆实时对练 vs 异步闯关</td>
+              </tr>
+              <tr>
+                <th>主 CTA</th>
+                <td>各卡片各自「开始做题 / 上传录音」</td>
+              </tr>
+              <tr>
+                <th>适用场景</th>
+                <td>管理员发布多个独立单元时的最小 MVP</td>
+              </tr>
+            </table>
+          </article>
+
+          <article class="compare-col">
+            <div class="compare-col__header compare-col__header--new">
+              <h2 class="compare-col__title">提案 · 销售闯关训练</h2>
+              <p class="compare-col__subtitle">路径驱动，明确关卡与下一步</p>
+            </div>
+            <table class="compare-table">
+              <tr>
+                <th>入口命名</th>
+                <td class="compare-highlight">销售闯关训练</td>
+              </tr>
+              <tr>
+                <th>信息架构</th>
+                <td class="compare-highlight">5 关线性路径：破冰 → 价值表达 → 需求挖掘 → 异议 → 推进</td>
+              </tr>
+              <tr>
+                <th>进度感知</th>
+                <td class="compare-highlight">UsageBar 双进度：本关任务 + 全路径；可折叠关卡地图</td>
+              </tr>
+              <tr>
+                <th>通关标准</th>
+                <td class="compare-highlight">每关 = 做题 + 录音，双线均达标方可解锁下一关</td>
+              </tr>
+              <tr>
+                <th>与客户对练</th>
+                <td class="compare-highlight">训练大厅分栏：「闯关训练」vs「客户对练」，职责清晰</td>
+              </tr>
+              <tr>
+                <th>主 CTA</th>
+                <td class="compare-highlight">单一主按钮：「继续本关 · {下一未完成任务}」</td>
+              </tr>
+              <tr>
+                <th>适用场景</th>
+                <td class="compare-highlight">新人 onboarding、可演示的完整技能路径</td>
+              </tr>
+            </table>
+          </article>
+        </div>
+
+        <!-- Detailed comparison table (wide) -->
+        <section class="card">
+          <h2 class="heading-md" style="margin-bottom: 1rem;">关键差异明细</h2>
+          <div style="overflow-x: auto;">
+            <table class="compare-table" style="min-width: 560px;">
+              <thead>
+                <tr>
+                  <th style="width: 22%;">维度</th>
+                  <th style="width: 39%;">现状</th>
+                  <th style="width: 39%;">提案</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>首页首屏</th>
+                  <td>两个 section 平铺所有已发布单元</td>
+                  <td>当前关卡卡片 + 进度条 + 任务清单 + 主 CTA</td>
+                </tr>
+                <tr>
+                  <th>单元进入前</th>
+                  <td>直接进入做题/上传页</td>
+                  <td>关卡任务简报：目标、标准、步骤、场景</td>
+                </tr>
+                <tr>
+                  <th>失败/重试</th>
+                  <td>结果页返回列表，需用户自行找单元</td>
+                  <td>回到路径首页，主 CTA 指向未通过子任务</td>
+                </tr>
+                <tr>
+                  <th>管理员配置</th>
+                  <td>独立发布训练单元</td>
+                  <td>单元绑定关卡序号 + 路径模板（可复用现有 unit API）</td>
+                </tr>
+                <tr>
+                  <th>数据模型</th>
+                  <td>unit 为中心，无 path 聚合</td>
+                  <td>path → level → unit（quiz + audio）三级结构</td>
+                </tr>
+                <tr>
+                  <th>迁移策略</th>
+                  <td>—</td>
+                  <td>保留现有单元列表为「自由练习」次级入口（可选）</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- User journey -->
+        <section class="card card--muted">
+          <h2 class="heading-md" style="margin-bottom: 0.75rem;">提案用户旅程（Happy Path）</h2>
+          <ol style="margin: 0; padding-left: 1.25rem; color: var(--color-text-secondary); font-size: 0.8125rem; line-height: 1.7;">
+            <li>训练大厅选择「销售闯关训练」→ 进入路径首页，看到当前第 2 关</li>
+            <li>主 CTA「继续本关 · 录音评分」→ 关卡简报确认标准</li>
+            <li>上传录音 → 等待评分 → 通过（≥ 75 分）</li>
+            <li>路径首页更新：第 2 关通关，第 3 关解锁，主 CTA 变为「开始第 3 关 · 做题训练」</li>
+            <li>全部 5 关完成后，推荐进入「客户对练」做综合演练</li>
+          </ol>
+        </section>
+
+        <!-- Decision note -->
+        <section class="card">
+          <h2 class="heading-md" style="margin-bottom: 0.75rem;">待决事项</h2>
+          <ul class="criteria-list">
+            <li>是否在 MVP 阶段保留扁平列表作为「自由练习」fallback？</li>
+            <li>路径模板由管理员配置还是 seed 固定 5 关？</li>
+            <li>训练大厅导航文案：「销售闯关训练」与「客户对练」的最终并列方式</li>
+          </ul>
+          <div class="divider"></div>
+          <div class="btn-group">
+            <a class="btn btn--primary" href="path-home.html">查看提案原型</a>
+            <a class="btn btn--outline" href="level-brief.html">查看关卡简报</a>
+          </div>
+        </section>
+      </div>
+
+      <footer class="proto-footer">UX 原型 · 非生产代码</footer>
+    </div>
+  </div>
+</body>
+</html>

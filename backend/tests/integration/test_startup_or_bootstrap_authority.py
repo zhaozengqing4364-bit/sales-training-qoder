@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, inspect, text
 
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
 
 def _create_legacy_personas_schema(db_path: Path) -> None:
     engine = create_engine(f"sqlite:///{db_path}")
@@ -59,7 +61,7 @@ async def test_production_startup_refuses_to_patch_legacy_personas_schema(
         # This test intentionally reloads common.db.session under a production env.
         # Reload it back onto the development baseline so later tests do not inherit
         # the production bootstrap module state via process-global imports.
-        os.environ.pop("DATABASE_URL", None)
+        os.environ["DATABASE_URL"] = TEST_DATABASE_URL
         os.environ["ENVIRONMENT"] = "development"
         _load_db_session_module()
 
@@ -81,7 +83,7 @@ async def test_production_startup_refuses_missing_report_evaluation_tables(
         with pytest.raises(RuntimeError, match="report/evaluation schema drift"):
             await db_session.init_db()
     finally:
-        os.environ.pop("DATABASE_URL", None)
+        os.environ["DATABASE_URL"] = TEST_DATABASE_URL
         os.environ["ENVIRONMENT"] = "development"
         _load_db_session_module()
 

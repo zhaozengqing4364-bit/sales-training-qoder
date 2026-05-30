@@ -61,6 +61,7 @@ from curriculum_practice.schemas import (
     TemplateReferenceListResponse,
     UnpublishAcknowledgeRequest,
 )
+from curriculum_practice.services.asset_references import CurriculumAssetReferenceReader
 from curriculum_practice.services.content_assets import (
     ContentAssetAlreadyDraftError,
     ContentAssetNotEditableError,
@@ -96,6 +97,14 @@ from curriculum_practice.services.practice_templates import (
     serialize_template,
 )
 from curriculum_practice.services.question_generation import QuestionGenerationService
+from curriculum_practice.services.roleplay.situation_pack_repository import (
+    SituationPackRepository,
+)
+from curriculum_practice.services.roleplay_contracts import (
+    RoleplayContractCompileError,
+    RoleplayContractCompiler,
+    RoleplaySituationPackAdminService,
+)
 from curriculum_practice.services.roleplay_runtime_dossier_preview import (
     RoleplayRuntimeDossierPreviewService,
 )
@@ -430,6 +439,12 @@ async def start_my_study_exam(
                 error_code,
                 status_code=409,
                 message="该学习内容未绑定已发布的课程模板或 AI 考官，请联系管理员配置。",
+            )
+        if error_code == "[TEMPLATE_EXAMINER_AMBIGUOUS]":
+            return _api_error(
+                error_code,
+                status_code=409,
+                message="该学习内容绑定了多个已发布考核模板，请联系管理员保留唯一模板。",
             )
         if error_code == "[EXAMINER_AGENT_NOT_FOUND]":
             return _api_error(
@@ -1688,6 +1703,22 @@ async def get_practice_template_runtime_dossier_preview(
         preview = await RoleplayRuntimeDossierPreviewService(db).build_preview(
             template_id
         )
+        reference_reader = CurriculumAssetReferenceReader(db).read_reference
+        situation_packs = await SituationPackRepository.from_database(db)
+        try:
+            roleplay_contract = await RoleplayContractCompiler(
+                reference_reader,
+                situation_packs=situation_packs,
+            ).compile_from_template(
+                template_id,
+                actor_id=str(current_user.user_id),
+            )
+            roleplay_gate_results: list[dict[str, Any]] = []
+        except RoleplayContractCompileError as exc:
+            roleplay_contract = None
+            roleplay_gate_results = [
+                item.model_dump() for item in exc.gate_results
+            ]
     except SQLAlchemyError as exc:
         return build_server_error(
             "[PRACTICE_TEMPLATE_RUNTIME_DOSSIER_PREVIEW_FAILED]",
@@ -1696,7 +1727,115 @@ async def get_practice_template_runtime_dossier_preview(
         )
     if preview is None:
         return _not_found()
+    preview = dict(preview)
+    preview["roleplay_contract"] = roleplay_contract
+    preview["roleplay_gate_results"] = roleplay_gate_results
     return _success(preview)
+
+
+@router.get("/roleplay-situation-packs", response_model=None)
+async def list_roleplay_situation_packs(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    try:
+        return _success(await RoleplaySituationPackAdminService(db).list_packs())
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[ROLEPLAY_SITUATION_PACKS_FETCH_FAILED]",
+            message="Roleplay Situation Pack 暂时无法读取。",
+            exc=exc,
+        )
+
+
+@router.get("/roleplay-situation-packs/{code}", response_model=None)
+async def get_roleplay_situation_pack(
+    code: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    try:
+        pack = await RoleplaySituationPackAdminService(db).get_pack(code)
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[ROLEPLAY_SITUATION_PACK_FETCH_FAILED]",
+            message="Roleplay Situation Pack 暂时无法读取。",
+            exc=exc,
+        )
+    if pack is None:
+        return _api_error(
+            "[ROLEPLAY_SITUATION_PACK_NOT_FOUND]",
+            status_code=404,
+            message="Roleplay Situation Pack 不存在。",
+        )
+    return _success(pack)
+
+
+@router.get("/roleplay-situation-packs/{code}/resolve", response_model=None)
+async def resolve_roleplay_situation_pack(
+    code: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = RoleplaySituationPackAdminService(db)
+    try:
+        resolved = await service.resolve_published(code)
+        if resolved is not None:
+            return _success(resolved)
+        publish_state = await service.pack_publish_state(code)
+        if publish_state is None:
+            return _api_error(
+                "[ROLEPLAY_SITUATION_PACK_NOT_FOUND]",
+                status_code=404,
+                message="Roleplay Situation Pack 不存在。",
+            )
+        return _api_error(
+            "[ROLEPLAY_SITUATION_PACK_NOT_PUBLISHED]",
+            status_code=404,
+            message="Roleplay Situation Pack 尚未发布。",
+        )
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[ROLEPLAY_SITUATION_PACK_RESOLVE_FAILED]",
+            message="Roleplay Situation Pack 解析暂时无法完成。",
+            exc=exc,
+        )
+
+
+@router.get("/roleplay-situation-packs/{code}/references", response_model=None)
+async def get_roleplay_situation_pack_references(
+    code: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    admin_error = _require_admin(current_user)
+    if admin_error is not None:
+        return admin_error
+    service = RoleplaySituationPackAdminService(db)
+    try:
+        pack = await service.get_pack(code)
+        if pack is None:
+            return _api_error(
+                "[ROLEPLAY_SITUATION_PACK_NOT_FOUND]",
+                status_code=404,
+                message="Roleplay Situation Pack 不存在。",
+            )
+        return _success(await service.references_for(code))
+    except SQLAlchemyError as exc:
+        return build_server_error(
+            "[ROLEPLAY_SITUATION_PACK_REFERENCES_FETCH_FAILED]",
+            message="Roleplay Situation Pack 引用关系暂时无法读取。",
+            exc=exc,
+        )
 
 
 @router.put("/templates/{template_id}", response_model=None)

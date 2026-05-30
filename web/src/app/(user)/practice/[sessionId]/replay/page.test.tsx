@@ -16,6 +16,7 @@ const {
   getThumbnailBlobMock,
   createSessionMock,
   getSegmentAudioBlobUrlMock,
+  useCurrentUserMock,
   searchParamsState,
   scrollIntoViewMock,
 } = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const {
   getThumbnailBlobMock: vi.fn(),
   createSessionMock: vi.fn(),
   getSegmentAudioBlobUrlMock: vi.fn(),
+  useCurrentUserMock: vi.fn(),
   searchParamsState: {
     current: new URLSearchParams(),
   },
@@ -97,6 +99,10 @@ vi.mock("@/lib/api/client", async () => {
     },
   };
 });
+
+vi.mock("@/hooks/use-current-user", () => ({
+  useCurrentUser: useCurrentUserMock,
+}));
 
 function buildReplayData(overrides: Record<string, unknown> = {}) {
   return {
@@ -730,6 +736,18 @@ describe("SessionReplayPage", () => {
     getThumbnailBlobMock.mockRejectedValue(new Error("thumbnail unavailable"));
     getSegmentAudioBlobUrlMock.mockReset();
     getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
+    useCurrentUserMock.mockReturnValue({
+      data: {
+        id: "user-1",
+        user_id: "user-1",
+        display_name: "员工",
+        name: "员工",
+        email: "learner@example.com",
+        role: "user",
+        is_active: true,
+        created_at: "2026-04-01T00:00:00Z",
+      },
+    });
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -779,6 +797,50 @@ describe("SessionReplayPage", () => {
 
     expect(await screen.findByText("部分音频片段上传失败")).toBeTruthy();
     expect(screen.getByText("签名已过期，请重新上传")).toBeTruthy();
+  });
+
+  it("shows roleplay compliance timeline only for admin replay", async () => {
+    useCurrentUserMock.mockReturnValue({
+      data: {
+        id: "admin-1",
+        user_id: "admin-1",
+        display_name: "主管",
+        name: "主管",
+        email: "admin@example.com",
+        role: "admin",
+        is_active: true,
+        created_at: "2026-04-01T00:00:00Z",
+      },
+    });
+    renderReplayPage({
+      replayOverrides: {
+        roleplay_compliance_summary: {
+          status: "ready",
+          situation_code: "first_visit",
+          violation_count: 1,
+          blocking_violation_count: 1,
+          regenerate_count: 1,
+          cancel_stream_count: 1,
+        },
+        roleplay_compliance_timeline: [
+          {
+            event_type: "compliance_decision",
+            turn_number: 2,
+            action: "regenerate_once",
+            severity: "blocking",
+            violation_code: "ROLEPLAY_FORBIDDEN_CLAIM",
+            matched_pattern: "上次拜访",
+            visible_keys: ["industry"],
+            disclosed_keys: [],
+            trace_id: "trace-roleplay-1",
+          },
+        ],
+      },
+    });
+
+    expect(await screen.findByText("Roleplay Compliance Timeline")).toBeTruthy();
+    expect(screen.getByText(/ROLEPLAY_FORBIDDEN_CLAIM/)).toBeTruthy();
+    expect(screen.getByText(/matched pattern: 上次拜访/)).toBeTruthy();
   });
 
   it("renders answer-level knowledge diagnostics for assistant replay messages", async () => {

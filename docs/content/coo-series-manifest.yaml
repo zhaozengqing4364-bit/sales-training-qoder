@@ -1,0 +1,340 @@
+learning_content:
+  title: COO谈市场·新人成长十五讲
+  import_batch_id: coo-market-series-v1
+  summary: COO 谈市场新人成长系列十五讲，覆盖陌拜破冰、客户拜访、渠道协作、技术交流到报价选型等核心销售能力。
+  owner: coo-market-series
+  source: coo.md
+series:
+- series_index: 1
+  chapter_key: coo-series-01
+  title: 系列之1：破冰与突围——“陌拜”实战心法与场景应对
+  short_title: 陌拜实战
+  source_anchor:
+    start_line: 5
+    end_line: 87
+  quiz_unit_name: COO系列之1：陌拜实战测验
+  path:
+    level_title: 第1关：陌拜实战
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-01-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-01-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-01-q3
+  - slot: 4
+    type: single_choice
+    natural_key: coo-series-01-q4
+  - slot: 5
+    type: single_choice
+    natural_key: coo-series-01-q5
+  - slot: 6
+    type: true_false
+    natural_key: coo-series-01-q6
+  - slot: 7
+    type: true_false
+    natural_key: coo-series-01-q7
+  - slot: 8
+    type: single_choice
+    natural_key: coo-series-01-q8
+- series_index: 2
+  chapter_key: coo-series-02
+  title: 系列之2：从拜访准备到事后复盘
+  short_title: 拜访准备复盘
+  source_anchor:
+    start_line: 88
+    end_line: 325
+  quiz_unit_name: COO系列之2：拜访准备复盘测验
+  path:
+    level_title: 第2关：拜访准备复盘
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-02-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-02-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-02-q3
+  - slot: 4
+    type: single_choice
+    natural_key: coo-series-02-q4
+  - slot: 5
+    type: true_false
+    natural_key: coo-series-02-q5
+  - slot: 6
+    type: single_choice
+    natural_key: coo-series-02-q6
+- series_index: 3
+  chapter_key: coo-series-03
+  title: 系列之3：从“不敢敲门”到“系统化破冰”
+  short_title: 系统化破冰
+  source_anchor:
+    start_line: 326
+    end_line: 439
+  quiz_unit_name: COO系列之3：系统化破冰测验
+  path:
+    level_title: 第3关：系统化破冰
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-03-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-03-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-03-q3
+  - slot: 4
+    type: single_choice
+    natural_key: coo-series-03-q4
+  - slot: 5
+    type: true_false
+    natural_key: coo-series-03-q5
+  - slot: 6
+    type: single_choice
+    natural_key: coo-series-03-q6
+- series_index: 4
+  chapter_key: coo-series-04
+  title: 系列之4：实战破局与客户深度开发
+  short_title: 客户深度开发
+  source_anchor:
+    start_line: 440
+    end_line: 557
+  quiz_unit_name: COO系列之4：客户深度开发测验
+  path:
+    level_title: 第4关：客户深度开发
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-04-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-04-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-04-q3
+- series_index: 5
+  chapter_key: coo-series-05
+  title: 系列之5：谋定而后动——客户拜访的价值设计与沟通策略
+  short_title: 拜访价值设计
+  source_anchor:
+    start_line: 558
+    end_line: 673
+  quiz_unit_name: COO系列之5：拜访价值设计测验
+  path:
+    level_title: 第5关：拜访价值设计
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-05-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-05-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-05-q3
+- series_index: 6
+  chapter_key: coo-series-06
+  title: 系列之6：通过办公室细节洞察客户性格与偏好
+  short_title: 洞察客户偏好
+  source_anchor:
+    start_line: 674
+    end_line: 770
+  quiz_unit_name: COO系列之6：洞察客户偏好测验
+  path:
+    level_title: 第6关：洞察客户偏好
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-06-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-06-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-06-q3
+- series_index: 7
+  chapter_key: coo-series-07
+  title: 系列之7：以茶入局——商务场合中的茶文化沟通与品鉴入门
+  short_title: 茶文化与商务
+  source_anchor:
+    start_line: 771
+    end_line: 871
+  quiz_unit_name: COO系列之7：茶文化与商务测验
+  path:
+    level_title: 第7关：茶文化与商务
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-07-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-07-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-07-q3
+- series_index: 8
+  chapter_key: coo-series-08
+  title: 系列之8：合纵与连横——渠道生态认知与协作共赢心法
+  short_title: 渠道协作
+  source_anchor:
+    start_line: 872
+    end_line: 991
+  quiz_unit_name: COO系列之8：渠道协作测验
+  path:
+    level_title: 第8关：渠道协作
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-08-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-08-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-08-q3
+- series_index: 9
+  chapter_key: coo-series-09
+  title: 系列之9：从“不需要”到“约见面”——大客户微信跟进7步实战心法
+  short_title: 微信跟进
+  source_anchor:
+    start_line: 992
+    end_line: 1095
+  quiz_unit_name: COO系列之9：微信跟进测验
+  path:
+    level_title: 第9关：微信跟进
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-09-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-09-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-09-q3
+- series_index: 10
+  chapter_key: coo-series-10
+  title: 系列之10：价值对话——销售首次技术交流的“避坑”与“破局”指南
+  short_title: 首次技术交流
+  source_anchor:
+    start_line: 1096
+    end_line: 1321
+  quiz_unit_name: COO系列之10：首次技术交流测验
+  path:
+    level_title: 第10关：首次技术交流
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-10-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-10-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-10-q3
+- series_index: 11
+  chapter_key: coo-series-11
+  title: 系列之11：破局——解锁技术负责人“愿意见你”的三大驱动力
+  short_title: 约见技术负责人
+  source_anchor:
+    start_line: 1322
+    end_line: 1483
+  quiz_unit_name: COO系列之11：约见技术负责人测验
+  path:
+    level_title: 第11关：约见技术负责人
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-11-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-11-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-11-q3
+- series_index: 12
+  chapter_key: coo-series-12
+  title: 系列之12：拜访后跟进——决胜赢单的关键策略
+  short_title: 拜访后跟进
+  source_anchor:
+    start_line: 1484
+    end_line: 1646
+  quiz_unit_name: COO系列之12：拜访后跟进测验
+  path:
+    level_title: 第12关：拜访后跟进
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-12-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-12-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-12-q3
+- series_index: 13
+  chapter_key: coo-series-13
+  title: 系列之13：结构化表达——从“听不懂”到“高转化”的销售沟通术
+  short_title: 结构化表达
+  source_anchor:
+    start_line: 1647
+    end_line: 1766
+  quiz_unit_name: COO系列之13：结构化表达测验
+  path:
+    level_title: 第13关：结构化表达
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-13-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-13-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-13-q3
+- series_index: 14
+  chapter_key: coo-series-14
+  title: 系列之14：项目合伙人——销售与售前的高效协同
+  short_title: 销售售前协同
+  source_anchor:
+    start_line: 1767
+    end_line: 1911
+  quiz_unit_name: COO系列之14：销售售前协同测验
+  path:
+    level_title: 第14关：销售售前协同
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-14-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-14-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-14-q3
+- series_index: 15
+  chapter_key: coo-series-15
+  title: 系列之15：高效报价与选型实战指南
+  short_title: 报价与选型
+  source_anchor:
+    start_line: 1912
+    end_line: 2106
+  quiz_unit_name: COO系列之15：报价与选型测验
+  path:
+    level_title: 第15关：报价与选型
+  question_slots:
+  - slot: 1
+    type: single_choice
+    natural_key: coo-series-15-q1
+  - slot: 2
+    type: true_false
+    natural_key: coo-series-15-q2
+  - slot: 3
+    type: short_answer
+    natural_key: coo-series-15-q3

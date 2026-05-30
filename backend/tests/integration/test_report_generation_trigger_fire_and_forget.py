@@ -14,7 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import evaluation.services.report_generation_trigger as trigger_module
 from common.conversation.models import ConversationMessage
-from common.db.models import PracticeSession, Scenario, SessionStatus, User
+from common.db.models import (
+    EvaluationRun,
+    EvaluationRunStatus,
+    PracticeSession,
+    Scenario,
+    SessionStatus,
+    TrainingReportSnapshot,
+    User,
+)
 from common.error_handling.result import Result
 from evaluation.services.report_generation_trigger import trigger_report_generation
 
@@ -90,6 +98,39 @@ async def _seed_sales_session(
             ),
         ]
     )
+    await db_session.commit()
+    await db_session.refresh(session)
+    return session
+
+
+async def _seed_non_evaluable_sales_session(
+    db_session: AsyncSession,
+    *,
+    user_id: str,
+) -> PracticeSession:
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name=f"fire_and_forget_non_eval_{uuid.uuid4().hex[:8]}",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=user_id,
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.SCORING.value,
+        report_status="processing",
+        logic_score=0.0,
+        accuracy_score=0.0,
+        completeness_score=0.0,
+        total_duration_seconds=10,
+        effectiveness_snapshot={
+            "evaluable": False,
+            "not_evaluable_reason": "INSUFFICIENT_TURN_DATA",
+            "version": "session_evidence_projection_v1",
+        },
+    )
+    db_session.add_all([scenario, session])
     await db_session.commit()
     await db_session.refresh(session)
     return session
@@ -190,3 +231,55 @@ async def test_fire_and_forget_trigger_persists_failed_report_and_completed_sale
     assert persisted.report_status == "failed"
     assert persisted.report_error == "[ENHANCED_REPORT_FAILED]"
     assert persisted.status == SessionStatus.COMPLETED.value
+
+
+@pytest.mark.asyncio
+async def test_fire_and_forget_trigger_persists_non_evaluable_projection_without_fake_score(
+    test_db: AsyncSession,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    session = await _seed_non_evaluable_sales_session(
+        test_db,
+        user_id=str(test_user.user_id),
+    )
+    session_factory = async_sessionmaker(
+        test_db.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    mock_report_service = _patch_trigger_to_use_test_engine(
+        monkeypatch,
+        session_factory,
+        Result.ok(SimpleNamespace(overall_score=85.0)),
+    )
+
+    await trigger_report_generation(str(session.session_id), "sales", db=None)
+
+    async with session_factory() as verify_db:
+        run = (
+            await verify_db.execute(
+                select(EvaluationRun).where(
+                    EvaluationRun.session_id == str(session.session_id)
+                )
+            )
+        ).scalar_one()
+        snapshot = (
+            await verify_db.execute(
+                select(TrainingReportSnapshot).where(
+                    TrainingReportSnapshot.session_id == str(session.session_id)
+                )
+            )
+        ).scalar_one()
+
+    mock_report_service.generate_report.assert_not_awaited()
+    assert run.status == EvaluationRunStatus.NON_EVALUABLE.value
+    assert run.result_payload["evaluable"] is False
+    assert "overall_score" not in run.result_payload
+    assert run.result_payload["not_evaluable_reason_code"] == "missing_min_messages"
+    assert snapshot.non_evaluable_reason == (
+        "缺少足够对话证据，无法按当前评分规则评估。"
+    )
+    assert snapshot.report_payload["evaluable"] is False
+    assert "overall_score" not in snapshot.report_payload
+    assert snapshot.score_basis == "session_evidence_projection_evaluable_only"

@@ -21,6 +21,7 @@ import type {
     PracticeTemplateGateResult,
     PracticeTemplateMutationRequest,
     PracticeTemplateRecord,
+    RoleplaySituationPack,
     RoleProfileRecord,
     ScoringRulesetRecord,
 } from "@/lib/api/types";
@@ -100,6 +101,7 @@ function createEmptyForm(): FormState {
         knowledge_base_refs: [],
         case_item_id: null,
         role_profile_id: null,
+        situation_pack_code: null,
         curriculum_plan: null,
         max_stage_duration_seconds: null,
     };
@@ -125,6 +127,7 @@ function formFromTemplate(template: PracticeTemplateRecord): FormState {
         knowledge_base_refs: [...template.knowledge_base_refs],
         case_item_id: template.case_item_id ?? null,
         role_profile_id: template.role_profile_id ?? null,
+        situation_pack_code: template.situation_pack_code ?? null,
         curriculum_plan: template.curriculum_plan ?? null,
         max_stage_duration_seconds: template.max_stage_duration_seconds ?? null,
     };
@@ -206,6 +209,27 @@ function roleProfileOptions(items: RoleProfileRecord[]): AssetRefPickerOption[] 
     }));
 }
 
+function situationPackOptions(
+    items: RoleplaySituationPack[],
+    context: { mode: string; scenarioType: string },
+): AssetRefPickerOption[] {
+    return items.map((item) => {
+        const modeCompatible = item.compatible_practice_modes.length === 0
+            || item.compatible_practice_modes.includes(context.mode);
+        const scenarioCompatible = item.compatible_scenario_types.length === 0
+            || item.compatible_scenario_types.includes(context.scenarioType);
+        const selectable = item.status === "published" && modeCompatible && scenarioCompatible;
+        return {
+            id: item.code,
+            label: item.label || item.code,
+            subtitle: item.code,
+            status: item.status,
+            editHref: "/admin/curriculum-practice/roleplay-situation-packs",
+            selectable,
+        };
+    });
+}
+
 function prerequisitesFromText(value: string) {
     return refsFromText(value).map((templateStageKey) => ({
         template_stage_key: templateStageKey,
@@ -235,6 +259,7 @@ export function TemplateForm({ mode, templateId, initialTemplate, onSaved, onCan
     const [personas, setPersonas] = useState<AdminPersona[]>([]);
     const [runtimeProfiles, setRuntimeProfiles] = useState<AdminVoiceRuntimeProfile[]>([]);
     const [scoringRulesets, setScoringRulesets] = useState<ScoringRulesetRecord[]>([]);
+    const [situationPacks, setSituationPacks] = useState<RoleplaySituationPack[]>([]);
     const [knowledgeBases, setKnowledgeBases] = useState<AdminKnowledgeBase[]>([]);
     const [pickerLoading, setPickerLoading] = useState(true);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -254,6 +279,10 @@ export function TemplateForm({ mode, templateId, initialTemplate, onSaved, onCan
     const personaPickerOptions = useMemo(() => personaOptions(personas), [personas]);
     const runtimePickerOptions = useMemo(() => runtimeOptions(runtimeProfiles), [runtimeProfiles]);
     const scoringPickerOptions = useMemo(() => scoringOptions(scoringRulesets), [scoringRulesets]);
+    const situationPackPickerOptions = useMemo(() => situationPackOptions(
+        situationPacks,
+        { mode: form.mode, scenarioType: form.scenario_type },
+    ), [form.mode, form.scenario_type, situationPacks]);
     const casePickerOptions = useMemo(() => caseItemOptions(caseItems), [caseItems]);
     const rolePickerOptions = useMemo(() => roleProfileOptions(roleProfiles), [roleProfiles]);
 
@@ -267,6 +296,7 @@ export function TemplateForm({ mode, templateId, initialTemplate, onSaved, onCan
                 personaResponse,
                 runtimeResponse,
                 scoringResponse,
+                situationPackResponse,
                 knowledgeResponse,
             ] = await Promise.all([
                 api.admin.listCaseItems(),
@@ -275,6 +305,7 @@ export function TemplateForm({ mode, templateId, initialTemplate, onSaved, onCan
                 api.admin.getPersonas({ page_size: 200 }),
                 api.admin.getVoiceRuntimeProfiles(),
                 api.admin.listScoringRulesets("sales"),
+                api.admin.listRoleplaySituationPacks(),
                 api.admin.getKnowledgeBases({ page: 1, page_size: 200 }),
             ]);
             setCaseItems(caseItemResponse.items);
@@ -283,6 +314,7 @@ export function TemplateForm({ mode, templateId, initialTemplate, onSaved, onCan
             setPersonas(personaResponse.items);
             setRuntimeProfiles(runtimeResponse.items);
             setScoringRulesets(scoringResponse.items);
+            setSituationPacks(situationPackResponse.items);
             setKnowledgeBases(knowledgeResponse.items);
         } catch (err) {
             setActionError(`加载引用资产失败：${getApiErrorMessage(err)}`);
@@ -311,6 +343,7 @@ export function TemplateForm({ mode, templateId, initialTemplate, onSaved, onCan
             personaOptions: personaPickerOptions,
             runtimeOptions: runtimePickerOptions,
             scoringOptions: scoringPickerOptions,
+            situationPackOptions: situationPackPickerOptions,
             knowledgeBases,
             caseOptions: casePickerOptions,
             roleOptions: rolePickerOptions,
@@ -483,6 +516,16 @@ export function TemplateForm({ mode, templateId, initialTemplate, onSaved, onCan
                         loading={pickerLoading}
                         placeholder="搜索 Persona…"
                         error={fieldErrors.persona_id}
+                    />
+                    <AdminAssetRefPicker
+                        label="Situation Pack"
+                        value={form.situation_pack_code ?? ""}
+                        onChange={(code) => setForm((current) => ({ ...current, situation_pack_code: code || null }))}
+                        options={situationPackPickerOptions}
+                        loading={pickerLoading}
+                        placeholder="搜索 Situation Pack…"
+                        emptyMessage="暂无已发布且兼容的 Situation Pack"
+                        error={fieldErrors.situation_pack_code}
                     />
                     <AdminAssetRefPicker
                         label="语音运行时配置"

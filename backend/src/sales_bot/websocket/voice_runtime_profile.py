@@ -6,10 +6,8 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from sales_bot.services.voice_instruction_compiler import (
-    VoiceInstructionCompiler,
-    build_instruction_contract_hash,
-)
+from prompt_templates.compiled_contract import compose_turn_instruction_text
+from sales_bot.services.voice_instruction_compiler import build_instruction_contract_hash
 
 
 class FrozenDict(Mapping[str, Any]):
@@ -106,6 +104,7 @@ class VoiceRuntimeProfile:
     instruction_contract_hash: str
     knowledge_base_ids: tuple[str, ...]
     tool_policy: Mapping[str, Any]
+    role_anchor_text: str = ""
     connection_health: str = "healthy"
 
     def __post_init__(self) -> None:
@@ -119,6 +118,7 @@ class VoiceRuntimeProfile:
             "instruction_contract_hash",
             self.instruction_contract_hash.strip(),
         )
+        object.__setattr__(self, "role_anchor_text", self.role_anchor_text.strip())
         object.__setattr__(
             self,
             "knowledge_base_ids",
@@ -149,6 +149,7 @@ class VoiceRuntimeProfile:
             instruction_contract_hash=contract_hash,
             knowledge_base_ids=_as_kb_ids(snapshot.get("knowledge_base_ids")),
             tool_policy=tool_policy if isinstance(tool_policy, Mapping) else {},
+            role_anchor_text=_as_text(snapshot.get("role_anchor_text")),
             connection_health=_as_text(snapshot.get("connection_health"), "healthy"),
         )
 
@@ -167,10 +168,23 @@ class VoiceRuntimeProfile:
         *,
         base_instructions: str | None = None,
         grounding_context: str = "",
+        roleplay_turn_instruction: str = "",
+        role_anchor_text: str | None = None,
     ) -> str:
-        return VoiceInstructionCompiler.compose_turn_instructions(
-            base_instructions=self.instructions if base_instructions is None else base_instructions,
+        anchor = (
+            self.role_anchor_text
+            if role_anchor_text is None
+            else str(role_anchor_text or "").strip()
+        )
+        return compose_turn_instruction_text(
+            base_instructions=(
+                self.instructions
+                if base_instructions is None
+                else base_instructions
+            ),
             grounding_context=grounding_context,
+            roleplay_turn_instruction=roleplay_turn_instruction,
+            role_anchor_text=anchor,
         )
 
     def validate_instruction_contract(self) -> ContractValidationResult:
@@ -228,6 +242,7 @@ class VoiceRuntimeProfile:
             "temperature",
             "instructions",
             "instruction_contract_hash",
+            "role_anchor_text",
             "knowledge_base_ids",
             "tool_policy",
             "connection_health",
@@ -244,6 +259,7 @@ class VoiceRuntimeProfile:
                 "temperature": self.temperature,
                 "instructions": self.instructions,
                 "instruction_contract_hash": self.instruction_contract_hash,
+                "role_anchor_text": self.role_anchor_text,
                 "knowledge_base_ids": self.knowledge_base_ids,
                 "tool_policy": self.tool_policy,
                 "connection_health": self.connection_health,

@@ -9,6 +9,7 @@ const getAgentsMock = vi.hoisted(() => vi.fn());
 const getPersonasMock = vi.hoisted(() => vi.fn());
 const getVoiceRuntimeProfilesMock = vi.hoisted(() => vi.fn());
 const listScoringRulesetsMock = vi.hoisted(() => vi.fn());
+const listRoleplaySituationPacksMock = vi.hoisted(() => vi.fn());
 const getKnowledgeBasesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/client", async () => {
@@ -25,6 +26,7 @@ vi.mock("@/lib/api/client", async () => {
                 getPersonas: getPersonasMock,
                 getVoiceRuntimeProfiles: getVoiceRuntimeProfilesMock,
                 listScoringRulesets: listScoringRulesetsMock,
+                listRoleplaySituationPacks: listRoleplaySituationPacksMock,
                 getKnowledgeBases: getKnowledgeBasesMock,
             },
         },
@@ -53,6 +55,7 @@ const template = {
     updated_at: "2026-05-12T00:00:00Z",
     case_item_id: "case-1",
     role_profile_id: "role-1",
+    situation_pack_code: "first_visit",
 };
 
 const publishedCaseItem = {
@@ -96,6 +99,20 @@ const pickerAssets = {
     personas: [{ id: "persona-1", name: "默认 Persona", category: "customer", status: "active" }],
     runtimeProfiles: [{ id: "runtime-1", name: "默认语音", is_active: true, voice_mode: "stepfun_realtime" }],
     scoringRulesets: [{ ruleset_id: "ruleset-1", display_name: "默认评分", version: "v1", status: "published" }],
+    situationPacks: [{
+        code: "first_visit",
+        label: "首次拜访",
+        version: "v1",
+        status: "published",
+        compatible_practice_modes: ["customer_roleplay"],
+        compatible_scenario_types: ["sales"],
+        relationship_context_defaults: {},
+        default_visible_information_scope: {},
+        default_forbidden_claim_patterns: [],
+        default_forbidden_topic_codes: [],
+        default_forbidden_stage_codes: [],
+        default_runtime_violation_policy: {},
+    }],
     knowledgeBases: [{ id: "kb-1", name: "知识库 A", status: "active", document_count: 2 }],
 };
 
@@ -122,6 +139,7 @@ describe("TemplateForm", () => {
         getPersonasMock.mockResolvedValue({ items: pickerAssets.personas, total: pickerAssets.personas.length });
         getVoiceRuntimeProfilesMock.mockResolvedValue({ items: pickerAssets.runtimeProfiles });
         listScoringRulesetsMock.mockResolvedValue({ items: pickerAssets.scoringRulesets, total: pickerAssets.scoringRulesets.length });
+        listRoleplaySituationPacksMock.mockResolvedValue({ items: pickerAssets.situationPacks, total: pickerAssets.situationPacks.length });
         getKnowledgeBasesMock.mockResolvedValue({ items: pickerAssets.knowledgeBases, total: pickerAssets.knowledgeBases.length });
     });
 

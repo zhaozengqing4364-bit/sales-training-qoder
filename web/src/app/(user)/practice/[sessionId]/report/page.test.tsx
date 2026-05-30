@@ -701,6 +701,43 @@ describe("ReportPage", () => {
         expect(getNextRecommendationMock).toHaveBeenCalledWith("session-1");
     });
 
+    it("renders learner-safe roleplay compliance summary without internal rules", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            roleplay_compliance_summary: {
+                status: "ready",
+                situation_code: "first_visit",
+                contract_hash: "hash-roleplay",
+                violation_count: 1,
+                blocking_violation_count: 1,
+                regenerate_count: 1,
+                cancel_stream_count: 1,
+                hidden_leak_prevented_count: 1,
+                disclosed_keys_count: 0,
+                last_decision: {
+                    violation_code: "ROLEPLAY_FORBIDDEN_CLAIM",
+                    matched_pattern: "上次拜访",
+                    action: "regenerate_once",
+                },
+            },
+        });
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced unavailable"));
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("角色一致性")).toBeTruthy();
+        expect(screen.getByText("配置正常")).toBeTruthy();
+        expect(screen.getByText("已阻止 1 次泄露")).toBeTruthy();
+        expect(screen.getByText("2 次")).toBeTruthy();
+        expect(screen.queryByText("上次拜访")).toBeNull();
+        expect(screen.queryByText("ROLEPLAY_FORBIDDEN_CLAIM")).toBeNull();
+    });
+
     it("lets supervisors submit a retraining decision from the report page", async () => {
         useCurrentUserMock.mockReturnValue({
             data: {

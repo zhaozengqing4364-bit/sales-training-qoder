@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>录音评分结果 · 销售训练原型</title>
+  <link rel="stylesheet" href="_shared.css" />
+  <style>
+    .result-hero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.875rem;
+    }
+    .score-total {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      color: #0f172a;
+    }
+    .threshold-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.75rem;
+      font-size: 0.8125rem;
+      color: #64748b;
+    }
+    .threshold-row strong {
+      color: #334155;
+    }
+    .poll-note {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-top: 0.5rem;
+    }
+    .transcript-box {
+      max-height: 8rem;
+      overflow-y: auto;
+      padding: 0.875rem 1rem;
+      background: #f8fafc;
+      border-radius: 0.75rem;
+      font-size: 0.8125rem;
+      color: #475569;
+      line-height: 1.6;
+    }
+    .transcript-box mark {
+      background: #fef9c3;
+      color: #713f12;
+      padding: 0 0.15rem;
+      border-radius: 0.15rem;
+    }
+    .cta-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .teaser {
+      padding: 0.875rem 1rem;
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border: 1px solid #e2e8f0;
+      border-radius: 0.875rem;
+      font-size: 0.8125rem;
+      color: #475569;
+    }
+    .teaser strong {
+      display: block;
+      margin-bottom: 0.25rem;
+      color: #0f172a;
+      font-size: 0.875rem;
+    }
+    .summary-line {
+      margin: 0 0 1rem;
+      font-size: 0.875rem;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <nav class="top-nav" aria-label="原型导航">
+      <a href="index.html">← 训练首页</a>
+      <span class="sep">·</span>
+      <a href="path-home.html">学习路径</a>
+      <span class="sep">·</span>
+      <a href="audio-practice.html">重新上传</a>
+    </nav>
+
+    <header>
+      <h1 class="page-title">录音评分结果</h1>
+      <p class="page-subtitle">visit-opening-20260529.m4a · 处理已完成</p>
+    </header>
+
+    <!-- 自动轮询 UX：已全部完成 -->
+    <section class="card" aria-labelledby="pipeline-heading">
+      <h2 id="pipeline-heading">处理进度</h2>
+      <ol class="timeline" aria-label="上传至评分完成">
+        <li class="timeline__step">
+          <div class="timeline__dot" aria-hidden="true">
+            <svg viewBox="0 0 12 12"><path d="M2 6l3 3 5-5"/></svg>
+          </div>
+          <span class="timeline__label">上传</span>
+        </li>
+        <li class="timeline__step">
+          <div class="timeline__dot" aria-hidden="true">
+            <svg viewBox="0 0 12 12"><path d="M2 6l3 3 5-5"/></svg>
+          </div>
+          <span class="timeline__label">转写</span>
+        </li>
+        <li class="timeline__step">
+          <div class="timeline__dot" aria-hidden="true">
+            <svg viewBox="0 0 12 12"><path d="M2 6l3 3 5-5"/></svg>
+          </div>
+          <span class="timeline__label">评分</span>
+        </li>
+        <li class="timeline__step">
+          <div class="timeline__dot" aria-hidden="true">
+            <svg viewBox="0 0 12 12"><path d="M2 6l3 3 5-5"/></svg>
+          </div>
+          <span class="timeline__label">完成</span>
+        </li>
+      </ol>
+      <p class="poll-note">原型展示「轮询结束」态：学员进入页面时四步均已勾选，无需手动刷新。</p>
+    </section>
+
+    <section class="card" aria-labelledby="score-heading">
+      <div class="result-hero">
+        <div>
+          <p class="muted" style="margin:0 0 0.25rem;">总分</p>
+          <p class="score-total" aria-label="总分 78 分">78</p>
+        </div>
+        <div>
+          <span class="badge badge-fail" id="pass-badge">未达标</span>
+        </div>
+      </div>
+      <div class="threshold-row" role="status">
+        <span>通过线 <strong>80</strong> 分</span>
+        <span aria-hidden="true">·</span>
+        <span>本次 <strong>78</strong> 分，差 <strong>2</strong> 分</span>
+      </div>
+      <p class="summary-line">
+        开场与方案价值表达较好；痛点挖掘偏浅，收尾未明确约定下一步，建议按改进项重录一版。
+      </p>
+    </section>
+
+    <section class="card" aria-labelledby="dimensions-heading">
+      <h2 id="dimensions-heading">维度得分</h2>
+      <div class="score-bar">
+        <div class="score-bar__head">
+          <span class="score-bar__label">表达清晰度</span>
+          <span class="score-bar__value">82</span>
+        </div>
+        <div class="score-bar__track" role="progressbar" aria-valuenow="82" aria-valuemin="0" aria-valuemax="100">
+          <div class="score-bar__fill" style="width: 82%;"></div>
+        </div>
+      </div>
+      <div class="score-bar">
+        <div class="score-bar__head">
+          <span class="score-bar__label">结构完整</span>
+          <span class="score-bar__value">74</span>
+        </div>
+        <div class="score-bar__track" role="progressbar" aria-valuenow="74" aria-valuemin="0" aria-valuemax="100">
+          <div class="score-bar__fill" style="width: 74%;"></div>
+        </div>
+      </div>
+      <div class="score-bar">
+        <div class="score-bar__head">
+          <span class="score-bar__label">客户价值</span>
+          <span class="score-bar__value">80</span>
+        </div>
+        <div class="score-bar__track" role="progressbar" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100">
+          <div class="score-bar__fill" style="width: 80%;"></div>
+        </div>
+      </div>
+      <div class="score-bar">
+        <div class="score-bar__head">
+          <span class="score-bar__label">销售动作</span>
+          <span class="score-bar__value">76</span>
+        </div>
+        <div class="score-bar__track" role="progressbar" aria-valuenow="76" aria-valuemin="0" aria-valuemax="100">
+          <div class="score-bar__fill" style="width: 76%;"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="feedback-heading">
+      <h2 id="feedback-heading">反馈要点</h2>
+      <h3>做得好的地方</h3>
+      <ul class="bullet-list bullet-list--good">
+        <li>开场简洁，点明拜访目的与行业相关性，语气自然。</li>
+        <li>方案段能将「数据流动治理」与客户合规场景挂钩，避免纯功能堆砌。</li>
+        <li>语速适中，关键术语发音清晰，利于转写与复核。</li>
+      </ul>
+      <h3 style="margin-top:1rem;">建议改进</h3>
+      <ul class="bullet-list bullet-list--improve">
+        <li>痛点段缺少追问：可补充「目前跨系统数据审批平均多久」类开放问题。</li>
+        <li>四段结构不完整：收尾未确认下一步（资料/试点/二次会议）。</li>
+        <li>客户价值可再量化：如「缩短审批周期」「降低违规暴露面」等可感知收益。</li>
+      </ul>
+    </section>
+
+    <section class="card" aria-labelledby="transcript-heading">
+      <h2 id="transcript-heading">转写摘录</h2>
+      <div class="transcript-box">
+        <p style="margin:0;">
+          …您好，我是石犀科技的售前顾问小王，今天想和您聊一下贵司在<strong>数据跨域流动</strong>上的合规管控…
+          很多 CIO 会担心审批链路过长，我们这边可以把策略和审计放在统一平台里…
+          <mark>（痛点段略短，未展开追问）</mark>
+          …如果您方便，我可以下周带一份同行业试点案例过来，咱们再约 30 分钟细聊？
+        </p>
+      </div>
+      <p class="muted" style="margin:0.75rem 0 0;">完整转写可在正式产品中展开查看；原型仅展示摘要。</p>
+    </section>
+
+    <section class="card" aria-labelledby="actions-heading">
+      <h2 id="actions-heading">下一步</h2>
+      <div class="cta-stack">
+        <a class="btn btn-primary btn-block" href="audio-practice.html">按建议重录本关</a>
+        <a class="btn btn-outline btn-block" href="path-home.html#unit-3">进入下一关 · 产品问答</a>
+      </div>
+      <div class="teaser" style="margin-top:0.875rem;">
+        <strong>预告 · 客户对练（未开放）</strong>
+        达标后将解锁「CIO 首次拜访」实时语音对练：AI 客户会追问预算、竞品与落地周期。本 MVP 原型仅展示入口预告。
+      </div>
+    </section>
+
+    <footer class="footer-disclaimer">
+      静态 UX 原型 · 维度分、优劣势与通过线均为示意数据。无 alert/confirm，状态均内联展示。
+    </footer>
+  </main>
+</body>
+</html>

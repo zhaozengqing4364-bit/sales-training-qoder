@@ -1,0 +1,816 @@
+[
+  {
+    "series_index": 1,
+    "natural_key": "coo-series-01-q1",
+    "question_type": "single_choice",
+    "title": "S.O.S原则首字母含义",
+    "stem": "陌拜被「抓包」时，S.O.S 原则中第一个 S（Sincere）强调什么？",
+    "reference_answer": "A. 真诚坦白来意",
+    "options": [
+      [
+        "A",
+        "真诚坦白来意"
+      ],
+      [
+        "B",
+        "迅速离开现场"
+      ],
+      [
+        "C",
+        "假装是客户约见"
+      ],
+      [
+        "D",
+        "强调产品最低价"
+      ]
+    ],
+    "correct": "A",
+    "explanation": "Sincere 要求第一时间真诚承认来意，不撒谎。"
+  },
+  {
+    "series_index": 1,
+    "natural_key": "coo-series-01-q2",
+    "question_type": "true_false",
+    "title": "陌拜跟进可谎称已见过负责人",
+    "stem": "陌拜失败后，可以打电话谎称「上次已和你们研发聊过」来争取二次机会。",
+    "reference_answer": "错误",
+    "correct_bool": false,
+    "explanation": "谎言在小公司极易被戳穿，应诚恳说明曾拜访并尊重对方时间。"
+  },
+  {
+    "series_index": 1,
+    "natural_key": "coo-series-01-q3",
+    "question_type": "short_answer",
+    "title": "描述一种破门技巧",
+    "stem": "请简述「破门三板斧」中任意一种技巧，并说明适用场景（30-80字）。",
+    "reference_answer": "示例：前台同理心攻势——用奶茶、书签等小礼物和真诚赞美建立好感，再请前台帮忙引荐；适用于有前台值守的写字楼。"
+  },
+  {
+    "series_index": 1,
+    "natural_key": "coo-series-01-q4",
+    "question_type": "single_choice",
+    "title": "S.O.S中Objective含义",
+    "stem": "S.O.S 原则中 O（Objective）要求销售在陌拜时首先明确什么？",
+    "reference_answer": "B. 本次拜访的具体目标",
+    "options": [
+      ["A", "如何最快签单"],
+      ["B", "本次拜访的具体目标"],
+      ["C", "竞争对手的底价"],
+      ["D", "公司内部考核指标"]
+    ],
+    "correct": "B",
+    "explanation": "Objective 强调带着清晰、可执行的拜访目标，而非盲目推销。"
+  },
+  {
+    "series_index": 1,
+    "natural_key": "coo-series-01-q5",
+    "question_type": "single_choice",
+    "title": "破门三板斧识别",
+    "stem": "以下哪一项不属于「破门三板斧」常见技巧？",
+    "reference_answer": "D. 冒充客户身份混入办公区",
+    "options": [
+      ["A", "前台同理心攻势"],
+      ["B", "制造「偶遇」机会"],
+      ["C", "价值先行留下资料"],
+      ["D", "冒充客户身份混入办公区"]
+    ],
+    "correct": "D",
+    "explanation": "破门技巧建立在真诚与价值输出上，冒充身份违背 S.O.S 原则。"
+  },
+  {
+    "series_index": 1,
+    "natural_key": "coo-series-01-q6",
+    "question_type": "true_false",
+    "title": "陌拜心态：拒绝是常态",
+    "stem": "陌拜过程中被拒绝是常态，销售应把每次拒绝当作练习机会并保持积极心态。",
+    "reference_answer": "正确",
+    "correct_bool": true,
+    "explanation": "正确心态有助于持续改进话术与流程，而非一次失败就放弃。"
+  },
+  {
+    "series_index": 1,
+    "natural_key": "coo-series-01-q7",
+    "question_type": "true_false",
+    "title": "跟进可编造见面事实",
+    "stem": "电话跟进时可以说「上次已和你们技术负责人深聊过」来制造熟悉感，即使并未见面。",
+    "reference_answer": "错误",
+    "correct_bool": false,
+    "explanation": "编造见面事实极易被核实，损害信任，应诚实说明曾拜访并尊重对方时间。"
+  },
+  {
+    "series_index": 1,
+    "natural_key": "coo-series-01-q8",
+    "question_type": "single_choice",
+    "title": "陌拜电话跟进开场",
+    "stem": "陌拜被拒后电话跟进，较合适的开场是？",
+    "reference_answer": "A. 说明来意并确认是否方便占用 1-2 分钟",
+    "options": [
+      ["A", "说明来意并确认是否方便占用 1-2 分钟"],
+      ["B", "直接询问预算和采购时间"],
+      ["C", "强调产品限时折扣"],
+      ["D", "批评对方上次接待不专业"]
+    ],
+    "correct": "A",
+    "explanation": "尊重对方时间、简明说明来意，是诚信跟进的基础。"
+  },
+  {
+    "series_index": 2,
+    "natural_key": "coo-series-02-q1",
+    "question_type": "single_choice",
+    "title": "拜访准备三大支柱",
+    "stem": "系统化拜访准备不包括以下哪一项？",
+    "reference_answer": "D. 竞争对手报价明细",
+    "options": [
+      [
+        "A",
+        "研究公司/行业"
+      ],
+      [
+        "B",
+        "研究拜访对象"
+      ],
+      [
+        "C",
+        "定义本次价值输出"
+      ],
+      [
+        "D",
+        "竞争对手报价明细"
+      ]
+    ],
+    "correct": "D"
+  },
+  {
+    "series_index": 2,
+    "natural_key": "coo-series-02-q2",
+    "question_type": "true_false",
+    "title": "初次拜访重在立印象",
+    "stem": "初次拜访的核心目标是让客户记住你这个人，而不必强求立刻挖出明确商机。",
+    "reference_answer": "正确",
+    "correct_bool": true
+  },
+  {
+    "series_index": 2,
+    "natural_key": "coo-series-02-q3",
+    "question_type": "short_answer",
+    "title": "拜访六步之一",
+    "stem": "客户拜访现场「六步控场法」包含哪六个环节？写出至少三个。",
+    "reference_answer": "开场白、双方介绍、议程说明、方案汇报/讨论、互动问答、总结与下一步。"
+  },
+  {
+    "series_index": 2,
+    "natural_key": "coo-series-02-q4",
+    "question_type": "single_choice",
+    "title": "拜访后复盘重点",
+    "stem": "拜访结束后，复盘记录最应优先写下哪一项？",
+    "reference_answer": "C. 本次达成的共识与明确的下一步",
+    "options": [
+      ["A", "客户办公室装修风格"],
+      ["B", "竞争对手所有报价"],
+      ["C", "本次达成的共识与明确的下一步"],
+      ["D", "个人差旅费用明细"]
+    ],
+    "correct": "C",
+    "explanation": "复盘核心是沉淀可跟进的业务信息，而非无关细节。"
+  },
+  {
+    "series_index": 2,
+    "natural_key": "coo-series-02-q5",
+    "question_type": "true_false",
+    "title": "准备阶段可跳过对象研究",
+    "stem": "若时间紧张，可以跳过对拜访对象背景的研究，直接带标准方案进场。",
+    "reference_answer": "错误",
+    "correct_bool": false,
+    "explanation": "研究拜访对象是三大准备支柱之一，跳过会削弱针对性与信任感。"
+  },
+  {
+    "series_index": 2,
+    "natural_key": "coo-series-02-q6",
+    "question_type": "single_choice",
+    "title": "定义价值输出",
+    "stem": "拜访前「定义本次价值输出」是指？",
+    "reference_answer": "B. 明确客户本次见面能获得的具体收获",
+    "options": [
+      ["A", "准备尽可能多的产品功能清单"],
+      ["B", "明确客户本次见面能获得的具体收获"],
+      ["C", "列出所有可能的折扣方案"],
+      ["D", "背诵公司成立历史"]
+    ],
+    "correct": "B",
+    "explanation": "价值输出应站在客户视角，说明本次交流对客户的意义。"
+  },
+  {
+    "series_index": 3,
+    "natural_key": "coo-series-03-q1",
+    "question_type": "single_choice",
+    "title": "系统化破冰第一步",
+    "stem": "从「不敢敲门」到系统化破冰，首要应建立什么？",
+    "reference_answer": "B. 可重复执行的拜访流程与预案",
+    "options": [
+      [
+        "A",
+        "更多产品资料"
+      ],
+      [
+        "B",
+        "可重复执行的拜访流程与预案"
+      ],
+      [
+        "C",
+        "更低折扣"
+      ],
+      [
+        "D",
+        "更多名片"
+      ]
+    ],
+    "correct": "B"
+  },
+  {
+    "series_index": 3,
+    "natural_key": "coo-series-03-q2",
+    "question_type": "true_false",
+    "title": "破冰只靠话术模板",
+    "stem": "系统化破冰只需要背熟话术模板，不需要区域规划和角色演练。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 3,
+    "natural_key": "coo-series-03-q3",
+    "question_type": "short_answer",
+    "title": "破冰行动清单",
+    "stem": "列出两项你可以在本周执行的「系统化破冰」准备动作。",
+    "reference_answer": "示例：①与搭档演练保安/前台/负责人三种场景；②圈定一个产业园并标记目标客户水牌。"
+  },
+  {
+    "series_index": 3,
+    "natural_key": "coo-series-03-q4",
+    "question_type": "single_choice",
+    "title": "系统化破冰首要建设",
+    "stem": "从「不敢敲门」到「系统化破冰」，销售团队最应先建设什么？",
+    "reference_answer": "A. 可重复执行的拜访流程与场景预案",
+    "options": [
+      ["A", "可重复执行的拜访流程与场景预案"],
+      ["B", "更多产品宣传册"],
+      ["C", "更低的产品报价"],
+      ["D", "更大的名片库存"]
+    ],
+    "correct": "A",
+    "explanation": "系统化靠流程与预案降低不确定性，而非堆物料。"
+  },
+  {
+    "series_index": 3,
+    "natural_key": "coo-series-03-q5",
+    "question_type": "true_false",
+    "title": "区域规划是破冰基础",
+    "stem": "系统化破冰应包含区域规划——圈定目标园区/楼宇并标记潜在客户。",
+    "reference_answer": "正确",
+    "correct_bool": true,
+    "explanation": "有目标的区域规划让破冰行动可衡量、可复盘。"
+  },
+  {
+    "series_index": 3,
+    "natural_key": "coo-series-03-q6",
+    "question_type": "single_choice",
+    "title": "角色演练价值",
+    "stem": "破冰前的角色演练（保安/前台/负责人）主要解决什么问题？",
+    "reference_answer": "C. 降低临场紧张并预演应对话术",
+    "options": [
+      ["A", "替代真实陌拜"],
+      ["B", "背诵全部产品参数"],
+      ["C", "降低临场紧张并预演应对话术"],
+      ["D", "收集竞争对手情报"]
+    ],
+    "correct": "C",
+    "explanation": "演练让销售在真实场景前已有肌肉记忆与备选话术。"
+  },
+  {
+    "series_index": 4,
+    "natural_key": "coo-series-04-q1",
+    "question_type": "single_choice",
+    "title": "客户深度开发关键",
+    "stem": "实战破局与客户深度开发中，最关键的转变是？",
+    "reference_answer": "C. 从单次交易思维转向长期关系与信息积累",
+    "options": [
+      [
+        "A",
+        "增加陌拜数量即可"
+      ],
+      [
+        "B",
+        "只跟进意向最高的客户"
+      ],
+      [
+        "C",
+        "从单次交易思维转向长期关系与信息积累"
+      ],
+      [
+        "D",
+        "减少与客户技术层接触"
+      ]
+    ],
+    "correct": "C"
+  },
+  {
+    "series_index": 4,
+    "natural_key": "coo-series-04-q2",
+    "question_type": "true_false",
+    "title": "深度开发等于频繁打扰",
+    "stem": "客户深度开发就是提高联系频率，不必区分客户阶段与价值。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 4,
+    "natural_key": "coo-series-04-q3",
+    "question_type": "short_answer",
+    "title": "深度开发动作",
+    "stem": "针对已有初步接触但未立项的客户，写出一个「深度开发」下一步动作（含目的）。",
+    "reference_answer": "示例：基于上次交流的技术关注点，整理一份同行业案例摘要并约 20 分钟专题交流。"
+  },
+  {
+    "series_index": 5,
+    "natural_key": "coo-series-05-q1",
+    "question_type": "single_choice",
+    "title": "拜访价值设计核心",
+    "stem": "「谋定而后动」强调拜访前必须明确什么？",
+    "reference_answer": "A. 本次拜访要输出的独特价值点",
+    "options": [
+      [
+        "A",
+        "本次拜访要输出的独特价值点"
+      ],
+      [
+        "B",
+        "竞争对手所有弱点"
+      ],
+      [
+        "C",
+        "合同条款细节"
+      ],
+      [
+        "D",
+        "公司成立年份"
+      ]
+    ],
+    "correct": "A"
+  },
+  {
+    "series_index": 5,
+    "natural_key": "coo-series-05-q2",
+    "question_type": "true_false",
+    "title": "方案讲解可跳过背景",
+    "stem": "向技术/业务负责人做 5 分钟方案讲解时，可以跳过背景与痛点直接进入功能列表。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 5,
+    "natural_key": "coo-series-05-q3",
+    "question_type": "short_answer",
+    "title": "一分钟价值陈述",
+    "stem": "参考主胶片讲解逻辑，用 60 字以内说明：你是谁、解决什么问题、差异化在哪。",
+    "reference_answer": "示例：我们是数据流动治理平台，帮客户自动盘点 API 资产、AI 分类分级并实时监测泄露风险，平台+组件模式比堆设备更灵活。"
+  },
+  {
+    "series_index": 6,
+    "natural_key": "coo-series-06-q1",
+    "question_type": "single_choice",
+    "title": "办公室细节洞察",
+    "stem": "通过办公室细节洞察客户，以下哪项最有业务参考价值？",
+    "reference_answer": "B. 书架/奖杯/合影反映的关注点与关系网",
+    "options": [
+      [
+        "A",
+        "装修风格是否豪华"
+      ],
+      [
+        "B",
+        "书架/奖杯/合影反映的关注点与关系网"
+      ],
+      [
+        "C",
+        "员工数量"
+      ],
+      [
+        "D",
+        "空调品牌"
+      ]
+    ],
+    "correct": "B"
+  },
+  {
+    "series_index": 6,
+    "natural_key": "coo-series-06-q2",
+    "question_type": "true_false",
+    "title": "细节观察可以当面点评",
+    "stem": "观察到客户办公室细节后，应直接当面点评以显示观察力。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 6,
+    "natural_key": "coo-series-06-q3",
+    "question_type": "short_answer",
+    "title": "细节转化为话题",
+    "stem": "若看到客户书架上有大量管理类书籍，你会如何自然引出话题？",
+    "reference_answer": "示例：注意到您关注团队管理，想请教您目前带团队最关注的能力短板，我们再结合案例交流。"
+  },
+  {
+    "series_index": 7,
+    "natural_key": "coo-series-07-q1",
+    "question_type": "single_choice",
+    "title": "以茶入局目的",
+    "stem": "商务场合「以茶入局」的核心目的是什么？",
+    "reference_answer": "C. 营造平等、慢节奏的深度交流氛围",
+    "options": [
+      [
+        "A",
+        "展示茶叶专业知识碾压客户"
+      ],
+      [
+        "B",
+        "用价格体现诚意"
+      ],
+      [
+        "C",
+        "营造平等、慢节奏的深度交流氛围"
+      ],
+      [
+        "D",
+        "替代方案讲解"
+      ]
+    ],
+    "correct": "C"
+  },
+  {
+    "series_index": 7,
+    "natural_key": "coo-series-07-q2",
+    "question_type": "true_false",
+    "title": "茶桌可以一直谈产品",
+    "stem": "茶桌场合应长时间宣讲产品功能，不必留时间给客户表达。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 7,
+    "natural_key": "coo-series-07-q3",
+    "question_type": "short_answer",
+    "title": "茶局破冰话术",
+    "stem": "写一句茶局开场破冰话术（体现尊重与轻松，不急于推销）。",
+    "reference_answer": "示例：今天 mainly 想听听您对这个行业的看法，也带上一点我们最近看到的趋势，您方便慢慢聊。"
+  },
+  {
+    "series_index": 8,
+    "natural_key": "coo-series-08-q1",
+    "question_type": "single_choice",
+    "title": "渠道协作心态",
+    "stem": "渠道生态中「合纵连横」强调销售应？",
+    "reference_answer": "B. 识别伙伴利益点并设计共赢分工",
+    "options": [
+      [
+        "A",
+        "把渠道当单纯进货商"
+      ],
+      [
+        "B",
+        "识别伙伴利益点并设计共赢分工"
+      ],
+      [
+        "C",
+        "避免与渠道分享客户信息"
+      ],
+      [
+        "D",
+        "只争取独家代理"
+      ]
+    ],
+    "correct": "B"
+  },
+  {
+    "series_index": 8,
+    "natural_key": "coo-series-08-q2",
+    "question_type": "true_false",
+    "title": "渠道等于竞争对手",
+    "stem": "所有渠道伙伴都应被视为潜在竞争对手，不宜共享市场信息。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 8,
+    "natural_key": "coo-series-08-q3",
+    "question_type": "short_answer",
+    "title": "渠道共赢设计",
+    "stem": "设计一个与渠道伙伴的「共赢分工」示例（各方职责各一句）。",
+    "reference_answer": "示例：渠道负责区域客户关系与立项推动；我方负责方案、交付与售后；共同分享行业案例与线索反馈。"
+  },
+  {
+    "series_index": 9,
+    "natural_key": "coo-series-09-q1",
+    "question_type": "single_choice",
+    "title": "微信跟进第一步",
+    "stem": "大客户微信跟进 7 步法中，收到「不需要」后首先应？",
+    "reference_answer": "A. 确认并尊重拒绝，再寻找可继续对话的切入点",
+    "options": [
+      [
+        "A",
+        "确认并尊重拒绝，再寻找可继续对话的切入点"
+      ],
+      [
+        "B",
+        "连续发送产品长文"
+      ],
+      [
+        "C",
+        "频繁语音呼叫"
+      ],
+      [
+        "D",
+        "指责客户不了解市场"
+      ]
+    ],
+    "correct": "A"
+  },
+  {
+    "series_index": 9,
+    "natural_key": "coo-series-09-q2",
+    "question_type": "true_false",
+    "title": "微信跟进可只发广告",
+    "stem": "微信跟进可以只转发公司宣传链接，不必个性化价值信息。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 9,
+    "natural_key": "coo-series-09-q3",
+    "question_type": "short_answer",
+    "title": "微信约见面",
+    "stem": "客户微信回复「暂时不需要」，写一条争取约见面的跟进消息（80字内）。",
+    "reference_answer": "示例：理解您目前不急，我整理一份同行业如何降低数据合规风险的短案例，下周能否占用您 15 分钟当面交流？"
+  },
+  {
+    "series_index": 10,
+    "natural_key": "coo-series-10-q1",
+    "question_type": "single_choice",
+    "title": "首次技术交流避坑",
+    "stem": "销售首次与技术负责人交流时，最应避免的误区是？",
+    "reference_answer": "D. 未确认需求就堆砌功能细节",
+    "options": [
+      [
+        "A",
+        "提前了解对方技术背景"
+      ],
+      [
+        "B",
+        "准备同行业案例"
+      ],
+      [
+        "C",
+        "明确会议议程"
+      ],
+      [
+        "D",
+        "未确认需求就堆砌功能细节"
+      ]
+    ],
+    "correct": "D"
+  },
+  {
+    "series_index": 10,
+    "natural_key": "coo-series-10-q2",
+    "question_type": "true_false",
+    "title": "技术交流销售应主导细节",
+    "stem": "首次技术交流中，销售应代替售前讲清所有架构细节，不必控场。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 10,
+    "natural_key": "coo-series-10-q3",
+    "question_type": "short_answer",
+    "title": "技术交流开场",
+    "stem": "写一段首次与技术负责人开场的 40 字话术（说明目的+确认议题）。",
+    "reference_answer": "示例：今天想先了解贵司数据资产与流动治理现状，再针对性分享同类客户的落地路径，占用您约 30 分钟可以吗？"
+  },
+  {
+    "series_index": 11,
+    "natural_key": "coo-series-11-q1",
+    "question_type": "single_choice",
+    "title": "技术负责人见你的驱动力",
+    "stem": "解锁技术负责人「愿意见你」的三大驱动力通常不包括？",
+    "reference_answer": "D. 承诺最低折扣",
+    "options": [
+      [
+        "A",
+        "专业可信度"
+      ],
+      [
+        "B",
+        "问题相关性"
+      ],
+      [
+        "C",
+        "低风险的交流设计"
+      ],
+      [
+        "D",
+        "承诺最低折扣"
+      ]
+    ],
+    "correct": "D"
+  },
+  {
+    "series_index": 11,
+    "natural_key": "coo-series-11-q2",
+    "question_type": "true_false",
+    "title": "只见老板即可",
+    "stem": "只要老板同意，就不必争取与技术负责人建立单独沟通。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 11,
+    "natural_key": "coo-series-11-q3",
+    "question_type": "short_answer",
+    "title": "约见技术负责人",
+    "stem": "写一条争取与技术负责人 30 分钟交流的邀约理由（强调对其问题的价值）。",
+    "reference_answer": "示例：了解到贵司在 API 资产梳理上有痛点，我们可提供旁路扫描的零侵入评估思路，想与您的团队快速对齐可行性。"
+  },
+  {
+    "series_index": 12,
+    "natural_key": "coo-series-12-q1",
+    "question_type": "single_choice",
+    "title": "拜访后跟进时机",
+    "stem": "拜访后跟进的关键策略中，「黄金窗口」通常指？",
+    "reference_answer": "B. 客户记忆仍清晰时的 24-72 小时",
+    "options": [
+      [
+        "A",
+        "一个月后"
+      ],
+      [
+        "B",
+        "客户记忆仍清晰时的 24-72 小时"
+      ],
+      [
+        "C",
+        "财年结束前"
+      ],
+      [
+        "D",
+        "竞争对手报价后"
+      ]
+    ],
+    "correct": "B"
+  },
+  {
+    "series_index": 12,
+    "natural_key": "coo-series-12-q2",
+    "question_type": "true_false",
+    "title": "跟进只需发感谢信",
+    "stem": "拜访后跟进只需发一封感谢邮件，不必复述共识与明确下一步。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 12,
+    "natural_key": "coo-series-12-q3",
+    "question_type": "short_answer",
+    "title": "跟进邮件结构",
+    "stem": "列出拜访后跟进邮件/消息应包含的三个要素。",
+    "reference_answer": "复述本次共识、明确下一步动作与参与人、给出可验证的小范围试点或资料。"
+  },
+  {
+    "series_index": 13,
+    "natural_key": "coo-series-13-q1",
+    "question_type": "single_choice",
+    "title": "结构化表达框架",
+    "stem": "结构化表达常用 PREP 中 P 代表？",
+    "reference_answer": "A. Point 观点先行",
+    "options": [
+      [
+        "A",
+        "Point 观点先行"
+      ],
+      [
+        "B",
+        "Price 价格"
+      ],
+      [
+        "C",
+        "Product 产品"
+      ],
+      [
+        "D",
+        "Process 流程"
+      ]
+    ],
+    "correct": "A"
+  },
+  {
+    "series_index": 13,
+    "natural_key": "coo-series-13-q2",
+    "question_type": "true_false",
+    "title": "信息越多越好",
+    "stem": "面对客户时提供越多信息越能体现专业，不必控制层次。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 13,
+    "natural_key": "coo-series-13-q3",
+    "question_type": "short_answer",
+    "title": "PREP示例",
+    "stem": "用 PREP 结构写 60 字以内回答：「为什么现在要做数据分类分级？」",
+    "reference_answer": "观点：合规与风险双驱动；理由：等保与行业检查趋严；例证：同行被通报案例；结论：建议先小范围盘点。"
+  },
+  {
+    "series_index": 14,
+    "natural_key": "coo-series-14-q1",
+    "question_type": "single_choice",
+    "title": "销售售前协同",
+    "stem": "销售与售前高效协同时，销售在方案汇报环节的核心职责是？",
+    "reference_answer": "C. 察言观色、控场并衔接客户关注点",
+    "options": [
+      [
+        "A",
+        "代替售前讲所有技术细节"
+      ],
+      [
+        "B",
+        "只负责订会议室"
+      ],
+      [
+        "C",
+        "察言观色、控场并衔接客户关注点"
+      ],
+      [
+        "D",
+        "当场承诺交付周期"
+      ]
+    ],
+    "correct": "C"
+  },
+  {
+    "series_index": 14,
+    "natural_key": "coo-series-14-q2",
+    "question_type": "true_false",
+    "title": "售前可不参与拜访",
+    "stem": "有了优秀售前，销售不必参与需求澄清与现场控场。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 14,
+    "natural_key": "coo-series-14-q3",
+    "question_type": "short_answer",
+    "title": "协同分工",
+    "stem": "写出一项拜访前销售与售前必须对齐的内容。",
+    "reference_answer": "示例：明确本次客户最关注的 1-2 个业务问题、我方核心观点、各自发言分工与不可过度承诺的边界。"
+  },
+  {
+    "series_index": 15,
+    "natural_key": "coo-series-15-q1",
+    "question_type": "single_choice",
+    "title": "报价前必备",
+    "stem": "高效报价与选型前，必须先确认什么？",
+    "reference_answer": "B. 需求范围、部署模式与验收标准",
+    "options": [
+      [
+        "A",
+        "客户个人喜好"
+      ],
+      [
+        "B",
+        "需求范围、部署模式与验收标准"
+      ],
+      [
+        "C",
+        "竞争对手底价"
+      ],
+      [
+        "D",
+        "公司财年"
+      ]
+    ],
+    "correct": "B"
+  },
+  {
+    "series_index": 15,
+    "natural_key": "coo-series-15-q2",
+    "question_type": "true_false",
+    "title": "越早报价越好",
+    "stem": "客户尚未确认需求范围时，应尽早给出详细报价以锁定客户。",
+    "reference_answer": "错误",
+    "correct_bool": false
+  },
+  {
+    "series_index": 15,
+    "natural_key": "coo-series-15-q3",
+    "question_type": "short_answer",
+    "title": "报价沟通原则",
+    "stem": "当客户催促报价但需求未澄清时，你如何回应？（40-80字）",
+    "reference_answer": "示例：理解您需要预算参考，建议先用 30 分钟对齐范围与部署模式，我们再给分阶段报价，避免后续变更成本。"
+  }
+]

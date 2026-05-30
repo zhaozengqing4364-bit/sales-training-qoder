@@ -385,6 +385,9 @@ paths:
           content:
             application/json:
               schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PageResponse'
                 title: Response Get Presentation Pages Api V1 Presentations  Presentation
                   Id  Pages Get
         '422':
@@ -756,6 +759,53 @@ paths:
             application/json:
               schema:
                 title: Response End Session Api V1 Practice Sessions  Session Id  Delete
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/practice/sessions/{session_id}/runtime-preflight:
+    get:
+      tags:
+      - practice
+      summary: Get Session Runtime Preflight
+      description: Check whether a session can open its runtime WebSocket before connecting.
+      operationId: get_session_runtime_preflight_api_v1_practice_sessions__session_id__runtime_preflight_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: persist_lifecycle
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: When true, persist runnable/failed lifecycle from this check.
+          default: false
+          title: Persist Lifecycle
+        description: When true, persist runnable/failed lifecycle from this check.
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Get Session Runtime Preflight Api V1 Practice Sessions  Session
+                  Id  Runtime Preflight Get
         '422':
           description: Validation Error
           content:
@@ -10924,6 +10974,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}/template-references:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Examiner Agent Template References
+      operationId: get_examiner_agent_template_references_api_v1_admin_curriculum_practice_examiner_agents__examiner_agent_id__template_references_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: examiner_agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Examiner Agent Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}/duplicate:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Duplicate Examiner Agent
+      operationId: duplicate_examiner_agent_api_v1_admin_curriculum_practice_examiner_agents__examiner_agent_id__duplicate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: examiner_agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Examiner Agent Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}/unpublish:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Unpublish Examiner Agent
+      operationId: unpublish_examiner_agent_api_v1_admin_curriculum_practice_examiner_agents__examiner_agent_id__unpublish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: examiner_agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Examiner Agent Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/UnpublishAcknowledgeRequest'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}/simulate:
     post:
       tags:
@@ -11073,6 +11239,42 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PracticeTemplateUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/templates/{template_id}/runtime-dossier-preview:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Practice Template Runtime Dossier Preview
+      operationId: get_practice_template_runtime_dossier_preview_api_v1_admin_curriculum_practice_templates__template_id__runtime_dossier_preview_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
       responses:
         '200':
           description: Successful Response
@@ -11389,6 +11591,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/case-items/{case_item_id}/template-references:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Case Item Template References
+      operationId: get_case_item_template_references_api_v1_admin_curriculum_practice_case_items__case_item_id__template_references_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: case_item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Item Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/case-items/{case_item_id}/duplicate:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Duplicate Case Item
+      operationId: duplicate_case_item_api_v1_admin_curriculum_practice_case_items__case_item_id__duplicate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: case_item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Item Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/case-items/{case_item_id}/unpublish:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Unpublish Case Item
+      operationId: unpublish_case_item_api_v1_admin_curriculum_practice_case_items__case_item_id__unpublish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: case_item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Item Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/UnpublishAcknowledgeRequest'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/admin/curriculum-practice/role-profiles:
     get:
       tags:
@@ -11651,6 +11969,122 @@ paths:
           - type: string
           - type: 'null'
           title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/role-profiles/{role_profile_id}/template-references:
+    get:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Get Role Profile Template References
+      operationId: get_role_profile_template_references_api_v1_admin_curriculum_practice_role_profiles__role_profile_id__template_references_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: role_profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Role Profile Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/role-profiles/{role_profile_id}/duplicate:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Duplicate Role Profile
+      operationId: duplicate_role_profile_api_v1_admin_curriculum_practice_role_profiles__role_profile_id__duplicate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: role_profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Role Profile Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/curriculum-practice/role-profiles/{role_profile_id}/unpublish:
+    post:
+      tags:
+      - admin-curriculum-practice
+      - admin-curriculum-practice
+      summary: Unpublish Role Profile
+      operationId: unpublish_role_profile_api_v1_admin_curriculum_practice_role_profiles__role_profile_id__unpublish_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: role_profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Role Profile Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/UnpublishAcknowledgeRequest'
+              - type: 'null'
+              title: Payload
       responses:
         '200':
           description: Successful Response
@@ -12848,6 +13282,42 @@ paths:
         schema:
           type: string
           title: Content Id
+      - name: app_session
+        in: cookie
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/curriculum-practice/study/exam-sessions/{session_id}/report:
+    get:
+      tags:
+      - curriculum-practice-study
+      - curriculum-practice-study
+      summary: Get My Exam Session Report
+      operationId: get_my_exam_session_report_api_v1_curriculum_practice_study_exam_sessions__session_id__report_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
       - name: app_session
         in: cookie
         required: false
@@ -24620,6 +25090,43 @@ components:
       - weight
       title: ScoringDimensionRule
       description: Configurable scoring dimension inside a ruleset definition.
+    ScoringHiddenInformationCoverageRule:
+      properties:
+        key:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Key
+        name:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Name
+        expected_trigger:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Expected Trigger
+        evidence:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Evidence
+        dimension:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Dimension
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      title: ScoringHiddenInformationCoverageRule
+      description: Roleplay-specific hidden information coverage criteria.
     ScoringMinimumEvidence:
       properties:
         min_messages:
@@ -24704,6 +25211,36 @@ components:
             type: string
           type: object
           title: Not Evaluable Reasons
+        passing_score:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: 'null'
+          title: Passing Score
+        rubric:
+          anyOf:
+          - type: string
+            maxLength: 3000
+          - type: 'null'
+          title: Rubric
+        hidden_information_coverage:
+          items:
+            $ref: '#/components/schemas/ScoringHiddenInformationCoverageRule'
+          type: array
+          title: Hidden Information Coverage
+        deductions:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Deductions
+        roleplay_contract_version:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Roleplay Contract Version
       additionalProperties: false
       type: object
       required:
@@ -25834,6 +26371,15 @@ components:
       additionalProperties: false
       type: object
       title: TrainingTaskUpdate
+    UnpublishAcknowledgeRequest:
+      properties:
+        acknowledge:
+          type: boolean
+          title: Acknowledge
+          default: false
+      additionalProperties: false
+      type: object
+      title: UnpublishAcknowledgeRequest
     UpdateAgentPersonaRequest:
       properties:
         display_order:

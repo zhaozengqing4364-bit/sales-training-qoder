@@ -35,6 +35,40 @@ def test_validate_accepts_valid_profile() -> None:
     assert profile.validate() is True
 
 
+def test_compile_instructions_includes_role_anchor_segment() -> None:
+    profile = _valid_profile(
+        role_anchor_text="【角色锚】\n你是采购负责人，这是你们首次正式见面。"
+    )
+
+    merged = profile.compile_instructions(
+        grounding_context="用户问题：交付周期",
+        roleplay_turn_instruction="【角色扮演轮次】可见字段：industry",
+    )
+
+    assert "保持销售训练角色。" in merged
+    assert "用户问题：交付周期" in merged
+    assert "【角色锚】" in merged
+    assert "【角色扮演轮次】" in merged
+
+
+def test_from_policy_snapshot_reads_role_anchor_text() -> None:
+    snapshot = {
+        "voice_mode": "stepfun_realtime",
+        "model_name": "step-audio-2",
+        "voice_name": "qingchunshaonv",
+        "temperature": 0.7,
+        "instructions": "保持销售训练角色。",
+        "instruction_contract_hash": "hash-abc",
+        "role_anchor_text": "【角色锚】\n底线约束。",
+        "knowledge_base_ids": [],
+        "tool_policy": {},
+    }
+
+    profile = VoiceRuntimeProfile.from_policy_snapshot(snapshot)
+
+    assert profile.role_anchor_text == "【角色锚】\n底线约束。"
+
+
 def test_from_policy_snapshot_parses_all_fields() -> None:
     snapshot = {
         "voice_mode": "stepfun_realtime",

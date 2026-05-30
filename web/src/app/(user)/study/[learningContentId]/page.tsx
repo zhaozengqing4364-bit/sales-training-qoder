@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, RefreshCcw } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
@@ -10,6 +10,8 @@ import {
     ensureExamReturnToStudy,
     examHrefForSession,
 } from "@/lib/exam-session-storage";
+import { CooChapterReaderTerminal } from "@/components/sales-trainer/coo-chapter-reader";
+import { isCooLearningContentId } from "@/lib/sales-trainer/coo-learn-navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -58,9 +60,29 @@ function ChapterSidebar({
     );
 }
 
+function resolveChapterIdFromParam(
+    chapters: LearningChapter[],
+    chapterParam: string | null,
+): string | null {
+    if (!chapterParam) {
+        return null;
+    }
+    const orderIndex = Number(chapterParam);
+    if (!Number.isFinite(orderIndex) || orderIndex < 1) {
+        return null;
+    }
+    const sorted = [...chapters].sort((left, right) => left.order_index - right.order_index);
+    const byOrderIndex = sorted.find((chapter) => chapter.order_index === orderIndex);
+    if (byOrderIndex) {
+        return byOrderIndex.chapter_id;
+    }
+    return sorted[orderIndex - 1]?.chapter_id ?? null;
+}
+
 export default function StudyPage() {
     const { learningContentId } = useParams<{ learningContentId: string }>();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [content, setContent] = useState<LearnerStudyContent | null>(null);
     const [progress, setProgress] = useState<LearnerStudyProgress | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -99,8 +121,15 @@ export default function StudyPage() {
             const data = await api.learnerStudy.getContent(learningContentId);
             setContent(data);
             setProgress(data.progress);
-            if (data.chapters.length > 0 && !selectedChapterId) {
-                setSelectedChapterId(data.chapters.sort((a, b) => a.order_index - b.order_index)[0].chapter_id);
+            if (data.chapters.length > 0) {
+                const chapterFromParam = resolveChapterIdFromParam(
+                    data.chapters,
+                    searchParams.get("chapter"),
+                );
+                const defaultChapterId = [...data.chapters]
+                    .sort((left, right) => left.order_index - right.order_index)[0]
+                    .chapter_id;
+                setSelectedChapterId(chapterFromParam ?? defaultChapterId);
             }
         } catch (err) {
             setError(getApiErrorMessage(err));
@@ -109,11 +138,27 @@ export default function StudyPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [learningContentId, selectedChapterId]);
+    }, [learningContentId, searchParams]);
 
     useEffect(() => {
+        if (isCooLearningContentId(learningContentId)) {
+            return;
+        }
         void loadContent();
-    }, [learningContentId]);
+    }, [loadContent, learningContentId]);
+
+    useEffect(() => {
+        if (!content?.chapters.length) {
+            return;
+        }
+        const chapterFromParam = resolveChapterIdFromParam(
+            content.chapters,
+            searchParams.get("chapter"),
+        );
+        if (chapterFromParam) {
+            setSelectedChapterId(chapterFromParam);
+        }
+    }, [content, searchParams]);
 
     const handleCompleteChapter = async (chapterId: string) => {
         setCompletingId(chapterId);
@@ -141,6 +186,15 @@ export default function StudyPage() {
             setIsStartingExam(false);
         }
     };
+
+    if (isCooLearningContentId(learningContentId)) {
+        return (
+            <CooChapterReaderTerminal
+                title="请从销售训练路径进入"
+                message="COO 系列章节需在销售训练闯关路径中按关卡阅读，不支持在此自由浏览全部章节。"
+            />
+        );
+    }
 
     if (isLoading) {
         return (

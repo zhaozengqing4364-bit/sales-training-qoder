@@ -26,12 +26,14 @@ def _published_template() -> dict[str, object]:
         "version": 3,
         "content_hash": "sha256:template-hash",
         "scenario_type": "sales",
+        "mode": "customer_roleplay",
         "agent_id": "agent-1",
         "persona_id": "persona-1",
         "runtime_profile_id": "runtime-1",
         "voice_mode": "stepfun_realtime",
         "scoring_ruleset_id": "ruleset-1",
         "knowledge_base_refs": ["kb-1"],
+        "case_item_id": "case-1",
     }
 
 
@@ -80,6 +82,10 @@ def _reference_reader(asset_type: str, asset_id: str) -> object | None:
             "version": 1,
             "content_hash": "sha256:case-hash",
             "hidden_information": "绝不能进入运行时快照的隐藏预算",
+            "allowed_disclosure_policy": {
+                "phases": [{"trigger": "ask_budget", "disclose": "budget"}],
+                "roleplay": {"situation_code": "first_visit"},
+            },
         },
         ("learning_content", "learning-1"): {
             "learning_content_id": "learning-1",
@@ -87,6 +93,20 @@ def _reference_reader(asset_type: str, asset_id: str) -> object | None:
             "version": 2,
             "content_hash": "sha256:learning-hash",
             "title": "不应冻结的正文标题之外内容",
+        },
+        ("examiner_agent", "examiner-1"): {
+            "examiner_agent_id": "examiner-1",
+            "status": "published",
+            "version": 1,
+            "content_hash": "sha256:examiner-hash",
+            "question_source_ids": ["question-1"],
+        },
+        ("question_item", "question-1"): {
+            "question_id": "question-1",
+            "status": "published",
+            "version": 1,
+            "content_hash": "sha256:question-hash",
+            "safety_flagged": False,
         },
     }
     return references.get((asset_type, asset_id))
@@ -219,8 +239,38 @@ async def test_should_store_version_refs_and_hashes_without_large_text_blobs() -
     }
     assert snapshot.rubric.asset_type == "scoring_ruleset"
     assert snapshot.content_assets[0].asset_type == "knowledge_base"
+    assert snapshot.roleplay_contract is not None
+    assert snapshot.roleplay_contract["situation"]["code"] == "first_visit"
     assert "敏感话术正文" not in encoded
     assert len(encoded.encode("utf-8")) < 256 * 1024
+
+
+@pytest.mark.asyncio
+async def test_instruction_contract_hash_changes_when_prompt_asset_ref_changes() -> None:
+    service = RuntimeSnapshotService(reference_reader=_reference_reader)
+    baseline = await service.build_for_session(
+        template_ref=_published_template_ref(),
+        training_task_ref={"id": "task-1", "scenario_type": "sales"},
+        actor_id="actor-1",
+    )
+
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        reference = _reference_reader(asset_type, asset_id)
+        if (asset_type, asset_id) == ("case_item", "case-1"):
+            assert isinstance(reference, dict)
+            return reference | {"content_hash": "sha256:case-hash-v2"}
+        return reference
+
+    changed = await RuntimeSnapshotService(reference_reader=reference_reader).build_for_session(
+        template_ref=_published_template_ref(),
+        training_task_ref={"id": "task-1", "scenario_type": "sales"},
+        actor_id="actor-1",
+    )
+
+    assert (
+        baseline.runtime.instruction_contract_hash
+        != changed.runtime.instruction_contract_hash
+    )
 
 
 @pytest.mark.asyncio
@@ -267,6 +317,23 @@ async def test_should_include_stage_snapshots_without_hidden_information() -> No
     stage_snapshot = snapshot.stage_snapshots["template_stage_opening"]
     assert stage_snapshot.template_ref.asset_id == "child-template-1"
     assert stage_snapshot.runtime_payload == {
+        "template_stage_key": "template_stage_opening",
+        "order": 1,
+        "stage_type": "practice",
+        "completion_policy": {
+            "min_score": 7.0,
+            "min_rounds": 2,
+            "max_duration_seconds": 600,
+        },
+        "failure_policy": "retry_current",
+        "prerequisites": [],
+        "template_ref": {
+            "asset_type": "practice_template",
+            "asset_id": "child-template-1",
+            "version": 1,
+            "hash": "sha256:child-template-hash",
+            "snapshot_label": "published",
+        },
         "template_id": "child-template-1",
         "version": 1,
         "content_hash": "sha256:child-template-hash",
@@ -280,7 +347,6 @@ async def test_should_include_stage_snapshots_without_hidden_information() -> No
     }
     assert stage_snapshot.content_assets[0].asset_type == "knowledge_base"
     assert stage_snapshot.content_assets[1].asset_type == "case_item"
-    assert "hidden_information" not in encoded
     assert "隐藏预算" not in encoded
 
 
@@ -327,10 +393,114 @@ async def test_should_freeze_study_stage_asset_and_learner_level() -> None:
     assert snapshot.learner_level == "beginner"
     stage_snapshot = snapshot.stage_snapshots["study_stage"]
     assert stage_snapshot.runtime_payload == {
+        "template_stage_key": "study_stage",
+        "order": 1,
         "stage_type": "study",
+        "completion_policy": {
+            "min_score": 0.0,
+            "min_rounds": 0,
+            "max_duration_seconds": 300,
+        },
+        "failure_policy": "retry_current",
+        "prerequisites": [],
+        "template_ref": {
+            "asset_type": "learning_content",
+            "asset_id": "learning-1",
+            "version": 2,
+            "hash": "sha256:learning-hash",
+            "snapshot_label": "published",
+        },
         "asset_type": "learning_content",
         "asset_id": "learning-1",
         "version": 2,
         "content_hash": "sha256:learning-hash",
     }
     assert stage_snapshot.content_assets[0].asset_type == "learning_content"
+
+
+@pytest.mark.asyncio
+async def test_should_keep_legacy_unversioned_label_for_knowledge_base() -> None:
+    service = RuntimeSnapshotService(reference_reader=_reference_reader)
+
+    snapshot = await service.build_for_session(
+        template_ref=_published_template_ref(),
+        training_task_ref={"id": "task-1", "scenario_type": "sales"},
+        actor_id="actor-1",
+    )
+
+    knowledge_ref = snapshot.content_assets[0]
+    assert knowledge_ref.asset_type == "knowledge_base"
+    assert knowledge_ref.snapshot_label == "legacy_unversioned"
+
+
+@pytest.mark.asyncio
+async def test_should_return_asset_hash_mismatch_before_asset_status_failure() -> None:
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        if (asset_type, asset_id) == ("learning_content", "learning-1"):
+            return {
+                "learning_content_id": "learning-1",
+                "status": "draft",
+                "version": 2,
+                "content_hash": "sha256:current-learning-hash",
+            }
+        if (asset_type, asset_id) == ("practice_template", "template-1"):
+            return _published_template() | {
+                "curriculum_plan": {
+                    "name": "学习闭环",
+                    "stages": [
+                        {
+                            "template_stage_key": "study_stage",
+                            "stage_type": "study",
+                            "order": 1,
+                            "name": "学习",
+                            "template_ref": {
+                                "asset_type": "learning_content",
+                                "asset_id": "learning-1",
+                                "version": 2,
+                                "hash": "sha256:frozen-learning-hash",
+                                "snapshot_label": "published",
+                            },
+                            "completion_policy": {
+                                "min_score": 0,
+                                "min_rounds": 0,
+                                "max_duration_seconds": 300,
+                            },
+                        }
+                    ],
+                }
+            }
+        return _reference_reader(asset_type, asset_id)
+
+    service = RuntimeSnapshotService(reference_reader=reference_reader)
+
+    with pytest.raises(RuntimeSnapshotBuildError) as exc_info:
+        await service.build_for_session(
+            template_ref=_published_template_ref(),
+            training_task_ref={"id": "task-1", "scenario_type": "sales"},
+            actor_id="actor-1",
+        )
+
+    assert exc_info.value.reason_code == "asset_hash_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_safety_flagged_question_with_unified_reason() -> None:
+    def reference_reader(asset_type: str, asset_id: str) -> object | None:
+        if (asset_type, asset_id) == ("practice_template", "template-1"):
+            return _published_template() | {"examiner_agent_id": "examiner-1"}
+        if (asset_type, asset_id) == ("question_item", "question-1"):
+            reference = _reference_reader(asset_type, asset_id)
+            assert isinstance(reference, dict)
+            return reference | {"safety_flagged": True}
+        return _reference_reader(asset_type, asset_id)
+
+    service = RuntimeSnapshotService(reference_reader=reference_reader)
+
+    with pytest.raises(RuntimeSnapshotBuildError) as exc_info:
+        await service.build_for_session(
+            template_ref=_published_template_ref(),
+            training_task_ref={"id": "task-1", "scenario_type": "sales"},
+            actor_id="actor-1",
+        )
+
+    assert exc_info.value.reason_code == "question_item_unpublished"

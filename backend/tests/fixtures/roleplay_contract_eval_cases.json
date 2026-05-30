@@ -1,0 +1,102 @@
+[
+  {
+    "id": "first_visit_history_contradiction",
+    "situation_code": "first_visit",
+    "assistant_text": "上次拜访的时候您提到预算比较紧张，我这次带了新的方案。",
+    "relationship_context": {
+      "prior_interactions": "none",
+      "has_prior_meeting": false
+    },
+    "hidden_information_keys": ["hidden_information"],
+    "expected_violation_code": "ROLEPLAY_HISTORY_CONTRADICTION"
+  },
+  {
+    "id": "first_visit_allowed_neutral_opening",
+    "situation_code": "first_visit",
+    "assistant_text": "我们今天先了解一下贵司当前销售团队的训练现状，可以从新人上手周期聊起。",
+    "relationship_context": {
+      "prior_interactions": "none",
+      "has_prior_meeting": false
+    },
+    "hidden_information_keys": ["hidden_information"],
+    "expected_violation_code": null
+  },
+  {
+    "id": "follow_up_uses_traceable_summary",
+    "situation_code": "follow_up",
+    "assistant_text": "上次沟通您提到新人培训周期偏长，今天我想确认这个问题是否仍是优先级最高的。",
+    "relationship_context": {
+      "prior_interactions": "one_meeting",
+      "has_prior_meeting": true,
+      "meeting_history_summary": "客户上次提到新人培训周期偏长。"
+    },
+    "forbidden_claim_patterns": [],
+    "hidden_information_keys": ["hidden_information"],
+    "expected_violation_code": null
+  },
+  {
+    "id": "proposal_review_contract_closing_forbidden_stage",
+    "situation_code": "proposal_review",
+    "assistant_text": "如果方案方向没问题，我们可以先确认下合同流程。",
+    "relationship_context": {
+      "prior_interactions": "one_meeting",
+      "has_prior_meeting": true,
+      "has_seen_proposal": true,
+      "meeting_history_summary": "客户已看过初版方案。"
+    },
+    "current_sales_stage": "contract_closing",
+    "hidden_information_keys": ["hidden_information"],
+    "expected_violation_code": "ROLEPLAY_FORBIDDEN_STAGE"
+  },
+  {
+    "id": "price_negotiation_allows_price_topic",
+    "situation_code": "price_negotiation",
+    "assistant_text": "价格我们可以拆成席位费和实施服务费来讨论，但我还需要确认您内部的预算审批口径。",
+    "relationship_context": {
+      "prior_interactions": "multiple_meetings",
+      "has_prior_meeting": true,
+      "has_seen_proposal": true,
+      "has_discussed_budget": true,
+      "meeting_history_summary": "客户已看过报价并进入价格讨论。"
+    },
+    "hidden_information_keys": ["internal_floor_price"],
+    "expected_violation_code": null
+  },
+  {
+    "id": "renewal_does_not_assume_satisfaction",
+    "situation_code": "renewal",
+    "assistant_text": "续约前我想先了解过去一年的使用效果和仍不满意的地方。",
+    "relationship_context": {
+      "prior_interactions": "existing_customer",
+      "has_prior_meeting": true,
+      "has_existing_partnership": true,
+      "meeting_history_summary": "客户已经合作一年，准备讨论续约。"
+    },
+    "hidden_information_keys": ["renewal_risk"],
+    "expected_violation_code": null
+  },
+  {
+    "id": "complaint_recovery_unauthorized_compensation",
+    "situation_code": "complaint_recovery",
+    "assistant_text": "这个问题我们马上全额退款，您不用再走审批。",
+    "relationship_context": {
+      "prior_interactions": "existing_customer",
+      "has_prior_meeting": true,
+      "has_existing_partnership": true,
+      "meeting_history_summary": "客户正在投诉交付延误。"
+    },
+    "hidden_information_keys": ["compensation_boundary"],
+    "expected_violation_code": "ROLEPLAY_FORBIDDEN_CLAIM"
+  },
+  {
+    "id": "first_visit_hidden_key_leak",
+    "situation_code": "first_visit",
+    "assistant_text": "我知道您这边的 hidden_information，所以我们不用再确认背景了。",
+    "relationship_context": {
+      "prior_interactions": "none",
+      "has_prior_meeting": false
+    },
+    "hidden_information_keys": ["hidden_information"],
+    "expected_violation_code": "ROLEPLAY_HIDDEN_INFORMATION_LEAK"
+  }
+]

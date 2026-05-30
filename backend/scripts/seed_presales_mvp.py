@@ -1386,11 +1386,27 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only verify expected seed records; do not create or update data",
     )
+    parser.add_argument(
+        "--legacy-seed-unsafe",
+        action="store_true",
+        help="Run deprecated direct DB seed path. Prefer Config Asset Import API.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if not args.legacy_seed_unsafe:
+        sys.stdout.write(json.dumps({
+            "ok": False,
+            "deprecated": True,
+            "message": (
+                "seed_presales_mvp.py is deprecated. Use the Config Asset Center "
+                "Import API with backend/config-assets/presales-cio-first-visit.export.json. "
+                "Pass --legacy-seed-unsafe only for local emergency repair."
+            ),
+        }, ensure_ascii=False, sort_keys=True) + "\n")
+        raise SystemExit(2)
     exit_code, summary = asyncio.run(run(verify_only=bool(args.verify_only)))
     sys.stdout.write(json.dumps(summary, ensure_ascii=False, sort_keys=True) + "\n")
     raise SystemExit(exit_code)

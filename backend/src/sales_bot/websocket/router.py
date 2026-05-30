@@ -23,6 +23,11 @@ from common.monitoring.trace_context import normalize_trace_id
 from common.services.session_runtime_lifecycle_hooks import (
     mark_session_runtime_failed,
 )
+from common.services.runtime_gate import (
+    RuntimeAdmissionDecision,
+    RuntimeGate,
+    runtime_admission_failure,
+)
 from common.websocket.session_manager import get_session_manager
 from training_runtime import TrainingRuntimeDescriptor, dispatch_scenario_plugin
 
@@ -32,17 +37,10 @@ router = APIRouter()
 
 # M020/S01/T01 current sales websocket auth posture.
 # This is an explicit inventory of the shipped behavior before T02 tightens the authority line.
-SALES_WS_AUTH_POLICY: dict[str, list[str] | dict[str, int] | str] = {
+SALES_WS_AUTH_POLICY: dict[str, list[str] | str] = {
     "formal": ["authorization_bearer", "session_cookie"],
     "compatibility": ["query_token"],
     "current_resolution_order": "authorization_header -> session_cookie -> query_token_compatibility",
-    "reject_close_codes": {
-        "unauthorized": 4001,
-        "owner_mismatch": 4003,
-        "kb_lock_unbound": 4410,
-        "agent_persona_required": 4411,
-        "legacy_sales_runtime_disabled": 4412,
-    },
 }
 
 
@@ -136,6 +134,33 @@ async def _reject_sales_websocket(
     await websocket.close(code=code, reason=reason)
 
 
+async def _reject_sales_admission(
+    websocket: WebSocket,
+    decision: RuntimeAdmissionDecision,
+    *,
+    session_id: str,
+    **log_fields: Any,
+) -> None:
+    reason = decision.close_reason or decision.code or "RUNTIME_NOT_RUNNABLE"
+    logger.warning(
+        "Rejected /ws/sales connection due to runtime admission decision",
+        session_id=session_id,
+        runtime_type=decision.runtime_type,
+        classification=decision.classification,
+        failure_code=decision.code,
+        missing=decision.missing,
+        **log_fields,
+    )
+    if decision.mark_runtime_failed:
+        await mark_session_runtime_failed(
+            session_id,
+            failure_code=reason,
+            source="sales_websocket_reject",
+        )
+    await websocket.accept()
+    await websocket.close(code=decision.close_code or 4413, reason=reason)
+
+
 async def _handle_sales_websocket(
     websocket: WebSocket,
     session_id: str | None,
@@ -165,40 +190,16 @@ async def _handle_sales_websocket(
         await _reject_invalid_session_id(websocket, session_id)
         return
 
-    (
-        session_scenario_type,
-        persisted_voice_mode,
-        persisted_agent_id,
-        persisted_persona_id,
-    ) = await _resolve_session_runtime(resolved_session_id)
-    if session_scenario_type and session_scenario_type != "sales":
-        logger.warning(
-            "Rejected /ws/sales connection due to scenario mismatch",
-            session_id=resolved_session_id,
-            expected="sales",
-            actual=session_scenario_type,
-        )
-        await mark_session_runtime_failed(
-            resolved_session_id,
-            failure_code="SESSION_SCENARIO_MISMATCH",
-            source="sales_websocket_reject",
-        )
-        await websocket.accept()
-        await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
-        return
-
-    if await _is_kb_lock_unbound_session(resolved_session_id):
-        logger.warning(
-            "Rejected /ws/sales connection due to KB lock without bound knowledge base",
+    persisted_voice_mode, persisted_agent_id, persisted_persona_id = (
+        await _resolve_sales_runtime_identity(resolved_session_id)
+    )
+    admission = await _resolve_sales_admission_decision(resolved_session_id)
+    if admission is not None and not admission.allowed:
+        await _reject_sales_admission(
+            websocket,
+            admission,
             session_id=resolved_session_id,
         )
-        await mark_session_runtime_failed(
-            resolved_session_id,
-            failure_code="KB_LOCK_UNBOUND",
-            source="sales_websocket_reject",
-        )
-        await websocket.accept()
-        await websocket.close(code=4410, reason="KB_LOCK_UNBOUND")
         return
 
     # Enforce voice mode lock from persisted session snapshot.
@@ -212,11 +213,13 @@ async def _handle_sales_websocket(
         )
     normalized_voice_mode = persisted_voice_mode
     if normalized_voice_mode != "stepfun_realtime":
-        await _reject_sales_websocket(
+        await _reject_sales_admission(
             websocket,
-            code=4412,
-            reason="LEGACY_SALES_RUNTIME_DISABLED",
-            log_message="Rejected /ws/sales connection because legacy sales runtime is disabled",
+            runtime_admission_failure(
+                runtime_type="sales",
+                code="LEGACY_SALES_RUNTIME_DISABLED",
+                missing=["voice_mode"],
+            ),
             session_id=resolved_session_id,
             persisted_voice_mode=persisted_voice_mode,
         )
@@ -272,19 +275,17 @@ async def _handle_sales_websocket(
     resolved_persona_id = persisted_persona_id or persona_id
 
     if not (resolved_agent_id and resolved_persona_id):
-        logger.warning(
-            "Rejected /ws/sales connection due to missing agent/persona runtime lock",
+        await _reject_sales_admission(
+            websocket,
+            runtime_admission_failure(
+                runtime_type="sales",
+                code="AGENT_PERSONA_REQUIRED",
+                missing=["agent_id", "persona_id"],
+            ),
             session_id=resolved_session_id,
             persisted_agent_id=persisted_agent_id,
             persisted_persona_id=persisted_persona_id,
         )
-        await mark_session_runtime_failed(
-            resolved_session_id,
-            failure_code="AGENT_PERSONA_REQUIRED",
-            source="sales_websocket_reject",
-        )
-        await websocket.accept()
-        await websocket.close(code=4411, reason="AGENT_PERSONA_REQUIRED")
         return
 
     await _handle_stepfun_realtime_connection(
@@ -295,9 +296,27 @@ async def _handle_sales_websocket(
     )
 
 
+async def _resolve_sales_admission_decision(
+    session_id: str,
+) -> RuntimeAdmissionDecision | None:
+    async with AsyncSessionLocal() as db:
+        return await RuntimeGate(db).admit_session(
+            session_id,
+            expected_runtime_type="sales",
+        )
+
+
+async def _resolve_sales_runtime_identity(
+    session_id: str,
+) -> tuple[str, str | None, str | None]:
+    _scenario_type, voice_mode, agent_id, persona_id = await _resolve_session_runtime(
+        session_id
+    )
+    return voice_mode, agent_id, persona_id
+
+
 async def _is_kb_lock_unbound_session(session_id: str) -> bool:
     """Evaluate the sales KB lock through the shared runtime gate authority."""
-    from common.services.runtime_gate import RuntimeGate
 
     async with AsyncSessionLocal() as db:
         return await RuntimeGate(db).is_kb_lock_unbound_for_session_id(session_id)

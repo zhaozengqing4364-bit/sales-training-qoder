@@ -1,0 +1,6 @@
+{"file":"docs/design/sales-trainer-system.md","reason":"核对实现标记、录音不限时长要求和测试缺陷记录。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"核查音频失败类型、权限拒绝和 API 响应是否稳定。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"核查后端测试、lint 与迁移验证证据。"}
+{"file":".trellis/spec/frontend/admin-console-patterns.md","reason":"核查后台页面是否符合按意图拆页约束。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"核查 API facade 与 snake_case 类型契约。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"核查前端质量命令和真实浏览器路径。"}

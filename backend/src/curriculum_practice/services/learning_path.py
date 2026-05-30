@@ -767,7 +767,7 @@ class LearningPathService:
                 if self._exam_report_passed(exam_session, completion_policy=completion_policy):
                     return "completed"
                 return "failed"
-        elif asset_type == "practice_template" or stage.stage_type == "practice":
+        elif asset_type in {"practice_template"} or stage.stage_type == "practice":
             if asset_id in evidence["practice_template_ids"]:
                 return "completed"
 

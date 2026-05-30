@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 import websockets
+from websockets.exceptions import InvalidStatus
 
 from common.audio.asr_alibaba import AlibabaASRProvider
 from common.audio.asr_with_fallback import get_asr_with_fallback
@@ -39,6 +40,16 @@ def skip_infra_missing(reason: str) -> None:
 
 def skip_external_unavailable(reason: str) -> None:
     pytest.skip(f"{NFR_EXTERNAL_UNAVAILABLE}: {reason}")
+
+
+def skip_ws_auth_rejected(exc: InvalidStatus) -> None:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code in {401, 403}:
+        skip_infra_missing(
+            f"WebSocket server on localhost:3444 requires authenticated test session: HTTP {status_code}"
+        )
+    raise exc
 
 
 class NFRMetricsTracker:
@@ -152,6 +163,8 @@ class TestWebSocketConnectionLatency:
                 skip_infra_missing(
                     f"WebSocket server unavailable on localhost:3444: {exc}"
                 )
+            except InvalidStatus as exc:
+                skip_ws_auth_rejected(exc)
 
             end_time = time.perf_counter()
             latency_ms = (end_time - start_time) * 1000
@@ -197,6 +210,8 @@ class TestWebSocketConnectionLatency:
                 skip_infra_missing(
                     f"WebSocket server unavailable on localhost:3444: {exc}"
                 )
+            except InvalidStatus as exc:
+                skip_ws_auth_rejected(exc)
 
             end_time = time.perf_counter()
             latency_ms = (end_time - start_time) * 1000

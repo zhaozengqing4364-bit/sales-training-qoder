@@ -1,18 +1,42 @@
 from __future__ import annotations
 
 from inspect import isawaitable
+from typing import Any
 
+from common.business_rules.service import BusinessRuleResolution
 from curriculum_practice.schemas import (
     GateResult,
     PracticeTemplatePublishCandidate,
     PublishGateDecision,
     ReferenceReader,
 )
+from curriculum_practice.services.published_asset_refs import build_published_asset_refs
+from curriculum_practice.services.roleplay.situation_pack_repository import (
+    SituationPackRepository,
+)
+from curriculum_practice.services.roleplay_contracts import RoleplayContractCompiler
+
+_REFERENCE_MISSING_FAILURES: dict[str, tuple[str, str]] = {
+    "case_item": ("content_asset_reference", "asset_unpublished"),
+    "role_profile": ("content_asset_reference", "asset_unpublished"),
+    "learning_content": ("content_asset_reference", "asset_unpublished"),
+    "knowledge_base": ("content_asset_reference", "asset_unpublished"),
+    "scoring_ruleset": ("scoring_rubric_reference", "rubric_missing"),
+    "examiner_agent": ("examiner_agent_reference", "examiner_agent_unpublished"),
+}
 
 
 class PublishingGateService:
-    def __init__(self, reference_reader: ReferenceReader) -> None:
+    def __init__(
+        self,
+        reference_reader: ReferenceReader,
+        *,
+        situation_packs: SituationPackRepository | None = None,
+        situation_pack_config: BusinessRuleResolution | None = None,
+    ) -> None:
         self._reference_reader = reference_reader
+        self._situation_packs = situation_packs
+        self._situation_pack_config = situation_pack_config
 
     async def validate(
         self, candidate: PracticeTemplatePublishCandidate
@@ -33,39 +57,15 @@ class PublishingGateService:
             if isawaitable(reference):
                 reference = await reference
             if reference is None:
-                if asset_type in ("case_item", "role_profile"):
+                known_failure = _REFERENCE_MISSING_FAILURES.get(asset_type)
+                if known_failure is not None:
+                    gate_name, reason_code = known_failure
                     results.append(
                         GateResult(
-                            gate_name="content_asset_reference",
+                            gate_name=gate_name,
                             status="failed",
-                            reason_code=f"{asset_type}_unpublished",
-                            message=(
-                                f"{asset_type} reference {asset_id} does not exist or is not published."
-                            ),
-                        )
-                    )
-                    continue
-                if asset_type == "scoring_ruleset":
-                    results.append(
-                        GateResult(
-                            gate_name="scoring_rubric_reference",
-                            status="failed",
-                            reason_code="scoring_rubric_missing",
-                            message=(
-                                f"{asset_type} reference {asset_id} does not exist or is not readable."
-                            ),
-                        )
-                    )
-                    continue
-                if asset_type == "examiner_agent":
-                    results.append(
-                        GateResult(
-                            gate_name="examiner_agent_reference",
-                            status="failed",
-                            reason_code="examiner_agent_unpublished",
-                            message=(
-                                f"{asset_type} reference {asset_id} does not exist or is not published."
-                            ),
+                            reason_code=reason_code,
+                            message=f"{asset_type} reference {asset_id} does not exist or is not published.",
                         )
                     )
                     continue
@@ -107,7 +107,7 @@ class PublishingGateService:
                             GateResult(
                                 gate_name="curriculum_plan_stage_asset",
                                 status="failed",
-                                reason_code="curriculum_stage_asset_unpublished",
+                                reason_code="asset_unpublished",
                                 message=(
                                     "CurriculumPlan stage "
                                     f"{stage.template_stage_key} references an unpublished "
@@ -145,7 +145,7 @@ class PublishingGateService:
                         GateResult(
                             gate_name="curriculum_plan_child_templates",
                             status="failed",
-                            reason_code="child_template_unpublished",
+                            reason_code="template_unpublished",
                             message=(
                                 "CurriculumPlan stage "
                                 f"{stage.template_stage_key} references an unpublished child template."
@@ -232,7 +232,30 @@ class PublishingGateService:
                     )
                 )
 
+        if not results:
+            roleplay_gate_results = await RoleplayContractCompiler(
+                self._reference_reader,
+                situation_packs=self._situation_packs,
+            ).validate_template_candidate(candidate, actor_id="publish_gate")
+            results.extend(roleplay_gate_results)
+
         return PublishGateDecision(can_publish=not results, results=results)
+
+    async def build_published_asset_refs(
+        self,
+        candidate: PracticeTemplatePublishCandidate,
+        *,
+        resolved_at: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        if self._situation_packs is None:
+            raise ValueError("SituationPackRepository is required to freeze published refs.")
+        return await build_published_asset_refs(
+            candidate,
+            reference_reader=self._reference_reader,
+            situation_packs=self._situation_packs,
+            situation_pack_config=self._situation_pack_config,
+            resolved_at=resolved_at,
+        )
 
     def _validate_curriculum_graph(
         self, candidate: PracticeTemplatePublishCandidate

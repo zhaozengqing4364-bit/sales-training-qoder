@@ -3,7 +3,20 @@ import { debug } from "@/lib/debug";
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api, getApiErrorMessage } from "@/lib/api/client";
+import {
+    api,
+    getApiErrorMessage,
+    getPersonaPolicyValidationErrors,
+} from "@/lib/api/client";
+import {
+    buildRoleAnchorFormState,
+    buildRoleAnchorPayload,
+    emptyRoleAnchorFormState,
+    mapPersonaPolicyValidationErrors,
+    previewRoleAnchorText,
+    type AdminPersonaRoleAnchorFormState,
+    type RoleAnchorFieldKey,
+} from "@/lib/admin/persona-role-anchor";
 import {
     AdminPersona,
     AdminKnowledgeBase,
@@ -337,6 +350,12 @@ export default function EditPersonaPage() {
     const [customerPressureForm, setCustomerPressureForm] = useState<CustomerPressureFormState>(
         emptyCustomerPressureFormState(),
     );
+    const [roleAnchorForm, setRoleAnchorForm] = useState<AdminPersonaRoleAnchorFormState>(
+        emptyRoleAnchorFormState(),
+    );
+    const [roleAnchorFieldErrors, setRoleAnchorFieldErrors] = useState<
+        Partial<Record<RoleAnchorFieldKey, string>>
+    >({});
     const [isPreviewingTTS, setIsPreviewingTTS] = useState(false);
     const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -353,6 +372,8 @@ export default function EditPersonaPage() {
             setPersonaPolicy(personaData.persona_policy || null);
             setIndustryPackContract(personaIndustryPackContract);
             setCustomerPressureForm(buildCustomerPressureFormState(personaData.persona_policy));
+            setRoleAnchorForm(buildRoleAnchorFormState(personaData.persona_policy));
+            setRoleAnchorFieldErrors({});
             setFormData({
                 name: personaData.name || "",
                 description: personaData.description || "",
@@ -459,6 +480,7 @@ export default function EditPersonaPage() {
         }
 
         setIsSaving(true);
+        setRoleAnchorFieldErrors({});
         try {
             const {
                 salesFocus,
@@ -467,28 +489,39 @@ export default function EditPersonaPage() {
                 expectedCustomerQuestions,
                 customerPressure,
             } = buildCustomerPressurePayload(personaPolicy, customerPressureForm);
+            const roleAnchorPayload = buildRoleAnchorPayload(roleAnchorForm);
+            const nextPersonaPolicy = {
+                ...(personaPolicy || {}),
+                version: 1,
+                system_prompt: formData.system_prompt,
+                knowledge_base_ids: linkedKnowledgeBases.map((kb) => kb.id),
+                tool_policy: buildPersonaToolPolicyPayload(),
+                sales_focus: salesFocus,
+                value_axes: valueAxes,
+                objection_axes: objectionAxes,
+                expected_customer_questions: expectedCustomerQuestions,
+                customer_pressure: customerPressure,
+            } as Record<string, unknown>;
+            if (roleAnchorPayload) {
+                nextPersonaPolicy.role_anchor = roleAnchorPayload;
+            } else {
+                delete nextPersonaPolicy.role_anchor;
+            }
 
             await api.admin.updatePersona(personaId, {
                 ...formData,
                 knowledge_base_ids: linkedKnowledgeBases.map(kb => kb.id),
-                persona_policy: {
-                    ...(personaPolicy || {}),
-                    version: 1,
-                    system_prompt: formData.system_prompt,
-                    knowledge_base_ids: linkedKnowledgeBases.map((kb) => kb.id),
-                    tool_policy: buildPersonaToolPolicyPayload(),
-                    sales_focus: salesFocus,
-                    value_axes: valueAxes,
-                    objection_axes: objectionAxes,
-                    expected_customer_questions: expectedCustomerQuestions,
-                    customer_pressure: customerPressure,
-                },
+                persona_policy: nextPersonaPolicy,
                 tts_config: ttsConfig,
             });
             router.push("/admin/personas");
         } catch (err) {
             debug.error("Failed to save persona:", err);
-            toast.error(`保存失败: ${err instanceof Error ? err.message : "未知错误"}`);
+            const validationErrors = getPersonaPolicyValidationErrors(err);
+            if (validationErrors) {
+                setRoleAnchorFieldErrors(mapPersonaPolicyValidationErrors(validationErrors));
+            }
+            toast.error(`保存失败: ${getApiErrorMessage(err)}`);
         } finally {
             setIsSaving(false);
         }
@@ -564,6 +597,22 @@ export default function EditPersonaPage() {
     ].filter((value): value is string => Boolean(value));
     const contractOwnedFieldEntries = Object.entries(industryPackContract?.owned_fields || {});
     const runtimeTargets = industryPackContract?.runtime_targets || {};
+    const roleAnchorPreview = previewRoleAnchorText(roleAnchorForm, formData.name || persona?.name || "角色");
+
+    const updateRoleAnchorField = <K extends RoleAnchorFieldKey>(
+        key: K,
+        value: AdminPersonaRoleAnchorFormState[K],
+    ) => {
+        setRoleAnchorForm((prev) => ({ ...prev, [key]: value }));
+        setRoleAnchorFieldErrors((prev) => {
+            if (!prev[key]) {
+                return prev;
+            }
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+    };
 
     if (isLoading) {
         return (
@@ -693,6 +742,130 @@ export default function EditPersonaPage() {
                             value={formData.system_prompt}
                             onChange={(e) => setFormData(prev => ({ ...prev, system_prompt: e.target.value }))}
                         />
+                    </div>
+
+                    <div className="space-y-5 rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">角色锚（role_anchor）</h3>
+                                <p className="text-xs text-slate-500">
+                                    结构化身份底线与硬约束，保存后由 VoiceInstructionCompiler 编译为每轮追加的 role_anchor_text。
+                                </p>
+                            </div>
+                            <Badge variant={roleAnchorForm.enabled ? "green" : "secondary"}>
+                                {roleAnchorForm.enabled ? "已启用" : "未配置"}
+                            </Badge>
+                        </div>
+
+                        <label className="flex items-start gap-3 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4">
+                            <input
+                                type="checkbox"
+                                aria-label="启用 role_anchor"
+                                className="mt-0.5 rounded border-slate-300"
+                                checked={roleAnchorForm.enabled}
+                                onChange={(event) => updateRoleAnchorField("enabled", event.target.checked)}
+                            />
+                            <div className="space-y-1">
+                                <div className="text-sm font-semibold text-slate-800">启用角色锚</div>
+                                <div className="text-xs text-slate-500">
+                                    关闭时不写入 persona_policy.role_anchor，保持 legacy persona 兼容。
+                                </div>
+                            </div>
+                        </label>
+
+                        {roleAnchorForm.enabled ? (
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <label htmlFor="role-anchor-identity-template" className="text-xs font-bold text-slate-500 uppercase">
+                                        身份模板
+                                    </label>
+                                    <textarea
+                                        id="role-anchor-identity-template"
+                                        aria-label="身份模板"
+                                        className={`w-full h-24 rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-white ${
+                                            roleAnchorFieldErrors.identityTemplate ? "border-red-300" : "border-slate-200"
+                                        }`}
+                                        value={roleAnchorForm.identityTemplate}
+                                        onChange={(event) => updateRoleAnchorField("identityTemplate", event.target.value)}
+                                    />
+                                    {roleAnchorFieldErrors.identityTemplate ? (
+                                        <p className="text-xs text-red-600">{roleAnchorFieldErrors.identityTemplate}</p>
+                                    ) : (
+                                        <p className="text-xs text-slate-400">仅允许变量 {"{role_name}"}、{"{relationship_stage}"}、{"{bottom_line}"}。</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label htmlFor="role-anchor-bottom-line" className="text-xs font-bold text-slate-500 uppercase">
+                                        身份底线（bottom_line）
+                                    </label>
+                                    <textarea
+                                        id="role-anchor-bottom-line"
+                                        aria-label="身份底线"
+                                        className={`w-full h-24 rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-white ${
+                                            roleAnchorFieldErrors.bottomLine ? "border-red-300" : "border-slate-200"
+                                        }`}
+                                        placeholder="你不认识他，保持初次见面的审慎与距离感。需求未被满足前绝不让步。"
+                                        value={roleAnchorForm.bottomLine}
+                                        onChange={(event) => updateRoleAnchorField("bottomLine", event.target.value)}
+                                    />
+                                    {roleAnchorFieldErrors.bottomLine ? (
+                                        <p className="text-xs text-red-600">{roleAnchorFieldErrors.bottomLine}</p>
+                                    ) : null}
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label htmlFor="role-anchor-must-do" className="text-xs font-bold text-slate-500 uppercase">
+                                            必须（must_do）
+                                        </label>
+                                        <textarea
+                                            id="role-anchor-must-do"
+                                            aria-label="必须"
+                                            className={`w-full h-24 rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-white ${
+                                                roleAnchorFieldErrors.mustDo ? "border-red-300" : "border-slate-200"
+                                            }`}
+                                            value={roleAnchorForm.mustDo}
+                                            onChange={(event) => updateRoleAnchorField("mustDo", event.target.value)}
+                                        />
+                                        {roleAnchorFieldErrors.mustDo ? (
+                                            <p className="text-xs text-red-600">{roleAnchorFieldErrors.mustDo}</p>
+                                        ) : null}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label htmlFor="role-anchor-must-not" className="text-xs font-bold text-slate-500 uppercase">
+                                            禁止（must_not）
+                                        </label>
+                                        <textarea
+                                            id="role-anchor-must-not"
+                                            aria-label="禁止"
+                                            className={`w-full h-24 rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-white ${
+                                                roleAnchorFieldErrors.mustNot ? "border-red-300" : "border-slate-200"
+                                            }`}
+                                            value={roleAnchorForm.mustNot}
+                                            onChange={(event) => updateRoleAnchorField("mustNot", event.target.value)}
+                                        />
+                                        {roleAnchorFieldErrors.mustNot ? (
+                                            <p className="text-xs text-red-600">{roleAnchorFieldErrors.mustNot}</p>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 space-y-2">
+                                    <div className="text-xs font-bold uppercase tracking-wide text-blue-800">编译预览</div>
+                                    <p className="text-xs text-blue-700">
+                                        预览使用占位关系阶段「这是你们首次正式见面」；真实 runtime 会按 SituationPack 关系史编译。
+                                    </p>
+                                    {roleAnchorPreview ? (
+                                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-xl border border-blue-100 bg-white p-3 text-xs text-slate-700">
+                                            {roleAnchorPreview}
+                                        </pre>
+                                    ) : (
+                                        <p className="text-xs text-blue-700">填写 bottom_line 后可预览 role_anchor_text。</p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
 
                     <div className="space-y-5 rounded-3xl border border-slate-200 bg-slate-50/70 p-5">

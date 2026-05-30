@@ -78,6 +78,7 @@ class SupportRuntimeOverviewData(BaseModel):
     session_health: SupportRuntimeSessionHealth
     release_health: SupportRuntimeReleaseHealth
     anomaly_summary: SupportRuntimeAnomalySummary
+    roleplay: dict[str, Any] = Field(default_factory=dict)
 
 
 class SupportRuntimeFaultDiagnostics(BaseModel):

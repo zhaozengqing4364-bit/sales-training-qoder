@@ -17,6 +17,12 @@ class RealtimeResponseState:
     total_duration_ms: int = 0
     first_chunk_sent: bool = False
     question_limit_enforced: bool = False
+    roleplay_suppressed: bool = False
+    roleplay_cancel_sent: bool = False
+    roleplay_regenerate_attempted: bool = False
+    roleplay_violation_decision: dict | None = None
+    roleplay_audio_forwarded: bool = False
+    roleplay_repair_sent: bool = False
 
 
 @dataclass

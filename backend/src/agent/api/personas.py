@@ -11,6 +11,7 @@ References:
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -39,6 +40,22 @@ logger = get_logger(__name__)
 admin_router = APIRouter(prefix="/admin/personas", tags=["admin-personas"])
 
 
+def _raise_persona_service_error(result_fallback: str | None, *, not_found_status: int = 404) -> None:
+    fallback = str(result_fallback or "")
+    if fallback.startswith("{"):
+        try:
+            payload = json.loads(fallback)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict) and payload.get("error") == (
+            "[PERSONA_POLICY_VALIDATION_FAILED]"
+        ):
+            raise HTTPException(status_code=400, detail=payload)
+    if fallback == "[PERSONA_NOT_FOUND]":
+        raise HTTPException(status_code=not_found_status, detail=fallback)
+    raise HTTPException(status_code=400, detail=fallback)
+
+
 async def commit_or_500(db: AsyncSession, action: str) -> JSONResponse | None:
     """Persist transaction and return normalized 500 response on failure."""
     try:
@@ -65,7 +82,7 @@ async def create_persona(
     result = await service.create(request, user_id=current_user.user_id)
 
     if not result.is_success:
-        raise HTTPException(status_code=400, detail=result.fallback)
+        _raise_persona_service_error(result.fallback)
 
     persona = result.value
     commit_error = await commit_or_500(db, "create_persona")
@@ -149,7 +166,7 @@ async def get_persona(
     result = await service.get_by_id(persona_id)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.fallback)
+        _raise_persona_service_error(result.fallback, not_found_status=404)
 
     persona = result.value
     return {
@@ -170,7 +187,7 @@ async def update_persona(
     result = await service.update(persona_id, request)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.fallback)
+        _raise_persona_service_error(result.fallback, not_found_status=404)
 
     persona = result.value
     commit_error = await commit_or_500(db, "update_persona")
@@ -217,7 +234,7 @@ async def duplicate_persona(
     result = await service.duplicate(persona_id, user_id=current_user.user_id)
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.fallback)
+        _raise_persona_service_error(result.fallback, not_found_status=404)
 
     persona = result.value
     commit_error = await commit_or_500(db, "duplicate_persona")

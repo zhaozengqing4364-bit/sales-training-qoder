@@ -52,7 +52,9 @@ async def _db():
 @pytest_asyncio.fixture
 async def _client(_db: AsyncSession):
     """Async HTTP test client wired to the isolated DB."""
+    import common.api.practice as practice_api
     import common.auth.service as auth_service
+    import http_routes
     import main as main_module
     from common.db.session import get_db as current_get_db
 
@@ -65,6 +67,8 @@ async def _client(_db: AsyncSession):
         current_get_db,
         getattr(main_module, "get_db", current_get_db),
         getattr(auth_service, "get_db", current_get_db),
+        getattr(http_routes, "get_db", current_get_db),
+        getattr(practice_api, "get_db", current_get_db),
     }
     for target in override_targets:
         app.dependency_overrides[target] = _override

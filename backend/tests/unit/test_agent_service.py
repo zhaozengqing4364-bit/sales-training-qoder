@@ -16,12 +16,28 @@ from sqlalchemy.orm import sessionmaker
 from agent.models import AgentPersona, AgentStatus, Persona
 from agent.schemas import CreateAgentRequest, UpdateAgentRequest
 from agent.services.agent_service import AgentService
+from agent.services.persona_policy import PersonaPolicyValidator
 
 # Import Base first
 from common.db.models import Base, PracticeSession, Scenario, User
 
 # Test database URL
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+async def _link_active_persona(agent_service, agent_id: str) -> Persona:
+    persona = Persona(
+        name=f"客户 {agent_id[:8]}",
+        category="customer",
+        difficulty="medium",
+        system_prompt="persona",
+        status="active",
+    )
+    agent_service.db.add(persona)
+    await agent_service.db.flush()
+    agent_service.db.add(AgentPersona(agent_id=agent_id, persona_id=persona.id))
+    await agent_service.db.flush()
+    return persona
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -176,6 +192,7 @@ class TestAgentServiceList:
         """Should filter by status (admin only)"""
         # Create and publish one agent
         result = await agent_service.create(sample_agent_data)
+        await _link_active_persona(agent_service, result.value.id)
         await agent_service.publish(result.value.id)
 
         # Create another draft agent
@@ -216,6 +233,7 @@ class TestAgentServiceGetById:
         """User should get published Agent without system_prompt"""
         create_result = await agent_service.create(sample_agent_data)
         agent_id = create_result.value.id
+        await _link_active_persona(agent_service, agent_id)
         await agent_service.publish(agent_id)
 
         result = await agent_service.get_by_id(agent_id, admin=False)
@@ -375,6 +393,7 @@ class TestAgentServicePublish:
         """Should publish draft agent"""
         create_result = await agent_service.create(sample_agent_data)
         agent_id = create_result.value.id
+        await _link_active_persona(agent_service, agent_id)
 
         result = await agent_service.publish(agent_id)
 
@@ -382,10 +401,23 @@ class TestAgentServicePublish:
         assert result.value.status == AgentStatus.PUBLISHED.value
         assert result.value.published_at is not None
 
+    async def test_publish_agent_requires_active_persona_link(
+        self, agent_service, sample_agent_data
+    ):
+        """Should fail if draft agent has no active Persona link"""
+        create_result = await agent_service.create(sample_agent_data)
+        agent_id = create_result.value.id
+
+        result = await agent_service.publish(agent_id)
+
+        assert not result.is_success
+        assert result.fallback == "[AGENT_PERSONA_LINK_REQUIRED]"
+
     async def test_publish_agent_already_published(self, agent_service, sample_agent_data):
         """Should fail if already published"""
         create_result = await agent_service.create(sample_agent_data)
         agent_id = create_result.value.id
+        await _link_active_persona(agent_service, agent_id)
         await agent_service.publish(agent_id)
 
         result = await agent_service.publish(agent_id)
@@ -418,6 +450,7 @@ class TestAgentServiceArchive:
         """Should archive published agent"""
         create_result = await agent_service.create(sample_agent_data)
         agent_id = create_result.value.id
+        await _link_active_persona(agent_service, agent_id)
         await agent_service.publish(agent_id)
 
         result = await agent_service.archive(agent_id)
@@ -532,3 +565,20 @@ class TestAgentServiceCapabilityNames:
 
         names = agent_service._extract_capability_names(None)
         assert names == []
+
+
+class TestPersonaPolicyValidator:
+    def test_should_skip_validation_when_role_anchor_absent(self):
+        assert PersonaPolicyValidator.validate({"system_prompt": "prompt"}) == []
+
+    def test_should_flag_invalid_identity_template_variable(self):
+        errors = PersonaPolicyValidator.validate(
+            {
+                "role_anchor": {
+                    "identity_template": "预算{budget_limit}",
+                    "bottom_line": "你不认识他，保持初次见面的审慎与距离感。",
+                }
+            }
+        )
+
+        assert errors[0].reason_code == "role_anchor_identity_template_invalid_vars"

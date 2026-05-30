@@ -41,6 +41,7 @@ import {
   type SessionClaimTruthTone,
 } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 function formatDuration(ms: number): string {
   const safe = Math.max(0, Math.floor(ms || 0));
@@ -437,6 +438,99 @@ function getReplayRoleLabel(role?: string | null): string {
   return "对话";
 }
 
+function formatRoleplayReplayStatus(status?: string | null): string {
+  switch (status) {
+    case "ready": return "配置正常";
+    case "legacy": return "历史配置";
+    case "missing": return "配置缺失";
+    case "invalid": return "配置异常";
+    default: return status || "未记录";
+  }
+}
+
+function RoleplayComplianceTimelinePanel({
+  replayData,
+}: {
+  replayData: ReplayData;
+}) {
+  const summary = replayData.roleplay_compliance_summary;
+  const timeline = replayData.roleplay_compliance_timeline || [];
+  if (!summary && timeline.length === 0) return null;
+
+  return (
+    <GlassCard className="p-4 sm:p-5 border border-indigo-100 bg-indigo-50/40">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="font-bold text-slate-900 text-base sm:text-lg">Roleplay Compliance Timeline</h2>
+          <p className="mt-1 text-xs text-indigo-700">
+            管理员审计视图；包含每轮 visible scope、披露状态、违规决策和 trace，不向学员展示。
+          </p>
+        </div>
+        {summary ? (
+          <span className="rounded-full border border-indigo-200 bg-white/80 px-3 py-1 text-xs font-semibold text-indigo-700">
+            {formatRoleplayReplayStatus(summary.status)}
+          </span>
+        ) : null}
+      </div>
+
+      {summary ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
+          <MetricTile label="Situation" value={summary.situation_code || "--"} />
+          <MetricTile label="Violations" value={String(summary.violation_count ?? 0)} />
+          <MetricTile label="Blocking" value={String(summary.blocking_violation_count ?? 0)} />
+          <MetricTile label="Regenerate" value={String(summary.regenerate_count ?? 0)} />
+          <MetricTile label="Cancel" value={String(summary.cancel_stream_count ?? 0)} />
+        </div>
+      ) : null}
+
+      <div className="mt-4 space-y-3">
+        {timeline.map((item, index) => (
+          <div key={`${item.event_type}-${item.trace_id || index}`} className="rounded-xl border border-white/80 bg-white/85 p-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="font-semibold text-slate-900">{item.event_type}</span>
+              {typeof item.turn_number === "number" ? <span>turn {item.turn_number}</span> : null}
+              {item.sales_stage ? <span>stage {item.sales_stage}</span> : null}
+              {item.severity ? <span>severity {item.severity}</span> : null}
+              {item.action ? <span>action {item.action}</span> : null}
+            </div>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              <div className="text-xs text-slate-600">
+                violation: <span className="font-mono text-slate-900">{item.violation_code || "--"}</span>
+              </div>
+              <div className="text-xs text-slate-600">
+                trace: <span className="font-mono text-slate-900">{item.trace_id || "--"}</span>
+              </div>
+              <div className="text-xs text-slate-600">
+                visible keys: {((item.visible_keys || []).join("、") || item.visible_keys_count?.toString()) ?? "--"}
+              </div>
+              <div className="text-xs text-slate-600">
+                disclosed keys: {((item.disclosed_keys || []).join("、") || item.disclosed_keys_count?.toString()) ?? "--"}
+              </div>
+            </div>
+            {item.matched_pattern ? (
+              <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2 text-xs text-amber-800">
+                matched pattern: {item.matched_pattern}
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {timeline.length === 0 ? (
+          <p className="text-sm text-indigo-700">当前回放没有记录逐轮 compliance timeline。</p>
+        ) : null}
+      </div>
+    </GlassCard>
+  );
+}
+
+function MetricTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/70 bg-white/70 p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">{label}</div>
+      <div className="mt-1 break-all text-sm font-bold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
 function getReplayEvidenceReason(
   learningEvidence?: ReplayLearningEvidence | null,
   fallbackReason?: string | null,
@@ -545,6 +639,7 @@ export default function SessionReplayPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { data: currentUser } = useCurrentUser();
   const sessionId = params.sessionId as string;
 
   const [isLoading, setIsLoading] = useState(true);
@@ -713,6 +808,7 @@ export default function SessionReplayPage() {
   const replayOverallScore = replayRollups.overall ?? 0;
   const scenarioType = replayData?.scenario_type ?? reportSnapshot?.scenario_type ?? null;
   const isPresentationScenario = scenarioType === "presentation";
+  const isAdminReplay = currentUser?.role === "admin";
   const conclusionEvidenceSections = !isPresentationScenario
     ? formatConclusionEvidenceSections(replayData?.conclusion_evidence)
     : [];
@@ -1432,6 +1528,8 @@ export default function SessionReplayPage() {
           </div>
         </GlassCard>
       ) : null}
+
+      {isAdminReplay ? <RoleplayComplianceTimelinePanel replayData={replayData} /> : null}
 
       {!isPresentationScenario && highlights.length > 0 ? (
         <GlassCard className="p-4 sm:p-5">

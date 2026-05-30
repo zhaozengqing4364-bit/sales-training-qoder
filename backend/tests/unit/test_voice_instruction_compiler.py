@@ -3,11 +3,159 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import patch
 
+from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
 from sales_bot.services.voice_instruction_compiler import (
     VoiceInstructionCompiler,
     enforce_question_limit,
 )
+
+
+def _first_visit_situation_pack() -> SituationPackDTO:
+    return SituationPackDTO(
+        code="first_visit",
+        label="首次拜访",
+        version="v1",
+        status="published",
+        relationship_context={
+            "prior_interactions": "none",
+            "has_prior_meeting": False,
+            "has_seen_proposal": False,
+            "has_discussed_budget": False,
+            "has_existing_partnership": False,
+            "meeting_history_summary": None,
+        },
+        visible_information_scope={
+            "initial_visible_keys": ["industry"],
+            "hidden_by_default_keys": ["hidden_information"],
+        },
+        forbidden_claim_patterns=["上次拜访"],
+        forbidden_topic_codes=[],
+        forbidden_stage_codes=[],
+        conflict_response_strategy="customer_confused_correction",
+        behavior_rules_for_prompt_only=[],
+        disclosure_policy={},
+        runtime_violation_policy={},
+        compatible_practice_modes=["customer_roleplay"],
+        compatible_scenario_types=["sales"],
+    )
+
+
+def _sample_role_anchor() -> dict[str, str]:
+    return {
+        "identity_template": "你是{role_name}，{relationship_stage}。{bottom_line}。",
+        "bottom_line": "你不认识对方，保持审慎距离；需求未被充分理解前不让步。",
+        "must_do": "追问量化影响、集成风险与可验证证据。",
+        "must_not": "主动报价、承诺未验证 ROI、一次性透露全部隐藏信息。",
+    }
+
+
+def test_build_role_anchor_humanizes_first_visit_relationship():
+    persona_policy = {"role_anchor": _sample_role_anchor()}
+
+    anchor = VoiceInstructionCompiler.build_role_anchor(
+        persona_policy,
+        _first_visit_situation_pack(),
+        "制造业 CIO",
+    )
+
+    assert anchor.startswith("【角色锚】")
+    assert "制造业 CIO" in anchor
+    assert "这是你们首次正式见面" in anchor
+    assert "你不认识对方，保持审慎距离" in anchor
+    assert "必须：追问量化影响、集成风险与可验证证据。" in anchor
+    assert "禁止：主动报价、承诺未验证 ROI、一次性透露全部隐藏信息。" in anchor
+
+
+def test_build_role_anchor_returns_empty_when_role_anchor_missing():
+    anchor = VoiceInstructionCompiler.build_role_anchor(
+        {"system_prompt": "prompt"},
+        _first_visit_situation_pack(),
+        "制造业 CIO",
+    )
+
+    assert anchor == ""
+
+
+def test_build_role_anchor_returns_empty_for_empty_role_anchor_with_warning():
+    with patch(
+        "sales_bot.services.voice_instruction_compiler.logger.warning"
+    ) as warning_mock:
+        anchor = VoiceInstructionCompiler.build_role_anchor(
+            {"role_anchor": {}},
+            _first_visit_situation_pack(),
+            "制造业 CIO",
+        )
+
+    assert anchor == ""
+    warning_mock.assert_called_once()
+    assert warning_mock.call_args.kwargs["reason"] == "empty_role_anchor"
+
+
+def test_build_role_anchor_returns_empty_when_relationship_stage_unresolved():
+    pack = SituationPackDTO(
+        code="custom",
+        label="自定义",
+        version="v1",
+        status="published",
+        relationship_context={},
+        visible_information_scope={},
+        forbidden_claim_patterns=[],
+        forbidden_topic_codes=[],
+        forbidden_stage_codes=[],
+        conflict_response_strategy="neutral_clarification",
+        behavior_rules_for_prompt_only=[],
+        disclosure_policy={},
+        runtime_violation_policy={},
+        compatible_practice_modes=[],
+        compatible_scenario_types=[],
+    )
+
+    with patch(
+        "sales_bot.services.voice_instruction_compiler.logger.warning"
+    ) as warning_mock:
+        anchor = VoiceInstructionCompiler.build_role_anchor(
+            {"role_anchor": _sample_role_anchor()},
+            pack,
+            "制造业 CIO",
+        )
+
+    assert anchor == ""
+    warning_mock.assert_called_once()
+    assert warning_mock.call_args.kwargs["reason"] == "missing_relationship_stage"
+
+
+def test_build_role_anchor_uses_meeting_history_summary_for_follow_up():
+    pack = SituationPackDTO(
+        code="follow_up",
+        label="复访跟进",
+        version="v1",
+        status="published",
+        relationship_context={
+            "prior_interactions": "one_meeting",
+            "has_prior_meeting": True,
+            "meeting_history_summary": "上次已讨论现状与初步痛点。",
+        },
+        visible_information_scope={},
+        forbidden_claim_patterns=[],
+        forbidden_topic_codes=[],
+        forbidden_stage_codes=[],
+        conflict_response_strategy="neutral_clarification",
+        behavior_rules_for_prompt_only=[],
+        disclosure_policy={},
+        runtime_violation_policy={},
+        compatible_practice_modes=[],
+        compatible_scenario_types=[],
+    )
+
+    anchor = VoiceInstructionCompiler.build_role_anchor(
+        {"role_anchor": _sample_role_anchor()},
+        pack,
+        "制造业 CIO",
+    )
+
+    assert "上次已讨论现状与初步痛点。" in anchor
 
 
 def test_compile_base_contract_contains_role_and_network_constraints():
@@ -48,6 +196,39 @@ def test_compose_turn_instructions_keeps_base_contract():
 
     assert "坚持角色扮演" in merged
     assert "用户问题：交付周期" in merged
+
+
+def test_profile_compose_turn_includes_role_anchor_for_hash_audit():
+    from prompt_templates.compiled_contract import (
+        build_base_instruction_hash,
+        build_turn_instruction_hash,
+        compose_turn_instruction_text,
+    )
+    from sales_bot.websocket.voice_runtime_profile import VoiceRuntimeProfile
+
+    profile = VoiceRuntimeProfile(
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+        instructions="【系统总指令】坚持角色扮演",
+        instruction_contract_hash="hash-base",
+        role_anchor_text="【角色锚】\n底线约束。",
+        knowledge_base_ids=(),
+        tool_policy={},
+    )
+    turn = profile.compile_instructions(
+        grounding_context="用户问题：交付周期",
+    )
+
+    assert turn == compose_turn_instruction_text(
+        base_instructions=profile.instructions,
+        grounding_context="用户问题：交付周期",
+        role_anchor_text=profile.role_anchor_text,
+    )
+    assert build_base_instruction_hash(profile.instructions) != build_turn_instruction_hash(
+        turn
+    )
 
 
 def test_compile_base_contract_adds_kb_lock_directive():

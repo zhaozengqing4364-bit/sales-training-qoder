@@ -1,0 +1,830 @@
+{
+  "export_meta": {
+    "version": "config-asset-export-v1",
+    "exported_at": "2026-05-27T08:00:00Z",
+    "source_instance": "dev-presales-cio-bootstrap",
+    "exported_by": "00000000-0000-4000-8000-000000000001",
+    "export_audit_recorded": false,
+    "notes": "Presales CIO first-visit import-first bootstrap package. Generated from the Config Asset Export v1 service contract and kept as the deployable bootstrap artifact for #105."
+  },
+  "assets": [
+    {
+      "asset_type": "agent",
+      "namespace": "default",
+      "natural_key": "bootstrap-agent",
+      "name": "售前训练智能体",
+      "version": 1,
+      "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "name": "售前训练智能体",
+        "description": "面向销售售前首访训练的通用智能体入口。",
+        "category": "sales",
+        "welcome_message": "开始首访训练。",
+        "capabilities_config": {
+          "roleplay": true,
+          "study": true,
+          "exam": true,
+          "report": true
+        },
+        "status": "published"
+      },
+      "depends_on": []
+    },
+    {
+      "asset_type": "voice_runtime_profile",
+      "namespace": "default",
+      "natural_key": "bootstrap-runtime",
+      "name": "售前首访实时语音配置",
+      "version": 1,
+      "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "name": "售前首访实时语音配置",
+        "description": "首访客户对练默认 StepFun realtime 配置。",
+        "is_default": false,
+        "is_active": true,
+        "voice_mode": "stepfun_realtime",
+        "model_name": "step-audio-2",
+        "voice_name": "qingchunshaonv",
+        "temperature": 0.7,
+        "input_audio_format": "pcm16",
+        "output_audio_format": "pcm16",
+        "output_sample_rate": 24000,
+        "turn_detection": null,
+        "tool_policy": {
+          "enable_web_search": false,
+          "enable_internal_retrieval": true,
+          "require_grounding": true,
+          "network_access_mode": "off"
+        }
+      },
+      "depends_on": []
+    },
+    {
+      "asset_type": "scoring_ruleset",
+      "namespace": "default",
+      "natural_key": "sales-bootstrap",
+      "name": "销售首访基础评分规则",
+      "version": "sales-bootstrap",
+      "content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "scenario_type": "sales",
+        "version": "sales-bootstrap",
+        "display_name": "销售首访基础评分规则",
+        "description": "用于 Presales CIO 首访闭环训练的基础评分规则。",
+        "definition": {
+          "schema_version": "scoring_ruleset_schema_v1",
+          "scenario_type": "sales",
+          "score_basis": "session_evidence_projection_evaluable_only",
+          "dimensions": [
+            {
+              "dimension_id": "value_expression",
+              "label": "价值表达",
+              "weight": 0.6,
+              "rollup_contributions": [
+                {
+                  "rollup_id": "logic",
+                  "weight": 0.6
+                }
+              ],
+              "min_evidence": {},
+              "description": null
+            },
+            {
+              "dimension_id": "customer_benefit_connection",
+              "label": "客户收益连接",
+              "weight": 0.85,
+              "rollup_contributions": [
+                {
+                  "rollup_id": "logic",
+                  "weight": 0.4
+                },
+                {
+                  "rollup_id": "accuracy",
+                  "weight": 0.45
+                }
+              ],
+              "min_evidence": {},
+              "description": null
+            },
+            {
+              "dimension_id": "evidence_usage",
+              "label": "证据使用",
+              "weight": 0.55,
+              "rollup_contributions": [
+                {
+                  "rollup_id": "accuracy",
+                  "weight": 0.55
+                }
+              ],
+              "min_evidence": {},
+              "description": null
+            },
+            {
+              "dimension_id": "objection_handling",
+              "label": "异议处理",
+              "weight": 0.6,
+              "rollup_contributions": [
+                {
+                  "rollup_id": "completeness",
+                  "weight": 0.6
+                }
+              ],
+              "min_evidence": {},
+              "description": null
+            },
+            {
+              "dimension_id": "next_step_commitment",
+              "label": "推进下一步",
+              "weight": 0.4,
+              "rollup_contributions": [
+                {
+                  "rollup_id": "completeness",
+                  "weight": 0.4
+                }
+              ],
+              "min_evidence": {},
+              "description": null
+            }
+          ],
+          "min_evidence": {
+            "min_messages": 1,
+            "require_score_evidence": true,
+            "require_stage_evidence": false
+          },
+          "not_evaluable_reasons": {
+            "missing_min_messages": "缺少足够对话证据，无法按当前评分规则评估。",
+            "missing_score_evidence": "缺少会话分数或实时评分证据，无法按当前评分规则评估。",
+            "missing_stage_evidence": "缺少销售阶段证据，无法按当前评分规则评估。"
+          },
+          "passing_score": null,
+          "rubric": null,
+          "hidden_information_coverage": [],
+          "deductions": [],
+          "roleplay_contract_version": null
+        },
+        "status": "published",
+        "is_active": true
+      },
+      "depends_on": []
+    },
+    {
+      "asset_type": "knowledge_base",
+      "namespace": "default",
+      "natural_key": "presales-cio-first-visit-kb",
+      "name": "制造业 CIO 首访售前知识库",
+      "version": 1,
+      "content_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "name": "制造业 CIO 首访售前知识库",
+        "description": "制造业数字化、CIO 首访需求挖掘、集成风险和 ROI 证据知识。",
+        "category": "product",
+        "collection_name": "presales_cio_first_visit",
+        "status": "published"
+      },
+      "depends_on": []
+    },
+    {
+      "asset_type": "learning_content",
+      "namespace": "default",
+      "natural_key": "cio-first-visit-camp",
+      "name": "制造业 CIO 首访训练营",
+      "version": 1,
+      "content_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "title": "制造业 CIO 首访训练营",
+        "summary": "首访目标、关系边界、问题探索和证据准备。",
+        "owner": "sales-enablement",
+        "source": "config-asset-bootstrap",
+        "safety_flagged": false,
+        "chapters": [
+          {
+            "title": "首访边界",
+            "content": "首次拜访阶段只建立信任、确认业务背景、澄清痛点和约定下一步，不直接报价或承诺 ROI。",
+            "order_index": 1
+          },
+          {
+            "title": "CIO 关注点",
+            "content": "制造业 CIO 通常关注系统集成风险、生产连续性、数据治理、投入产出证据和组织协同成本。",
+            "order_index": 2
+          }
+        ],
+        "status": "published"
+      },
+      "depends_on": []
+    },
+    {
+      "asset_type": "question_category",
+      "namespace": "default",
+      "natural_key": "cio-first-visit-exam",
+      "name": "CIO 首访考核",
+      "version": 1,
+      "content_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "name": "CIO 首访考核",
+        "description": "制造业 CIO 首访场景的基础考核题。",
+        "order_index": 1
+      },
+      "depends_on": []
+    },
+    {
+      "asset_type": "question_item",
+      "namespace": "default",
+      "natural_key": "cio-first-visit-discovery-question",
+      "name": "首访中应优先确认什么",
+      "version": 1,
+      "content_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "title": "首访中应优先确认什么",
+        "stem": "面对首次接触的制造业 CIO，售前顾问应优先确认哪些信息，哪些动作应避免？",
+        "reference_answer": "应优先确认业务背景、当前系统约束、痛点影响、决策链和下一步验证方式；应避免假装已有关系、直接报价、承诺未验证 ROI 或一次性套取隐藏预算。",
+        "scoring_criteria": {
+          "dimensions": [
+            "relationship_boundary",
+            "pain_discovery",
+            "evidence_orientation"
+          ]
+        },
+        "scoring_dimensions": [
+          "relationship_boundary",
+          "pain_discovery",
+          "evidence_orientation"
+        ],
+        "tags": ["first_visit", "cio", "discovery"],
+        "difficulty": "medium",
+        "safety_flagged": false,
+        "department": "sales",
+        "asset_refs": {
+          "category": {
+            "asset_type": "question_category",
+            "namespace": "default",
+            "natural_key": "cio-first-visit-exam"
+          }
+        },
+        "status": "published"
+      },
+      "depends_on": [
+        {
+          "asset_type": "question_category",
+          "namespace": "default",
+          "natural_key": "cio-first-visit-exam"
+        }
+      ]
+    },
+    {
+      "asset_type": "examiner_agent",
+      "namespace": "default",
+      "natural_key": "cio-first-visit-examiner",
+      "name": "CIO 首访考官",
+      "version": 1,
+      "content_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "name": "CIO 首访考官",
+        "description": "评估销售是否理解首次拜访边界与 CIO 需求探索。",
+        "learner_level_strategy": {
+          "default_level": "beginner",
+          "allowed_levels": ["conservative", "beginner", "intermediate", "advanced"]
+        },
+        "timeout_config": {
+          "max_seconds": 900
+        },
+        "safety_config": {},
+        "prompt_config": {
+          "grading_focus": "first_visit_boundary"
+        },
+        "simulation_config": {},
+        "asset_refs": {
+          "question_sources": [
+            {
+              "asset_type": "question_item",
+              "namespace": "default",
+              "natural_key": "cio-first-visit-discovery-question"
+            }
+          ],
+          "scoring_policy": {
+            "asset_type": "scoring_ruleset",
+            "namespace": "default",
+            "natural_key": "sales-bootstrap"
+          }
+        },
+        "status": "published"
+      },
+      "depends_on": [
+        {
+          "asset_type": "question_item",
+          "namespace": "default",
+          "natural_key": "cio-first-visit-discovery-question"
+        },
+        {
+          "asset_type": "scoring_ruleset",
+          "namespace": "default",
+          "natural_key": "sales-bootstrap"
+        }
+      ]
+    },
+    {
+      "asset_type": "situation_pack",
+      "namespace": "default",
+      "natural_key": "first_visit",
+      "name": "首次拜访",
+      "version": "v1",
+      "content_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "status": "published",
+      "governance": "config_bundle",
+      "source_bundle_key": "roleplay.situation_packs.ruleset",
+      "payload": {
+        "code": "first_visit",
+        "label": "首次拜访",
+        "description": "销售第一次接触客户的标准场景。",
+        "version": "v1",
+        "relationship_context": {
+          "prior_interactions": "none",
+          "has_prior_meeting": false,
+          "has_seen_proposal": false,
+          "has_discussed_budget": false,
+          "has_existing_partnership": false,
+          "meeting_history_summary": null
+        },
+        "visible_information_scope": {
+          "initial_visible_keys": [
+            "industry",
+            "company_profile",
+            "customer_role",
+            "pain_points",
+            "objections",
+            "success_criteria"
+          ],
+          "conditionally_visible_keys": ["hidden_information"],
+          "hidden_by_default_keys": [
+            "hidden_information",
+            "budget",
+            "decision_chain",
+            "competitor_quote"
+          ]
+        },
+        "forbidden_claim_patterns": [
+          "上次拜访",
+          "之前我们聊",
+          "上次方案",
+          "之前报价"
+        ],
+        "forbidden_topic_codes": ["contract_closing"],
+        "forbidden_stage_codes": ["price_negotiation", "contract_closing"],
+        "conflict_response_strategy": "customer_confused_correction",
+        "behavior_rules_for_prompt_only": [],
+        "disclosure_policy": {
+          "default_hidden": true,
+          "phases": [
+            {
+              "phase": "discovery",
+              "visible_keys": ["industry", "company_profile", "customer_role", "pain_points"]
+            }
+          ],
+          "never_disclose_keys": ["competitor_quote", "decision_chain"]
+        },
+        "runtime_violation_policy": {
+          "relationship_history_contradiction": "regenerate_once",
+          "hidden_information_leak": "regenerate_once"
+        },
+        "compatible_practice_modes": ["customer_roleplay", "mixed_path"],
+        "compatible_scenario_types": ["sales"]
+      },
+      "depends_on": []
+    },
+    {
+      "asset_type": "case_item",
+      "namespace": "default",
+      "natural_key": "presales-cio-first-visit-case",
+      "name": "制造业 CIO 首访案例",
+      "version": 1,
+      "content_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "industry": "高端装备制造",
+        "company_profile": "华东精密装备集团正在推进多工厂数字化与生产数据治理，历史系统多、接口复杂、停线风险敏感。",
+        "customer_role": "集团 CIO",
+        "pain_points": [
+          "多套 MES/ERP/设备系统割裂",
+          "跨工厂数据口径不一致",
+          "数字化项目 ROI 难量化"
+        ],
+        "objections": [
+          "担心系统集成影响生产连续性",
+          "不接受没有行业证据的泛泛方案",
+          "预算和决策链暂不适合过早透露"
+        ],
+        "hidden_information": "预算范围、竞品报价、最终决策链和内部政治关系只在销售完成充分需求探索后逐步透露。",
+        "success_criteria": [
+          "能保持首次拜访关系边界",
+          "能追问业务影响和验证指标",
+          "能约定下一步诊断或技术交流"
+        ],
+        "allowed_disclosure_policy": {
+          "situation_code": "first_visit",
+          "phases": [
+            {
+              "phase": "discovery",
+              "visible_keys": ["industry", "company_profile", "customer_role", "pain_points"]
+            },
+            {
+              "phase": "validated_need",
+              "visible_keys": ["objections", "success_criteria"]
+            }
+          ],
+          "never_disclose_keys": ["competitor_quote", "decision_chain"]
+        },
+        "content_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "status": "published"
+      },
+      "depends_on": []
+    },
+    {
+      "asset_type": "persona",
+      "namespace": "default",
+      "natural_key": "manufacturing-cio-first-visit",
+      "name": "制造业 CIO 首次拜访",
+      "version": 1,
+      "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "name": "制造业 CIO 首次拜访",
+        "description": "严谨、技术导向的制造业集团 CIO，首次正式拜访场景。",
+        "category": "customer",
+        "difficulty": "medium",
+        "system_prompt": "你是华东精密装备集团的信息化负责人，正在首次接待外部售前顾问。",
+        "traits": {
+          "communication_style": "rigorous",
+          "evidence_oriented": "true"
+        },
+        "knowledge_base_ids": [],
+        "persona_policy": {
+          "version": 1,
+          "system_prompt": "你是华东精密装备集团 CIO，首次拜访只谈现状、痛点和下一步，不接受空泛产品推销。",
+          "role_anchor": {
+            "version": 1,
+            "identity_template": "你是{role_name}，{relationship_stage}。{bottom_line}。",
+            "bottom_line": "你不认识对方，保持审慎距离；需求未被充分理解前不让步。",
+            "must_do": "追问量化影响、集成风险与可验证证据。",
+            "must_not": "主动报价、承诺未验证 ROI、一次性透露全部隐藏信息。"
+          },
+          "tone_profile": {
+            "base_tone": "professional_detached",
+            "response_length": "medium",
+            "challenge_frequency": 0.7
+          },
+          "knowledge_base_ids": [],
+          "tool_policy": {
+            "require_grounding": true,
+            "allow_web_search": false
+          }
+        },
+        "behavior_config": {
+          "challenge_frequency": 0.7,
+          "follow_up_style": "socratic"
+        },
+        "status": "published"
+      },
+      "depends_on": [
+        {
+          "asset_type": "knowledge_base",
+          "namespace": "default",
+          "natural_key": "presales-cio-first-visit-kb"
+        }
+      ]
+    },
+    {
+      "asset_type": "practice_template",
+      "namespace": "default",
+      "natural_key": "cio-first-visit-roleplay",
+      "name": "制造业 CIO 首访客户对练",
+      "version": 1,
+      "content_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "name": "制造业 CIO 首访客户对练",
+        "description": "制造业 CIO 首访场景的单段客户角色扮演模板。",
+        "scenario_type": "sales",
+        "mode": "customer_roleplay",
+        "situation_pack_code": "first_visit",
+        "target_learner_level": "beginner",
+        "timeout_config": {
+          "roleplay": {
+            "situation_code": "first_visit",
+            "max_duration_seconds": 900
+          }
+        },
+        "asset_refs": {
+          "agent": {
+            "asset_type": "agent",
+            "namespace": "default",
+            "natural_key": "bootstrap-agent"
+          },
+          "persona": {
+            "asset_type": "persona",
+            "namespace": "default",
+            "natural_key": "manufacturing-cio-first-visit"
+          },
+          "runtime_profile": {
+            "asset_type": "voice_runtime_profile",
+            "namespace": "default",
+            "natural_key": "bootstrap-runtime"
+          },
+          "scoring_ruleset": {
+            "asset_type": "scoring_ruleset",
+            "namespace": "default",
+            "natural_key": "sales-bootstrap"
+          },
+          "situation_pack": {
+            "asset_type": "situation_pack",
+            "namespace": "default",
+            "natural_key": "first_visit"
+          },
+          "case_item": {
+            "asset_type": "case_item",
+            "namespace": "default",
+            "natural_key": "presales-cio-first-visit-case"
+          },
+          "knowledge_bases": [
+            {
+              "asset_type": "knowledge_base",
+              "namespace": "default",
+              "natural_key": "presales-cio-first-visit-kb"
+            }
+          ]
+        },
+        "status": "published"
+      },
+      "depends_on": [
+        {
+          "asset_type": "agent",
+          "namespace": "default",
+          "natural_key": "bootstrap-agent"
+        },
+        {
+          "asset_type": "persona",
+          "namespace": "default",
+          "natural_key": "manufacturing-cio-first-visit"
+        },
+        {
+          "asset_type": "voice_runtime_profile",
+          "namespace": "default",
+          "natural_key": "bootstrap-runtime"
+        },
+        {
+          "asset_type": "scoring_ruleset",
+          "namespace": "default",
+          "natural_key": "sales-bootstrap"
+        },
+        {
+          "asset_type": "situation_pack",
+          "namespace": "default",
+          "natural_key": "first_visit"
+        },
+        {
+          "asset_type": "case_item",
+          "namespace": "default",
+          "natural_key": "presales-cio-first-visit-case"
+        },
+        {
+          "asset_type": "knowledge_base",
+          "namespace": "default",
+          "natural_key": "presales-cio-first-visit-kb"
+        }
+      ]
+    },
+    {
+      "asset_type": "practice_template",
+      "namespace": "default",
+      "natural_key": "cio-first-visit-loop",
+      "name": "制造业 CIO 首次拜访闭环训练",
+      "version": 1,
+      "content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "status": "published",
+      "governance": "native_lifecycle",
+      "payload": {
+        "name": "制造业 CIO 首次拜访闭环训练",
+        "description": "学习、考核、客户对练和报告复盘的一条闭环路径。",
+        "scenario_type": "sales",
+        "mode": "mixed_path",
+        "situation_pack_code": "first_visit",
+        "target_learner_level": "beginner",
+        "timeout_config": {
+          "roleplay": {
+            "situation_code": "first_visit",
+            "max_duration_seconds": 900
+          }
+        },
+        "curriculum_plan": {
+          "name": "制造业 CIO 首次拜访闭环",
+          "description": "学习（含专家答疑）→ 考核 → 客户对练 → 报告复盘",
+          "max_stage_duration_seconds": 900,
+          "stages": [
+            {
+              "template_stage_key": "presales_cio_study",
+              "stage_type": "study",
+              "order": 1,
+              "name": "首访学习与专家答疑",
+              "template_ref": {
+                "asset_type": "learning_content",
+                "namespace": "default",
+                "natural_key": "cio-first-visit-camp",
+                "version": 1,
+                "hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+                "snapshot_label": "published"
+              },
+              "completion_policy": {
+                "min_score": 0,
+                "min_rounds": 0,
+                "max_duration_seconds": 600
+              },
+              "failure_policy": "retry_current",
+              "prerequisites": []
+            },
+            {
+              "template_stage_key": "presales_cio_exam",
+              "stage_type": "exam",
+              "order": 2,
+              "name": "首访能力测验",
+              "template_ref": {
+                "asset_type": "examiner_agent",
+                "namespace": "default",
+                "natural_key": "cio-first-visit-examiner",
+                "version": 1,
+                "hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+                "snapshot_label": "published"
+              },
+              "completion_policy": {
+                "min_score": 6,
+                "min_rounds": 1,
+                "max_duration_seconds": 900
+              },
+              "failure_policy": "retry_current",
+              "prerequisites": [
+                {
+                  "template_stage_key": "presales_cio_study",
+                  "required_result": "completed"
+                }
+              ]
+            },
+            {
+              "template_stage_key": "presales_cio_roleplay",
+              "stage_type": "practice",
+              "order": 3,
+              "name": "制造业 CIO 客户模拟",
+              "template_ref": {
+                "asset_type": "practice_template",
+                "namespace": "default",
+                "natural_key": "cio-first-visit-roleplay",
+                "version": 1,
+                "hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "snapshot_label": "published"
+              },
+              "completion_policy": {
+                "min_score": 6,
+                "min_rounds": 1,
+                "max_duration_seconds": 900
+              },
+              "failure_policy": "retry_current",
+              "prerequisites": [
+                {
+                  "template_stage_key": "presales_cio_exam",
+                  "required_result": "completed"
+                }
+              ]
+            }
+          ]
+        },
+        "asset_refs": {
+          "agent": {
+            "asset_type": "agent",
+            "namespace": "default",
+            "natural_key": "bootstrap-agent"
+          },
+          "persona": {
+            "asset_type": "persona",
+            "namespace": "default",
+            "natural_key": "manufacturing-cio-first-visit"
+          },
+          "runtime_profile": {
+            "asset_type": "voice_runtime_profile",
+            "namespace": "default",
+            "natural_key": "bootstrap-runtime"
+          },
+          "scoring_ruleset": {
+            "asset_type": "scoring_ruleset",
+            "namespace": "default",
+            "natural_key": "sales-bootstrap"
+          },
+          "situation_pack": {
+            "asset_type": "situation_pack",
+            "namespace": "default",
+            "natural_key": "first_visit"
+          },
+          "learning_content": {
+            "asset_type": "learning_content",
+            "namespace": "default",
+            "natural_key": "cio-first-visit-camp"
+          },
+          "examiner_agent": {
+            "asset_type": "examiner_agent",
+            "namespace": "default",
+            "natural_key": "cio-first-visit-examiner"
+          },
+          "knowledge_bases": [
+            {
+              "asset_type": "knowledge_base",
+              "namespace": "default",
+              "natural_key": "presales-cio-first-visit-kb"
+            }
+          ]
+        },
+        "status": "published"
+      },
+      "depends_on": [
+        {
+          "asset_type": "agent",
+          "namespace": "default",
+          "natural_key": "bootstrap-agent"
+        },
+        {
+          "asset_type": "persona",
+          "namespace": "default",
+          "natural_key": "manufacturing-cio-first-visit"
+        },
+        {
+          "asset_type": "voice_runtime_profile",
+          "namespace": "default",
+          "natural_key": "bootstrap-runtime"
+        },
+        {
+          "asset_type": "scoring_ruleset",
+          "namespace": "default",
+          "natural_key": "sales-bootstrap"
+        },
+        {
+          "asset_type": "situation_pack",
+          "namespace": "default",
+          "natural_key": "first_visit"
+        },
+        {
+          "asset_type": "learning_content",
+          "namespace": "default",
+          "natural_key": "cio-first-visit-camp"
+        },
+        {
+          "asset_type": "examiner_agent",
+          "namespace": "default",
+          "natural_key": "cio-first-visit-examiner"
+        },
+        {
+          "asset_type": "practice_template",
+          "namespace": "default",
+          "natural_key": "cio-first-visit-roleplay"
+        },
+        {
+          "asset_type": "knowledge_base",
+          "namespace": "default",
+          "natural_key": "presales-cio-first-visit-kb"
+        }
+      ]
+    }
+  ],
+  "topology_order": [
+    "agent:bootstrap-agent",
+    "voice_runtime_profile:bootstrap-runtime",
+    "scoring_ruleset:sales-bootstrap",
+    "knowledge_base:presales-cio-first-visit-kb",
+    "learning_content:cio-first-visit-camp",
+    "question_category:cio-first-visit-exam",
+    "question_item:cio-first-visit-discovery-question",
+    "examiner_agent:cio-first-visit-examiner",
+    "situation_pack:first_visit",
+    "case_item:presales-cio-first-visit-case",
+    "persona:manufacturing-cio-first-visit",
+    "practice_template:cio-first-visit-roleplay",
+    "practice_template:cio-first-visit-loop"
+  ],
+  "import_options_documentation": {
+    "dry_run": true,
+    "conflict_strategy": "new_version",
+    "publish_after_import": true
+  }
+}

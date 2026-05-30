@@ -90,6 +90,47 @@ class AgentService:
             logger.error(f"Failed to create Agent: {e}")
             return Result.fail(f"[AGENT_CREATE_FAILED] {str(e)}")
 
+    async def import_agent(
+        self,
+        payload: dict[str, Any],
+        *,
+        user_id: str | None,
+        status: str = AgentStatus.DRAFT.value,
+    ) -> Result[Agent]:
+        """Create an Agent from a config-asset import payload through service rules."""
+
+        result = await self.create(
+            CreateAgentRequest(
+                name=str(payload.get("name") or "Imported Agent"),
+                description=payload.get("description"),
+                icon=payload.get("icon"),
+                category=str(payload.get("category") or "sales"),
+                welcome_message=payload.get("welcome_message"),
+                capabilities_config=(
+                    payload.get("capabilities_config")
+                    if isinstance(payload.get("capabilities_config"), dict)
+                    else {}
+                ),
+            ),
+            user_id=user_id,
+        )
+        if not result.is_success or result.value is None:
+            return result
+
+        agent = result.value
+        normalized_status = str(status or AgentStatus.DRAFT.value)
+        if normalized_status == AgentStatus.PUBLISHED.value:
+            setattr(agent, "status", AgentStatus.PUBLISHED.value)
+            setattr(agent, "published_at", datetime.now(UTC))
+            setattr(agent, "updated_at", datetime.now(UTC))
+        elif normalized_status == AgentStatus.ARCHIVED.value:
+            setattr(agent, "status", AgentStatus.ARCHIVED.value)
+            setattr(agent, "updated_at", datetime.now(UTC))
+
+        await self.db.flush()
+        await self.db.refresh(agent)
+        return Result.ok(agent)
+
     async def list(
         self,
         page: int = 1,
@@ -291,6 +332,21 @@ class AgentService:
 
         if agent.status == AgentStatus.PUBLISHED.value:
             return Result.fail("[AGENT_ALREADY_PUBLISHED]")
+
+        active_persona_stmt = (
+            select(AgentPersona)
+            .join(Persona, AgentPersona.persona_id == Persona.id)
+            .where(
+                AgentPersona.agent_id == agent_id,
+                Persona.status == "active",
+            )
+            .limit(1)
+        )
+        active_persona = (
+            await self.db.execute(active_persona_stmt)
+        ).scalar_one_or_none()
+        if active_persona is None:
+            return Result.fail("[AGENT_PERSONA_LINK_REQUIRED]")
 
         setattr(agent, "status", AgentStatus.PUBLISHED.value)
         setattr(agent, "published_at", datetime.now(UTC))

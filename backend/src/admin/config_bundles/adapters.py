@@ -10,7 +10,11 @@ from typing import Any, Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.business_rules.defaults import SALES_COMBINATION_RULES_KEY
+from common.business_rules.defaults import (
+    ROLEPLAY_SITUATION_PACKS_KEY,
+    SALES_COMBINATION_RULES_KEY,
+    get_business_rule_definition,
+)
 from common.business_rules.service import BusinessRuleConfigService
 from common.db.models import BusinessRuleConfig, ScoringRuleset
 from common.effectiveness.scoring_rulesets import (
@@ -161,6 +165,73 @@ class ScoringRulesetBundleAdapter:
         ]
 
 
+class RoleplaySituationPacksConfigBundleAdapter:
+    """ConfigBundle adapter for governed Roleplay Situation Packs."""
+
+    adapter_key = "roleplay_situation_packs"
+    bundle_key = ROLEPLAY_SITUATION_PACKS_KEY
+    display_name = "角色扮演情景包"
+    domain = "voice_runtime"
+
+    async def bundle(self, db: AsyncSession) -> ConfigBundleSnapshot:
+        definition = get_business_rule_definition(self.bundle_key)
+        versions = await self.versions(db)
+        active = next(
+            (item for item in versions if item.status in {"published", "disabled"}),
+            versions[0] if versions else None,
+        )
+        snapshot = active.snapshot if active else {}
+        return ConfigBundleSnapshot(
+            bundle_key=self.bundle_key,
+            display_name=self.display_name,
+            domain=self.domain,
+            legacy_domain=definition.domain,
+            adapter_key=self.adapter_key,
+            read_path=definition.read_path,
+            admin_entry=definition.admin_entry,
+            status=active.status if active else "default",
+            overview=_roleplay_situation_pack_overview(snapshot),
+            active_version=active,
+        )
+
+    async def versions(self, db: AsyncSession) -> list[ConfigVersionSnapshot]:
+        service = BusinessRuleConfigService(db)
+        rows = await service.list_configs(key=self.bundle_key)
+        if not rows:
+            resolution = await service.resolve_active_config(self.bundle_key)
+            return [
+                ConfigVersionSnapshot(
+                    source_config_id=resolution.config_id,
+                    version=resolution.version,
+                    version_label=_version_label(resolution.value, resolution.version),
+                    status=resolution.status or "default",
+                    snapshot=deepcopy(resolution.value),
+                    created_at=None,
+                    updated_at=None,
+                )
+            ]
+        return [_version_from_business_rule_row(row) for row in rows]
+
+    async def sync_head_projection(
+        self,
+        db: AsyncSession,
+        *,
+        snapshot: dict[str, Any] | None = None,
+        actor_id: str | None = None,
+    ):
+        from curriculum_practice.services.roleplay.situation_pack_projection_sync import (
+            SituationPackProjectionSyncService,
+        )
+
+        service = SituationPackProjectionSyncService(db)
+        if snapshot is not None:
+            return await service.sync_from_ruleset_snapshot(
+                snapshot,
+                actor_id=actor_id,
+            )
+        return await service.sync_active_published_ruleset(actor_id=actor_id)
+
+
 def service_definition():
     from common.business_rules.defaults import get_business_rule_definition
 
@@ -243,8 +314,24 @@ def _scoring_ruleset_overview(
     }
 
 
+def _roleplay_situation_pack_overview(snapshot: dict[str, Any]) -> dict[str, Any]:
+    packs = [item for item in snapshot.get("packs", []) if isinstance(item, dict)]
+    published = [
+        item for item in packs if str(item.get("status") or "") == "published"
+    ]
+    return {
+        "ruleset_version": snapshot.get("version"),
+        "pack_count": len(packs),
+        "published_pack_count": len(published),
+        "published_codes": sorted(
+            str(item.get("code")) for item in published if item.get("code")
+        ),
+    }
+
+
 def list_config_bundle_adapters() -> list[ConfigBundleAdapter]:
     return [
         BusinessRuleSalesCombinationConfigBundleAdapter(),
         ScoringRulesetBundleAdapter(),
+        RoleplaySituationPacksConfigBundleAdapter(),
     ]

@@ -12,12 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin.config_bundles.adapters import (
     ConfigBundleAdapter,
+    RoleplaySituationPacksConfigBundleAdapter,
     list_config_bundle_adapters,
 )
-from common.business_rules.defaults import SALES_COMBINATION_RULES_KEY
+from common.business_rules.defaults import ROLEPLAY_SITUATION_PACKS_KEY
 from common.business_rules.service import BusinessRuleConfigService
 from common.db.models import ConfigBundle, ConfigBundleAuditLog, ConfigVersion
-from common.monitoring.logger import get_trace_id
+from common.monitoring.logger import get_logger, get_trace_id
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -135,12 +138,21 @@ class ConfigBundleLifecycleService:
         )
         version = await self._sync_business_rule_version(bundle_key, row)
         await self._sync_active_history(bundle_key)
+        projection_sync = await self._sync_situation_pack_head_projection(
+            bundle_key=bundle_key,
+            actor_id=actor_id,
+            snapshot=dict(getattr(row, "value_json") or {}),
+            lifecycle_action="publish",
+        )
+        after_snapshot = self.version_snapshot(version)
+        if projection_sync is not None and after_snapshot is not None:
+            after_snapshot = {**after_snapshot, "projection_sync": projection_sync}
         audit = self._queue_audit(
             action="publish",
             bundle_key=bundle_key,
             actor_id=actor_id,
             before_snapshot=self.version_snapshot(before),
-            after_snapshot=self.version_snapshot(version),
+            after_snapshot=after_snapshot,
             reason=reason,
             version=version,
         )
@@ -165,12 +177,21 @@ class ConfigBundleLifecycleService:
         )
         version = await self._sync_business_rule_version(bundle_key, row)
         await self._sync_active_history(bundle_key)
+        projection_sync = await self._sync_situation_pack_head_projection(
+            bundle_key=bundle_key,
+            actor_id=actor_id,
+            snapshot=dict(getattr(row, "value_json") or {}),
+            lifecycle_action="rollback",
+        )
+        after_snapshot = self.version_snapshot(version)
+        if projection_sync is not None and after_snapshot is not None:
+            after_snapshot = {**after_snapshot, "projection_sync": projection_sync}
         audit = self._queue_audit(
             action="rollback",
             bundle_key=bundle_key,
             actor_id=actor_id,
             before_snapshot=self.version_snapshot(before),
-            after_snapshot=self.version_snapshot(version),
+            after_snapshot=after_snapshot,
             reason=reason,
             version=version,
         )
@@ -220,8 +241,6 @@ class ConfigBundleLifecycleService:
         bundle_key: str,
         row: object,
     ) -> ConfigVersion:
-        if bundle_key != SALES_COMBINATION_RULES_KEY:
-            raise ValueError("[CONFIG_BUNDLE_LIFECYCLE_UNSUPPORTED]")
         adapter = self._adapter_for(bundle_key)
         bundle = await adapter.bundle(self._db)
         bundle_row = await self._bundle_row(bundle_key)
@@ -297,6 +316,45 @@ class ConfigBundleLifecycleService:
         rows = await BusinessRuleConfigService(self._db).list_configs(key=bundle_key)
         for row in rows:
             await self._sync_business_rule_version(bundle_key, row)
+
+    async def _sync_situation_pack_head_projection(
+        self,
+        *,
+        bundle_key: str,
+        actor_id: str | None,
+        snapshot: dict[str, Any],
+        lifecycle_action: str,
+    ) -> dict[str, Any] | None:
+        if bundle_key != ROLEPLAY_SITUATION_PACKS_KEY:
+            return None
+        adapter = self._adapter_for(bundle_key)
+        if not isinstance(adapter, RoleplaySituationPacksConfigBundleAdapter):
+            return None
+        try:
+            sync_result = await adapter.sync_head_projection(
+                self._db,
+                snapshot=snapshot,
+                actor_id=actor_id,
+            )
+            return {
+                "status": "ok",
+                "lifecycle_action": lifecycle_action,
+                "synced_codes": list(sync_result.synced_codes),
+                "created_count": sync_result.created_count,
+                "updated_count": sync_result.updated_count,
+            }
+        except Exception as exc:
+            logger.warning(
+                "situation_pack_projection_sync_failed",
+                bundle_key=bundle_key,
+                lifecycle_action=lifecycle_action,
+                error=str(exc),
+            )
+            return {
+                "status": "failed",
+                "lifecycle_action": lifecycle_action,
+                "error": str(exc),
+            }
 
     @staticmethod
     def version_snapshot(version: ConfigVersion | None) -> dict[str, Any] | None:

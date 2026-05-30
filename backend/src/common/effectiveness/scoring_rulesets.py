@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -398,6 +399,45 @@ class ScoringRulesetService:
             after=self._snapshot(row),
         )
         return self.view_from_model(row)
+
+    async def import_ruleset(
+        self,
+        payload: dict[str, Any],
+        *,
+        actor_id: str,
+        status: str = "draft",
+        reason: str | None = None,
+    ) -> ScoringRulesetView:
+        """Create a ruleset from config-asset import data through this service."""
+
+        definition = ScoringRulesetDefinition.model_validate(
+            payload.get("definition") or payload.get("definition_json") or {}
+        )
+        actor = cast(
+            User,
+            SimpleNamespace(
+                user_id=actor_id,
+                role="admin",
+                email=actor_id,
+            ),
+        )
+        view = await self.create_ruleset(
+            scenario_type=str(payload.get("scenario_type") or definition.scenario_type),
+            version=str(payload.get("version") or "imported"),
+            display_name=str(payload.get("display_name") or payload.get("name") or "Imported scoring ruleset"),
+            description=payload.get("description"),
+            definition=definition,
+            actor=actor,
+        )
+        if status == "published" or bool(payload.get("is_active")):
+            if view.ruleset_id is None:
+                raise ValueError("[SCORING_RULESET_IMPORT_ID_MISSING]")
+            view = await self.publish_ruleset(
+                ruleset_id=view.ruleset_id,
+                actor=actor,
+                reason=reason or "config_asset_import",
+            )
+        return view
 
     async def update_ruleset(
         self,

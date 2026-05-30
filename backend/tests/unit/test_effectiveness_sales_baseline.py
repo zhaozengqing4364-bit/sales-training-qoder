@@ -5,8 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from common.api.practice import _apply_sales_realtime_score_snapshot_to_session
 from common.effectiveness import evaluate_effectiveness_snapshot
+from common.services.practice_session_service import (
+    _apply_sales_realtime_score_snapshot_to_session,
+)
 
 
 @pytest.mark.asyncio

@@ -11,10 +11,22 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from common.monitoring.logger import get_logger
+from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
 from prompt_templates.compiled_contract import (
     PROMPT_CONTRACT_VERSION,
     build_prompt_contract_hash,
 )
+
+logger = get_logger(__name__)
+
+_RELATIONSHIP_STAGE_LABELS = {
+    "none": "这是你们首次正式见面",
+    "one_meeting": "你们此前有过一次正式沟通",
+    "multiple_meetings": "你们此前已有多次正式沟通",
+    "existing_customer": "你们已是既有合作关系",
+    "unspecified": "你们的关系阶段尚未明确",
+}
 
 _SALES_FOCUS_LABELS = {
     "value_translation": "价值翻译",
@@ -40,7 +52,7 @@ _SALES_FOCUS_LABELS = {
 
 
 def build_instruction_contract_hash(instructions: str) -> str:
-    """Build a short stable hash for instruction contract auditing."""
+    """Build a short stable hash for legacy instruction_contract_hash fields."""
     return build_prompt_contract_hash("voice_instruction", instructions)
 
 
@@ -90,6 +102,10 @@ class VoiceInstructionCompiler:
                 "- 不直接给销售方答案，优先表达顾虑、条件与澄清需求。"
             )
 
+        roleplay_contract_section = cls._build_roleplay_contract_section(policy)
+        if roleplay_contract_section:
+            sections.append(roleplay_contract_section)
+
         customer_pressure_section = cls._build_customer_pressure_section(
             policy=policy,
             persona_policy=persona_policy,
@@ -108,6 +124,101 @@ class VoiceInstructionCompiler:
             base_instructions=instructions,
             contract_hash=build_instruction_contract_hash(instructions),
         )
+
+    @classmethod
+    def build_role_anchor(
+        cls,
+        persona_policy: dict[str, Any],
+        situation_pack: SituationPackDTO,
+        persona_name: str,
+    ) -> str:
+        """Compile persona role_anchor template into per-turn anchor text."""
+        policy = cls._as_dict(persona_policy)
+        role_anchor = policy.get("role_anchor")
+        if role_anchor is None:
+            return ""
+        if not isinstance(role_anchor, dict):
+            logger.warning(
+                "role_anchor_compile_skipped",
+                reason="invalid_type",
+                role_anchor_type=type(role_anchor).__name__,
+            )
+            return ""
+        if not role_anchor:
+            logger.warning(
+                "role_anchor_compile_skipped",
+                reason="empty_role_anchor",
+            )
+            return ""
+
+        relationship_stage = cls._humanize_relationship(
+            situation_pack.relationship_context
+        )
+        template = str(role_anchor.get("identity_template") or "")
+        bottom_line = str(role_anchor.get("bottom_line") or "").strip()
+        must_do = str(role_anchor.get("must_do") or "").strip()
+        must_not = str(role_anchor.get("must_not") or "").strip()
+
+        if "{relationship_stage}" in template and not relationship_stage:
+            logger.warning(
+                "role_anchor_compile_skipped",
+                reason="missing_relationship_stage",
+                situation_code=situation_pack.code,
+            )
+            return ""
+
+        format_values = {
+            "role_name": str(persona_name or "").strip(),
+            "relationship_stage": relationship_stage,
+            "bottom_line": bottom_line,
+        }
+        try:
+            identity_text = template.format(**format_values)
+        except (KeyError, ValueError, IndexError) as exc:
+            logger.warning(
+                "role_anchor_compile_skipped",
+                reason="template_format_failed",
+                error=str(exc),
+            )
+            return ""
+
+        if not identity_text.strip() and not must_do and not must_not:
+            logger.warning(
+                "role_anchor_compile_skipped",
+                reason="empty_compiled_anchor",
+            )
+            return ""
+
+        parts = [f"【角色锚】\n{identity_text}"]
+        if must_do:
+            parts.append(f"必须：{must_do}。")
+        if must_not:
+            parts.append(f"禁止：{must_not}。")
+
+        return "\n".join(parts)
+
+    @staticmethod
+    def _humanize_relationship(relationship_context: dict[str, Any]) -> str:
+        relationship = VoiceInstructionCompiler._as_dict(relationship_context)
+        meeting_summary = str(relationship.get("meeting_history_summary") or "").strip()
+        if meeting_summary:
+            return meeting_summary
+
+        prior_interactions = str(
+            relationship.get("prior_interactions") or ""
+        ).strip().lower()
+        if prior_interactions == "none":
+            return _RELATIONSHIP_STAGE_LABELS["none"]
+        if prior_interactions in _RELATIONSHIP_STAGE_LABELS:
+            return _RELATIONSHIP_STAGE_LABELS[prior_interactions]
+
+        has_prior_meeting = relationship.get("has_prior_meeting")
+        if has_prior_meeting is False:
+            return _RELATIONSHIP_STAGE_LABELS["none"]
+        if has_prior_meeting is True:
+            return _RELATIONSHIP_STAGE_LABELS["one_meeting"]
+
+        return ""
 
     @staticmethod
     def compose_turn_instructions(
@@ -129,6 +240,74 @@ class VoiceInstructionCompiler:
         if isinstance(value, dict):
             return value
         return {}
+
+    @classmethod
+    def _build_roleplay_contract_section(cls, policy: dict[str, Any]) -> str:
+        contract = cls._as_dict(policy.get("roleplay_contract"))
+        if not contract or contract.get("legacy_status") == "legacy_unstructured_roleplay":
+            return ""
+
+        situation = cls._as_dict(contract.get("situation"))
+        relationship = cls._as_dict(contract.get("relationship_context"))
+        visible_scope = cls._as_dict(contract.get("visible_information_scope"))
+        sales_stage_policy = cls._as_dict(contract.get("sales_stage_policy"))
+        forbidden_patterns = cls._normalize_text_list(
+            contract.get("forbidden_claim_patterns")
+        )
+        prompt_only_rules = cls._normalize_text_list(
+            contract.get("behavior_rules_for_prompt_only")
+        )
+
+        lines = [
+            f"情景：{str(situation.get('label') or situation.get('code') or '').strip()}。",
+            "关系史事实：" + cls._relationship_context_text(relationship),
+            "销售阶段 authority 固定为 "
+            + str(sales_stage_policy.get("stage_authority") or "SalesStageCapability")
+            + "；不要自行创造另一套阶段状态。",
+            "首轮只能使用这些业务字段："
+            + cls._join_text_list(visible_scope.get("initial_visible_keys")),
+            "默认隐藏字段不得主动披露："
+            + cls._join_text_list(visible_scope.get("hidden_by_default_keys")),
+        ]
+        if forbidden_patterns:
+            lines.append("不得声称或暗示：" + "；".join(forbidden_patterns))
+        conflict_strategy = str(contract.get("conflict_response_strategy") or "").strip()
+        if conflict_strategy:
+            lines.append(f"当用户提出与关系史冲突的前提时，按 {conflict_strategy} 响应。")
+        if prompt_only_rules:
+            lines.extend(prompt_only_rules)
+        lines.append("除非当前轮 instructions 明确新增可见字段，否则不要使用隐藏信息或编造历史互动。")
+        return "【角色扮演合同】\n" + "\n".join(f"- {line}" for line in lines if line)
+
+    @staticmethod
+    def _relationship_context_text(relationship: dict[str, Any]) -> str:
+        facts: list[str] = []
+        for key in (
+            "prior_interactions",
+            "has_prior_meeting",
+            "has_seen_proposal",
+            "has_discussed_budget",
+            "has_existing_partnership",
+        ):
+            if relationship.get(key) is not None:
+                facts.append(f"{key}={relationship.get(key)}")
+        summary = str(relationship.get("meeting_history_summary") or "").strip()
+        if summary:
+            facts.append(f"meeting_history_summary={summary}")
+        return "，".join(facts) if facts else "unspecified"
+
+    @classmethod
+    def _join_text_list(cls, raw: Any) -> str:
+        values = cls._normalize_text_list(raw)
+        return "、".join(values) if values else "无"
+
+    @staticmethod
+    def _normalize_text_list(raw: Any) -> list[str]:
+        if isinstance(raw, str):
+            return [raw] if raw.strip() else []
+        if isinstance(raw, (list, tuple, set)):
+            return [str(item).strip() for item in raw if str(item).strip()]
+        return []
 
     @staticmethod
     def _to_bool(value: Any, default: bool = False) -> bool:

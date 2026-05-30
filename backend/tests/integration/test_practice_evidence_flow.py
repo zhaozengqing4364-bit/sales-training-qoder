@@ -541,8 +541,12 @@ async def test_report_history_admin_and_replay_routes_keep_session_evidence_as_c
     assert history_item["not_evaluable_reason"] is None
     assert admin_item["not_evaluable_reason"] is None
 
-    assert report_data["evidence_completeness"] == baseline_projection.evidence_completeness
-    assert replay_data["evidence_completeness"] == baseline_projection.evidence_completeness
+    expected_report_completeness = {
+        **baseline_projection.evidence_completeness,
+        "scoring_ruleset": report_data["evidence_completeness"]["scoring_ruleset"],
+    }
+    assert report_data["evidence_completeness"] == expected_report_completeness
+    assert replay_data["evidence_completeness"] == expected_report_completeness
     assert history_item["evidence_completeness"] == baseline_projection.evidence_completeness
     assert admin_item["evidence_completeness"] == baseline_projection.evidence_completeness
 

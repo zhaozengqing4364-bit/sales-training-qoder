@@ -199,6 +199,14 @@ describe("ContentAssetIndex", () => {
         expect(await screen.findByRole("heading", { name: "客户角色库" })).toBeTruthy();
         expect(screen.getByText("谨慎型采购总监")).toBeTruthy();
     });
+
+    it("shows edit link for draft RoleProfile", async () => {
+        render(<ContentAssetIndex assetType="role-profile" />);
+        await screen.findByText("谨慎型采购总监");
+        expect(screen.getByRole("link", { name: "编辑资产" }).getAttribute("href")).toBe(
+            "/admin/curriculum-practice/role-profiles/role-1/edit",
+        );
+    });
 });
 
 describe("ContentAssetImportWizard", () => {
@@ -258,6 +266,24 @@ describe("ContentAssetFormPage", () => {
         render(<ContentAssetFormPage assetType="case-item" mode="edit" assetId="case-1" />);
         await screen.findByRole("button", { name: "保存资产" });
         expect(getCaseItemMock).toHaveBeenCalledWith("case-1");
+    });
+
+    it("renders CaseItem create form with structured fields only", () => {
+        render(<ContentAssetFormPage assetType="case-item" mode="create" />);
+
+        expect(screen.getByLabelText("行业")).toBeTruthy();
+        expect(screen.getByLabelText("公司画像")).toBeTruthy();
+        expect(screen.getByLabelText("允许披露阶段（逗号分隔）")).toBeTruthy();
+        expect(screen.queryByText(/\(JSON\)/)).toBeNull();
+    });
+
+    it("renders RoleProfile edit form with structured fields only", async () => {
+        render(<ContentAssetFormPage assetType="role-profile" mode="edit" assetId="role-1" />);
+        await screen.findByLabelText("角色名称");
+
+        expect(screen.getByLabelText("压力等级")).toBeTruthy();
+        expect(screen.getByLabelText("沟通风格")).toBeTruthy();
+        expect(screen.queryByText(/\(JSON\)/)).toBeNull();
     });
 
     it("creates CaseItems from dedicated form page", async () => {

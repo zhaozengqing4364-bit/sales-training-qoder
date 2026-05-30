@@ -69,7 +69,17 @@ from common.websocket.base_handler import (
 )
 from common.websocket.session_manager import get_session_manager
 from common.websocket.session_state_service import SessionStateSnapshot
-from curriculum_practice.models import PracticeTemplate
+from curriculum_practice.services.runtime_dossier import (
+    CURRICULUM_RUNTIME_SNAPSHOT_STALE,
+    CurriculumRuntimeDossierError,
+    CurriculumRuntimeDossierHydrator,
+    compose_curriculum_runtime_instructions,
+)
+from curriculum_practice.services.roleplay_contracts import (
+    ROLEPLAY_DISCLOSURE_STATE_KEY,
+    initial_roleplay_disclosure_state,
+    normalize_roleplay_disclosure_state,
+)
 from sales_bot.services.transcript_normalization import (
     TranscriptNormalizationResult,
     TranscriptNormalizationService,
@@ -645,7 +655,7 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
             )
 
     async def _load_effective_policy(self) -> None:
-        """Load effective voice policy from session snapshot or resolver service."""
+        """Load effective voice policy from the persisted session snapshot."""
         self._effective_policy = {}
         async with self._db_session_factory() as db:
             session_result = await db.execute(
@@ -667,17 +677,33 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
                 if isinstance(curriculum_snapshot, dict)
                 else None
             )
-            if self._curriculum_snapshot is not None:
-                practice_template_id = _optional_runtime_text(
-                    getattr(session, "practice_template_id", None)
+            contract = self._resolve_roleplay_contract_from_snapshots(
+                curriculum_snapshot=self._curriculum_snapshot,
+                voice_policy_snapshot=getattr(session, "voice_policy_snapshot", None),
+            )
+            runtime_state = (
+                getattr(session, "runtime_state", None)
+                if isinstance(getattr(session, "runtime_state", None), dict)
+                else {}
+            )
+            self._roleplay_disclosure_state = normalize_roleplay_disclosure_state(
+                contract,
+                runtime_state.get(ROLEPLAY_DISCLOSURE_STATE_KEY)
+                if isinstance(runtime_state, dict)
+                else None,
+            )
+            if isinstance(contract, dict) and not isinstance(
+                runtime_state.get(ROLEPLAY_DISCLOSURE_STATE_KEY)
+                if isinstance(runtime_state, dict)
+                else None,
+                dict,
+            ):
+                runtime_state = dict(runtime_state)
+                runtime_state[ROLEPLAY_DISCLOSURE_STATE_KEY] = (
+                    self._roleplay_disclosure_state
                 )
-                if practice_template_id:
-                    template = await db.get(PracticeTemplate, practice_template_id)
-                    curriculum_plan = getattr(template, "curriculum_plan", None)
-                    if isinstance(curriculum_plan, dict):
-                        self._curriculum_snapshot["curriculum_plan"] = copy.deepcopy(
-                            curriculum_plan
-                        )
+                session_any.runtime_state = runtime_state
+                await db.commit()
             self._session_agent_id = _optional_runtime_text(
                 getattr(session, "agent_id", None)
             )
@@ -696,39 +722,14 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
             if snapshot:
                 self._effective_policy = snapshot
             else:
-                policy_service_cls = _handler_symbol(
-                    "VoiceRuntimePolicyService",
-                    VoiceRuntimePolicyService,
-                )
-                policy_service = policy_service_cls(db)
-                resolved_policy = await policy_service.resolve_effective_policy(
-                    agent_id=self._session_agent_id,
-                    persona_id=self._session_persona_id,
-                    voice_mode_override=_optional_runtime_text(
-                        getattr(session, "voice_mode", None)
-                    ),
-                    runtime_profile_override=_optional_runtime_text(
-                        getattr(session, "voice_runtime_profile_id", None)
-                    ),
-                )
-                self._effective_policy = resolved_policy
-                session_any.voice_policy_snapshot = self._effective_policy
-                session_any.voice_mode = self._effective_policy.get(
-                    "voice_mode",
-                    _optional_runtime_text(getattr(session, "voice_mode", None))
-                    or "legacy",
-                )
-                session_any.voice_runtime_profile_id = self._effective_policy.get(
-                    "runtime_profile_id"
-                )
-                await db.commit()
-                policy_source = "resolved"
+                raise RuntimeError("VOICE_POLICY_SNAPSHOT_MISSING")
 
             guardrail_applied = self._enforce_tool_policy_guardrails()
             dictionary_applied = await self._merge_kb_dictionary_into_effective_policy(db)
             if guardrail_applied or dictionary_applied:
-                session_any.voice_policy_snapshot = self._effective_policy
-                await db.commit()
+                if self._curriculum_snapshot is None:
+                    session_any.voice_policy_snapshot = self._effective_policy
+                    await db.commit()
 
             profile = self._apply_voice_runtime_profile(self._effective_policy)
             self._stepfun_input_audio_format = str(
@@ -752,6 +753,7 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
                     self._stepfun_playback_rate,
                 )
             )
+            await self._hydrate_curriculum_runtime_dossier(db)
             self._ensure_knowledge_runtime_metrics()
             tool_policy = self._effective_policy.get("tool_policy")
             if not isinstance(tool_policy, dict):
@@ -786,6 +788,66 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
         self._stepfun_instructions = profile.instructions
         self._instruction_contract_hash = profile.instruction_contract_hash
         return profile
+
+    async def _hydrate_curriculum_runtime_dossier(self, db: Any) -> None:
+        if self._curriculum_snapshot is None:
+            return
+        try:
+            dossier = await CurriculumRuntimeDossierHydrator(db).hydrate(
+                self._curriculum_snapshot,
+                roleplay_disclosure_state=self._roleplay_disclosure_state,
+            )
+        except CurriculumRuntimeDossierError as exc:
+            logger.warning(
+                "Curriculum runtime dossier hydration failed",
+                session_id=self.session_id,
+                code=exc.code,
+                missing=exc.missing,
+            )
+            raise RuntimeError(CURRICULUM_RUNTIME_SNAPSHOT_STALE) from exc
+        if not dossier.has_prompt_context:
+            return
+
+        composed_instructions = compose_curriculum_runtime_instructions(
+            self._stepfun_instructions,
+            dossier,
+        )
+        self._stepfun_instructions = composed_instructions
+        self._instruction_contract_hash = build_instruction_contract_hash(
+            composed_instructions
+        )
+        self._effective_policy = dict(self._effective_policy)
+        self._effective_policy["instructions"] = composed_instructions
+        self._effective_policy[
+            "instruction_contract_hash"
+        ] = self._instruction_contract_hash
+        runtime_metrics = self._effective_policy.get("runtime_metrics")
+        if not isinstance(runtime_metrics, dict):
+            runtime_metrics = {}
+        runtime_metrics = dict(runtime_metrics)
+        runtime_metrics["curriculum_dossier"] = dossier.runtime_metrics()
+        self._effective_policy["runtime_metrics"] = runtime_metrics
+        self._voice_runtime_profile = VoiceRuntimeProfile.from_policy_snapshot(
+            self._effective_policy
+        )
+
+    @staticmethod
+    def _resolve_roleplay_contract_from_snapshots(
+        *,
+        curriculum_snapshot: object,
+        voice_policy_snapshot: object,
+    ) -> dict[str, Any] | None:
+        if isinstance(curriculum_snapshot, dict) and isinstance(
+            curriculum_snapshot.get("roleplay_contract"),
+            dict,
+        ):
+            return curriculum_snapshot.get("roleplay_contract")
+        if isinstance(voice_policy_snapshot, dict) and isinstance(
+            voice_policy_snapshot.get("roleplay_contract"),
+            dict,
+        ):
+            return voice_policy_snapshot.get("roleplay_contract")
+        return None
 
     def _active_voice_runtime_profile(self) -> VoiceRuntimeProfile:
         """Return canonical voice runtime profile, falling back to legacy fields before policy load."""
@@ -1170,6 +1232,11 @@ class StepFunRealtimePolicyMixin(StepFunRealtimeStateBase):
                 )
                 realtime_analysis = await self._run_realtime_feedback(
                     user_text=text,
+                    turn_number=turn_number,
+                    sales_stage=sales_stage,
+                )
+                await self._update_roleplay_disclosure_state(
+                    learner_message=text,
                     turn_number=turn_number,
                     sales_stage=sales_stage,
                 )

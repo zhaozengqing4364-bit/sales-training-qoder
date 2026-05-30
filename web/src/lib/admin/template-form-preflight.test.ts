@@ -17,6 +17,7 @@ describe("validateTemplateFormPreflight", () => {
         personaOptions: [publishedOption("persona-1", "Persona A")],
         runtimeOptions: [publishedOption("runtime-1", "Runtime A")],
         scoringOptions: [publishedOption("ruleset-1", "Ruleset A")],
+        situationPackOptions: [publishedOption("first_visit", "首次拜访")],
         knowledgeBases: [{ id: "kb-1", name: "KB", status: "active" } as never],
     };
 
@@ -30,6 +31,8 @@ describe("validateTemplateFormPreflight", () => {
                 scoring_ruleset_id: "ruleset-1",
                 knowledge_base_refs: ["kb-1"],
                 voice_mode: "stepfun_realtime",
+                mode: "customer_roleplay",
+                situation_pack_code: "first_visit",
             },
             context,
         );
@@ -83,5 +86,23 @@ describe("validateTemplateFormPreflight", () => {
             },
         );
         expect(result.fieldErrors.case_item_id).toContain("训练案例尚未发布");
+    });
+
+    it("requires a published Situation Pack for customer roleplay templates", () => {
+        const result = validateTemplateFormPreflight(
+            {
+                name: "模板",
+                agent_id: "agent-1",
+                persona_id: "persona-1",
+                runtime_profile_id: "runtime-1",
+                scoring_ruleset_id: "ruleset-1",
+                knowledge_base_refs: [],
+                voice_mode: "stepfun_realtime",
+                mode: "customer_roleplay",
+                situation_pack_code: "",
+            },
+            context,
+        );
+        expect(result.fieldErrors.situation_pack_code).toContain("必须选择 Situation Pack");
     });
 });

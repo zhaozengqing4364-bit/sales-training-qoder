@@ -175,8 +175,8 @@ async def test_should_reject_template_publish_when_case_or_role_is_unpublished(
     assert published is None
     assert decision.can_publish is False
     assert [item.reason_code for item in decision.results] == [
-        "case_item_unpublished",
-        "role_profile_unpublished",
+        "asset_unpublished",
+        "asset_unpublished",
     ]
 
 
@@ -270,6 +270,11 @@ async def test_should_include_case_and_role_version_refs_without_hidden_informat
     assert refs["role_profile"].asset_id == role_profile.role_profile_id
     assert refs["role_profile"].hash == role_profile.content_hash
 
-    serialized = json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False)
+    prompt_surface = {
+        "content_assets": [
+            item.model_dump(mode="json") for item in snapshot.content_assets
+        ],
+    }
+    serialized = json.dumps(prompt_surface, ensure_ascii=False)
     assert "隐藏预算" not in serialized
     assert "hidden_information" not in serialized

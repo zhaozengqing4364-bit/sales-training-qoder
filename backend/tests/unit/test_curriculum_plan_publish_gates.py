@@ -19,7 +19,7 @@ async def test_should_fail_publish_when_child_template_is_unpublished() -> None:
     decision = await service.validate(candidate)
 
     assert decision.can_publish is False
-    assert "child_template_unpublished" in [
+    assert "template_unpublished" in [
         result.reason_code for result in decision.results
     ]
 

@@ -564,6 +564,7 @@ class SessionReport(BaseModel):
     presentation_review: PresentationReview | None = None
     retry_entry: dict[str, Any] | None = None
     audio_audit: "AudioAuditPayloadSchema | None" = None
+    roleplay_compliance_summary: dict[str, Any] | None = None
     conclusion_evidence: dict[str, Any] | None = None
     evidence_degradation: dict[str, Any] | None = None
 

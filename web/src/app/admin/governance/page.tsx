@@ -4,14 +4,21 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfigAssetCenterObservabilityPanel } from "@/components/admin/config-asset-center-observability-panel";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 import { AdminPageHeader, PolicyPageShell } from "@/components/admin/admin-layout-shells";
 import { api, ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
+import {
+    extractRuntimeGovernanceArtifacts,
+    formatPublishedAssetRefLabel,
+} from "@/lib/admin/runtime-governance-artifacts";
+import { normalizeConfigAssetCenterObservability } from "@/lib/admin/config-asset-center-observability";
 import type {
     AdminAiGovernanceExplainabilityResponse,
     AdminGovernancePermissionsResponse,
     AdminGovernanceSettingsBacklogResponse,
+    SupportRuntimeOverview,
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 
@@ -30,9 +37,19 @@ function formatJsonDisplay(value: Record<string, unknown> | null | undefined): s
     }
 }
 
+function RoleplayGovernanceMetric({ label, value }: { label: string; value: number }) {
+    return (
+        <div className="rounded-2xl border border-slate-100 bg-white/80 p-4">
+            <div className="text-xs font-bold uppercase tracking-widest text-slate-500">{label}</div>
+            <div className="mt-2 text-2xl font-black text-slate-900">{value}</div>
+        </div>
+    );
+}
+
 export default function AdminGovernancePage() {
     const [permissions, setPermissions] = useState<AdminGovernancePermissionsResponse | null>(null);
     const [settingsBacklog, setSettingsBacklog] = useState<AdminGovernanceSettingsBacklogResponse | null>(null);
+    const [runtimeOverview, setRuntimeOverview] = useState<SupportRuntimeOverview | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -48,12 +65,14 @@ export default function AdminGovernancePage() {
         setLoading(true);
         setError(null);
         try {
-            const [permissionsResponse, backlogResponse] = await Promise.all([
+            const [permissionsResponse, backlogResponse, runtimeResponse] = await Promise.all([
                 api.admin.getGovernancePermissionsMatrix(),
                 api.admin.getGovernanceSettingsBacklog(),
+                api.supportRuntime.getOverview({ window_hours: 168 }),
             ]);
             setPermissions(permissionsResponse);
             setSettingsBacklog(backlogResponse);
+            setRuntimeOverview(runtimeResponse);
         } catch (err) {
             setError(`治理信息加载失败：${getApiErrorMessage(err)}`);
             debug.warn("[AdminGovernancePage] failed to load governance inventory", { error: err });
@@ -92,6 +111,8 @@ export default function AdminGovernancePage() {
         }
     }, [sessionIdInput]);
 
+    const configAssetCenterObservability = normalizeConfigAssetCenterObservability(runtimeOverview);
+
     const renderExplainabilityContent = () => {
         const data = explainabilityData;
 
@@ -127,6 +148,10 @@ export default function AdminGovernancePage() {
 
         if (!data) return null;
 
+        const governanceArtifacts = extractRuntimeGovernanceArtifacts(data);
+        const publishedAssetRefEntries = Object.entries(governanceArtifacts.publishedAssetRefs);
+        const runtimeDossier = governanceArtifacts.runtimeDossier;
+
         return (
             <div className="space-y-6">
                 <GlassCard className="p-5">
@@ -150,6 +175,49 @@ export default function AdminGovernancePage() {
                         </div>
                     </div>
                 </GlassCard>
+
+                {(publishedAssetRefEntries.length > 0 || runtimeDossier) ? (
+                    <GlassCard className="space-y-4 p-5">
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                Frozen asset refs / Runtime dossier
+                            </div>
+                            <p className="mt-2 text-sm text-slate-600">
+                                从报告快照、config bundle snapshot 或 evidence 中提取的发布期 frozen refs 与会话 runtime dossier 元数据。
+                            </p>
+                        </div>
+
+                        {publishedAssetRefEntries.length > 0 ? (
+                            <div className="space-y-2">
+                                <div className="text-sm font-bold text-slate-900">published_asset_refs</div>
+                                <div className="grid gap-2">
+                                    {publishedAssetRefEntries.map(([refKey, ref]) => (
+                                        <div key={refKey} className="rounded-2xl border border-slate-100 bg-white/80 p-3 text-xs text-slate-700">
+                                            <div className="font-semibold text-slate-900">
+                                                {formatPublishedAssetRefLabel(refKey, ref)}
+                                            </div>
+                                            <div className="mt-2 grid gap-1 md:grid-cols-2">
+                                                <div>hash: {ref.content_hash || "未记录"}</div>
+                                                <div>snapshot: {ref.snapshot_label || "未记录"}</div>
+                                                <div>bundle: {ref.source_bundle_key || "entity-backed"}</div>
+                                                <div>selector: {ref.snapshot_selector || "未记录"}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {runtimeDossier ? (
+                            <div className="space-y-2">
+                                <div className="text-sm font-bold text-slate-900">runtime dossier</div>
+                                <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-xs text-slate-700">
+                                    {formatJsonDisplay(runtimeDossier)}
+                                </pre>
+                            </div>
+                        ) : null}
+                    </GlassCard>
+                ) : null}
 
                 <div className="grid gap-4 lg:grid-cols-2">
                     <GlassCard className="p-5">
@@ -354,6 +422,58 @@ export default function AdminGovernancePage() {
                                     <p className="mt-2 text-sm text-slate-600">非模型设置仍需后端配置存储、审计和回滚能力。</p>
                                 </GlassCard>
                             </div>
+
+                            <GlassCard className="space-y-4 p-6">
+                                <h2 className="text-xl font-black text-slate-900">Roleplay 合同治理</h2>
+                                <p className="text-sm text-slate-600">
+                                    聚合最近 {runtimeOverview?.window_hours ?? 168} 小时的合同 readiness、违规、修复与 hidden leak prevented 指标。
+                                </p>
+                                <div className="grid gap-3 md:grid-cols-4">
+                                    <RoleplayGovernanceMetric label="Ready sessions" value={runtimeOverview?.roleplay?.ready_sessions ?? 0} />
+                                    <RoleplayGovernanceMetric label="Legacy sessions" value={runtimeOverview?.roleplay?.legacy_sessions ?? 0} />
+                                    <RoleplayGovernanceMetric label="Missing / invalid" value={(runtimeOverview?.roleplay?.missing_sessions ?? 0) + (runtimeOverview?.roleplay?.invalid_sessions ?? 0)} />
+                                    <RoleplayGovernanceMetric label="Hidden leak prevented" value={runtimeOverview?.roleplay?.hidden_leak_prevented_count ?? 0} />
+                                    <RoleplayGovernanceMetric label="Violations" value={runtimeOverview?.roleplay?.violation_count ?? 0} />
+                                    <RoleplayGovernanceMetric label="Blocking" value={runtimeOverview?.roleplay?.blocking_violation_count ?? 0} />
+                                    <RoleplayGovernanceMetric label="Regenerate" value={runtimeOverview?.roleplay?.regenerate_count ?? 0} />
+                                    <RoleplayGovernanceMetric label="Cancel stream" value={runtimeOverview?.roleplay?.cancel_stream_count ?? 0} />
+                                </div>
+                                <div className="grid gap-4 lg:grid-cols-2">
+                                    <div className="rounded-2xl border border-slate-100 bg-white/80 p-4">
+                                        <div className="text-sm font-bold text-slate-900">高违规情景包</div>
+                                        <div className="mt-3 space-y-2">
+                                            {(runtimeOverview?.roleplay?.high_violation_situation_packs || []).slice(0, 6).map((item) => (
+                                                <div key={item.situation_code} className="flex items-center justify-between gap-3 text-sm">
+                                                    <span className="font-mono text-slate-700">{item.situation_code}</span>
+                                                    <Badge variant={item.violation_count > 0 ? "orange" : "gray"}>{item.violation_count}</Badge>
+                                                </div>
+                                            ))}
+                                            {(runtimeOverview?.roleplay?.high_violation_situation_packs || []).length === 0 ? (
+                                                <p className="text-sm text-slate-500">暂无高违规模板。</p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-100 bg-white/80 p-4">
+                                        <div className="text-sm font-bold text-slate-900">合同编译失败排行</div>
+                                        <div className="mt-3 space-y-2">
+                                            {(runtimeOverview?.roleplay?.compile_failure_rank || []).slice(0, 6).map((item) => (
+                                                <div key={item.kind} className="flex items-center justify-between gap-3 text-sm">
+                                                    <span className="text-slate-700">{item.kind}</span>
+                                                    <Badge variant={item.count > 0 ? "red" : "gray"}>{item.count}</Badge>
+                                                </div>
+                                            ))}
+                                            {(runtimeOverview?.roleplay?.compile_failure_rank || []).length === 0 ? (
+                                                <p className="text-sm text-slate-500">暂无编译失败排行。</p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </div>
+                            </GlassCard>
+
+                            <ConfigAssetCenterObservabilityPanel
+                                model={configAssetCenterObservability}
+                                windowHours={runtimeOverview?.window_hours ?? 168}
+                            />
 
                             <GlassCard className="space-y-4 p-6">
                                 <h2 className="text-xl font-black text-slate-900">权限矩阵</h2>

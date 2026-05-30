@@ -10,6 +10,7 @@ from admin.api.analytics import router as admin_analytics_router
 from admin.api.analytics_curriculum import router as admin_curriculum_analytics_router
 from admin.api.audit_trail import router as audit_trail_router
 from admin.api.business_rules import router as business_rules_router
+from admin.api.config_assets import router as config_assets_router
 from admin.api.config_bundles import router as config_bundles_router
 from admin.api.config_center import router as config_center_router
 from admin.api.governance import ai_governance_router
@@ -59,6 +60,8 @@ from presentation_coach.api import presentations
 from prompt_templates.api.routes import router as prompt_templates_router
 from prompt_templates.api.routes import scenario_router as scenario_prompts_router
 from sales_bot.api.scenarios import router as scenarios_router
+from sales_trainer.api import admin_router as sales_trainer_admin_router
+from sales_trainer.api import router as sales_trainer_router
 from supervisor.api import router as supervisor_router
 from support.api.runtime_status import router as support_runtime_router
 
@@ -135,6 +138,17 @@ def register_routers(app: FastAPI) -> None:
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(
+        sales_trainer_router,
+        prefix="/api/v1",
+        tags=["sales-trainer"],
+        dependencies=[Depends(require_role(["admin", "user"]))],
+    )
+    app.include_router(
+        sales_trainer_admin_router,
+        prefix="/api/v1",
+        tags=["admin-sales-trainer"],
+    )
+    app.include_router(
         admin_presentations_router,
         prefix="/api/v1",
         tags=["admin-presentations"],
@@ -195,6 +209,11 @@ def register_routers(app: FastAPI) -> None:
         config_center_router,
         prefix="/api/v1/admin",
         tags=["admin-config-center"],
+    )
+    app.include_router(
+        config_assets_router,
+        prefix="/api/v1/admin",
+        tags=["admin-config-assets"],
     )
     app.include_router(
         audit_trail_router,

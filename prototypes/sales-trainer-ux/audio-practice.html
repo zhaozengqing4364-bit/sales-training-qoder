@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>录音演练 · 销售训练原型</title>
+  <link rel="stylesheet" href="_shared.css" />
+  <style>
+    .briefing-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.875rem 1rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.875rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .briefing-link:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+    .checklist {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.625rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.875rem;
+    }
+    .checklist li:last-child {
+      border-bottom: none;
+    }
+    .checklist__box {
+      flex-shrink: 0;
+      width: 1.125rem;
+      height: 1.125rem;
+      margin-top: 0.15rem;
+      border: 2px solid #cbd5e1;
+      border-radius: 0.25rem;
+      background: #fff;
+    }
+    .checklist__box--done {
+      background: #0f172a;
+      border-color: #0f172a;
+      position: relative;
+    }
+    .checklist__box--done::after {
+      content: "";
+      position: absolute;
+      left: 0.2rem;
+      top: 0.05rem;
+      width: 0.35rem;
+      height: 0.6rem;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .checklist__text strong {
+      display: block;
+      color: #0f172a;
+    }
+    .checklist__text span {
+      color: #64748b;
+      font-size: 0.8125rem;
+    }
+    .upload-zone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 1rem;
+      padding: 1.5rem 1rem;
+      text-align: center;
+      background: #fafbfc;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .upload-zone:hover,
+    .upload-zone:focus-within {
+      border-color: #94a3b8;
+      background: #f8fafc;
+    }
+    .upload-zone__icon {
+      width: 2.5rem;
+      height: 2.5rem;
+      margin: 0 auto 0.75rem;
+      color: #64748b;
+    }
+    .upload-zone input[type="file"] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      overflow: hidden;
+    }
+    .upload-zone label {
+      display: block;
+      cursor: pointer;
+    }
+    .record-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .record-row .btn {
+      flex: 1;
+    }
+    .file-chip {
+      display: none;
+      margin-top: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: #f1f5f9;
+      border-radius: 0.75rem;
+      font-size: 0.8125rem;
+      color: #334155;
+    }
+    .file-chip.is-visible {
+      display: block;
+    }
+    .hints {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .hints li {
+      position: relative;
+      padding-left: 1rem;
+      margin-bottom: 0.35rem;
+      font-size: 0.8125rem;
+      color: #64748b;
+    }
+    .hints li::before {
+      content: "·";
+      position: absolute;
+      left: 0;
+      color: #94a3b8;
+    }
+    .sticky-actions {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+      background: linear-gradient(180deg, transparent 0%, #f8fafc 24%);
+      pointer-events: none;
+    }
+    .sticky-actions .btn {
+      pointer-events: auto;
+      max-width: 28rem;
+      margin: 0 auto;
+      display: flex;
+    }
+    @media (min-width: 640px) {
+      .sticky-actions .btn {
+        max-width: 36rem;
+      }
+    }
+    #upload-status:empty {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <nav class="top-nav" aria-label="原型导航">
+      <a href="index.html">← 训练首页</a>
+      <span class="sep">·</span>
+      <a href="path-home.html">学习路径</a>
+    </nav>
+
+    <header>
+      <p class="muted" style="margin:0 0 0.25rem;">第 2 关 · 录音演练</p>
+      <h1 class="page-title">首次拜访 · 价值开场</h1>
+      <p class="page-subtitle">按任务清单完成一段 3–5 分钟口述，上传后系统自动转写并评分。</p>
+    </header>
+
+    <section class="card" aria-labelledby="briefing-heading">
+      <h2 id="briefing-heading">关卡说明</h2>
+      <a class="briefing-link" href="path-home.html#unit-2-briefing">
+        <span>查看本关 briefing：客户背景、话术要点与禁忌</span>
+        <span aria-hidden="true">→</span>
+      </a>
+    </section>
+
+    <section class="card" aria-labelledby="checklist-heading">
+      <h2 id="checklist-heading">演练任务清单</h2>
+      <p class="muted" style="margin:0 0 0.75rem;">录音中尽量覆盖以下四段，便于维度评分。</p>
+      <ul class="checklist">
+        <li>
+          <span class="checklist__box checklist__box--done" aria-hidden="true"></span>
+          <div class="checklist__text">
+            <strong>开场</strong>
+            <span>自我介绍 + 拜访目的，建立信任</span>
+          </div>
+        </li>
+        <li>
+          <span class="checklist__box" aria-hidden="true"></span>
+          <div class="checklist__text">
+            <strong>痛点</strong>
+            <span>用 1–2 个提问引出客户数据安全/合规顾虑</span>
+          </div>
+        </li>
+        <li>
+          <span class="checklist__box" aria-hidden="true"></span>
+          <div class="checklist__text">
+            <strong>方案</strong>
+            <span>对应石犀能力点，讲清价值而非功能罗列</span>
+          </div>
+        </li>
+        <li>
+          <span class="checklist__box" aria-hidden="true"></span>
+          <div class="checklist__text">
+            <strong>收尾</strong>
+            <span>确认下一步：资料、试点或二次会议</span>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="card" aria-labelledby="upload-heading">
+      <h2 id="upload-heading">上传或录制</h2>
+      <div class="upload-zone" id="upload-zone">
+        <label for="audio-file">
+          <svg class="upload-zone__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M12 3v12m0 0l4-4m-4 4L8 11M5 15v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <p style="margin:0 0 0.25rem;font-weight:600;color:#0f172a;">点击选择音频文件</p>
+          <p class="muted" style="margin:0;">也可使用手机「语音备忘录」录好后导入</p>
+          <input type="file" id="audio-file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/*" />
+        </label>
+      </div>
+      <div class="record-row">
+        <button type="button" class="btn btn-outline" id="btn-record" aria-pressed="false">开始录音</button>
+        <button type="button" class="btn btn-outline" id="btn-stop" disabled>停止</button>
+      </div>
+      <div class="file-chip" id="file-chip" role="status" aria-live="polite"></div>
+      <div id="upload-status" class="inline-status inline-status--info" style="margin-top:0.75rem;" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card" aria-labelledby="hints-heading">
+      <h2 id="hints-heading">格式与录音建议</h2>
+      <ul class="hints">
+        <li>支持常见格式：<strong>mp3</strong>、<strong>m4a</strong>（也支持 wav 等）</li>
+        <li>尽量在安静环境录制，<strong>人声清晰</strong>、少背景音乐</li>
+        <li>不限制时长；文件过大时页面会提示，请压缩后重试</li>
+        <li>提交后约 1–3 分钟可查看转写与评分（原型跳转结果页）</li>
+      </ul>
+    </section>
+
+    <div class="sticky-actions">
+      <button type="button" class="btn btn-primary btn-block" id="btn-submit">提交录音并评分</button>
+    </div>
+
+    <footer class="footer-disclaimer">
+      静态 UX 原型 · 仅供评审交互与文案，非生产环境。行为通过页面内联状态展示，无弹窗。
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      var fileInput = document.getElementById("audio-file");
+      var fileChip = document.getElementById("file-chip");
+      var statusEl = document.getElementById("upload-status");
+      var btnRecord = document.getElementById("btn-record");
+      var btnStop = document.getElementById("btn-stop");
+      var btnSubmit = document.getElementById("btn-submit");
+      var recording = false;
+
+      function setStatus(message, kind) {
+        statusEl.textContent = message;
+        statusEl.className = "inline-status inline-status--" + (kind || "info");
+        statusEl.style.marginTop = "0.75rem";
+      }
+
+      fileInput.addEventListener("change", function () {
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) {
+          fileChip.classList.remove("is-visible");
+          fileChip.textContent = "";
+          return;
+        }
+        fileChip.textContent = "已选择：" + file.name;
+        fileChip.classList.add("is-visible");
+        setStatus("文件已就绪，点击下方按钮提交。", "success");
+      });
+
+      btnRecord.addEventListener("click", function () {
+        recording = true;
+        btnRecord.setAttribute("aria-pressed", "true");
+        btnRecord.disabled = true;
+        btnStop.disabled = false;
+        setStatus("正在录音（原型演示）… 说完后点「停止」。", "info");
+      });
+
+      btnStop.addEventListener("click", function () {
+        recording = false;
+        btnRecord.disabled = false;
+        btnRecord.setAttribute("aria-pressed", "false");
+        btnStop.disabled = true;
+        fileChip.textContent = "已录制：visit-opening-demo.webm（原型模拟）";
+        fileChip.classList.add("is-visible");
+        setStatus("录音已保存，可提交评分。", "success");
+      });
+
+      btnSubmit.addEventListener("click", function () {
+        var hasFile = (fileInput.files && fileInput.files.length) || fileChip.classList.contains("is-visible");
+        if (!hasFile) {
+          setStatus("请先选择或录制一段音频，再提交。", "warn");
+          return;
+        }
+        setStatus("正在上传… 完成后将自动进入结果页（原型跳转）。", "info");
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = "上传中…";
+        window.setTimeout(function () {
+          window.location.href = "audio-result.html";
+        }, 900);
+      });
+    })();
+  </script>
+</body>
+</html>

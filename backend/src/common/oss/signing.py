@@ -132,6 +132,24 @@ class OssSigningService:
         url: str = self._bucket.sign_url("GET", object_key, expires=expires)
         return url
 
+    def get_object_size(self, object_key: str) -> int:
+        """Return the remote object size without downloading the object."""
+        try:
+            result = self._bucket.head_object(object_key)
+        except Exception as exc:
+            if _looks_like_not_found(exc):
+                raise FileNotFoundError(object_key) from exc
+            raise
+        for attr in ("content_length", "content_len", "Content-Length"):
+            value = getattr(result, attr, None)
+            if value is not None:
+                return int(value)
+        headers = getattr(result, "headers", {}) or {}
+        for key in ("Content-Length", "content-length"):
+            if key in headers:
+                return int(headers[key])
+        raise RuntimeError("OSS head_object response did not include content length.")
+
     @staticmethod
     def build_object_key(session_id: str, segment_sequence: int) -> str:
         """Construct the canonical OSS key for an audio segment.
@@ -157,3 +175,14 @@ def get_oss_signing_service() -> OssSigningService:
     if _instance is None:
         _instance = OssSigningService()
     return _instance
+
+
+def _looks_like_not_found(exc: Exception) -> bool:
+    status = getattr(exc, "status", None) or getattr(exc, "status_code", None)
+    if str(status) == "404":
+        return True
+    code = getattr(exc, "code", None)
+    if str(code).lower() in {"nosuchkey", "notfound", "404"}:
+        return True
+    message = str(exc).lower()
+    return "not found" in message or "nosuchkey" in message or "no such key" in message

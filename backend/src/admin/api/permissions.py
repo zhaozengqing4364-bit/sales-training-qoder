@@ -25,6 +25,8 @@ CONFIG_BUNDLE_PUBLISH_PERMISSION: Final = "config_bundle.publish"
 CONFIG_BUNDLE_ROLLBACK_PERMISSION: Final = "config_bundle.rollback"
 CONFIG_BUNDLE_DISABLE_PERMISSION: Final = "config_bundle.disable"
 CONFIG_AUDIT_READ_PERMISSION: Final = "config_audit.read"
+CONFIG_ASSET_EXPORT_PERMISSION: Final = "config_asset.export"
+CONFIG_ASSET_IMPORT_PERMISSION: Final = "config_asset.import"
 SCORING_RULESET_DRY_RUN_PERMISSION: Final = "scoring_ruleset.dry_run"
 
 DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
@@ -42,6 +44,8 @@ DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
             CONFIG_BUNDLE_ROLLBACK_PERMISSION,
             CONFIG_BUNDLE_DISABLE_PERMISSION,
             CONFIG_AUDIT_READ_PERMISSION,
+            CONFIG_ASSET_EXPORT_PERMISSION,
+            CONFIG_ASSET_IMPORT_PERMISSION,
             SCORING_RULESET_DRY_RUN_PERMISSION,
         }
     ),
@@ -57,6 +61,8 @@ DEFAULT_ADMIN_ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
             CONFIG_BUNDLE_ROLLBACK_PERMISSION,
             CONFIG_BUNDLE_DISABLE_PERMISSION,
             CONFIG_AUDIT_READ_PERMISSION,
+            CONFIG_ASSET_EXPORT_PERMISSION,
+            CONFIG_ASSET_IMPORT_PERMISSION,
             SCORING_RULESET_DRY_RUN_PERMISSION,
         }
     ),

@@ -41,6 +41,22 @@ class Settings:
             "CURRICULUM_EXAMINER_ENABLED",
             False,
         )
+        self.SITUATION_PACK_DUAL_READ = _env_bool(
+            "SITUATION_PACK_DUAL_READ",
+            False,
+        )
+        self.SITUATION_PACK_READ_ORM = _env_bool(
+            "SITUATION_PACK_READ_ORM",
+            False,
+        )
+        self.SITUATION_PACK_B1_AUTHORITY = _env_bool(
+            "SITUATION_PACK_B1_AUTHORITY",
+            False,
+        )
+        self.SITUATION_PACK_B1_APPROVAL_ID = os.getenv(
+            "SITUATION_PACK_B1_APPROVAL_ID",
+            "",
+        ).strip()
 
     # Environment
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
@@ -230,6 +246,22 @@ class Settings:
         "CURRICULUM_EXAMINER_ENABLED",
         False,
     )
+    SITUATION_PACK_DUAL_READ: bool = _env_bool(
+        "SITUATION_PACK_DUAL_READ",
+        False,
+    )
+    SITUATION_PACK_READ_ORM: bool = _env_bool(
+        "SITUATION_PACK_READ_ORM",
+        False,
+    )
+    SITUATION_PACK_B1_AUTHORITY: bool = _env_bool(
+        "SITUATION_PACK_B1_AUTHORITY",
+        False,
+    )
+    SITUATION_PACK_B1_APPROVAL_ID: str = os.getenv(
+        "SITUATION_PACK_B1_APPROVAL_ID",
+        "",
+    ).strip()
     # 测试期：参与即满足前置（正式环境可设为 false）
     LEARNING_PATH_PARTICIPATION_UNLOCK: bool = _env_bool(
         "LEARNING_PATH_PARTICIPATION_UNLOCK",

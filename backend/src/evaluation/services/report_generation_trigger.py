@@ -29,6 +29,10 @@ from tenacity import (
 from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, ReportGenerationStatus, SessionStatus
 from common.db.session import AsyncSessionLocal
+from common.effectiveness.report_scoring_projection import (
+    ReportScoringProjection,
+    ReportScoringProjectionService,
+)
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger, get_trace_id
 from evaluation.services.comprehensive_report import ComprehensiveReportService
@@ -139,6 +143,7 @@ class ReportGenerationTrigger:
                 return
 
             projection = None
+            scoring_projection = None
             normalized_scenario_type = (scenario_type or "sales").lower()
             should_persist_evidence_chain = self._should_persist_evidence_chain()
             should_build_projection_chain = normalized_scenario_type == "sales" or (
@@ -163,15 +168,27 @@ class ReportGenerationTrigger:
                     return
 
                 projection = projection_result.value
+                scoring_projection = await ReportScoringProjectionService(
+                    self.db
+                ).build(
+                    evidence_projection=projection,
+                    scenario_type=normalized_scenario_type,
+                )
                 run_service = EvaluationRunService(self.db)
                 evaluation_run = await run_service.ensure_pending_run(
                     session_id=session_id,
-                    input_evidence_reference=self._build_evidence_reference(projection),
+                    input_evidence_reference=self._build_evidence_reference(
+                        projection,
+                        scoring_projection=scoring_projection,
+                    ),
                 )
                 await run_service.mark_running(evaluation_run.run_id)
 
                 if self._should_use_phase4_local_report():
-                    payload = self._build_phase4_local_report_payload(projection)
+                    payload = self._build_phase4_local_report_payload(
+                        projection,
+                        scoring_projection=scoring_projection,
+                    )
                     await run_service.mark_succeeded(
                         evaluation_run.run_id,
                         result_payload=payload,
@@ -184,16 +201,7 @@ class ReportGenerationTrigger:
                     await TrainingReportSnapshotService(self.db).ensure_snapshot(
                         evaluation_run_id=evaluation_run.run_id,
                         report_payload=payload,
-                        ruleset_source="session_evidence_projection",
-                        ruleset_version=str(
-                            getattr(projection, "ruleset_version", "")
-                            or "session_evidence_projection_v1"
-                        ),
-                        score_basis=str(getattr(projection, "score_basis", "") or ""),
-                        non_evaluable_reason=(
-                            str(getattr(projection, "not_evaluable_reason", "") or "")
-                            or None
-                        ),
+                        **scoring_projection.snapshot_metadata,
                     )
                     await self._update_report_status(
                         session_id,
@@ -206,9 +214,9 @@ class ReportGenerationTrigger:
                     await self._commit_if_owned()
                     return
 
-                if getattr(projection, "evaluable", None) is False:
-                    reason = getattr(projection, "not_evaluable_reason", None) or "not_evaluable"
-                    payload = self._build_non_evaluable_payload(projection, reason)
+                if not scoring_projection.evaluable:
+                    reason = scoring_projection.not_evaluable_reason or "not_evaluable"
+                    payload = scoring_projection.build_non_evaluable_payload()
                     await run_service.mark_non_evaluable(
                         evaluation_run.run_id,
                         reason=reason,
@@ -217,13 +225,7 @@ class ReportGenerationTrigger:
                     await TrainingReportSnapshotService(self.db).ensure_snapshot(
                         evaluation_run_id=evaluation_run.run_id,
                         report_payload=payload,
-                        ruleset_source="session_evidence_projection",
-                        ruleset_version=str(
-                            getattr(projection, "ruleset_version", "")
-                            or "session_evidence_projection_v1"
-                        ),
-                        score_basis=str(getattr(projection, "score_basis", "") or ""),
-                        non_evaluable_reason=reason,
+                        **scoring_projection.snapshot_metadata,
                     )
                     await self._update_report_status(
                         session_id,
@@ -254,6 +256,7 @@ class ReportGenerationTrigger:
                     payload = self._build_report_payload(
                         generated_report,
                         projection=projection,
+                        scoring_projection=scoring_projection,
                     )
                     await EvaluationRunService(self.db).mark_succeeded(
                         evaluation_run.run_id,
@@ -265,19 +268,10 @@ class ReportGenerationTrigger:
                     await TrainingReportSnapshotService(self.db).ensure_snapshot(
                         evaluation_run_id=evaluation_run.run_id,
                         report_payload=payload,
-                        ruleset_source=str(
-                            getattr(generated_report, "ruleset_source", "") or ""
-                        )
-                        or None,
-                        ruleset_version=str(
-                            getattr(generated_report, "ruleset_version", "") or ""
-                        )
-                        or None,
-                        score_basis=str(getattr(generated_report, "score_basis", "") or "")
-                        or None,
-                        non_evaluable_reason=(
-                            str(getattr(projection, "not_evaluable_reason", "") or "")
-                            or None
+                        **(
+                            scoring_projection.snapshot_metadata
+                            if scoring_projection is not None
+                            else self._build_legacy_snapshot_metadata(generated_report)
                         ),
                     )
                 await self._update_report_status(
@@ -367,6 +361,7 @@ class ReportGenerationTrigger:
         return (
             report_status == ReportGenerationStatus.PROCESSING.value
             and not self.owns_db_session
+            and self.report_service is None
         )
 
     def _should_persist_evidence_chain(self) -> bool:
@@ -375,19 +370,39 @@ class ReportGenerationTrigger:
         return not isinstance(EvaluationRunService, type)
 
     @staticmethod
-    def _build_evidence_reference(projection: object) -> dict[str, Any]:
+    def _build_evidence_reference(
+        projection: object,
+        *,
+        scoring_projection: ReportScoringProjection | None = None,
+    ) -> dict[str, Any]:
         completeness = getattr(projection, "evidence_completeness", {})
         if not isinstance(completeness, dict):
             completeness = {}
         reference = {
             "source": "session_evidence_projection",
-            "ruleset_version": str(
-                getattr(projection, "ruleset_version", "")
-                or "session_evidence_projection_v1"
+            "ruleset_version": (
+                scoring_projection.ruleset_version
+                if scoring_projection is not None
+                else str(
+                    getattr(projection, "ruleset_version", "")
+                    or "session_evidence_projection_v1"
+                )
             ),
-            "score_basis": str(getattr(projection, "score_basis", "") or ""),
-            "evaluable": getattr(projection, "evaluable", None),
-            "message_count": completeness.get("message_count"),
+            "score_basis": (
+                scoring_projection.score_basis
+                if scoring_projection is not None
+                else str(getattr(projection, "score_basis", "") or "")
+            ),
+            "evaluable": (
+                scoring_projection.evaluable
+                if scoring_projection is not None
+                else getattr(projection, "evaluable", None)
+            ),
+            "message_count": (
+                scoring_projection.evidence_completeness.get("message_count")
+                if scoring_projection is not None
+                else completeness.get("message_count")
+            ),
         }
         provider_transcript = ReportGenerationTrigger._build_provider_transcript_reference()
         if provider_transcript is not None:
@@ -455,7 +470,11 @@ class ReportGenerationTrigger:
         return reference
 
     @staticmethod
-    def _build_phase4_local_report_payload(projection: object) -> dict[str, Any]:
+    def _build_phase4_local_report_payload(
+        projection: object,
+        *,
+        scoring_projection: ReportScoringProjection | None = None,
+    ) -> dict[str, Any]:
         completeness = getattr(projection, "evidence_completeness", {})
         provider_transcript = ReportGenerationTrigger._build_provider_transcript_reference()
         scenario_type = str(getattr(projection, "scenario_type", "sales") or "sales")
@@ -475,56 +494,95 @@ class ReportGenerationTrigger:
         if provider_transcript is not None:
             evidence["provider_transcript"] = provider_transcript
 
-        return {
-            "overall_score": getattr(projection, "overall_score", None),
-            "ruleset_source": "session_evidence_projection",
-            "ruleset_version": str(
-                getattr(projection, "ruleset_version", "")
-                or "session_evidence_projection_v1"
-            ),
-            "score_basis": str(getattr(projection, "score_basis", "") or ""),
-            "evidence_completeness": dict(completeness)
+        evidence_completeness = (
+            scoring_projection.evidence_completeness
+            if scoring_projection is not None
+            else dict(completeness)
             if isinstance(completeness, dict)
-            else {},
+            else {}
+        )
+        payload = {
+            "overall_score": getattr(projection, "overall_score", None),
+            "ruleset_source": (
+                scoring_projection.ruleset_source
+                if scoring_projection is not None
+                else "session_evidence_projection"
+            ),
+            "ruleset_version": (
+                scoring_projection.ruleset_version
+                if scoring_projection is not None
+                else str(
+                    getattr(projection, "ruleset_version", "")
+                    or "session_evidence_projection_v1"
+                )
+            ),
+            "score_basis": (
+                scoring_projection.score_basis
+                if scoring_projection is not None
+                else str(getattr(projection, "score_basis", "") or "")
+            ),
+            "evidence_completeness": evidence_completeness,
             "evidence": evidence,
             "diagnostics": {
                 "provider": "phase4_local",
                 "deterministic_report": True,
             },
         }
-
-    @staticmethod
-    def _build_non_evaluable_payload(
-        projection: object,
-        reason: str,
-    ) -> dict[str, Any]:
-        completeness = getattr(projection, "evidence_completeness", {})
-        return {
-            "evaluable": False,
-            "not_evaluable_reason": reason,
-            "evidence_completeness": dict(completeness)
-            if isinstance(completeness, dict)
-            else {},
-        }
+        if scoring_projection is not None:
+            payload["scoring_metadata"] = scoring_projection.scoring_metadata
+        return payload
 
     @staticmethod
     def _build_report_payload(
         report: object,
         *,
         projection: object | None,
+        scoring_projection: ReportScoringProjection | None = None,
     ) -> dict[str, Any]:
         completeness = getattr(projection, "evidence_completeness", {}) if projection else {}
+        evidence_completeness = (
+            scoring_projection.evidence_completeness
+            if scoring_projection is not None
+            else dict(completeness)
+            if isinstance(completeness, dict)
+            else {}
+        )
+        scoring_metadata = (
+            scoring_projection.scoring_metadata
+            if scoring_projection is not None
+            else getattr(report, "scoring_metadata", None)
+        )
         payload = {
             "overall_score": getattr(report, "overall_score", None),
-            "ruleset_source": getattr(report, "ruleset_source", None),
-            "ruleset_version": getattr(report, "ruleset_version", None),
-            "score_basis": getattr(report, "score_basis", None),
-            "scoring_metadata": getattr(report, "scoring_metadata", None),
-            "evidence_completeness": dict(completeness)
-            if isinstance(completeness, dict)
-            else {},
+            "ruleset_source": (
+                scoring_projection.ruleset_source
+                if scoring_projection is not None
+                else getattr(report, "ruleset_source", None)
+            ),
+            "ruleset_version": (
+                scoring_projection.ruleset_version
+                if scoring_projection is not None
+                else getattr(report, "ruleset_version", None)
+            ),
+            "score_basis": (
+                scoring_projection.score_basis
+                if scoring_projection is not None
+                else getattr(report, "score_basis", None)
+            ),
+            "scoring_metadata": scoring_metadata,
+            "evidence_completeness": evidence_completeness,
         }
         return {key: value for key, value in payload.items() if value is not None}
+
+    @staticmethod
+    def _build_legacy_snapshot_metadata(report: object) -> dict[str, Any]:
+        return {
+            "ruleset_source": str(getattr(report, "ruleset_source", "") or "") or None,
+            "ruleset_version": str(getattr(report, "ruleset_version", "") or "")
+            or None,
+            "score_basis": str(getattr(report, "score_basis", "") or "") or None,
+            "non_evaluable_reason": None,
+        }
 
     async def _finalize_session_status_if_ready(
         self,

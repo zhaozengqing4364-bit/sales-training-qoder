@@ -41,7 +41,7 @@ export interface DashboardStats {
 export interface GrowthAchievement {
     achievement_id: string;
     code: string;
-    name: string;
+    name?: string;
     description: string;
     icon_key: string;
     unlocked_at?: string | null;
@@ -448,6 +448,8 @@ export interface PracticeTemplateRecord {
     created_at: string;
     updated_at: string;
     published_ref?: PublishedPracticeTemplateRef;
+    situation_pack_code?: string | null;
+    published_asset_refs?: Record<string, PublishedAssetRefRecord>;
 }
 
 export interface PracticeTemplateListResponse {
@@ -505,6 +507,7 @@ export interface PracticeTemplateMutationRequest {
     knowledge_base_refs?: string[];
     case_item_id?: string | null;
     role_profile_id?: string | null;
+    situation_pack_code?: string | null;
     curriculum_plan?: CurriculumPlanSchema | null;
     max_stage_duration_seconds?: number | null;
 }
@@ -768,7 +771,15 @@ export interface ScoringRulesetAuditLogResponse {
 
 export interface ConfigBundleListItem {
     bundle_key: string;
+    display_name?: string;
     domain: string;
+    legacy_domain?: string | null;
+    adapter_key?: string;
+    read_path?: string;
+    admin_entry?: string;
+    status?: string;
+    overview?: Record<string, unknown>;
+    active_version?: ConfigBundleVersionItem | null;
     name: string;
     description?: string | null;
     active_version_id?: string | null;
@@ -781,33 +792,44 @@ export interface ConfigBundleListItem {
 
 export interface ConfigBundleListResponse {
     items: ConfigBundleListItem[];
+    total?: number;
 }
 
 export interface ConfigBundleVersionItem {
     version_id: string;
+    source_config_id?: string | null;
     bundle_key: string;
     version_number: number;
+    version?: number;
     version_label?: string | null;
     status: string;
-    source_config_id?: string | null;
+    snapshot?: Record<string, unknown> | null;
     snapshot_json?: Record<string, unknown> | null;
     created_at?: string | null;
+    updated_at?: string | null;
 }
 
 export interface ConfigBundleVersionListResponse {
+    bundle_key?: string;
+    adapter_key?: string;
     items: ConfigBundleVersionItem[];
+    total?: number;
 }
 
 export interface ConfigBundleValueMutationRequest {
-    config_value: Record<string, unknown>;
+    value?: Record<string, unknown>;
+    config_value?: Record<string, unknown>;
+    reason?: string | null;
 }
 
 export interface ConfigBundleLifecycleMutationResponse {
-    version_id: string;
-    bundle_key: string;
-    version_number: number;
+    version?: ConfigBundleVersionItem | null;
+    audit?: Record<string, unknown> | null;
+    version_id?: string;
+    bundle_key?: string;
+    version_number?: number;
     version_label?: string | null;
-    status: string;
+    status?: string;
     audit_id?: string | null;
     audit_summary?: Record<string, unknown> | null;
 }
@@ -815,21 +837,29 @@ export interface ConfigBundleLifecycleMutationResponse {
 export interface ConfigBundleValidationResponse {
     valid: boolean;
     errors: Array<{ field: string; message: string }>;
+    normalized_value?: Record<string, unknown>;
     version_id?: string | null;
+    audit?: Record<string, unknown> | null;
 }
 
 export interface ConfigBundlePreviewResponse {
     version_id?: string | null;
     bundle_key: string;
+    summary?: Record<string, unknown>;
     preview_summary: Record<string, unknown>;
+    active_version?: number | string | null;
     active_version_number?: number | null;
+    audit?: Record<string, unknown> | null;
 }
 
 export interface ConfigBundlePublishRequest {
+    config_id?: string | null;
     reason?: string | null;
 }
 
 export interface ConfigBundleRollbackRequest {
+    target_config_id?: string | null;
+    target_version?: number | null;
     reason?: string | null;
 }
 
@@ -849,6 +879,161 @@ export interface ConfigCenterDomainItem {
 
 export interface ConfigCenterDomainsResponse {
     items: ConfigCenterDomainItem[];
+}
+
+export interface RoleplaySituationPack {
+    code: string;
+    label: string;
+    version: string;
+    status: "draft" | "published" | "archived" | string;
+    initial_stage_hint?: string | null;
+    relationship_context_defaults: Record<string, unknown>;
+    default_visible_information_scope: {
+        initial_visible_keys?: string[];
+        conditionally_visible_keys?: string[];
+        hidden_by_default_keys?: string[];
+    };
+    default_forbidden_claim_patterns: string[];
+    default_forbidden_topic_codes: string[];
+    default_forbidden_stage_codes: string[];
+    stage_transition_notes?: string[];
+    default_conflict_response_strategy?: string | null;
+    default_behavior_rules_for_prompt_only?: string[];
+    default_runtime_violation_policy: Record<string, string>;
+    default_disclosure_policy?: Record<string, unknown>;
+    compatible_practice_modes: string[];
+    compatible_scenario_types: string[];
+    audit?: Record<string, unknown>;
+    references?: RoleplaySituationPackReferenceResponse;
+}
+
+export interface RoleplaySituationPackRuleset {
+    version: string;
+    enabled: boolean;
+    packs: RoleplaySituationPack[];
+}
+
+export interface RoleplaySituationPackReference {
+    asset_type: "practice_template" | "case_item" | "persona" | string;
+    asset_id: string;
+    name?: string | null;
+    label?: string | null;
+    status?: string | null;
+    version?: string | number | null;
+    content_hash?: string | null;
+    category?: string | null;
+}
+
+export interface RoleplaySituationPackReferenceResponse {
+    practice_templates: RoleplaySituationPackReference[];
+    case_items: RoleplaySituationPackReference[];
+    personas: RoleplaySituationPackReference[];
+    total: number;
+}
+
+export interface RoleplaySituationPackListResponse {
+    items: RoleplaySituationPack[];
+    total: number;
+    config_key: string;
+    management: Record<string, unknown>;
+}
+
+export interface RoleplaySituationPackCanonical {
+    code: string;
+    label: string;
+    version: string;
+    status: "draft" | "published" | "archived" | string;
+    relationship_context: Record<string, unknown>;
+    visible_information_scope: {
+        initial_visible_keys?: string[];
+        conditionally_visible_keys?: string[];
+        hidden_by_default_keys?: string[];
+    };
+    forbidden_claim_patterns: string[];
+    forbidden_topic_codes: string[];
+    forbidden_stage_codes: string[];
+    initial_stage_hint?: string | null;
+    stage_transition_notes?: string[];
+    conflict_response_strategy?: string | null;
+    behavior_rules_for_prompt_only?: string[];
+    disclosure_policy?: Record<string, unknown>;
+    runtime_violation_policy: Record<string, string>;
+    compatible_practice_modes: string[];
+    compatible_scenario_types: string[];
+    audit?: Record<string, unknown>;
+}
+
+export interface RoleplaySituationPackResolveMetadata {
+    config_key: string;
+    read_path: string;
+    ruleset_version: string;
+    source: string;
+    config_id?: string | null;
+    config_version?: number | null;
+    resolved_at: string;
+}
+
+export interface RoleplaySituationPackResolveResponse {
+    pack: RoleplaySituationPackCanonical;
+    metadata: RoleplaySituationPackResolveMetadata;
+}
+
+export interface RoleplayComplianceDecision {
+    allowed?: boolean;
+    severity?: "none" | "info" | "warning" | "blocking" | string;
+    violation_code?: string | null;
+    matched_pattern?: string | null;
+    action?: string | null;
+    audit_payload?: Record<string, unknown>;
+}
+
+export interface RoleplayComplianceSummary {
+    status: "ready" | "legacy" | "missing" | "invalid" | string;
+    schema_version?: string | null;
+    contract_hash?: string | null;
+    situation_code?: string | null;
+    blocking_issues?: string[];
+    violation_count?: number;
+    blocking_violation_count?: number;
+    regenerate_count?: number;
+    cancel_stream_count?: number;
+    hidden_leak_prevented_count?: number;
+    disclosed_keys_count?: number;
+    visible_keys_count?: number;
+    disclosure_state_status?: string;
+    last_decision?: RoleplayComplianceDecision | null;
+    last_action_at?: string | null;
+    timeline?: RoleplayComplianceTimelineItem[];
+}
+
+export interface RoleplayComplianceTimelineItem {
+    event_type: "compliance_decision" | "disclosure" | string;
+    turn_number?: number | null;
+    response_id?: string | null;
+    action?: string | null;
+    violation_code?: string | null;
+    severity?: string | null;
+    sales_stage?: string | null;
+    visible_keys_count?: number | null;
+    disclosed_keys_count?: number | null;
+    created_at?: string | null;
+    trace_id?: string | null;
+    matched_pattern?: string | null;
+    decision?: RoleplayComplianceDecision | null;
+    visible_keys?: string[];
+    disclosed_keys?: string[];
+}
+
+export interface RoleplayEvalRunResult {
+    schema_version: string;
+    release_gate: Record<string, unknown>;
+    deterministic: {
+        total: number;
+        passed: number;
+        failed: number;
+        results: Array<Record<string, unknown>>;
+    };
+    llm_grader: Record<string, unknown>;
 }
 
 export interface AdminAuditTrailItem {
@@ -1333,6 +1518,51 @@ export interface SupportRuntimeAnomalySummaryItem {
     count: number;
 }
 
+export type ConfigAssetCenterHealthStatus = "healthy" | "warning" | "blocking" | "unknown";
+
+export interface ConfigAssetCenterDualReadMismatchSample {
+    code: string;
+    phase_a_hash: string | null;
+    phase_b1_hash: string | null;
+}
+
+export interface ConfigAssetCenterDualReadSummary {
+    enabled: boolean;
+    authority?: string | null;
+    lookup_count?: number;
+    mismatch_count?: number;
+    matched_count?: number;
+    mismatch_rate?: number | null;
+    sample_mismatches?: ConfigAssetCenterDualReadMismatchSample[];
+}
+
+export interface ConfigAssetCenterProjectionSyncSummary {
+    status?: string | null;
+    last_sync_at?: string | null;
+    packs_synced?: number;
+    packs_failed?: number;
+    recent_failures?: Array<{ code?: string | null; reason?: string | null }>;
+}
+
+export interface ConfigAssetCenterAssetResolutionModeItem {
+    mode: string;
+    count: number;
+}
+
+export interface ConfigAssetCenterAssetResolutionSummary {
+    session_count?: number;
+    mode_breakdown?: ConfigAssetCenterAssetResolutionModeItem[];
+    legacy_warning_sessions?: number;
+    frozen_ref_sessions?: number;
+}
+
+export interface SupportRuntimeConfigAssetCenter {
+    status?: ConfigAssetCenterHealthStatus;
+    dual_read?: ConfigAssetCenterDualReadSummary;
+    projection_sync?: ConfigAssetCenterProjectionSyncSummary;
+    asset_resolution?: ConfigAssetCenterAssetResolutionSummary;
+}
+
 export interface SupportRuntimeOverview {
     generated_at: string;
     window_hours: number;
@@ -1358,6 +1588,23 @@ export interface SupportRuntimeOverview {
         blocking: SupportRuntimeAnomalySummaryItem[];
         warning: SupportRuntimeAnomalySummaryItem[];
     };
+    roleplay?: {
+        ready_sessions?: number;
+        legacy_sessions?: number;
+        missing_sessions?: number;
+        invalid_sessions?: number;
+        violation_count?: number;
+        blocking_violation_count?: number;
+        regenerate_count?: number;
+        cancel_stream_count?: number;
+        hidden_leak_prevented_count?: number;
+        high_violation_situation_packs?: Array<{
+            situation_code: string;
+            violation_count: number;
+        }>;
+        compile_failure_rank?: SupportRuntimeAnomalySummaryItem[];
+    };
+    config_asset_center?: SupportRuntimeConfigAssetCenter;
 }
 
 export interface AssetGovernanceAnomaly {
@@ -1536,6 +1783,14 @@ export interface AdminPersonaCustomerPressure {
     [key: string]: unknown;
 }
 
+export interface AdminPersonaRoleAnchor {
+    version?: number | string;
+    identity_template?: string;
+    bottom_line?: string;
+    must_do?: string;
+    must_not?: string;
+}
+
 export interface AdminPersonaPolicy {
     version?: number;
     system_prompt?: string;
@@ -1546,7 +1801,34 @@ export interface AdminPersonaPolicy {
     objection_axes?: string[];
     expected_customer_questions?: string[];
     customer_pressure?: AdminPersonaCustomerPressure;
+    role_anchor?: AdminPersonaRoleAnchor;
     [key: string]: unknown;
+}
+
+export interface PersonaPolicyValidationErrorItem {
+    field: string;
+    reason_code: string;
+    message: string;
+}
+
+export interface PersonaPolicyValidationErrorDetails {
+    error?: string;
+    errors?: PersonaPolicyValidationErrorItem[];
+}
+
+export interface PublishedAssetRefRecord {
+    asset_type: string;
+    asset_id?: string | null;
+    asset_code?: string | null;
+    version?: string | null;
+    content_hash?: string | null;
+    snapshot_label?: string | null;
+    source_bundle_key?: string | null;
+    source_config_version_id?: string | null;
+    source_config_id?: string | null;
+    snapshot_selector?: string | null;
+    source_snapshot_hash?: string | null;
+    resolved_at?: string | null;
 }
 
 export interface AdminIndustryPackRuntimeTarget {
@@ -3123,6 +3405,8 @@ export interface ReplayData extends SessionEvidenceContract {
     overall_score: number;
     messages: ReplayMessage[];
     timeline_markers: ReplayTimelineMarker[];
+    roleplay_compliance_summary?: RoleplayComplianceSummary | null;
+    roleplay_compliance_timeline?: RoleplayComplianceTimelineItem[];
 }
 
 export interface ReplayMessagesResponse {
@@ -3683,6 +3967,7 @@ export interface PracticeSessionReport extends SessionEvidenceContract {
     presentation_review?: PresentationReview | null;
     retry_entry?: RetryEntry | null;
     audio_audit?: AudioAuditPayload | null;
+    roleplay_compliance_summary?: RoleplayComplianceSummary | null;
 }
 
 export interface ReportTrendPoint {
@@ -4113,6 +4398,509 @@ export interface QuestionItem {
     updated_at: string;
     category_name?: string;
     test_bank_ref?: TestBankRef;
+}
+
+export type SalesTrainerUnitType = "quiz" | "audio_scoring";
+export type SalesTrainerStatus = "draft" | "published" | "archived";
+export type SalesTrainerQuizAttemptStatus = "submitted" | "scored" | "failed";
+export type SalesTrainerAudioSubmissionStatus =
+    | "uploaded"
+    | "transcribing"
+    | "transcribed"
+    | "transcription_failed"
+    | "scoring"
+    | "scored"
+    | "scoring_failed";
+export type SalesTrainerQuestionType =
+    | "single_choice"
+    | "multiple_choice"
+    | "true_false"
+    | "short_answer";
+
+export interface SalesTrainerQuestionOption {
+    label: string;
+    value: string;
+}
+
+export interface SalesTrainerQuestionCategory {
+    category_id: string;
+    parent_id: string | null;
+    name: string;
+    description: string | null;
+    usage_scope: string;
+    order_index: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SalesTrainerQuestionCategoryListResponse {
+    items: SalesTrainerQuestionCategory[];
+    total: number;
+}
+
+export interface SalesTrainerQuestionCategoryCreateRequest {
+    name: string;
+    parent_id?: string | null;
+    description?: string | null;
+    order_index?: number;
+}
+
+export interface SalesTrainerQuestionCategoryUpdateRequest {
+    name?: string;
+    parent_id?: string | null;
+    description?: string | null;
+    order_index?: number;
+}
+
+export interface SalesTrainerQuestion {
+    question_id: string;
+    title: string;
+    stem: string;
+    reference_answer: string | null;
+    category_id: string;
+    question_type: SalesTrainerQuestionType;
+    difficulty: QuestionDifficulty;
+    status: SalesTrainerStatus;
+    tags: string[];
+    scoring_dimensions: string[];
+    scoring_criteria: Record<string, unknown>;
+    safety_flagged: boolean;
+    department: string | null;
+    usage_scope: string;
+    version: number;
+    content_hash: string | null;
+    published_at: string | null;
+    created_at: string;
+    updated_at: string;
+    options: SalesTrainerQuestionOption[];
+    correct_answer: string | null;
+    correct_answers: string[];
+    correct_bool: boolean | null;
+    explanation: string | null;
+    ai_scoring: Record<string, unknown> | null;
+}
+
+export interface SalesTrainerQuestionListResponse {
+    items: SalesTrainerQuestion[];
+    total: number;
+}
+
+export interface SalesTrainerQuestionCreateRequest {
+    title: string;
+    stem: string;
+    category_id: string;
+    question_type: SalesTrainerQuestionType;
+    difficulty?: QuestionDifficulty;
+    tags?: string[];
+    department?: string | null;
+    safety_flagged?: boolean;
+    options?: SalesTrainerQuestionOption[];
+    correct_answer?: string | null;
+    correct_answers?: string[];
+    correct_bool?: boolean | null;
+    reference_answer?: string | null;
+    scoring_dimensions?: string[];
+    explanation?: string | null;
+    ai_scoring?: Record<string, unknown> | null;
+}
+
+export interface SalesTrainerQuestionUpdateRequest {
+    title?: string;
+    stem?: string;
+    category_id?: string;
+    question_type?: SalesTrainerQuestionType;
+    difficulty?: QuestionDifficulty;
+    tags?: string[];
+    department?: string | null;
+    safety_flagged?: boolean;
+    options?: SalesTrainerQuestionOption[];
+    correct_answer?: string | null;
+    correct_answers?: string[];
+    correct_bool?: boolean | null;
+    reference_answer?: string | null;
+    scoring_dimensions?: string[];
+    explanation?: string | null;
+    ai_scoring?: Record<string, unknown> | null;
+}
+
+export interface SalesTrainerUnitQuestionBinding {
+    question_id: string;
+    order_index: number;
+    points: number;
+}
+
+export interface SalesTrainerUnitQuestion {
+    question_id: string;
+    title: string;
+    stem: string;
+    question_type: SalesTrainerQuestionType;
+    points: number;
+    order_index: number;
+    options?: SalesTrainerQuestionOption[];
+}
+
+export interface SalesTrainerUnitConfig {
+    learner?: {
+        learning_content_id?: string;
+        chapter_order_index?: number;
+        presentation_entry?: string;
+        hub?: boolean;
+    };
+    audio?: {
+        scoring_prompt_id?: string;
+        pass_threshold?: number;
+        purpose?: string;
+        [key: string]: unknown;
+    };
+    path?: {
+        enabled?: boolean;
+        path_key?: string;
+        path_title?: string | null;
+        goal_title?: string | null;
+        level_title?: string | null;
+        level_description?: string | null;
+        order_index?: number;
+        unlock_after_unit_ids?: string[];
+        completion_rule?: "passed" | "scored" | "submitted";
+        primary_action_label?: string | null;
+        retry_action_label?: string | null;
+        review_action_label?: string | null;
+        guidance_templates?: Record<string, string>;
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+}
+
+export interface SalesTrainerUnit {
+    unit_id: string;
+    name: string;
+    description: string | null;
+    unit_type: SalesTrainerUnitType;
+    config: SalesTrainerUnitConfig;
+    status: SalesTrainerStatus;
+    created_by: string | null;
+    updated_by: string | null;
+    created_at: string;
+    updated_at: string;
+    questions: SalesTrainerUnitQuestion[];
+}
+
+export interface SalesTrainerUnitListResponse {
+    items: SalesTrainerUnit[];
+    total: number;
+}
+
+export interface SalesTrainerPathLevel {
+    unit_id: string;
+    name: string;
+    description: string | null;
+    unit_type: SalesTrainerUnitType;
+    order_index: number;
+    level_title: string;
+    level_description: string | null;
+    locked: boolean;
+    lock_reason: string | null;
+    status: "locked" | "available" | "in_progress" | "completed";
+    completion_rule: "passed" | "scored" | "submitted";
+    primary_action_label: string;
+    retry_action_label: string;
+    review_action_label: string;
+    target_path: string;
+    latest_result: {
+        status: string;
+        passed: boolean | null;
+        score: number | null;
+        max_score: number | null;
+        submitted_at: string | null;
+        result_id: string | null;
+        target_path: string | null;
+        improvements?: string[];
+    } | null;
+}
+
+export interface SalesTrainerGoalEvidenceItem {
+    evidence_id: string;
+    evidence_type: "quiz_attempt" | "audio_submission";
+    unit_id: string;
+    unit_type: SalesTrainerUnitType;
+    level_title: string;
+    status: string;
+    passed: boolean | null;
+    score: number | null;
+    max_score: number | null;
+    submitted_at: string | null;
+    result_path: string | null;
+}
+
+export interface SalesTrainerGoalWeakPoint {
+    unit_id: string;
+    level_title: string;
+    issue_type: "not_started" | "not_passed" | "not_scored" | "locked" | "audio_improvement";
+    issue_text: string;
+    evidence_id: string | null;
+    score: number | null;
+    max_score: number | null;
+}
+
+export interface SalesTrainerGoalNextRecommendation {
+    title: string;
+    reason: string;
+    action_label: string;
+    target_path: string;
+    unit_id: string | null;
+    level_title: string | null;
+    recommendation_kind: "start_level" | "retry_level" | "review_result" | "path_completed";
+}
+
+export interface SalesTrainerGoalContext {
+    goal_title: string | null;
+    score_basis: "sales_trainer_path_projection_v1";
+    evidence_items: SalesTrainerGoalEvidenceItem[];
+    weak_points: SalesTrainerGoalWeakPoint[];
+    next_recommendation: SalesTrainerGoalNextRecommendation | null;
+}
+
+export interface SalesTrainerPath {
+    path_key: string;
+    title: string;
+    goal_title: string | null;
+    total_levels: number;
+    completed_levels: number;
+    current_level_id: string | null;
+    next_level_id: string | null;
+    levels: SalesTrainerPathLevel[];
+    goal_context: SalesTrainerGoalContext;
+}
+
+export interface SalesTrainerPathListResponse {
+    items: SalesTrainerPath[];
+    total: number;
+}
+
+export interface SalesTrainerQuizAnswerSubmitRequest {
+    question_id: string;
+    answer_payload: unknown;
+}
+
+export interface SalesTrainerQuizAttemptCreateRequest {
+    unit_id: string;
+    answers: SalesTrainerQuizAnswerSubmitRequest[];
+}
+
+export interface SalesTrainerQuizAnswer {
+    answer_id: string;
+    question_id: string;
+    question_type: SalesTrainerQuestionType;
+    answer_payload: unknown;
+    question_title: string | null;
+    question_stem: string | null;
+    options: SalesTrainerQuestionOption[];
+    correct_answer: unknown;
+    reference_answer: string | null;
+    explanation: string | null;
+    scoring_feedback: string | null;
+    scoring_reason: string | null;
+    normalized_score: number | null;
+    is_correct: boolean | null;
+    score: number | null;
+    created_at: string;
+}
+
+export interface SalesTrainerQuizAttempt {
+    attempt_id: string;
+    unit_id: string;
+    user_id: string;
+    user_name?: string | null;
+    user_email?: string | null;
+    user_department?: string | null;
+    total_score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    status: SalesTrainerQuizAttemptStatus;
+    submitted_at: string;
+    answers: SalesTrainerQuizAnswer[];
+}
+
+export interface SalesTrainerQuizAttemptListResponse {
+    items: SalesTrainerQuizAttempt[];
+    total: number;
+}
+
+export interface SalesTrainerAudioUploadUrlRequest {
+    filename: string;
+    content_type: string;
+}
+
+export interface SalesTrainerAudioUploadUrlResponse {
+    upload_url: string;
+    storage_key: string;
+    expires_at: string;
+    content_type: string;
+    storage_backend: string;
+}
+
+export interface SalesTrainerAudioSubmissionCreateRequest {
+    unit_id?: string | null;
+    purpose: string;
+    original_filename: string;
+    content_type: string;
+    size_bytes: number;
+    storage_key: string;
+    file_hash?: string | null;
+    duration_seconds?: number | null;
+    source_page?: string | null;
+    auto_process?: boolean;
+}
+
+export interface SalesTrainerAudioTranscript {
+    transcript_id: string;
+    provider: string;
+    transcript_text: string;
+    raw_payload: Record<string, unknown> | null;
+    started_at: string | null;
+    completed_at: string | null;
+    created_at: string;
+}
+
+export interface SalesTrainerAudioScoreResult {
+    score_id: string;
+    submission_id: string;
+    prompt_id: string;
+    prompt_version: number;
+    prompt_hash: string;
+    deucate_model: string | null;
+    transcript_snapshot: string | null;
+    total_score: number | null;
+    passed: boolean | null;
+    summary: string | null;
+    strengths: Array<string | Record<string, unknown>>;
+    improvements: Array<string | Record<string, unknown>>;
+    dimension_scores: Record<string, unknown>;
+    raw_response: Record<string, unknown> | null;
+    error_code: string | null;
+    error_message: string | null;
+    latency_ms: number | null;
+    created_at: string;
+}
+
+export interface SalesTrainerAudioSubmission {
+    submission_id: string;
+    unit_id: string | null;
+    user_id: string;
+    user_name: string | null;
+    user_email: string | null;
+    user_department: string | null;
+    purpose: string;
+    original_filename: string;
+    content_type: string;
+    size_bytes: number;
+    storage_key: string;
+    file_hash: string | null;
+    duration_seconds: number | null;
+    source_page: string | null;
+    status: SalesTrainerAudioSubmissionStatus;
+    error_code: string | null;
+    error_message: string | null;
+    created_at: string;
+    updated_at: string;
+    transcript: SalesTrainerAudioTranscript | null;
+    score_result: SalesTrainerAudioScoreResult | null;
+}
+
+export interface SalesTrainerAudioSubmissionListResponse {
+    items: SalesTrainerAudioSubmission[];
+    total: number;
+}
+
+export interface SalesTrainerAudioScorePrompt {
+    prompt_id: string;
+    name: string;
+    purpose: string;
+    system_prompt: string;
+    scoring_template: string;
+    output_schema: Record<string, unknown>;
+    version: number;
+    status: SalesTrainerStatus;
+    created_by: string | null;
+    updated_by: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SalesTrainerAudioScorePromptListResponse {
+    items: SalesTrainerAudioScorePrompt[];
+    total: number;
+}
+
+export interface SalesTrainerAudioScorePromptCreateRequest {
+    name: string;
+    purpose: string;
+    system_prompt: string;
+    scoring_template: string;
+    output_schema?: Record<string, unknown>;
+}
+
+export interface SalesTrainerAudioScorePromptUpdateRequest {
+    name?: string;
+    purpose?: string;
+    system_prompt?: string;
+    scoring_template?: string;
+    output_schema?: Record<string, unknown>;
+}
+
+export interface SalesTrainerAudioScoreResultListResponse {
+    items: SalesTrainerAudioScoreResult[];
+    total: number;
+}
+
+export interface SalesTrainerOperationLog {
+    log_id: string;
+    actor_id: string | null;
+    actor_role: string | null;
+    action: string;
+    target_type: string;
+    target_id: string | null;
+    request_id: string | null;
+    ip_address: string | null;
+    user_agent: string | null;
+    metadata: Record<string, unknown>;
+    created_at: string;
+}
+
+export interface SalesTrainerOperationLogListResponse {
+    items: SalesTrainerOperationLog[];
+    total: number;
+}
+
+export interface SalesTrainerSettings {
+    storage_backend: string;
+    direct_upload_supported: boolean;
+    cos_configured: boolean;
+    cos_public_read: boolean;
+    oss_configured: boolean;
+    asr_mode: string;
+    asr_model: string;
+    dashscope_configured: boolean;
+    deucate_configured: boolean;
+    deucate_model: string | null;
+    max_file_size_mb: number;
+    allowed_mime_types: string[];
+    file_url_expires_seconds: number;
+}
+
+export interface SalesTrainerUnitCreateRequest {
+    name: string;
+    description?: string | null;
+    unit_type: SalesTrainerUnitType;
+    config: SalesTrainerUnitConfig;
+    questions: SalesTrainerUnitQuestionBinding[];
+}
+
+export interface SalesTrainerUnitUpdateRequest {
+    name?: string;
+    description?: string | null;
+    config?: SalesTrainerUnitConfig;
+    questions?: SalesTrainerUnitQuestionBinding[];
 }
 
 export interface CreateCategoryRequest {

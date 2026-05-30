@@ -203,6 +203,61 @@ describe("EditPersonaPage", () => {
         expect(screen.getByText("practice_sessions.voice_policy_snapshot.knowledge_base_ids")).toBeTruthy();
     });
 
+    it("renders role_anchor structured form and compile preview", async () => {
+        getPersonaMock.mockResolvedValueOnce({
+            ...basePersona,
+            persona_policy: {
+                ...basePersona.persona_policy,
+                role_anchor: {
+                    identity_template: "你是{role_name}，{relationship_stage}。{bottom_line}。",
+                    bottom_line: "你不认识对方，保持审慎距离。",
+                    must_do: "追问 ROI。",
+                    must_not: "主动让步。",
+                },
+            },
+        });
+
+        render(<EditPersonaPage />);
+
+        expect(await screen.findByText("角色锚（role_anchor）")).toBeTruthy();
+        expect((screen.getByLabelText("身份底线") as HTMLTextAreaElement).value).toContain("审慎距离");
+        expect(screen.getByText(/【角色锚】/)).toBeTruthy();
+    });
+
+    it("maps persona policy validation errors to inline role_anchor field errors", async () => {
+        const { ApiRequestError: ApiRequestErrorClass } = await import("@/lib/api/client");
+        updatePersonaMock.mockRejectedValueOnce(
+            new ApiRequestErrorClass({
+                status: 400,
+                errorCode: "[PERSONA_POLICY_VALIDATION_FAILED]",
+                message: "Persona policy validation failed",
+                details: {
+                    error: "[PERSONA_POLICY_VALIDATION_FAILED]",
+                    errors: [
+                        {
+                            field: "persona_policy.role_anchor.bottom_line",
+                            reason_code: "role_anchor_bottom_line_required",
+                            message: "bottom_line is required when role_anchor is configured.",
+                        },
+                    ],
+                },
+            }),
+        );
+
+        render(<EditPersonaPage />);
+
+        await screen.findByText("角色锚（role_anchor）");
+        fireEvent.click(screen.getByLabelText("启用 role_anchor"));
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+        await waitFor(() => {
+            expect(updatePersonaMock).toHaveBeenCalledTimes(1);
+        });
+
+        expect(await screen.findByText(/role_anchor_bottom_line_required/)).toBeTruthy();
+        expect(pushMock).not.toHaveBeenCalled();
+    });
+
     it("saves the nested customer pressure contract back into persona_policy", async () => {
         render(<EditPersonaPage />);
 

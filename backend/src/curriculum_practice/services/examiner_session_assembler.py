@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -11,6 +12,15 @@ from common.db.models import PracticeSession, Scenario
 from common.monitoring.logger import get_logger
 from common.services.session_runtime_state_service import SessionRuntimeStateService
 from curriculum_practice.models import ExaminerAgent, PracticeTemplate, QuestionItem
+from curriculum_practice.services.asset_references import CurriculumAssetReferenceReader
+from curriculum_practice.services.practice_templates import published_ref
+from curriculum_practice.services.roleplay.situation_pack_repository import (
+    SituationPackRepository,
+)
+from curriculum_practice.services.snapshots import (
+    RuntimeSnapshotBuildError,
+    RuntimeSnapshotService,
+)
 
 logger = get_logger(__name__)
 
@@ -33,21 +43,34 @@ class ExaminerSessionAssembler:
         user_id: str,
         learning_content_id: str,
     ) -> ExaminerSessionCreateResult:
-        agent = await self._resolve_examiner_agent(learning_content_id)
+        template, agent = await self._resolve_examiner_template(learning_content_id)
 
-        questions = await self._load_published_questions(agent)
+        await self._load_published_questions(agent)
         scenario = await self._get_or_create_exam_scenario()
         session = PracticeSession(
+            session_id=str(uuid.uuid4()),
             user_id=user_id,
             scenario_id=str(scenario.scenario_id),
             status="in_progress",
             report_status="pending",
-            curriculum_snapshot=self._build_curriculum_snapshot(
-                learning_content_id=learning_content_id,
-                agent=agent,
-                questions=questions,
-            ),
+            practice_template_id=str(template.template_id),
+            agent_id=str(template.agent_id),
+            persona_id=str(template.persona_id),
+            voice_runtime_profile_id=str(template.runtime_profile_id),
+            voice_mode=str(template.voice_mode),
         )
+        await self._apply_curriculum_snapshot(
+            session=session,
+            template=template,
+            learning_content_id=learning_content_id,
+            user_id=user_id,
+        )
+        if isinstance(session.curriculum_snapshot, dict):
+            session.curriculum_snapshot.update(
+                self._compat_examiner_snapshot_fields(
+                    learning_content_id=learning_content_id,
+                )
+            )
         self._db.add(session)
         await self._db.commit()
         await self._db.refresh(session)
@@ -58,10 +81,10 @@ class ExaminerSessionAssembler:
         )
         return ExaminerSessionCreateResult(session=session, examiner_agent=agent)
 
-    async def _resolve_examiner_agent(
+    async def _resolve_examiner_template(
         self,
         learning_content_id: str,
-    ) -> ExaminerAgent:
+    ) -> tuple[PracticeTemplate, ExaminerAgent]:
         template_result = await self._db.execute(
             select(PracticeTemplate)
             .where(
@@ -69,17 +92,23 @@ class ExaminerSessionAssembler:
                 PracticeTemplate.status == "published",
                 PracticeTemplate.examiner_agent_id.isnot(None),
             )
-            .order_by(PracticeTemplate.updated_at.desc())
-            .limit(1)
         )
-        template = template_result.scalar_one_or_none()
-        if template is None or not template.examiner_agent_id:
+        templates = list(template_result.scalars().all())
+        if not templates:
             logger.warning(
                 "No published practice template with examiner binding",
                 learning_content_id=learning_content_id,
             )
             raise ValueError("[TEMPLATE_EXAMINER_NOT_BOUND]")
+        if len(templates) > 1:
+            logger.warning(
+                "Ambiguous published examiner templates for learning content",
+                learning_content_id=learning_content_id,
+                template_ids=[str(template.template_id) for template in templates],
+            )
+            raise ValueError("[TEMPLATE_EXAMINER_AMBIGUOUS]")
 
+        template = templates[0]
         agent = await self._db.get(ExaminerAgent, str(template.examiner_agent_id))
         if agent is None or getattr(agent, "status", None) != "published":
             logger.warning(
@@ -88,7 +117,40 @@ class ExaminerSessionAssembler:
                 examiner_agent_id=str(template.examiner_agent_id),
             )
             raise ValueError("[EXAMINER_AGENT_NOT_FOUND]")
-        return agent
+        return template, agent
+
+    async def _apply_curriculum_snapshot(
+        self,
+        *,
+        session: PracticeSession,
+        template: PracticeTemplate,
+        learning_content_id: str,
+        user_id: str,
+    ) -> None:
+        snapshot_service = RuntimeSnapshotService.from_database(
+            self._db,
+            reference_reader=CurriculumAssetReferenceReader(self._db).read_reference,
+            situation_packs=await SituationPackRepository.from_database(self._db),
+        )
+        try:
+            snapshot = await snapshot_service.build_for_session(
+                published_ref(template),
+                {
+                    "id": str(session.session_id),
+                    "scenario_type": "sales",
+                },
+                user_id,
+            )
+        except RuntimeSnapshotBuildError as exc:
+            logger.warning(
+                "Failed to build examiner session runtime snapshot",
+                learning_content_id=learning_content_id,
+                template_id=str(template.template_id),
+                reason_code=exc.reason_code,
+            )
+            raise ValueError(f"[RUNTIME_SNAPSHOT_{exc.reason_code.upper()}]") from exc
+
+        session.curriculum_snapshot = snapshot.model_dump(mode="json")
 
     async def _load_published_questions(
         self,
@@ -143,39 +205,11 @@ class ExaminerSessionAssembler:
         return scenario
 
     @staticmethod
-    def _build_curriculum_snapshot(
+    def _compat_examiner_snapshot_fields(
         *,
         learning_content_id: str,
-        agent: ExaminerAgent,
-        questions: list[QuestionItem],
     ) -> dict[str, object]:
         return {
             "kind": "curriculum_examiner_session",
             "learning_content_id": learning_content_id,
-            "content_assets": [
-                _curriculum_exam_asset_ref("examiner_agent", agent, str(agent.name)),
-                *[
-                    _curriculum_exam_asset_ref(
-                        "question_item", question, str(question.title)
-                    )
-                    for question in questions
-                ],
-            ],
         }
-
-
-def _curriculum_exam_asset_ref(
-    asset_type: str, asset: object, label: str
-) -> dict[str, object]:
-    id_attr = {
-        "examiner_agent": "examiner_agent_id",
-        "question_item": "question_id",
-        "learning_content": "learning_content_id",
-    }.get(asset_type, f"{asset_type}_id")
-    return {
-        "asset_type": asset_type,
-        "asset_id": str(getattr(asset, id_attr, "")),
-        "version": int(getattr(asset, "version", 0) or 0),
-        "hash": getattr(asset, "content_hash", None),
-        "snapshot_label": label,
-    }

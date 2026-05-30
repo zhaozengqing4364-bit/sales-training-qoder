@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
+from dataclasses import asdict, dataclass
 from typing import Any, Generic, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -69,6 +70,7 @@ class PracticeTemplatePublishCandidate(BaseModel):
     timeout_config: dict[str, object] | None = None
     curriculum_plan: CurriculumPlanSchema | None = None
     max_stage_duration_seconds: int | None = Field(None, ge=1, le=1500)
+    situation_pack_code: str | None = Field(None, min_length=1, max_length=60)
 
 
 class GateResult(BaseModel):
@@ -186,6 +188,78 @@ class AssetRef(BaseModel, Generic[AssetTypeT, AssetVersionT, SnapshotLabelT]):
     version: AssetVersionT
     hash: str
     snapshot_label: SnapshotLabelT
+
+
+@dataclass(frozen=True, slots=True)
+class PublishedAssetRef:
+    """Frozen publish-time asset pointer for Config Asset Center."""
+
+    asset_type: str
+    asset_id: str | None
+    asset_code: str | None
+    version: str
+    content_hash: str
+    snapshot_label: str
+    source_bundle_key: str | None
+    source_config_version_id: str | None
+    source_config_id: str | None
+    snapshot_selector: str | None
+    source_snapshot_hash: str | None
+    resolved_at: str
+
+    def can_reconstruct_from_snapshot(self) -> bool:
+        return bool(self.source_config_version_id and self.snapshot_selector)
+
+    @classmethod
+    def from_schema(cls, schema: PublishedAssetRefSchema) -> PublishedAssetRef:
+        return cls(**schema.model_dump())
+
+    def to_schema(self) -> PublishedAssetRefSchema:
+        return PublishedAssetRefSchema.model_validate(asdict(self))
+
+
+class PublishedAssetRefSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_type: str = Field(..., min_length=1, max_length=80)
+    asset_id: str | None = Field(None, min_length=1, max_length=36)
+    asset_code: str | None = Field(None, min_length=1, max_length=120)
+    version: str = Field(..., min_length=1, max_length=80)
+    content_hash: str = Field(..., min_length=1, max_length=80)
+    snapshot_label: SnapshotLabel
+    source_bundle_key: str | None = Field(None, min_length=1, max_length=160)
+    source_config_version_id: str | None = Field(None, min_length=1, max_length=36)
+    source_config_id: str | None = Field(None, min_length=1, max_length=36)
+    snapshot_selector: str | None = Field(None, min_length=1, max_length=200)
+    source_snapshot_hash: str | None = Field(None, min_length=1, max_length=80)
+    resolved_at: str = Field(..., min_length=1, max_length=40)
+
+    @model_validator(mode="after")
+    def validate_governance_source(self) -> PublishedAssetRefSchema:
+        governance_fields = {
+            "source_config_version_id": self.source_config_version_id,
+            "source_config_id": self.source_config_id,
+            "snapshot_selector": self.snapshot_selector,
+            "source_snapshot_hash": self.source_snapshot_hash,
+        }
+        has_bundle = bool(self.source_bundle_key)
+        present = {key for key, value in governance_fields.items() if value}
+        if has_bundle:
+            missing = sorted(set(governance_fields) - present)
+            if missing:
+                raise ValueError(
+                    "ConfigBundle-governed PublishedAssetRef requires "
+                    f"{', '.join(missing)}"
+                )
+        elif present:
+            raise ValueError(
+                "Native PublishedAssetRef cannot include partial ConfigBundle "
+                f"governance fields: {', '.join(sorted(present))}"
+            )
+        return self
+
+    def to_dataclass(self) -> PublishedAssetRef:
+        return PublishedAssetRef.from_schema(self)
 
 
 class PublishedTemplateRef(
@@ -333,8 +407,11 @@ class CurriculumRuntimeSnapshot(BaseModel):
     content_assets: list[CurriculumVersionRef] = Field(default_factory=list)
     rubric: CurriculumVersionRef
     runtime: CurriculumRuntimeRef
+    roleplay_contract: dict[str, object] | None = None
     role_profile_voice_id: str | None = None
     learner_level: LearnerLevel = "conservative"
+    asset_resolution: dict[str, object] | None = None
+    legacy_warnings: list[str] = Field(default_factory=list)
     stage_snapshots: dict[str, TemplateStageSnapshot] = Field(default_factory=dict)
     llm_nodes: list[dict[str, object]] = Field(default_factory=list)
 
@@ -533,6 +610,7 @@ class QuestionCategoryCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=160)
     parent_id: str | None = Field(None, min_length=1, max_length=36)
     description: str | None = Field(None, max_length=2000)
+    usage_scope: str = Field("general", min_length=1, max_length=50)
     order_index: int = Field(1, ge=1)
 
 
@@ -542,6 +620,7 @@ class QuestionCategoryUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=160)
     parent_id: str | None = Field(None, min_length=1, max_length=36)
     description: str | None = Field(None, max_length=2000)
+    usage_scope: str | None = Field(None, min_length=1, max_length=50)
     order_index: int | None = Field(None, ge=1)
 
 
@@ -552,6 +631,7 @@ class QuestionCategoryResponse(BaseModel):
     parent_id: str | None = None
     name: str
     description: str | None = None
+    usage_scope: str = "general"
     order_index: int
     created_at: object
     updated_at: object
@@ -572,6 +652,7 @@ class QuestionItemCreate(BaseModel):
     scoring_criteria: dict[str, object] = Field(default_factory=dict)
     scoring_dimensions: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    usage_scope: str = Field("general", min_length=1, max_length=50)
     difficulty: QuestionDifficulty = "medium"
     safety_flagged: bool = False
     department: str | None = Field(None, min_length=1, max_length=120)
@@ -587,6 +668,7 @@ class QuestionItemUpdate(BaseModel):
     scoring_criteria: dict[str, object] | None = None
     scoring_dimensions: list[str] | None = None
     tags: list[str] | None = None
+    usage_scope: str | None = Field(None, min_length=1, max_length=50)
     difficulty: QuestionDifficulty | None = None
     safety_flagged: bool | None = None
     department: str | None = Field(None, min_length=1, max_length=120)
@@ -603,6 +685,7 @@ class QuestionItemResponse(BaseModel):
     scoring_criteria: dict[str, object]
     scoring_dimensions: list[str]
     tags: list[str]
+    usage_scope: str = "general"
     difficulty: QuestionDifficulty
     status: QuestionLifecycleStatus
     safety_flagged: bool
@@ -750,6 +833,7 @@ class PracticeTemplateCreate(BaseModel):
     timeout_config: dict[str, object] | None = None
     curriculum_plan: CurriculumPlanSchema | None = None
     max_stage_duration_seconds: int | None = Field(None, ge=1, le=1500)
+    situation_pack_code: str | None = Field(None, min_length=1, max_length=60)
 
 
 class PracticeTemplateUpdate(BaseModel):
@@ -773,6 +857,7 @@ class PracticeTemplateUpdate(BaseModel):
     timeout_config: dict[str, object] | None = None
     curriculum_plan: CurriculumPlanSchema | None = None
     max_stage_duration_seconds: int | None = Field(None, ge=1, le=1500)
+    situation_pack_code: str | None = Field(None, min_length=1, max_length=60)
 
 
 class PracticeTemplateResponse(BaseModel):
@@ -797,6 +882,8 @@ class PracticeTemplateResponse(BaseModel):
     timeout_config: dict[str, object] | None = None
     curriculum_plan: dict[str, Any] | None = None
     max_stage_duration_seconds: int | None = None
+    situation_pack_code: str | None = None
+    published_asset_refs: dict[str, dict[str, Any]] = Field(default_factory=dict)
     status: str
     version: int
     content_hash: str | None = None

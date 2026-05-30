@@ -164,21 +164,36 @@ class CurriculumStageRuntime:
     def _normalize_stage_entries(
         self, curriculum_plan: dict[str, Any] | None
     ) -> list[dict[str, Any]]:
-        raw_stages = curriculum_plan.get("stages") if isinstance(curriculum_plan, dict) else None
-        stages = [stage for stage in raw_stages or [] if isinstance(stage, dict)]
-        stages.sort(key=lambda stage: int(stage.get("order") or 0))
         entries: list[dict[str, Any]] = []
-        for stage in stages:
-            stage_key = str(stage.get("template_stage_key") or "").strip()
-            if not stage_key or stage_key not in self._stage_snapshots:
+        for index, (stage_key, snapshot) in enumerate(self._stage_snapshots.items()):
+            snapshot_payload = _as_dict(snapshot)
+            runtime_payload = _as_dict(snapshot_payload.get("runtime_payload"))
+            frozen_stage_key = str(
+                runtime_payload.get("template_stage_key") or stage_key
+            ).strip()
+            if not frozen_stage_key:
                 continue
-            entries.append(copy.deepcopy(stage))
+            entries.append(
+                {
+                    "template_stage_key": frozen_stage_key,
+                    "order": _as_int(runtime_payload.get("order"), default=index + 1),
+                    "stage_type": str(runtime_payload.get("stage_type") or "practice"),
+                    "completion_policy": _completion_policy(runtime_payload),
+                    "failure_policy": str(
+                        runtime_payload.get("failure_policy") or "retry_current"
+                    ),
+                    "prerequisites": copy.deepcopy(
+                        runtime_payload.get("prerequisites") or []
+                    ),
+                    "template_ref": copy.deepcopy(
+                        runtime_payload.get("template_ref") or {}
+                    ),
+                }
+            )
         if entries:
+            entries.sort(key=lambda stage: int(stage.get("order") or 0))
             return entries
-        return [
-            {"template_stage_key": stage_key, "order": index + 1}
-            for index, stage_key in enumerate(self._stage_snapshots.keys())
-        ]
+        return []
 
     def _restore_context(
         self, runtime_state: dict[str, Any] | None
@@ -317,3 +332,28 @@ class CurriculumStageRuntime:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return copy.deepcopy(value) if isinstance(value, dict) else {}
+
+
+def _completion_policy(runtime_payload: dict[str, Any]) -> dict[str, Any]:
+    policy = _as_dict(runtime_payload.get("completion_policy"))
+    return {
+        "min_score": _as_float(policy.get("min_score"), default=0.0),
+        "min_rounds": _as_int(policy.get("min_rounds"), default=0),
+        "max_duration_seconds": _as_float(
+            policy.get("max_duration_seconds"), default=0.0
+        ),
+    }
+
+
+def _as_int(value: Any, *, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value: Any, *, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default

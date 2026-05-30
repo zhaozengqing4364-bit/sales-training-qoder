@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from common.services.runtime_gate import RuntimeAdmissionDecision
 from sales_bot.websocket import router as sales_router
 
 
@@ -18,13 +19,6 @@ def test_sales_websocket_auth_policy_marks_query_token_as_compatibility_only() -
         "session_cookie",
     ]
     assert sales_router.SALES_WS_AUTH_POLICY["compatibility"] == ["query_token"]
-    assert sales_router.SALES_WS_AUTH_POLICY["reject_close_codes"] == {
-        "unauthorized": 4001,
-        "owner_mismatch": 4003,
-        "kb_lock_unbound": 4410,
-        "agent_persona_required": 4411,
-        "legacy_sales_runtime_disabled": 4412,
-    }
 
 
 def test_sales_legacy_handler_modules_stay_deleted() -> None:
@@ -45,6 +39,29 @@ def patch_kb_lock_gate(
     return kb_lock_gate
 
 
+def sales_admission_ok() -> RuntimeAdmissionDecision:
+    return RuntimeAdmissionDecision(
+        allowed=True,
+        runtime_type="sales",
+        classification="voluntary",
+    )
+
+
+def sales_admission_blocked(
+    code: str,
+    close_code: int,
+) -> RuntimeAdmissionDecision:
+    return RuntimeAdmissionDecision(
+        allowed=False,
+        runtime_type="sales",
+        classification="terminal",
+        code=code,
+        close_code=close_code,
+        close_reason=code,
+        mark_runtime_failed=True,
+    )
+
+
 @pytest.mark.asyncio
 async def test_handle_sales_websocket_rejects_when_kb_lock_unbound(monkeypatch):
     websocket = MagicMock()
@@ -57,7 +74,11 @@ async def test_handle_sales_websocket_rejects_when_kb_lock_unbound(monkeypatch):
         "_resolve_session_runtime",
         AsyncMock(return_value=("sales", "stepfun_realtime", None, None)),
     )
-    patch_kb_lock_gate(monkeypatch, is_unbound=True)
+    monkeypatch.setattr(
+        sales_router,
+        "_resolve_sales_admission_decision",
+        AsyncMock(return_value=sales_admission_blocked("KB_LOCK_UNBOUND", 4410)),
+    )
     monkeypatch.setattr(
         sales_router,
         "mark_session_runtime_failed",
@@ -109,10 +130,8 @@ async def test_kb_lock_unbound_session_uses_runtime_gate_authority(monkeypatch):
             assert session_id == "session-1"
             return True
 
-    import common.services.runtime_gate as runtime_gate_module
-
     monkeypatch.setattr(sales_router, "AsyncSessionLocal", lambda: db_context)
-    monkeypatch.setattr(runtime_gate_module, "RuntimeGate", DummyRuntimeGate)
+    monkeypatch.setattr(sales_router, "RuntimeGate", DummyRuntimeGate)
 
     is_unbound = await sales_router._is_kb_lock_unbound_session("session-1")
 
@@ -133,7 +152,11 @@ async def test_handle_sales_websocket_rejects_invalid_token_before_runtime_conne
         "_resolve_session_runtime",
         AsyncMock(return_value=("sales", "stepfun_realtime", "agent-1", "persona-1")),
     )
-    patch_kb_lock_gate(monkeypatch, is_unbound=False)
+    monkeypatch.setattr(
+        sales_router,
+        "_resolve_sales_admission_decision",
+        AsyncMock(return_value=sales_admission_ok()),
+    )
     monkeypatch.setattr(sales_router, "_resolve_ws_token", lambda *_args, **_kwargs: "invalid-token")
     monkeypatch.setattr(sales_router, "_extract_user_id_from_token", lambda _token: None)
     mark_runtime_failed = AsyncMock()
@@ -176,7 +199,11 @@ async def test_handle_sales_websocket_rejects_legacy_mode_before_runtime_connect
         "_resolve_session_runtime",
         AsyncMock(return_value=("sales", "legacy", "agent-1", "persona-1")),
     )
-    patch_kb_lock_gate(monkeypatch, is_unbound=False)
+    monkeypatch.setattr(
+        sales_router,
+        "_resolve_sales_admission_decision",
+        AsyncMock(return_value=sales_admission_ok()),
+    )
     monkeypatch.setattr(
         sales_router,
         "mark_session_runtime_failed",
@@ -221,7 +248,11 @@ async def test_handle_sales_websocket_rejects_non_owner_before_stepfun_connect(
         "_resolve_session_runtime",
         AsyncMock(return_value=("sales", "stepfun_realtime", "agent-1", "persona-1")),
     )
-    patch_kb_lock_gate(monkeypatch, is_unbound=False)
+    monkeypatch.setattr(
+        sales_router,
+        "_resolve_sales_admission_decision",
+        AsyncMock(return_value=sales_admission_ok()),
+    )
     monkeypatch.setattr(sales_router, "_resolve_ws_token", lambda *_args, **_kwargs: "valid-token")
     monkeypatch.setattr(sales_router, "_extract_user_id_from_token", lambda _token: "outsider-user")
     monkeypatch.setattr(

@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sales-training.local/schemas/config-asset-export-v1.schema.json",
+  "title": "Config Asset Export v1",
+  "description": "Machine-readable contract for Config Asset Center bulk export (docs/architecture/config-asset-center.md §8). Replaces seed scripts: assets are identified by {asset_type, namespace, natural_key}, ordered by topology_order, and imported through Service Layer APIs (not direct INSERT). Import operations MUST be recorded in the unified audit trail (ConfigBundle audit for ConfigBundle-governed assets; native lifecycle audit for Persona, CaseItem, etc.). Export operations MAY omit audit entries but SHOULD include export_meta.exported_by when an operator triggers export. Import API options (not part of export payload): dry_run (bool), conflict_strategy (skip | fail | new_version | replace_draft; default new_version), publish_after_import (bool; ConfigBundle-governed assets use ConfigBundle lifecycle publish; native-lifecycle assets use respective Service publish/archive).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["export_meta", "assets", "topology_order"],
+  "properties": {
+    "export_meta": {
+      "type": "object",
+      "description": "Export envelope metadata. version MUST be config-asset-export-v1 for this schema.",
+      "additionalProperties": false,
+      "required": ["version", "exported_at"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "const": "config-asset-export-v1",
+          "description": "Export protocol version. Importers reject unknown versions."
+        },
+        "exported_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 UTC timestamp when the export was generated."
+        },
+        "source_instance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Optional source environment label (e.g. dev-env-1, staging)."
+        },
+        "exported_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36,
+          "description": "Optional operator user UUID. Recommended when export is operator-triggered."
+        },
+        "export_audit_recorded": {
+          "type": "boolean",
+          "description": "Optional. True if export was written to audit log. Import MUST record audit; export audit is optional per §8.1."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Optional human-readable export notes (scenario name, ticket, etc.)."
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ordered bag of exported assets. Each entry is self-contained payload plus cross-instance identity (natural_key). Instance UUIDs MUST NOT appear as primary keys; importers remap IDs.",
+      "items": {
+        "$ref": "#/$defs/asset_entry"
+      }
+    },
+    "topology_order": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Topological import order: dependencies before dependents. Each item is asset_type:natural_key (namespace defaults to default unless asset entry specifies another namespace). Importers MUST process assets in this order after validating depends_on is satisfied.",
+      "items": {
+        "$ref": "#/$defs/topology_ref"
+      }
+    },
+    "import_options_documentation": {
+      "type": "object",
+      "description": "Optional documentation-only block for import API consumers. Not validated on export; mirrors POST /api/v1/admin/import options.",
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "type": "boolean",
+          "description": "When true, validate and plan import without writes."
+        },
+        "conflict_strategy": {
+          "type": "string",
+          "enum": ["skip", "fail", "new_version", "replace_draft"],
+          "description": "skip: existing natural_key → skip. fail: existing → abort import. new_version (default): existing → create new draft only. replace_draft: overwrite draft if present; if only published exists → new_version."
+        },
+        "publish_after_import": {
+          "type": "boolean",
+          "description": "When true, publish imported assets after successful import. ConfigBundle-governed (e.g. situation_pack) via ConfigBundle lifecycle; native lifecycle assets via respective Service publish."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "asset_type": {
+      "type": "string",
+      "enum": [
+        "agent",
+        "persona",
+        "situation_pack",
+        "case_item",
+        "role_profile",
+        "knowledge_base",
+        "learning_content",
+        "question_category",
+        "question_item",
+        "scoring_ruleset",
+        "voice_runtime_profile",
+        "examiner_agent",
+        "practice_template",
+        "training_task"
+      ],
+      "description": "Asset discriminator. natural_key source: persona/case_item/practice_template/agent/training_task/knowledge_base/learning_content/question_category/examiner_agent → slug of name; situation_pack → code; scoring_ruleset → version string; role_profile → slug of name or stable hash key."
+    },
+    "namespace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "default": "default",
+      "description": "Tenant or pack namespace. Default default when omitted on depends_on."
+    },
+    "natural_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "description": "Cross-instance stable key. Rules: persona → slug(name); situation_pack → code; case_item → slug(name); practice_template → slug(name); knowledge_base → slug(name); scoring_ruleset → version; role_profile → slug(name) or content hash key. MUST be unique per (asset_type, namespace)."
+    },
+    "asset_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_type", "natural_key"],
+      "properties": {
+        "asset_type": {
+          "$ref": "#/$defs/asset_type"
+        },
+        "namespace": {
+          "$ref": "#/$defs/namespace"
+        },
+        "natural_key": {
+          "$ref": "#/$defs/natural_key"
+        }
+      }
+    },
+    "topology_ref": {
+      "type": "string",
+      "pattern": "^(agent|persona|situation_pack|case_item|role_profile|knowledge_base|learning_content|question_category|question_item|scoring_ruleset|voice_runtime_profile|examiner_agent|practice_template|training_task):[a-z][a-z0-9_-]*$",
+      "description": "Reference token asset_type:natural_key for topology_order."
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{8,64}$",
+      "description": "SHA256 digest of canonical serialized asset content for drift detection."
+    },
+    "asset_status": {
+      "type": "string",
+      "enum": ["draft", "published", "archived"],
+      "description": "Lifecycle status at export time."
+    },
+    "asset_version": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      ],
+      "description": "Asset version at export: integer for ORM version counters; string for ruleset/situation_pack codes (e.g. v1, presales-cio-first-visit-v1)."
+    },
+    "asset_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_type",
+        "namespace",
+        "natural_key",
+        "name",
+        "version",
+        "content_hash",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "asset_type": {
+          "$ref": "#/$defs/asset_type"
+        },
+        "namespace": {
+          "$ref": "#/$defs/namespace"
+        },
+        "natural_key": {
+          "$ref": "#/$defs/natural_key"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Human-readable display name (source for slug natural_key on name-based assets)."
+        },
+        "version": {
+          "$ref": "#/$defs/asset_version"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/content_hash"
+        },
+        "status": {
+          "$ref": "#/$defs/asset_status"
+        },
+        "payload": {
+          "type": "object",
+          "description": "Full domain payload for import_one(). Shape is asset-type-specific; importer validates via Service Layer.",
+          "additionalProperties": true
+        },
+        "depends_on": {
+          "type": "array",
+          "description": "Explicit dependencies declared at export time. MUST be satisfied before importing this asset. Importer also uses topology_order.",
+          "items": {
+            "$ref": "#/$defs/asset_ref"
+          },
+          "default": []
+        },
+        "governance": {
+          "type": "string",
+          "enum": ["config_bundle", "native_lifecycle"],
+          "description": "Import write path: config_bundle → ConfigBundle lifecycle (drafts/validate/publish); native_lifecycle → asset Service draft/publish APIs."
+        },
+        "source_bundle_key": {
+          "type": "string",
+          "description": "When governance=config_bundle, ConfigBundle key (e.g. roleplay.situation_packs.ruleset)."
+        }
+      }
+    }
+  }
+}

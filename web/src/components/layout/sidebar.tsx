@@ -54,6 +54,7 @@ type SidebarFooterSlot = ReactNode | ((options: { isCollapsed: boolean }) => Rea
 export const navItems = [
     { label: "首页", icon: Home, href: "/" },
     { label: "训练模式", icon: LayoutGrid, href: "/training" },
+    { label: "销售训练", icon: Sparkles, href: "/sales-trainer" },
     { label: "排行榜", icon: BarChart2, href: "/leaderboard" },
     { label: "历史记录", icon: History, href: "/history" },
 ];

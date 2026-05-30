@@ -123,6 +123,12 @@ frontend_analytics_events_total = Counter(
     ["event_type", "status"],
 )
 
+situation_pack_dual_read_mismatch = Counter(
+    "situation_pack_dual_read_mismatch",
+    "Situation pack dual-read hash mismatches between Phase A and B1 projection",
+    ["code", "scope"],
+)
+
 # System metrics
 application_info = Info("application", "Application information")
 
@@ -247,6 +253,11 @@ def track_frontend_analytics_event(
         event_type=event_type,
         status=status,
     ).inc()
+
+
+def track_situation_pack_dual_read_mismatch(*, code: str, scope: str) -> None:
+    """Track Phase A vs B1 SituationPack projection hash mismatches."""
+    situation_pack_dual_read_mismatch.labels(code=code, scope=scope).inc()
 
 
 def track_voice_policy_rollback(

@@ -11,10 +11,10 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import common.api.practice as practice_api
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.db.models import PracticeSession, Presentation, Scenario, User
 from common.error_handling.result import Result
+from common.services import practice_session_service
 
 
 def _require_dict(value: object, field_name: str) -> dict:
@@ -25,7 +25,11 @@ def _require_dict(value: object, field_name: str) -> dict:
 
 def _stub_sales_cleanup(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     cleanup_mock = AsyncMock(return_value=Result.ok({"session_id": "contract-session"}))
-    monkeypatch.setattr(practice_api.sales_bot_service, "end_session", cleanup_mock)
+    monkeypatch.setattr(
+        practice_session_service.sales_bot_service,
+        "end_session",
+        cleanup_mock,
+    )
     return cleanup_mock
 
 
@@ -759,7 +763,7 @@ class TestSessionsContract:
         cleanup_mock = _stub_sales_cleanup(monkeypatch)
         report_trigger_mock = AsyncMock()
         monkeypatch.setattr(
-            practice_api.SessionLifecycleService,
+            practice_session_service.SessionLifecycleService,
             "trigger_report_generation_if_needed",
             report_trigger_mock,
         )

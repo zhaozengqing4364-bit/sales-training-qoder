@@ -113,6 +113,50 @@ describe("AdminShell auth and role routing", () => {
         expect(sessionExpiredMock).not.toHaveBeenCalled();
     });
 
+    it("allows support users to stay inside the sales trainer admin area", async () => {
+        usePathnameMock.mockReturnValue("/admin/sales-trainer/units");
+        useCurrentUserMock.mockReturnValue({
+            data: {
+                ...currentUser,
+                role: "support",
+            },
+            error: null,
+        });
+
+        render(
+            <AdminShell currentUser={{ ...currentUser, role: "support" }}>
+                <div>sales trainer content</div>
+            </AdminShell>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText("sales trainer content")).toBeTruthy();
+        });
+        expect(replaceMock).not.toHaveBeenCalled();
+    });
+
+    it("redirects support users away from non sales trainer admin pages", async () => {
+        usePathnameMock.mockReturnValue("/admin/users");
+        useCurrentUserMock.mockReturnValue({
+            data: {
+                ...currentUser,
+                role: "support",
+            },
+            error: null,
+        });
+
+        render(
+            <AdminShell currentUser={{ ...currentUser, role: "support" }}>
+                <div>admin content</div>
+            </AdminShell>,
+        );
+
+        await waitFor(() => {
+            expect(replaceMock).toHaveBeenCalledWith("/admin/sales-trainer/units");
+        });
+        expect(sessionExpiredMock).not.toHaveBeenCalled();
+    });
+
     it("exposes the AI examiner management entry in the admin sidebar", () => {
         useCurrentUserMock.mockReturnValue({ data: currentUser, error: null });
         usePathnameMock.mockReturnValue("/admin/curriculum-practice/examiner-agents");

@@ -74,6 +74,23 @@ from sales_bot.services.transcript_normalization import (
     TranscriptNormalizationResult,
     TranscriptNormalizationService,
 )
+from curriculum_practice.services.roleplay_contracts import (
+    ROLEPLAY_COMPLIANCE_METRICS_KEY,
+    ROLEPLAY_DISCLOSURE_STATE_KEY,
+    build_roleplay_turn_context,
+    initial_roleplay_disclosure_state,
+    normalize_roleplay_disclosure_state,
+    resolve_roleplay_disclosure_state,
+    visible_case_payload,
+    _as_dict as _roleplay_as_dict,
+)
+from sales_bot.services.roleplay_compliance_checker import (
+    check_realtime_roleplay_output,
+)
+from prompt_templates.compiled_contract import (
+    build_turn_instruction_hash,
+    compose_turn_instruction_text,
+)
 from sales_bot.services.voice_instruction_compiler import (
     VoiceInstructionCompiler,
     build_instruction_contract_hash,
@@ -175,6 +192,8 @@ from sales_bot.websocket.stepfun_tool_execution import ToolExecutionContext
 from training_runtime.stepfun_transport import StepFunSendStatus
 
 logger = get_logger(__name__)
+ROLEPLAY_INSTRUCTION_HASH_METRICS_KEY = "roleplay_instruction_hash"
+ROLEPLAY_INSTRUCTION_HASH_SAMPLE_LIMIT = 10
 
 
 def _handler_symbol(name: str, fallback: Any) -> Any:
@@ -208,7 +227,9 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         if audio_flow is not None:
             audio_flow.commit_input_audio()
         self._has_uncommitted_audio = False
-        self._reset_input_audio_quality()
+        reset_input_audio_quality = getattr(self, "_reset_input_audio_quality", None)
+        if callable(reset_input_audio_quality):
+            reset_input_audio_quality()
         await self._schedule_response_after_commit()
 
     async def _prepare_grounding_context(self, query: str) -> None:
@@ -756,36 +777,71 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             "type": "response.create",
             "response": {"modalities": ["audio", "text"]},
         }
+        grounding_context = self._pending_grounding_context.strip()
+        roleplay_repair_instruction = str(
+            getattr(self, "_roleplay_repair_instruction", "") or ""
+        ).strip()
+        roleplay_turn_context = self._roleplay_turn_instruction_context()
+        roleplay_turn_instruction = self._format_roleplay_turn_instruction(
+            roleplay_turn_context
+        )
         try:
             profile = self._active_voice_runtime_profile()
         except AttributeError:
             profile = None
-        grounding_context = self._pending_grounding_context.strip()
         if profile is not None:
-            turn_instructions = profile.compile_instructions(
-                grounding_context=grounding_context,
-            )
             base_instructions = profile.instructions
             instruction_contract_hash = profile.instruction_contract_hash
-        else:
-            turn_instructions = VoiceInstructionCompiler.compose_turn_instructions(
-                base_instructions=self._stepfun_instructions,
+            role_anchor_text = profile.role_anchor_text
+            turn_instructions = profile.compile_instructions(
                 grounding_context=grounding_context,
+                roleplay_turn_instruction=roleplay_turn_instruction,
             )
+        else:
+            effective_policy = getattr(self, "_effective_policy", None)
+            role_anchor_text = ""
+            if isinstance(effective_policy, dict):
+                role_anchor_text = str(
+                    effective_policy.get("role_anchor_text") or ""
+                ).strip()
             base_instructions = self._stepfun_instructions
             instruction_contract_hash = self._instruction_contract_hash
+            turn_instructions = compose_turn_instruction_text(
+                base_instructions=base_instructions,
+                grounding_context=grounding_context,
+                roleplay_turn_instruction=roleplay_turn_instruction,
+                role_anchor_text=role_anchor_text,
+            )
+        if roleplay_repair_instruction:
+            turn_instructions = (
+                f"{turn_instructions}\n\n【角色合同修复指令】\n{roleplay_repair_instruction}"
+                if turn_instructions
+                else f"【角色合同修复指令】\n{roleplay_repair_instruction}"
+            )
+        turn_instruction_hash = build_turn_instruction_hash(turn_instructions)
         if turn_instructions:
             response_payload["response"]["instructions"] = turn_instructions
         self._pending_grounding_context = ""
-        self._log_grounding_debug(
-            "response_create",
-            request_id=self.current_request_id,
-            has_grounding_context=bool(grounding_context),
-            grounding_context_length=len(grounding_context),
-            has_base_instructions=bool(base_instructions.strip()),
-            final_instruction_length=len(turn_instructions),
-            instruction_contract_hash=instruction_contract_hash,
-        )
+        self._roleplay_repair_instruction = ""
+        grounding_debug_payload = {
+            "request_id": self.current_request_id,
+            "has_grounding_context": bool(grounding_context),
+            "grounding_context_length": len(grounding_context),
+            "has_base_instructions": bool(base_instructions.strip()),
+            "has_role_anchor": bool(role_anchor_text),
+            "role_anchor_length": len(role_anchor_text),
+            "final_instruction_length": len(turn_instructions),
+            "instruction_contract_hash": instruction_contract_hash,
+            "turn_instruction_hash": turn_instruction_hash,
+        }
+        if roleplay_turn_context.get("disclosure_state_status") == "ready":
+            grounding_debug_payload["roleplay_visible_keys_count"] = len(
+                roleplay_turn_context.get("visible_keys", [])
+            )
+        if roleplay_repair_instruction:
+            grounding_debug_payload["roleplay_repair"] = True
+        await self._record_roleplay_instruction_hash_metric(grounding_debug_payload)
+        self._log_grounding_debug("response_create", **grounding_debug_payload)
 
         await self._send_status("thinking")
         await self._send_upstream(response_payload)
@@ -1212,6 +1268,11 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
                     ),
                 }
             await self._handle_curriculum_stage_turn(turn_number=turn_number)
+            await self._update_roleplay_disclosure_state(
+                learner_message=normalized_transcript,
+                turn_number=turn_number,
+                sales_stage=sales_stage,
+            )
             await self._persist_message(
                 turn_number=turn_number,
                 role="user",
@@ -1319,6 +1380,8 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         """Forward realtime audio chunk to frontend."""
         delta = event.get("delta", "")
         if self._active_response and delta:
+            if self._active_response.roleplay_suppressed:
+                return
             if self._active_response.question_limit_enforced:
                 return
             await self._forward_audio_delta_chunk(delta)
@@ -1357,7 +1420,13 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         response_text = self._extract_response_text(response_done_event)
         if not response_text:
             response_text = "".join(response_state.text_parts).strip()
-        # Keep transcript verbatim for chat UI parity with streamed audio (no post-hoc truncation).
+        response_text = self._grounding_pipeline.apply_output_guard(
+            response_text,
+            self._latest_knowledge_answer_diagnostics
+            if isinstance(self._latest_knowledge_answer_diagnostics, dict)
+            else None,
+        )
+        response_text = await self._apply_roleplay_output_guard(response_text)
 
         if response_text:
             await self._persist_message(
@@ -1379,6 +1448,12 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
 
         # No output at all in this round; only reset status.
         if response_state.chunk_index == 0 and not response_text:
+            await self._send_status("listening")
+            return True
+
+        if response_state.roleplay_suppressed:
+            if not response_state.roleplay_repair_sent:
+                await self._send_roleplay_repair_audio(response_state)
             await self._send_status("listening")
             return True
 
@@ -1434,6 +1509,358 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
 
         await self._send_status("listening")
         return True
+
+    async def _apply_roleplay_output_guard(self, response_text: str) -> str:
+        if not response_text:
+            return response_text
+        contract = self._roleplay_contract()
+        current_stage = self._current_sales_stage_code()
+        decision = check_realtime_roleplay_output(
+            roleplay_contract=contract if isinstance(contract, dict) else None,
+            text=response_text,
+            runtime_state=self._roleplay_checker_runtime_state(contract),
+            current_sales_stage=current_stage,
+        )
+        if not isinstance(decision, dict) or decision.get("severity") in (None, "none"):
+            return response_text
+        await self._record_roleplay_compliance_decision(
+            decision,
+            response_id=None,
+            action_override=None,
+        )
+        self._log_grounding_debug(
+            "roleplay_output_guard_decision",
+            violation_code=decision.get("violation_code"),
+            severity=decision.get("severity"),
+            action=decision.get("action"),
+            matched_pattern=decision.get("matched_pattern"),
+        )
+        if decision.get("severity") == "blocking":
+            return self._roleplay_repair_message(contract, decision)
+        return response_text
+
+    async def _apply_roleplay_stream_guard(self) -> None:
+        response_state = self._active_response
+        if response_state is None or response_state.roleplay_suppressed:
+            return
+        text = "".join(response_state.text_parts).strip()
+        if not text:
+            return
+        contract = self._roleplay_contract()
+        current_stage = self._current_sales_stage_code()
+        decision = check_realtime_roleplay_output(
+            roleplay_contract=contract if isinstance(contract, dict) else None,
+            text=text,
+            runtime_state=self._roleplay_checker_runtime_state(contract),
+            current_sales_stage=current_stage,
+        )
+        if (
+            not isinstance(decision, dict)
+            or decision.get("severity") != "blocking"
+        ):
+            return
+        response_state.roleplay_suppressed = True
+        response_state.roleplay_violation_decision = decision
+        action = "cancel_stream"
+        if not response_state.roleplay_cancel_sent:
+            response_state.roleplay_cancel_sent = True
+            await self._send_upstream({"type": "response.cancel"})
+        await self._record_roleplay_compliance_decision(
+            decision,
+            response_id=response_state.response_id,
+            action_override=action,
+            count_violation=True,
+        )
+        self._log_grounding_debug(
+            "roleplay_stream_guard_cancelled",
+            request_id=response_state.request_id,
+            response_id=response_state.response_id,
+            violation_code=decision.get("violation_code"),
+            matched_pattern=decision.get("matched_pattern"),
+            audio_forwarded=response_state.roleplay_audio_forwarded,
+        )
+        if (
+            not self._roleplay_regenerate_attempted_for_turn
+            and not response_state.roleplay_regenerate_attempted
+        ):
+            response_state.roleplay_regenerate_attempted = True
+            self._roleplay_regenerate_attempted_for_turn = True
+            self._roleplay_repair_instruction = self._build_roleplay_repair_instruction(
+                decision
+            )
+            await self._record_roleplay_compliance_decision(
+                decision,
+                response_id=response_state.response_id,
+                action_override="regenerate_once",
+                count_violation=False,
+            )
+            self._active_response = None
+            await self._create_response()
+            return
+        await self._send_roleplay_repair_audio(response_state)
+
+    async def _record_roleplay_compliance_decision(
+        self,
+        decision: dict[str, Any],
+        *,
+        response_id: str | None,
+        action_override: str | None,
+        count_violation: bool = True,
+    ) -> None:
+        runtime_metrics = self._effective_policy.get("runtime_metrics")
+        if not isinstance(runtime_metrics, dict):
+            runtime_metrics = {}
+        roleplay_metrics = runtime_metrics.get(ROLEPLAY_COMPLIANCE_METRICS_KEY)
+        if not isinstance(roleplay_metrics, dict):
+            roleplay_metrics = {
+                "violation_count": 0,
+                "blocking_violation_count": 0,
+                "regenerate_count": 0,
+                "cancel_stream_count": 0,
+            }
+        action = action_override or str(decision.get("action") or "")
+        if count_violation:
+            roleplay_metrics["violation_count"] = int(
+                roleplay_metrics.get("violation_count") or 0
+            ) + 1
+            if decision.get("severity") == "blocking":
+                roleplay_metrics["blocking_violation_count"] = int(
+                    roleplay_metrics.get("blocking_violation_count") or 0
+                ) + 1
+        if action == "regenerate_once":
+            roleplay_metrics["regenerate_count"] = int(
+                roleplay_metrics.get("regenerate_count") or 0
+            ) + 1
+        if action == "cancel_stream":
+            roleplay_metrics["cancel_stream_count"] = int(
+                roleplay_metrics.get("cancel_stream_count") or 0
+            ) + 1
+        if decision.get("violation_code") == "ROLEPLAY_HIDDEN_INFORMATION_LEAK":
+            roleplay_metrics["hidden_leak_prevented_count"] = int(
+                roleplay_metrics.get("hidden_leak_prevented_count") or 0
+            ) + 1
+        roleplay_metrics["last_decision"] = decision
+        roleplay_metrics["last_action"] = action or decision.get("action")
+        roleplay_metrics["last_action_at"] = datetime.now(UTC).isoformat()
+        roleplay_metrics["response_id"] = response_id
+        timeline = roleplay_metrics.get("timeline")
+        if not isinstance(timeline, list):
+            timeline = []
+        timeline.append(
+            {
+                "turn_number": max(1, int(self.turn_count or 0)),
+                "response_id": response_id,
+                "action": action or decision.get("action"),
+                "decision": decision,
+                "sales_stage": self._current_sales_stage_code(),
+                "visible_keys": self._roleplay_visible_keys(self._roleplay_contract()),
+                "disclosed_keys": self._roleplay_disclosed_keys(),
+                "created_at": roleplay_metrics["last_action_at"],
+                "trace_id": get_trace_id(),
+            }
+        )
+        roleplay_metrics["timeline"] = timeline[-100:]
+        runtime_metrics[ROLEPLAY_COMPLIANCE_METRICS_KEY] = roleplay_metrics
+        self._effective_policy["runtime_metrics"] = runtime_metrics
+        try:
+            await self._persist_runtime_metrics_to_session()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Failed to persist roleplay compliance metrics: {exc}")
+
+    async def _send_roleplay_repair_audio(
+        self,
+        response_state: RealtimeResponseState,
+    ) -> None:
+        if response_state.roleplay_repair_sent:
+            return
+        response_state.roleplay_repair_sent = True
+        decision = response_state.roleplay_violation_decision or {}
+        contract = self._roleplay_contract()
+        repair_text = self._roleplay_repair_message(contract, decision)
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "tts_audio",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "stream_id": response_state.stream_id,
+                "request_id": response_state.request_id,
+                "data": {
+                    "text": repair_text,
+                    "audio": "",
+                    "audio_format": "",
+                    "duration_ms": len(repair_text) * 100,
+                    "fallback": "browser_tts",
+                    "roleplay_guard": True,
+                    "playback_rate": self._stepfun_playback_rate,
+                },
+            },
+        )
+
+    @staticmethod
+    def _build_roleplay_repair_instruction(decision: dict[str, Any]) -> str:
+        code = str(decision.get("violation_code") or "")
+        pattern = str(decision.get("matched_pattern") or "")
+        return (
+            "上一条输出触发了角色合同违规，必须重写本轮回答。"
+            f"违规码={code or 'unknown'}；命中={pattern or 'none'}。"
+            "新回答必须保持客户角色，不声称未发生的关系史，不披露未在当前可见字段中的隐藏信息，"
+            "不要解释系统规则。"
+        )
+
+    def _roleplay_contract(self) -> dict[str, Any] | None:
+        contract = None
+        curriculum_snapshot = getattr(self, "_curriculum_snapshot", None)
+        if isinstance(curriculum_snapshot, dict):
+            contract = curriculum_snapshot.get("roleplay_contract")
+        if not isinstance(contract, dict):
+            effective_policy = getattr(self, "_effective_policy", {})
+            contract = (
+                effective_policy.get("roleplay_contract")
+                if isinstance(effective_policy, dict)
+                else None
+            )
+        return contract if isinstance(contract, dict) else None
+
+    def _current_sales_stage_code(self) -> str | None:
+        latest_stage_data = getattr(self, "_latest_stage_data", None)
+        if isinstance(latest_stage_data, dict):
+            stage = latest_stage_data.get("current_stage")
+            return str(stage) if stage else None
+        return None
+
+    def _roleplay_checker_runtime_state(
+        self,
+        contract: object,
+    ) -> dict[str, Any]:
+        return {
+            "current_sales_stage": self._current_sales_stage_code(),
+            "visible_keys": self._roleplay_visible_keys(contract),
+            "disclosed_keys": self._roleplay_disclosed_keys(),
+        }
+
+    def _roleplay_disclosed_keys(self) -> list[str]:
+        disclosure_state = getattr(self, "_roleplay_disclosure_state", {})
+        if not isinstance(disclosure_state, dict):
+            return []
+        raw_keys = disclosure_state.get("disclosed_keys")
+        if not isinstance(raw_keys, list):
+            return []
+        return [str(item) for item in raw_keys if str(item).strip()]
+
+    async def _update_roleplay_disclosure_state(
+        self,
+        *,
+        learner_message: str,
+        turn_number: int,
+        sales_stage: Any,
+    ) -> None:
+        contract = self._roleplay_contract()
+        current_state = getattr(self, "_roleplay_disclosure_state", {})
+        previous = (
+            current_state
+            if isinstance(current_state, dict)
+            else initial_roleplay_disclosure_state(contract)
+        )
+        next_state = resolve_roleplay_disclosure_state(
+            contract=contract,
+            previous_state=previous,
+            learner_message=learner_message,
+            current_sales_stage=str(sales_stage or self._current_sales_stage_code() or ""),
+            turn_number=turn_number,
+            evidence={"trace_id": get_trace_id()},
+        )
+        self._roleplay_disclosure_state = next_state
+        await self._persist_roleplay_disclosure_state()
+
+    async def _persist_roleplay_disclosure_state(self) -> None:
+        disclosure_state = getattr(self, "_roleplay_disclosure_state", None)
+        if not self.session_id or not isinstance(disclosure_state, dict):
+            return
+        async with self._db_session_factory() as db:
+            result = await db.execute(
+                select(PracticeSession).where(PracticeSession.session_id == self.session_id)
+            )
+            session = result.scalar_one_or_none()
+            if session is None:
+                return
+            runtime_state = (
+                dict(session.runtime_state)
+                if isinstance(session.runtime_state, dict)
+                else {}
+            )
+            runtime_state[ROLEPLAY_DISCLOSURE_STATE_KEY] = disclosure_state
+            session.runtime_state = runtime_state
+            await db.commit()
+
+    def _roleplay_turn_instruction_context(self) -> dict[str, Any]:
+        contract = self._roleplay_contract()
+        state = normalize_roleplay_disclosure_state(
+            contract,
+            getattr(self, "_roleplay_disclosure_state", {}),
+        )
+        self._roleplay_disclosure_state = state
+        return build_roleplay_turn_context(
+            contract=contract,
+            disclosure_state=state,
+            visible_payload=_roleplay_as_dict(state.get("disclosed_payload")),
+            current_sales_stage=self._current_sales_stage_code(),
+        )
+
+    @staticmethod
+    def _format_roleplay_turn_instruction(context: dict[str, Any]) -> str:
+        if not isinstance(context, dict):
+            return ""
+        if context.get("disclosure_state_status") != "ready":
+            return ""
+        visible_keys = context.get("visible_keys")
+        disclosed_keys = context.get("disclosed_keys")
+        visible_payload = context.get("visible_payload")
+        lines = [
+            "【当前轮角色合同可见范围】",
+            f"- 当前销售阶段：{context.get('current_sales_stage') or 'unknown'}",
+            "- 当前可见字段："
+            + ("、".join(str(item) for item in visible_keys) if isinstance(visible_keys, list) and visible_keys else "无"),
+            "- 已披露字段："
+            + ("、".join(str(item) for item in disclosed_keys) if isinstance(disclosed_keys, list) and disclosed_keys else "无"),
+        ]
+        if isinstance(visible_payload, dict) and visible_payload:
+            payload_text = "；".join(
+                f"{key}={value}"
+                for key, value in visible_payload.items()
+                if str(value).strip()
+            )
+            if payload_text:
+                lines.append(f"- 本轮新增可见信息：{payload_text}")
+        lines.append("- 未列入当前可见字段的信息不得主动使用。")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _roleplay_visible_keys(contract: object) -> list[str]:
+        if not isinstance(contract, dict):
+            return []
+        scope = contract.get("visible_information_scope")
+        if not isinstance(scope, dict):
+            return []
+        raw_keys = scope.get("initial_visible_keys")
+        if not isinstance(raw_keys, list):
+            return []
+        return [str(item) for item in raw_keys if str(item).strip()]
+
+    @staticmethod
+    def _roleplay_repair_message(
+        contract: object,
+        decision: dict[str, Any],
+    ) -> str:
+        strategy = ""
+        if isinstance(contract, dict):
+            strategy = str(contract.get("conflict_response_strategy") or "")
+        if decision.get("violation_code") == "ROLEPLAY_HISTORY_CONTRADICTION":
+            if strategy == "customer_confused_correction":
+                return "我有点困惑，我们今天应该是第一次正式沟通。你可以先介绍一下这次想了解什么。"
+            return "我不确定你说的上次沟通指什么。我们先按这次正式沟通来聊。"
+        if decision.get("violation_code") == "ROLEPLAY_HIDDEN_INFORMATION_LEAK":
+            return "这个信息我现在还不方便展开。你可以先说明为什么需要了解这部分。"
+        return "这个话题现在还不适合展开。我们先回到当前沟通目标。"
 
     async def _execute_function_call(
         self,
@@ -1860,7 +2287,10 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         """Accumulate response text/audio transcript delta for fallback flush."""
         delta = event.get("delta", "")
         if self._active_response and delta:
+            if self._active_response.roleplay_suppressed:
+                return
             self._active_response.text_parts.append(delta)
+            await self._apply_roleplay_stream_guard()
 
     async def _handle_upstream_response_done(self, event: dict) -> None:
         """Finalize response and execute potential tool follow-ups."""
@@ -1969,6 +2399,7 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
             response_state.first_chunk_sent = True
             await self._send_status("speaking")
 
+        response_state.roleplay_audio_forwarded = True
         response_state.chunk_index += 1
 
     async def _accumulate_function_call_arguments(
@@ -2052,6 +2483,49 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
     def _ensure_knowledge_runtime_metrics(self) -> dict[str, Any]:
         """Ensure runtime metrics structure exists on effective policy snapshot."""
         return ensure_knowledge_runtime_metrics(self._effective_policy)
+
+    async def _record_roleplay_instruction_hash_metric(
+        self,
+        grounding_debug_payload: dict[str, Any],
+    ) -> None:
+        effective_policy = getattr(self, "_effective_policy", None)
+        if not isinstance(effective_policy, dict):
+            return
+        runtime_metrics = effective_policy.get("runtime_metrics")
+        if not isinstance(runtime_metrics, dict):
+            runtime_metrics = {}
+        audit = runtime_metrics.get(ROLEPLAY_INSTRUCTION_HASH_METRICS_KEY)
+        if not isinstance(audit, dict):
+            audit = {}
+        sample = {
+            "request_id": grounding_debug_payload.get("request_id"),
+            "instruction_contract_hash": grounding_debug_payload.get(
+                "instruction_contract_hash"
+            ),
+            "turn_instruction_hash": grounding_debug_payload.get(
+                "turn_instruction_hash"
+            ),
+            "final_instruction_length": grounding_debug_payload.get(
+                "final_instruction_length"
+            ),
+            "role_anchor_length": grounding_debug_payload.get("role_anchor_length"),
+            "has_grounding_context": grounding_debug_payload.get(
+                "has_grounding_context"
+            ),
+            "recorded_at": datetime.now(UTC).isoformat(),
+        }
+        previous_samples = audit.get("samples")
+        samples = previous_samples if isinstance(previous_samples, list) else []
+        audit = {
+            "latest": sample,
+            "samples": [sample, *samples][:ROLEPLAY_INSTRUCTION_HASH_SAMPLE_LIMIT],
+        }
+        runtime_metrics[ROLEPLAY_INSTRUCTION_HASH_METRICS_KEY] = audit
+        effective_policy["runtime_metrics"] = runtime_metrics
+        self._effective_policy = effective_policy
+        persist = getattr(self, "_persist_runtime_metrics_to_session", None)
+        if callable(persist):
+            await persist()
 
     @staticmethod
     def _normalize_recent_timestamps(

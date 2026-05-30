@@ -6,6 +6,7 @@ export interface TemplatePreflightContext {
     personaOptions: AssetRefPickerOption[];
     runtimeOptions: AssetRefPickerOption[];
     scoringOptions: AssetRefPickerOption[];
+    situationPackOptions?: AssetRefPickerOption[];
     knowledgeBases: AdminKnowledgeBase[];
 }
 
@@ -17,6 +18,8 @@ export interface TemplateFormPreflightInput {
     scoring_ruleset_id: string;
     knowledge_base_refs: string[];
     voice_mode: string;
+    mode?: string;
+    situation_pack_code?: string | null;
     case_item_id?: string | null;
     role_profile_id?: string | null;
 }
@@ -73,6 +76,15 @@ export function validateTemplateFormPreflight(
     }
     if (form.voice_mode !== "stepfun_realtime") {
         pushFieldError("voice_mode", "课程模板仅支持 stepfun_realtime 语音模式。");
+    }
+    if (form.mode === "customer_roleplay") {
+        if (!form.situation_pack_code?.trim()) {
+            pushFieldError("situation_pack_code", "客户对练模板必须选择 Situation Pack。");
+        } else {
+            const pack = context.situationPackOptions?.find((item) => item.id === form.situation_pack_code);
+            if (!pack) pushFieldError("situation_pack_code", "所选 Situation Pack 不存在，请重新选择。");
+            else if (!pack.selectable) pushFieldError("situation_pack_code", "所选 Situation Pack 尚未发布或不兼容当前模板。");
+        }
     }
     for (const kbId of form.knowledge_base_refs) {
         const kb = context.knowledgeBases.find((item) => item.id === kbId);

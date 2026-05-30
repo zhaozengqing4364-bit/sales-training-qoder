@@ -23,9 +23,11 @@ import {
     Database,
     ChevronDown,
     Target,
+    Milestone,
     BriefcaseBusiness,
     BookOpen,
     UserRoundCog,
+    Mic,
     type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -109,21 +111,51 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         items: [],
     },
     {
-        key: "assets",
-        label: "业务资产",
+        key: "sales-trainer",
+        label: "销售训练",
+        icon: Mic,
+        items: [
+            { label: "工作台", icon: LayoutDashboard, href: "/admin/sales-trainer" },
+            { label: "训练单元", icon: Target, href: "/admin/sales-trainer/units" },
+            { label: "训练路径", icon: Milestone, href: "/admin/sales-trainer/paths" },
+            { label: "销售题库", icon: FileText, href: "/admin/sales-trainer/questions" },
+            { label: "录音评分标准", icon: Mic, href: "/admin/sales-trainer/score-standards" },
+            { label: "学员录音", icon: Activity, href: "/admin/sales-trainer/audio-submissions" },
+            { label: "评分结果", icon: BarChart3, href: "/admin/sales-trainer/score-results" },
+            { label: "配置", icon: Settings, href: "/admin/sales-trainer/settings" },
+            { label: "操作记录", icon: ScrollText, href: "/admin/sales-trainer/operation-logs" },
+        ],
+    },
+    {
+        key: "curriculum",
+        label: "课程训练",
+        icon: Target,
+        items: [
+            { label: "课程训练模板", icon: Target, href: "/admin/curriculum-practice/templates" },
+            { label: "训练案例库", icon: BriefcaseBusiness, href: "/admin/curriculum-practice/case-items" },
+            { label: "客户角色库", icon: UserRoundCog, href: "/admin/curriculum-practice/role-profiles" },
+            { label: "角色情景包", icon: ScrollText, href: "/admin/curriculum-practice/roleplay-situation-packs" },
+            { label: "AI 考官管理", icon: UserRoundCog, href: "/admin/curriculum-practice/examiner-agents" },
+        ],
+    },
+    {
+        key: "content",
+        label: "内容与知识",
+        icon: BookOpen,
+        items: [
+            { label: "学习内容管理", icon: BookOpen, href: "/admin/learning-contents" },
+            { label: "知识库管理", icon: Database, href: "/admin/knowledge" },
+            { label: "通用题库", icon: FileText, href: "/admin/test-bank" },
+        ],
+    },
+    {
+        key: "agent-role",
+        label: "智能体与角色",
         icon: Bot,
         items: [
             { label: "智能体管理", icon: Bot, href: "/admin/agents" },
             { label: "角色管理", icon: User, href: "/admin/personas" },
-            { label: "知识库管理", icon: Database, href: "/admin/knowledge" },
-            { label: "检索策略", icon: Settings, href: "/admin/retrieval-strategies" },
             { label: "PPT 演练管理", icon: Presentation, href: "/admin/presentations" },
-            { label: "训练案例库", icon: BriefcaseBusiness, href: "/admin/curriculum-practice/case-items" },
-            { label: "客户角色库", icon: UserRoundCog, href: "/admin/curriculum-practice/role-profiles" },
-            { label: "课程训练模板", icon: Target, href: "/admin/curriculum-practice/templates" },
-            { label: "学习内容管理", icon: BookOpen, href: "/admin/learning-contents" },
-            { label: "题库管理", icon: FileText, href: "/admin/test-bank" },
-            { label: "AI 考官管理", icon: UserRoundCog, href: "/admin/curriculum-practice/examiner-agents" },
         ],
     },
     {
@@ -132,6 +164,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         icon: Sparkles,
         items: [
             { label: "提示词管理", icon: MessageSquareText, href: "/admin/prompts" },
+            { label: "检索策略", icon: Settings, href: "/admin/retrieval-strategies" },
             { label: "业务规则", icon: Settings, href: "/admin/business-rules/sales-combinations" },
             { label: "成就徽章规则", icon: Sparkles, href: "/admin/business-rules/growth-achievements" },
             { label: "AI 教练规则", icon: MessageSquareText, href: "/admin/business-rules/ai-coach" },
@@ -171,6 +204,25 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     },
 ];
 
+const SALES_TRAINER_MANAGER_NAV_SECTIONS: AdminNavSection[] = [
+    {
+        key: "sales-trainer",
+        label: "销售训练",
+        icon: Mic,
+        items: [
+            { label: "工作台", icon: LayoutDashboard, href: "/admin/sales-trainer" },
+            { label: "训练单元", icon: Target, href: "/admin/sales-trainer/units" },
+            { label: "训练路径", icon: Milestone, href: "/admin/sales-trainer/paths" },
+            { label: "销售题库", icon: FileText, href: "/admin/sales-trainer/questions" },
+            { label: "录音评分标准", icon: Mic, href: "/admin/sales-trainer/score-standards" },
+            { label: "学员录音", icon: Activity, href: "/admin/sales-trainer/audio-submissions" },
+            { label: "评分结果", icon: BarChart3, href: "/admin/sales-trainer/score-results" },
+            { label: "配置", icon: Settings, href: "/admin/sales-trainer/settings" },
+            { label: "操作记录", icon: ScrollText, href: "/admin/sales-trainer/operation-logs" },
+        ],
+    },
+];
+
 function isPathActive(pathname: string, href: string): boolean {
     if (href === "/admin") {
         return pathname === href;
@@ -178,8 +230,8 @@ function isPathActive(pathname: string, href: string): boolean {
     return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function resolveActiveSectionKey(pathname: string): string | null {
-    for (const section of ADMIN_NAV_SECTIONS) {
+function resolveActiveSectionKey(pathname: string, sections: AdminNavSection[]): string | null {
+    for (const section of sections) {
         if (section.href && isPathActive(pathname, section.href)) {
             return section.key;
         }
@@ -190,6 +242,25 @@ function resolveActiveSectionKey(pathname: string): string | null {
     return null;
 }
 
+function visibleAdminNavSections(currentUser: UserInfo | null): AdminNavSection[] {
+    return currentUser?.role === "support"
+        ? SALES_TRAINER_MANAGER_NAV_SECTIONS
+        : ADMIN_NAV_SECTIONS;
+}
+
+function adminRoleLabel(
+    role: string | undefined,
+    options: { expanded?: boolean } = {},
+): string {
+    if (role === "admin") {
+        return options.expanded ? "超级管理员" : "超级用户";
+    }
+    if (role === "support") {
+        return "培训负责人";
+    }
+    return "普通用户";
+}
+
 export function AdminSidebarContent({
     currentUser,
     isCollapsed = false,
@@ -198,7 +269,8 @@ export function AdminSidebarContent({
 }: AdminSidebarContentProps) {
     const pathname = usePathname();
     const [openSectionKeys, setOpenSectionKeys] = useState<Record<string, boolean>>({});
-    const activeSectionKey = resolveActiveSectionKey(pathname);
+    const sections = visibleAdminNavSections(currentUser);
+    const activeSectionKey = resolveActiveSectionKey(pathname, sections);
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
@@ -222,13 +294,13 @@ export function AdminSidebarContent({
             {/* Main Navigation */}
             <TooltipProvider delayDuration={0}>
                 <nav className="flex-1 space-y-2 flex flex-col w-full overflow-y-auto min-h-0 pr-1">
-                    {ADMIN_NAV_SECTIONS.map((section, sectionIndex) => (
+                    {sections.map((section, sectionIndex) => (
                         <AdminNavSectionGroup
                             key={section.key}
                             section={section}
                             pathname={pathname}
                             isCollapsed={isCollapsed}
-                            isLast={sectionIndex === ADMIN_NAV_SECTIONS.length - 1}
+                            isLast={sectionIndex === sections.length - 1}
                             isOpen={openSectionKeys[section.key] ?? section.key === activeSectionKey}
                             onToggle={() => {
                                 setOpenSectionKeys((prev) => ({
@@ -281,7 +353,7 @@ function AdminUserCard({
 }) {
     const userInfo = currentUser;
     const displayName = userInfo?.display_name || "管理员";
-    const roleLabel = userInfo?.role === "admin" ? "超级用户" : "普通用户";
+    const roleLabel = adminRoleLabel(userInfo?.role);
 
     if (isCollapsed) {
         return (
@@ -342,7 +414,7 @@ function AdminProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
     };
 
     const displayName = userInfo?.display_name || "管理员";
-    const roleLabel = userInfo?.role === "admin" ? "超级管理员" : "普通用户";
+    const roleLabel = adminRoleLabel(userInfo?.role, { expanded: true });
 
     return (
         <DialogContent>

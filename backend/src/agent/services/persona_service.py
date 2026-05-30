@@ -30,6 +30,8 @@ from ..schemas import (
 )
 from .persona_policy import (
     PERSONA_POLICY_VERSION,
+    PersonaPolicyValidator,
+    format_persona_policy_validation_failure,
     normalize_persona_policy,
     sync_legacy_persona_fields,
 )
@@ -77,6 +79,11 @@ class PersonaService:
                 fallback_system_prompt=data.system_prompt,
                 fallback_kb_ids=data.knowledge_base_ids or [],
             )
+            validation_errors = PersonaPolicyValidator.validate(persona_policy)
+            if validation_errors:
+                return Result.fail(
+                    format_persona_policy_validation_failure(validation_errors)
+                )
             persona.persona_policy = persona_policy
             sync_legacy_persona_fields(persona, persona_policy)
 
@@ -261,6 +268,11 @@ class PersonaService:
                 fallback_system_prompt=next_system_prompt,
                 fallback_kb_ids=next_kb_ids,
             )
+            validation_errors = PersonaPolicyValidator.validate(persona_policy)
+            if validation_errors:
+                return Result.fail(
+                    format_persona_policy_validation_failure(validation_errors)
+                )
             persona.persona_policy = persona_policy
             sync_legacy_persona_fields(persona, persona_policy)
 

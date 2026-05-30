@@ -26,7 +26,8 @@ from common.db.models import Base
 # Knowledge Base models (R5)
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument  # noqa: F401
 from common.knowledge.rag_profile_models import RagProfile  # noqa: F401
-from curriculum_practice.models import PracticeTemplate  # noqa: F401
+from curriculum_practice.models import PracticeTemplate, SituationPack  # noqa: F401
+from sales_trainer import models as sales_trainer_models  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config

@@ -24,13 +24,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-import common.api.practice as practice_api
 from agent.models import Agent, AgentPersona, Persona
 
 # Import all models to ensure they're registered with Base.metadata
 from common.db.models import Base, PracticeSession, Presentation, Scenario, User
 from common.db.session import get_db
 from common.error_handling.result import Result
+from common.services import practice_session_service
 from main import app
 
 
@@ -57,8 +57,16 @@ def _stub_sales_end_dependencies(monkeypatch: pytest.MonkeyPatch):
         )
     )
     cleanup_mock = AsyncMock(return_value=Result.ok({"session_id": "flow-session"}))
-    monkeypatch.setattr(practice_api.summary_service, "generate_summary", summary_mock)
-    monkeypatch.setattr(practice_api.sales_bot_service, "end_session", cleanup_mock)
+    monkeypatch.setattr(
+        practice_session_service.summary_service,
+        "generate_summary",
+        summary_mock,
+    )
+    monkeypatch.setattr(
+        practice_session_service.sales_bot_service,
+        "end_session",
+        cleanup_mock,
+    )
     return summary_mock, cleanup_mock
 
 

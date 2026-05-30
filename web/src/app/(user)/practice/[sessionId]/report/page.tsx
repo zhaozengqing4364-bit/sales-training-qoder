@@ -199,6 +199,106 @@ function formatTrendDate(value: string): string {
     });
 }
 
+function formatRoleplayStatusLabel(status?: string | null): string {
+    switch (status) {
+        case "ready": return "配置正常";
+        case "legacy": return "历史配置";
+        case "missing": return "配置缺失";
+        case "invalid": return "配置异常";
+        default: return status || "未记录";
+    }
+}
+
+function getRoleplaySummaryTone(status?: string | null, blockingCount = 0) {
+    if (status === "missing" || status === "invalid" || blockingCount > 0) {
+        return {
+            card: "border-amber-200 bg-amber-50/80",
+            badge: "border-amber-200 bg-white/80 text-amber-700",
+            text: "text-amber-900",
+            note: "text-amber-700",
+        };
+    }
+    if (status === "legacy") {
+        return {
+            card: "border-slate-200 bg-slate-50/80",
+            badge: "border-slate-200 bg-white/80 text-slate-700",
+            text: "text-slate-900",
+            note: "text-slate-600",
+        };
+    }
+    return {
+        card: "border-emerald-200 bg-emerald-50/80",
+        badge: "border-emerald-200 bg-white/80 text-emerald-700",
+        text: "text-emerald-900",
+        note: "text-emerald-700",
+    };
+}
+
+function RoleplayComplianceSummaryCard({
+    summary,
+}: {
+    summary?: PracticeSessionReport["roleplay_compliance_summary"];
+}) {
+    if (!summary) return null;
+
+    const violationCount = summary.violation_count ?? 0;
+    const blockingCount = summary.blocking_violation_count ?? 0;
+    const repairCount = (summary.regenerate_count ?? 0) + (summary.cancel_stream_count ?? 0);
+    const hiddenLeakPrevented = summary.hidden_leak_prevented_count ?? 0;
+    const disclosedKeysCount = summary.disclosed_keys_count ?? 0;
+    const tone = getRoleplaySummaryTone(summary.status, blockingCount);
+
+    return (
+        <GlassCard className={cn("p-6 mb-6 border", tone.card)}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                    <div className="flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-emerald-600" />
+                        <h2 className={cn("text-lg font-semibold", tone.text)}>角色一致性</h2>
+                    </div>
+                    <p className={cn("mt-2 text-sm", tone.note)}>
+                        本摘要只展示训练可理解的角色一致性结果，不展示隐藏字段、禁用短语或守门规则细节。
+                    </p>
+                </div>
+                <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", tone.badge)}>
+                    {formatRoleplayStatusLabel(summary.status)}
+                </span>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+                <div className="rounded-xl border border-white/70 bg-white/70 p-4">
+                    <div className="text-xs font-semibold text-slate-500">关系史越界</div>
+                    <div className="mt-2 text-sm font-bold text-slate-900">
+                        {blockingCount > 0 ? "已触发系统修复/记录" : "未发现明显矛盾"}
+                    </div>
+                </div>
+                <div className="rounded-xl border border-white/70 bg-white/70 p-4">
+                    <div className="text-xs font-semibold text-slate-500">隐藏信息保护</div>
+                    <div className="mt-2 text-sm font-bold text-slate-900">
+                        {hiddenLeakPrevented > 0 ? `已阻止 ${hiddenLeakPrevented} 次泄露` : "未记录泄露风险"}
+                    </div>
+                </div>
+                <div className="rounded-xl border border-white/70 bg-white/70 p-4">
+                    <div className="text-xs font-semibold text-slate-500">系统修复</div>
+                    <div className="mt-2 text-sm font-bold text-slate-900">
+                        {repairCount > 0 ? `${repairCount} 次` : "未触发"}
+                    </div>
+                </div>
+                <div className="rounded-xl border border-white/70 bg-white/70 p-4">
+                    <div className="text-xs font-semibold text-slate-500">披露范围</div>
+                    <div className="mt-2 text-sm font-bold text-slate-900">
+                        {disclosedKeysCount > 0 ? `已按规则披露 ${disclosedKeysCount} 项` : "未额外披露"}
+                    </div>
+                </div>
+            </div>
+            {violationCount > 0 ? (
+                <p className={cn("mt-3 text-xs", tone.note)}>
+                    本场共记录 {violationCount} 次角色边界检查事件，其中 {blockingCount} 次需要系统修复或运营复核。
+                </p>
+            ) : null}
+        </GlassCard>
+    );
+}
+
 function getClaimTruthClasses(tone: SessionClaimTruthTone) {
     if (tone === "critical") {
         return {
@@ -1912,6 +2012,8 @@ export default function ComprehensiveReportPage() {
                     </p>
                 </div>
             </GlassCard>
+
+            <RoleplayComplianceSummaryCard summary={report.roleplay_compliance_summary} />
 
             {(isSupervisor || latestSupervisorReview || supervisorReviewHint || retrainingCompletionHint) && (
                 <GlassCard className="p-6 mb-6 border border-slate-200 bg-slate-50/70">

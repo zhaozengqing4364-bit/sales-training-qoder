@@ -22,6 +22,16 @@ from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, Presentation, SystemLog
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument
 from common.monitoring.logger import get_logger
+from curriculum_practice.services.roleplay.dual_read_observability import (
+    build_config_asset_center_overview_payload,
+)
+from curriculum_practice.services.roleplay.dual_read_promotion_gate import (
+    DualReadPromotionGateService,
+)
+from curriculum_practice.services.roleplay_contracts import (
+    ROLEPLAY_COMPLIANCE_METRICS_KEY,
+    roleplay_compliance_summary_from_session,
+)
 from presentation_coach.services.presentation_report_service import (
     PresentationReportService,
 )
@@ -53,6 +63,7 @@ class RuntimeSessionRecord:
     projection_error: str | None = None
     presentation_review: dict[str, Any] | None = None
     audio_diagnostics: dict[str, Any] = field(default_factory=dict)
+    roleplay_diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 class RuntimeStatusService:
@@ -294,9 +305,7 @@ class RuntimeStatusService:
                     default=None,
                 )
                 latest_document_created_at = (
-                    self._coerce_datetime(
-                        getattr(latest_document, "created_at", None)
-                    )
+                    self._coerce_datetime(getattr(latest_document, "created_at", None))
                     if latest_document is not None
                     else None
                 )
@@ -317,10 +326,9 @@ class RuntimeStatusService:
 
                 change_count_7d = 0
                 for document in documents:
-                    document_created_at = (
-                        self._coerce_datetime(getattr(document, "created_at", None))
-                        or datetime.min.replace(tzinfo=UTC)
-                    )
+                    document_created_at = self._coerce_datetime(
+                        getattr(document, "created_at", None)
+                    ) or datetime.min.replace(tzinfo=UTC)
                     if document_created_at >= seven_days_ago:
                         change_count_7d += 1
                 if kb_updated_at is not None and kb_updated_at >= seven_days_ago:
@@ -528,6 +536,10 @@ class RuntimeStatusService:
         supplemental_logs = await self._load_supplemental_logs(
             window_start=window_start
         )
+        promotion_gate = await DualReadPromotionGateService(self.db).evaluate(
+            write_audit=False,
+            now=now,
+        )
         faults = self.build_faults_payload(
             records,
             now=now,
@@ -542,6 +554,9 @@ class RuntimeStatusService:
             now=now,
             window_hours=window_hours,
             supplemental_logs=supplemental_logs,
+            config_asset_center=build_config_asset_center_overview_payload(
+                promotion_gate=promotion_gate.to_payload()
+            ),
         )
 
         logger.info(
@@ -663,6 +678,7 @@ class RuntimeStatusService:
 
             # Extract audio audit diagnostics from voice_policy_snapshot.runtime_metrics
             audio_diagnostics = self._extract_audio_diagnostics(snapshot)
+            roleplay_diagnostics = self._extract_roleplay_diagnostics(session, snapshot)
 
             records.append(
                 RuntimeSessionRecord(
@@ -674,6 +690,7 @@ class RuntimeStatusService:
                     projection_error=projection_error,
                     presentation_review=presentation_review,
                     audio_diagnostics=audio_diagnostics,
+                    roleplay_diagnostics=roleplay_diagnostics,
                 )
             )
 
@@ -714,6 +731,44 @@ class RuntimeStatusService:
             "uploaded_segment_count": uploaded_segment_count,
         }
 
+    @staticmethod
+    def _extract_roleplay_diagnostics(
+        session: PracticeSession,
+        voice_policy_snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        runtime_state = getattr(session, "runtime_state", None)
+        curriculum_snapshot = getattr(session, "curriculum_snapshot", None)
+        summary = roleplay_compliance_summary_from_session(
+            curriculum_snapshot=curriculum_snapshot,
+            voice_policy_snapshot=voice_policy_snapshot,
+            runtime_state=runtime_state,
+        )
+        runtime_metrics = (
+            voice_policy_snapshot.get("runtime_metrics")
+            if isinstance(voice_policy_snapshot, dict)
+            else None
+        )
+        roleplay_metrics = (
+            runtime_metrics.get(ROLEPLAY_COMPLIANCE_METRICS_KEY)
+            if isinstance(runtime_metrics, dict)
+            else None
+        )
+        if not isinstance(roleplay_metrics, dict):
+            roleplay_metrics = {}
+        config_asset_runtime = (
+            summary.get("config_asset_runtime")
+            if isinstance(summary.get("config_asset_runtime"), dict)
+            else {}
+        )
+        return {
+            "summary": summary,
+            "asset_resolution": summary.get("asset_resolution"),
+            "config_asset_runtime": config_asset_runtime,
+            "timeline_count": len(roleplay_metrics.get("timeline") or [])
+            if isinstance(roleplay_metrics.get("timeline"), list)
+            else 0,
+        }
+
     async def _load_supplemental_logs(
         self,
         *,
@@ -739,6 +794,7 @@ class RuntimeStatusService:
         now: datetime,
         window_hours: int,
         supplemental_logs: list[SystemLog],
+        config_asset_center: dict[str, object] | None = None,
     ) -> dict[str, Any]:
         typed_items = [item for item in fault_items if item.get("source") == "session"]
         started_in_window = [
@@ -779,6 +835,10 @@ class RuntimeStatusService:
         warning_items = [
             item for item in typed_items if item.get("severity") == "warning"
         ]
+        roleplay = cls._build_roleplay_governance_payload(
+            started_in_window,
+            fault_items=typed_items,
+        )
 
         completion_rate = (
             round((len(completed_in_window) / len(started_in_window)) * 100, 2)
@@ -827,6 +887,9 @@ class RuntimeStatusService:
                 "blocking": cls._summarize_kinds(blocking_items),
                 "warning": cls._summarize_kinds(warning_items),
             },
+            "roleplay": roleplay,
+            "config_asset_center": config_asset_center
+            or build_config_asset_center_overview_payload(),
         }
 
     @classmethod
@@ -947,6 +1010,53 @@ class RuntimeStatusService:
                     or getattr(session, "start_time", None),
                     diagnostics={
                         "error_code": cls._compact_error_token(record.projection_error),
+                    },
+                )
+
+            roleplay_diag = (
+                record.roleplay_diagnostics
+                if isinstance(record.roleplay_diagnostics, dict)
+                else {}
+            )
+            roleplay_summary = (
+                roleplay_diag.get("summary")
+                if isinstance(roleplay_diag.get("summary"), dict)
+                else {}
+            )
+            roleplay_status = str(roleplay_summary.get("status") or "")
+            blocking_roleplay_count = int(
+                roleplay_summary.get("blocking_violation_count") or 0
+            )
+            if roleplay_status in {"missing", "invalid"}:
+                add_item(
+                    severity="blocking",
+                    kind=f"roleplay_contract_{roleplay_status}",
+                    summary="Roleplay Contract 缺失或非法，角色一致性运行时只能降级诊断。",
+                    detected_at=getattr(session, "start_time", None),
+                    diagnostics={
+                        "roleplay": roleplay_summary,
+                    },
+                )
+            elif roleplay_status == "legacy":
+                add_item(
+                    severity="warning",
+                    kind="roleplay_contract_legacy",
+                    summary="会话使用 legacy Roleplay Contract，无法完整执行情景边界守门。",
+                    detected_at=getattr(session, "start_time", None),
+                    diagnostics={
+                        "roleplay": roleplay_summary,
+                    },
+                )
+            elif blocking_roleplay_count > 0:
+                add_item(
+                    severity="warning",
+                    kind="roleplay_blocking_violation",
+                    summary="会话触发 Roleplay Contract 阻断级违规，已由运行时守门修复或标记。",
+                    detected_at=roleplay_summary.get("last_action_at")
+                    or getattr(session, "end_time", None)
+                    or getattr(session, "start_time", None),
+                    diagnostics={
+                        "roleplay": roleplay_summary,
                     },
                 )
 
@@ -1277,6 +1387,75 @@ class RuntimeStatusService:
                 counts, key=lambda current: (-counts[current], str(current))
             )
         ]
+
+    @classmethod
+    def _build_roleplay_governance_payload(
+        cls,
+        records: list[RuntimeSessionRecord],
+        *,
+        fault_items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        legacy_sessions = 0
+        missing_sessions = 0
+        invalid_sessions = 0
+        ready_sessions = 0
+        violation_count = 0
+        blocking_violation_count = 0
+        regenerate_count = 0
+        cancel_stream_count = 0
+        hidden_leak_prevented_count = 0
+        by_situation: Counter[str] = Counter()
+        for record in records:
+            diag = (
+                record.roleplay_diagnostics
+                if isinstance(record.roleplay_diagnostics, dict)
+                else {}
+            )
+            summary = (
+                diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
+            )
+            status = str(summary.get("status") or "")
+            if status == "ready":
+                ready_sessions += 1
+            elif status == "legacy":
+                legacy_sessions += 1
+            elif status == "invalid":
+                invalid_sessions += 1
+            else:
+                missing_sessions += 1
+            situation = str(summary.get("situation_code") or "unknown")
+            by_situation[situation] += int(summary.get("violation_count") or 0)
+            violation_count += int(summary.get("violation_count") or 0)
+            blocking_violation_count += int(
+                summary.get("blocking_violation_count") or 0
+            )
+            regenerate_count += int(summary.get("regenerate_count") or 0)
+            cancel_stream_count += int(summary.get("cancel_stream_count") or 0)
+            hidden_leak_prevented_count += int(
+                summary.get("hidden_leak_prevented_count") or 0
+            )
+        compile_failures = [
+            item
+            for item in fault_items
+            if str(item.get("kind") or "").startswith("roleplay_contract_")
+        ]
+        return {
+            "ready_sessions": ready_sessions,
+            "legacy_sessions": legacy_sessions,
+            "missing_sessions": missing_sessions,
+            "invalid_sessions": invalid_sessions,
+            "violation_count": violation_count,
+            "blocking_violation_count": blocking_violation_count,
+            "regenerate_count": regenerate_count,
+            "cancel_stream_count": cancel_stream_count,
+            "hidden_leak_prevented_count": hidden_leak_prevented_count,
+            "high_violation_situation_packs": [
+                {"situation_code": code, "violation_count": count}
+                for code, count in by_situation.most_common()
+                if count > 0
+            ][:10],
+            "compile_failure_rank": cls._summarize_kinds(compile_failures),
+        }
 
     @staticmethod
     def _compact_error_token(value: Any) -> str | None:

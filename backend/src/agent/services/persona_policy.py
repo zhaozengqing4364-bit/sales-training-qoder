@@ -10,6 +10,9 @@ Persona policy is the single source of truth for:
 
 from __future__ import annotations
 
+import json
+import re
+from dataclasses import dataclass
 from typing import Any
 
 PERSONA_POLICY_VERSION = 1
@@ -82,6 +85,125 @@ _CUSTOMER_PRESSURE_FOLLOW_UP_KEYS = {
     "require_evidence",
     "expected_customer_questions",
 }
+
+ROLE_ANCHOR_IDENTITY_TEMPLATE_VARS = frozenset(
+    {"role_name", "relationship_stage", "bottom_line"}
+)
+ROLE_ANCHOR_BOTTOM_LINE_MIN_LEN = 10
+ROLE_ANCHOR_TEXT_MAX_LEN = 200
+_ROLE_ANCHOR_TEMPLATE_VAR_PATTERN = re.compile(r"\{([^{}]+)\}")
+
+
+@dataclass(frozen=True, slots=True)
+class PersonaPolicyValidationError:
+    field: str
+    reason_code: str
+    message: str
+
+
+class PersonaPolicyValidator:
+    """Validate structured persona_policy extensions such as role_anchor."""
+
+    @classmethod
+    def validate(cls, persona_policy: dict[str, Any] | None) -> list[PersonaPolicyValidationError]:
+        policy = _as_dict(persona_policy)
+        if "role_anchor" not in policy:
+            return []
+
+        role_anchor = policy.get("role_anchor")
+        if role_anchor is None:
+            return []
+        if not isinstance(role_anchor, dict):
+            return [
+                PersonaPolicyValidationError(
+                    field="persona_policy.role_anchor",
+                    reason_code="role_anchor_invalid_type",
+                    message="role_anchor must be an object.",
+                )
+            ]
+        if not role_anchor:
+            return [
+                PersonaPolicyValidationError(
+                    field="persona_policy.role_anchor.bottom_line",
+                    reason_code="role_anchor_bottom_line_required",
+                    message="bottom_line is required when role_anchor is configured.",
+                )
+            ]
+
+        errors: list[PersonaPolicyValidationError] = []
+        bottom_line = str(role_anchor.get("bottom_line") or "").strip()
+        if len(bottom_line) < ROLE_ANCHOR_BOTTOM_LINE_MIN_LEN:
+            errors.append(
+                PersonaPolicyValidationError(
+                    field="persona_policy.role_anchor.bottom_line",
+                    reason_code="role_anchor_bottom_line_required",
+                    message=(
+                        "bottom_line must be a non-empty string with at least "
+                        f"{ROLE_ANCHOR_BOTTOM_LINE_MIN_LEN} characters."
+                    ),
+                )
+            )
+
+        identity_template = str(role_anchor.get("identity_template") or "")
+        invalid_vars = sorted(
+            {
+                variable
+                for variable in _ROLE_ANCHOR_TEMPLATE_VAR_PATTERN.findall(
+                    identity_template
+                )
+                if variable not in ROLE_ANCHOR_IDENTITY_TEMPLATE_VARS
+            }
+        )
+        if invalid_vars:
+            allowed = ", ".join(
+                f"{{{name}}}" for name in sorted(ROLE_ANCHOR_IDENTITY_TEMPLATE_VARS)
+            )
+            errors.append(
+                PersonaPolicyValidationError(
+                    field="persona_policy.role_anchor.identity_template",
+                    reason_code="role_anchor_identity_template_invalid_vars",
+                    message=(
+                        "identity_template contains unsupported variables: "
+                        f"{', '.join(invalid_vars)}. Allowed: {allowed}."
+                    ),
+                )
+            )
+
+        for field_name, reason_code in (
+            ("must_do", "role_anchor_must_do_too_long"),
+            ("must_not", "role_anchor_must_not_too_long"),
+        ):
+            value = str(role_anchor.get(field_name) or "")
+            if len(value) > ROLE_ANCHOR_TEXT_MAX_LEN:
+                errors.append(
+                    PersonaPolicyValidationError(
+                        field=f"persona_policy.role_anchor.{field_name}",
+                        reason_code=reason_code,
+                        message=(
+                            f"{field_name} must be at most "
+                            f"{ROLE_ANCHOR_TEXT_MAX_LEN} characters."
+                        ),
+                    )
+                )
+
+        return errors
+
+
+def format_persona_policy_validation_failure(
+    errors: list[PersonaPolicyValidationError],
+) -> str:
+    payload = {
+        "error": "[PERSONA_POLICY_VALIDATION_FAILED]",
+        "errors": [
+            {
+                "field": error.field,
+                "reason_code": error.reason_code,
+                "message": error.message,
+            }
+            for error in errors
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _as_dict(value: Any) -> dict[str, Any]:

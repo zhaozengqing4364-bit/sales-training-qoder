@@ -3,16 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import StudyPage from "./page";
 
-const { getContentMock, completeChapterMock, startExamMock, pushMock } = vi.hoisted(() => ({
+const { getContentMock, completeChapterMock, startExamMock, pushMock, searchParamsMock } = vi.hoisted(() => ({
     getContentMock: vi.fn(),
     completeChapterMock: vi.fn(),
     startExamMock: vi.fn(),
     pushMock: vi.fn(),
+    searchParamsMock: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock("next/navigation", () => ({
     useParams: () => ({ learningContentId: "content-1" }),
     useRouter: () => ({ push: pushMock }),
+    useSearchParams: () => searchParamsMock(),
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -50,8 +52,8 @@ function makeContent() {
         owner: "curriculum-team",
         source: "manual",
         chapters: [
-            makeChapter("chapter-1", 0, "开场技巧", "先确认客户背景。"),
-            makeChapter("chapter-2", 1, "异议识别", "识别常见的四种异议类型。"),
+            makeChapter("chapter-1", 1, "开场技巧", "先确认客户背景。"),
+            makeChapter("chapter-2", 2, "异议识别", "识别常见的四种异议类型。"),
         ],
         progress: {
             completed_chapter_ids: [],
@@ -70,6 +72,17 @@ describe("StudyPage", () => {
         completeChapterMock.mockReset();
         startExamMock.mockReset();
         pushMock.mockReset();
+        searchParamsMock.mockReset();
+        searchParamsMock.mockReturnValue(new URLSearchParams());
+    });
+
+    it("selects chapter from ?chapter= deep link by order_index", async () => {
+        searchParamsMock.mockReturnValue(new URLSearchParams("chapter=2"));
+        getContentMock.mockResolvedValue(makeContent());
+        render(<StudyPage />);
+
+        expect(await screen.findByText("识别常见的四种异议类型。")).toBeTruthy();
+        expect(screen.queryByText("先确认客户背景。")).toBeNull();
     });
 
     it("renders loading state", async () => {

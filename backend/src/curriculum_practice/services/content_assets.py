@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.models import Persona
 from curriculum_practice.models import CaseItem, PracticeTemplate, RoleProfile
 from curriculum_practice.schemas import CaseItemCreate, RoleProfileCreate
+from curriculum_practice.services.asset_references import CurriculumAssetReferenceReader
 from curriculum_practice.services.voice_clone import VoiceCloneResult, VoiceCloneService
 
 HASH_EXCLUDED_FIELDS = {
@@ -364,27 +365,10 @@ class ContentAssetService:
     async def read_snapshot_reference(
         self, asset_type: str, asset_id: str
     ) -> dict[str, object] | None:
-        if asset_type == "case_item":
-            item = await self._db.get(CaseItem, asset_id)
-            if item is None:
-                return None
-            return {
-                "case_item_id": item.case_item_id,
-                "status": item.status,
-                "version": item.version,
-                "content_hash": item.content_hash,
-            }
-        if asset_type == "role_profile":
-            item = await self._db.get(RoleProfile, asset_id)
-            if item is None:
-                return None
-            return {
-                "role_profile_id": item.role_profile_id,
-                "status": item.status,
-                "version": item.version,
-                "content_hash": item.content_hash,
-            }
-        return None
+        return await CurriculumAssetReferenceReader(self._db).read_reference(
+            asset_type,
+            asset_id,
+        )
 
 
 async def list_published_template_references(

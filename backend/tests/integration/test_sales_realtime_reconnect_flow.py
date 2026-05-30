@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from starlette.websockets import WebSocketState
 
+import common.services.session_runtime_lifecycle_hooks as runtime_hooks_module
 import sales_bot.websocket.stepfun_realtime_handler as stepfun_module
 from common.db.models import PracticeSession, Scenario, User
 from common.error_handling.result import Result
@@ -239,6 +240,7 @@ async def test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_termi
     )
 
     monkeypatch.setattr(stepfun_module, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(runtime_hooks_module, "AsyncSessionLocal", session_factory)
     monkeypatch.setattr(
         stepfun_module.SessionLifecycleService,
         "trigger_report_generation_if_needed",

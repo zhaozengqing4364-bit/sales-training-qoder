@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>训练路径 · 销售闯关训练</title>
+  <link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+  <div class="page">
+    <div class="container">
+      <div class="stack">
+        <!-- Header -->
+        <header>
+          <a class="back-link" href="index.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            返回原型索引
+          </a>
+          <div style="margin-top: 1rem;">
+            <p class="text-label">售前新人训练路径</p>
+            <h1 class="heading-xl">销售闯关训练</h1>
+            <p class="text-body" style="margin-top: 0.5rem;">
+              按关卡推进销售基本功：完成当前关卡的做题与录音任务即可解锁下一关。
+            </p>
+          </div>
+        </header>
+
+        <!-- Current level hero card -->
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <span class="badge badge--amber">进行中</span>
+              <h2 class="heading-lg" style="margin-top: 0.5rem;">第 2 关 · 价值表达</h2>
+              <p class="text-body" style="margin-top: 0.25rem;">
+                学会把产品能力翻译成客户可感知的业务价值，并用证据支撑。
+              </p>
+            </div>
+          </div>
+
+          <!-- UsageBar-style progress -->
+          <div class="usage-bar" style="margin-bottom: 1.25rem;">
+            <div class="usage-bar__header">
+              <span class="usage-bar__label">本关进度</span>
+              <span class="usage-bar__value">1 / 2 任务完成</span>
+            </div>
+            <div class="usage-bar__track">
+              <div class="usage-bar__fill" style="width: 50%;"></div>
+            </div>
+            <div class="usage-bar__meta">
+              <span>关卡 2 / 5</span>
+              <span>路径总进度 30%</span>
+            </div>
+          </div>
+
+          <div class="usage-bar" style="margin-bottom: 1.5rem;">
+            <div class="usage-bar__header">
+              <span class="usage-bar__label">全路径进度</span>
+              <span class="usage-bar__value">1.5 / 5 关</span>
+            </div>
+            <div class="usage-bar__track">
+              <div class="usage-bar__fill" style="width: 30%;"></div>
+            </div>
+          </div>
+
+          <a class="btn btn--primary btn--block" href="level-brief.html">
+            继续本关 · 录音评分
+          </a>
+          <p class="text-caption" style="margin-top: 0.75rem; text-align: center;">
+            通关标准：做题 ≥ 80 分 且 录音评分 ≥ 75 分
+          </p>
+        </section>
+
+        <!-- Stats -->
+        <div class="stat-row">
+          <div class="stat-box">
+            <p class="stat-box__value">1</p>
+            <p class="stat-box__label">已通关</p>
+          </div>
+          <div class="stat-box">
+            <p class="stat-box__value">86</p>
+            <p class="stat-box__label">最近得分</p>
+          </div>
+          <div class="stat-box">
+            <p class="stat-box__value">~25</p>
+            <p class="stat-box__label">预计分钟</p>
+          </div>
+        </div>
+
+        <!-- Checklist: quiz + audio -->
+        <section>
+          <div class="section-header" style="margin-bottom: 0.75rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <h2 class="heading-md">本关任务清单</h2>
+          </div>
+
+          <ul class="checklist">
+            <li class="checklist__item">
+              <span class="checklist__icon checklist__icon--done">✓</span>
+              <div class="checklist__body">
+                <p class="checklist__title">做题训练 · 价值表达基础</p>
+                <p class="checklist__desc">10 道选择题 · 得分 86 / 80 · 已通过</p>
+              </div>
+              <span class="badge badge--emerald checklist__action">已完成</span>
+            </li>
+            <li class="checklist__item">
+              <span class="checklist__icon checklist__icon--current">2</span>
+              <div class="checklist__body">
+                <p class="checklist__title">录音评分 · 30 秒价值陈述</p>
+                <p class="checklist__desc">上传一段面向制造业 CIO 的产品价值陈述录音</p>
+              </div>
+              <a class="btn btn--primary checklist__action" href="level-brief.html" style="padding: 0.5rem 1rem; font-size: 0.75rem;">开始</a>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Collapsible level map -->
+        <details class="details">
+          <summary>查看完整关卡地图（5 关）</summary>
+          <div class="details__content">
+            <ul class="level-map">
+              <li class="level-map__item level-map__item--done">
+                <span class="level-map__num">✓</span>
+                <div class="level-map__info">
+                  <p class="level-map__name">第 1 关 · 破冰与开场</p>
+                  <p class="level-map__status">已通过 · 做题 92 分 · 录音 78 分</p>
+                </div>
+                <span class="badge badge--emerald">已通关</span>
+              </li>
+              <li class="level-map__item level-map__item--current">
+                <span class="level-map__num">2</span>
+                <div class="level-map__info">
+                  <p class="level-map__name">第 2 关 · 价值表达</p>
+                  <p class="level-map__status">进行中 · 1/2 任务完成</p>
+                </div>
+                <span class="badge badge--amber">当前</span>
+              </li>
+              <li class="level-map__item level-map__item--locked">
+                <span class="level-map__num">3</span>
+                <div class="level-map__info">
+                  <p class="level-map__name">第 3 关 · 需求挖掘</p>
+                  <p class="level-map__status">完成第 2 关后解锁</p>
+                </div>
+                <span class="badge badge--slate">未解锁</span>
+              </li>
+              <li class="level-map__item level-map__item--locked">
+                <span class="level-map__num">4</span>
+                <div class="level-map__info">
+                  <p class="level-map__name">第 4 关 · 异议处理</p>
+                  <p class="level-map__status">完成第 3 关后解锁</p>
+                </div>
+                <span class="badge badge--slate">未解锁</span>
+              </li>
+              <li class="level-map__item level-map__item--locked">
+                <span class="level-map__num">5</span>
+                <div class="level-map__info">
+                  <p class="level-map__name">第 5 关 · 推进下一步</p>
+                  <p class="level-map__status">完成第 4 关后解锁</p>
+                </div>
+                <span class="badge badge--slate">未解锁</span>
+              </li>
+            </ul>
+          </div>
+        </details>
+
+        <!-- Secondary actions -->
+        <div class="btn-group">
+          <a class="btn btn--outline" href="compare.html">查看改版对比</a>
+          <button class="btn btn--outline" type="button">刷新进度</button>
+        </div>
+      </div>
+
+      <footer class="proto-footer">UX 原型 · 非生产代码</footer>
+    </div>
+  </div>
+</body>
+</html>

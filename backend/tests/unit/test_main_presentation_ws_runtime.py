@@ -9,7 +9,31 @@ import pytest
 
 import main
 from common.auth.service import JWTError
+from common.services.runtime_gate import RuntimeAdmissionDecision
 from training_runtime.plugins import ScenarioRuntimeHandlerSelection
+
+
+def presentation_admission_ok() -> RuntimeAdmissionDecision:
+    return RuntimeAdmissionDecision(
+        allowed=True,
+        runtime_type="presentation",
+        classification="voluntary",
+    )
+
+
+def presentation_admission_blocked(
+    code: str,
+    close_code: int,
+) -> RuntimeAdmissionDecision:
+    return RuntimeAdmissionDecision(
+        allowed=False,
+        runtime_type="presentation",
+        classification="terminal",
+        code=code,
+        close_code=close_code,
+        close_reason=code,
+        mark_runtime_failed=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -37,6 +61,10 @@ async def test_presentation_ws_uses_persisted_legacy_mode_and_registers_session(
         patch(
             "main._is_presentation_kb_lock_unbound_session",
             new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "main._resolve_presentation_admission_decision",
+            new=AsyncMock(return_value=presentation_admission_ok()),
         ),
         patch(
             "presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler",
@@ -99,6 +127,10 @@ async def test_presentation_ws_uses_persisted_stepfun_mode() -> None:
         patch(
             "main._is_presentation_kb_lock_unbound_session",
             new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "main._resolve_presentation_admission_decision",
+            new=AsyncMock(return_value=presentation_admission_ok()),
         ),
         patch(
             "presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler",
@@ -169,6 +201,10 @@ async def test_presentation_ws_runtime_selection_uses_plugin_seam() -> None:
             "main._is_presentation_kb_lock_unbound_session",
             new=AsyncMock(return_value=False),
         ),
+        patch(
+            "main._resolve_presentation_admission_decision",
+            new=AsyncMock(return_value=presentation_admission_ok()),
+        ),
         patch("websocket_routes.dispatch_scenario_plugin", return_value=plugin),
         patch(
             "presentation_coach.websocket.presentation_stepfun_realtime_handler.PresentationStepFunRealtimeHandler",
@@ -228,6 +264,16 @@ async def test_presentation_ws_rejects_scenario_mismatch() -> None:
             new=AsyncMock(return_value=False),
         ),
         patch(
+            "main._resolve_presentation_admission_decision",
+            new=AsyncMock(
+                return_value=presentation_admission_blocked(
+                    "SESSION_SCENARIO_MISMATCH",
+                    4409,
+                )
+            ),
+        ),
+        patch("websocket_routes.mark_session_runtime_failed", new=AsyncMock()),
+        patch(
             "common.websocket.session_manager.get_session_manager",
             return_value=session_manager,
         ),
@@ -269,6 +315,13 @@ async def test_presentation_ws_rejects_when_kb_lock_unbound() -> None:
             "main._is_presentation_kb_lock_unbound_session",
             new=AsyncMock(return_value=True),
         ),
+        patch(
+            "main._resolve_presentation_admission_decision",
+            new=AsyncMock(
+                return_value=presentation_admission_blocked("KB_LOCK_UNBOUND", 4410)
+            ),
+        ),
+        patch("websocket_routes.mark_session_runtime_failed", new=AsyncMock()),
         patch(
             "common.websocket.session_manager.get_session_manager",
             return_value=session_manager,
@@ -313,6 +366,10 @@ async def test_presentation_ws_rejects_invalid_token_before_registering_session(
         patch(
             "main._is_presentation_kb_lock_unbound_session",
             new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "main._resolve_presentation_admission_decision",
+            new=AsyncMock(return_value=presentation_admission_ok()),
         ),
         patch(
             "presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler",
@@ -361,6 +418,10 @@ async def test_presentation_ws_rejects_owner_mismatch_before_registering_session
         patch(
             "main._is_presentation_kb_lock_unbound_session",
             new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "main._resolve_presentation_admission_decision",
+            new=AsyncMock(return_value=presentation_admission_ok()),
         ),
         patch(
             "main._resolve_presentation_session_owner_id",

@@ -19,6 +19,7 @@ from common.monitoring.trace_context import normalize_trace_id
 from common.services.session_runtime_lifecycle_hooks import (
     mark_session_runtime_failed,
 )
+from common.services.runtime_gate import RuntimeAdmissionDecision, RuntimeGate
 from curriculum_practice.websocket.router import router as examiner_ws_router
 from sales_bot.websocket.router import router as sales_ws_router
 from training_runtime import TrainingRuntimeDescriptor
@@ -53,6 +54,31 @@ async def _reject_invalid_presentation_session(
     await websocket.close(code=4400, reason="INVALID_SESSION_ID")
 
 
+async def _reject_presentation_admission(
+    websocket: WebSocket,
+    decision: RuntimeAdmissionDecision,
+    *,
+    session_id: str,
+) -> None:
+    reason = decision.close_reason or decision.code or "RUNTIME_NOT_RUNNABLE"
+    logger.warning(
+        "Rejected /ws/presentation connection due to runtime admission decision",
+        session_id=session_id,
+        runtime_type=decision.runtime_type,
+        classification=decision.classification,
+        failure_code=decision.code,
+        missing=decision.missing,
+    )
+    if decision.mark_runtime_failed:
+        await mark_session_runtime_failed(
+            session_id,
+            failure_code=reason,
+            source="presentation_websocket_reject",
+        )
+    await websocket.accept()
+    await websocket.close(code=decision.close_code or 4413, reason=reason)
+
+
 def _instantiate_runtime_handler(selection: Any) -> Any:
     handler_module = import_module(selection.handler_factory_path)
     handler_factory = getattr(handler_module, selection.handler_factory_name)
@@ -70,6 +96,8 @@ async def _handle_presentation_websocket(
     is_kb_lock_unbound: ResolveFlag | None = None,
     resolve_owner_id: ResolveOwner | None = None,
     is_admin_user_id: ResolveFlag | None = None,
+    resolve_admission: Callable[[str], Awaitable[RuntimeAdmissionDecision | None]]
+    | None = None,
 ) -> None:
     from common.auth.service import verify_token
     from common.websocket.session_manager import get_session_manager
@@ -78,43 +106,23 @@ async def _handle_presentation_websocket(
     is_kb_lock_unbound = is_kb_lock_unbound or _is_presentation_kb_lock_unbound_session
     resolve_owner_id = resolve_owner_id or _resolve_presentation_session_owner_id
     is_admin_user_id = is_admin_user_id or _is_admin_user_id
+    resolve_admission = resolve_admission or _resolve_presentation_admission_decision
 
     resolved_session_id = _parse_session_id(session_id)
     if not resolved_session_id:
         await _reject_invalid_presentation_session(websocket, session_id)
         return
 
-    scenario_type, persisted_voice_mode = await resolve_runtime(resolved_session_id)
-    if scenario_type and scenario_type != "presentation":
-        logger.warning(
-            "Rejected /ws/presentation connection due to scenario mismatch",
+    admission = await resolve_admission(resolved_session_id)
+    if admission is not None and not admission.allowed:
+        await _reject_presentation_admission(
+            websocket,
+            admission,
             session_id=resolved_session_id,
-            expected="presentation",
-            actual=scenario_type,
         )
-        await mark_session_runtime_failed(
-            resolved_session_id,
-            failure_code="SESSION_SCENARIO_MISMATCH",
-            source="presentation_websocket_reject",
-        )
-        await websocket.accept()
-        await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
         return
 
-    kb_lock_unbound = await is_kb_lock_unbound(resolved_session_id)
-    if kb_lock_unbound:
-        logger.warning(
-            "Rejected /ws/presentation connection due to KB lock without bound knowledge base",
-            session_id=resolved_session_id,
-        )
-        await mark_session_runtime_failed(
-            resolved_session_id,
-            failure_code="KB_LOCK_UNBOUND",
-            source="presentation_websocket_reject",
-        )
-        await websocket.accept()
-        await websocket.close(code=4410, reason="KB_LOCK_UNBOUND")
-        return
+    _scenario_type, persisted_voice_mode = await resolve_runtime(resolved_session_id)
 
     token = resolve_websocket_token(
         query_token=token,
@@ -156,11 +164,6 @@ async def _handle_presentation_websocket(
         user_id = None
 
     if user_id is None:
-        await mark_session_runtime_failed(
-            resolved_session_id,
-            failure_code="Unauthorized",
-            source="presentation_websocket_reject",
-        )
         await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return
@@ -176,11 +179,6 @@ async def _handle_presentation_websocket(
             session_id=resolved_session_id,
             request_user_id=user_id,
             session_owner_id=session_owner_id,
-        )
-        await mark_session_runtime_failed(
-            resolved_session_id,
-            failure_code="ACCESS_DENIED",
-            source="presentation_websocket_reject",
         )
         await websocket.accept()
         await websocket.close(code=4003, reason="ACCESS_DENIED")
@@ -335,6 +333,16 @@ async def _is_presentation_kb_lock_unbound_session(session_id: str) -> bool:
             error=str(exc),
         )
         return False
+
+
+async def _resolve_presentation_admission_decision(
+    session_id: str,
+) -> RuntimeAdmissionDecision | None:
+    async with AsyncSessionLocal() as db:
+        return await RuntimeGate(db).admit_session(
+            session_id,
+            expected_runtime_type="presentation",
+        )
 
 
 def register_websocket_routes(app: FastAPI) -> None:

@@ -81,7 +81,7 @@ ADMIN_ROUTE_PERMISSION_MATRIX: tuple[AdminRoutePermissionEntry, ...] = (
     ),
     AdminRoutePermissionEntry(
         route_family="admin.api.release_verification",
-        auth_surface="Depends(get_current_admin_user)",
+        auth_surface="Depends(require_admin_permission(release_verification.manage))",
         routes=(
             "POST /admin/release-verification/candidates",
             "GET /admin/release-verification/candidates*",
@@ -91,7 +91,7 @@ ADMIN_ROUTE_PERMISSION_MATRIX: tuple[AdminRoutePermissionEntry, ...] = (
             "POST /admin/release-verification/candidates/{release_candidate_id}/auto-decision",
         ),
         allowed_roles=("admin",),
-        non_admin_deny_path="common.auth.service.get_current_admin_user -> 403 [ROLE_REQUIRED]",
+        non_admin_deny_path="admin.api.permissions.require_admin_permission -> 403 [PERMISSION_REQUIRED]",
         current_evidence=(
             "backend/src/admin/api/release_verification.py",
             "backend/tests/integration/test_admin_users_api.py::test_admin_router_modules_require_admin_even_without_main_router_guard",
@@ -102,13 +102,19 @@ ADMIN_ROUTE_PERMISSION_MATRIX: tuple[AdminRoutePermissionEntry, ...] = (
     ),
     AdminRoutePermissionEntry(
         route_family="admin.api.system_logs",
-        auth_surface="Depends(get_current_admin_user)",
+        auth_surface="Depends(require_admin_permission(config_audit.read))",
         routes=(
             "GET /admin/system-logs",
             "GET /admin/system-logs/{log_id}",
         ),
-        allowed_roles=("admin",),
-        non_admin_deny_path="common.auth.service.get_current_admin_user -> 403 [ROLE_REQUIRED]",
+        allowed_roles=(
+            "admin",
+            "content_admin",
+            "operations",
+            "support",
+            "readonly_auditor",
+        ),
+        non_admin_deny_path="admin.api.permissions.require_admin_permission -> 403 [PERMISSION_REQUIRED]",
         current_evidence=(
             "backend/src/admin/api/system_logs.py",
             "backend/tests/integration/test_admin_users_api.py::test_admin_router_modules_require_admin_even_without_main_router_guard",

@@ -7,6 +7,7 @@ References:
 - Requirements: R3 (Persona Management)
 - Design: Section 5 (Persona Service)
 """
+import json
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -450,3 +451,82 @@ class TestPersonaPolicyHealthAudit:
             and "kb_lock_unbound" in issue["issue_types"]
             for issue in report["sample_issues"]
         )
+
+
+class TestPersonaServiceRoleAnchorValidation:
+    async def test_should_reject_create_when_role_anchor_bottom_line_too_short(
+        self, persona_service
+    ):
+        result = await persona_service.create(
+            CreatePersonaRequest(
+                name="Invalid Anchor Persona",
+                category="customer",
+                system_prompt="prompt",
+                persona_policy={
+                    "system_prompt": "prompt",
+                    "role_anchor": {
+                        "bottom_line": "太短",
+                    },
+                },
+            )
+        )
+
+        assert not result.is_success
+        payload = json.loads(result.fallback)
+        assert payload["error"] == "[PERSONA_POLICY_VALIDATION_FAILED]"
+        assert payload["errors"][0]["reason_code"] == "role_anchor_bottom_line_required"
+
+    async def test_should_persist_valid_role_anchor_on_create(self, persona_service):
+        role_anchor = {
+            "identity_template": "你是{role_name}，{relationship_stage}。{bottom_line}",
+            "bottom_line": "你不认识他，保持初次见面的审慎与距离感。",
+            "must_do": "追问量化 ROI 和落地风险。",
+            "must_not": "闲聊叙旧、主动让步。",
+        }
+        result = await persona_service.create(
+            CreatePersonaRequest(
+                name="Anchor Persona",
+                category="customer",
+                system_prompt="prompt",
+                persona_policy={
+                    "system_prompt": "prompt",
+                    "role_anchor": role_anchor,
+                },
+            )
+        )
+
+        assert result.is_success
+        assert result.value.persona_policy["role_anchor"] == role_anchor
+
+    async def test_should_reject_update_with_invalid_role_anchor_template_var(
+        self, persona_service, sample_persona_data
+    ):
+        create_result = await persona_service.create(sample_persona_data)
+        assert create_result.is_success
+
+        update_result = await persona_service.update(
+            create_result.value.id,
+            UpdatePersonaRequest(
+                persona_policy={
+                    "system_prompt": "prompt",
+                    "role_anchor": {
+                        "identity_template": "预算{budget_limit}",
+                        "bottom_line": "你不认识他，保持初次见面的审慎与距离感。",
+                    },
+                }
+            ),
+        )
+
+        assert not update_result.is_success
+        payload = json.loads(update_result.fallback)
+        assert payload["errors"][0]["reason_code"] == (
+            "role_anchor_identity_template_invalid_vars"
+        )
+
+    async def test_should_allow_legacy_persona_without_role_anchor(
+        self, persona_service, sample_persona_data
+    ):
+        result = await persona_service.create(sample_persona_data)
+
+        assert result.is_success
+        assert "role_anchor" not in result.value.persona_policy

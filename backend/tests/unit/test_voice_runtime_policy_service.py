@@ -12,6 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentVoicePolicy, Persona, VoiceRuntimeProfile
+from curriculum_practice.services.roleplay.situation_pack_repository import (
+    SituationPackRepository,
+)
 from sales_bot.services.voice_runtime_policy import (
     DEFAULT_TOOL_POLICY,
     ToolPolicyResolver,
@@ -945,3 +948,87 @@ def test_policy_snapshot_stale_when_sales_focus_extensions_change():
         )
         is True
     )
+
+
+def test_compile_role_anchor_text_uses_situation_pack_and_persona_name() -> None:
+    situation_packs = SituationPackRepository.from_defaults()
+    roleplay_contract = {
+        "situation": {"code": "first_visit", "label": "首次拜访", "version": "v1"},
+    }
+    persona_policy = {
+        "role_anchor": {
+            "identity_template": "你是{role_name}，{relationship_stage}。{bottom_line}。",
+            "bottom_line": "你不认识对方，保持审慎距离。",
+            "must_do": "追问量化影响。",
+            "must_not": "主动报价。",
+        }
+    }
+
+    anchor = VoiceRuntimePolicyService._compile_role_anchor_text(
+        persona_policy=persona_policy,
+        persona=Persona(name="制造业 CIO"),
+        roleplay_contract=roleplay_contract,
+        situation_packs=situation_packs,
+    )
+
+    assert anchor.startswith("【角色锚】")
+    assert "制造业 CIO" in anchor
+    assert "这是你们首次正式见面" in anchor
+    assert "必须：追问量化影响。" in anchor
+
+
+def test_compile_role_anchor_text_returns_empty_without_role_anchor_policy() -> None:
+    situation_packs = SituationPackRepository.from_defaults()
+
+    anchor = VoiceRuntimePolicyService._compile_role_anchor_text(
+        persona_policy={"system_prompt": "prompt"},
+        persona=Persona(name="制造业 CIO"),
+        roleplay_contract={"situation": {"code": "first_visit"}},
+        situation_packs=situation_packs,
+    )
+
+    assert anchor == ""
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_includes_role_anchor_text(
+    test_db: AsyncSession,
+) -> None:
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="制造业 CIO",
+        description="测试角色",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是制造业 CIO。",
+        persona_policy={
+            "roleplay_defaults": {"situation_code": "first_visit"},
+            "role_anchor": {
+                "identity_template": "你是{role_name}，{relationship_stage}。{bottom_line}。",
+                "bottom_line": "你不认识对方，保持审慎距离。",
+                "must_do": "追问量化影响。",
+                "must_not": "主动报价。",
+            },
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="默认配置",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(persona_id=persona.id)
+
+    assert effective["role_anchor_text"].startswith("【角色锚】")
+    assert "制造业 CIO" in effective["role_anchor_text"]
+    assert isinstance(effective.get("instruction_contract_hash"), str)
+    assert "【角色锚】" not in effective["instructions"]

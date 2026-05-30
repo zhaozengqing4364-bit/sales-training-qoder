@@ -801,6 +801,7 @@ export default function PracticeSessionPage() {
         lifecycleErrorMessage,
         lifecycleRetryLabel,
         runtimePreflight.hint,
+        runtimePreflight.lifecycleState,
         runtimePreflight.status,
         sessionMetaError,
         wsError,

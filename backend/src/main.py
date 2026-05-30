@@ -41,6 +41,9 @@ _is_presentation_kb_lock_unbound_session = (
 _resolve_presentation_session_owner_id = (
     _presentation_websocket_routes._resolve_presentation_session_owner_id
 )
+_resolve_presentation_admission_decision = (
+    _presentation_websocket_routes._resolve_presentation_admission_decision
+)
 _is_admin_user_id = _presentation_websocket_routes._is_admin_user_id
 
 
@@ -62,6 +65,7 @@ async def _handle_presentation_websocket(
         is_kb_lock_unbound=_is_presentation_kb_lock_unbound_session,
         resolve_owner_id=_resolve_presentation_session_owner_id,
         is_admin_user_id=_is_admin_user_id,
+        resolve_admission=_resolve_presentation_admission_decision,
     )
 
 

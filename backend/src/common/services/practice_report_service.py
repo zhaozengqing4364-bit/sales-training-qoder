@@ -18,7 +18,9 @@ from common.conversation.session_evidence import (
 from common.db.models import PracticeSession, SessionAudioSegment
 from common.db.schemas import ScenarioType, SessionReport
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
-from common.effectiveness.scoring_rulesets import ScoringRulesetService
+from common.effectiveness.report_scoring_projection import (
+    ReportScoringProjectionService,
+)
 from common.monitoring.logger import get_logger
 from common.oss.signing import (
     OssConfigError,
@@ -29,6 +31,9 @@ from common.services.practice_session_service import (
     PracticeRetryEntryAssembler,
     PracticeServiceError,
     ensure_effectiveness_snapshot,
+)
+from curriculum_practice.services.roleplay_contracts import (
+    roleplay_compliance_summary_from_session,
 )
 
 if TYPE_CHECKING:
@@ -221,6 +226,7 @@ class PracticeReportService:
                     session_id=session_id,
                     session=session,
                 ),
+                roleplay_compliance_summary=self._roleplay_compliance_summary(session),
             )
 
         await self._maybe_generate_comprehensive_sales_report(session_id)
@@ -263,6 +269,7 @@ class PracticeReportService:
                 session_id=session_id,
                 session=session,
             ),
+            roleplay_compliance_summary=self._roleplay_compliance_summary(session),
         )
 
     async def build_session_report(
@@ -315,27 +322,17 @@ class PracticeReportService:
             scenario_type_enum=scenario_type_enum,
             presentation_review=presentation_review,
         )
-        (
-            ruleset_version,
-            score_basis,
-            ruleset_metadata,
-        ) = await self._resolve_report_ruleset_metadata(
+        scoring_projection = await ReportScoringProjectionService(self.db).build(
+            evidence_projection=projection,
             scenario_type=scenario_type_enum.value,
-            fallback_ruleset_version=projection.ruleset_version,
-            fallback_score_basis=projection.score_basis,
         )
-        evidence_completeness = projection.evidence_completeness
+        evidence_completeness = scoring_projection.evidence_completeness
         canonical_evaluation_kernel = projection.canonical_evaluation_kernel
-        if ruleset_metadata is not None:
-            evidence_completeness = {
-                **projection.evidence_completeness,
-                "scoring_ruleset": ruleset_metadata,
+        if isinstance(canonical_evaluation_kernel, dict):
+            canonical_evaluation_kernel = {
+                **canonical_evaluation_kernel,
+                "scoring_ruleset": scoring_projection.scoring_metadata,
             }
-            if isinstance(canonical_evaluation_kernel, dict):
-                canonical_evaluation_kernel = {
-                    **canonical_evaluation_kernel,
-                    "scoring_ruleset": ruleset_metadata,
-                }
 
         report = SessionReport(
             session_id=session.session_id,
@@ -396,8 +393,8 @@ class PracticeReportService:
                 else projection.not_evaluable_reason
             ),
             evidence_completeness=evidence_completeness,
-            ruleset_version=ruleset_version,
-            score_basis=score_basis,
+            ruleset_version=scoring_projection.ruleset_version,
+            score_basis=scoring_projection.score_basis,
             canonical_evaluation_kernel=canonical_evaluation_kernel,
             compatibility_readers=projection.compatibility_readers,
             presentation_review=presentation_review,
@@ -411,6 +408,7 @@ class PracticeReportService:
                 session_id=session_id,
                 session=session,
             ),
+            roleplay_compliance_summary=self._roleplay_compliance_summary(session),
             conclusion_evidence=(
                 None
                 if scenario_type_enum == ScenarioType.PRESENTATION
@@ -437,21 +435,6 @@ class PracticeReportService:
             presentation_degraded_reasons=evidence_completeness.get("degraded_reasons"),
         )
         return report
-
-    async def _resolve_report_ruleset_metadata(
-        self,
-        *,
-        scenario_type: str,
-        fallback_ruleset_version: str,
-        fallback_score_basis: str,
-    ) -> tuple[str, str, dict[str, Any] | None]:
-        active = await ScoringRulesetService(self.db).get_active_or_default(
-            scenario_type
-        )
-        if active.source == "default":
-            return fallback_ruleset_version, fallback_score_basis, None
-        metadata = ScoringRulesetService.report_metadata_for_view(active)
-        return active.version, active.definition.score_basis, metadata
 
     @staticmethod
     def _presentation_review_scores(
@@ -521,6 +504,14 @@ class PracticeReportService:
             + float(session_any.accuracy_score or 0)
             + float(session_any.completeness_score or 0)
         ) / 3
+
+    @staticmethod
+    def _roleplay_compliance_summary(session: PracticeSession) -> dict[str, Any]:
+        return roleplay_compliance_summary_from_session(
+            curriculum_snapshot=getattr(session, "curriculum_snapshot", None),
+            voice_policy_snapshot=getattr(session, "voice_policy_snapshot", None),
+            runtime_state=getattr(session, "runtime_state", None),
+        )
 
     @staticmethod
     def _projection_suggestions(
