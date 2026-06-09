@@ -1,0 +1,31 @@
+web/src/components/sales-trainer/sales-trainer-module-grid.test.tsx:86:            level_title: "金字塔演讲 · 5 分钟",
+web/src/components/sales-trainer/sales-trainer-module-grid.test.tsx:104:            level_title: "金字塔演讲 · 10 分钟",
+web/src/components/sales-trainer/sales-trainer-module-grid.test.tsx:122:            level_title: "金字塔演讲 · 15 分钟",
+web/src/lib/sales-trainer/coo-learn-navigation.test.ts:155:        ).toContain("销售训练路径");
+web/src/lib/sales-trainer/module-path.test.ts:70:            level_title: "金字塔演讲 · 5 分钟",
+web/src/lib/sales-trainer/module-path.test.ts:88:            level_title: "金字塔演讲 · 10 分钟",
+web/src/lib/sales-trainer/module-path.test.ts:106:            level_title: "金字塔演讲 · 15 分钟",
+web/src/components/sales-trainer/coo-chapter-reader.tsx:265:                    返回销售训练
+web/src/app/(dashboard)/sales-trainer/page.test.tsx:268:                    level_title: "第1关：PPT演练",
+web/src/app/(dashboard)/sales-trainer/page.test.tsx:275:                    level_title: "第2关：拜访前商务",
+web/src/app/(dashboard)/sales-trainer/page.test.tsx:282:                    level_title: "金字塔演讲 · 5 分钟",
+web/src/app/(dashboard)/sales-trainer/page.test.tsx:289:                    level_title: "金字塔演讲 · 10 分钟",
+web/src/app/(dashboard)/sales-trainer/page.test.tsx:296:                    level_title: "金字塔演讲 · 15 分钟",
+web/src/lib/sales-trainer/coo-learn-navigation.ts:96:        return "请从销售训练路径进入本章阅读。";
+web/src/lib/sales-trainer/coo-learn-navigation.ts:108:        return "章节与训练关卡不匹配，请从销售训练路径重新进入。";
+web/src/app/(dashboard)/sales-trainer/quiz/[unitId]/page.tsx:112:                    <Button className="rounded-full">返回销售训练</Button>
+web/src/app/(dashboard)/sales-trainer/quiz/[unitId]/page.tsx:126:                    返回销售训练
+web/src/app/(dashboard)/sales-trainer/next-step-panel.tsx:82:                <h2 className="mt-2 text-lg font-bold text-slate-900">回到销售训练首页</h2>
+web/src/app/(dashboard)/sales-trainer/audio/[unitId]/page.tsx:163:                    <Button className="rounded-full">返回销售训练</Button>
+web/src/app/(dashboard)/sales-trainer/audio/[unitId]/page.tsx:177:                    返回销售训练
+web/src/app/(dashboard)/sales-trainer/audio/result/[submissionId]/page.tsx:153:                    <Button className="rounded-full">返回销售训练</Button>
+web/src/app/(dashboard)/sales-trainer/audio/result/[submissionId]/page.tsx:177:                    返回销售训练
+web/src/app/(dashboard)/sales-trainer/learn/hub/page.tsx:15:const HUB_UNIT_NAME = "模块二：拜访前商务";
+web/src/app/(dashboard)/sales-trainer/learn/hub/page.tsx:58:                返回销售训练
+web/src/app/(dashboard)/sales-trainer/learn/hub/page.tsx:62:                <h1 className="text-3xl font-black tracking-tight text-slate-900">拜访前商务</h1>
+web/src/app/(dashboard)/sales-trainer/quiz/result/[attemptId]/page.tsx:99:                    <Button className="rounded-full">返回销售训练</Button>
+web/src/app/(dashboard)/sales-trainer/quiz/result/[attemptId]/page.tsx:115:                    返回销售训练
+web/src/app/(dashboard)/sales-trainer/learn/[unitId]/page.tsx:61:                setAccessError("本训练单元未配置章节阅读，请从销售训练路径进入。");
+web/src/app/(dashboard)/sales-trainer/learn/[unitId]/page.tsx:188:                message="章节数据不完整，请从销售训练路径重新进入。"
+web/src/app/(dashboard)/sales-trainer/learn/[unitId]/page.tsx:198:                message="章节数据不完整，请从销售训练路径重新进入。"
+web/src/app/(dashboard)/sales-trainer/learn/[unitId]/page.tsx:211:            pathTitle={hubMode ? "拜访前商务" : pathContext!.path.title}

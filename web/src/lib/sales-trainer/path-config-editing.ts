@@ -1,0 +1,165 @@
+import type {
+    NewcomerPathConfigPayload,
+    NewcomerPathModuleConfig,
+} from "@/lib/api/types";
+
+import { MODULE_DEFINITIONS } from "./config-center-definitions";
+import type { NewcomerConfigModuleKey } from "./config-center-types";
+
+export type AudioEditableModuleKey = "ppt_explanation" | "elevator_pitch";
+
+export interface PathAudioBindingValue {
+    readonly materialId: string;
+    readonly materialVersionId: string;
+    readonly scoringPromptId: string;
+}
+
+export interface PathBusinessBindingValue {
+    readonly examPaperId: string;
+    readonly learningContentId: string;
+}
+
+const AUDIO_MODULE_DEFAULTS: Record<AudioEditableModuleKey, {
+    readonly completionRule: "scored";
+    readonly moduleType: "audio_scoring";
+    readonly orderIndex: number;
+    readonly primaryActionLabel: string;
+}> = {
+    ppt_explanation: {
+        completionRule: "scored",
+        moduleType: "audio_scoring",
+        orderIndex: 1,
+        primaryActionLabel: "上传录音",
+    },
+    elevator_pitch: {
+        completionRule: "scored",
+        moduleType: "audio_scoring",
+        orderIndex: 3,
+        primaryActionLabel: "上传演讲录音",
+    },
+};
+
+export function isAudioEditableModuleKey(
+    moduleKey: NewcomerConfigModuleKey,
+): moduleKey is AudioEditableModuleKey {
+    return moduleKey === "ppt_explanation" || moduleKey === "elevator_pitch";
+}
+
+export function audioBindingValueForModule(
+    path: NewcomerPathConfigPayload,
+    moduleKey: AudioEditableModuleKey,
+): PathAudioBindingValue {
+    const module = path.modules.find((item) => item.module_key === moduleKey) ?? null;
+    return {
+        materialId: module?.material_id ?? "",
+        materialVersionId: module?.material_version_id ?? "",
+        scoringPromptId: module?.scoring_prompt_id ?? "",
+    };
+}
+
+export function updatePathAudioBinding(
+    path: NewcomerPathConfigPayload,
+    moduleKey: AudioEditableModuleKey,
+    value: PathAudioBindingValue,
+): NewcomerPathConfigPayload {
+    const nextModule = (module: NewcomerPathModuleConfig): NewcomerPathModuleConfig => ({
+        ...module,
+        material_id: nullable(value.materialId),
+        material_version_id: nullable(value.materialVersionId),
+        scoring_prompt_id: nullable(value.scoringPromptId),
+    });
+    if (path.modules.some((module) => module.module_key === moduleKey)) {
+        return {
+            ...path,
+            modules: path.modules.map((module) => (
+                module.module_key === moduleKey ? nextModule(module) : module
+            )),
+        };
+    }
+    return {
+        ...path,
+        modules: [...path.modules, nextModule(defaultAudioModule(moduleKey))],
+    };
+}
+
+export function businessBindingValueForModule(
+    path: NewcomerPathConfigPayload,
+): PathBusinessBindingValue {
+    const module = path.modules.find((item) => item.module_key === "business_skills") ?? null;
+    return {
+        examPaperId: module?.exam_paper_id ?? "",
+        learningContentId: module?.learning_content_id ?? "",
+    };
+}
+
+export function updatePathBusinessBinding(
+    path: NewcomerPathConfigPayload,
+    value: PathBusinessBindingValue,
+): NewcomerPathConfigPayload {
+    const nextModule = (module: NewcomerPathModuleConfig): NewcomerPathModuleConfig => ({
+        ...module,
+        exam_paper_id: nullable(value.examPaperId),
+        learning_content_id: nullable(value.learningContentId),
+    });
+    if (path.modules.some((module) => module.module_key === "business_skills")) {
+        return {
+            ...path,
+            modules: path.modules.map((module) => (
+                module.module_key === "business_skills" ? nextModule(module) : module
+            )),
+        };
+    }
+    return {
+        ...path,
+        modules: [...path.modules, nextModule(defaultBusinessModule())],
+    };
+}
+
+function defaultAudioModule(moduleKey: AudioEditableModuleKey): NewcomerPathModuleConfig {
+    const definition = MODULE_DEFINITIONS.find((item) => item.moduleKey === moduleKey);
+    const defaults = AUDIO_MODULE_DEFAULTS[moduleKey];
+    return {
+        module_key: moduleKey,
+        module_type: defaults.moduleType,
+        enabled: true,
+        order_index: defaults.orderIndex,
+        title: definition?.title ?? moduleKey,
+        description: definition?.description ?? null,
+        target_unit_id: null,
+        learning_content_id: null,
+        exam_paper_id: null,
+        disabled_reason: null,
+        unlock_after_unit_ids: [],
+        completion_rule: defaults.completionRule,
+        primary_action_label: defaults.primaryActionLabel,
+        retry_action_label: null,
+        review_action_label: null,
+        guidance_templates: {},
+    };
+}
+
+function defaultBusinessModule(): NewcomerPathModuleConfig {
+    const definition = MODULE_DEFINITIONS.find((item) => item.moduleKey === "business_skills");
+    return {
+        module_key: "business_skills",
+        module_type: "article_exam",
+        enabled: true,
+        order_index: 2,
+        title: definition?.title ?? "商务技巧",
+        description: definition?.description ?? null,
+        target_unit_id: null,
+        learning_content_id: null,
+        exam_paper_id: null,
+        disabled_reason: null,
+        unlock_after_unit_ids: [],
+        completion_rule: "submitted",
+        primary_action_label: "开始学习",
+        retry_action_label: null,
+        review_action_label: null,
+        guidance_templates: {},
+    };
+}
+
+function nullable(value: string): string | null {
+    return value.trim() ? value : null;
+}

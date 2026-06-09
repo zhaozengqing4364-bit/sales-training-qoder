@@ -15,6 +15,9 @@ from curriculum_practice.services.asset_references import (
     PUBLISHED_SNAPSHOT_LABEL,
     stable_hash,
 )
+from curriculum_practice.services.published_asset_ref_lineage import (
+    published_asset_revision_lineage,
+)
 from curriculum_practice.services.roleplay.situation_pack_dto import SituationPackDTO
 from curriculum_practice.services.roleplay.situation_pack_hasher import (
     situation_pack_content_hash,
@@ -120,10 +123,7 @@ async def build_published_asset_refs(
         resolved_at=resolved_at_value,
     )
 
-    return {
-        key: ref.to_schema().model_dump()
-        for key, ref in refs.items()
-    }
+    return {key: ref.to_schema().model_dump() for key, ref in refs.items()}
 
 
 async def resolve_template_situation_pack_code(
@@ -168,6 +168,10 @@ def _entity_published_ref(
         content_hash = stable_hash(reference)
     else:
         content_hash = str(reference.get("content_hash") or stable_hash(reference))
+    lineage = published_asset_revision_lineage(
+        reference,
+        fallback_logical_id=asset_id,
+    )
     return PublishedAssetRef(
         asset_type=asset_type,
         asset_id=asset_id,
@@ -181,6 +185,9 @@ def _entity_published_ref(
         snapshot_selector=None,
         source_snapshot_hash=None,
         resolved_at=resolved_at,
+        logical_id=lineage.logical_id,
+        revision_id=lineage.revision_id,
+        revision_no=lineage.revision_no,
     )
 
 

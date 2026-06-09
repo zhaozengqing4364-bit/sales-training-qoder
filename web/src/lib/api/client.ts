@@ -239,6 +239,7 @@ import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
 import { buildTraceHeaders } from "@/lib/observability/trace-context";
 import {
+    createAdminNewcomerTrainingDomain,
     createAdminSalesTrainerDomain,
     createAdminReportDomain,
     createAgentsDomain,
@@ -247,6 +248,7 @@ import {
     createLearnerStudyDomain,
     createLearningContentsDomain,
     createLearningPathDomain,
+    createNewcomerTrainingDomain,
     createPracticeDomain,
     createPresentationsDomain,
     createSalesTrainerDomain,
@@ -269,7 +271,7 @@ function isLoopbackHost(hostname: string): boolean {
     return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
-function resolveApiBaseUrl(): string {
+export function resolveApiBaseUrl(): string {
     if (typeof window === "undefined") {
         return CONFIGURED_API_BASE_URL;
     }
@@ -281,11 +283,10 @@ function resolveApiBaseUrl(): string {
         }
 
         const pageHost = window.location.hostname;
-        if (!pageHost || isLoopbackHost(pageHost)) {
+        if (!pageHost) {
             return parsed.toString().replace(/\/+$/, "");
         }
 
-        // When frontend is opened via LAN hostname/IP, keep API host aligned to avoid localhost misrouting.
         parsed.hostname = pageHost;
         return parsed.toString().replace(/\/+$/, "");
     } catch {
@@ -1974,9 +1975,16 @@ const salesTrainerDomain = createSalesTrainerDomain({
     upload: apiUpload,
     resolveApiBaseUrl,
 });
+const newcomerTrainingDomain = createNewcomerTrainingDomain({
+    request: apiFetch,
+});
 const adminSalesTrainerDomain = createAdminSalesTrainerDomain({
     request: apiFetch,
+    upload: apiUpload,
     resolveApiBaseUrl,
+});
+const adminNewcomerTrainingDomain = createAdminNewcomerTrainingDomain({
+    request: apiFetch,
 });
 
 export const api = {
@@ -1989,6 +1997,7 @@ export const api = {
     learnerStudy: learnerStudyDomain,
     featureFlags: featureFlagsDomain,
     salesTrainer: salesTrainerDomain,
+    newcomerTraining: newcomerTrainingDomain,
 
     testBank: {
         listCategories: async () => {
@@ -2794,6 +2803,7 @@ export const api = {
     admin: {
         ...adminReportDomain,
         salesTrainer: adminSalesTrainerDomain,
+        newcomerTraining: adminNewcomerTrainingDomain,
         // Business Rule Governance
         getSalesCombinationRuleSets: async () => {
             return apiFetch<SalesCombinationRuleSetListResponse>("/admin/business-rules/sales-combinations");

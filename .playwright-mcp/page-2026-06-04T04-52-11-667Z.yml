@@ -1,0 +1,64 @@
+- generic [ref=e1]:
+  - generic [active]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - navigation [ref=e7]:
+            - button "previous" [disabled] [ref=e8]:
+              - img "previous" [ref=e9]
+            - generic [ref=e11]:
+              - generic [ref=e12]: 1/
+              - text: "2"
+            - button "next" [ref=e13] [cursor=pointer]:
+              - img "next" [ref=e14]
+          - img
+        - generic [ref=e16]:
+          - link "Next.js 16.2.3 (stale) Turbopack" [ref=e17] [cursor=pointer]:
+            - /url: https://nextjs.org/docs/messages/version-staleness
+            - img [ref=e18]
+            - generic "There is a newer version (16.2.7) available, upgrade recommended!" [ref=e20]: Next.js 16.2.3 (stale)
+            - generic [ref=e21]: Turbopack
+          - img
+      - generic [ref=e22]:
+        - dialog "Console Error" [ref=e23]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - generic [ref=e30]: Console Error
+              - generic [ref=e31]:
+                - button "Copy Error Info" [ref=e32] [cursor=pointer]:
+                  - img [ref=e33]
+                - button "No related documentation found" [disabled] [ref=e35]:
+                  - img [ref=e36]
+                - button "Attach Node.js inspector" [ref=e38] [cursor=pointer]:
+                  - img [ref=e39]
+            - generic [ref=e48]: "[instrumentation-client] unhandled error {}"
+          - generic [ref=e49]: "1"
+          - generic [ref=e50]: "2"
+        - contentinfo [ref=e51]:
+          - region "Error feedback" [ref=e52]:
+            - paragraph [ref=e53]:
+              - link "Was this helpful?" [ref=e54] [cursor=pointer]:
+                - /url: https://nextjs.org/telemetry#error-feedback
+            - button "Mark as helpful" [ref=e55] [cursor=pointer]:
+              - img [ref=e56]
+            - button "Mark as not helpful" [ref=e59] [cursor=pointer]:
+              - img [ref=e60]
+    - generic [ref=e66] [cursor=pointer]:
+      - button "Open Next.js Dev Tools" [ref=e67]:
+        - img [ref=e68]
+      - generic [ref=e71]:
+        - button "Open issues overlay" [ref=e72]:
+          - generic [ref=e73]:
+            - generic [ref=e74]: "1"
+            - generic [ref=e75]: "2"
+          - generic [ref=e76]:
+            - text: Issue
+            - generic [ref=e77]: s
+        - button "Collapse issues badge" [ref=e78]:
+          - img [ref=e79]
+  - generic [ref=e82]:
+    - img [ref=e83]
+    - heading "This page couldn’t load" [level=1] [ref=e85]
+    - paragraph [ref=e86]: A server error occurred. Reload to try again.
+    - button "Reload" [ref=e89] [cursor=pointer]
+  - paragraph [ref=e90]: ERROR 2311493007

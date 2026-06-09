@@ -1,0 +1,38 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: AI
+      - heading "欢迎回来" [level=1] [ref=e7]
+      - paragraph [ref=e8]: 登录 AI 智能练习平台 开始训练
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - button "企业微信登录 (WeCom)" [disabled]
+        - paragraph [ref=e11]: 当前环境未配置企业微信 SSO。
+      - generic [ref=e46]:
+        - button "开发者快速登录" [ref=e47]
+        - paragraph [ref=e48]: 仅 development 环境可用的开发者登录。
+      - generic [ref=e13]: 或者使用账号登录
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]: 邮箱地址
+          - textbox "邮箱地址" [active] [ref=e18]:
+            - /placeholder: name@company.com
+        - generic [ref=e19]:
+          - link "忘记密码？" [ref=e21] [cursor=pointer]:
+            - /url: /forgot-password
+          - generic [ref=e22]: 密码
+          - generic [ref=e23]:
+            - textbox "密码" [ref=e24]:
+              - /placeholder: ••••••••
+            - button "显示密码" [ref=e25]:
+              - img [ref=e26]
+        - generic [ref=e29]:
+          - checkbox "记住邮箱，下次自动填入；登录有效期仍由后端会话配置决定。" [ref=e30]
+          - generic [ref=e31]: 记住邮箱，下次自动填入；登录有效期仍由后端会话配置决定。
+        - button "登录" [ref=e32]:
+          - text: 登录
+          - img [ref=e33]
+      - paragraph [ref=e35]: 仅供内部人员使用，如需帮助请联系管理员
+  - button "Open Next.js Dev Tools" [ref=e41] [cursor=pointer]:
+    - img [ref=e42]
+  - alert [ref=e45]

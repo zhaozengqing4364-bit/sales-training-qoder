@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 09:52:33 GMT
+server: uvicorn
+content-length: 1017
+content-type: application/json
+x-trace-id: 2884333eb4cc94f74f75291dcb59bd6b
+traceparent: 00-2884333eb4cc94f74f75291dcb59bd6b-5c35ea19a347bb1c-01
+
+{"success":true,"data":{"attempt_id":"07639a61-8eed-4c6d-826e-2c70350dd34f","unit_id":"task7-business","user_id":"task7-user","user_name":"Task7 User","user_email":"task7-user@example.com","user_department":null,"total_score":10.0,"max_score":10.0,"passed":null,"status":"scored","submitted_at":"2026-06-02T09:52:34.399486","answers":[{"answer_id":"d9aaf03c-4914-49b1-8582-0d0078812698","question_id":"task7-question-dress","question_type":"single_choice","answer_payload":"A","question_title":"着装准备","question_stem":"见客户前应如何着装？","options":[{"label":"A. 以客户场景为准，整洁得体","value":"A"}],"correct_answer":"A","reference_answer":null,"explanation":"见客户前应保证整洁、得体并匹配客户场景。","scoring_feedback":null,"scoring_reason":null,"normalized_score":null,"is_correct":true,"score":10.0,"created_at":"2026-06-02T09:52:34.404063"}],"paper_id":"task7-business-paper","paper_title":"商务技巧考卷"},"trace_id":"2884333eb4cc94f74f75291dcb59bd6b"}

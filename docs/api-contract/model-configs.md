@@ -3,6 +3,8 @@
 > 状态：✅ 已实现  
 > 前缀：`/api/v1/admin/model-configs`
 
+> 2026-06 补充: StepFun realtime 提供者 (`stepfun_realtime`) 与 DashScope (`dashscope`) 已在 `provider` enum 中, **`STEPFUN_API_KEY` 走 Fernet 加密存储** (`MODEL_CONFIG_ENCRYPTION_KEY`), 启动时解密, 不入明文日志。详见 `backend/src/common/ai/encryption.py` 与 `audit-2026-06/04-audio-and-ai-capabilities.md` P0-03。
+
 ## Prompt/runtime dependency routing
 
 - `provider` / `base_url` / `model_name` 是 legacy evaluation/report compiled prompt contract 的运行时前提；`PromptTemplateService.compile_runtime_prompt_contract(...)` 会读取当前 LLM model config 并生成对应的 `base_url` policy diagnostics。

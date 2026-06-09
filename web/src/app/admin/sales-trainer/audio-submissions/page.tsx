@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { formatAdminRecordStatus, formatAudioSourceLabel } from "@/lib/sales-trainer/admin-display";
 import type { SalesTrainerAudioSubmission } from "@/lib/api/types";
 
 function formatSubmissionUser(item: SalesTrainerAudioSubmission): string {
@@ -45,7 +46,7 @@ export default function SalesTrainerAudioSubmissionsPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="销售训练录音记录"
+                    title="新人训练路径录音记录"
                     description="查看录音状态、转写和评分入口。详情页提供重试和授权文件访问。"
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
                 />
@@ -82,7 +83,7 @@ export default function SalesTrainerAudioSubmissionsPage() {
                                     <div>
                                         <p className="font-medium text-slate-900">{item.original_filename}</p>
                                         <p className="mt-1 text-xs text-slate-500">
-                                            {item.content_type} · {item.source_page || "未知来源"}
+                                            {item.content_type} · {formatAudioSourceLabel(item.source_page)}
                                         </p>
                                     </div>
                                 </td>
@@ -91,7 +92,7 @@ export default function SalesTrainerAudioSubmissionsPage() {
                                     <p className="mt-1 text-xs text-slate-400">{item.user_id}</p>
                                 </td>
                                 <td className="px-6 py-4">
-                                    <Badge className="bg-slate-100 text-slate-700">{item.status}</Badge>
+                                    <Badge className="bg-slate-100 text-slate-700">{formatAdminRecordStatus(item.status)}</Badge>
                                 </td>
                                 <td className="px-6 py-4">{new Date(item.created_at).toLocaleString()}</td>
                                 <td className="px-6 py-4">

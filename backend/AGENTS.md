@@ -22,6 +22,7 @@ backend/
 │   ├── evaluation/          # Staged evaluation & reports
 │   ├── curriculum_practice/ # Curriculum / examiner runtime
 │   ├── prompt_templates/    # Prompt template governance
+│   ├── sales_trainer/       # Sales trainer admin + learner APIs
 │   ├── supervisor/          # Supervisor review & retraining
 │   ├── training_runtime/    # Unified runtime descriptors & plugins
 │   ├── support/             # Support release-health surfaces
@@ -66,6 +67,7 @@ Enter these before making changes in the corresponding subtree:
 - `backend/src/evaluation/AGENTS.md`
 - `backend/src/curriculum_practice/AGENTS.md`
 - `backend/src/prompt_templates/AGENTS.md`
+- `backend/src/sales_trainer/AGENTS.md`
 - `backend/src/supervisor/AGENTS.md`
 - `backend/src/training_runtime/AGENTS.md`
 - `backend/src/support/AGENTS.md`

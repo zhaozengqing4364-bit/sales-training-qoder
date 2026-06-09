@@ -5,9 +5,14 @@ import { useParams, usePathname } from "next/navigation";
 
 import { AdminDetailShell } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
+import { QuizAttemptRegradePanel } from "@/components/admin/sales-trainer/quiz-attempt-regrade-panel";
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import {
+    formatAdminRecordStatus,
+    formatTrainingTaskDisplay,
+} from "@/lib/sales-trainer/admin-display";
 import type { SalesTrainerQuizAnswer, SalesTrainerQuizAttempt } from "@/lib/api/types";
 
 function stringifyAnswer(value: unknown): string {
@@ -111,6 +116,7 @@ export default function SalesTrainerQuizAttemptDetailPage() {
     }, [params.attemptId]);
 
     const badge = attempt ? getAttemptBadge(attempt) : null;
+    const taskDisplay = attempt ? formatTrainingTaskDisplay(null, attempt.unit_id) : null;
 
     return (
         <AdminDetailShell
@@ -130,7 +136,7 @@ export default function SalesTrainerQuizAttemptDetailPage() {
                     <GlassCard className="space-y-4 p-6">
                         <div className="flex flex-wrap items-center gap-2">
                             {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
-                            <Badge variant="outline">{attempt.status}</Badge>
+                            <Badge variant="outline">{formatAdminRecordStatus(attempt.status)}</Badge>
                         </div>
                         <div className="grid gap-4 md:grid-cols-4">
                             <div>
@@ -139,8 +145,11 @@ export default function SalesTrainerQuizAttemptDetailPage() {
                                 <p className="mt-1 text-xs text-slate-400">{attempt.user_id}</p>
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500">训练单元</p>
-                                <p className="mt-1 text-sm text-slate-900">{attempt.unit_id}</p>
+                                <p className="text-xs text-slate-500">训练任务</p>
+                                <p className="mt-1 text-sm text-slate-900">{taskDisplay?.title}</p>
+                                {taskDisplay?.detail ? (
+                                    <p className="mt-1 text-xs text-slate-400">{taskDisplay.detail}</p>
+                                ) : null}
                             </div>
                             <div>
                                 <p className="text-xs text-slate-500">得分</p>
@@ -155,6 +164,8 @@ export default function SalesTrainerQuizAttemptDetailPage() {
                             </div>
                         </div>
                     </GlassCard>
+
+                    <QuizAttemptRegradePanel attempt={attempt} />
 
                     <div className="space-y-4">
                         {attempt.answers.map((answer, index) => {

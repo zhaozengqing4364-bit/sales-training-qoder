@@ -1,0 +1,16 @@
+/**
+ * @layer tokens.score
+ * ScorePanel 评分环与销售维度色
+ */
+:root {
+  --st-score-excellent: #52c41a;
+  --st-score-good: #faad14;
+  --st-score-poor: #f5222d;
+  --st-score-ring-track: #e2e8f0;
+
+  --st-dim-value: #1890ff;
+  --st-dim-benefit: #52c41a;
+  --st-dim-evidence: #faad14;
+  --st-dim-objection: #722ed1;
+  --st-dim-closing: #eb2f96;
+}

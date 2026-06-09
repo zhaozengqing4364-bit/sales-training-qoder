@@ -31,8 +31,20 @@ from sales_trainer.models import (
 )
 from sales_trainer.rules import resolve_audio_pass_threshold
 from sales_trainer.schemas import AudioSubmissionCreate
+from sales_trainer.services.audio_submission_lineage import (
+    freeze_submission_context,
+    submission_lineage_fields,
+)
 from sales_trainer.services.deucate_scoring_service import DeucateScoringService
+from sales_trainer.services.material_service import (
+    MaterialServiceError,
+    SalesTrainerMaterialService,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.path_attempt_context_service import (
+    PathAttemptContextService,
+    PathRuntimeContextPayload,
+)
 from sales_trainer.services.transcription_service import TranscriptionService
 
 DEFAULT_ALLOWED_MIME_TYPES = {
@@ -77,6 +89,7 @@ class AudioSubmissionService:
         self._transcription = transcription_service or TranscriptionService()
         self._scoring = scoring_service or DeucateScoringService()
         self._logs = OperationLogService(db)
+        self._materials = SalesTrainerMaterialService(db)
 
     def generate_upload_url(
         self,
@@ -139,6 +152,7 @@ class AudioSubmissionService:
         unit_id: str | None,
         purpose: str,
         source_page: str | None,
+        confirmed_material_version_id: str | None,
         actor: User,
         auto_process: bool = True,
     ) -> SalesTrainerAudioSubmission:
@@ -171,6 +185,7 @@ class AudioSubmissionService:
                 storage_key=storage_key,
                 file_hash=file_hash,
                 source_page=source_page,
+                confirmed_material_version_id=confirmed_material_version_id,
                 auto_process=auto_process,
             ),
             actor=actor,
@@ -185,6 +200,9 @@ class AudioSubmissionService:
     ) -> SalesTrainerAudioSubmission:
         self._validate_content_type(payload.content_type)
         self._validate_file_size(payload.size_bytes)
+        unit = None
+        snapshots: dict[str, Any] = {}
+        submission_context: PathRuntimeContextPayload | None = None
         if payload.unit_id is not None:
             unit = await self._db.get(SalesTrainerUnit, payload.unit_id)
             if unit is None or unit.status != "published":
@@ -198,6 +216,26 @@ class AudioSubmissionService:
                     "[SALES_TRAINER_UNIT_TYPE_MISMATCH]",
                     "该训练单元不是音频评分模块。",
                 )
+            try:
+                self._require_material_binding_for_ppt(unit, payload.purpose)
+                snapshots = await self._materials.freeze_submission_snapshots(
+                    unit,
+                    confirmed_material_version_id=payload.confirmed_material_version_id,
+                )
+            except MaterialServiceError as exc:
+                raise AudioSubmissionServiceError(
+                    exc.code,
+                    exc.message,
+                    status_code=exc.status_code,
+                ) from exc
+            submission_context = (
+                await PathAttemptContextService(self._db).resolve_for_unit(unit)
+            ).to_payload()
+            task_brief_snapshot = snapshots.get("task_brief_snapshot")
+            snapshots["task_brief_snapshot"] = freeze_submission_context(
+                task_brief_snapshot if isinstance(task_brief_snapshot, dict) else None,
+                submission_context,
+            )
         self._validate_direct_object_if_needed(
             payload.storage_key,
             expected_size_bytes=payload.size_bytes,
@@ -214,6 +252,13 @@ class AudioSubmissionService:
             file_hash=payload.file_hash,
             duration_seconds=payload.duration_seconds,
             source_page=payload.source_page,
+            confirmed_material_version_id=payload.confirmed_material_version_id,
+            confirmed_material_at=datetime.now(UTC)
+            if payload.confirmed_material_version_id
+            else None,
+            material_snapshot=snapshots.get("material_snapshot"),
+            score_scheme_snapshot=snapshots.get("score_scheme_snapshot"),
+            task_brief_snapshot=snapshots.get("task_brief_snapshot"),
             status="uploaded",
         )
         self._db.add(submission)
@@ -229,6 +274,8 @@ class AudioSubmissionService:
                 "content_type": payload.content_type,
                 "size_bytes": payload.size_bytes,
                 "source_page": payload.source_page,
+                "confirmed_material_version_id": payload.confirmed_material_version_id,
+                "submission_context": submission_context,
             },
         )
         await self._db.commit()
@@ -484,6 +531,12 @@ class AudioSubmissionService:
         transcript = await self._get_transcript(submission.submission_id)
         score = await self._get_latest_score(submission.submission_id)
         user = await self._db.get(User, submission.user_id)
+        task_brief_snapshot = (
+            submission.task_brief_snapshot
+            if isinstance(submission.task_brief_snapshot, dict)
+            else None
+        )
+        lineage = submission_lineage_fields(task_brief_snapshot)
         return {
             "submission_id": submission.submission_id,
             "unit_id": submission.unit_id,
@@ -501,17 +554,60 @@ class AudioSubmissionService:
             if submission.duration_seconds is not None
             else None,
             "source_page": submission.source_page,
+            "confirmed_material_version_id": submission.confirmed_material_version_id,
+            "confirmed_material_at": submission.confirmed_material_at,
+            "material_snapshot": submission.material_snapshot,
+            "score_scheme_snapshot": submission.score_scheme_snapshot,
+            "task_brief_snapshot": submission.task_brief_snapshot,
+            "path_key": lineage["path_key"],
+            "path_revision_id": lineage["path_revision_id"],
+            "path_revision_no": lineage["path_revision_no"],
+            "module_key": lineage["module_key"],
+            "legacy_snapshot_only": lineage["legacy_snapshot_only"],
             "status": submission.status,
             "error_code": submission.error_code,
             "error_message": submission.error_message,
             "created_at": submission.created_at,
             "updated_at": submission.updated_at,
             "transcript": _serialize_transcript(transcript) if transcript else None,
-            "score_result": _serialize_score(score) if score else None,
+            "score_result": _serialize_score_with_lineage(score, task_brief_snapshot)
+            if score
+            else None,
         }
 
-    def serialize_score_result(self, score: SalesTrainerAudioScoreResult) -> dict[str, Any]:
-        return _serialize_score(score)
+    def _require_material_binding_for_ppt(
+        self,
+        unit: SalesTrainerUnit,
+        purpose: str,
+    ) -> None:
+        unit_purpose = ((unit.config or {}).get("audio") or {}).get("purpose")
+        resolved_purpose = str(unit_purpose or purpose or "")
+        if resolved_purpose != "ppt_pitch":
+            return
+        materials_config = (unit.config or {}).get("materials")
+        bindings = (
+            materials_config.get("bindings")
+            if isinstance(materials_config, dict)
+            else None
+        )
+        if not isinstance(bindings, list) or not bindings:
+            raise AudioSubmissionServiceError(
+                "[PPT_MATERIAL_BINDING_REQUIRED]",
+                "PPT 演练任务必须先绑定已发布训练材料。",
+                status_code=409,
+            )
+
+    async def serialize_score_result(
+        self,
+        score: SalesTrainerAudioScoreResult,
+    ) -> dict[str, Any]:
+        submission = await self._db.get(SalesTrainerAudioSubmission, score.submission_id)
+        task_brief_snapshot = (
+            submission.task_brief_snapshot
+            if submission is not None and isinstance(submission.task_brief_snapshot, dict)
+            else None
+        )
+        return _serialize_score_with_lineage(score, task_brief_snapshot)
 
     async def _transcribe(
         self,
@@ -977,4 +1073,19 @@ def _serialize_score(score: SalesTrainerAudioScoreResult) -> dict[str, Any]:
         "error_message": score.error_message,
         "latency_ms": score.latency_ms,
         "created_at": score.created_at,
+    }
+
+
+def _serialize_score_with_lineage(
+    score: SalesTrainerAudioScoreResult,
+    task_brief_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    lineage = submission_lineage_fields(task_brief_snapshot)
+    return {
+        **_serialize_score(score),
+        "path_key": lineage["path_key"],
+        "path_revision_id": lineage["path_revision_id"],
+        "path_revision_no": lineage["path_revision_no"],
+        "module_key": lineage["module_key"],
+        "legacy_snapshot_only": lineage["legacy_snapshot_only"],
     }

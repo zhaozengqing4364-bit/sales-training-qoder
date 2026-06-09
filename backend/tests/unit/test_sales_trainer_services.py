@@ -14,12 +14,16 @@ from sales_trainer.models import (
     SalesTrainerAudioScoreResult,
     SalesTrainerAudioSubmission,
     SalesTrainerAudioTranscript,
+    SalesTrainerMaterial,
+    SalesTrainerMaterialVersion,
     SalesTrainerUnit,
 )
 from sales_trainer.schemas import (
     AudioSubmissionCreate,
     QuizAnswerSubmit,
     QuizAttemptCreate,
+    SalesTrainerMaterialCreate,
+    SalesTrainerMaterialVersionCreate,
     SalesTrainerUnitCreate,
     SalesTrainerUnitUpdate,
     UnitQuestionBinding,
@@ -33,6 +37,7 @@ from sales_trainer.services.deucate_scoring_service import (
     DeucateScoringService,
     HttpDeucateClient,
 )
+from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_service import SalesTrainerPathService
 from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
@@ -205,7 +210,7 @@ async def test_should_process_audio_submission_without_fixed_duration_limit(
     prompt = SalesTrainerAudioScorePrompt(
         prompt_id=str(uuid.uuid4()),
         name="PPT 讲解评分",
-        purpose="ppt_pitch",
+        purpose="general_audio_scoring",
         system_prompt="你是销售训练评分员。",
         scoring_template="请评分：{transcript}",
         output_schema={},
@@ -217,7 +222,13 @@ async def test_should_process_audio_submission_without_fixed_duration_limit(
         unit_id=str(uuid.uuid4()),
         name="PPT 讲解录音",
         unit_type="audio_scoring",
-        config={"audio": {"scoring_prompt_id": prompt.prompt_id, "pass_threshold": 80}},
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 80,
+                "purpose": "general_audio_scoring",
+            }
+        },
         status="published",
         created_by=admin.user_id,
         updated_by=admin.user_id,
@@ -233,7 +244,7 @@ async def test_should_process_audio_submission_without_fixed_duration_limit(
     submission = await service.create_submission(
         AudioSubmissionCreate(
             unit_id=unit.unit_id,
-            purpose="ppt_pitch",
+            purpose="general_audio_scoring",
             original_filename="long-recording.wav",
             content_type="audio/wav",
             size_bytes=1024,
@@ -427,6 +438,7 @@ async def test_should_store_multipart_upload_in_cos_when_backend_is_cos(
         unit_id=None,
         purpose="general_audio_scoring",
         source_page="sales_trainer_audio_upload",
+        confirmed_material_version_id=None,
         actor=test_user,
         auto_process=False,
     )
@@ -1068,3 +1080,179 @@ async def test_should_return_typed_error_when_deucate_timeout_config_is_invalid(
     )
 
     assert outcome.error_code == "[DEUCATE_CONFIG_INVALID]"
+
+
+@pytest.mark.asyncio
+async def test_should_publish_material_version_as_single_current_version(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    test_db.add(admin)
+    await test_db.commit()
+
+    service = SalesTrainerMaterialService(test_db)
+    material = await service.create_material(
+        SalesTrainerMaterialCreate(
+            material_key="company_master_deck",
+            name="公司主胶片",
+            material_type="ppt_deck",
+            purpose="ppt_pitch",
+        ),
+        actor=admin,
+    )
+    first = await service.create_version(
+        material,
+        SalesTrainerMaterialVersionCreate(
+            version_label="v2026.05",
+            title="公司主胶片 2026-05",
+            file_name="deck-v1.pptx",
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            file_size_bytes=100,
+            storage_key="/tmp/deck-v1.pptx",
+        ),
+        actor=admin,
+    )
+    second = await service.create_version(
+        material,
+        SalesTrainerMaterialVersionCreate(
+            version_label="v2026.06",
+            title="公司主胶片 2026-06",
+            file_name="deck-v2.pptx",
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            file_size_bytes=120,
+            storage_key="/tmp/deck-v2.pptx",
+        ),
+        actor=admin,
+    )
+
+    await service.publish_version(first, actor=admin)
+    await service.publish_version(second, actor=admin)
+    refreshed_material = await service.get_material(material.material_id)
+    refreshed_first = await service.get_version(first.version_id)
+
+    assert refreshed_material is not None
+    assert refreshed_material.current_version_id == second.version_id
+    assert refreshed_material.status == "published"
+    assert refreshed_first is not None
+    assert refreshed_first.status == "archived"
+
+
+@pytest.mark.asyncio
+async def test_should_require_latest_material_confirmation_for_ppt_submission(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    material = SalesTrainerMaterial(
+        material_id=str(uuid.uuid4()),
+        material_key="company_master_deck",
+        name="公司主胶片",
+        material_type="ppt_deck",
+        purpose="ppt_pitch",
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    version = SalesTrainerMaterialVersion(
+        version_id=str(uuid.uuid4()),
+        material_id=material.material_id,
+        version_label="v2026.06",
+        title="公司主胶片 2026-06",
+        file_name="deck.pptx",
+        content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        file_size_bytes=100,
+        storage_key="/tmp/deck.pptx",
+        status="published",
+        created_by=admin.user_id,
+        published_by=admin.user_id,
+    )
+    material.current_version_id = version.version_id
+    prompt = SalesTrainerAudioScorePrompt(
+        prompt_id=str(uuid.uuid4()),
+        name="PPT 讲解评分方案",
+        purpose="ppt_pitch",
+        system_prompt="你是销售训练评分员。",
+        scoring_template="请评分：{transcript}",
+        output_schema={},
+        learner_rubric={
+            "visible_to_learner": True,
+            "criteria": [{"key": "structure", "label": "结构", "weight": 40}],
+            "common_mistakes": ["没有讲清业务价值"],
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    unit = SalesTrainerUnit(
+        unit_id=str(uuid.uuid4()),
+        name="PPT 演练",
+        unit_type="audio_scoring",
+        config={
+            "audio": {
+                "scoring_prompt_id": prompt.prompt_id,
+                "pass_threshold": 80,
+                "purpose": "ppt_pitch",
+            },
+            "task_brief": {
+                "title": "PPT 演练",
+                "purpose": "练习公司主胶片讲解。",
+                "instructions": ["下载最新版 PPT", "按主线录音"],
+            },
+            "materials": {
+                "bindings": [
+                    {
+                        "material_id": material.material_id,
+                        "required": True,
+                        "confirmation_required": True,
+                        "version_policy": "current_published",
+                        "display_order": 1,
+                    }
+                ]
+            },
+        },
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    test_db.add_all([admin, learner, material, version, prompt, unit])
+    await test_db.commit()
+
+    service = AudioSubmissionService(
+        test_db,
+        transcription_service=FakeTranscriptionService(),
+        scoring_service=FakeScoringService(),
+    )
+    with pytest.raises(AudioSubmissionServiceError) as missing_confirmation:
+        await service.create_submission(
+            AudioSubmissionCreate(
+                unit_id=unit.unit_id,
+                purpose="ppt_pitch",
+                original_filename="ppt-recording.wav",
+                content_type="audio/wav",
+                size_bytes=1024,
+                storage_key="/tmp/ppt-recording.wav",
+                auto_process=False,
+            ),
+            actor=learner,
+        )
+    assert missing_confirmation.value.code == "[MATERIAL_VERSION_CONFIRMATION_REQUIRED]"
+
+    submission = await service.create_submission(
+        AudioSubmissionCreate(
+            unit_id=unit.unit_id,
+            purpose="ppt_pitch",
+            original_filename="ppt-recording.wav",
+            content_type="audio/wav",
+            size_bytes=1024,
+            storage_key="/tmp/ppt-recording.wav",
+            confirmed_material_version_id=version.version_id,
+            auto_process=True,
+        ),
+        actor=learner,
+    )
+
+    assert submission.status == "scored"
+    assert submission.confirmed_material_version_id == version.version_id
+    assert submission.material_snapshot["items"][0]["current_version"]["version_label"] == "v2026.06"
+    assert submission.task_brief_snapshot["title"] == "PPT 演练"
+    assert submission.score_scheme_snapshot["learner_rubric"]["criteria"][0]["label"] == "结构"

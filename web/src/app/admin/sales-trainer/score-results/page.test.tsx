@@ -96,15 +96,20 @@ describe("SalesTrainerScoreResultsPage", () => {
         });
 
         expect(screen.getByText("张三 · 销售一部")).toBeTruthy();
-        expect(screen.getByText("unit-1")).toBeTruthy();
+        expect(screen.getByText("训练任务")).toBeTruthy();
+        expect(screen.getByText("编号：unit-1")).toBeTruthy();
+        expect(screen.queryByText("训练单元 unit-1")).toBeNull();
+        expect(screen.getByLabelText("训练任务编号")).toBeTruthy();
+        expect(screen.queryByText("训练单元 ID")).toBeNull();
+        expect(screen.queryByPlaceholderText("按 unit_id 查询")).toBeNull();
         expect(screen.getByText("18")).toBeTruthy();
         expect(screen.getByText("submission-1")).toBeTruthy();
         expect(screen.getByText("deucate-v1")).toBeTruthy();
 
-        fireEvent.change(screen.getAllByLabelText("用户 ID")[0], {
+        fireEvent.change(screen.getAllByLabelText("学员编号")[0], {
             target: { value: "user-1" },
         });
-        fireEvent.change(screen.getByLabelText("训练单元 ID"), {
+        fireEvent.change(screen.getByLabelText("训练任务编号"), {
             target: { value: "unit-1" },
         });
         fireEvent.click(screen.getAllByRole("button", { name: "查询" })[0]);
@@ -117,10 +122,10 @@ describe("SalesTrainerScoreResultsPage", () => {
             });
         });
 
-        fireEvent.change(screen.getAllByLabelText("用户 ID")[1], {
+        fireEvent.change(screen.getAllByLabelText("学员编号")[1], {
             target: { value: "user-1" },
         });
-        fireEvent.change(screen.getByLabelText("录音提交 ID"), {
+        fireEvent.change(screen.getByLabelText("录音提交编号"), {
             target: { value: "submission-1" },
         });
         fireEvent.click(screen.getAllByRole("button", { name: "查询" })[1]);

@@ -1,0 +1,9 @@
+
+ RUN  v4.1.4 /Users/zhaozengqing/github/销售训练qoder/web
+
+
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
+   Start at  15:17:11
+   Duration  1.50s (transform 155ms, setup 0ms, import 457ms, tests 362ms, environment 553ms)
+

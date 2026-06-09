@@ -1,0 +1,9 @@
+HTTP/1.1 422 Unprocessable Entity
+date: Tue, 02 Jun 2026 10:14:49 GMT
+server: uvicorn
+content-length: 161
+content-type: application/json
+x-trace-id: ff6e8d74cc97f61afb184253cac172f7
+traceparent: 00-ff6e8d74cc97f61afb184253cac172f7-5f17d3b27aaa98f4-01
+
+{"success":false,"data":null,"error":"[NEWCOMER_MODULE_CONFIG_INVALID]","message":"训练路径配置不合法。","trace_id":"ff6e8d74cc97f61afb184253cac172f7"}

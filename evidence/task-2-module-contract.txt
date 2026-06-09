@@ -1,0 +1,16 @@
+docs/api-contract/sales-trainer.md:50:  | "audio_scoring"
+docs/api-contract/sales-trainer.md:51:  | "article_exam"
+docs/api-contract/sales-trainer.md:52:  | "audio_scoring_group"
+docs/api-contract/sales-trainer.md:53:  | "realtime_placeholder";
+docs/api-contract/sales-trainer.md:114:| `ppt_explanation` | `PPT 讲解录音` | `"audio_scoring"` | `true` | `audio_scored` | `target_unit_id`、已发布材料、已发布评分提示词 | admin 新人训练路径模块/材料/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.ppt_explanation.*` |
+docs/api-contract/sales-trainer.md:115:| `business_skills` | `商务技巧` | `"article_exam"` | `true` | `paper_passed` | `learning_content_id`、`exam_paper_id` | admin 新人训练路径文章绑定/考卷管理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_module.business_skills.*` |
+docs/api-contract/sales-trainer.md:116:| `elevator_pitch` | `电梯演讲` | `"audio_scoring_group"` | `true` | `all_audio_options_scored` | `duration_options[].target_unit_id`、已发布评分提示词 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
+docs/api-contract/sales-trainer.md:117:| `realtime_roleplay_placeholder` | `实时对练` | `"realtime_placeholder"` | `false` | `placeholder_disabled` | 无；只允许 `disabled_reason` | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
+docs/api-contract/sales-trainer.md:124:- `"audio_scoring"` 模块必须绑定一个已发布 `audio_scoring` 单元、至少一个 required 材料绑定和已发布音频评分提示词；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]`。
+docs/api-contract/sales-trainer.md:125:- `"article_exam"` 模块必须绑定已发布 `LearningContent` 和已发布 `ExamPaper`；草稿或归档内容对 learner 返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` 或 `[PAPER_NOT_PUBLISHED]`。
+docs/api-contract/sales-trainer.md:126:- `"audio_scoring_group"` 模块必须至少有一个 duration option；每个 option 的 `duration_minutes` 必须大于 0，`target_unit_id` 必须指向已发布音频评分单元。
+docs/api-contract/sales-trainer.md:127:- `"realtime_placeholder"` 默认 disabled；即使 enabled，也只能展示占位和 `disabled_reason`，不得调用 `/api/v1/practice/sessions`。
+docs/api-contract/sales-trainer.md:166:  unit_type: "quiz" | "audio_scoring";
+docs/api-contract/sales-trainer.md:637:  unit_type: "quiz" | "audio_scoring";
+docs/api-contract/sales-trainer.md:803:    unit_type: "quiz" | "audio_scoring";
+docs/api-contract/sales-trainer.md:942:| `newcomer_path.modules[].module_type` | 无 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 只允许 `"audio_scoring"`、`"article_exam"`、`"audio_scoring_group"`、`"realtime_placeholder"` |

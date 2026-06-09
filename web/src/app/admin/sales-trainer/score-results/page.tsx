@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { formatTrainingTaskDisplay } from "@/lib/sales-trainer/admin-display";
 import type { SalesTrainerAudioScoreResult, SalesTrainerQuizAttempt } from "@/lib/api/types";
 
 function formatLearner(attempt: SalesTrainerQuizAttempt): string {
@@ -156,7 +157,7 @@ export default function SalesTrainerScoreResultsPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="销售训练学员结果"
+                    title="新人训练路径学员结果"
                     description="统一查看做题结果和录音评分结果，核对题目快照、学员答案、AI 反馈和评分结论。"
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
                 />
@@ -171,24 +172,24 @@ export default function SalesTrainerScoreResultsPage() {
                     <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto_auto]" onSubmit={applyQuizFilters}>
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-quiz-user-id">
-                                用户 ID
+                                学员编号
                             </label>
                             <Input
                                 id="sales-trainer-quiz-user-id"
                                 value={quizUserId}
                                 onChange={(event) => setQuizUserId(event.target.value)}
-                                placeholder="按 user_id 查询"
+                                placeholder="输入后台记录中的学员编号"
                             />
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-quiz-unit-id">
-                                训练单元 ID
+                                训练任务编号
                             </label>
                             <Input
                                 id="sales-trainer-quiz-unit-id"
                                 value={quizUnitId}
                                 onChange={(event) => setQuizUnitId(event.target.value)}
-                                placeholder="按 unit_id 查询"
+                                placeholder="输入后台记录中的训练任务编号"
                             />
                         </div>
                         <div className="flex items-end">
@@ -214,7 +215,7 @@ export default function SalesTrainerScoreResultsPage() {
                         <thead>
                             <tr className="border-b border-slate-100 text-left text-slate-500">
                                 <th className="px-6 py-4">学员</th>
-                                <th className="px-6 py-4">训练单元</th>
+                                <th className="px-6 py-4">训练任务</th>
                                 <th className="px-6 py-4">得分</th>
                                 <th className="px-6 py-4">结果</th>
                                 <th className="px-6 py-4">提交时间</th>
@@ -230,34 +231,46 @@ export default function SalesTrainerScoreResultsPage() {
                                 <tr>
                                     <td colSpan={6} className="px-6 py-10 text-center text-slate-500">暂无做题结果</td>
                                 </tr>
-                            ) : quizItems.map((item) => (
-                                <tr key={item.attempt_id} className="border-b border-slate-100 last:border-b-0">
-                                    <td className="px-6 py-4">
-                                        <div className="font-medium text-slate-900">{formatLearner(item)}</div>
-                                        <div className="mt-1 text-xs text-slate-400">{item.user_id}</div>
-                                    </td>
-                                    <td className="px-6 py-4">{item.unit_id}</td>
-                                    <td className="px-6 py-4">
-                                        {item.total_score ?? "--"}
-                                        <span className="text-slate-400"> / {item.max_score ?? "--"}</span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <Badge variant={getQuizResultVariant(item)}>
-                                            {getQuizResultLabel(item)}
-                                        </Badge>
-                                    </td>
-                                    <td className="px-6 py-4">{new Date(item.submitted_at).toLocaleString()}</td>
-                                    <td className="px-6 py-4">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => router.push(`/admin/sales-trainer/quiz-attempts/${item.attempt_id}`)}
-                                        >
-                                            查看详情
-                                        </Button>
-                                    </td>
-                                </tr>
-                            ))}
+                            ) : quizItems.map((item) => {
+                                const taskDisplay = formatTrainingTaskDisplay(null, item.unit_id);
+                                return (
+                                    <tr key={item.attempt_id} className="border-b border-slate-100 last:border-b-0">
+                                        <td className="px-6 py-4">
+                                            <div className="font-medium text-slate-900">{formatLearner(item)}</div>
+                                            <div className="mt-1 text-xs text-slate-400">{item.user_id}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <p className="font-medium text-slate-900">
+                                                {taskDisplay.title}
+                                            </p>
+                                            {taskDisplay.detail ? (
+                                                <p className="mt-1 text-xs text-slate-400">
+                                                    {taskDisplay.detail}
+                                                </p>
+                                            ) : null}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {item.total_score ?? "--"}
+                                            <span className="text-slate-400"> / {item.max_score ?? "--"}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <Badge variant={getQuizResultVariant(item)}>
+                                                {getQuizResultLabel(item)}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-6 py-4">{new Date(item.submitted_at).toLocaleString()}</td>
+                                        <td className="px-6 py-4">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => router.push(`/admin/sales-trainer/quiz-attempts/${item.attempt_id}`)}
+                                            >
+                                                查看详情
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </GlassCard>
@@ -270,24 +283,24 @@ export default function SalesTrainerScoreResultsPage() {
                     <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto_auto]" onSubmit={applyScoreFilters}>
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-score-user-id">
-                                用户 ID
+                                学员编号
                             </label>
                             <Input
                                 id="sales-trainer-score-user-id"
                                 value={scoreUserId}
                                 onChange={(event) => setScoreUserId(event.target.value)}
-                                placeholder="按 user_id 查询"
+                                placeholder="输入后台记录中的学员编号"
                             />
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-700" htmlFor="sales-trainer-score-submission-id">
-                                录音提交 ID
+                                录音提交编号
                             </label>
                             <Input
                                 id="sales-trainer-score-submission-id"
                                 value={submissionId}
                                 onChange={(event) => setSubmissionId(event.target.value)}
-                                placeholder="按 submission_id 查询"
+                                placeholder="输入后台记录中的录音提交编号"
                             />
                         </div>
                         <div className="flex items-end">

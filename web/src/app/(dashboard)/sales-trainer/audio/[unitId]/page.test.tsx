@@ -5,12 +5,12 @@ import SalesTrainerAudioUploadPage from "./page";
 
 const {
     pushMock,
-    getUnitMock,
+    getUnitBriefMock,
     listPathsMock,
     uploadAudioSubmissionDirectMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
-    getUnitMock: vi.fn(),
+    getUnitBriefMock: vi.fn(),
     listPathsMock: vi.fn(),
     uploadAudioSubmissionDirectMock: vi.fn(),
 }));
@@ -28,8 +28,9 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             salesTrainer: {
                 ...actual.api.salesTrainer,
-                getUnit: getUnitMock,
+                getUnitBrief: getUnitBriefMock,
                 listPaths: listPathsMock,
+                getMaterialVersionFileUrl: (versionId: string) => `/api/materials/${versionId}/file`,
                 uploadAudioSubmissionDirect: uploadAudioSubmissionDirectMock,
             },
         },
@@ -38,18 +39,74 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerAudioUploadPage", () => {
     beforeEach(() => {
-        getUnitMock.mockResolvedValue({
-            unit_id: "audio-unit",
-            name: "录音单元",
-            description: "录音训练",
-            unit_type: "audio_scoring",
-            config: { audio: { purpose: "ppt_pitch", pass_threshold: 80 } },
-            status: "published",
-            created_by: "admin-1",
-            updated_by: "admin-1",
-            created_at: "2026-05-28T00:00:00Z",
-            updated_at: "2026-05-28T00:00:00Z",
-            questions: [],
+        getUnitBriefMock.mockResolvedValue({
+            unit: {
+                unit_id: "audio-unit",
+                name: "录音单元",
+                description: "录音训练",
+                unit_type: "audio_scoring",
+                config: { audio: { purpose: "ppt_pitch", pass_threshold: 80 } },
+                status: "published",
+                created_by: "admin-1",
+                updated_by: "admin-1",
+                created_at: "2026-05-28T00:00:00Z",
+                updated_at: "2026-05-28T00:00:00Z",
+                questions: [],
+            },
+            task_brief: {
+                title: "第二关：录音表达",
+                purpose: "上传讲解语音作业。",
+                scenario: "按公司主胶片逻辑完成一次讲解录音。",
+                instructions: ["下载最新版 PPT", "按主线录音"],
+                success_criteria: ["结构完整"],
+                common_mistakes: ["没有讲清价值"],
+                upload_guidance: "先确认材料版本，再上传录音。",
+            },
+            materials: [
+                {
+                    material_id: "material-1",
+                    material_key: "company_master_deck",
+                    name: "公司主胶片",
+                    material_type: "ppt_deck",
+                    description: null,
+                    purpose: "ppt_pitch",
+                    required: true,
+                    confirmation_required: true,
+                    learner_note: "使用最新版公司主胶片。",
+                    display_order: 1,
+                    current_version: {
+                        version_id: "version-1",
+                        material_id: "material-1",
+                        version_label: "v2026.06",
+                        title: "公司主胶片 2026-06",
+                        file_name: "deck.pptx",
+                        content_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        file_size_bytes: 1024,
+                        storage_key: "cos://deck.pptx",
+                        file_hash: null,
+                        release_notes: null,
+                        status: "published",
+                        published_at: "2026-06-01T00:00:00Z",
+                        published_by: "admin-1",
+                        created_by: "admin-1",
+                        created_at: "2026-06-01T00:00:00Z",
+                        updated_at: "2026-06-01T00:00:00Z",
+                    },
+                },
+            ],
+            score_scheme: {
+                prompt_id: "prompt-1",
+                name: "PPT 讲解评分",
+                purpose: "ppt_pitch",
+                version: 1,
+                status: "published",
+                pass_threshold: 80,
+                learner_rubric: {
+                    visible_to_learner: true,
+                    criteria: [{ key: "structure", label: "结构", weight: 40 }],
+                    common_mistakes: ["没有讲清价值"],
+                },
+            },
         });
         listPathsMock.mockResolvedValue({
             items: [
@@ -101,7 +158,8 @@ describe("SalesTrainerAudioUploadPage", () => {
         expect(await screen.findByText("第二关：录音表达")).toBeTruthy();
         expect(screen.getByText("上传讲解语音作业。")).toBeTruthy();
         expect(screen.getByText(/本关需达到 80 分通过，可多次上传，以最新一次为准/)).toBeTruthy();
-        expect(screen.getByText(/建议先用手机录音 App 录好语音/)).toBeTruthy();
+        expect(screen.getByText(/下载最新版 PPT/)).toBeTruthy();
+        expect(screen.getAllByText(/v2026.06/).length).toBeGreaterThan(0);
 
         const file = new File(["audio"], "pitch.wav", { type: "audio/wav" });
         fireEvent.change(screen.getByLabelText("选择音频文件"), {
@@ -109,6 +167,7 @@ describe("SalesTrainerAudioUploadPage", () => {
         });
 
         expect(await screen.findByText(/已选择：pitch.wav/)).toBeTruthy();
+        fireEvent.click(screen.getByText(/我已下载并确认使用 v2026.06/));
 
         fireEvent.click(screen.getByRole("button", { name: /上传并开始评分/ }));
 
@@ -118,6 +177,7 @@ describe("SalesTrainerAudioUploadPage", () => {
                 unit_id: "audio-unit",
                 purpose: "ppt_pitch",
                 source_page: "sales_trainer_audio_upload",
+                confirmed_material_version_id: "version-1",
             });
         });
         expect(screen.queryByText(/50 秒|最大时长/)).toBeNull();

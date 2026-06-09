@@ -44,6 +44,7 @@ from support.services.asset_registry import (
 from support.services.asset_registry import (
     iter_asset_refs as iter_registered_asset_refs,
 )
+from support.services.runtime_roleplay_faults import build_roleplay_fault_candidate
 
 logger = get_logger(__name__)
 
@@ -1013,51 +1014,18 @@ class RuntimeStatusService:
                     },
                 )
 
-            roleplay_diag = (
-                record.roleplay_diagnostics
-                if isinstance(record.roleplay_diagnostics, dict)
-                else {}
+            roleplay_fault = build_roleplay_fault_candidate(
+                roleplay_diagnostics=record.roleplay_diagnostics,
+                session_started_at=getattr(session, "start_time", None),
+                session_finished_at=getattr(session, "end_time", None),
             )
-            roleplay_summary = (
-                roleplay_diag.get("summary")
-                if isinstance(roleplay_diag.get("summary"), dict)
-                else {}
-            )
-            roleplay_status = str(roleplay_summary.get("status") or "")
-            blocking_roleplay_count = int(
-                roleplay_summary.get("blocking_violation_count") or 0
-            )
-            if roleplay_status in {"missing", "invalid"}:
+            if roleplay_fault is not None:
                 add_item(
-                    severity="blocking",
-                    kind=f"roleplay_contract_{roleplay_status}",
-                    summary="Roleplay Contract 缺失或非法，角色一致性运行时只能降级诊断。",
-                    detected_at=getattr(session, "start_time", None),
-                    diagnostics={
-                        "roleplay": roleplay_summary,
-                    },
-                )
-            elif roleplay_status == "legacy":
-                add_item(
-                    severity="warning",
-                    kind="roleplay_contract_legacy",
-                    summary="会话使用 legacy Roleplay Contract，无法完整执行情景边界守门。",
-                    detected_at=getattr(session, "start_time", None),
-                    diagnostics={
-                        "roleplay": roleplay_summary,
-                    },
-                )
-            elif blocking_roleplay_count > 0:
-                add_item(
-                    severity="warning",
-                    kind="roleplay_blocking_violation",
-                    summary="会话触发 Roleplay Contract 阻断级违规，已由运行时守门修复或标记。",
-                    detected_at=roleplay_summary.get("last_action_at")
-                    or getattr(session, "end_time", None)
-                    or getattr(session, "start_time", None),
-                    diagnostics={
-                        "roleplay": roleplay_summary,
-                    },
+                    severity=roleplay_fault.severity,
+                    kind=roleplay_fault.kind,
+                    summary=roleplay_fault.summary,
+                    detected_at=roleplay_fault.detected_at,
+                    diagnostics=roleplay_fault.diagnostics,
                 )
 
             if (

@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "active_work_id": "published-governance-revision-plan",
+  "works": {
+    "newcomer-training-path-plan": {
+      "work_id": "newcomer-training-path-plan",
+      "active_plan": ".omo/plans/newcomer-training-path-plan.md",
+      "plan_name": "newcomer-training-path-plan",
+      "session_ids": [
+        "codex:019e8723-c32b-7da0-98b8-d761f7a45d14"
+      ],
+      "status": "active",
+      "worktree_path": null
+    },
+    "published-governance-revision-plan": {
+      "work_id": "published-governance-revision-plan",
+      "active_plan": ".omo/plans/published-governance-revision-plan.md",
+      "plan_name": "published-governance-revision-plan",
+      "session_ids": [
+        "codex:019e8723-c32b-7da0-98b8-d761f7a45d14"
+      ],
+      "status": "active",
+      "worktree_path": null
+    }
+  }
+}

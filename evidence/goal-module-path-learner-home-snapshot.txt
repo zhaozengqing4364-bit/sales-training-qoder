@@ -1,0 +1,52 @@
+- complementary:
+  - generic: AI 销售教练
+  - generic: 平台
+  - navigation "主导航":
+    - generic: 菜单
+    - menubar:
+      - menuitem "首页":
+        - generic: 首页
+      - menuitem "训练模式":
+        - generic: 训练模式
+      - menuitem "新人训练路径":
+        - generic: 新人训练路径
+      - menuitem "排行榜":
+        - generic: 排行榜
+      - menuitem "历史记录":
+        - generic: 历史记录
+    - generic: 系统
+    - menubar:
+      - menuitem "运行状态":
+        - generic: 运行状态
+      - menuitem "管理后台":
+        - generic: 管理后台
+  - button "帮助与反馈":
+    - generic: 帮助与反馈
+  - generic: Developer
+  - generic: Development
+  - button "折叠侧边栏":
+    - generic: 折叠侧边栏
+- main:
+  - link "返回训练大厅":
+    - /url: /training
+    - text: 返回训练大厅
+  - heading "新人训练路径" [level=1]
+  - paragraph: 按模块完成 PPT 讲解录音、商务技巧学习与考试、电梯演讲录音；实时对练暂不开放。
+  - button "刷新":
+    - text: 刷新
+  - generic: 新人训练路径
+  - heading "新人训练路径" [level=2]
+  - paragraph: 掌握新人核心训练路径
+  - paragraph: 开始训练
+  - heading "选择下方模块开始训练" [level=3]
+  - paragraph: 已开放模块可随时进入，无强制解锁。建议顺序：PPT讲解录音 → 商务技巧 → 电梯演讲（时长自选）。实时对练暂不开放。
+  - generic: 第 2 关
+  - heading "第2关：商务技巧" [level=3]
+  - paragraph: 阅读文章后完成商务技巧考卷。
+  - link "阅读文章并考试":
+    - /url: /sales-trainer/business-skills?unitId=355b1cc5-03b8-4ed6-b0e1-4cd046f55145
+    - button "阅读文章并考试"
+  - button "更多练习（23）":
+    - generic: 更多练习（23）
+- button "Open Next.js Dev Tools":
+- alert

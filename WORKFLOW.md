@@ -1,4 +1,7 @@
 ---
+# ⚠️ 此文件为 Symphony/Linear 集成工作流的配置样板。
+# 本仓库当前未启用 Symphony, 此文件不参与日常执行, 仅作未来启用时的参考。
+# 若启用, 需将 REPLACE_WITH_LINEAR_PROJECT_SLUG 替换为真实 Linear 项目 slug。
 tracker:
   kind: linear
   # 必填：在 Linear 项目页右键复制 URL，取 URL 中的项目 slug 后替换此值。
@@ -40,7 +43,7 @@ agent:
   max_concurrent_agents_by_state:
     Merging: 1
 codex:
-  command: codex --config shell_environment_policy.inherit=all --config 'model="gpt-5.5"' --config model_reasoning_effort=high app-server
+  command: codex --config shell_environment_policy.inherit=all --config 'model="<参见 .codex/config.toml 或 codex CLI 当前推荐 model>"' --config model_reasoning_effort=high app-server
   approval_policy: never
   thread_sandbox: workspace-write
   turn_sandbox_policy:
@@ -120,7 +123,7 @@ No description provided.
 
 按改动范围选择，先跑最小相关验证，再按风险升级：
 
-- 文档 / Symphony 配置：`ruby -e 'require "yaml"; content=File.read("WORKFLOW.md"); abort("missing front matter") unless content.start_with?("---"); YAML.safe_load(content.split(/^---$/, 3)[1])'`，并检查脚本 shell 语法。
+- 文档 / Symphony 配置：`python -c "import sys; content=open('WORKFLOW.md').read(); assert content.startswith('---'), 'missing front matter'; import yaml; yaml.safe_load(content.split('---',2)[1])"`，并检查脚本 shell 语法。
 - Web 单测：`npm --prefix web run test -- <target>`。
 - Web lint/typecheck：`npm --prefix web run lint`、`cd web && npx tsc --noEmit`。
 - Backend 单测：`cd backend && ${PYTHON_BIN:-python3} -m pytest -q <target>`。

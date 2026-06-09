@@ -4402,7 +4402,21 @@ export interface QuestionItem {
 
 export type SalesTrainerUnitType = "quiz" | "audio_scoring";
 export type SalesTrainerStatus = "draft" | "published" | "archived";
+export type SalesTrainerMaterialType = "ppt_deck" | "script" | "example_audio" | "attachment";
 export type SalesTrainerQuizAttemptStatus = "submitted" | "scored" | "failed";
+export type NewcomerTrainingModuleType =
+    | "audio_scoring"
+    | "article_exam"
+    | "audio_scoring_group"
+    | "realtime_placeholder";
+export type NewcomerTrainingCompletionRule =
+    | "audio_scored"
+    | "paper_passed"
+    | "all_audio_options_scored"
+    | "placeholder_disabled"
+    | "passed"
+    | "scored"
+    | "submitted";
 export type SalesTrainerAudioSubmissionStatus =
     | "uploaded"
     | "transcribing"
@@ -4552,16 +4566,36 @@ export interface SalesTrainerUnitConfig {
         purpose?: string;
         [key: string]: unknown;
     };
+    task_brief?: {
+        enabled?: boolean;
+        title?: string | null;
+        purpose?: string | null;
+        scenario?: string | null;
+        instructions?: string[];
+        success_criteria?: string[];
+        common_mistakes?: string[];
+        upload_guidance?: string | null;
+    };
+    materials?: {
+        require_latest_confirmation?: boolean;
+        bindings?: SalesTrainerMaterialBinding[];
+    };
     path?: {
         enabled?: boolean;
         path_key?: string;
+        module_key?: string | null;
+        module_type?: NewcomerTrainingModuleType | null;
         path_title?: string | null;
         goal_title?: string | null;
         level_title?: string | null;
         level_description?: string | null;
         order_index?: number;
+        target_unit_id?: string | null;
+        learning_content_id?: string | null;
+        exam_paper_id?: string | null;
+        disabled_reason?: string | null;
         unlock_after_unit_ids?: string[];
-        completion_rule?: "passed" | "scored" | "submitted";
+        completion_rule?: NewcomerTrainingCompletionRule;
         primary_action_label?: string | null;
         retry_action_label?: string | null;
         review_action_label?: string | null;
@@ -4569,6 +4603,16 @@ export interface SalesTrainerUnitConfig {
         [key: string]: unknown;
     };
     [key: string]: unknown;
+}
+
+export interface SalesTrainerMaterialBinding {
+    material_id: string;
+    required?: boolean;
+    confirmation_required?: boolean;
+    version_policy?: "current_published" | "locked_version";
+    locked_version_id?: string | null;
+    display_order?: number;
+    learner_note?: string | null;
 }
 
 export interface SalesTrainerUnit {
@@ -4595,6 +4639,8 @@ export interface SalesTrainerPathLevel {
     name: string;
     description: string | null;
     unit_type: SalesTrainerUnitType;
+    module_key?: string | null;
+    module_type?: NewcomerTrainingModuleType | null;
     order_index: number;
     level_title: string;
     level_description: string | null;
@@ -4662,6 +4708,8 @@ export interface SalesTrainerGoalContext {
 
 export interface SalesTrainerPath {
     path_key: string;
+    path_revision_id?: string | null;
+    path_revision_no?: number | null;
     title: string;
     goal_title: string | null;
     total_levels: number;
@@ -4675,6 +4723,304 @@ export interface SalesTrainerPath {
 export interface SalesTrainerPathListResponse {
     items: SalesTrainerPath[];
     total: number;
+}
+
+export interface NewcomerTrainingDurationOption {
+    duration_minutes: number;
+    target_unit_id: string;
+    order_index: number;
+}
+
+export interface NewcomerTrainingAuditEvents {
+    created: string;
+    updated: string;
+    published: string;
+    archived: string;
+    binding_changed?: string;
+}
+
+export interface NewcomerTrainingModuleValidation {
+    required_bindings: string[];
+    missing_behavior: string;
+    illegal_behavior: string;
+}
+
+export interface NewcomerTrainingPathModuleConfig {
+    path_key: string;
+    module_key: string;
+    display_name: string;
+    description?: string | null;
+    order_index: number;
+    enabled: boolean;
+    module_type: NewcomerTrainingModuleType;
+    completion_rule: NewcomerTrainingCompletionRule;
+    target_unit_id?: string | null;
+    learning_content_id?: string | null;
+    exam_paper_id?: string | null;
+    disabled_reason?: string | null;
+    duration_options?: NewcomerTrainingDurationOption[];
+    admin_permissions: string[];
+    audit_events: NewcomerTrainingAuditEvents;
+    validation: NewcomerTrainingModuleValidation;
+}
+
+export interface NewcomerTrainingPathConfig {
+    path_key: string;
+    title: string;
+    modules: NewcomerTrainingPathModuleConfig[];
+    fallback_applied?: boolean;
+}
+
+export type NewcomerPathModuleType =
+    | "audio_scoring"
+    | "article_exam"
+    | "audio_scoring_group"
+    | "realtime_placeholder";
+
+export type NewcomerPathCompletionRule = "passed" | "scored" | "submitted";
+
+export interface NewcomerPathModuleConfig {
+    readonly module_key: string;
+    readonly module_type: NewcomerPathModuleType;
+    readonly enabled: boolean;
+    readonly order_index: number;
+    readonly title: string;
+    readonly description: string | null;
+    readonly target_unit_id: string | null;
+    readonly learning_content_id: string | null;
+    readonly exam_paper_id: string | null;
+    readonly material_id?: string | null;
+    readonly material_version_id?: string | null;
+    readonly scoring_prompt_id?: string | null;
+    readonly disabled_reason: string | null;
+    readonly unlock_after_unit_ids: readonly string[];
+    readonly completion_rule: NewcomerPathCompletionRule;
+    readonly primary_action_label: string | null;
+    readonly retry_action_label: string | null;
+    readonly review_action_label: string | null;
+    readonly guidance_templates: Readonly<Record<string, string>>;
+}
+
+export interface NewcomerPathConfigPayload {
+    readonly path_key: string;
+    readonly title: string;
+    readonly goal_title: string | null;
+    readonly description: string | null;
+    readonly enabled: boolean;
+    readonly modules: readonly NewcomerPathModuleConfig[];
+}
+
+export interface NewcomerPathConfigSaveRequest extends NewcomerPathConfigPayload {
+    readonly reason?: string | null;
+}
+
+export interface NewcomerPathConfigActionRequest {
+    readonly reason: string;
+    readonly revision_id?: string | null;
+}
+
+export type NewcomerPathRevisionStatus = "working" | "published" | "archived";
+
+export type NewcomerPathChangeClass =
+    | "non_semantic"
+    | "semantic"
+    | "binding"
+    | "scoring_high_risk";
+
+export interface NewcomerPathRevisionSummary {
+    readonly revision_id: string;
+    readonly revision_no: number;
+    readonly status: NewcomerPathRevisionStatus;
+    readonly change_class: NewcomerPathChangeClass;
+    readonly title: string;
+    readonly module_count: number;
+    readonly is_active: boolean;
+    readonly is_working: boolean;
+    readonly source_revision_id: string | null;
+    readonly payload_hash: string;
+    readonly reason: string | null;
+    readonly trace_id: string | null;
+    readonly created_by: string | null;
+    readonly published_by: string | null;
+    readonly created_at: string;
+    readonly published_at: string | null;
+}
+
+export interface NewcomerPathConfigResponse {
+    readonly source: "active_revision" | "unit_backfill";
+    readonly path: NewcomerPathConfigPayload;
+    readonly active_revision_id: string | null;
+    readonly active_revision_no: number | null;
+    readonly working_revision_id: string | null;
+    readonly working_revision_no: number | null;
+    readonly has_unpublished_revision: boolean;
+}
+
+export interface NewcomerPathRevisionListResponse {
+    readonly items: readonly NewcomerPathRevisionSummary[];
+    readonly total: number;
+}
+
+export interface NewcomerArticleChapter {
+    chapter_id: string;
+    title: string;
+    content: string;
+    order_index: number;
+}
+
+export interface NewcomerArticle {
+    module_key: string;
+    learning_content_id: string;
+    title: string;
+    summary: string | null;
+    owner: string | null;
+    source: string | null;
+    chapters: NewcomerArticleChapter[];
+}
+
+export interface NewcomerArticleBinding {
+    module_key: string;
+    learning_content_id: string;
+    path_key?: string | null;
+    active_revision_id?: string | null;
+    active_revision_no?: number | null;
+    working_revision_id?: string | null;
+    working_revision_no?: number | null;
+    has_unpublished_revision?: boolean;
+    impact_scope?: "future_learners_only" | null;
+}
+
+export interface NewcomerArticleBindingUpdateRequest {
+    learning_content_id: string;
+    path_key?: string;
+    reason?: string;
+}
+
+export interface NewcomerExamPaperQuestion {
+    question_id: string;
+    order_index: number;
+    points: number;
+    question_type: SalesTrainerQuestionType;
+    title: string;
+    stem: string;
+    options?: SalesTrainerQuestionOption[];
+}
+
+export interface NewcomerExamPaper {
+    paper_id: string;
+    paper_key: string;
+    title: string;
+    description: string | null;
+    module_key: string;
+    unit_id: string;
+    pass_threshold: number | null;
+    status: SalesTrainerStatus;
+    created_by: string | null;
+    updated_by: string | null;
+    created_at: string;
+    updated_at: string;
+    questions: NewcomerExamPaperQuestion[];
+    active_revision_id?: string | null;
+    active_revision_no?: number | null;
+    working_revision_id?: string | null;
+    working_revision_no?: number | null;
+    has_unpublished_revision?: boolean;
+}
+
+export interface NewcomerExamPaperListResponse {
+    items: NewcomerExamPaper[];
+    total: number;
+}
+
+export interface NewcomerExamPaperRevision {
+    revision_id: string;
+    revision_no: number;
+    status: "working" | "published" | "archived";
+    change_class: "non_semantic" | "semantic" | "binding" | "scoring_high_risk";
+    title: string | null;
+    question_count: number;
+    is_active: boolean;
+    is_working: boolean;
+    source_revision_id: string | null;
+    payload_hash: string;
+    reason: string | null;
+    trace_id: string | null;
+    created_by: string | null;
+    published_by: string | null;
+    created_at: string;
+    published_at: string | null;
+}
+
+export interface NewcomerExamPaperRevisionListResponse {
+    items: NewcomerExamPaperRevision[];
+    total: number;
+}
+
+export interface NewcomerUnitRevision {
+    revision_id: string;
+    revision_no: number;
+    status: "working" | "published" | "archived";
+    change_class: "non_semantic" | "semantic" | "binding" | "scoring_high_risk";
+    title: string | null;
+    question_count: number;
+    is_active: boolean;
+    is_working: boolean;
+    source_revision_id: string | null;
+    payload_hash: string;
+    reason: string | null;
+    trace_id: string | null;
+    created_by: string | null;
+    published_by: string | null;
+    created_at: string;
+    published_at: string | null;
+}
+
+export interface NewcomerUnitRevisionListResponse {
+    items: NewcomerUnitRevision[];
+    total: number;
+}
+
+export interface NewcomerUnitRollbackRequest {
+    target_revision_id: string;
+    reason: string;
+}
+
+export interface NewcomerExamPaperCreateRequest {
+    paper_key: string;
+    title: string;
+    description?: string | null;
+    module_key?: string;
+    pass_threshold?: number | null;
+    questions: SalesTrainerUnitQuestionBinding[];
+}
+
+export interface NewcomerExamPaperUpdateRequest {
+    title?: string;
+    description?: string | null;
+    module_key?: string;
+    pass_threshold?: number | null;
+    questions?: SalesTrainerUnitQuestionBinding[];
+}
+
+export interface NewcomerPaperAttemptCreateRequest {
+    paper_id: string;
+    answers: SalesTrainerQuizAnswerSubmitRequest[];
+}
+
+export interface NewcomerPaperRollbackRequest {
+    target_revision_id: string;
+    reason: string;
+}
+
+export interface NewcomerPaperAttempt extends SalesTrainerQuizAttempt {
+    paper_id: string;
+    paper_title: string;
+    paper_revision_id?: string | null;
+    path_key?: string | null;
+    path_revision_id?: string | null;
+    path_revision_no?: number | null;
+    module_key?: string | null;
+    legacy_snapshot_only?: boolean;
 }
 
 export interface SalesTrainerQuizAnswerSubmitRequest {
@@ -4701,6 +5047,7 @@ export interface SalesTrainerQuizAnswer {
     scoring_feedback: string | null;
     scoring_reason: string | null;
     normalized_score: number | null;
+    attempt_context?: Record<string, unknown> | null;
     is_correct: boolean | null;
     score: number | null;
     created_at: string;
@@ -4726,6 +5073,41 @@ export interface SalesTrainerQuizAttemptListResponse {
     total: number;
 }
 
+export interface SalesTrainerRegradePreviewRequest {
+    target_revision_id?: string | null;
+}
+
+export interface SalesTrainerRegradeRunRequest extends SalesTrainerRegradePreviewRequest {
+    reason: string;
+}
+
+export interface SalesTrainerRegradeImpactScope {
+    record_count: number;
+    affected_attempt_ids?: string[];
+    affected_submission_ids?: string[];
+    source_score_result_ids?: string[];
+    future_records_changed: false;
+    history_overwrite: false;
+    requires_reason: true;
+}
+
+export interface SalesTrainerRegradePreviewResponse {
+    target_type: "quiz_attempt" | "audio_submission";
+    target_id: string;
+    target_revision_id: string;
+    impact_scope: SalesTrainerRegradeImpactScope;
+    before_snapshot: Record<string, unknown>;
+    after_snapshot: Record<string, unknown>;
+}
+
+export interface SalesTrainerRegradeRunResponse extends SalesTrainerRegradePreviewResponse {
+    regrade_run_id: string;
+    status: "completed" | "failed";
+    reason: string;
+    trace_id: string;
+    created_at: string;
+}
+
 export interface SalesTrainerAudioUploadUrlRequest {
     filename: string;
     content_type: string;
@@ -4749,7 +5131,129 @@ export interface SalesTrainerAudioSubmissionCreateRequest {
     file_hash?: string | null;
     duration_seconds?: number | null;
     source_page?: string | null;
+    confirmed_material_version_id?: string | null;
     auto_process?: boolean;
+}
+
+export interface SalesTrainerMaterialVersion {
+    version_id: string;
+    material_id: string;
+    version_label: string;
+    title: string;
+    file_name: string;
+    content_type: string;
+    file_size_bytes: number;
+    storage_key: string;
+    file_hash: string | null;
+    release_notes: string | null;
+    status: SalesTrainerStatus;
+    published_at: string | null;
+    published_by: string | null;
+    created_by: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SalesTrainerMaterial {
+    material_id: string;
+    material_key: string;
+    name: string;
+    material_type: SalesTrainerMaterialType;
+    description: string | null;
+    purpose: string;
+    status: SalesTrainerStatus;
+    current_version_id: string | null;
+    current_version: SalesTrainerMaterialVersion | null;
+    versions: SalesTrainerMaterialVersion[];
+    created_by: string | null;
+    updated_by: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SalesTrainerMaterialListResponse {
+    items: SalesTrainerMaterial[];
+    total: number;
+}
+
+export interface SalesTrainerMaterialCreateRequest {
+    material_key: string;
+    name: string;
+    material_type?: SalesTrainerMaterialType;
+    description?: string | null;
+    purpose?: string;
+}
+
+export interface SalesTrainerMaterialUpdateRequest {
+    material_key?: string;
+    name?: string;
+    material_type?: SalesTrainerMaterialType;
+    description?: string | null;
+    purpose?: string;
+}
+
+export interface SalesTrainerMaterialVersionCreateRequest {
+    version_label: string;
+    title: string;
+    file_name: string;
+    content_type: string;
+    file_size_bytes: number;
+    storage_key: string;
+    file_hash?: string | null;
+    release_notes?: string | null;
+}
+
+export interface SalesTrainerMaterialVersionUploadRequest {
+    version_label: string;
+    title: string;
+    file: File;
+    release_notes?: string | null;
+}
+
+export interface SalesTrainerUnitBriefMaterial {
+    material_id: string;
+    material_key: string;
+    name: string;
+    material_type: SalesTrainerMaterialType;
+    description: string | null;
+    purpose: string;
+    required: boolean;
+    confirmation_required: boolean;
+    learner_note: string | null;
+    display_order: number;
+    current_version: SalesTrainerMaterialVersion;
+}
+
+export interface SalesTrainerLearnerRubricCriterion {
+    key: string;
+    label: string;
+    description?: string | null;
+    weight?: number | null;
+    excellent?: string | null;
+    passable?: string | null;
+    needs_work?: string | null;
+}
+
+export interface SalesTrainerLearnerRubric {
+    visible_to_learner?: boolean;
+    pass_threshold?: number | null;
+    criteria?: SalesTrainerLearnerRubricCriterion[];
+    common_mistakes?: string[];
+}
+
+export interface SalesTrainerUnitBrief {
+    unit: SalesTrainerUnit;
+    task_brief: Record<string, unknown>;
+    materials: SalesTrainerUnitBriefMaterial[];
+    score_scheme: {
+        prompt_id: string;
+        name: string;
+        purpose: string;
+        version: number;
+        status: string;
+        learner_rubric: SalesTrainerLearnerRubric | Record<string, unknown>;
+        pass_threshold: number;
+    } | null;
 }
 
 export interface SalesTrainerAudioTranscript {
@@ -4780,6 +5284,11 @@ export interface SalesTrainerAudioScoreResult {
     error_code: string | null;
     error_message: string | null;
     latency_ms: number | null;
+    path_key: string | null;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    module_key: string | null;
+    legacy_snapshot_only: boolean;
     created_at: string;
 }
 
@@ -4798,6 +5307,16 @@ export interface SalesTrainerAudioSubmission {
     file_hash: string | null;
     duration_seconds: number | null;
     source_page: string | null;
+    confirmed_material_version_id: string | null;
+    confirmed_material_at: string | null;
+    material_snapshot: Record<string, unknown> | null;
+    score_scheme_snapshot: Record<string, unknown> | null;
+    task_brief_snapshot: Record<string, unknown> | null;
+    path_key: string | null;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    module_key: string | null;
+    legacy_snapshot_only: boolean;
     status: SalesTrainerAudioSubmissionStatus;
     error_code: string | null;
     error_message: string | null;
@@ -4819,6 +5338,7 @@ export interface SalesTrainerAudioScorePrompt {
     system_prompt: string;
     scoring_template: string;
     output_schema: Record<string, unknown>;
+    learner_rubric: SalesTrainerLearnerRubric | Record<string, unknown>;
     version: number;
     status: SalesTrainerStatus;
     created_by: string | null;
@@ -4838,6 +5358,7 @@ export interface SalesTrainerAudioScorePromptCreateRequest {
     system_prompt: string;
     scoring_template: string;
     output_schema?: Record<string, unknown>;
+    learner_rubric?: SalesTrainerLearnerRubric | Record<string, unknown>;
 }
 
 export interface SalesTrainerAudioScorePromptUpdateRequest {
@@ -4846,6 +5367,7 @@ export interface SalesTrainerAudioScorePromptUpdateRequest {
     system_prompt?: string;
     scoring_template?: string;
     output_schema?: Record<string, unknown>;
+    learner_rubric?: SalesTrainerLearnerRubric | Record<string, unknown>;
 }
 
 export interface SalesTrainerAudioScoreResultListResponse {
@@ -4869,6 +5391,39 @@ export interface SalesTrainerOperationLog {
 
 export interface SalesTrainerOperationLogListResponse {
     items: SalesTrainerOperationLog[];
+    total: number;
+}
+
+export interface SalesTrainerTrainingRecord {
+    record_id: string;
+    record_type: "audio_submission" | "quiz_attempt";
+    path_key: string | null;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    module_key: string | null;
+    legacy_snapshot_only: boolean;
+    unit_id: string;
+    unit_name: string | null;
+    unit_type: SalesTrainerUnitType;
+    user_id: string;
+    user_name: string | null;
+    user_email: string | null;
+    user_department: string | null;
+    status: string;
+    score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    submitted_at: string | null;
+    material_snapshot: Record<string, unknown> | null;
+    score_scheme_snapshot: Record<string, unknown> | null;
+    task_brief_snapshot: Record<string, unknown> | null;
+    audio_submission: SalesTrainerAudioSubmission | null;
+    quiz_attempt: SalesTrainerQuizAttempt | null;
+    operation_logs: SalesTrainerOperationLog[];
+}
+
+export interface SalesTrainerTrainingRecordListResponse {
+    items: SalesTrainerTrainingRecord[];
     total: number;
 }
 

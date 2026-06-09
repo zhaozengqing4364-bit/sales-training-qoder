@@ -1,0 +1,8 @@
+{
+  "hasBusinessScopeLabel": true,
+  "hasNewDescription": true,
+  "hasQueue": false,
+  "hasSalesTrainerScope": false,
+  "hasSalesTrainingDefault": false,
+  "url": "http://localhost:3445/admin/sales-trainer/questions"
+}

@@ -51,3 +51,9 @@ Enter the route-group AGENTS before page-level work:
 - `web/src/components/AGENTS.md` — UI primitives & domain widgets
 - `web/src/hooks/AGENTS.md` — WebSocket & media hooks
 - `web/src/lib/AGENTS.md` — API façade, auth, query, support copy
+- `web/src/app/admin/sales-trainer/AGENTS.md` — 新人训练路径 admin 子域 (`/admin/sales-trainer/*`)
+
+## Cross-Domain Links
+
+- **新人训练路径 (Newcomer Training Path)** is a **separate product** from realtime sales practice. Routes: `/sales-trainer/*` (learner) and `/admin/sales-trainer/*` (admin). API: `/api/v1/sales-trainer` + `/api/v1/admin/sales-trainer`. See [`backend/src/sales_trainer/AGENTS.md`](../backend/src/sales_trainer/AGENTS.md) + [`docs/api-contract/sales-trainer.md`](../docs/api-contract/sales-trainer.md). Do NOT treat these routes as part of the realtime `sales_bot` practice flow (`/practice/[sessionId]`).
+- 实时对练 (realtime) is `sales_bot` + `training_runtime` + `practice_sessions`; 异步学习是 `sales_trainer`。两条轨道使用不同 API 前缀与 WebSocket 协议, 不要混用.

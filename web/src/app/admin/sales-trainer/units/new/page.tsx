@@ -1,21 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AdminFormShell } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { SalesTrainerUnitForm } from "@/components/admin/sales-trainer/unit-form";
+import { buildUnitTemplateForModule } from "@/components/admin/sales-trainer/unit-module-template";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { SalesTrainerAudioScorePrompt, SalesTrainerQuestion, SalesTrainerUnitCreateRequest } from "@/lib/api/types";
+import { NEWCOMER_QUESTION_TAG } from "@/lib/sales-trainer/question-scope";
+import type {
+    SalesTrainerAudioScorePrompt,
+    SalesTrainerMaterial,
+    SalesTrainerQuestion,
+    SalesTrainerUnitCreateRequest,
+} from "@/lib/api/types";
 
 export default function NewSalesTrainerUnitPage() {
     const pathname = usePathname();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const toast = useToast();
+    const moduleKey = searchParams.get("module");
     const [questions, setQuestions] = useState<SalesTrainerQuestion[]>([]);
     const [prompts, setPrompts] = useState<SalesTrainerAudioScorePrompt[]>([]);
+    const [materials, setMaterials] = useState<SalesTrainerMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -23,12 +33,14 @@ export default function NewSalesTrainerUnitPage() {
         async function loadDependencies() {
             setIsLoading(true);
             try {
-                const [questionsResult, promptsResult] = await Promise.all([
-                    api.admin.salesTrainer.listQuestions({ status: "published" }),
+                const [questionsResult, promptsResult, materialsResult] = await Promise.all([
+                    api.admin.salesTrainer.listQuestions({ status: "published", tag: NEWCOMER_QUESTION_TAG }),
                     api.admin.salesTrainer.listScorePrompts({ include_archived: false }),
+                    api.admin.salesTrainer.listMaterials({ include_archived: false, limit: 100 }),
                 ]);
                 setQuestions(questionsResult.items);
                 setPrompts(promptsResult.items);
+                setMaterials(materialsResult.items);
             } catch (loadError) {
                 toast.error(getApiErrorMessage(loadError));
             } finally {
@@ -41,7 +53,7 @@ export default function NewSalesTrainerUnitPage() {
     async function handleSubmit(payload: SalesTrainerUnitCreateRequest) {
         setIsSubmitting(true);
         try {
-            const result = await api.admin.salesTrainer.createUnit(payload);
+            const result = await api.admin.newcomerTraining.createUnit(payload);
             toast.success("训练单元已创建");
             router.push(`/admin/sales-trainer/units/${result.unit_id}/edit`);
         } catch (submitError) {
@@ -53,7 +65,7 @@ export default function NewSalesTrainerUnitPage() {
     return (
         <AdminFormShell
             backHref="/admin/sales-trainer/units"
-            title="新建销售训练单元"
+            title="新建新人训练路径模块单元"
             description="支持 quiz 与 audio_scoring 两类训练单元。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
         >
@@ -62,8 +74,14 @@ export default function NewSalesTrainerUnitPage() {
             ) : (
                 <SalesTrainerUnitForm
                     mode="create"
+                    initialUnit={buildUnitTemplateForModule({
+                        materials,
+                        moduleKey,
+                        prompts,
+                    })}
                     availableQuestions={questions}
                     availablePrompts={prompts}
+                    availableMaterials={materials}
                     isSubmitting={isSubmitting}
                     onSubmit={(payload) => void handleSubmit(payload as SalesTrainerUnitCreateRequest)}
                 />

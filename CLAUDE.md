@@ -48,7 +48,7 @@ This repo uses a single-context domain-doc layout: root `CONTEXT.md` when presen
 端到端延迟目标：<300ms（从用户停止说话到 AI 开始回应）
 
 ### III. 模块化场景独立
-两个核心场景（PPT 演练、销售对练）必须独立演进，互不影响
+多轨演练场景（PPT 演练 `presentation_coach/`、销售对练 `sales_bot/`、新人训练路径 `sales_trainer/`、课程考核 `curriculum_practice/`、运行时主语 `training_runtime/`）必须**独立演进、互不引用**；共享逻辑下沉到 `common/`，跨域访问需通过 `common/api/` 或 `common/db/models.py` 中转。详见 [docs/architecture.md](docs/architecture.md) §17 模块边界 与 [backend/src/*/AGENTS.md](backend/src/) 各子域契约。
 
 ### IV. 容错与恢复
 区分可恢复与不可恢复错误；单一依赖故障不得拖垮全站。可恢复：有限重试与降级；不可恢复：快速失败 + 可操作提示，不在连接层盲目重试。
@@ -205,40 +205,111 @@ docker-compose up -d --build
 
 ```
 backend/src/
-├── main.py                    # FastAPI 应用入口 (19655 lines)
+├── main.py                    # FastAPI 应用入口 (75 行兼容 shim, 实际装配见下)
+├── app_factory.py             # create_app() 工厂: middleware + 路由 + lifespan 装配
+├── app_lifespan.py            # lifespan 上下文: DB/Redis/Chroma/SessionManager/ConfigManager 初始化
+├── http_routes.py             # HTTP 顶层注册 (health / metrics / dev-login)
+├── websocket_routes.py        # WebSocket 顶层注册 (3+ 通道统一挂载)
+├── router_registry.py         # 30+ HTTP APIRouter 集中挂载 + knowledge-bases 别名镜像
 ├── agent/                     # Agent 平台核心
 │   ├── api/                   # Agent, Persona 管理 API
 │   ├── capabilities/          # 能力模块 (ASR, TTS, LLM, Scoring)
+│   │   ├── base.py                  # Capability 抽象基类
+│   │   ├── registry.py              # 能力注册表
+│   │   ├── runner.py                # 链式编排执行器
 │   │   ├── knowledge_retrieval.py
 │   │   ├── fuzzy_detection.py
 │   │   ├── realtime_scoring.py
-│   │   ├── sales_stage.py
-│   │   └── runner.py
+│   │   └── sales_stage.py
 │   ├── models.py
+│   ├── context.py
 │   └── services/              # Agent 业务逻辑
+│       ├── agent_service.py
+│       ├── agent_persona_service.py
+│       ├── persona_service.py
+│       ├── persona_policy.py
+│       └── industry_pack_contract.py
+├── prompt_templates/          # 提示词模板系统 (含 api/routes.py + scenario 绑定)
+├── evaluation/                # 分阶段评估系统 (含 triggers/ 与 staged_evaluation)
+├── sales_trainer/             # 【新人训练路径】异步学习/录音/考卷 (与 sales_bot 实时对练**分离**)
+│   ├── api.py                 # Router surface (含 user/admin_router)
+│   ├── article_api.py / paper_api.py / regrade_api.py / unit_api.py
+│   ├── models.py / schemas.py / permissions.py / rules.py
+│   ├── router_registration.py # 12 子路由集中注册
+│   ├── services/              # 56 个 service (含 audio_submission, paper_revision, material_publish)
+│   └── tasks/                 # 异步评分/转写入口
+├── curriculum_practice/       # 【课程闭环】templates / 考官 WS / test bank
+│   ├── api.py                 # 9 router 在 2542 行文件中
+│   ├── models.py / schemas.py
+│   ├── services/              # practice_templates / examiner_agents / publishing_gates / snapshots / ...
+│   └── websocket/             # /ws/curriculum/examiner/{session_id}
+├── training_runtime/          # 【运行时主语】TrainingRuntimeDescriptor + plugin dispatch
+│   ├── models.py / service.py
+│   ├── plugins.py             # dispatch_scenario_plugin (含 LEGACY_SALES_HANDLER_MODULES 禁单)
+│   └── stepfun_transport.py
+├── supervisor/                # 【主管审核】TrainingReportViewModel + 复训任务
+├── curriculum_analytics/      # 课程数据聚合 (与 admin/api/analytics_curriculum.py 配合)
+├── support/                   # 运维支撑 (runtime_status_service 等)
+├── admin/                     # 管理后台 API (governance / config_center / config_bundles / voice_runtime / ...)
 ├── presentation_coach/        # PPT 演练场景 (独立)
 │   ├── api/                   # PPT 上传、会话管理 API
-│   ├── services/              # Coach, PointTracker, InterruptionDetector
+│   ├── services/              # Coach, PointTracker, InterruptionDetector (13 文件)
 │   │   ├── coach_service.py
 │   │   ├── feedback_service.py
 │   │   ├── ppt_parser.py
 │   │   ├── presentation_ai_policy_service.py
-│   │   └── prompt_role_resolver.py
+│   │   ├── presentation_report_service.py
+│   │   ├── prompt_role_resolver.py
+│   │   ├── point_tracker.py
+│   │   ├── point_extraction.py
+│   │   ├── semantic_point_tracker.py
+│   │   ├── user_presentation_progress.py
+│   │   ├── interruption_detector.py
+│   │   ├── aho_matcher.py
+│   │   └── forbidden_matcher.py
 │   └── websocket/             # PPT 演练 WebSocket
-│       ├── presentation_handler.py
-│       └── presentation_stepfun_realtime_handler.py
-├── sales_bot/                 # 销售对练场景 (独立)
-│   ├── api/                   # 场景管理 API
-│   ├── services/              # BotService, ContextManager, SummaryService
-│   │   ├── voice_runtime_policy.py
+│       ├── presentation_handler.py            # legacy 模式入口
+│       └── presentation_stepfun_realtime_handler.py  # StepFun 变体 (复用 sales transport + PPT 上下文)
+├── sales_bot/                 # 销售对练场景 (独立) — **仅 StepFun-Realtime** 模式
+│   ├── api/                   # 场景管理 API (scenarios / bot_service)
+│   ├── services/              # BotService, ContextManager, SummaryService (9 文件)
+│   │   ├── bot_service.py             # (内含 _build_legacy_langchain_chain 残留, 确认无人调用后可清)
+│   │   ├── context_manager.py
+│   │   ├── roleplay_compliance_checker.py
+│   │   ├── summary_service.py
+│   │   ├── transcript_normalization.py
+│   │   ├── vagueness_detector.py
 │   │   ├── voice_instruction_compiler.py
-│   │   └── ...
-│   └── websocket/             # 销售对练 WebSocket
-│       ├── base_sales_handler.py    # 销售handler基类
-│       ├── enhanced_handler.py      # 增强版handler (TTS降级)
-│       ├── simple_handler.py        # 简化版handler
-│       ├── stepfun_realtime_handler.py
-│       └── components/              # 组件化模块
+│   │   ├── voice_policy_monitor.py
+│   │   └── voice_runtime_policy.py
+│   └── websocket/             # 销售对练 WebSocket (StepFun Realtime 单一权威)
+│       ├── router.py                       # /ws/sales/{session_id} 入口
+│       ├── stepfun_realtime_handler.py     # 1157 行主 handler, 6 mixin 组合 (复杂度热点)
+│       ├── stepfun_realtime_state.py       # 类型边界 (typed state base)
+│       ├── stepfun_realtime_connection.py  # transport mixin
+│       ├── stepfun_realtime_policy.py      # 语音策略 + 客户端消息分发 (60KB)
+│       ├── stepfun_realtime_upstream.py    # 上游事件路由/函数调用/响应生命周期 (115KB)
+│       ├── stepfun_realtime_feedback.py    # 实时反馈仲裁 (53KB)
+│       ├── stepfun_realtime_sales_stage.py # sales stage capability (17KB)
+│       ├── stepfun_realtime_constants.py
+│       ├── stepfun_runtime_types.py
+│       ├── stepfun_tool_execution.py
+│       ├── voice_runtime_profile.py
+│       ├── session_control_adapter.py
+│       ├── grounding_decision_pipeline.py
+│       ├── phase4_local_provider.py        # phase4 local fallback
+│       ├── realtime_audio_flow.py
+│       ├── realtime_feedback_arbiter.py
+│       ├── realtime_turn_coordinator.py
+│       ├── sales_handler.py.deprecated     # ⚠️ 已弃用, training_runtime/plugins.py 显式禁用
+│       └── components/                     # 解耦组件 (22 个 stepfun_* / capability_* helper)
+│           ├── capability_processor.py
+│           ├── curriculum_stage_runtime.py
+│           ├── message_persistence.py
+│           ├── objection_ledger_helpers.py
+│           ├── score_processor.py
+│           ├── stepfun_asr_fallback.py
+│           ├── stepfun_emotion_analyzer.py
 │           ├── stepfun_event_payloads.py
 │           ├── stepfun_function_call_helpers.py
 │           ├── stepfun_helpers.py
@@ -246,33 +317,50 @@ backend/src/
 │           ├── stepfun_knowledge_helpers.py
 │           ├── stepfun_message_helpers.py
 │           ├── stepfun_runtime_metrics_helpers.py
+│           ├── stepfun_thinking_capture.py
 │           ├── stepfun_tool_helpers.py
-│           └── stepfun_upstream_router.py
-├── prompt_templates/          # 提示词模板系统
-├── evaluation/                # 分阶段评估系统
-├── admin/                     # 管理后台 API
-├── common/                    # 共享模块
-│   ├── ai/                    # LLM, Embedding, ConfigManager
-│   ├── audio/                 # ASR, TTS 服务
-│   │   ├── asr_service.py
-│   │   ├── asr_with_fallback.py
-│   │   ├── asr_alibaba.py
-│   │   ├── asr_local.py
-│   │   ├── tts_service.py
-│   │   ├── tts_factory.py
+│           ├── stepfun_tts_contracts.py
+│           ├── stepfun_upstream_router.py
+│           ├── stepfun_voice_errors.py
+│           ├── stepfun_voice_selection.py
+│           └── tts_component.py
+├── common/                    # 共享模块 (27 子包 + config.py)
+│   ├── ai/                    # LLM, Embedding, ConfigManager, encryption
+│   ├── analytics/             # 公共分析 (与 admin/analytics 区分)
+│   ├── api/                   # 公共 REST 路由 (training, practice, dashboard, ...)
+│   ├── audio/                 # ASR/TTS 服务 (10 文件)
+│   │   ├── asr_service.py / asr_with_fallback.py
+│   │   ├── asr_alibaba.py / asr_base.py / asr_local.py / asr_streaming.py
+│   │   ├── pcm_duration.py
+│   │   ├── tts_service.py / tts_factory.py
 │   │   └── aliyun_streaming_tts.py
-│   ├── auth/
-│   ├── cache/
-│   ├── conversation/
-│   ├── db/
-│   ├── error_handling/        # Result[T] 错误处理
-│   ├── knowledge/             # ChromaDB 向量存储
-│   ├── logging/
-│   ├── rate_limit/
-│   ├── resilience/            # 熔断器
-│   ├── storage/               # 存储服务
-│   ├── validation/
-│   └── websocket/             # BaseWebSocketHandler, SessionManager
+│   ├── auth/                  # JWT + shared password + WeCom SSO
+│   ├── business_rules/        # 业务规则引擎
+│   ├── cache/                 # Redis 封装
+│   ├── config.py              # 全局配置常量
+│   ├── conversation/          # 对话消息存储/回放/证据
+│   ├── cos/                   # 阿里云 OSS 兼容层
+│   ├── db/                    # SQLAlchemy session + models
+│   ├── e2e/                   # 端到端测试 fixture
+│   ├── effectiveness/         # Canonical 评估内核
+│   ├── error_handling/        # Result[T] + middleware
+│   ├── growth/                # 成长中心
+│   ├── jobs/                  # 异步任务 (RQ/Celery 包装)
+│   ├── knowledge/             # ChromaDB 封装 + KB Lock guard
+│   ├── knowledge_engine/      # Haystack 知识问答引擎
+│   ├── logging/               # 日志脱敏
+│   ├── middleware/            # 通用中间件
+│   ├── monitoring/            # Prometheus + structlog 配置
+│   ├── oss/                   # 通用 OSS 抽象
+│   ├── ppt/                   # PPT 解析共享
+│   ├── rate_limit/            # api_limiter / session_limiter
+│   ├── recommendations/       # 推荐算法
+│   ├── resilience/            # circuit_breaker / backoff
+│   ├── services/              # runtime_gate / practice_session / session_runtime_* 等高阶 service
+│   ├── storage/               # 存储 (document / audio / presentation)
+│   ├── training_tasks/        # 训练任务 (TrainingTask 状态机)
+│   ├── validation/            # input_validator / file_validator / html_sanitizer
+│   └── websocket/             # BaseWebSocketHandler + SessionManager + SessionStateService
 └── tests/
 
 web/src/app/
@@ -282,7 +370,7 @@ web/src/app/
 │   └── practice/[sessionId]/
 │       ├── page.tsx           # 练习主页
 │       └── report/page.tsx    # 练习报告
-└── admin/                     # 管理后台
+└── admin/                     # 管理后台 (22+ 路由族)
     ├── page.tsx               # 管理首页
     ├── agents/                # Agent 管理
     ├── personas/              # Persona 管理
@@ -294,7 +382,18 @@ web/src/app/
     ├── users/                 # 用户管理
     ├── records/               # 演练记录
     ├── analytics/             # 数据分析
-    └── settings/              # 系统设置
+    ├── settings/              # 系统设置
+    ├── business-rules/        # 业务规则配置
+    ├── curriculum-practice/   # 课程考核管理
+    ├── governance/            # AI 治理
+    ├── learning-contents/     # 学习内容管理
+    ├── logs/                  # 系统日志
+    ├── rag-profiles/          # RAG 配置画像
+    ├── retrieval-strategies/  # 检索策略
+    ├── sales-trainer/         # 新人训练路径管理
+    ├── scoring-rulesets/      # 评分规则集
+    ├── supervisor-training/   # 主管培训/复训
+    └── test-bank/             # 题库管理
 ```
 
 ## Active Technologies
@@ -392,6 +491,18 @@ const data = await api.module.getEndpoint();
   - TTS 服务工厂化 (tts_factory, aliyun_streaming_tts)
   - 前端新增 presentation-ai 管理页面
 
+- **2026-05 ~ 2026-06**: 多模块增量
+  - 新人训练路径 `sales_trainer/` 落地（异步学习/录音/考卷/重判，与销售实时对练**分离**）
+  - 课程闭环 `curriculum_practice/` + 考官 WS + test bank + publish gate
+  - 训练运行时主语 `training_runtime/`（`TrainingRuntimeDescriptor` + `dispatch_scenario_plugin`）
+  - 主管审核 `supervisor/`（TrainingReportViewModel + 复训任务）
+  - 课程分析 `curriculum_analytics/` + `admin/analytics_curriculum/`
+  - 运维支撑 `support/`
+  - `app_factory.py` / `app_lifespan.py` / `http_routes.py` / `websocket_routes.py` 装配入口分离
+  - `BaseWebSocketHandler` 收敛 + `RuntimeGate.admit_session` 统一 admission
+  - Config Asset B2 HITL 治理 ADR（2026-05-27）
+  - routing audit 闭环 (Phase 1.2)
+
 - **2026-02-15**: Claude Code 钩子系统 V2 优化
 
 ---
@@ -402,12 +513,22 @@ const data = await api.module.getEndpoint();
 
 | 日期 | 决策 | 影响 |
 |------|------|------|
+| 2026-05-27 | Config Asset B2 HITL 治理 | 配置变更审批边界（AFK / HITL-Notify / HITL-Approve / HITL-Block） |
+| 2026-05-26 | Roleplay Contract 治理 | Situation Pack 不得脱离统一配置治理 |
+| 2026-05-12 | Case Item + Role Profile 试点契约 | 最小内容资产 (Proposed, 待 HITL 批准) |
+| 2026-05-11 | 领域边界与契约锁定 (PRD #23) | TrainingTask / PracticeSession / EvaluationRun / ConfigBundle 边界 |
+| 2026-05-11 | curriculum_practice 边界契约 | 内容资产 + RuntimeSnapshotService + 统一 *_ref JSON |
+| 2026-04-24 | 评分规则集治理 | versioned ruleset + 报告口径固化 + dry-run + 发布审计 |
+| 2026-04-21 | 成长中心延迟切片 | G-04 / G-08 / G-10 推迟到 Lane E |
+| 2026-03-14 | 训练运行时主语收敛 | `training_scenario_runtime` 单一主语, 避免场景分支 |
 | 2026-02-16 | 销售 WebSocket 组件化 | 解耦事件/消息/工具处理逻辑 |
 | 2026-02-15 | V2 钩子系统 | 精确工具计数 + 自动反思 |
 | 2026-02-13 | StepFun 事件解耦 | 降低 handler 复杂度 |
 | 2026-02-06 | TTS 降级链 | 阿里云→Edge→浏览器 |
 | 2026-02-04 | 分阶段评估 | 触发器模式 |
 | 2026-01-20 | StepFun Realtime | 双轨语音模式 |
+
+> 完整 ADR 见 [docs/adr/](docs/adr/)（10 个 ADR, 2026-03-14 ~ 2026-05-27）。
 
 ---
 

@@ -1,0 +1,20 @@
+### ADMIN BIND PUBLISHED ARTICLE
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 08:59:57 GMT
+server: uvicorn
+content-length: 150
+content-type: application/json
+x-trace-id: 9a74f785471fd7c6b5e0b3b70b0a9825
+traceparent: 00-9a74f785471fd7c6b5e0b3b70b0a9825-3dc271354069be62-01
+
+{"success":true,"data":{"module_key":"business_skills","learning_content_id":"task4-published-article"},"trace_id":"9a74f785471fd7c6b5e0b3b70b0a9825"}
+### LEARNER FETCH BOUND ARTICLE
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 08:59:57 GMT
+server: uvicorn
+content-length: 483
+content-type: application/json
+x-trace-id: 627616d148d2a1761e3204ad09d81a99
+traceparent: 00-627616d148d2a1761e3204ad09d81a99-ab903c7168c90c3e-01
+
+{"success":true,"data":{"module_key":"business_skills","learning_content_id":"task4-published-article","title":"见客户前商务礼仪","summary":"商务技巧文章 HTTP QA。","owner":"新人训练路径","source":"admin_learning_content","chapters":[{"chapter_id":"task4-published-chapter","title":"拜访前准备","content":"![商务礼仪图](https://example.com/etiquette.png)\n\n提前确认客户背景。","order_index":1}]},"trace_id":"627616d148d2a1761e3204ad09d81a99"}

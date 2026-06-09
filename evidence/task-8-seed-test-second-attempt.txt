@@ -1,0 +1,187 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/zhaozengqing/github/销售训练qoder/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.3.0, langsmith-0.8.3, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 2 items
+
+tests/unit/test_seed_newcomer_training_path.py FF                        [100%]
+
+=================================== FAILURES ===================================
+________________ test_seed_newcomer_training_path_is_idempotent ________________
+
+test_db = <sqlalchemy.orm.session.AsyncSession object at 0x109e96290>
+
+    @pytest.mark.asyncio
+    async def test_seed_newcomer_training_path_is_idempotent(
+        test_db: AsyncSession,
+    ) -> None:
+>       seed_module = _load_seed_module()
+                      ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_seed_newcomer_training_path.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_seed_newcomer_training_path.py:26: in _load_seed_module
+    spec.loader.exec_module(module)
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+scripts/seed_newcomer_training_path.py:48: in <module>
+    @dataclass(slots=True)
+     ^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/dataclasses.py:1222: in wrap
+    return _process_class(cls, init, repr, eq, order, unsafe_hash,
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/dataclasses.py:947: in _process_class
+    and _is_type(type, cls, dataclasses, dataclasses.KW_ONLY,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+annotation = 'int', cls = <class 'seed_newcomer_training_path.SeedSummary'>
+a_module = <module 'dataclasses' from '/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/dataclasses.py'>
+a_type = <dataclasses._KW_ONLY_TYPE object at 0x105f177d0>
+is_type_predicate = <function _is_kw_only at 0x105f28360>
+
+    def _is_type(annotation, cls, a_module, a_type, is_type_predicate):
+        # Given a type annotation string, does it refer to a_type in
+        # a_module?  For example, when checking that annotation denotes a
+        # ClassVar, then a_module is typing, and a_type is
+        # typing.ClassVar.
+    
+        # It's possible to look up a_module given a_type, but it involves
+        # looking in sys.modules (again!), and seems like a waste since
+        # the caller already knows a_module.
+    
+        # - annotation is a string type annotation
+        # - cls is the class that this annotation was found in
+        # - a_module is the module we want to match
+        # - a_type is the type in that module we want to match
+        # - is_type_predicate is a function called with (obj, a_module)
+        #   that determines if obj is of the desired type.
+    
+        # Since this test does not do a local namespace lookup (and
+        # instead only a module (global) lookup), there are some things it
+        # gets wrong.
+    
+        # With string annotations, cv0 will be detected as a ClassVar:
+        #   CV = ClassVar
+        #   @dataclass
+        #   class C0:
+        #     cv0: CV
+    
+        # But in this example cv1 will not be detected as a ClassVar:
+        #   @dataclass
+        #   class C1:
+        #     CV = ClassVar
+        #     cv1: CV
+    
+        # In C1, the code in this function (_is_type) will look up "CV" in
+        # the module and not find it, so it will not consider cv1 as a
+        # ClassVar.  This is a fairly obscure corner case, and the best
+        # way to fix it would be to eval() the string "CV" with the
+        # correct global and local namespaces.  However that would involve
+        # a eval() penalty for every single field of every dataclass
+        # that's defined.  It was judged not worth it.
+    
+        match = _MODULE_IDENTIFIER_RE.match(annotation)
+        if match:
+            ns = None
+            module_name = match.group(1)
+            if not module_name:
+                # No module name, assume the class's module did
+                # "from dataclasses import InitVar".
+>               ns = sys.modules.get(cls.__module__).__dict__
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'NoneType' object has no attribute '__dict__'
+
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/dataclasses.py:712: AttributeError
+_________ test_verify_newcomer_training_path_reports_missing_baseline __________
+
+test_db = <sqlalchemy.orm.session.AsyncSession object at 0x109ea0a90>
+
+    @pytest.mark.asyncio
+    async def test_verify_newcomer_training_path_reports_missing_baseline(
+        test_db: AsyncSession,
+    ) -> None:
+>       seed_module = _load_seed_module()
+                      ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_seed_newcomer_training_path.py:80: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_seed_newcomer_training_path.py:26: in _load_seed_module
+    spec.loader.exec_module(module)
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+scripts/seed_newcomer_training_path.py:48: in <module>
+    @dataclass(slots=True)
+     ^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/dataclasses.py:1222: in wrap
+    return _process_class(cls, init, repr, eq, order, unsafe_hash,
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/dataclasses.py:947: in _process_class
+    and _is_type(type, cls, dataclasses, dataclasses.KW_ONLY,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+annotation = 'int', cls = <class 'seed_newcomer_training_path.SeedSummary'>
+a_module = <module 'dataclasses' from '/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/dataclasses.py'>
+a_type = <dataclasses._KW_ONLY_TYPE object at 0x105f177d0>
+is_type_predicate = <function _is_kw_only at 0x105f28360>
+
+    def _is_type(annotation, cls, a_module, a_type, is_type_predicate):
+        # Given a type annotation string, does it refer to a_type in
+        # a_module?  For example, when checking that annotation denotes a
+        # ClassVar, then a_module is typing, and a_type is
+        # typing.ClassVar.
+    
+        # It's possible to look up a_module given a_type, but it involves
+        # looking in sys.modules (again!), and seems like a waste since
+        # the caller already knows a_module.
+    
+        # - annotation is a string type annotation
+        # - cls is the class that this annotation was found in
+        # - a_module is the module we want to match
+        # - a_type is the type in that module we want to match
+        # - is_type_predicate is a function called with (obj, a_module)
+        #   that determines if obj is of the desired type.
+    
+        # Since this test does not do a local namespace lookup (and
+        # instead only a module (global) lookup), there are some things it
+        # gets wrong.
+    
+        # With string annotations, cv0 will be detected as a ClassVar:
+        #   CV = ClassVar
+        #   @dataclass
+        #   class C0:
+        #     cv0: CV
+    
+        # But in this example cv1 will not be detected as a ClassVar:
+        #   @dataclass
+        #   class C1:
+        #     CV = ClassVar
+        #     cv1: CV
+    
+        # In C1, the code in this function (_is_type) will look up "CV" in
+        # the module and not find it, so it will not consider cv1 as a
+        # ClassVar.  This is a fairly obscure corner case, and the best
+        # way to fix it would be to eval() the string "CV" with the
+        # correct global and local namespaces.  However that would involve
+        # a eval() penalty for every single field of every dataclass
+        # that's defined.  It was judged not worth it.
+    
+        match = _MODULE_IDENTIFIER_RE.match(annotation)
+        if match:
+            ns = None
+            module_name = match.group(1)
+            if not module_name:
+                # No module name, assume the class's module did
+                # "from dataclasses import InitVar".
+>               ns = sys.modules.get(cls.__module__).__dict__
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'NoneType' object has no attribute '__dict__'
+
+/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/dataclasses.py:712: AttributeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_seed_newcomer_training_path.py::test_seed_newcomer_training_path_is_idempotent
+FAILED tests/unit/test_seed_newcomer_training_path.py::test_verify_newcomer_training_path_reports_missing_baseline
+============================== 2 failed in 3.28s ===============================

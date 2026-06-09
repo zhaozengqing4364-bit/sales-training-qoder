@@ -60,8 +60,7 @@ from presentation_coach.api import presentations
 from prompt_templates.api.routes import router as prompt_templates_router
 from prompt_templates.api.routes import scenario_router as scenario_prompts_router
 from sales_bot.api.scenarios import router as scenarios_router
-from sales_trainer.api import admin_router as sales_trainer_admin_router
-from sales_trainer.api import router as sales_trainer_router
+from sales_trainer.router_registration import register_sales_trainer_routers
 from supervisor.api import router as supervisor_router
 from support.api.runtime_status import router as support_runtime_router
 
@@ -137,17 +136,7 @@ def register_routers(app: FastAPI) -> None:
         tags=["scenarios"],
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
-    app.include_router(
-        sales_trainer_router,
-        prefix="/api/v1",
-        tags=["sales-trainer"],
-        dependencies=[Depends(require_role(["admin", "user"]))],
-    )
-    app.include_router(
-        sales_trainer_admin_router,
-        prefix="/api/v1",
-        tags=["admin-sales-trainer"],
-    )
+    register_sales_trainer_routers(app)
     app.include_router(
         admin_presentations_router,
         prefix="/api/v1",

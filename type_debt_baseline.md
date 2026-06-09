@@ -1,5 +1,12 @@
 # Type Debt Baseline
 
+> **⚠️ 历史基线 (Historical Baseline)**
+>
+> - 快照时间: 2026-05-09 (距今约 1 个月)
+> - 反映当时 mypy 错误分布 (674 errors / 31 files) 与 Phase 1 灰度门禁
+> - 2026-05-09 之后, sales_trainer 模块 + curriculum_practice + supervisor 评审相关 commit 已显著改变错误分布, Top 10 错误文件可能已变
+> - **当前真实状态以最新 `mypy src --show-error-codes` 为准**, 本文件仅作历史对照
+
 Generated: 2026-05-09
 
 ## Command

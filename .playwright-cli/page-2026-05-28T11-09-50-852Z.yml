@@ -1,0 +1,262 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e49]:
+    - complementary [ref=e50]:
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - img [ref=e54]
+          - generic [ref=e57]:
+            - generic [ref=e58]: AI 销售教练
+            - generic [ref=e59]: 平台
+        - navigation "主导航" [ref=e60]:
+          - generic [ref=e61]: 菜单
+          - menubar [ref=e62]:
+            - menuitem "首页" [ref=e63] [cursor=pointer]:
+              - img [ref=e65]
+              - generic [ref=e68]: 首页
+            - menuitem "训练模式" [ref=e69] [cursor=pointer]:
+              - img [ref=e70]
+              - generic [ref=e75]: 训练模式
+            - menuitem "销售训练" [ref=e76] [cursor=pointer]:
+              - img [ref=e77]
+              - generic [ref=e80]: 销售训练
+            - menuitem "排行榜" [ref=e81] [cursor=pointer]:
+              - img [ref=e82]
+              - generic [ref=e83]: 排行榜
+            - menuitem "历史记录" [ref=e84] [cursor=pointer]:
+              - img [ref=e85]
+              - generic [ref=e89]: 历史记录
+          - generic [ref=e92]: 系统
+          - menubar [ref=e93]:
+            - menuitem "运行状态" [ref=e94] [cursor=pointer]:
+              - img [ref=e95]
+              - generic [ref=e97]: 运行状态
+            - menuitem "管理后台" [ref=e98] [cursor=pointer]:
+              - img [ref=e99]
+              - generic [ref=e102]: 管理后台
+        - generic [ref=e103]:
+          - button "帮助与反馈" [ref=e105]:
+            - img [ref=e106]
+            - generic [ref=e108]: 帮助与反馈
+          - generic [ref=e109] [cursor=pointer]:
+            - img [ref=e111]
+            - generic [ref=e114]:
+              - generic [ref=e115]: Developer
+              - generic [ref=e116]: Development
+            - img [ref=e118]
+          - button "折叠侧边栏" [ref=e121]:
+            - img [ref=e122]
+            - generic [ref=e125]: 折叠侧边栏
+    - main [ref=e126]:
+      - generic [ref=e128]:
+        - generic [ref=e129]:
+          - generic [ref=e130]:
+            - button "v0.1.0" [ref=e132]
+            - heading "晚安, Developer 👋" [level=1] [ref=e133]
+            - paragraph [ref=e134]: 查看您的训练概览与最新进展。
+          - generic [ref=e136] [cursor=pointer]:
+            - generic [ref=e138]:
+              - generic [ref=e139]: 本周练习
+              - generic [ref=e140]: 0.0 小时
+            - img [ref=e142]
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - generic [ref=e148]:
+              - img [ref=e150]
+              - generic [ref=e152]:
+                - paragraph [ref=e153]: 连续练习
+                - heading "1 天" [level=2] [ref=e154]
+            - paragraph [ref=e155]: 只统计已完成且可评估的训练；证据不足或未完成训练不会计入连续天数。
+          - generic [ref=e156]:
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - img [ref=e161]
+                - generic [ref=e167]:
+                  - paragraph [ref=e168]: 本周目标
+                  - heading "0/3" [level=2] [ref=e169]
+              - generic [ref=e170]: 完成 3 次可评估训练点亮本周轻成就
+            - paragraph [ref=e172]: 本周目标进度只纳入 completed/evaluable 训练，避免把未完成或证据不足记录包装成成就。
+        - generic [ref=e175]:
+          - generic [ref=e176]:
+            - heading "成长动态" [level=2] [ref=e177]
+            - paragraph [ref=e178]: 3 条未读提醒
+          - generic [ref=e179]: 突破 80 分
+        - generic [ref=e180]:
+          - generic [ref=e181]:
+            - paragraph [ref=e183]: 3分钟连续表达通过率
+            - paragraph [ref=e184]: 0.0%
+          - generic [ref=e185]:
+            - paragraph [ref=e187]: 5轮追问稳定通过率
+            - paragraph [ref=e188]: 0.0%
+          - generic [ref=e189]:
+            - paragraph [ref=e191]: 四段结构完整率
+            - paragraph [ref=e192]: 0.0%
+          - generic [ref=e193]:
+            - paragraph [ref=e195]: 次日复练率
+            - paragraph [ref=e196]: 0.0%
+        - generic [ref=e197]:
+          - generic [ref=e200]:
+            - generic [ref=e201]:
+              - generic [ref=e202]: 今日复练任务
+              - heading "提升逻辑性能力" [level=2] [ref=e203]
+              - paragraph [ref=e204]: 您上次练习的逻辑性得分为 0 分，建议针对性练习来提升。
+            - link "针对练习" [ref=e205] [cursor=pointer]:
+              - /url: /training
+              - button "针对练习" [ref=e206]:
+                - text: 针对练习
+                - img [ref=e207]
+          - generic [ref=e211]:
+            - generic [ref=e212]:
+              - img [ref=e214]
+              - generic [ref=e218]:
+                - paragraph [ref=e219]: 学习路径下一步
+                - heading "制造业 CIO 首访训练营" [level=2] [ref=e220]
+                - paragraph [ref=e221]: 继续完成讲义学习，完成后可进入考试。
+            - link "continue learning" [ref=e222] [cursor=pointer]:
+              - /url: /learning-path
+              - text: continue learning
+              - img [ref=e223]
+          - generic [ref=e225]:
+            - img [ref=e228]
+            - generic [ref=e231]:
+              - generic [ref=e232]: "59.4"
+              - generic [ref=e233]: 上次得分
+            - paragraph [ref=e234]: 均分仅统计 19 次可评估训练，6 次证据不足训练不会计入均分。
+        - generic [ref=e235]:
+          - generic [ref=e236]:
+            - heading "最近记录" [level=2] [ref=e237]
+            - generic [ref=e238]:
+              - generic [ref=e239]: 高级筛选请在历史页进行
+              - link "去历史页筛选" [ref=e240] [cursor=pointer]:
+                - /url: /history
+                - button "去历史页筛选" [ref=e241]:
+                  - img [ref=e242]
+                  - text: 去历史页筛选
+          - generic [ref=e244]:
+            - generic [ref=e246]:
+              - generic [ref=e248]:
+                - generic [ref=e249]:
+                  - generic [ref=e250]: S
+                  - generic [ref=e251]:
+                    - heading "制造业 CIO 首访训练教练" [level=4] [ref=e252]
+                    - paragraph [ref=e253]: 6天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e254] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e255]:
+                - generic [ref=e256]:
+                  - generic [ref=e257]:
+                    - generic [ref=e258]: 综合评分
+                    - generic [ref=e259]: "0"
+                  - generic [ref=e261]:
+                    - generic [ref=e262]: 趋势
+                    - generic [ref=e263]: "--"
+                - generic [ref=e264]:
+                  - generic [ref=e265]:
+                    - generic [ref=e266]: 快捷入口
+                    - paragraph [ref=e267]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e268]:
+                    - link "历史页" [ref=e269] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+            - generic [ref=e271]:
+              - generic [ref=e273]:
+                - generic [ref=e274]:
+                  - generic [ref=e275]: S
+                  - generic [ref=e276]:
+                    - heading "制造业 CIO 首访训练教练" [level=4] [ref=e277]
+                    - paragraph [ref=e278]: 6天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e279] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e280]:
+                - generic [ref=e281]:
+                  - generic [ref=e282]:
+                    - generic [ref=e283]: 综合评分
+                    - generic [ref=e284]: "0"
+                  - generic [ref=e286]:
+                    - generic [ref=e287]: 趋势
+                    - generic [ref=e288]: "--"
+                - generic [ref=e289]:
+                  - generic [ref=e290]:
+                    - generic [ref=e291]: 快捷入口
+                    - paragraph [ref=e292]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e293]:
+                    - link "历史页" [ref=e294] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+            - generic [ref=e296]:
+              - generic [ref=e298]:
+                - generic [ref=e299]:
+                  - generic [ref=e300]: S
+                  - generic [ref=e301]:
+                    - heading "制造业 CIO 首访训练教练" [level=4] [ref=e302]
+                    - paragraph [ref=e303]: 6天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e304] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e305]:
+                - generic [ref=e306]:
+                  - generic [ref=e307]:
+                    - generic [ref=e308]: 综合评分
+                    - generic [ref=e309]: "0"
+                  - generic [ref=e311]:
+                    - generic [ref=e312]: 趋势
+                    - generic [ref=e313]: "--"
+                - generic [ref=e314]:
+                  - generic [ref=e315]:
+                    - generic [ref=e316]: 快捷入口
+                    - paragraph [ref=e317]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e318]:
+                    - link "历史页" [ref=e319] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+            - generic [ref=e321]:
+              - generic [ref=e323]:
+                - generic [ref=e324]:
+                  - generic [ref=e325]: S
+                  - generic [ref=e326]:
+                    - heading "制造业 CIO 首访训练教练" [level=4] [ref=e327]
+                    - paragraph [ref=e328]: 6天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e329] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e330]:
+                - generic [ref=e331]:
+                  - generic [ref=e332]:
+                    - generic [ref=e333]: 综合评分
+                    - generic [ref=e334]: "0"
+                  - generic [ref=e336]:
+                    - generic [ref=e337]: 趋势
+                    - generic [ref=e338]: "--"
+                - generic [ref=e339]:
+                  - generic [ref=e340]:
+                    - generic [ref=e341]: 快捷入口
+                    - paragraph [ref=e342]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e343]:
+                    - link "历史页" [ref=e344] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+            - generic [ref=e346]:
+              - generic [ref=e348]:
+                - generic [ref=e349]:
+                  - generic [ref=e350]: S
+                  - generic [ref=e351]:
+                    - heading "制造业 CIO 首访训练教练" [level=4] [ref=e352]
+                    - paragraph [ref=e353]: 6天前 • 持续 0分 0秒
+                - link "查看历史" [ref=e354] [cursor=pointer]:
+                  - /url: /history
+              - generic [ref=e355]:
+                - generic [ref=e356]:
+                  - generic [ref=e357]:
+                    - generic [ref=e358]: 综合评分
+                    - generic [ref=e359]: "0"
+                  - generic [ref=e361]:
+                    - generic [ref=e362]: 趋势
+                    - generic [ref=e363]: "--"
+                - generic [ref=e364]:
+                  - generic [ref=e365]:
+                    - generic [ref=e366]: 快捷入口
+                    - paragraph [ref=e367]: 会话完成并生成统一训练证据后即可查看报告。
+                  - generic [ref=e368]:
+                    - link "历史页" [ref=e369] [cursor=pointer]:
+                      - /url: /history
+                    - button "报告生成中" [disabled]
+  - button "Open Next.js Dev Tools" [ref=e44] [cursor=pointer]:
+    - img [ref=e45]
+  - alert [ref=e48]

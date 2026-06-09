@@ -30,6 +30,27 @@
 
 ---
 
+## 新人训练路径 (Newcomer Training Path)
+
+**定义**：新人入职后的异步学习、录音上传、AI 转写、AI 评分、文章学习和考卷考试路径。它面向学员学习闭环和管理员配置治理，不是实时 WebSocket 对练，也不是“销售队列”。
+
+**技术命名**：第一版继续复用 `sales_trainer` 后端模块、`/sales-trainer` 前端路由、learner `/api/v1/sales-trainer` 和 admin `/api/v1/admin/sales-trainer` 作为兼容技术命名。用户可见产品名必须使用“新人训练路径”。
+
+**典型模块**：
+- PPT 讲解录音：学习最新新人训练路径 PPT 内容和讲解要点，上传录音后走 ASR 和 AI 评分。
+- 商务技巧：阅读 Markdown 文章，完成按试卷管理的题目考试，简答题和可选多选题 AI 评分由后台提示词配置。
+- 电梯演讲：按 10/20/30 分钟等后台配置选项完成 PPT 演讲录音和评分。
+- 实时对练占位：仅展示未开放状态；本阶段不创建 realtime practice session。
+
+**与 AI 实时对练的边界**：AI 实时对练由 `sales_bot`、`practice_sessions`、`training_runtime` 和 `/practice/[sessionId]` 负责，是语音实时对话运行时。新人训练路径不得绕过该边界直接创建、复用或变更实时对练会话；未来集成必须通过独立契约和启用开关进入。
+
+**禁止**：
+- 不得把新人训练路径命名为“销售队列”或“销售训练队列”。
+- 不得把 `sales_bot` 的实时对话运行时逻辑搬进 `sales_trainer`。
+- 不得在页面组件中写死模块标签、评分标准、提示词、文章正文、材料 URL、考卷组成或模块启停状态；这些属于后台可配置业务内容。
+
+---
+
 ## 角色 (Persona)
 
 **定义**：平台级 AI 对话人格，是实时 WebSocket 对练中角色提示词、知识库绑定与行为策略的 **source of truth**。

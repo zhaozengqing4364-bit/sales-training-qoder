@@ -1,0 +1,168 @@
+from __future__ import annotations
+
+from typing import Any, TypeAlias
+
+from sales_trainer.models import SalesTrainerUnit
+from sales_trainer.schemas import SalesTrainerPathConfig
+from sales_trainer.services.path_guidance import (
+    DEFAULT_GUIDANCE_TEMPLATES,
+    build_goal_context,
+    guidance_text,
+)
+from sales_trainer.services.path_progress_service import UnitProgress
+
+PathBuildItem: TypeAlias = tuple[SalesTrainerUnit, SalesTrainerPathConfig]
+
+
+def build_path_payload(
+    *,
+    path_key: str,
+    title: str,
+    goal_title: str | None,
+    path_revision_id: str | None = None,
+    path_revision_no: int | None = None,
+    ordered_items: list[PathBuildItem],
+    quiz_progress: dict[str, UnitProgress],
+    audio_progress: dict[str, UnitProgress],
+) -> dict[str, Any]:
+    levels = [
+        _serialize_level(
+            unit,
+            path_config,
+            quiz_progress=quiz_progress,
+            audio_progress=audio_progress,
+        )
+        for unit, path_config in ordered_items
+    ]
+    completed_unit_ids = {
+        level["unit_id"] for level in levels if level["status"] == "completed"
+    }
+    for level in levels:
+        missing = [
+            unit_id
+            for unit_id in level["unlock_after_unit_ids"]
+            if unit_id not in completed_unit_ids
+        ]
+        if missing:
+            level["locked"] = True
+            level["lock_reason"] = guidance_text(level, "locked")
+            level["status"] = "locked"
+        level.pop("unlock_after_unit_ids", None)
+
+    available = [
+        level
+        for level in levels
+        if not level["locked"] and level["status"] != "completed"
+    ]
+    current_level_id = available[0]["unit_id"] if available else None
+    completed_levels = sum(1 for level in levels if level["status"] == "completed")
+    return {
+        "path_key": path_key,
+        "path_revision_id": path_revision_id,
+        "path_revision_no": path_revision_no,
+        "title": title,
+        "goal_title": goal_title,
+        "total_levels": len(levels),
+        "completed_levels": completed_levels,
+        "current_level_id": current_level_id,
+        "next_level_id": current_level_id,
+        "goal_context": build_goal_context(
+            goal_title=goal_title,
+            levels=levels,
+        ),
+        "levels": [_public_level(level) for level in levels],
+    }
+
+
+def _serialize_level(
+    unit: SalesTrainerUnit,
+    path_config: SalesTrainerPathConfig,
+    *,
+    quiz_progress: dict[str, UnitProgress],
+    audio_progress: dict[str, UnitProgress],
+) -> dict[str, Any]:
+    unit_id = str(unit.unit_id)
+    progress = (
+        quiz_progress.get(unit_id)
+        if unit.unit_type == "quiz"
+        else audio_progress.get(unit_id)
+    )
+    completed = _is_completed(progress, path_config.completion_rule)
+    status = "completed" if completed else "in_progress" if progress else "available"
+    return {
+        "unit_id": unit_id,
+        "name": unit.name,
+        "description": unit.description,
+        "unit_type": unit.unit_type,
+        "module_key": path_config.module_key,
+        "module_type": path_config.module_type,
+        "order_index": path_config.order_index,
+        "level_title": path_config.level_title or unit.name,
+        "level_description": path_config.level_description or unit.description,
+        "locked": False,
+        "lock_reason": None,
+        "status": status,
+        "completion_rule": path_config.completion_rule,
+        "primary_action_label": path_config.primary_action_label
+        or ("开始做题" if unit.unit_type == "quiz" else "上传录音"),
+        "retry_action_label": path_config.retry_action_label or "重练本关",
+        "review_action_label": path_config.review_action_label or "查看结果",
+        "target_path": _unit_target_path(unit, path_config),
+        "latest_result": _progress_payload(progress),
+        "unlock_after_unit_ids": path_config.unlock_after_unit_ids,
+        "guidance_templates": {
+            **DEFAULT_GUIDANCE_TEMPLATES,
+            **path_config.guidance_templates,
+        },
+    }
+
+
+def _public_level(level: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(level)
+    payload.pop("guidance_templates", None)
+    return payload
+
+
+def _is_completed(progress: UnitProgress | None, rule: str) -> bool:
+    if progress is None:
+        return False
+    if rule == "submitted":
+        return progress.status in {
+            "submitted",
+            "scored",
+            "uploaded",
+            "transcribing",
+            "transcribed",
+            "scoring",
+            "scoring_failed",
+            "scored",
+        }
+    if rule == "scored":
+        return progress.status == "scored"
+    return progress.passed is True
+
+
+def _unit_target_path(
+    unit: SalesTrainerUnit,
+    path_config: SalesTrainerPathConfig,
+) -> str:
+    if path_config.module_type == "article_exam":
+        return "/sales-trainer/business-skills"
+    if unit.unit_type == "quiz":
+        return f"/sales-trainer/quiz/{unit.unit_id}"
+    return f"/sales-trainer/audio/{unit.unit_id}"
+
+
+def _progress_payload(progress: UnitProgress | None) -> dict[str, Any] | None:
+    if progress is None:
+        return None
+    return {
+        "status": progress.status,
+        "passed": progress.passed,
+        "score": progress.score,
+        "max_score": progress.max_score,
+        "submitted_at": progress.submitted_at,
+        "result_id": progress.result_id,
+        "target_path": progress.target_path,
+        "improvements": list(progress.improvements),
+    }

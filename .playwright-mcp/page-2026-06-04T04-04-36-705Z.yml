@@ -1,0 +1,151 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e23]:
+    - complementary [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - img [ref=e28]
+          - generic [ref=e30]:
+            - generic [ref=e31]: 管理
+            - generic [ref=e32]: 控制台
+        - navigation [ref=e33]:
+          - link "总览" [ref=e35] [cursor=pointer]:
+            - /url: /admin
+            - img [ref=e36]
+            - generic [ref=e41]: 总览
+          - button "新人训练路径" [ref=e43]:
+            - img [ref=e44]
+            - generic [ref=e47]: 新人训练路径
+            - img [ref=e48]
+          - button "课程训练" [ref=e51]:
+            - img [ref=e52]
+            - generic [ref=e56]: 课程训练
+            - img [ref=e57]
+          - button "内容与知识" [ref=e60]:
+            - img [ref=e61]
+            - generic [ref=e63]: 内容与知识
+            - img [ref=e64]
+          - button "智能体与角色" [ref=e67]:
+            - img [ref=e68]
+            - generic [ref=e71]: 智能体与角色
+            - img [ref=e72]
+          - button "策略中心" [ref=e75]:
+            - img [ref=e76]
+            - generic [ref=e79]: 策略中心
+            - img [ref=e80]
+          - button "运营分析" [ref=e83]:
+            - img [ref=e84]
+            - generic [ref=e86]: 运营分析
+            - img [ref=e87]
+          - button "组织与权限" [ref=e90]:
+            - img [ref=e91]
+            - generic [ref=e96]: 组织与权限
+            - img [ref=e97]
+          - button "系统治理" [ref=e100]:
+            - img [ref=e101]
+            - generic [ref=e104]: 系统治理
+            - img [ref=e105]
+        - generic [ref=e107]:
+          - link "回到用户端" [ref=e108] [cursor=pointer]:
+            - /url: /
+            - img [ref=e109]
+            - generic [ref=e111]: 回到用户端
+          - generic [ref=e112] [cursor=pointer]:
+            - img [ref=e114]
+            - generic [ref=e116]:
+              - generic [ref=e117]: 管理员
+              - generic [ref=e118]: 超级用户
+            - img [ref=e120]
+          - button "折叠侧边栏" [ref=e123]:
+            - img [ref=e124]
+            - generic [ref=e127]: 折叠侧边栏
+    - main [ref=e128]:
+      - generic [ref=e130]:
+        - generic [ref=e131]:
+          - link "返回" [ref=e132] [cursor=pointer]:
+            - /url: /admin/sales-trainer/audio-submissions
+            - img [ref=e133]
+            - text: 返回
+          - generic [ref=e136]:
+            - heading "qa-audio-regrade-browser-20260604115414.wav" [level=1] [ref=e137]
+            - paragraph [ref=e138]: 提供授权文件访问、转写结果、评分结果，以及后台重试操作。
+        - generic [ref=e139]:
+          - generic [ref=e140]:
+            - generic [ref=e142]:
+              - generic [ref=e143]: 已评分
+              - link "授权播放" [ref=e144] [cursor=pointer]:
+                - /url: http://localhost:3444/api/v1/admin/sales-trainer/audio-submissions/49ec020b-b761-4580-86b8-28e5afac69c7/file
+                - button "授权播放" [ref=e145]
+              - link "下载录音" [ref=e146] [cursor=pointer]:
+                - /url: http://localhost:3444/api/v1/admin/sales-trainer/audio-submissions/49ec020b-b761-4580-86b8-28e5afac69c7/file
+                - button "下载录音" [ref=e147]
+              - button "重试转写" [ref=e148]
+              - button "重试评分" [ref=e149]
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - paragraph [ref=e152]: 用户
+                - paragraph [ref=e153]: 新人训练路径演示学员 · newcomer.training.seed.learner@example.com
+                - paragraph [ref=e154]: dde7cb98-f486-4b25-9e9b-281a4faade12
+              - generic [ref=e155]:
+                - paragraph [ref=e156]: 类型
+                - paragraph [ref=e157]: audio/wav
+              - generic [ref=e158]:
+                - paragraph [ref=e159]: 来源页面
+                - paragraph [ref=e160]: 自定义入口
+              - generic [ref=e161]:
+                - paragraph [ref=e162]: 上传时间
+                - paragraph [ref=e163]: 2026/6/4 11:55:02
+          - generic [ref=e164]:
+            - heading "训练快照" [level=2] [ref=e166]
+            - generic [ref=e167]:
+              - paragraph [ref=e168]: 任务简报
+              - paragraph [ref=e169]: "--"
+            - generic [ref=e170]:
+              - paragraph [ref=e171]: 评分方案
+              - paragraph [ref=e172]: "-- · v--"
+          - generic [ref=e173]:
+            - heading "转写结果" [level=2] [ref=e175]
+            - paragraph [ref=e176]: 转写尚未完成。
+          - generic [ref=e177]:
+            - heading "评分结果" [level=2] [ref=e179]
+            - generic [ref=e180]:
+              - generic [ref=e181]:
+                - paragraph [ref=e182]: 总分
+                - paragraph [ref=e183]: "88"
+              - generic [ref=e184]:
+                - paragraph [ref=e185]: 通过
+                - paragraph [ref=e186]: 是
+              - generic [ref=e187]:
+                - paragraph [ref=e188]: 模型
+                - paragraph [ref=e189]: qa-original-model
+            - paragraph [ref=e190]: 原始评分表达清楚。
+          - generic [ref=e191]:
+            - generic [ref=e193]:
+              - generic [ref=e194]:
+                - img [ref=e196]
+                - generic [ref=e198]:
+                  - heading "重新评分历史记录" [level=2] [ref=e199]
+                  - paragraph [ref=e200]: 先预览影响范围，确认后只追加重评记录，不覆盖原始录音评分和转写快照。
+              - button "预览重评影响" [ref=e201]:
+                - img [ref=e202]
+                - text: 预览重评影响
+            - generic [ref=e210]:
+              - generic [ref=e211]:
+                - paragraph [ref=e212]: 影响范围
+                - paragraph [ref=e213]: 1 条历史记录
+                - paragraph [ref=e214]: 只追加结果，不覆盖原始评分
+              - generic [ref=e215]:
+                - paragraph [ref=e216]: 原始评分
+                - paragraph [ref=e217]: "88"
+                - paragraph [ref=e218]: Prompt source-promp
+              - generic [ref=e219]:
+                - paragraph [ref=e220]: 重评预览
+                - paragraph [ref=e221]: "--"
+                - paragraph [ref=e222]: Prompt 7512e5927795
+            - generic [ref=e207]:
+              - text: 重评原因
+              - textbox "重评原因" [ref=e208]:
+                - /placeholder: 例如：录音评分 prompt 发布了新修订，需要追加一条可审计的历史重评记录。
+            - button "确认重评" [ref=e223]
+  - button "Open Next.js Dev Tools" [ref=e18] [cursor=pointer]:
+    - img [ref=e19]
+  - alert [ref=e22]

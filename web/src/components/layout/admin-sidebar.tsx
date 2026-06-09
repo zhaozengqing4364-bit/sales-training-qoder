@@ -17,6 +17,7 @@ import {
     PanelLeftOpen,
     ArrowLeft,
     BarChart3,
+    ClipboardList,
     MessageSquareText,
     Sparkles,
     Presentation,
@@ -27,6 +28,8 @@ import {
     BriefcaseBusiness,
     BookOpen,
     UserRoundCog,
+    Library,
+    ListChecks,
     Mic,
     type LucideIcon,
 } from "lucide-react";
@@ -102,6 +105,63 @@ interface AdminNavSection {
     items: AdminNavItem[];
 }
 
+const SALES_TRAINER_ITEMS = {
+    workbench: { label: "工作台", icon: LayoutDashboard, href: "/admin/sales-trainer" },
+    units: { label: "模块单元", icon: Target, href: "/admin/sales-trainer/units" },
+    paths: { label: "路径配置", icon: Milestone, href: "/admin/sales-trainer/paths" },
+    questions: { label: "题库管理", icon: FileText, href: "/admin/sales-trainer/questions" },
+    scoreStandards: { label: "录音评分标准", icon: Mic, href: "/admin/sales-trainer/score-standards" },
+    articles: { label: "商务技巧文章", icon: BookOpen, href: "/admin/sales-trainer/articles" },
+    papers: { label: "考卷管理", icon: ClipboardList, href: "/admin/sales-trainer/papers" },
+    materials: { label: "材料库", icon: Library, href: "/admin/sales-trainer/materials" },
+    trainingRecords: { label: "训练记录", icon: ListChecks, href: "/admin/sales-trainer/training-records" },
+    audioSubmissions: { label: "学员录音", icon: Activity, href: "/admin/sales-trainer/audio-submissions" },
+    scoreResults: { label: "评分结果", icon: BarChart3, href: "/admin/sales-trainer/score-results" },
+    settings: { label: "配置", icon: Settings, href: "/admin/sales-trainer/settings" },
+    operationLogs: { label: "操作记录", icon: ScrollText, href: "/admin/sales-trainer/operation-logs" },
+} as const satisfies Record<string, AdminNavItem>;
+
+const SALES_TRAINER_CONTENT_ITEMS: AdminNavItem[] = [
+    SALES_TRAINER_ITEMS.workbench,
+    SALES_TRAINER_ITEMS.units,
+    SALES_TRAINER_ITEMS.paths,
+    SALES_TRAINER_ITEMS.questions,
+    SALES_TRAINER_ITEMS.scoreStandards,
+    SALES_TRAINER_ITEMS.articles,
+    SALES_TRAINER_ITEMS.papers,
+    SALES_TRAINER_ITEMS.materials,
+];
+
+const SALES_TRAINER_RECORD_ITEMS: AdminNavItem[] = [
+    SALES_TRAINER_ITEMS.trainingRecords,
+    SALES_TRAINER_ITEMS.audioSubmissions,
+    SALES_TRAINER_ITEMS.scoreResults,
+];
+
+const SALES_TRAINER_OPS_ITEMS: AdminNavItem[] = [
+    SALES_TRAINER_ITEMS.trainingRecords,
+    SALES_TRAINER_ITEMS.audioSubmissions,
+    SALES_TRAINER_ITEMS.scoreResults,
+    SALES_TRAINER_ITEMS.settings,
+    SALES_TRAINER_ITEMS.operationLogs,
+];
+
+const SALES_TRAINER_ALL_ITEMS: AdminNavItem[] = [
+    ...SALES_TRAINER_CONTENT_ITEMS,
+    ...SALES_TRAINER_RECORD_ITEMS,
+    SALES_TRAINER_ITEMS.settings,
+    SALES_TRAINER_ITEMS.operationLogs,
+];
+
+function salesTrainerSection(items: AdminNavItem[]): AdminNavSection {
+    return {
+        key: "sales-trainer",
+        label: "新人训练路径",
+        icon: Mic,
+        items,
+    };
+}
+
 const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     {
         key: "overview",
@@ -112,19 +172,9 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     },
     {
         key: "sales-trainer",
-        label: "销售训练",
+        label: "新人训练路径",
         icon: Mic,
-        items: [
-            { label: "工作台", icon: LayoutDashboard, href: "/admin/sales-trainer" },
-            { label: "训练单元", icon: Target, href: "/admin/sales-trainer/units" },
-            { label: "训练路径", icon: Milestone, href: "/admin/sales-trainer/paths" },
-            { label: "销售题库", icon: FileText, href: "/admin/sales-trainer/questions" },
-            { label: "录音评分标准", icon: Mic, href: "/admin/sales-trainer/score-standards" },
-            { label: "学员录音", icon: Activity, href: "/admin/sales-trainer/audio-submissions" },
-            { label: "评分结果", icon: BarChart3, href: "/admin/sales-trainer/score-results" },
-            { label: "配置", icon: Settings, href: "/admin/sales-trainer/settings" },
-            { label: "操作记录", icon: ScrollText, href: "/admin/sales-trainer/operation-logs" },
-        ],
+        items: SALES_TRAINER_ALL_ITEMS,
     },
     {
         key: "curriculum",
@@ -204,27 +254,23 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     },
 ];
 
-const SALES_TRAINER_MANAGER_NAV_SECTIONS: AdminNavSection[] = [
-    {
-        key: "sales-trainer",
-        label: "销售训练",
-        icon: Mic,
-        items: [
-            { label: "工作台", icon: LayoutDashboard, href: "/admin/sales-trainer" },
-            { label: "训练单元", icon: Target, href: "/admin/sales-trainer/units" },
-            { label: "训练路径", icon: Milestone, href: "/admin/sales-trainer/paths" },
-            { label: "销售题库", icon: FileText, href: "/admin/sales-trainer/questions" },
-            { label: "录音评分标准", icon: Mic, href: "/admin/sales-trainer/score-standards" },
-            { label: "学员录音", icon: Activity, href: "/admin/sales-trainer/audio-submissions" },
-            { label: "评分结果", icon: BarChart3, href: "/admin/sales-trainer/score-results" },
-            { label: "配置", icon: Settings, href: "/admin/sales-trainer/settings" },
-            { label: "操作记录", icon: ScrollText, href: "/admin/sales-trainer/operation-logs" },
-        ],
-    },
+const SALES_TRAINER_CONTENT_NAV_SECTIONS: AdminNavSection[] = [
+    salesTrainerSection(SALES_TRAINER_CONTENT_ITEMS),
+];
+const SALES_TRAINER_RECORD_NAV_SECTIONS: AdminNavSection[] = [
+    salesTrainerSection(SALES_TRAINER_RECORD_ITEMS),
+];
+const SALES_TRAINER_OPS_NAV_SECTIONS: AdminNavSection[] = [
+    salesTrainerSection(SALES_TRAINER_OPS_ITEMS),
 ];
 
+const EXACT_ACTIVE_HREFS: ReadonlySet<string> = new Set([
+    "/admin",
+    "/admin/sales-trainer",
+] as const);
+
 function isPathActive(pathname: string, href: string): boolean {
-    if (href === "/admin") {
+    if (EXACT_ACTIVE_HREFS.has(href)) {
         return pathname === href;
     }
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -243,9 +289,20 @@ function resolveActiveSectionKey(pathname: string, sections: AdminNavSection[]):
 }
 
 function visibleAdminNavSections(currentUser: UserInfo | null): AdminNavSection[] {
-    return currentUser?.role === "support"
-        ? SALES_TRAINER_MANAGER_NAV_SECTIONS
-        : ADMIN_NAV_SECTIONS;
+    const role = currentUser?.role;
+    if (role === "admin" || role === "super_admin") {
+        return ADMIN_NAV_SECTIONS;
+    }
+    if (role === "content_admin" || role === "newcomer_content_admin") {
+        return SALES_TRAINER_CONTENT_NAV_SECTIONS;
+    }
+    if (role === "support" || role === "training_lead" || role === "training_manager") {
+        return SALES_TRAINER_RECORD_NAV_SECTIONS;
+    }
+    if (role === "operations" || role === "ops" || role === "operator" || role === "sre") {
+        return SALES_TRAINER_OPS_NAV_SECTIONS;
+    }
+    return [];
 }
 
 function adminRoleLabel(
@@ -255,8 +312,17 @@ function adminRoleLabel(
     if (role === "admin") {
         return options.expanded ? "超级管理员" : "超级用户";
     }
-    if (role === "support") {
+    if (role === "super_admin") {
+        return "超级管理员";
+    }
+    if (role === "content_admin" || role === "newcomer_content_admin") {
+        return "内容管理员";
+    }
+    if (role === "support" || role === "training_lead" || role === "training_manager") {
         return "培训负责人";
+    }
+    if (role === "operations" || role === "ops" || role === "operator" || role === "sre") {
+        return "运维人员";
     }
     return "普通用户";
 }
@@ -301,7 +367,8 @@ export function AdminSidebarContent({
                             pathname={pathname}
                             isCollapsed={isCollapsed}
                             isLast={sectionIndex === sections.length - 1}
-                            isOpen={openSectionKeys[section.key] ?? section.key === activeSectionKey}
+                            isOpen={openSectionKeys[section.key]
+                                ?? (section.key !== "sales-trainer" && section.key === activeSectionKey)}
                             onToggle={() => {
                                 setOpenSectionKeys((prev) => ({
                                     ...prev,

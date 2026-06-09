@@ -1,6 +1,6 @@
 # 发布验收契约（`release-verification`）
 
-> 状态：✅ 已实现  
+> 状态：✅ 后端已实现 / 前端待接入  
 > 前缀：`/api/v1/admin/release-verification`
 
 ## 1) 核心实体

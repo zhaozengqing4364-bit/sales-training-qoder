@@ -84,6 +84,17 @@ function formatFeedbackItem(item: string | Record<string, unknown>): string {
     return JSON.stringify(item);
 }
 
+function getSnapshotItems(snapshot: Record<string, unknown> | null): Array<{
+    name?: string;
+    current_version?: { version_label?: string; title?: string };
+}> {
+    const items = snapshot?.items;
+    return Array.isArray(items) ? items as Array<{
+        name?: string;
+        current_version?: { version_label?: string; title?: string };
+    }> : [];
+}
+
 export default function SalesTrainerAudioResultPage() {
     const params = useParams<{ submissionId: string }>();
     const {
@@ -138,9 +149,9 @@ export default function SalesTrainerAudioResultPage() {
         return (
             <GlassCard className="space-y-4 p-6">
                 <p className="text-sm text-red-700">{error || "语音作业结果不存在。"}</p>
-                <Link href="/sales-trainer">
-                    <Button className="rounded-full">返回销售训练</Button>
-                </Link>
+                <Button asChild className="rounded-full">
+                    <Link href="/sales-trainer">返回新人训练路径</Link>
+                </Button>
             </GlassCard>
         );
     }
@@ -163,7 +174,7 @@ export default function SalesTrainerAudioResultPage() {
                     className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
                 >
                     <ArrowLeft className="h-4 w-4" />
-                    返回销售训练
+                    返回新人训练路径
                 </Link>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -219,6 +230,40 @@ export default function SalesTrainerAudioResultPage() {
                 </div>
             </GlassCard>
 
+            {submission.material_snapshot || submission.score_scheme_snapshot || submission.task_brief_snapshot ? (
+                <GlassCard className="space-y-4 p-6">
+                    <h2 className="text-lg font-bold text-slate-900">本次训练快照</h2>
+                    {submission.task_brief_snapshot ? (
+                        <div>
+                            <p className="text-xs text-slate-500">任务</p>
+                            <p className="mt-1 text-sm text-slate-900">
+                                {String(submission.task_brief_snapshot.title || submission.task_brief_snapshot.purpose || "--")}
+                            </p>
+                        </div>
+                    ) : null}
+                    {getSnapshotItems(submission.material_snapshot).length ? (
+                        <div>
+                            <p className="text-xs text-slate-500">材料版本</p>
+                            <div className="mt-2 space-y-2">
+                                {getSnapshotItems(submission.material_snapshot).map((item) => (
+                                    <p key={`${item.name}-${item.current_version?.version_label}`} className="text-sm text-slate-900">
+                                        {item.name || "训练材料"} · {item.current_version?.version_label || "--"} · {item.current_version?.title || "--"}
+                                    </p>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+                    {submission.score_scheme_snapshot ? (
+                        <div>
+                            <p className="text-xs text-slate-500">评分方案</p>
+                            <p className="mt-1 text-sm text-slate-900">
+                                {String(submission.score_scheme_snapshot.name || "--")} · v{String(submission.score_scheme_snapshot.version || "--")}
+                            </p>
+                        </div>
+                    ) : null}
+                </GlassCard>
+            ) : null}
+
             {failureMessage ? (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {failureMessage}
@@ -245,7 +290,7 @@ export default function SalesTrainerAudioResultPage() {
                     </a>
                 </div>
                 <p className="text-xs text-slate-500">
-                    页面通过授权端点读取音频，不直接暴露 storage_key。
+                    页面通过授权端点读取音频，不直接暴露文件存储地址。
                 </p>
             </GlassCard>
 

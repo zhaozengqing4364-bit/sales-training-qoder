@@ -9,7 +9,10 @@ from common.business_rules.defaults import (
     ROLEPLAY_SITUATION_PACKS_KEY,
 )
 from common.business_rules.service import BusinessRuleResolution
-from curriculum_practice.schemas import PracticeTemplatePublishCandidate, PublishedAssetRefSchema
+from curriculum_practice.schemas import (
+    PracticeTemplatePublishCandidate,
+    PublishedAssetRefSchema,
+)
 from curriculum_practice.services.asset_references import stable_hash
 from curriculum_practice.services.published_asset_refs import build_published_asset_refs
 from curriculum_practice.services.publishing_gates import PublishingGateService
@@ -61,6 +64,9 @@ def _reference_reader() -> object:
         ("knowledge_base", "kb-1"): {"id": "kb-1", "status": "active"},
         ("case_item", "case-1"): {
             "case_item_id": "case-1",
+            "logical_id": "case-1",
+            "revision_id": "case-revision-1",
+            "revision_no": 7,
             "status": "published",
             "version": 1,
             "content_hash": "sha256:case-1",
@@ -71,18 +77,27 @@ def _reference_reader() -> object:
         },
         ("role_profile", "role-1"): {
             "role_profile_id": "role-1",
+            "logical_id": "role-1",
+            "revision_id": "role-revision-1",
+            "revision_no": 8,
             "status": "published",
             "version": 2,
             "content_hash": "sha256:role-1",
         },
         ("learning_content", "learning-1"): {
             "learning_content_id": "learning-1",
+            "logical_id": "learning-1",
+            "revision_id": "learning-revision-1",
+            "revision_no": 9,
             "status": "published",
             "version": 3,
             "content_hash": "sha256:learning-1",
         },
         ("examiner_agent", "examiner-1"): {
             "examiner_agent_id": "examiner-1",
+            "logical_id": "examiner-1",
+            "revision_id": "examiner-revision-1",
+            "revision_no": 10,
             "status": "published",
             "version": 4,
             "content_hash": "sha256:examiner-1",
@@ -137,6 +152,9 @@ def _expected_entity_ref(
         "snapshot_selector": None,
         "source_snapshot_hash": None,
         "resolved_at": resolved_at,
+        "logical_id": None,
+        "revision_id": None,
+        "revision_no": None,
     }
 
 
@@ -172,9 +190,17 @@ async def test_should_build_non_empty_published_asset_refs_with_matching_hashes(
         resolved_at=resolved_at,
     )
     assert refs["case_item_ref"]["content_hash"] == "sha256:case-1"
+    assert refs["case_item_ref"]["revision_id"] == "case-revision-1"
+    assert refs["case_item_ref"]["revision_no"] == 7
     assert refs["role_profile_ref"]["content_hash"] == "sha256:role-1"
+    assert refs["role_profile_ref"]["revision_id"] == "role-revision-1"
+    assert refs["role_profile_ref"]["revision_no"] == 8
     assert refs["learning_content_ref"]["content_hash"] == "sha256:learning-1"
+    assert refs["learning_content_ref"]["revision_id"] == "learning-revision-1"
+    assert refs["learning_content_ref"]["revision_no"] == 9
     assert refs["examiner_agent_ref"]["content_hash"] == "sha256:examiner-1"
+    assert refs["examiner_agent_ref"]["revision_id"] == "examiner-revision-1"
+    assert refs["examiner_agent_ref"]["revision_no"] == 10
     assert refs["scoring_ruleset_ref"]["content_hash"] == stable_hash(
         reader("scoring_ruleset", "ruleset-1")
     )
@@ -191,6 +217,9 @@ async def test_should_build_non_empty_published_asset_refs_with_matching_hashes(
         "snapshot_selector": "packs[code=first_visit]",
         "source_snapshot_hash": stable_hash(DEFAULT_ROLEPLAY_SITUATION_PACKS),
         "resolved_at": resolved_at,
+        "logical_id": None,
+        "revision_id": None,
+        "revision_no": None,
     }
 
     restored = {

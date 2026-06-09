@@ -1,0 +1,23 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/zhaozengqing/github/销售训练qoder/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.4.0, hydra-core-1.3.2, langsmith-0.8.5, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 44 items
+
+tests/unit/test_newcomer_training_path_audit_logs.py ...                 [  6%]
+tests/unit/test_newcomer_training_path_permissions.py .......            [ 22%]
+tests/integration/test_newcomer_training_path_rbac_api.py .              [ 25%]
+tests/unit/test_newcomer_training_path_boundary.py .....                 [ 36%]
+tests/unit/test_newcomer_training_path_articles.py ...                   [ 43%]
+tests/unit/test_newcomer_training_path_papers.py ....                    [ 52%]
+tests/unit/test_sales_trainer_services.py .....................          [100%]
+
+=============================== warnings summary ===============================
+tests/integration/test_newcomer_training_path_rbac_api.py::test_should_enforce_granular_sales_trainer_rbac
+  /Users/zhaozengqing/github/销售训练qoder/backend/venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(f):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 44 passed, 1 warning in 6.06s =========================

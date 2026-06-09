@@ -317,9 +317,8 @@ test.describe("full-stack smoke baseline", () => {
   });
 
   test("training entry smoke", async ({ page }) => {
-    const signals = watchForBlockingSignals(page);
-
     await loginFromUi(page);
+    const signals = watchForBlockingSignals(page);
     await page.goto("/training");
 
     await expect(page.getByRole("heading", { name: "训练模式" })).toBeVisible();

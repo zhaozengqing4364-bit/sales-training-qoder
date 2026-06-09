@@ -1,5 +1,13 @@
 # API Routing Audit
 
+> **⚠️ 历史快照 (Historical Snapshot, 2026-05-06)**
+>
+> - 距今约 1 个月, 仓库自此新增 `sales_trainer/` (含 12 子路由) + `curriculum_practice/` 多个 router + 治理相关 router。
+> - 头部 Summary 表中 `Runtime route entries 315` 与 `OpenAPI operations 18` 数字已过期, 需重跑 `create_app()` 重新生成。
+> - **R1** (auth/wechat 残留) 与 **R2** (OpenAPI 重新生成) 经 Phase 1.2 闭环已 resolved。
+> - **R3** (scoring-rulesets 路由迁移) 仍 deferred 到 Phase 2, 详见 `docs/api-contract/scoring-rulesets.md` 当前进度。
+> - 重新生成命令: `cd backend && PYTHONPATH=src python -c "from app_factory import create_app; app=create_app(); print(len(app.routes))"`
+
 Generated on: 2026-05-06
 
 ## Scope

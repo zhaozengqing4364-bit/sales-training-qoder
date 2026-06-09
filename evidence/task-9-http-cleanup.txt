@@ -1,0 +1,2 @@
+temp_db_removed=true
+token_removed=true

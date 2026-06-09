@@ -20,6 +20,10 @@ Backend development and CI support Python `>=3.11,<3.14`. Python 3.11 is the pri
 - CI/dev bootstrap should create a Python 3.11/3.12/3.13 environment, with 3.11 preferred until the dependency stack is upgraded.
 - A future Python 3.14 support project must upgrade/remove Pydantic v1 compatibility shims and rerun full backend tests, ruff, mypy/typing checks, and `pip check`.
 
+## 2026-06 补充 (Addendum)
+
+实际状态: `backend/.venv-test` 已在 Python 3.14.3 下运行 (用于本地验证), 触发上游 Pydantic v1 兼容层告警。该用法为**受控本地验证**, 不属于本 ADR 决策的"生产支持"范围, 仍以 Python 3.11 为生产/CI 主版本。如 3.14 验证发现新回归, 须在 2026-04-27 ADR 框架下走 `pip check` + 完整测试再决定是否推进。详见 [`docs/architecture.md` §1.2](../architecture.md) 技术栈行。
+
 ## Rollback
 
 Revert this ADR and the `backend/pyproject.toml` upper bound only after a dedicated Python 3.14 dependency migration passes full backend verification.

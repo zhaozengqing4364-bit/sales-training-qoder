@@ -1,0 +1,1075 @@
+
+ RUN  v4.1.4 /Users/zhaozengqing/github/销售训练qoder/web
+
+ ❯ src/app/(dashboard)/sales-trainer/page.test.tsx (5 tests | 2 failed) 1158ms
+     × shows quiz and audio entries from the catalog fallback when no paths exist 611ms
+     × shows three-module grid instead of level timeline 58ms
+ ❯ src/components/sales-trainer/sales-trainer-module-grid.test.tsx (1 test | 1 failed) 85ms
+     × renders newcomer module cards and keeps realtime practice disabled 80ms
+ ❯ src/lib/sales-trainer/module-path.test.ts (3 tests | 1 failed) 32ms
+     × builds newcomer path module cards with disabled realtime placeholder 21ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/sales-trainer/sales-trainer-module-grid.test.tsx > SalesTrainerModuleGrid > renders newcomer module cards and keeps realtime practice disabled
+TestingLibraryElementError: Unable to find an element with the text: PPT讲解录音. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"space-y-4"[39m
+    [36m>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"text-sm text-slate-500"[39m
+      [36m>[39m
+        [0m建议顺序：PPT演练 → 拜访前商务 → 金字塔演讲（时长自选）。各模块可随时进入，无强制解锁。[0m
+      [36m</p>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-4 lg:grid-cols-3"[39m
+      [36m>[39m
+        [36m<div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-upload h-5 w-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M12 3v12"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m17 8-5-5-5 5"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</div>[39m
+            [36m<span>[39m
+              [0m模块 1[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex-1 space-y-2"[39m
+          [36m>[39m
+            [36m<h3[39m
+              [33mclass[39m=[32m"text-xl font-black text-slate-900"[39m
+            [36m>[39m
+              [0mPPT演练[0m
+            [36m</h3>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm leading-6 text-slate-500"[39m
+            [36m>[39m
+              [0mppt desc[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-2"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/sales-trainer/audio/a1"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"w-full rounded-full bg-slate-900 text-white"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0m上传 PPT 讲解录音[0m
+              [36m</button>[39m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-graduation-cap h-5 w-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M22 10v6"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M6 12.5V16a6 3 0 0 0 12 0v-3.5"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</div>[39m
+            [36m<span>[39m
+              [0m模块 2[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex-1 space-y-2"[39m
+          [36m>[39m
+            [36m<h3[39m
+              [33mclass[39m=[32m"text-xl font-black text-slate-900"[39m
+            [36m>[39m
+              [0m拜访前商务[0m
+            [36m</h3>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm leading-6 text-slate-500"[39m
+            [36m>[39m
+              [0mbiz[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-2"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/sales-trainer/learn/hub"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"w-full rounded-full bg-slate-900 text-white"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0m阅读学习[0m
+              [36m</button>[39m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-file-headphone h-5 w-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M4 6.835V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-.343"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M14 2v5a1 1 0 0 0 1 1h5"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M2 19a2 2 0 0 1 4 0v1a2 2 0 0 1-4 0v-4a6 6 0 0 1 12 0v4a2 2 0 0 1-4 0v-1a2 2 0 0 1 4 0"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</div>[39m
+            [36m<span>[39m
+              [0m模块 3[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex-1 space-y-2"[39m
+          [36m>[39m
+            [36m<h3[39m
+              [33mclass[39m=[32m"text-xl font-black text-slate-900"[39m
+            [36m>[39m
+              [0m金字塔演讲[0m
+            [36m</h3>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm leading-6 text-slate-500"[39m
+            [36m>[39m
+              [0m选择时长上传演讲录音，获取转写与评分反馈。[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-2"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/sales-trainer/audio/a3"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"w-full rounded-full border-slate-200"[39m
+                [33mtype[39m=[32m"button"[39m
+                [33mvariant[39m=[32m"outline"[39m
+              [36m>[39m
+                [0m5 分钟[0m
+              [36m</button>[39m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/sales-trainer/audio/a4"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"w-full rounded-full border-slate-200"[39m
+                [33mtype[39m=[32m"button"[39m
+                [33mvariant[39m=[32m"outline"[39m
+              [36m>[39m
+                [0m10 分钟[0m
+              [36m</button>[39m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/sales-trainer/audio/a5"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"w-full rounded-full border-slate-200"[39m
+                [33mtype[39m=[32m"button"[39m
+                [33mvariant[39m=[32m"outline"[39m
+              [36m>[39m
+                [0m15 分钟[0m
+              [36m</button>[39m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/components/sales-trainer/sales-trainer-module-grid.test.tsx:141:23
+    139|         render(<SalesTrainerModuleGrid path={path} unitsById={new Map(…
+    140|
+    141|         expect(screen.getByText("PPT讲解录音")).toBeTruthy();
+       |                       ^
+    142|         expect(screen.getByText("商务技巧")).toBeTruthy();
+    143|         expect(screen.getByText("电梯演讲")).toBeTruthy();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/lib/sales-trainer/module-path.test.ts > module-path > builds newcomer path module cards with disabled realtime placeholder
+AssertionError: expected [ { key: 'ppt', …(7) }, …(2) ] to have a length of 4 but got 3
+
+- Expected
++ Received
+
+- 4
++ 3
+
+ ❯ src/lib/sales-trainer/module-path.test.ts:138:23
+    136|     it("builds newcomer path module cards with disabled realtime place…
+    137|         const views = buildModuleViews(modulePath(), new Map<string, S…
+    138|         expect(views).toHaveLength(4);
+       |                       ^
+    139|         expect(views.map((view) => view.title)).toEqual([
+    140|             "PPT讲解录音",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/app/(dashboard)/sales-trainer/page.test.tsx > SalesTrainerPage > shows quiz and audio entries from the catalog fallback when no paths exist
+TestingLibraryElementError: Unable to find an accessible element with the role "heading" and name "新人训练路径"
+
+Here are the accessible roles:
+
+  link:
+
+  Name "返回训练大厅":
+  [36m<a[39m
+    [33mhref[39m=[32m"/training"[39m
+  [36m/>[39m
+
+  Name "开始做题":
+  [36m<a[39m
+    [33mhref[39m=[32m"/sales-trainer/quiz/quiz-unit"[39m
+  [36m/>[39m
+
+  Name "上传语音作业":
+  [36m<a[39m
+    [33mhref[39m=[32m"/sales-trainer/audio/audio-unit"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  heading:
+
+  Name "销售训练":
+  [36m<h1[39m
+    [33mclass[39m=[32m"text-3xl font-black tracking-tight text-slate-900"[39m
+  [36m/>[39m
+
+  Name "做题训练":
+  [36m<h2[39m
+    [33mclass[39m=[32m"text-xl font-bold text-slate-900"[39m
+  [36m/>[39m
+
+  Name "做题单元":
+  [36m<h3[39m
+    [33mclass[39m=[32m"text-lg font-bold text-slate-900"[39m
+  [36m/>[39m
+
+  Name "语音作业":
+  [36m<h2[39m
+    [33mclass[39m=[32m"text-xl font-bold text-slate-900"[39m
+  [36m/>[39m
+
+  Name "录音单元":
+  [36m<h3[39m
+    [33mclass[39m=[32m"text-lg font-bold text-slate-900"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-sm text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-sm text-slate-500"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "刷新":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-full"[39m
+    [33mtype[39m=[32m"button"[39m
+    [33mvariant[39m=[32m"outline"[39m
+  [36m/>[39m
+
+  Name "开始做题":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-full bg-slate-900 text-white"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "上传语音作业":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-full bg-slate-900 text-white"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"space-y-6 pb-20"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"space-y-4"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mhref[39m=[32m"/training"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-arrow-left h-4 w-4"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m12 19-7-7 7-7"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M19 12H5"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [0m返回训练大厅[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col gap-3 md:flex-row md:items-end md:justify-between"[39m
+        [36m>[39m
+          [36m<div>[39m
+            [36m<h1[39m
+              [33mclass[39m=[32m"text-3xl font-black tracking-tight text-slate-900"[39m
+            [36m>[39m
+              [0m销售训练[0m
+            [36m</h1>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"mt-1 text-sm text-slate-500"[39m
+            [36m>[39m
+              [0m在一个入口内完成题目训练与语音作业上传。语音没有固定时长上限，格式与大小限制以后端校验为准。[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"rounded-full"[39m
+            [33mtype[39m=[32m"button"[39m
+            [33mvariant[39m=[32m"outline"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-refresh-cw mr-2 h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 3v5h-5"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M8 16H3v5"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [0m刷新[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"space-y-6"[39m
+      [36m>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"space-y-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-2"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-file-question-mark h-5 w-5 text-slate-700"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M12 17h.01"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M9.1 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<h2[39m
+              [33mclass[39m=[32m"text-xl font-bold text-slate-900"[39m
+            [36m>[39m
+              [0m做题训练[0m
+            [36m</h2>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-4 md:grid-cols-2"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"space-y-4 p-6"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+              [36m>[39m
+                [36m<div>[39m
+                  [36m<h3[39m
+                    [33mclass[39m=[32m"text-lg font-bold text-slate-900"[39m
+                  [36m>[39m
+                    [0m做题单元[0m
+                  [36m</h3>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"mt-1 text-sm text-slate-500"[39m
+                  [36m>[39m
+                    [0m题目训练[0m
+                  [36m</p>[39m
+                [36m</div>[39m
+                [36m<span>[39m
+                  [0m做题训练[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-sm text-slate-500"[39m
+              [36m>[39m
+                [0m共 [0m
+                [0m1[0m
+                [0m 道题[0m
+              [36m</p>[39m
+              [36m<a[39m
+                [33mhref[39m=[32m"/sales-trainer/quiz/quiz-unit"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33mclass[39m=[32m"rounded-full bg-slate-900 text-white"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [0m开始做题[0m
+                [36m</button>[39m
+              [36m</a>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"space-y-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-2"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-file-headphone h-5 w-5 text-slate-700"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M4 6.835V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-.343"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14 2v5a1 1 0 0 0 1 1h5"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M2 19a2 2 0 0 1 4 0v1a2 2 0 0 1-4 0v-4a6 6 0 0 1 12 0v4a2 2 0 0 1-4 0v-1a2 2 0 0 1 4 0"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<h2[39m
+              [33mclass[39m=[32m"text-xl font-bold text-slate-900"[39m
+            [36m>[39m
+              [0m语音作业[0m
+            [36m</h2>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-4 md:grid-cols-2"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"space-y-4 p-6"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+              [36m>[39m
+                [36m<div>[39m
+                  [36m<h3[39m
+                    [33mclass[39m=[32m"text-lg font-bold text-slate-900"[39m
+                  [36m>[39m
+                    [0m录音单元[0m
+                  [36m</h3>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"mt-1 text-sm text-slate-500"[39m
+                  [36m>[39m
+                    [0m录音训练[0m
+                  [36m</p>[39m
+                [36m</div>[39m
+                [36m<span>[39m
+                  [0m语音作业（上传）[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-sm text-slate-500"[39m
+              [36m>[39m
+                [0m上传语音后由系统转写并评分。[0m
+              [36m</p>[39m
+              [36m<a[39m
+                [33mhref[39m=[32m"/sales-trainer/audio/audio-unit"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33mclass[39m=[32m"rounded-full bg-slate-900 text-white"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [0m上传语音作业[0m
+                [36m</button>[39m
+              [36m</a>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/app/(dashboard)/sales-trainer/page.test.tsx:214:23
+    212|         expect(screen.getAllByRole("link", { name: /上传语音作业/ })[0].getA…
+    213|         expect(screen.getByText("语音作业")).toBeTruthy();
+    214|         expect(screen.getByRole("heading", { name: "新人训练路径" })).toBeTr…
+       |                       ^
+    215|     });
+    216|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/app/(dashboard)/sales-trainer/page.test.tsx > SalesTrainerPage > shows three-module grid instead of level timeline
+TestingLibraryElementError: Unable to find an element with the text: PPT讲解录音. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"space-y-6 pb-20"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"space-y-4"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mhref[39m=[32m"/training"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-arrow-left h-4 w-4"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m12 19-7-7 7-7"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M19 12H5"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [0m返回训练大厅[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col gap-3 md:flex-row md:items-end md:justify-between"[39m
+        [36m>[39m
+          [36m<div>[39m
+            [36m<h1[39m
+              [33mclass[39m=[32m"text-3xl font-black tracking-tight text-slate-900"[39m
+            [36m>[39m
+              [0m销售训练[0m
+            [36m</h1>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"mt-1 text-sm text-slate-500"[39m
+            [36m>[39m
+              [0m在一个入口内完成题目训练与语音作业上传。语音没有固定时长上限，格式与大小限制以后端校验为准。[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"rounded-full"[39m
+            [33mtype[39m=[32m"button"[39m
+            [33mvariant[39m=[32m"outline"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-refresh-cw mr-2 h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 3v5h-5"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M8 16H3v5"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [0m刷新[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"space-y-6"[39m
+      [36m>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"space-y-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-5 p-6"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex flex-col gap-3 md:flex-row md:items-start md:justify-between"[39m
+            [36m>[39m
+              [36m<div>[39m
+                [36m<span>[39m
+                  [0m三模块训练[0m
+                [36m</span>[39m
+                [36m<h2[39m
+                  [33mclass[39m=[32m"mt-3 text-2xl font-black text-slate-900"[39m
+                [36m>[39m
+                  [0m新人销售三模块训练[0m
+                [36m</h2>[39m
+                [36m<p[39m
+                  [33mclass[39m=[32m"mt-1 text-sm text-slate-500"[39m
+                [36m>[39m
+                  [0m掌握首次客户沟通[0m
+                [36m</p>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"rounded-lg bg-slate-900 p-5 text-white"[39m
+            [36m>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-xs font-semibold text-slate-300"[39m
+              [36m>[39m
+                [0m开始训练[0m
+              [36m</p>[39m
+              [36m<h3[39m
+                [33mclass[39m=[32m"mt-2 text-xl font-black"[39m
+              [36m>[39m
+                [0m选择下方模块开始训练[0m
+              [36m</h3>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"mt-2 max-w-3xl text-sm leading-6 text-slate-300"[39m
+              [36m>[39m
+                [0m三个模块均可随时进入，无强制解锁。[0m
+                [0m建议顺序：PPT演练 → 拜访前商务 → 金字塔演讲（时长自选）。各模块可随时进入，无强制解锁。[0m
+              [36m</p>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"space-y-4"[39m
+            [36m>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-sm text-slate-500"[39m
+              [36m>[39m
+                [0m建议顺序：PPT演练 → 拜访前商务 → 金字塔演讲（时长自选）。各模块可随时进入，无强制解锁。[0m
+              [36m</p>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"grid gap-4 lg:grid-cols-3"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex h-full flex-col gap-4 p-6"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"[39m
+                    [36m>[39m
+                      [36m<svg[39m
+                        [33maria-hidden[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"lucide lucide-upload h-5 w-5"[39m
+                        [33mfill[39m=[32m"none"[39m
+                        [33mheight[39m=[32m"24"[39m
+                        [33mstroke[39m=[32m"currentColor"[39m
+                        [33mstroke-linecap[39m=[32m"round"[39m
+                        [33mstroke-linejoin[39m=[32m"round"[39m
+                        [33mstroke-width[39m=[32m"2"[39m
+                        [33mviewBox[39m=[32m"0 0 24 24"[39m
+                        [33mwidth[39m=[32m"24"[39m
+                        [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                      [36m>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M12 3v12"[39m
+                        [36m/>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"m17 8-5-5-5 5"[39m
+                        [36m/>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"[39m
+                        [36m/>[39m
+                      [36m</svg>[39m
+                    [36m</div>[39m
+                    [36m<span>[39m
+                      [0m模块 1[0m
+                    [36m</span>[39m
+                  [36m</div>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex-1 space-y-2"[39m
+                  [36m>[39m
+                    [36m<h3[39m
+                      [33mclass[39m=[32m"text-xl font-black text-slate-900"[39m
+                    [36m>[39m
+                      [0mPPT演练[0m
+                    [36m</h3>[39m
+                    [36m<p[39m
+                      [33mclass[39m=[32m"text-sm leading-6 text-slate-500"[39m
+                    [36m>[39m
+                      [0m先确认产品定位。[0m
+                    [36m</p>[39m
+                  [36m</div>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex flex-col gap-2"[39m
+                  [36m>[39m
+                    [36m<a[39m
+                      [33mhref[39m=[32m"/sales-trainer/audio/ppt-unit"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33mclass[39m=[32m"w-full rounded-full bg-slate-900 text-white"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [0m上传 PPT 讲解录音[0m
+                      [36m</button>[39m
+                    [36m</a>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex h-full flex-col gap-4 p-6"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"[39m
+                    [36m>[39m
+                      [36m<svg[39m
+                        [33maria-hidden[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"lucide lucide-graduation-cap h-5 w-5"[39m
+                        [33mfill[39m=[32m"none"[39m
+                        [33mheight[39m=[32m"24"[39m
+                        [33mstroke[39m=[32m"currentColor"[39m
+                        [33mstroke-linecap[39m=[32m"round"[39m
+                        [33mstroke-linejoin[39m=[32m"round"[39m
+                        [33mstroke-width[39m=[32m"2"[39m
+                        [33mviewBox[39m=[32m"0 0 24 24"[39m
+                        [33mwidth[39m=[32m"24"[39m
+                        [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                      [36m>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"[39m
+                        [36m/>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M22 10v6"[39m
+                        [36m/>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M6 12.5V16a6 3 0 0 0 12 0v-3.5"[39m
+                        [36m/>[39m
+                      [36m</svg>[39m
+                    [36m</div>[39m
+                    [36m<span>[39m
+                      [0m模块 2[0m
+                    [36m</span>[39m
+                  [36m</div>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex-1 space-y-2"[39m
+                  [36m>[39m
+                    [36m<h3[39m
+                      [33mclass[39m=[32m"text-xl font-black text-slate-900"[39m
+                    [36m>[39m
+                      [0m拜访前商务[0m
+                    [36m</h3>[39m
+                    [36m<p[39m
+                      [33mclass[39m=[32m"text-sm leading-6 text-slate-500"[39m
+                    [36m>[39m
+                      [0m先确认产品定位。[0m
+                    [36m</p>[39m
+                  [36m</div>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex flex-col gap-2"[39m
+                  [36m>[39m
+                    [36m<a[39m
+                      [33mhref[39m=[32m"/sales-trainer/learn/hub"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33mclass[39m=[32m"w-full rounded-full bg-slate-900 text-white"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [0m阅读学习[0m
+                      [36m</button>[39m
+                    [36m</a>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex h-full flex-col gap-4 p-6"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"[39m
+                    [36m>[39m
+                      [36m<svg[39m
+                        [33maria-hidden[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"lucide lucide-file-headphone h-5 w-5"[39m
+                        [33mfill[39m=[32m"none"[39m
+                        [33mheight[39m=[32m"24"[39m
+                        [33mstroke[39m=[32m"currentColor"[39m
+                        [33mstroke-linecap[39m=[32m"round"[39m
+                        [33mstroke-linejoin[39m=[32m"round"[39m
+                        [33mstroke-width[39m=[32m"2"[39m
+                        [33mviewBox[39m=[32m"0 0 24 24"[39m
+                        [33mwidth[39m=[32m"24"[39m
+                        [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                      [36m>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M4 6.835V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-.343"[39m
+                        [36m/>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M14 2v5a1 1 0 0 0 1 1h5"[39m
+                        [36m/>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M2 19a2 2 0 0 1 4 0v1a2 2 0 0 1-4 0v-4a6 6 0 0 1 12 0v4a2 2 0 0 1-4 0v-1a2 2 0 0 1 4 0"[39m
+                        [36m/>[39m
+                      [36m</svg>[39m
+                    [36m</div>[39m
+                    [36m<span>[39m
+                      [0m模块 3[0m
+                    [36m</span>[39m
+                  [36m</div>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex-1 space-y-2"[39m
+                  [36m>[39m
+                    [36m<h3[39m
+                      [33mclass[39m=[32m"text-xl font-black text-slate-900"[39m
+                    [36m>[39m
+                      [0m金字塔演讲[0m
+                    [36m</h3>[39m
+                    [36m<p[39m
+                      [33mclass[39m=[32m"text-sm leading-6 text-slate-500"[39m
+                    [36m>[39m
+                      [0m选择时长上传演讲录音，获取转写与评分反馈。[0m
+                    [36m</p>[39m
+                  [36m</div>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex flex-col gap-2"[39m
+                  [36m>[39m
+                    [36m<a[39m
+                      [33mhref[39m=[32m"/sales-trainer/audio/audio-5"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33mclass[39m=[32m"w-full rounded-full border-slate-200"[39m
+                        [33mtype[39m=[32m"button"[39m
+                        [33mvariant[39m=[32m"outline"[39m
+                      [36m>[39m
+                        [0m5 分钟[0m
+                      [36m</button>[39m
+                    [36m</a>[39m
+                    [36m<a[39m
+                      [33mhref[39m=[32m"/sales-trainer/audio/audio-10"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33mclass[39m=[32m"w-full rounded-full border-slate-200"[39m
+                        [33mtype[39m=[32m"button"[39m
+                        [33mvariant[39m=[32m"outline"[39m
+                      [36m>[39m
+                        [0m10 分钟[0m
+                      [36m</button>[39m
+                    [36m</a>[39m
+                    [36m<a[39m
+                      [33mhref[39m=[32m"/sales-trainer/audio/audio-15"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33mclass[39m=[32m"w-full rounded-full border-slate-200"[39m
+                        [33mtype[39m=[32m"button"[39m
+                        [33mvariant[39m=[32m"outline"[39m
+                      [36m>[39m
+                        [0m15 分钟[0m
+                      [36m</button>[39m
+                    [36m</a>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"space-y-3"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-base font-bold text-slate-900"[39m
+            [36m>[39m
+              [0m更多练习（[0m
+              [0m3[0m
+              [0m）[0m
+            [36m</span>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down h-5 w-5 text-slate-500"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/app/(dashboard)/sales-trainer/page.test.tsx:320:23
+    318|
+    319|         expect(await screen.findByText("选择下方模块开始训练")).toBeTruthy();
+    320|         expect(screen.getByText("PPT讲解录音")).toBeTruthy();
+       |                       ^
+    321|         expect(screen.getByText("商务技巧")).toBeTruthy();
+    322|         expect(screen.getByText("电梯演讲")).toBeTruthy();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed | 5 passed (9)
+   Start at  17:34:08
+   Duration  7.37s (transform 780ms, setup 0ms, import 1.87s, tests 1.27s, environment 3.34s)
+

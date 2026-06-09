@@ -152,7 +152,7 @@ describe("coo-learn-navigation", () => {
                 chapter,
                 expectedChapterOrderIndex: 1,
             }),
-        ).toContain("销售训练路径");
+        ).toContain("新人训练路径");
     });
 
     it("builds learn href and decodes return path", () => {

@@ -80,16 +80,18 @@ export function PathLevelTimeline({ path, unitsById }: PathLevelTimelineProps) {
                             ) : (
                                 <div className="flex flex-wrap items-center gap-2">
                                     {studyHref ? (
-                                        <Link
-                                            href={studyHref}
-                                            onClick={() => persistLearnReturn("/sales-trainer")}
-                                        >
-                                            <Button variant="outline" className="rounded-full">阅读本章</Button>
-                                        </Link>
+                                        <Button asChild variant="outline" className="rounded-full">
+                                            <Link
+                                                href={studyHref}
+                                                onClick={() => persistLearnReturn("/sales-trainer")}
+                                            >
+                                                阅读本章
+                                            </Link>
+                                        </Button>
                                     ) : null}
-                                    <Link href={href}>
-                                        <Button variant="outline" className="rounded-full">{label}</Button>
-                                    </Link>
+                                    <Button asChild variant="outline" className="rounded-full">
+                                        <Link href={href}>{label}</Link>
+                                    </Button>
                                 </div>
                             )}
                         </div>

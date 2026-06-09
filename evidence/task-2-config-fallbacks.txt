@@ -1,0 +1,100 @@
+docs/api-contract/websocket.md:50:### `session_id` 校验
+docs/api-contract/websocket.md:52:### `session_id` 校验
+docs/api-contract/websocket.md:53:- 服务端在握手阶段校验 `session_id` 是否为 UUID。
+docs/api-contract/websocket.md:54:- 非法 `session_id` 将直接拒绝连接（`close code = 4400`, `reason = INVALID_SESSION_ID`）。
+docs/api-contract/websocket.md:61:| token 缺失或无效 | `4001` | `Unauthorized` |
+docs/api-contract/websocket.md:71:| examiner snapshot 缺失 | `4413` | `EXAMINER_RUNTIME_SNAPSHOT_MISSING` |
+docs/api-contract/websocket.md:72:| examiner runtime 配置缺失 | `4413` | `EXAMINER_RUNTIME_CONFIG_MISSING` |
+docs/api-contract/prompt-templates.md:60:- 非法 `template_id`（空值 / `undefined` / 非 UUID）返回 `400` + 顶层 envelope：
+docs/api-contract/personas.md:370:| 2026-02-16 | 新增 Persona 策略健康审计接口 | 提供 `/admin/personas/policy-health` 统计缺失策略、漂移与 KB 锁未绑定问题 |
+docs/api-contract/api-audit-anomaly-report.md:76:| 4 | GET | `/api/v1/admin/analytics/fallback-metrics` | TTS/ASR/LLM 各级降级链触发次数与浏览器 TTS 兜底使用率 | 同上 Tab 内流向图+统计表 |
+docs/api-contract/api-audit-anomaly-report.md:99:- 回训场景使用 `api.retraining.completeTaskWithSession`（在 report/page.tsx:1009 有调用），但主训练流程的 `complete` 缺失
+docs/api-contract/api-audit-anomaly-report.md:113:**现状**：前端 `learning-path/page.tsx` 仅使用 `learning-path/me` 和 `learning-path/me/next-task`。`self-assessment`/`learnerProfiles` 在 `web/src/` 下零匹配。值得注意的是，后端同时暴露了 `/api/v1/admin/curriculum-practice/learner-profiles/{user_id}/override`（管理员覆盖学员画像），前端 `admin/users/[id]/page.tsx` 使用了 `api.admin.overrideLearnerProfile`，但学员端画像查看和自我评估完全缺失。
+docs/api-contract/api-audit-anomaly-report.md:127:**现状**：`api.dashboard.getGrowth` 已在 `dashboard/page.tsx:431` 中用于成长卡片展示，但通知列表拉取和目标设置两个接口在前端完全缺失。
+docs/api-contract/api-audit-anomaly-report.md:139:| 1 | POST | `/api/v1/admin/settings/{surface}/validate` | 保存前校验配置 JSON 值的合法性，返回归一化值或验证错误（含审计日志写入） | 设置页每个配置编辑表单底部「校验配置」按钮 |
+docs/api-contract/api-audit-anomaly-report.md:189:> 创建回训任务功能缺失。
+docs/api-contract/api-audit-anomaly-report.md:260:**复核结论**：这不是“client 方法缺失”，而是“后端 + API client 已就绪，但 `web/src/app/admin/` 没有 Config Bundles / Config Center 管理页面”。应作为产品 backlog，而不是删除 API。
+docs/api-contract/api-audit-anomaly-report.md:285:**特殊说明**：`api.adminPresentations.*` 对应后端 `admin/api/admin.py` 中的管理员演示文稿管理路由（带 OCR、向量摄取、安全路径校验），与 `api.presentations.*` 对应的用户端路由（带缩略图、进度追踪）功能互补。但前端所有管理页（`admin/presentations/`）使用 `api.presentations.*`（用户端）而非 `api.adminPresentations.*`（管理端），导致：
+docs/api-contract/api-audit-anomaly-report.md:328:| **后端定义但前端完全未调用（孤立端点）** | **25** | 含完整模块 + 单点缺失 |
+docs/api-contract/api-audit-anomaly-report.md:333:| ├ 成长通知/目标（2 端点） | 2 | 通知列表 + 目标设定缺失 |
+docs/api-contract/api-audit-anomaly-report.md:335:| ├ 会话诊断/报告（3 端点） | 3 | 诊断入口 + 报告轮询缺失 |
+docs/api-contract/api-audit-anomaly-report.md:349:| **P2** | Settings 欠 validate/audit | 配置表单加校验按钮，面板加审计入口 |
+docs/api-contract/api-audit-anomaly-report.md:350:| | Learner profile/self-assessment 缺失 | 学习路径页加画像卡片 + 自评入口 |
+docs/api-contract/api-audit-anomaly-report.md:352:| | Growth notifications list + goals upsert 缺失 | Dashboard 通知中心 + 目标设定 |
+docs/api-contract/support-runtime.md:229:- `summary`: 支持 support/admin 直接阅读的安全摘要，不需要回看默认分数或 fallback 文案猜状态。
+docs/api-contract/support-runtime.md:235:- **`severity = degraded` 说明结果仍对外返回，但质量/完整性已经下降。** 例如 knowledge grounding partial、audio upload partial、budget warning、fallback anchor 等都属于 degraded，而不是成功低分。
+docs/api-contract/support-runtime.md:238:- **优先读 runtime event，不要反推默认文案。** 如果 `summary` 或 `details` 已经显式给出 degraded / failure / compat，就不要再用 `overall_score`、fallback 回答文案、`[REPORT_GENERATION_FAILED]` 之类外围信号做二次猜测。
+docs/api-contract/support-runtime.md:253:- 非法 `severity` 过滤值：`400` + `"[INVALID_SEVERITY_FILTER]"`（仅允许 `blocking` / `warning`）
+docs/api-contract/sessions.md:19:- 运行时对外统一主语为 `training_scenario_runtime`，避免会话接口、权限校验、统计口径继续按实体类型分叉。
+docs/api-contract/sessions.md:227:- `feedback_summary`: 快速反馈摘要（优先取 `main_issue.issue_text`，缺失时回退 `next_goal.goal_text`）
+docs/api-contract/sessions.md:259:- 若传入 `scenario_id`，系统会校验该场景存在、启用且与 `scenario_type` 一致，并以该 `scenario_id` 作为会话事实持久化
+docs/api-contract/sessions.md:428:非法迁移示例（`preparing -> resume`）:
+docs/api-contract/sessions.md:529:| 2026-02-11 | 补充访问控制与错误码 | 覆盖增强模式校验、legacy 兼容和权限边界 |
+docs/api-contract/voice-runtime.md:11:- **not the legacy template authority**：如果目标是修改 legacy evaluation/report 的 compiled prompt，入口在 `prompt-templates` / `scenario-prompts`；如果 diagnostics 指向 `base_url` 缺失，则修复入口在 `model-configs`，而不是继续改 runtime profile。
+docs/api-contract/voice-runtime.md:51:- `voice_mode` 仅允许 `legacy | stepfun_realtime`，非法值会触发请求校验失败（`422`）
+docs/api-contract/voice-runtime.md:141:- 请求体若继续携带上述旧字段，会触发 FastAPI 请求校验失败（`422`，`extra_forbidden`）。
+docs/api-contract/model-configs.md:9:- 如果 provider 要求 `base_url` 但当前配置缺失，运行时会 fail-closed 并显式返回 `[PROMPT_CONTRACT_BASE_URL_REQUIRED]`，修复入口是 `/admin/model-configs`，不是继续修改 prompt template 文本或 persona policy。
+docs/api-contract/release-verification.md:50:- `PUT /checks/{record_id}`：更新单条校验结果
+docs/api-contract/release-verification.md:52:- `POST /candidates/{release_candidate_id}/run-verification`：触发自动校验
+docs/api-contract/learning-content.md:85:`POST /publish` 会校验以下条件，任一不满足返回 400：
+docs/api-contract/analytics.md:309:- `top_weak_dimension` / `heatmap`: 优先使用 `TrainingReportSnapshot.report_payload.dimension_scores`；缺失时使用冻结 `TrainingReportSnapshot.report_payload.lineage.stage_snapshots[*].dimension_scores`，不读取 latest `PracticeTemplate` 内容。
+docs/api-contract/test-bank.md:134:`POST /questions/{question_id}/publish` 会校验：
+docs/api-contract/knowledge.md:90:    method?: "llm" | "fallback_rule" | string;
+docs/api-contract/knowledge.md:103:    fallback_reason?: string;
+docs/api-contract/knowledge.md:124:> LLM 辅助抽取语义：`POST .../dictionary-entries/generate` 优先使用全局 LLM 配置生成草稿；LLM 不可用或输出无法校验时回退规则抽取。所有生成结果仍为 `draft`，人工发布为 `active` 后才参与运行时归一化。`extraction_metadata` 仅用于人工审核来源、证据、别名原因、风险和回退原因。
+docs/api-contract/knowledge.md:219:- 非法文件内容会返回 `400`
+docs/api-contract/sales-trainer.md:25:- 团队范围: 培训负责人只能查看同部门学员的音频提交、AI 评分结果和操作日志；无部门时使用空范围兜底，不放大全局权限。
+docs/api-contract/sales-trainer.md:46:`path_key` 第一版默认使用 `newcomer_training_path_v1`；历史 `new_seller_modules_v1` 允许作为兼容 alias 读取，但新 seed 和后台保存必须写入 `newcomer_training_path_v1`。缺少模块配置时 learner 首页返回空路径和 `[NEWCOMER_PATH_CONFIG_MISSING]` 诊断；非法配置在后台保存/发布时返回 `[NEWCOMER_MODULE_CONFIG_INVALID]`，不得由前端猜测兜底。
+docs/api-contract/sales-trainer.md:102:  validation: {
+docs/api-contract/sales-trainer.md:119:### 校验与兜底
+docs/api-contract/sales-trainer.md:123:- `display_name`、`description`、`disabled_reason`、按钮文案和空状态文案属于后台可配置展示内容；缺失时服务端可使用安全默认值，但响应必须标明 `fallback_applied=true`。
+docs/api-contract/sales-trainer.md:124:- `"audio_scoring"` 模块必须绑定一个已发布 `audio_scoring` 单元、至少一个 required 材料绑定和已发布音频评分提示词；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]`。
+docs/api-contract/sales-trainer.md:128:- 非法 `module_type`、未知 `completion_rule`、重复 `module_key`、重复 `order_index` 或绑定不存在时，后台保存/发布返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` 并写操作日志。
+docs/api-contract/sales-trainer.md:129:- 配置读取失败或配置缺失时 learner 不展示伪成功；返回空路径、诊断错误或 disabled 模块，由 UI 显示可配置空状态。
+docs/api-contract/sales-trainer.md:296:`source_page` 用于记录上传来源页面，例如 `sales_trainer_audio_upload`。缺失时允许为 `null`，不得影响上传、转写或评分。
+docs/api-contract/sales-trainer.md:490:查询 learner 侧训练任务简报、当前材料版本和学员可见评分方案。未发布或不存在返回 `[SALES_TRAINER_UNIT_NOT_FOUND]`；绑定材料缺失、未发布或无当前版本时返回对应材料错误码。
+docs/api-contract/sales-trainer.md:781:校验规则:
+docs/api-contract/sales-trainer.md:850:| `[QUIZ_PASS_THRESHOLD_INVALID]` | 400 | 做题通过线配置非法 |
+docs/api-contract/sales-trainer.md:857:| `[AUDIO_SIZE_CONFIG_INVALID]` | 500 | 文件大小配置非法 |
+docs/api-contract/sales-trainer.md:858:| `[OSS_NOT_CONFIGURED]` | 503 | OSS 对象存储签名配置缺失或非法 |
+docs/api-contract/sales-trainer.md:859:| `[COS_NOT_CONFIGURED]` | 503 | COS 对象存储配置或 SDK 缺失 |
+docs/api-contract/sales-trainer.md:863:| `[AUDIO_FILE_URL_EXPIRES_CONFIG_INVALID]` | 500 | 音频文件访问链接有效期配置非法 |
+docs/api-contract/sales-trainer.md:867:| `[AUDIO_REMOTE_DOWNLOAD_TIMEOUT_CONFIG_INVALID]` | 500 | 远程音频下载超时配置非法 |
+docs/api-contract/sales-trainer.md:877:| `[DEUCATE_CONFIG_INVALID]` | 500 | Deucate 模型参数配置非法 |
+docs/api-contract/sales-trainer.md:878:| `[DEUCATE_CONFIG_MISSING]` | 500 | Deucate 配置缺失 |
+docs/api-contract/sales-trainer.md:881:| `[DEUCATE_RESPONSE_INVALID]` | 502 | Deucate 返回非预期 JSON 或结构非法 |
+docs/api-contract/sales-trainer.md:883:| `[MATERIAL_KEY_INVALID]` | 422 | 材料业务标识格式非法 |
+docs/api-contract/sales-trainer.md:894:| `[SALES_TRAINER_MATERIAL_BINDING_INVALID]` | 422 | 训练任务材料绑定配置结构非法 |
+docs/api-contract/sales-trainer.md:895:| `[SALES_TRAINER_TASK_BRIEF_INVALID]` | 422 | 训练任务简报配置结构非法 |
+docs/api-contract/sales-trainer.md:896:| `[LEARNER_RUBRIC_INVALID]` | 422 | 学员可见评分标准配置结构非法 |
+docs/api-contract/sales-trainer.md:897:| `[NEWCOMER_PATH_CONFIG_MISSING]` | 404/409 | 新人训练路径配置缺失或未启用 |
+docs/api-contract/sales-trainer.md:898:| `[NEWCOMER_MODULE_CONFIG_INVALID]` | 422 | 新人训练路径模块配置非法，例如未知 `module_type`、重复排序或绑定不存在 |
+docs/api-contract/sales-trainer.md:899:| `[NEWCOMER_MODULE_BINDING_MISSING]` | 409 | 模块必要绑定缺失，例如文章、考卷、材料、评分提示词或目标单元 |
+docs/api-contract/sales-trainer.md:906:| `[MATERIAL_FILE_URL_EXPIRES_CONFIG_INVALID]` | 500 | 材料文件访问链接有效期配置非法 |
+docs/api-contract/sales-trainer.md:911:| 配置项 | 默认值 | 读取位置 | 管理入口 | 校验与兜底 |
+docs/api-contract/sales-trainer.md:913:| `SALES_TRAINER_AUDIO_ALLOWED_MIME_TYPES` | `audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/webm,audio/mp4,audio/x-m4a` | 音频上传服务 | 环境配置/系统配置 | 缺失使用默认值；不命中返回 `[AUDIO_TYPE_NOT_ALLOWED]` |
+docs/api-contract/sales-trainer.md:914:| `SALES_TRAINER_AUDIO_MAX_FILE_SIZE_MB` | `200` | 音频上传服务 | 环境配置/系统配置 | 必须为正整数；非法返回 `[AUDIO_SIZE_CONFIG_INVALID]` |
+docs/api-contract/sales-trainer.md:916:| `SALES_TRAINER_AUDIO_STORAGE_PATH` | `./data/sales_trainer_audio` | 本地 multipart 上传和文件读取 | 环境配置/系统配置 | 缺失使用默认值；文件不存在返回 `[AUDIO_FILE_NOT_FOUND]` |
+docs/api-contract/sales-trainer.md:917:| `SALES_TRAINER_AUDIO_FILE_URL_EXPIRES_SECONDS` | `3600` | 对象存储音频读取/供应商转写 URL | 环境配置/系统配置 | 必须为正整数；非法返回 `[AUDIO_FILE_URL_EXPIRES_CONFIG_INVALID]` |
+docs/api-contract/sales-trainer.md:919:| `SALES_TRAINER_MATERIAL_STORAGE_PATH` | `./data/sales_trainer_materials` | 本地材料文件读取服务 | 环境配置/系统配置 | 缺失使用默认值；文件不存在返回 `[MATERIAL_FILE_NOT_FOUND]` |
+docs/api-contract/sales-trainer.md:920:| `SALES_TRAINER_MATERIAL_FILE_URL_EXPIRES_SECONDS` | `3600` | 对象存储材料下载 URL | 环境配置/系统配置 | 必须为正整数；非法返回 `[MATERIAL_FILE_URL_EXPIRES_CONFIG_INVALID]` |
+docs/api-contract/sales-trainer.md:921:| `SALES_TRAINER_AUDIO_REMOTE_DOWNLOAD_TIMEOUT_SECONDS` | `60` | legacy 远程音频下载转写桥接 | 环境配置/系统配置 | 必须为正数；非法返回 `[AUDIO_REMOTE_DOWNLOAD_TIMEOUT_CONFIG_INVALID]`，超时返回 `[AUDIO_REMOTE_DOWNLOAD_TIMEOUT]` |
+docs/api-contract/sales-trainer.md:922:| `TENCENT_COS_SECRET_ID` / `TENCENT_COS_SECRET_KEY` / `TENCENT_COS_BUCKET` / `TENCENT_COS_REGION` | 无 | COS 签名与服务端上传 | 环境配置/密钥管理 | `SALES_TRAINER_AUDIO_STORAGE_BACKEND=cos` 时必填；缺失返回 `[COS_NOT_CONFIGURED]` |
+docs/api-contract/sales-trainer.md:926:| `DASHSCOPE_API_KEY` | 无 | DashScope 文件识别 | 环境配置/密钥管理 | `SALES_TRAINER_ASR_MODE=file` 时必填，缺失返回 `[ASR_API_KEY_REQUIRED]` |
+docs/api-contract/sales-trainer.md:928:| `SALES_TRAINER_MANAGER_ROLES` | `support` | 销售训练后台权限判断 | 环境配置/系统配置 | 逗号分隔角色列表；缺失使用 `support`；团队范围按 `users.department` 过滤 |
+docs/api-contract/sales-trainer.md:929:| `DEUCATE_BASE_URL` | 无 | Deucate 评分服务 | 环境配置/模型配置 | 缺失返回 `[DEUCATE_CONFIG_MISSING]` |
+docs/api-contract/sales-trainer.md:930:| `DEUCATE_API_KEY` | 无 | Deucate 评分服务 | 环境配置/模型配置 | 缺失返回 `[DEUCATE_CONFIG_MISSING]` |
+docs/api-contract/sales-trainer.md:931:| `DEUCATE_MODEL` | `deucate` | Deucate 评分服务 | 环境配置/模型配置 | 缺失使用默认值 |
+docs/api-contract/sales-trainer.md:932:| `DEUCATE_TIMEOUT_SECONDS` | `30` | Deucate 评分服务 | 环境配置/模型配置 | 必须为正数；非法返回 `[DEUCATE_CONFIG_INVALID]`，超时返回 `[DEUCATE_TIMEOUT]` |
+docs/api-contract/sales-trainer.md:934:| `unit.config.audio.purpose` | `general_audio_scoring` | 训练单元配置与学员上传页面 | admin 训练单元管理 | 必填字符串；缺失时前端使用默认用途 |
+docs/api-contract/sales-trainer.md:935:| `unit.config.audio.pass_threshold` | `70` | 训练单元配置 | admin 训练单元管理 | 必须在 `0-100`；缺失使用默认值 |
+docs/api-contract/sales-trainer.md:936:| `unit.config.quiz.pass_threshold` | 无 | 训练单元配置与做题服务 | admin 训练单元管理 | 必须为非负数字；非法返回 `[QUIZ_PASS_THRESHOLD_INVALID]` |
+docs/api-contract/sales-trainer.md:937:| `unit.config.task_brief` | 按训练单元名称/描述兜底 | learner brief API、提交快照 | admin 训练单元管理 | 必须为对象；缺失使用安全默认简报 |
+docs/api-contract/sales-trainer.md:938:| `unit.config.materials` | 空绑定 | learner brief API、提交快照 | admin 训练单元管理 | PPT 演练必须至少绑定一个确认材料；非法返回 `[SALES_TRAINER_MATERIAL_BINDING_INVALID]` |
+docs/api-contract/sales-trainer.md:939:| `audio_score_prompt.learner_rubric` | `{}` | learner brief API、提交快照、结果页 | admin 评分方案管理 | 必须为对象；缺失使用 `{}` 并由通过线兜底 |
+docs/api-contract/sales-trainer.md:940:| `newcomer_path.path_key` | `newcomer_training_path_v1` | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 必填；兼容读取 `new_seller_modules_v1`；缺失返回 `[NEWCOMER_PATH_CONFIG_MISSING]` |
+docs/api-contract/sales-trainer.md:943:| `newcomer_path.modules[].display_name` | 默认模块矩阵名称 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 1-120 字符；缺失使用默认值并标记 `fallback_applied=true` |
+docs/api-contract/sales-trainer.md:945:| `newcomer_path.modules[].target_unit_id(s)` | 无 | learner 模块入口、完成状态聚合 | admin 新人训练路径配置 | 必须指向已发布训练单元；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]` |
+docs/api-contract/sales-trainer.md:946:| `newcomer_path.modules[].learning_content_id` | 无 | 商务技巧文章入口 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |
+docs/api-contract/sales-trainer.md:947:| `newcomer_path.modules[].exam_paper_id` | 无 | 商务技巧考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
+docs/api-contract/sales-trainer.md:948:| `newcomer_path.modules[].duration_options` | `10/20/30` 分钟可由 seed 初始化 | 电梯演讲模块入口 | admin 新人训练路径配置 | 每项必须有正数时长和已发布音频单元；非法返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |

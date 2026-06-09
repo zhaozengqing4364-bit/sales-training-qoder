@@ -1,0 +1,47 @@
+paper_id=cb30473c-feb4-44fc-b7db-3c65a18981dc
+--- users/me ---
+HTTP/1.1 401 Unauthorized
+date: Tue, 02 Jun 2026 10:17:33 GMT
+server: uvicorn
+content-length: 358
+content-type: application/json
+x-trace-id: 3fc671b7dbddcfaee985d3721d69828f
+traceparent: 00-3fc671b7dbddcfaee985d3721d69828f-78c6edc5a2ae8a48-01
+
+{"success":false,"error":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","message":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","detail":{"error":"[AUTH_USER_NOT_FOUND]","message":"登录用户不存在或已被删除。"},"trace_id":"3fc671b7dbddcfaee985d3721d69828f"}--- article ---
+HTTP/1.1 401 Unauthorized
+date: Tue, 02 Jun 2026 10:17:33 GMT
+server: uvicorn
+content-length: 358
+content-type: application/json
+x-trace-id: 3c9a1b1782dc92beacd5412f4883ad18
+traceparent: 00-3c9a1b1782dc92beacd5412f4883ad18-e87053fbd1a8a9e1-01
+
+{"success":false,"error":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","message":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","detail":{"error":"[AUTH_USER_NOT_FOUND]","message":"登录用户不存在或已被删除。"},"trace_id":"3c9a1b1782dc92beacd5412f4883ad18"}--- newcomer paper ---
+HTTP/1.1 401 Unauthorized
+date: Tue, 02 Jun 2026 10:17:33 GMT
+server: uvicorn
+content-length: 358
+content-type: application/json
+x-trace-id: 6dd6f2ae2557cb927b7dcd396c09ee34
+traceparent: 00-6dd6f2ae2557cb927b7dcd396c09ee34-6825871373f506a2-01
+
+{"success":false,"error":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","message":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","detail":{"error":"[AUTH_USER_NOT_FOUND]","message":"登录用户不存在或已被删除。"},"trace_id":"6dd6f2ae2557cb927b7dcd396c09ee34"}--- compatibility sales-trainer paper ---
+HTTP/1.1 401 Unauthorized
+date: Tue, 02 Jun 2026 10:17:33 GMT
+server: uvicorn
+content-length: 358
+content-type: application/json
+x-trace-id: 3b0dcd89feba8efac406ebe43d977f5b
+traceparent: 00-3b0dcd89feba8efac406ebe43d977f5b-49c27328506447ed-01
+
+{"success":false,"error":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","message":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","detail":{"error":"[AUTH_USER_NOT_FOUND]","message":"登录用户不存在或已被删除。"},"trace_id":"3b0dcd89feba8efac406ebe43d977f5b"}--- practice history compatibility ---
+HTTP/1.1 401 Unauthorized
+date: Tue, 02 Jun 2026 10:17:33 GMT
+server: uvicorn
+content-length: 358
+content-type: application/json
+x-trace-id: 817e061ce793208c9228235e40d26f94
+traceparent: 00-817e061ce793208c9228235e40d26f94-d8e73a29e86b313d-01
+
+{"success":false,"error":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","message":"{'error': '[AUTH_USER_NOT_FOUND]', 'message': '登录用户不存在或已被删除。'}","detail":{"error":"[AUTH_USER_NOT_FOUND]","message":"登录用户不存在或已被删除。"},"trace_id":"817e061ce793208c9228235e40d26f94"}

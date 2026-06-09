@@ -1,0 +1,39 @@
+web/src/components/admin/sales-trainer/module-nav.test.tsx:15:        expect(screen.getByRole("link", { name: "新人训练路径" }).getAttribute("href")).toBe(
+web/src/components/admin/sales-trainer/module-nav.tsx:8:    { href: "/admin/sales-trainer", label: "新人训练路径" },
+web/src/components/layout/admin-sidebar.tsx:115:        label: "新人训练路径",
+web/src/components/layout/admin-sidebar.tsx:210:        label: "新人训练路径",
+web/src/app/admin/sales-trainer/questions/categories/page.tsx:62:            title="销售题库分类"
+web/src/app/admin/sales-trainer/questions/page.tsx:101:                    description="新人训练路径专用题库，底层复用通用题库数据，但只读写 sales_trainer 范围。"
+web/src/components/admin/sales-trainer/unit-form.tsx:690:                    加入新人训练路径
+web/src/components/admin/sales-trainer/unit-form.tsx:700:                            <Input id="sales-trainer-path-title" value={pathTitle} onChange={(event) => setPathTitle(event.target.value)} disabled={isSubmitting || !canEdit} placeholder="例如 新人训练路径" />
+web/src/components/layout/sidebar.tsx:57:    { label: "新人训练路径", icon: Sparkles, href: "/sales-trainer" },
+web/src/components/layout/admin-sidebar.test.tsx:62:        expect(await screen.findByRole("button", { name: "新人训练路径" })).not.toBeNull();
+web/src/components/layout/admin-sidebar.test.tsx:81:        expect(await screen.findByRole("button", { name: "新人训练路径" })).not.toBeNull();
+web/src/components/admin/sales-trainer/unit-form.test.tsx:270:        fireEvent.click(screen.getByLabelText("加入新人训练路径"));
+web/src/components/admin/sales-trainer/unit-form.test.tsx:275:            target: { value: "新人训练路径" },
+web/src/components/admin/sales-trainer/unit-form.test.tsx:303:                        path_title: "新人训练路径",
+web/src/components/admin/sales-trainer/unit-form.test.tsx:366:        fireEvent.click(screen.getByLabelText("加入新人训练路径"));
+web/src/app/admin/sales-trainer/materials/page.tsx:177:                    title="新人训练路径材料库"
+web/src/app/admin/sales-trainer/materials/page.tsx:178:                    description="单独管理新人训练路径 PPT、逐字稿和附件版本；训练任务只绑定这里的已发布材料。"
+web/src/app/admin/sales-trainer/score-standards/page.tsx:61:                    title="新人训练路径录音评分标准"
+web/src/app/admin/sales-trainer/audio-submissions/page.tsx:48:                    title="新人训练路径录音记录"
+web/src/app/admin/sales-trainer/articles/page.tsx:52:                    description="文章正文和章节在 LearningContent 后台维护，这里只配置新人训练路径模块绑定。"
+web/src/app/admin/sales-trainer/paths/page.test.tsx:47:                            path_title: "新人训练路径",
+web/src/app/admin/sales-trainer/paths/page.test.tsx:71:                            path_title: "新人训练路径",
+web/src/app/admin/sales-trainer/paths/page.test.tsx:101:        expect(screen.getAllByText("新人训练路径").length).toBeGreaterThan(0);
+web/src/app/admin/sales-trainer/units/new/page.tsx:64:            title="新建新人训练路径模块单元"
+web/src/app/admin/sales-trainer/operation-logs/page.tsx:39:                    title="新人训练路径操作日志"
+web/src/components/layout/sidebar.test.tsx:100:        const salesTrainerLink = screen.getByRole("menuitem", { name: "新人训练路径" }) as HTMLAnchorElement;
+web/src/app/admin/sales-trainer/score-results/page.tsx:159:                    title="新人训练路径学员结果"
+web/src/app/admin/sales-trainer/page.tsx:13:    { href: "/admin/sales-trainer/paths", label: "训练路径", icon: Milestone },
+web/src/app/admin/sales-trainer/page.tsx:29:                    title="新人训练路径工作台"
+web/src/app/admin/sales-trainer/page.tsx:30:                    description="新人训练路径的模块、文章、考卷、录音评分、配置健康和操作记录集中在这里管理。"
+web/src/app/admin/sales-trainer/units/page.tsx:81:                    title="新人训练路径模块单元"
+web/src/app/admin/sales-trainer/paths/page.tsx:38:        pathTitle: path.path_title || "新人训练路径",
+web/src/app/admin/sales-trainer/paths/page.tsx:95:                    title="新人训练路径配置"
+web/src/app/admin/sales-trainer/paths/page.tsx:96:                    description="训练路径由训练单元的路径配置聚合而来；调整关卡顺序、解锁条件和反馈文案请进入对应训练单元编辑。"
+web/src/app/admin/sales-trainer/paths/page.tsx:109:                    <p className="text-sm font-medium text-red-700">训练路径加载失败：{error}</p>
+web/src/app/admin/sales-trainer/paths/page.tsx:124:                <GlassCard className="p-8 text-center text-sm text-slate-500">正在加载训练路径...</GlassCard>
+web/src/app/admin/sales-trainer/paths/page.tsx:127:                    <p className="text-lg font-bold text-slate-900">暂无训练路径</p>
+web/src/app/admin/sales-trainer/paths/page.tsx:128:                    <p className="text-sm text-slate-500">在训练单元中开启“加入新人训练路径”后，这里会自动聚合展示。</p>
+web/src/app/admin/sales-trainer/settings/page.tsx:43:                    title="新人训练路径配置"

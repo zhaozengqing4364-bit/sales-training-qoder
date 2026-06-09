@@ -1,0 +1,4 @@
+web/src/lib/sales-trainer/coo-learn-navigation.ts:5:export const SALES_TRAINER_LEARN_RETURN_KEY = "sales_trainer_learn_return";
+web/src/app/admin/sales-trainer/questions/categories/page.tsx:95:                                    {category.usage_scope === "sales_trainer" ? "新人训练路径" : category.usage_scope}
+web/src/app/(dashboard)/sales-trainer/audio/[unitId]/page.tsx:144:                source_page: "sales_trainer_audio_upload",
+web/src/app/admin/sales-trainer/articles/page.tsx:18:const BUSINESS_SKILLS_CONTENT_SOURCE = "sales_trainer_business_skills";

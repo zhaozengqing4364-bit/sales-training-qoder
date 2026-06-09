@@ -1,0 +1,27 @@
+/**
+ * @layer tokens.typography
+ */
+:root {
+  --st-font-sans: "Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei",
+    "Heiti SC", system-ui, sans-serif;
+  --st-font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", monospace;
+
+  --st-text-xs: 0.75rem;
+  --st-text-sm: 0.875rem;
+  --st-text-base: 1rem;
+  --st-text-lg: 1.125rem;
+  --st-text-xl: 1.25rem;
+  --st-text-2xl: 1.5rem;
+  --st-text-3xl: 2rem;
+
+  --st-leading-tight: 1.25;
+  --st-leading-normal: 1.5;
+  --st-leading-relaxed: 1.625;
+  --st-leading-loose: 1.75;
+
+  --st-font-normal: 400;
+  --st-font-medium: 500;
+  --st-font-semibold: 600;
+  --st-font-bold: 700;
+  --st-font-black: 800;
+}

@@ -93,7 +93,7 @@ export function validateCooChapterAccess(params: {
     softHubNavigation?: boolean;
 }): string | null {
     if (!params.pathContext && !params.softHubNavigation) {
-        return "请从销售训练路径进入本章阅读。";
+        return "请从新人训练路径进入本章阅读。";
     }
     if (params.softHubNavigation) {
         if (!params.chapter) {
@@ -105,7 +105,7 @@ export function validateCooChapterAccess(params: {
         return "未找到对应章节内容，请联系管理员检查配置。";
     }
     if (params.chapter.order_index !== params.expectedChapterOrderIndex) {
-        return "章节与训练关卡不匹配，请从销售训练路径重新进入。";
+        return "章节与训练关卡不匹配，请从新人训练路径重新进入。";
     }
     return null;
 }

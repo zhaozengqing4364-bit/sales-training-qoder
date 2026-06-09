@@ -45,6 +45,8 @@ export function ExtraUnitsSection({ units }: ExtraUnitsSectionProps) {
                 <div className="grid gap-4 md:grid-cols-2">
                     {sortedUnits.map((unit) => {
                         const isInternal = isLikelyInternalUnit(unit);
+                        const isDisabledByPathConfig = unit.config.path?.enabled === false;
+                        const disabledReason = unit.config.path?.disabled_reason ?? "暂不开放";
                         const href = unit.unit_type === "quiz"
                             ? `/sales-trainer/quiz/${unit.unit_id}`
                             : `/sales-trainer/audio/${unit.unit_id}`;
@@ -66,14 +68,20 @@ export function ExtraUnitsSection({ units }: ExtraUnitsSectionProps) {
                                         ) : null}
                                     </div>
                                 </div>
-                                {unit.unit_type === "quiz" ? (
+                                {isDisabledByPathConfig ? (
+                                    <p className="text-sm text-slate-500">{disabledReason}</p>
+                                ) : unit.unit_type === "quiz" ? (
                                     <p className="text-sm text-slate-500">共 {unit.questions.length} 道题</p>
                                 ) : (
                                     <p className="text-sm text-slate-500">上传语音后由系统转写并评分。</p>
                                 )}
-                                <Link href={href}>
-                                    <Button variant="outline" className="rounded-full">{actionLabel}</Button>
-                                </Link>
+                                {isDisabledByPathConfig ? (
+                                    <Button variant="outline" className="rounded-full" disabled>{disabledReason}</Button>
+                                ) : (
+                                    <Button asChild variant="outline" className="rounded-full">
+                                        <Link href={href}>{actionLabel}</Link>
+                                    </Button>
+                                )}
                             </GlassCard>
                         );
                     })}

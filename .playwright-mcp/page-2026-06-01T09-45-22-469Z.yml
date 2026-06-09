@@ -1,0 +1,59 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e10]:
+            - generic [ref=e11]: AI 销售教练
+            - generic [ref=e12]: 平台
+        - navigation "主导航" [ref=e13]:
+          - generic [ref=e14]: 菜单
+          - menubar [ref=e15]:
+            - menuitem "首页" [ref=e16] [cursor=pointer]:
+              - img [ref=e17]
+              - generic [ref=e20]: 首页
+            - menuitem "训练模式" [ref=e21] [cursor=pointer]:
+              - img [ref=e23]
+              - generic [ref=e28]: 训练模式
+            - menuitem "销售训练" [ref=e29] [cursor=pointer]:
+              - img [ref=e30]
+              - generic [ref=e33]: 销售训练
+            - menuitem "排行榜" [ref=e34] [cursor=pointer]:
+              - img [ref=e35]
+              - generic [ref=e36]: 排行榜
+            - menuitem "历史记录" [ref=e37] [cursor=pointer]:
+              - img [ref=e38]
+              - generic [ref=e42]: 历史记录
+          - generic [ref=e45]: 系统
+          - menubar [ref=e46]:
+            - menuitem "运行状态" [ref=e47] [cursor=pointer]:
+              - img [ref=e48]
+              - generic [ref=e50]: 运行状态
+            - menuitem "管理后台" [ref=e51] [cursor=pointer]:
+              - img [ref=e52]
+              - generic [ref=e55]: 管理后台
+        - generic [ref=e56]:
+          - button "帮助与反馈" [ref=e58]:
+            - img [ref=e59]
+            - generic [ref=e61]: 帮助与反馈
+          - generic [ref=e62] [cursor=pointer]:
+            - img [ref=e64]
+            - generic [ref=e67]:
+              - generic [ref=e68]: Developer
+              - generic [ref=e69]: Development
+            - img [ref=e71]
+          - button "折叠侧边栏" [ref=e74]:
+            - img [ref=e75]
+            - generic [ref=e78]: 折叠侧边栏
+    - main [ref=e79]:
+      - generic [ref=e82]:
+        - button "返回训练大厅" [ref=e83]:
+          - img [ref=e84]
+          - text: 返回训练大厅
+        - generic [ref=e87]:
+          - heading "演讲与表达训练" [level=1] [ref=e88]
+          - paragraph [ref=e89]: 选择一个演讲场景开始演练。
+  - button "Open Next.js Dev Tools" [ref=e100] [cursor=pointer]:
+    - img [ref=e101]
+  - alert [ref=e104]

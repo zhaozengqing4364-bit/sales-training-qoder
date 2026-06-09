@@ -95,9 +95,9 @@ export default function SalesTrainerQuizResultPage() {
         return (
             <GlassCard className="space-y-4 p-6">
                 <p className="text-sm text-red-700">{error || "做题结果不存在。"}</p>
-                <Link href="/sales-trainer">
-                    <Button className="rounded-full">返回销售训练</Button>
-                </Link>
+                <Button asChild className="rounded-full">
+                    <Link href="/sales-trainer">返回新人训练路径</Link>
+                </Button>
             </GlassCard>
         );
     }
@@ -112,7 +112,7 @@ export default function SalesTrainerQuizResultPage() {
                     className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
                 >
                     <ArrowLeft className="h-4 w-4" />
-                    返回销售训练
+                    返回新人训练路径
                 </Link>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>

@@ -1,0 +1,21 @@
+CONTEXT.md:14:| `sales` | 销售对练场景，走 `sales_bot/` 运行时 |
+CONTEXT.md:33:## 新人训练路径 (Newcomer Training Path)
+CONTEXT.md:37:**技术命名**：第一版继续复用 `sales_trainer` 后端模块、`/sales-trainer` 前端路由、learner `/api/v1/sales-trainer` 和 admin `/api/v1/admin/sales-trainer` 作为兼容技术命名。用户可见产品名必须使用“新人训练路径”。
+CONTEXT.md:40:- PPT 讲解录音：学习最新新人训练路径 PPT 内容和讲解要点，上传录音后走 ASR 和 AI 评分。
+CONTEXT.md:45:**与 AI 实时对练的边界**：AI 实时对练由 `sales_bot`、`practice_sessions`、`training_runtime` 和 `/practice/[sessionId]` 负责，是语音实时对话运行时。新人训练路径不得绕过该边界直接创建、复用或变更实时对练会话；未来集成必须通过独立契约和启用开关进入。
+CONTEXT.md:48:- 不得把新人训练路径命名为“销售队列”或“销售训练队列”。
+CONTEXT.md:49:- 不得把 `sales_bot` 的实时对话运行时逻辑搬进 `sales_trainer`。
+CONTEXT.md:226:- 平台直练：`common/services/practice_session_service.py`、`sales_bot/services/voice_runtime_policy.py`
+docs/api-contract/sales-trainer.md:5:> 后端模块: `backend/src/sales_trainer/`
+docs/api-contract/sales-trainer.md:11:本契约的用户可见产品名为“新人训练路径”。`sales_trainer`、`/sales-trainer`、`/api/v1/sales-trainer` 和 `/api/v1/admin/sales-trainer` 在第一版只作为兼容技术命名保留，不代表产品应继续对学员或管理员展示为“销售队列”或“销售训练队列”。
+docs/api-contract/sales-trainer.md:13:新人训练路径负责异步学习闭环：PPT/材料学习、录音上传、AI 转写、AI 评分、Markdown 文章学习、试卷考试、后台配置和审计。AI 实时对练由 `sales_bot`、`practice_sessions`、`training_runtime`、`/practice/[sessionId]` 和 `/api/v1/practice/sessions` 负责，两者在运行时、权限、失败语义和配置来源上保持独立。
+docs/api-contract/sales-trainer.md:15:模块 4“实时对练”在本版本只允许作为 disabled/coming-soon 占位配置出现，不开发实时对练功能，不创建 `PracticeSession`，不调用 `sales_bot` WebSocket 运行时。未来若接入实时对练，必须另行补充契约、启用开关、权限边界和回退策略。
+docs/api-contract/sales-trainer.md:26:- 销售训练材料单独管理: 销售训练 PPT、逐字稿、示例录音和附件属于 `sales_trainer` 域，不复用 `/admin/presentations` 的业务语义。
+docs/api-contract/sales-trainer.md:28:- 兼容命名: API 路径和模块目录暂不改名；新增 DTO、后台导航和学员页面文案必须以“新人训练路径”为展示名。
+docs/api-contract/sales-trainer.md:207:`source_page` 用于记录上传来源页面，例如 `sales_trainer_audio_upload`。缺失时允许为 `null`，不得影响上传、转写或评分。
+docs/api-contract/sales-trainer.md:820:| `SALES_TRAINER_AUDIO_STORAGE_PATH` | `./data/sales_trainer_audio` | 本地 multipart 上传和文件读取 | 环境配置/系统配置 | 缺失使用默认值；文件不存在返回 `[AUDIO_FILE_NOT_FOUND]` |
+docs/api-contract/sales-trainer.md:823:| `SALES_TRAINER_MATERIAL_STORAGE_PATH` | `./data/sales_trainer_materials` | 本地材料文件读取服务 | 环境配置/系统配置 | 缺失使用默认值；文件不存在返回 `[MATERIAL_FILE_NOT_FOUND]` |
+docs/api-contract/analytics.md:20:- `sales_bot` → `sales`
+docs/api-contract/analytics.md:43:- `scenario_type` (可选): `sales` / `sales_bot` / `presentation`
+docs/api-contract/analytics.md:141:- 以上四项为 80/20 主看板核心指标（基于 `practice_sessions.effectiveness_snapshot` 真实计算）。
+docs/api-contract/replay.md:5:> 目标: 回放/高光/消息读取统一引用 `practice_sessions.voice_policy_snapshot`，不在读取链路重算策略

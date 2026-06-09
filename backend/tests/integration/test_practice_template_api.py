@@ -6,10 +6,16 @@ import uuid
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from admin.config_bundles.lifecycle import ConfigBundleLifecycleService
 from agent.models import Agent, Persona, VoiceRuntimeProfile
 from common.auth.service import create_access_token
+from common.business_rules.defaults import (
+    DEFAULT_ROLEPLAY_SITUATION_PACKS,
+    ROLEPLAY_SITUATION_PACKS_KEY,
+)
 from common.db.models import Base, ScoringRuleset, User
 from common.db.session import get_db
 from common.knowledge.models import KnowledgeBase
@@ -19,6 +25,7 @@ from curriculum_practice.services.content_assets import (
     role_profile_content_hash,
 )
 from main import app
+from sales_trainer.models import SalesTrainerAssetRevision
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -77,6 +84,20 @@ async def admin_headers(admin_user: User) -> dict[str, str]:
 
 
 async def _seed_publishable_references(db: AsyncSession) -> None:
+    config_service = ConfigBundleLifecycleService(db)
+    pack_draft = await config_service.create_draft(
+        bundle_key=ROLEPLAY_SITUATION_PACKS_KEY,
+        value=DEFAULT_ROLEPLAY_SITUATION_PACKS,
+        actor_id="fixture-admin",
+        reason="practice template publish fixture",
+    )
+    assert pack_draft.version is not None
+    await config_service.publish(
+        bundle_key=ROLEPLAY_SITUATION_PACKS_KEY,
+        actor_id="fixture-admin",
+        config_id=str(pack_draft.version.source_config_id),
+        reason="practice template publish fixture",
+    )
     db.add_all(
         [
             Agent(
@@ -176,6 +197,43 @@ def _template_payload() -> dict[str, object]:
         "case_item_id": "case-1",
         "role_profile_id": "role-1",
     }
+
+
+def _revisioned_case_payload() -> dict[str, object]:
+    payload: dict[str, object] = {
+        "industry": "企业服务",
+        "company_profile": "区域型 CRM 服务商，正在搭建新人客户访谈训练体系。",
+        "customer_role": "销售 VP",
+        "pain_points": ["新人访谈问题浅"],
+        "objections": ["担心训练脚本太死板"],
+        "hidden_information": "真实诉求是减少主管逐个陪访的时间。",
+        "success_criteria": ["问出主管陪访成本"],
+        "allowed_disclosure_policy": {
+            "phases": [
+                {
+                    "trigger": "询问培训成本",
+                    "keywords": ["主管", "陪访", "成本"],
+                    "disclose": "主管每周需要花 6 小时陪新人复盘。",
+                }
+            ],
+            "roleplay": {"situation_code": "first_visit"},
+        },
+    }
+    return payload | {"content_hash": case_item_content_hash(payload)}
+
+
+def _revisioned_role_payload() -> dict[str, object]:
+    payload: dict[str, object] = {
+        "role_type": "customer",
+        "role_name": "谨慎型销售 VP",
+        "persona_ref": None,
+        "communication_style": "直接、关注业务结果。",
+        "pressure_level": "medium",
+        "knowledge_boundary": ["知道主管陪访成本"],
+        "behavior_rules": ["只在被问到时透露真实诉求"],
+        "voice_style_hint": "语速中等，语气克制。",
+    }
+    return payload | {"content_hash": role_profile_content_hash(payload)}
 
 
 def _curriculum_plan_payload(child_template: dict[str, object]) -> dict[str, object]:
@@ -833,6 +891,66 @@ async def test_should_publish_practice_template_when_gate_passes(
 
 
 @pytest.mark.asyncio
+async def test_should_freeze_revision_lineage_in_published_asset_refs(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    admin_headers: dict[str, str],
+) -> None:
+    await _seed_publishable_references(db_session)
+    case_create = await async_client.post(
+        "/api/v1/admin/curriculum-practice/case-items",
+        headers=admin_headers,
+        json=_revisioned_case_payload(),
+    )
+    assert case_create.status_code == 200
+    case_item_id = case_create.json()["data"]["case_item_id"]
+    case_publish = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/case-items/{case_item_id}/publish",
+        headers=admin_headers,
+    )
+    assert case_publish.status_code == 200
+
+    role_create = await async_client.post(
+        "/api/v1/admin/curriculum-practice/role-profiles",
+        headers=admin_headers,
+        json=_revisioned_role_payload(),
+    )
+    assert role_create.status_code == 200
+    role_profile_id = role_create.json()["data"]["role_profile_id"]
+    role_publish = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/role-profiles/{role_profile_id}/publish",
+        headers=admin_headers,
+    )
+    assert role_publish.status_code == 200
+
+    create_response = await async_client.post(
+        "/api/v1/admin/curriculum-practice/templates",
+        headers=admin_headers,
+        json=_template_payload()
+        | {
+            "case_item_id": case_item_id,
+            "role_profile_id": role_profile_id,
+        },
+    )
+    assert create_response.status_code == 200
+    template_id = create_response.json()["data"]["template_id"]
+
+    publish_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/templates/{template_id}/publish",
+        headers=admin_headers,
+    )
+
+    assert publish_response.status_code == 200
+    published_refs = publish_response.json()["data"]["published_asset_refs"]
+    assert published_refs["case_item_ref"]["logical_id"] == case_item_id
+    assert published_refs["case_item_ref"]["revision_id"]
+    assert published_refs["case_item_ref"]["revision_no"] == 1
+    assert published_refs["role_profile_ref"]["logical_id"] == role_profile_id
+    assert published_refs["role_profile_ref"]["revision_id"]
+    assert published_refs["role_profile_ref"]["revision_no"] == 1
+
+
+@pytest.mark.asyncio
 async def test_should_roundtrip_curriculum_plan_and_publish_parent_template(
     async_client: AsyncClient,
     db_session: AsyncSession,
@@ -903,7 +1021,7 @@ async def test_should_roundtrip_curriculum_plan_and_publish_parent_template(
 
 
 @pytest.mark.asyncio
-async def test_should_reject_update_when_practice_template_is_not_draft(
+async def test_should_stage_future_revision_when_published_practice_template_is_edited(
     async_client: AsyncClient,
     db_session: AsyncSession,
     admin_headers: dict[str, str],
@@ -924,11 +1042,17 @@ async def test_should_reject_update_when_practice_template_is_not_draft(
     update_response = await async_client.put(
         f"/api/v1/admin/curriculum-practice/templates/{template_id}",
         headers=admin_headers,
-        json={"description": "不应写入的修改"},
+        json={"description": "后续学员使用的新说明"},
     )
 
-    assert update_response.status_code == 409
-    assert update_response.json()["error"] == "[PRACTICE_TEMPLATE_NOT_EDITABLE]"
+    assert update_response.status_code == 200, update_response.json()
+    assert update_response.json()["data"]["description"] == "最小 PracticeTemplate 草稿"
+    working_revision = await _latest_practice_template_revision(
+        db_session,
+        logical_id=template_id,
+        status="working",
+    )
+    assert working_revision.payload_json["description"] == "后续学员使用的新说明"
 
     read_response = await async_client.get(
         f"/api/v1/admin/curriculum-practice/templates/{template_id}",
@@ -938,3 +1062,39 @@ async def test_should_reject_update_when_practice_template_is_not_draft(
     unchanged = read_response.json()["data"]
     assert unchanged["status"] == "published"
     assert unchanged["description"] == "最小 PracticeTemplate 草稿"
+
+    republish_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/templates/{template_id}/publish",
+        headers=admin_headers,
+    )
+    assert republish_response.status_code == 200, republish_response.json()
+    republished = republish_response.json()["data"]
+    assert republished["description"] == "后续学员使用的新说明"
+    assert republished["version"] == 2
+
+    published_revision = await _latest_practice_template_revision(
+        db_session,
+        logical_id=template_id,
+        status="published",
+    )
+    assert published_revision.revision_id == working_revision.revision_id
+
+
+async def _latest_practice_template_revision(
+    db: AsyncSession,
+    *,
+    logical_id: str,
+    status: str,
+) -> SalesTrainerAssetRevision:
+    result = await db.execute(
+        select(SalesTrainerAssetRevision)
+        .where(
+            SalesTrainerAssetRevision.resource_type == "curriculum_practice_template",
+            SalesTrainerAssetRevision.logical_id == logical_id,
+            SalesTrainerAssetRevision.status == status,
+        )
+        .order_by(SalesTrainerAssetRevision.revision_no.desc())
+    )
+    revision = result.scalars().first()
+    assert revision is not None
+    return revision

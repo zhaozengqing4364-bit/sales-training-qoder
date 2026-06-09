@@ -1,0 +1,13 @@
+{
+  "url": "http://127.0.0.1:3445/sales-trainer",
+  "hasTrainingPath": true,
+  "hasBusinessSkills": true,
+  "hasElevator": true,
+  "hasDisabledRealtimeCopy": true,
+  "hasForbiddenQueue": false,
+  "hasPracticeLink": false,
+  "hasRealtimeLink": false,
+  "relevantLines": [
+    "按模块完成 PPT 讲解录音、商务技巧学习与考试、电梯演讲录音；实时对练暂不开放。"
+  ]
+}

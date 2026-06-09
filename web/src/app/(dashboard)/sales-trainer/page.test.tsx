@@ -211,6 +211,7 @@ describe("SalesTrainerPage", () => {
         expect(screen.getByRole("link", { name: /开始做题/ }).getAttribute("href")).toBe("/sales-trainer/quiz/quiz-unit");
         expect(screen.getAllByRole("link", { name: /上传语音作业/ })[0].getAttribute("href")).toBe("/sales-trainer/audio/audio-unit");
         expect(screen.getByText("语音作业")).toBeTruthy();
+        expect(screen.getByRole("heading", { name: "新人训练路径" })).toBeTruthy();
     });
 
     it("shows path-first layout without score_basis and hides full catalog grids", async () => {
@@ -221,7 +222,8 @@ describe("SalesTrainerPage", () => {
 
         render(<SalesTrainerPage />);
 
-        expect(await screen.findByText("新人销售闯关")).toBeTruthy();
+        expect(await screen.findByText("新人训练路径")).toBeTruthy();
+        expect(screen.queryByText("新人销售闯关")).toBeNull();
         expect(screen.getByText("掌握首次客户沟通")).toBeTruthy();
         expect(screen.getByText("1/2")).toBeTruthy();
         expect(screen.getByText("当前要练")).toBeTruthy();
@@ -264,35 +266,35 @@ describe("SalesTrainerPage", () => {
                     ...basePath.levels[0],
                     unit_id: "ppt-unit",
                     order_index: 1,
-                    level_title: "第1关：PPT演练",
+                    level_title: "第1关：PPT讲解录音",
                     target_path: "/sales-trainer/audio/ppt-unit",
                 },
                 {
                     ...basePath.levels[0],
                     unit_id: "hub-unit",
                     order_index: 2,
-                    level_title: "第2关：拜访前商务",
-                    target_path: "/sales-trainer/learn/hub",
+                    level_title: "第2关：商务技巧",
+                    target_path: "/sales-trainer/business-skills",
                 },
                 {
                     ...basePath.levels[1],
                     unit_id: "audio-5",
                     order_index: 3,
-                    level_title: "金字塔演讲 · 5 分钟",
+                    level_title: "电梯演讲 · 5 分钟",
                     target_path: "/sales-trainer/audio/audio-5",
                 },
                 {
                     ...basePath.levels[1],
                     unit_id: "audio-10",
                     order_index: 4,
-                    level_title: "金字塔演讲 · 10 分钟",
+                    level_title: "电梯演讲 · 10 分钟",
                     target_path: "/sales-trainer/audio/audio-10",
                 },
                 {
                     ...basePath.levels[1],
                     unit_id: "audio-15",
                     order_index: 5,
-                    level_title: "金字塔演讲 · 15 分钟",
+                    level_title: "电梯演讲 · 15 分钟",
                     target_path: "/sales-trainer/audio/audio-15",
                 },
             ],
@@ -316,9 +318,14 @@ describe("SalesTrainerPage", () => {
         render(<SalesTrainerPage />);
 
         expect(await screen.findByText("选择下方模块开始训练")).toBeTruthy();
-        expect(screen.getByText("PPT演练")).toBeTruthy();
-        expect(screen.getByText("拜访前商务")).toBeTruthy();
-        expect(screen.getByText("金字塔演讲")).toBeTruthy();
+        expect(screen.queryByText(/按模块完成 PPT 讲解录音/)).toBeNull();
+        expect(screen.queryByText("三模块训练")).toBeNull();
+        expect(screen.getByText("PPT讲解录音")).toBeTruthy();
+        expect(screen.getByRole("heading", { name: "商务技巧" })).toBeTruthy();
+        expect(screen.getByText("电梯演讲")).toBeTruthy();
+        expect(screen.getByText("实时对练")).toBeTruthy();
+        expect(screen.getByRole("button", { name: /暂不开放/ }).hasAttribute("disabled")).toBe(true);
+        expect(screen.queryByRole("link", { name: /实时对练/ })).toBeNull();
         expect(screen.queryByText("当前要练")).toBeNull();
         expect(screen.queryByText("1/2")).toBeNull();
     });
@@ -338,5 +345,47 @@ describe("SalesTrainerPage", () => {
 
         expect(await screen.findByText("额外练习")).toBeTruthy();
         expect(screen.getByRole("link", { name: /开始做题/ }).getAttribute("href")).toBe("/sales-trainer/quiz/extra-unit");
+    });
+
+    it("keeps realtime placeholder disabled when it appears in extra units", async () => {
+        listPathsMock.mockResolvedValue({
+            items: [basePath],
+            total: 1,
+        });
+        listUnitsMock.mockResolvedValue({
+            items: [
+                ...baseUnits,
+                {
+                    unit_id: "realtime-placeholder",
+                    name: "实时对练占位",
+                    description: "当前版本仅展示占位，不允许启动实时对练。",
+                    unit_type: "quiz" as const,
+                    config: {
+                        path: {
+                            module_key: "realtime_placeholder",
+                            module_type: "realtime_placeholder",
+                            enabled: false,
+                            disabled_reason: "模块 4 仅为占位，不支持实时对练。",
+                        },
+                    },
+                    status: "published" as const,
+                    created_by: "admin-1",
+                    updated_by: "admin-1",
+                    created_at: "2026-05-28T00:00:00Z",
+                    updated_at: "2026-05-28T00:00:00Z",
+                    questions: [],
+                },
+            ],
+            total: baseUnits.length + 1,
+        });
+
+        render(<SalesTrainerPage />);
+
+        expect(await screen.findByText("更多练习（2）")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: /更多练习（2）/ }));
+
+        expect(await screen.findByText("实时对练占位")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "模块 4 仅为占位，不支持实时对练。" }).hasAttribute("disabled")).toBe(true);
+        expect(screen.getAllByRole("link", { name: /开始做题/ })).toHaveLength(1);
     });
 });

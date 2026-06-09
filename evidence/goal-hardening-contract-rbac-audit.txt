@@ -1,0 +1,11 @@
+24:- 内容管理员权限: `content_admin` / `newcomer_content_admin` 可管理训练单元、文章绑定、题库、考卷、材料和评分提示词；不能查看学员记录、配置健康、操作日志或重试任务。
+25:- 培训负责人权限: `support` / `training_lead` / `training_manager` 可查看本人 `department` 范围内的学员录音、评分结果、做题记录和训练记录；不能修改内容配置、查看系统日志或重试任务。无部门时使用空范围兜底，不放大全局权限。
+26:- 运维人员权限: `operations` / `ops` / `operator` / `sre` 可查看配置健康、操作日志、全局记录，并可重试转写/评分任务；不能管理文章、题库、考卷、材料等内容配置。
+739:| 内容配置、发布、归档 | `admin`、`super_admin`、`content_admin`、`newcomer_content_admin` | 全局内容资产 |
+740:| 学员录音、评分结果、做题记录、训练记录 | `admin`、`super_admin`、`support`、`training_lead`、`training_manager`、`operations`、`ops`、`operator`、`sre` | 超级管理员/运维全局；培训负责人按 `department` |
+741:| 转写/评分失败重试 | `admin`、`super_admin`、`operations`、`ops`、`operator`、`sre` | 全局 |
+742:| 配置健康、操作日志 | `admin`、`super_admin`、`operations`、`ops`、`operator`、`sre` | 全局 |
+819:- 权限复用新人训练路径内容管理能力：`admin`、`super_admin`、`content_admin`、`newcomer_content_admin`。
+1012:- 仅 `admin`、`super_admin`、`operations`、`ops`、`operator`、`sre` 可读取操作日志。
+1013:- 关键生命周期事件的 metadata 必须包含 `previous`、`next`、`changed_fields`；发布/归档事件还必须包含 `previous_status`、`next_status`。
+1115:| `SALES_TRAINER_MANAGER_ROLES` | `support,training_lead,training_manager` | 培训负责人记录查看能力兼容配置 | 环境配置/系统配置 | 逗号分隔角色列表；缺失使用默认培训负责人角色；只授予团队记录读取能力，不授予内容管理、日志、配置健康或任务重试能力 |

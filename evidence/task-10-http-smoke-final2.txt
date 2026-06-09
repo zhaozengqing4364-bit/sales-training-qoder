@@ -1,0 +1,47 @@
+paper_id=9a675d2f-d783-4952-bcf0-55cad9588fda
+--- users/me ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:20:27 GMT
+server: uvicorn
+content-length: 359
+content-type: application/json
+x-trace-id: efc49d54d08de1c0b426bcac3430e153
+traceparent: 00-efc49d54d08de1c0b426bcac3430e153-9450bb9a868db65e-01
+
+{"success":true,"data":{"id":"bfb1aca2-8f04-4ea6-9149-cc148f5cd9be","display_name":"新人训练路径演示学员","avatar_url":null,"role":"user","department":"新人训练路径","email":"newcomer.training.seed.learner@example.com","settings":{"notifications_enabled":true,"language":"zh-CN","theme":"light"}},"trace_id":"efc49d54d08de1c0b426bcac3430e153"}--- article ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:20:27 GMT
+server: uvicorn
+content-length: 663
+content-type: application/json
+x-trace-id: 5e7e13f146693860184b98c41c9a64eb
+traceparent: 00-5e7e13f146693860184b98c41c9a64eb-07164eea1a0ca25c-01
+
+{"success":true,"data":{"module_key":"business_skills","learning_content_id":"81d7d771-9596-447e-9873-4b70ce5551e9","title":"见客户前商务礼仪","summary":"阅读文章后完成商务技巧考卷。","owner":"新人训练路径","source":"seed_newcomer_training_path","chapters":[{"chapter_id":"ad3bb9d7-565d-4a7b-a3e7-551666f01324","title":"拜访前准备","content":"拜访客户前先确认背景、目标与礼仪要求。","order_index":1},{"chapter_id":"47652a5b-5671-4562-8aa0-9f2f2d26d7fb","title":"商务礼仪","content":"保持得体表达、明确边界、避免夸大承诺。","order_index":2}]},"trace_id":"5e7e13f146693860184b98c41c9a64eb"}--- newcomer paper ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:20:27 GMT
+server: uvicorn
+content-length: 1763
+content-type: application/json
+x-trace-id: e2a02ef64a0b33a0cffb5e1d28a2daa2
+traceparent: 00-e2a02ef64a0b33a0cffb5e1d28a2daa2-34054295c113813f-01
+
+{"success":true,"data":{"paper_id":"9a675d2f-d783-4952-bcf0-55cad9588fda","paper_key":"newcomer_business_skills_paper_v1","title":"商务技巧考卷","description":"绑定见客户前商务礼仪文章的考卷。","module_key":"business_skills","unit_id":"9d8b574f-81fa-42a6-9fd6-d4da5d1bf59b","pass_threshold":70.0,"status":"published","created_by":"e978ccdc-4b30-44d6-b260-06bed4d984c7","updated_by":"e978ccdc-4b30-44d6-b260-06bed4d984c7","created_at":"2026-06-02T10:19:53.886043","updated_at":"2026-06-02T10:19:53.886044","questions":[{"question_id":"347bf33d-3fba-4ace-a584-5f108e721c79","order_index":1,"points":25,"question_type":"single_choice","title":"见客户前第一步是什么？","stem":"见客户前最重要的准备动作是什么？","options":[{"value":"A","label":"直接谈价格"},{"value":"B","label":"确认客户背景与目标"},{"value":"C","label":"跳过准备快速见面"}]},{"question_id":"43e9510f-c020-4a4a-9cd3-0684ae7f6eed","order_index":2,"points":25,"question_type":"multiple_choice","title":"商务礼仪多选题","stem":"以下哪些做法符合商务礼仪？","options":[{"value":"A","label":"提前到场"},{"value":"B","label":"打断对方发言"},{"value":"C","label":"表达清晰"},{"value":"D","label":"尊重对方"}]},{"question_id":"a56ccd7d-2128-4a6c-8bdc-aeed5bed44b1","order_index":3,"points":25,"question_type":"true_false","title":"礼仪判断题","stem":"见客户时可以随意打断对方以抢占话语权。","options":[]},{"question_id":"ff8c0714-9d7d-4630-9995-9039fb7bb8c5","order_index":4,"points":25,"question_type":"short_answer","title":"商务技巧简答题","stem":"请简述商务拜访时需要注意的两个要点。","options":[]}]},"trace_id":"e2a02ef64a0b33a0cffb5e1d28a2daa2"}--- compatibility sales-trainer paper ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:20:27 GMT
+server: uvicorn
+content-length: 1763
+content-type: application/json
+x-trace-id: 626fca7982d0467aeac8b23d55f4d305
+traceparent: 00-626fca7982d0467aeac8b23d55f4d305-7b8356233f550ec4-01
+
+{"success":true,"data":{"paper_id":"9a675d2f-d783-4952-bcf0-55cad9588fda","paper_key":"newcomer_business_skills_paper_v1","title":"商务技巧考卷","description":"绑定见客户前商务礼仪文章的考卷。","module_key":"business_skills","unit_id":"9d8b574f-81fa-42a6-9fd6-d4da5d1bf59b","pass_threshold":70.0,"status":"published","created_by":"e978ccdc-4b30-44d6-b260-06bed4d984c7","updated_by":"e978ccdc-4b30-44d6-b260-06bed4d984c7","created_at":"2026-06-02T10:19:53.886043","updated_at":"2026-06-02T10:19:53.886044","questions":[{"question_id":"347bf33d-3fba-4ace-a584-5f108e721c79","order_index":1,"points":25,"question_type":"single_choice","title":"见客户前第一步是什么？","stem":"见客户前最重要的准备动作是什么？","options":[{"value":"A","label":"直接谈价格"},{"value":"B","label":"确认客户背景与目标"},{"value":"C","label":"跳过准备快速见面"}]},{"question_id":"43e9510f-c020-4a4a-9cd3-0684ae7f6eed","order_index":2,"points":25,"question_type":"multiple_choice","title":"商务礼仪多选题","stem":"以下哪些做法符合商务礼仪？","options":[{"value":"A","label":"提前到场"},{"value":"B","label":"打断对方发言"},{"value":"C","label":"表达清晰"},{"value":"D","label":"尊重对方"}]},{"question_id":"a56ccd7d-2128-4a6c-8bdc-aeed5bed44b1","order_index":3,"points":25,"question_type":"true_false","title":"礼仪判断题","stem":"见客户时可以随意打断对方以抢占话语权。","options":[]},{"question_id":"ff8c0714-9d7d-4630-9995-9039fb7bb8c5","order_index":4,"points":25,"question_type":"short_answer","title":"商务技巧简答题","stem":"请简述商务拜访时需要注意的两个要点。","options":[]}]},"trace_id":"626fca7982d0467aeac8b23d55f4d305"}--- practice history compatibility ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:20:27 GMT
+server: uvicorn
+content-length: 133
+content-type: application/json
+x-trace-id: 0eaf2f34f3727c972e01f2da77dcc0a0
+traceparent: 00-0eaf2f34f3727c972e01f2da77dcc0a0-f4e387e8edfb8c13-01
+
+{"success":true,"data":{"items":[],"total":0,"page":1,"page_size":20,"has_more":false},"trace_id":"0eaf2f34f3727c972e01f2da77dcc0a0"}

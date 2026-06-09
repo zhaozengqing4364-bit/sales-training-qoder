@@ -5,6 +5,7 @@ import uuid
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from common.auth.service import create_access_token
@@ -12,6 +13,7 @@ from common.db.models import Base, User
 from common.db.session import get_db
 from curriculum_practice.models import QuestionCategory, QuestionItem
 from main import app
+from sales_trainer.models import SalesTrainerAssetRevision
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -192,6 +194,7 @@ async def test_should_create_update_list_and_delete_category_tree_with_protectio
 async def test_should_create_edit_filter_publish_archive_question_and_keep_snapshot_immutable(
     async_client: AsyncClient,
     admin_headers: dict[str, str],
+    db_session: AsyncSession,
 ) -> None:
     category_id = await _create_category(async_client, admin_headers)
     other_category_id = await _create_category(async_client, admin_headers, "异议处理")
@@ -248,13 +251,40 @@ async def test_should_create_edit_filter_publish_archive_question_and_keep_snaps
     assert published["version"] == 1
     assert published["content_hash"].startswith("sha256:")
 
-    immutable_response = await async_client.put(
+    future_revision_response = await async_client.put(
         f"/api/v1/curriculum/test-bank/questions/{question['question_id']}",
         headers=admin_headers,
-        json={"title": "不应修改已发布题目"},
+        json={"title": "后续使用的新题目标题"},
     )
-    assert immutable_response.status_code == 409
-    assert immutable_response.json()["error"] == "[QUESTION_ITEM_NOT_EDITABLE]"
+    assert future_revision_response.status_code == 200, future_revision_response.json()
+    assert future_revision_response.json()["data"]["title"] == "识别客户预算"
+    working_revision = await _latest_question_revision(
+        db_session,
+        logical_id=question["question_id"],
+        status="working",
+    )
+    assert working_revision.payload_json["title"] == "后续使用的新题目标题"
+    read_before_publish = await async_client.get(
+        f"/api/v1/curriculum/test-bank/questions/{question['question_id']}",
+        headers=admin_headers,
+    )
+    assert read_before_publish.json()["data"]["title"] == "识别客户预算"
+
+    republish_response = await async_client.post(
+        f"/api/v1/curriculum/test-bank/questions/{question['question_id']}/publish",
+        headers=admin_headers,
+    )
+    assert republish_response.status_code == 200, republish_response.json()
+    republished = republish_response.json()["data"]
+    assert republished["title"] == "后续使用的新题目标题"
+    assert republished["version"] == 2
+
+    published_revision = await _latest_question_revision(
+        db_session,
+        logical_id=question["question_id"],
+        status="published",
+    )
+    assert published_revision.revision_id == working_revision.revision_id
 
     archive_response = await async_client.post(
         f"/api/v1/curriculum/test-bank/questions/{question['question_id']}/archive",
@@ -330,3 +360,23 @@ def _reason_codes(response) -> list[str]:
     return [
         item["reason_code"] for item in response.json()["details"]["gate_results"]
     ]
+
+
+async def _latest_question_revision(
+    db: AsyncSession,
+    *,
+    logical_id: str,
+    status: str,
+) -> SalesTrainerAssetRevision:
+    result = await db.execute(
+        select(SalesTrainerAssetRevision)
+        .where(
+            SalesTrainerAssetRevision.resource_type == "curriculum_question_item",
+            SalesTrainerAssetRevision.logical_id == logical_id,
+            SalesTrainerAssetRevision.status == status,
+        )
+        .order_by(SalesTrainerAssetRevision.revision_no.desc())
+    )
+    revision = result.scalars().first()
+    assert revision is not None
+    return revision

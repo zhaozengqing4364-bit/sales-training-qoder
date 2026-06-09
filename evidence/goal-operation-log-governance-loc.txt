@@ -1,0 +1,5 @@
+     250 web/src/lib/sales-trainer/operation-log-display.ts
+     104 web/src/lib/sales-trainer/operation-log-display.test.ts
+     118 web/src/app/admin/sales-trainer/operation-logs/page.tsx
+      94 web/src/app/admin/sales-trainer/operation-logs/page.test.tsx
+     566 total

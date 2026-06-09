@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { SalesTrainerPath, SalesTrainerUnit } from "@/lib/api/types";
+import type {
+    SalesTrainerLearnerRubric,
+    SalesTrainerPath,
+    SalesTrainerUnit,
+    SalesTrainerUnitBrief,
+} from "@/lib/api/types";
 import {
     findLevelForUnit,
     formatPassThresholdLine,
@@ -22,12 +27,34 @@ function getAudioPurpose(unit: SalesTrainerUnit): string {
         : "general_audio_scoring";
 }
 
+function getBriefText(brief: Record<string, unknown> | null | undefined, key: string): string {
+    const value = brief?.[key];
+    return typeof value === "string" ? value : "";
+}
+
+function getBriefList(brief: Record<string, unknown> | null | undefined, key: string): string[] {
+    const value = brief?.[key];
+    return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        : [];
+}
+
+function getRubric(brief: SalesTrainerUnitBrief | null): SalesTrainerLearnerRubric | null {
+    const rubric = brief?.score_scheme?.learner_rubric;
+    if (!rubric || typeof rubric !== "object" || Array.isArray(rubric)) {
+        return null;
+    }
+    return rubric as SalesTrainerLearnerRubric;
+}
+
 export default function SalesTrainerAudioUploadPage() {
     const params = useParams<{ unitId: string }>();
     const router = useRouter();
     const [unit, setUnit] = useState<SalesTrainerUnit | null>(null);
+    const [brief, setBrief] = useState<SalesTrainerUnitBrief | null>(null);
     const [paths, setPaths] = useState<SalesTrainerPath[]>([]);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [confirmedMaterialVersionId, setConfirmedMaterialVersionId] = useState<string | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
@@ -38,13 +65,15 @@ export default function SalesTrainerAudioUploadPage() {
             setIsLoading(true);
             setError(null);
             try {
-                const [unitResult, pathResult] = await Promise.all([
-                    api.salesTrainer.getUnit(params.unitId),
+                const [briefResult, pathResult] = await Promise.all([
+                    api.salesTrainer.getUnitBrief(params.unitId),
                     api.salesTrainer.listPaths(),
                 ]);
-                setUnit(unitResult);
+                setBrief(briefResult);
+                setUnit(briefResult.unit);
                 setPaths(pathResult.items);
             } catch (loadError) {
+                setBrief(null);
                 setUnit(null);
                 setPaths([]);
                 setError(getApiErrorMessage(loadError));
@@ -73,15 +102,36 @@ export default function SalesTrainerAudioUploadPage() {
         () => findLevelForUnit(paths, params.unitId),
         [paths, params.unitId],
     );
-    const pageTitle = levelContext?.level.level_title || unit?.name || "语音作业";
-    const pageDescription = levelContext?.level.level_description
+    const pageTitle = getBriefText(brief?.task_brief, "title")
+        || levelContext?.level.level_title
+        || unit?.name
+        || "语音作业";
+    const pageDescription = getBriefText(brief?.task_brief, "purpose")
+        || levelContext?.level.level_description
         || unit?.description
         || "上传本次语音作业，系统会完成转写和评分。";
-    const passThreshold = getAudioPassThreshold(unit);
+    const passThreshold = brief?.score_scheme?.pass_threshold ?? getAudioPassThreshold(unit);
+    const requiredMaterial = brief?.materials.find(
+        (material) => material.required && material.confirmation_required,
+    ) ?? null;
+    const rubric = getRubric(brief);
+    const commonMistakes = Array.from(
+        new Set([
+            ...(rubric?.common_mistakes ?? []),
+            ...getBriefList(brief?.task_brief, "common_mistakes"),
+        ]),
+    );
+    const canUpload = !isUploading
+        && Boolean(selectedFile)
+        && (!requiredMaterial || confirmedMaterialVersionId === requiredMaterial.current_version.version_id);
 
     async function handleUpload() {
         if (!selectedFile || !unit) {
             setError("请先选择一个音频文件。");
+            return;
+        }
+        if (requiredMaterial && confirmedMaterialVersionId !== requiredMaterial.current_version.version_id) {
+            setError("请先下载并确认当前最新版训练材料。");
             return;
         }
         setIsUploading(true);
@@ -92,6 +142,7 @@ export default function SalesTrainerAudioUploadPage() {
                 unit_id: unit.unit_id,
                 purpose: getAudioPurpose(unit),
                 source_page: "sales_trainer_audio_upload",
+                confirmed_material_version_id: confirmedMaterialVersionId,
             });
             router.push(`/sales-trainer/audio/result/${result.submission_id}`);
         } catch (uploadError) {
@@ -108,9 +159,9 @@ export default function SalesTrainerAudioUploadPage() {
         return (
             <GlassCard className="space-y-4 p-6">
                 <p className="text-sm text-red-700">{error || "该训练单元不存在，或不是语音作业单元。"}</p>
-                <Link href="/sales-trainer">
-                    <Button className="rounded-full">返回销售训练</Button>
-                </Link>
+                <Button asChild className="rounded-full">
+                    <Link href="/sales-trainer">返回新人训练路径</Link>
+                </Button>
             </GlassCard>
         );
     }
@@ -123,7 +174,7 @@ export default function SalesTrainerAudioUploadPage() {
                     className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
                 >
                     <ArrowLeft className="h-4 w-4" />
-                    返回销售训练
+                    返回新人训练路径
                 </Link>
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">{pageTitle}</h1>
@@ -132,16 +183,100 @@ export default function SalesTrainerAudioUploadPage() {
             </div>
 
             <GlassCard className="space-y-3 p-6">
-                <h2 className="text-lg font-bold text-slate-900">作业说明</h2>
-                <p className="text-sm leading-6 text-slate-600">
-                    建议先用手机录音 App 录好语音，再回到本页上传。常见音频格式如 MP3、M4A、WAV 等，具体能否上传以后端校验为准。
-                </p>
+                <h2 className="text-lg font-bold text-slate-900">任务简报</h2>
+                {getBriefText(brief?.task_brief, "scenario") ? (
+                    <p className="text-sm leading-6 text-slate-600">{getBriefText(brief?.task_brief, "scenario")}</p>
+                ) : null}
+                {getBriefList(brief?.task_brief, "instructions").length ? (
+                    <ul className="space-y-2 text-sm leading-6 text-slate-600">
+                        {getBriefList(brief?.task_brief, "instructions").map((item) => (
+                            <li key={item}>{item}</li>
+                        ))}
+                    </ul>
+                ) : null}
+                {getBriefText(brief?.task_brief, "upload_guidance") ? (
+                    <p className="text-sm leading-6 text-slate-600">{getBriefText(brief?.task_brief, "upload_guidance")}</p>
+                ) : null}
             </GlassCard>
 
             <GlassCard className="space-y-3 p-6">
-                <h2 className="text-lg font-bold text-slate-900">通过标准</h2>
+                <h2 className="text-lg font-bold text-slate-900">评分标准</h2>
                 <p className="text-sm leading-6 text-slate-600">{formatPassThresholdLine(passThreshold)}</p>
+                {rubric?.criteria?.length ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                        {rubric.criteria.map((item) => (
+                            <div key={item.key} className="rounded-2xl border border-slate-100 bg-white p-4">
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="font-semibold text-slate-900">{item.label}</p>
+                                    {item.weight != null ? (
+                                        <span className="text-xs text-slate-500">{item.weight}%</span>
+                                    ) : null}
+                                </div>
+                                {item.description ? (
+                                    <p className="mt-2 text-sm leading-6 text-slate-600">{item.description}</p>
+                                ) : null}
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+                {commonMistakes.length ? (
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+                        <p className="text-sm font-semibold text-amber-900">常见扣分点</p>
+                        <ul className="mt-2 space-y-1 text-sm text-amber-800">
+                            {commonMistakes.map((item) => (
+                                <li key={item}>{item}</li>
+                            ))}
+                        </ul>
+                    </div>
+                ) : null}
             </GlassCard>
+
+            {brief?.materials.length ? (
+                <GlassCard className="space-y-4 p-6">
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-900">训练材料</h2>
+                        <p className="mt-1 text-sm text-slate-500">请使用当前版本完成录音；提交时会冻结你确认的材料版本。</p>
+                    </div>
+                    <div className="space-y-3">
+                        {brief.materials.map((material) => {
+                            const version = material.current_version;
+                            const fileUrl = api.salesTrainer.getMaterialVersionFileUrl(version.version_id);
+                            return (
+                                <div key={`${material.material_id}-${version.version_id}`} className="rounded-2xl border border-slate-100 bg-white p-4">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                        <div>
+                                            <p className="font-semibold text-slate-900">{material.name}</p>
+                                            <p className="mt-1 text-sm text-slate-500">
+                                                {version.version_label} · {version.title}
+                                            </p>
+                                            {material.learner_note ? (
+                                                <p className="mt-2 text-sm text-slate-600">{material.learner_note}</p>
+                                            ) : null}
+                                        </div>
+                                        <a href={fileUrl} target="_blank" rel="noreferrer">
+                                            <Button variant="outline" className="rounded-full">
+                                                <Download className="mr-2 h-4 w-4" />
+                                                下载材料
+                                            </Button>
+                                        </a>
+                                    </div>
+                                    {material.confirmation_required ? (
+                                        <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={confirmedMaterialVersionId === version.version_id}
+                                                onChange={(event) => setConfirmedMaterialVersionId(event.target.checked ? version.version_id : null)}
+                                                disabled={isUploading}
+                                            />
+                                            <span>我已下载并确认使用 {version.version_label} 版本进行本次录音。</span>
+                                        </label>
+                                    ) : null}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </GlassCard>
+            ) : null}
 
             <GlassCard className="space-y-4 p-6">
                 <div className="space-y-2">
@@ -185,7 +320,7 @@ export default function SalesTrainerAudioUploadPage() {
                     <Button
                         className="rounded-full bg-slate-900 text-white"
                         onClick={() => void handleUpload()}
-                        disabled={isUploading}
+                        disabled={!canUpload}
                     >
                         <Upload className="mr-2 h-4 w-4" />
                         {isUploading ? "上传中..." : "上传并开始评分"}

@@ -1,0 +1,25 @@
+AGENTS.md
+backend/AGENTS.md
+backend/src/sales_trainer/api.py
+backend/src/sales_trainer/models.py
+backend/src/sales_trainer/schemas.py
+backend/src/sales_trainer/services/audio_submission_service.py
+backend/src/sales_trainer/services/prompt_service.py
+backend/src/sales_trainer/services/unit_service.py
+backend/tests/unit/test_sales_trainer_services.py
+web/src/app/(dashboard)/sales-trainer/audio/[unitId]/page.test.tsx
+web/src/app/(dashboard)/sales-trainer/audio/[unitId]/page.tsx
+web/src/app/(dashboard)/sales-trainer/audio/result/[submissionId]/page.tsx
+web/src/app/AGENTS.md
+web/src/app/admin/sales-trainer/audio-submissions/[submissionId]/page.tsx
+web/src/app/admin/sales-trainer/score-standards/page.tsx
+web/src/app/admin/sales-trainer/units/[unitId]/edit/page.tsx
+web/src/app/admin/sales-trainer/units/new/page.tsx
+web/src/components/admin/sales-trainer/module-nav.tsx
+web/src/components/admin/sales-trainer/score-prompt-form.tsx
+web/src/components/admin/sales-trainer/unit-form.test.tsx
+web/src/components/admin/sales-trainer/unit-form.tsx
+web/src/lib/api/client-domains.ts
+web/src/lib/api/types.ts
+
+--- non-doc dirty baseline noted ---

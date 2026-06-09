@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiRequestError, api } from "./client";
+import { ApiRequestError, api, resolveApiBaseUrl } from "./client";
 import { authHandler } from "@/lib/auth-handler";
 
 function mockFetchResponse(status: number, payload: unknown) {
@@ -236,6 +236,16 @@ describe("API client 401 handling", () => {
             name: "ApiRequestError",
             errorCode: "[NETWORK_ERROR]",
         });
+    });
+
+    it("aligns loopback API host with the current page host so dev-login cookies survive on 127.0.0.1", () => {
+        vi.stubGlobal("window", {
+            location: {
+                hostname: "127.0.0.1",
+            },
+        });
+
+        expect(resolveApiBaseUrl()).toBe("http://127.0.0.1:3444/api/v1");
     });
 
     it("does not retry cookie-backed login request against another loopback host", async () => {

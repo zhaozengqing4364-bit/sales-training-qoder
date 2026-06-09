@@ -1,0 +1,47 @@
+paper_id=cb30473c-feb4-44fc-b7db-3c65a18981dc
+--- users/me ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:17:57 GMT
+server: uvicorn
+content-length: 359
+content-type: application/json
+x-trace-id: 9b6b92d0bc6aa51eae8e7a3c112828b3
+traceparent: 00-9b6b92d0bc6aa51eae8e7a3c112828b3-8cfcc2f8ab472d98-01
+
+{"success":true,"data":{"id":"65d04d3b-0961-4aa3-ba03-64ee18741d1f","display_name":"新人训练路径演示学员","avatar_url":null,"role":"user","department":"新人训练路径","email":"newcomer.training.seed.learner@example.com","settings":{"notifications_enabled":true,"language":"zh-CN","theme":"light"}},"trace_id":"9b6b92d0bc6aa51eae8e7a3c112828b3"}--- article ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:17:57 GMT
+server: uvicorn
+content-length: 663
+content-type: application/json
+x-trace-id: dd6a9d6fc6cbcd24c8c3cb9ba2f6db99
+traceparent: 00-dd6a9d6fc6cbcd24c8c3cb9ba2f6db99-87c93de9d63265f5-01
+
+{"success":true,"data":{"module_key":"business_skills","learning_content_id":"d68e07e2-4cbf-48f7-982d-cdb5f9b8db1d","title":"见客户前商务礼仪","summary":"阅读文章后完成商务技巧考卷。","owner":"新人训练路径","source":"seed_newcomer_training_path","chapters":[{"chapter_id":"01154e3b-55c8-4fa9-bab6-131ff953d19a","title":"拜访前准备","content":"拜访客户前先确认背景、目标与礼仪要求。","order_index":1},{"chapter_id":"f604e90b-5b50-40f8-8363-77b43ee29678","title":"商务礼仪","content":"保持得体表达、明确边界、避免夸大承诺。","order_index":2}]},"trace_id":"dd6a9d6fc6cbcd24c8c3cb9ba2f6db99"}--- newcomer paper ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:17:57 GMT
+server: uvicorn
+content-length: 589
+content-type: application/json
+x-trace-id: 4d1cc47128bc9f620a7ec222bd4e56c5
+traceparent: 00-4d1cc47128bc9f620a7ec222bd4e56c5-80ee1a0c5267bf7e-01
+
+{"success":true,"data":{"paper_id":"cb30473c-feb4-44fc-b7db-3c65a18981dc","paper_key":"newcomer_business_skills_paper_v1","title":"商务技巧考卷","description":"绑定见客户前商务礼仪文章的考卷。","module_key":"business_skills","unit_id":"8addf713-1bfd-4d0a-87c1-8dcbdfcf16e6","pass_threshold":70.0,"status":"published","created_by":"58fa497f-0d07-4bff-8552-f5a4652b60b7","updated_by":"58fa497f-0d07-4bff-8552-f5a4652b60b7","created_at":"2026-06-02T10:16:27.623750","updated_at":"2026-06-02T10:16:27.623751","questions":[]},"trace_id":"4d1cc47128bc9f620a7ec222bd4e56c5"}--- compatibility sales-trainer paper ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:17:57 GMT
+server: uvicorn
+content-length: 589
+content-type: application/json
+x-trace-id: 2456c0115e8a4b247e9314665817e7d4
+traceparent: 00-2456c0115e8a4b247e9314665817e7d4-7517e986f8bb05f6-01
+
+{"success":true,"data":{"paper_id":"cb30473c-feb4-44fc-b7db-3c65a18981dc","paper_key":"newcomer_business_skills_paper_v1","title":"商务技巧考卷","description":"绑定见客户前商务礼仪文章的考卷。","module_key":"business_skills","unit_id":"8addf713-1bfd-4d0a-87c1-8dcbdfcf16e6","pass_threshold":70.0,"status":"published","created_by":"58fa497f-0d07-4bff-8552-f5a4652b60b7","updated_by":"58fa497f-0d07-4bff-8552-f5a4652b60b7","created_at":"2026-06-02T10:16:27.623750","updated_at":"2026-06-02T10:16:27.623751","questions":[]},"trace_id":"2456c0115e8a4b247e9314665817e7d4"}--- practice history compatibility ---
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 10:17:57 GMT
+server: uvicorn
+content-length: 133
+content-type: application/json
+x-trace-id: 60410bf27b432ec422ef60a285c3923a
+traceparent: 00-60410bf27b432ec422ef60a285c3923a-f7e41251599559fa-01
+
+{"success":true,"data":{"items":[],"total":0,"page":1,"page_size":20,"has_more":false},"trace_id":"60410bf27b432ec422ef60a285c3923a"}

@@ -1,0 +1,7 @@
+Task 7 cleanup receipt
+Ports after teardown:
+Remove temporary QA DB:
+temporary QA DB removed
+Screenshots retained:
+-rw-r--r--  1 zhaozengqing  staff  451083 Jun  2 17:53 evidence/task-7-learner-home-browser.png
+-rw-r--r--  1 zhaozengqing  staff  391247 Jun  2 17:53 evidence/task-7-learner-module2-browser.png

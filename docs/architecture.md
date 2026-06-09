@@ -117,7 +117,7 @@
 | 层 | 技术 | 版本 |
 |----|------|------|
 | 后端框架 | FastAPI | 0.115+ |
-| Python | 3.11+ | async/await |
+| Python | 3.11+ (主版本 3.11; .venv-test 验证环境为 3.14.3, 见 ADR 2026-04-27) | async/await |
 | ORM | SQLAlchemy 2.0+ | async |
 | 数据库 | PostgreSQL | via asyncpg |
 | 缓存 | Redis | |
@@ -192,6 +192,12 @@
 | `/api/v1/admin/users` | 用户管理 |
 | `/api/v1/admin/training-records` | 训练记录 |
 | `/api/v1/admin/curriculum-practice` | 课程考核管理 |
+| `/api/v1/admin/sales-trainer` | 新人训练路径管理 (admin) |
+| `/api/v1/sales-trainer` | 新人训练路径 (learner: 单元/文章/试卷/录音/评分) |
+| `/api/v1/admin/supervisor-training` | 主管复训/培训管理 |
+| `/api/v1/admin/learning-contents` | 学习内容管理 |
+| `/api/v1/admin/test-bank` | 题库管理 |
+| `/api/v1/admin/scoring-rulesets` | 评分规则集 |
 | `/api/v1/admin/learning-contents` | 学习内容管理 |
 | `/api/v1/admin/test-bank` | 题库管理 |
 | `/api/v1/admin/interventions` | 干预管理 |
@@ -896,25 +902,28 @@ TrainingTask 1──0..N PracticeSession 1──0..N ConversationMessage
 |------|------|---------|
 | `common/` | 共享平台层 | 三方库 |
 | `presentation_coach/` | PPT 演练 | `common/` |
-| `sales_bot/` | 销售对练 | `common/` |
+| `sales_bot/` | 销售对练 (realtime StepFun-Realtime only) | `common/` |
+| `sales_trainer/` | 新人训练路径 (异步学习/录音/考卷; **不**与 realtime 共享) | `common/` + `prompt_templates/` |
 | `evaluation/` | 评估引擎 | `common/` + `prompt_templates/` |
 | `agent/` | Agent 平台 | `common/` |
 | `admin/` | 管理后台 | `common/` |
 | `supervisor/` | 主管审核 | `common/` + `evaluation/` |
 | `prompt_templates/` | 提示词系统 | `common/ai/` |
-| `curriculum_practice/` | 课程考核 | `common/` + `evaluation/` |
+| `curriculum_practice/` | 课程考核 (含 Examiner WS) | `common/` + `evaluation/` |
 | `curriculum_analytics/` | 课程分析 | `common/` |
-| `training_runtime/` | 运行时主语 | `common/` |
-| `support/` | 运维支撑 | `common/` |
+| `training_runtime/` | 运行时主语 (descriptor + plugin dispatch) | `common/` |
+| `support/` | 运维支撑 (runtime_status) | `common/` |
 | `common/effectiveness/` | 评估框架核心 | `common/` |
 | `common/growth/` | 成长中心 | `common/` |
 | `common/knowledge_engine/` | 知识问答引擎 | `common/` |
 | `common/business_rules/` | 业务规则引擎 | `common/` |
 
 **禁止**：
-- `presentation_coach/` 和 `sales_bot/` 互不引用
+- `presentation_coach/` / `sales_bot/` / `sales_trainer/` / `curriculum_practice/` **互不引用**
+- `sales_trainer/` 不得 `import` 自 `sales_bot/` / `training_runtime/` 创建或变更 realtime 会话
 - 跨域访问其他模块的 DB 模型（只能通过 `common/db/models.py` 访问）
 - 场景特定字段泄露到共享实体
+- `presentation_coach/` / `sales_bot/` / `curriculum_practice/` 各自拥有独立 WebSocket 路由, 不得在 `router_registry.py` 中合并入口
 
 ---
 

@@ -1,0 +1,84 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e10]:
+            - generic [ref=e11]: AI 销售教练
+            - generic [ref=e12]: 平台
+        - navigation "主导航" [ref=e13]:
+          - generic [ref=e14]: 菜单
+          - menubar [ref=e15]:
+            - menuitem "首页" [ref=e16] [cursor=pointer]:
+              - img [ref=e17]
+              - generic [ref=e20]: 首页
+            - menuitem "训练模式" [ref=e21] [cursor=pointer]:
+              - img [ref=e22]
+              - generic [ref=e27]: 训练模式
+            - menuitem "销售训练" [ref=e28] [cursor=pointer]:
+              - img [ref=e29]
+              - generic [ref=e32]: 销售训练
+            - menuitem "排行榜" [ref=e33] [cursor=pointer]:
+              - img [ref=e34]
+              - generic [ref=e35]: 排行榜
+            - menuitem "历史记录" [ref=e36] [cursor=pointer]:
+              - img [ref=e38]
+              - generic [ref=e42]: 历史记录
+          - generic [ref=e45]: 系统
+          - menubar [ref=e46]:
+            - menuitem "运行状态" [ref=e47] [cursor=pointer]:
+              - img [ref=e48]
+              - generic [ref=e50]: 运行状态
+            - menuitem "管理后台" [ref=e51] [cursor=pointer]:
+              - img [ref=e52]
+              - generic [ref=e55]: 管理后台
+        - generic [ref=e56]:
+          - button "帮助与反馈" [ref=e58]:
+            - img [ref=e59]
+            - generic [ref=e61]: 帮助与反馈
+          - generic [ref=e62] [cursor=pointer]:
+            - img [ref=e64]
+            - generic [ref=e67]:
+              - generic [ref=e68]: Developer
+              - generic [ref=e69]: Development
+            - img [ref=e71]
+          - button "折叠侧边栏" [ref=e74]:
+            - img [ref=e75]
+            - generic [ref=e78]: 折叠侧边栏
+    - main [ref=e79]:
+      - generic [ref=e81]:
+        - link "返回训练大厅" [ref=e83] [cursor=pointer]:
+          - /url: /training
+          - button "返回训练大厅" [ref=e84]:
+            - img [ref=e85]
+            - text: 返回训练大厅
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - heading "训练历史记录" [level=1] [ref=e89]
+            - paragraph [ref=e90]: 回顾每一次练习，并跟踪你的进步趋势（分析样本 0）
+          - generic [ref=e91]:
+            - combobox [ref=e92]:
+              - option "全部场景" [selected]
+              - option "销售对练"
+              - option "PPT 演讲"
+            - button "重试" [disabled]
+        - generic [ref=e93]:
+          - generic [ref=e94]:
+            - generic [ref=e96]: 完成练习
+            - generic [ref=e97]: "--"
+          - generic [ref=e98]:
+            - generic [ref=e100]: 平均得分
+            - generic [ref=e101]: "--"
+          - generic [ref=e102]:
+            - generic [ref=e104]: 历史最好
+            - generic [ref=e105]: "--"
+          - generic [ref=e106]:
+            - generic [ref=e108]: 总时长（小时）
+            - generic [ref=e109]: "--"
+        - generic [ref=e110]:
+          - img [ref=e112]
+          - text: 正在加载训练历史...
+  - button "Open Next.js Dev Tools" [ref=e119] [cursor=pointer]:
+    - img [ref=e120]
+  - alert [ref=e123]

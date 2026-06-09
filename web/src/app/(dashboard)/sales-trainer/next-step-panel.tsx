@@ -79,15 +79,15 @@ export function SalesTrainerNextStepPanel({ unitId }: SalesTrainerNextStepPanelP
         return (
             <GlassCard className="p-5">
                 <p className="text-xs font-semibold text-slate-500">练完下一步</p>
-                <h2 className="mt-2 text-lg font-bold text-slate-900">回到销售训练首页</h2>
+                <h2 className="mt-2 text-lg font-bold text-slate-900">回到新人训练路径首页</h2>
                 <p className="mt-1 text-sm text-slate-500">
                     首页会根据当前训练路径继续展示可练关卡和复盘入口。
                 </p>
-                <Link className="mt-4 inline-flex" href="/sales-trainer">
-                    <Button className="rounded-full bg-slate-900 text-white">
+                <Button asChild className="mt-4 rounded-full bg-slate-900 text-white">
+                    <Link href="/sales-trainer">
                         查看训练路径
-                    </Button>
-                </Link>
+                    </Link>
+                </Button>
             </GlassCard>
         );
     }
@@ -99,12 +99,12 @@ export function SalesTrainerNextStepPanel({ unitId }: SalesTrainerNextStepPanelP
                 <h2 className="mt-2 text-lg font-bold text-slate-900">{recommendation.title}</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">{recommendation.reason}</p>
             </div>
-            <Link className="inline-flex" href={recommendation.target_path}>
-                <Button className="rounded-full bg-slate-900 text-white">
+            <Button asChild className="rounded-full bg-slate-900 text-white">
+                <Link href={recommendation.target_path}>
                     {recommendation.action_label}
                     <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-            </Link>
+                </Link>
+            </Button>
         </GlassCard>
     );
 }

@@ -1,0 +1,871 @@
+
+ RUN  v4.1.4 /Users/zhaozengqing/github/销售训练qoder/web
+
+ ❯ src/components/layout/admin-sidebar.test.tsx (2 tests | 2 failed) 2178ms
+     × exposes the newcomer training path admin entry in the shared sidebar 1141ms
+     × limits support users to the newcomer training path admin entry 1032ms
+ ❯ src/components/layout/sidebar.test.tsx (5 tests | 1 failed) 1106ms
+     × exposes the learner newcomer training path entry from the shared sidebar nav 563ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/layout/admin-sidebar.test.tsx > AdminSidebarContent > exposes the newcomer training path admin entry in the shared sidebar
+TestingLibraryElementError: Unable to find role="button" and name "新人训练路径"
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col h-full w-full overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"mb-10 flex items-center group cursor-default transition-all duration-300 shrink-0 gap-4 px-2"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-300 shrink-0"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-shield w-6 h-6 text-yellow-300"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col overflow-hidden transition-all duration-300 w-auto opacity-100"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap"[39m
+          [36m>[39m
+            [0m管理[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-xs uppercase tracking-[0.2em] text-slate-400 font-semibold mt-1.5 ml-0.5 whitespace-nowrap"[39m
+          [36m>[39m
+            [0m控制台[0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div>[39m
+        [36m<nav[39m
+          [33mclass[39m=[32m"flex-1 space-y-2 flex flex-col w-full overflow-y-auto min-h-0 pr-1"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 group relative px-4 w-full text-slate-500 hover:text-slate-900 hover:bg-white/40"[39m
+              [33mhref[39m=[32m"/admin"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-layout-dashboard transition-all duration-300 shrink-0 w-4 h-4 text-slate-400 group-hover:text-slate-600 group-hover:scale-105"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"9"[39m
+                  [33mrx[39m=[32m"1"[39m
+                  [33mwidth[39m=[32m"7"[39m
+                  [33mx[39m=[32m"3"[39m
+                  [33my[39m=[32m"3"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"5"[39m
+                  [33mrx[39m=[32m"1"[39m
+                  [33mwidth[39m=[32m"7"[39m
+                  [33mx[39m=[32m"14"[39m
+                  [33my[39m=[32m"3"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"9"[39m
+                  [33mrx[39m=[32m"1"[39m
+                  [33mwidth[39m=[32m"7"[39m
+                  [33mx[39m=[32m"14"[39m
+                  [33my[39m=[32m"12"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"5"[39m
+                  [33mrx[39m=[32m"1"[39m
+                  [33mwidth[39m=[32m"7"[39m
+                  [33mx[39m=[32m"3"[39m
+                  [33my[39m=[32m"16"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"text-base font-medium tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 w-auto opacity-100"[39m
+              [36m>[39m
+                [0m总览[0m
+              [36m</span>[39m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-1"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33maria-expanded[39m=[32m"true"[39m
+              [33maria-label[39m=[32m"销售训练"[39m
+              [33mclass[39m=[32m"flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 w-full group px-4 text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-mic transition-all duration-300 shrink-0 w-4 h-4 text-slate-900 scale-110"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2.5"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M12 19v3"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M19 10v2a7 7 0 0 1-14 0v-2"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"13"[39m
+                  [33mrx[39m=[32m"3"[39m
+                  [33mwidth[39m=[32m"6"[39m
+                  [33mx[39m=[32m"9"[39m
+                  [33my[39m=[32m"2"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"text-base tracking-wide whitespace-nowrap font-bold"[39m
+    ...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col h-full w-full overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"mb-10 flex items-center group cursor-default transition-all duration-300 shrink-0 gap-4 px-2"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-300 shrink-0"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-shield w-6 h-6 text-yellow-300"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col overflow-hidden transition-all duration-300 w-auto opacity-100"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap"[39m
+          [36m>[39m
+            [0m管理[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-xs uppercase tracking-[0.2em] text-slate-400 font-semibold mt-1.5 ml-0.5 whitespace-nowrap"[39m
+          [36m>[39m
+            [0m控制台[0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div>[39m
+        [36m<nav[39m
+          [33mclass[39m=[32m"flex-1 space-y-2 flex flex-col w-full overflow-y-auto min-h-0 pr-1"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 group relative px-4 w-full text-slate-500 hover:text-slate-900 hover:bg-white/40"[39m
+              [33mhref[39m=[32m"/admin"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-layout-dashboard transition-all duration-300 shrink-0 w-4 h-4 text-slate-400 group-hover:text-slate-600 group-hover:scale-105"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"9"[39m
+                  [33mrx[39m=[32m"1"[39m
+                  [33mwidth[39m=[32m"7"[39m
+                  [33mx[39m=[32m"3"[39m
+                  [33my[39m=[32m"3"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"5"[39m
+                  [33mrx[39m=[32m"1"[39m
+                  [33mwidth[39m=[32m"7"[39m
+                  [33mx[39m=[32m"14"[39m
+                  [33my[39m=[32m"3"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"9"[39m
+                  [33mrx[39m=[32m"1"[39m
+                  [33mwidth[39m=[32m"7"[39m
+                  [33mx[39m=[32m"14"[39m
+                  [33my[39m=[32m"12"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"5"[39m
+                  [33mrx[39m=[32m"1"[39m
+                  [33mwidth[39m=[32m"7"[39m
+                  [33mx[39m=[32m"3"[39m
+                  [33my[39m=[32m"16"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"text-base font-medium tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 w-auto opacity-100"[39m
+              [36m>[39m
+                [0m总览[0m
+              [36m</span>[39m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-1"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33maria-expanded[39m=[32m"true"[39m
+              [33maria-label[39m=[32m"销售训练"[39m
+              [33mclass[39m=[32m"flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 w-full group px-4 text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-mic transition-all duration-300 shrink-0 w-4 h-4 text-slate-900 scale-110"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2.5"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M12 19v3"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M19 10v2a7 7 0 0 1-14 0v-2"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"13"[39m
+                  [33mrx[39m=[32m"3"[39m
+                  [33mwidth[39m=[32m"6"[39m
+                  [33mx[39m=[32m"9"[39m
+                  [33my[39m=[32m"2"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"text-base tracking-wide whitespace-nowrap font-bold"[39m
+    ...
+ ❯ waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ src/components/layout/admin-sidebar.test.tsx:62:29
+     60|         );
+     61|
+     62|         expect(await screen.findByRole("button", { name: "新人训练路径" })).…
+       |                             ^
+     63|         const workbenchLink = await screen.findByRole("link", { name: …
+     64|         expect(workbenchLink.getAttribute("href")).toBe("/admin/sales-…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/components/layout/admin-sidebar.test.tsx > AdminSidebarContent > limits support users to the newcomer training path admin entry
+TestingLibraryElementError: Unable to find role="button" and name "新人训练路径"
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col h-full w-full overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"mb-10 flex items-center group cursor-default transition-all duration-300 shrink-0 gap-4 px-2"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-300 shrink-0"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-shield w-6 h-6 text-yellow-300"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col overflow-hidden transition-all duration-300 w-auto opacity-100"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap"[39m
+          [36m>[39m
+            [0m管理[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-xs uppercase tracking-[0.2em] text-slate-400 font-semibold mt-1.5 ml-0.5 whitespace-nowrap"[39m
+          [36m>[39m
+            [0m控制台[0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div>[39m
+        [36m<nav[39m
+          [33mclass[39m=[32m"flex-1 space-y-2 flex flex-col w-full overflow-y-auto min-h-0 pr-1"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-1"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33maria-expanded[39m=[32m"true"[39m
+              [33maria-label[39m=[32m"销售训练"[39m
+              [33mclass[39m=[32m"flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 w-full group px-4 text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-mic transition-all duration-300 shrink-0 w-4 h-4 text-slate-900 scale-110"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2.5"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M12 19v3"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M19 10v2a7 7 0 0 1-14 0v-2"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"13"[39m
+                  [33mrx[39m=[32m"3"[39m
+                  [33mwidth[39m=[32m"6"[39m
+                  [33mx[39m=[32m"9"[39m
+                  [33my[39m=[32m"2"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"text-base tracking-wide whitespace-nowrap font-bold"[39m
+              [36m>[39m
+                [0m销售训练[0m
+              [36m</span>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-chevron-down ml-auto w-4 h-4 text-slate-400 transition-transform duration-200 rotate-180"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m6 9 6 6 6-6"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</button>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"pl-3 border-l border-slate-200 ml-4 space-y-1"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 group relative px-4 w-full text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"[39m
+                [33mhref[39m=[32m"/admin/sales-trainer"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-slate-900 rounded-r-full"[39m
+                [36m/>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-layout-dashboard transition-all duration-300 shrink-0 w-4 h-4 text-slate-900 scale-110"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2.5"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<rect[39m
+                    [33mheight[39m=[32m"9"[39m
+                    [33mrx[39m=[32m"1"[39m
+                    [33mwidth[39m=[32m"7"[39m
+                    [33mx[39m=[32m"3"[39m
+                    [33my[39m=[32m"3...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col h-full w-full overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"mb-10 flex items-center group cursor-default transition-all duration-300 shrink-0 gap-4 px-2"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-300 shrink-0"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-shield w-6 h-6 text-yellow-300"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col overflow-hidden transition-all duration-300 w-auto opacity-100"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap"[39m
+          [36m>[39m
+            [0m管理[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-xs uppercase tracking-[0.2em] text-slate-400 font-semibold mt-1.5 ml-0.5 whitespace-nowrap"[39m
+          [36m>[39m
+            [0m控制台[0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div>[39m
+        [36m<nav[39m
+          [33mclass[39m=[32m"flex-1 space-y-2 flex flex-col w-full overflow-y-auto min-h-0 pr-1"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-1"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33maria-expanded[39m=[32m"true"[39m
+              [33maria-label[39m=[32m"销售训练"[39m
+              [33mclass[39m=[32m"flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 w-full group px-4 text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-mic transition-all duration-300 shrink-0 w-4 h-4 text-slate-900 scale-110"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2.5"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M12 19v3"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M19 10v2a7 7 0 0 1-14 0v-2"[39m
+                [36m/>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"13"[39m
+                  [33mrx[39m=[32m"3"[39m
+                  [33mwidth[39m=[32m"6"[39m
+                  [33mx[39m=[32m"9"[39m
+                  [33my[39m=[32m"2"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"text-base tracking-wide whitespace-nowrap font-bold"[39m
+              [36m>[39m
+                [0m销售训练[0m
+              [36m</span>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-chevron-down ml-auto w-4 h-4 text-slate-400 transition-transform duration-200 rotate-180"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m6 9 6 6 6-6"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</button>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"pl-3 border-l border-slate-200 ml-4 space-y-1"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex items-center gap-3 py-2.5 rounded-xl transition-all duration-300 group relative px-4 w-full text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"[39m
+                [33mhref[39m=[32m"/admin/sales-trainer"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-slate-900 rounded-r-full"[39m
+                [36m/>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-layout-dashboard transition-all duration-300 shrink-0 w-4 h-4 text-slate-900 scale-110"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2.5"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<rect[39m
+                    [33mheight[39m=[32m"9"[39m
+                    [33mrx[39m=[32m"1"[39m
+                    [33mwidth[39m=[32m"7"[39m
+                    [33mx[39m=[32m"3"[39m
+                    [33my[39m=[32m"3...
+ ❯ waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ src/components/layout/admin-sidebar.test.tsx:81:29
+     79|         );
+     80|
+     81|         expect(await screen.findByRole("button", { name: "新人训练路径" })).…
+       |                             ^
+     82|         const workbenchLink = await screen.findByRole("link", { name: …
+     83|         expect(workbenchLink.getAttribute("href")).toBe("/admin/sales-…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/components/layout/sidebar.test.tsx > SidebarContent learner seams > exposes the learner newcomer training path entry from the shared sidebar nav
+TestingLibraryElementError: Unable to find an accessible element with the role "menuitem" and name "新人训练路径"
+
+Here are the accessible roles:
+
+  navigation:
+
+  Name "主导航":
+  [36m<nav[39m
+    [33maria-label[39m=[32m"主导航"[39m
+    [33mclass[39m=[32m"flex-1 flex flex-col w-full overflow-y-auto scrollbar-hide min-h-0 pb-4"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  menubar:
+
+  Name "":
+  [36m<ul[39m
+    [33mclass[39m=[32m"space-y-2 px-1"[39m
+    [33mrole[39m=[32m"menubar"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  none:
+
+  Name "":
+  [36m<li[39m
+    [33mrole[39m=[32m"none"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mrole[39m=[32m"none"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mrole[39m=[32m"none"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mrole[39m=[32m"none"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mrole[39m=[32m"none"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  menuitem:
+
+  Name "首页":
+  [36m<a[39m
+    [33mclass[39m=[32m"flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative px-5 w-full text-slate-500 hover:text-slate-900 hover:bg-white/40"[39m
+    [33mhref[39m=[32m"/"[39m
+    [33mrole[39m=[32m"menuitem"[39m
+  [36m/>[39m
+
+  Name "训练模式":
+  [36m<a[39m
+    [33mclass[39m=[32m"flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative px-5 w-full text-slate-500 hover:text-slate-900 hover:bg-white/40"[39m
+    [33mhref[39m=[32m"/training"[39m
+    [33mrole[39m=[32m"menuitem"[39m
+  [36m/>[39m
+
+  Name "销售训练":
+  [36m<a[39m
+    [33mclass[39m=[32m"flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative px-5 w-full text-slate-500 hover:text-slate-900 hover:bg-white/40"[39m
+    [33mhref[39m=[32m"/sales-trainer"[39m
+    [33mrole[39m=[32m"menuitem"[39m
+  [36m/>[39m
+
+  Name "排行榜":
+  [36m<a[39m
+    [33mclass[39m=[32m"flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative px-5 w-full text-slate-500 hover:text-slate-900 hover:bg-white/40"[39m
+    [33mhref[39m=[32m"/leaderboard"[39m
+    [33mrole[39m=[32m"menuitem"[39m
+  [36m/>[39m
+
+  Name "历史记录":
+  [36m<a[39m
+    [33maria-current[39m=[32m"page"[39m
+    [33mclass[39m=[32m"flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative px-5 w-full text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"[39m
+    [33mhref[39m=[32m"/history"[39m
+    [33mrole[39m=[32m"menuitem"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "退出登录":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-full text-red-500 border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-100"[39m
+    [33mtype[39m=[32m"button"[39m
+    [33mvariant[39m=[32m"outline"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "编辑资料":
+  [36m<a[39m
+    [33mhref[39m=[32m"/profile"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col h-full w-full overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"mb-8 flex items-center group cursor-default transition-all duration-300 shrink-0 gap-4 px-2"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-300 shrink-0"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-sparkles w-6 h-6 text-yellow-300"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"1.5"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M20 2v4"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M22 4h-4"[39m
+            [36m/>[39m
+            [36m<circle[39m
+              [33mcx[39m=[32m"4"[39m
+              [33mcy[39m=[32m"20"[39m
+              [33mr[39m=[32m"2"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col overflow-hidden transition-all duration-300 w-auto opacity-100"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap"[39m
+          [36m>[39m
+            [0mAI 销售教练[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mt-1.5 ml-0.5 whitespace-nowrap"[39m
+          [36m>[39m
+            [0m平台[0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div>[39m
+        [36m<nav[39m
+          [33maria-label[39m=[32m"主导航"[39m
+          [33mclass[39m=[32m"flex-1 flex flex-col w-full overflow-y-auto scrollbar-hide min-h-0 pb-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"px-4 mb-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 shrink-0"[39m
+          [36m>[39m
+            [0m菜单[0m
+          [36m</div>[39m
+          [36m<ul[39m
+            [33mclass[39m=[32m"space-y-2 px-1"[39m
+            [33mrole[39m=[32m"menubar"[39m
+          [36m>[39m
+            [36m<li[39m
+              [33mrole[39m=[32m"none"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative px-5 w-full text-slate-500 hover:text-slate-900 hover:bg-white/40"[39m
+                [33mhref[39m=[32m"/"[39m
+                [33mrole[39m=[32m"menuitem"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-house transition-all duration-300 shrink-0 w-5 h-5 text-slate-500 group-hover:text-slate-600 group-hover:scale-105"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+                  [36m/>[39m
+                [36m</svg>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"text-base font-medium tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 w-auto opacity-100"[39m
+                [36m>[39m
+                  [0m首页[0m
+                [36m</span>[39m
+              [36m</a>[39m
+            [36m</li>[39m
+            [36m<li[39m
+              [33mrole[39m=[32m"none"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative px-5 w-full text-slate-500 hover:text-slate-900 hover:bg-white/40"[39m
+                [33mhref[39m=[32m"/training"[39m
+                [33mrole[39m=[32m"menuitem"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-layout-grid transition-all duration-300 shrink-0 w-5 h-5 text-slate-500 group-hover:text-slate-600 group-hover:scale-105"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<rect[39m
+                    [33mheight[39m=[32m"7"[39m
+                    [33mrx[39m=[32m"1"[39m
+                    [33mwidth[39m=[32m"7"[39m
+                    [33mx[39m=[32m"3"[39m
+                    [33my[39m=[32m"3"[39m
+                  [36m/>[39m
+                  [36m<rect[39m
+                    [33mheight[39m=[32m"7"[39m
+                    [33mrx[39m=[32m"1"[39m
+     ...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/components/layout/sidebar.test.tsx:100:41
+     98|         render(<SidebarContent currentUser={learnerUser} />);
+     99|
+    100|         const salesTrainerLink = screen.getByRole("menuitem", { name: …
+       |                                         ^
+    101|         expect(salesTrainerLink.getAttribute("href")).toBe("/sales-tra…
+    102|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 4 passed (7)
+   Start at  17:25:44
+   Duration  8.29s (transform 528ms, setup 0ms, import 1.40s, tests 3.28s, environment 3.05s)
+

@@ -2,15 +2,54 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerPathsPage from "./page";
+import {
+    defaultLearningContentsResponse,
+    defaultMaterialsResponse,
+    defaultModuleArticle,
+    defaultPapersResponse,
+    defaultPathConfigResponse,
+    defaultPathRevisionsResponse,
+    defaultScorePromptsResponse,
+    defaultSettingsResponse,
+    defaultUnitsResponse,
+    pathConfigWithWorkingRevision,
+    pathRevisionsWithRollbackTarget,
+} from "./page.test-data";
 
-const { listUnitsMock, pushMock } = vi.hoisted(() => ({
+const {
+    getModuleArticleMock,
+    getPathConfigMock,
+    getSettingsMock,
+    listPathConfigRevisionsMock,
+    listLearningContentsMock,
+    listMaterialsMock,
+    listPapersMock,
+    listScorePromptsMock,
+    listUnitsMock,
+    publishPathConfigMock,
+    rollbackPathConfigMock,
+    savePathConfigMock,
+    searchParamsMock,
+} = vi.hoisted(() => ({
+    getModuleArticleMock: vi.fn(),
+    getPathConfigMock: vi.fn(),
+    getSettingsMock: vi.fn(),
+    listPathConfigRevisionsMock: vi.fn(),
+    listLearningContentsMock: vi.fn(),
+    listMaterialsMock: vi.fn(),
+    listPapersMock: vi.fn(),
+    listScorePromptsMock: vi.fn(),
     listUnitsMock: vi.fn(),
-    pushMock: vi.fn(),
+    publishPathConfigMock: vi.fn(),
+    rollbackPathConfigMock: vi.fn(),
+    savePathConfigMock: vi.fn(),
+    searchParamsMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
     usePathname: () => "/admin/sales-trainer/paths",
-    useRouter: () => ({ push: pushMock }),
+    useRouter: () => ({ push: vi.fn() }),
+    useSearchParams: searchParamsMock,
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -23,8 +62,28 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
+                    getSettings: getSettingsMock,
+                    listMaterials: listMaterialsMock,
+                    listScorePrompts: listScorePromptsMock,
                     listUnits: listUnitsMock,
                 },
+                newcomerTraining: {
+                    ...actual.api.admin.newcomerTraining,
+                    getPathConfig: getPathConfigMock,
+                    listPathConfigRevisions: listPathConfigRevisionsMock,
+                    listPapers: listPapersMock,
+                    publishPathConfig: publishPathConfigMock,
+                    rollbackPathConfig: rollbackPathConfigMock,
+                    savePathConfig: savePathConfigMock,
+                },
+            },
+            learningContents: {
+                ...actual.api.learningContents,
+                list: listLearningContentsMock,
+            },
+            newcomerTraining: {
+                ...actual.api.newcomerTraining,
+                getModuleArticle: getModuleArticleMock,
             },
         },
     };
@@ -32,63 +91,23 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("SalesTrainerPathsPage", () => {
     beforeEach(() => {
-        pushMock.mockReset();
-        listUnitsMock.mockResolvedValue({
-            items: [
-                {
-                    unit_id: "unit-1",
-                    name: "产品定位训练",
-                    description: null,
-                    unit_type: "quiz",
-                    config: {
-                        path: {
-                            enabled: true,
-                            path_key: "new_seller",
-                            path_title: "新人销售闯关",
-                            goal_title: "掌握首次客户沟通",
-                            level_title: "第一关：产品定位",
-                            order_index: 1,
-                            completion_rule: "passed",
-                            unlock_after_unit_ids: [],
-                        },
-                    },
-                    status: "published",
-                    created_by: "admin-1",
-                    updated_by: "admin-1",
-                    created_at: "2026-05-28T00:00:00Z",
-                    updated_at: "2026-05-28T00:00:00Z",
-                    questions: [],
-                },
-                {
-                    unit_id: "unit-2",
-                    name: "录音表达训练",
-                    description: null,
-                    unit_type: "audio_scoring",
-                    config: {
-                        path: {
-                            enabled: true,
-                            path_key: "new_seller",
-                            path_title: "新人销售闯关",
-                            goal_title: "掌握首次客户沟通",
-                            level_title: "第二关：录音表达",
-                            order_index: 2,
-                            completion_rule: "scored",
-                            unlock_after_unit_ids: ["unit-1"],
-                        },
-                    },
-                    status: "draft",
-                    created_by: "admin-1",
-                    updated_by: "admin-1",
-                    created_at: "2026-05-28T00:00:00Z",
-                    updated_at: "2026-05-28T00:00:00Z",
-                    questions: [],
-                },
-            ],
-            total: 2,
-        });
+        vi.clearAllMocks();
+        listUnitsMock.mockResolvedValue(defaultUnitsResponse());
+        getPathConfigMock.mockResolvedValue(defaultPathConfigResponse());
+        listPathConfigRevisionsMock.mockResolvedValue(defaultPathRevisionsResponse());
+        listLearningContentsMock.mockResolvedValue(defaultLearningContentsResponse());
+        getModuleArticleMock.mockResolvedValue(defaultModuleArticle());
+        listPapersMock.mockResolvedValue(defaultPapersResponse());
+        listMaterialsMock.mockResolvedValue(defaultMaterialsResponse());
+        listScorePromptsMock.mockResolvedValue(defaultScorePromptsResponse());
+        getSettingsMock.mockResolvedValue(defaultSettingsResponse());
+        savePathConfigMock.mockResolvedValue(defaultPathConfigResponse());
+        publishPathConfigMock.mockResolvedValue(defaultPathConfigResponse());
+        rollbackPathConfigMock.mockResolvedValue(defaultPathConfigResponse());
+        searchParamsMock.mockReturnValue(new URLSearchParams());
     });
 
-    it("groups unit path config into an admin path overview", async () => {
+    it("renders a newcomer training path configuration center with diagnostics", async () => {
         render(<SalesTrainerPathsPage />);
 
         await waitFor(() => {
@@ -98,16 +117,127 @@ describe("SalesTrainerPathsPage", () => {
             });
         });
 
-        expect(screen.getByText("新人销售闯关")).toBeTruthy();
-        expect(screen.getByText("掌握首次客户沟通")).toBeTruthy();
-        expect(screen.getByText("第一关：产品定位")).toBeTruthy();
-        expect(screen.getByText("第二关：录音表达")).toBeTruthy();
-        expect(screen.getByText("1/2")).toBeTruthy();
-        expect(screen.getByText("unit-1")).toBeTruthy();
+        expect(listLearningContentsMock).toHaveBeenCalled();
+        expect(getModuleArticleMock).toHaveBeenCalledWith("business_skills");
+        expect(getPathConfigMock).toHaveBeenCalled();
+        expect(listPathConfigRevisionsMock).toHaveBeenCalled();
+        expect(listPapersMock).toHaveBeenCalledWith({ include_archived: true, limit: 100 });
+        expect(listMaterialsMock).toHaveBeenCalledWith({ include_archived: true, limit: 100 });
+        expect(listScorePromptsMock).toHaveBeenCalledWith({ include_archived: true });
+        expect(getSettingsMock).toHaveBeenCalled();
 
-        const editButtons = screen.getAllByRole("button", { name: "编辑关卡" });
-        expect(editButtons).toHaveLength(2);
-        fireEvent.click(editButtons[1]);
-        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/units/unit-2/edit");
+        expect(screen.getByRole("heading", { name: "新人训练路径配置中心" })).toBeTruthy();
+        expect(screen.getByText("第一关")).toBeTruthy();
+        expect(screen.getByText("PPT 讲解录音")).toBeTruthy();
+        expect(screen.getByText("第二关")).toBeTruthy();
+        expect(screen.getByText("商务技巧新修订")).toBeTruthy();
+        expect(screen.queryByText("模块二：旧商务技巧")).toBeNull();
+        expect(screen.getByText("当前生效版本 v2")).toBeTruthy();
+        expect(screen.getByText("路径级发布配置")).toBeTruthy();
+        expect(screen.getByText("第三关")).toBeTruthy();
+        expect(screen.getByText("电梯演讲")).toBeTruthy();
+        expect(screen.getByText("第四关")).toBeTruthy();
+        expect(screen.getByText("实时对练占位")).toBeTruthy();
+        expect(screen.getByText("学习文章：见客户前商务礼仪（1 节）")).toBeTruthy();
+        expect(screen.getByText("考卷：商务技巧考卷（0 题）")).toBeTruthy();
+        expect(screen.getAllByText("缺少路径配置中心里的关卡配置。").length).toBeGreaterThan(0);
+        expect(screen.getAllByRole("link", { name: "配置路径模块" })[0].getAttribute("href")).toBe(
+            "/admin/sales-trainer/paths?module=ppt_explanation",
+        );
+        expect(screen.getAllByRole("link", { name: "选择评分标准" })[0].getAttribute("href")).toBe(
+            "/admin/sales-trainer/paths?module=ppt_explanation",
+        );
+        expect(screen.getAllByRole("link", { name: "选择材料版本" })[0].getAttribute("href")).toBe(
+            "/admin/sales-trainer/paths?module=ppt_explanation",
+        );
+        expect(screen.getAllByRole("link", { name: "选择材料版本" })[0].querySelector("button")).toBeNull();
+        expect(screen.getByRole("link", { name: "选择 PPT 材料" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/materials?module=ppt_explanation&purpose=ppt_pitch",
+        );
+        expect(screen.getByRole("link", { name: "选择 PPT 材料" }).querySelector("button")).toBeNull();
+        expect(screen.getByRole("link", { name: "配置商务技巧文章" }).getAttribute("href")).toBe("/admin/sales-trainer/articles");
+        expect(screen.getByRole("link", { name: "查看配置健康" }).getAttribute("href")).toBe("/admin/sales-trainer/settings");
+        expect(screen.getByRole("link", { name: "查看配置健康" }).querySelector("button")).toBeNull();
+        expect(screen.getByText(/编辑会保存为新的待发布修订/)).toBeTruthy();
+        expect(screen.queryByText(/复制为新草稿/)).toBeNull();
+        expect(screen.getAllByText("需补齐后发布").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("待配置").length).toBeGreaterThan(0);
+        expect(screen.queryByRole("button", { name: "编辑关卡" })).toBeNull();
+    });
+
+    it("focuses the target module when opened from a diagnostic remediation link", async () => {
+        searchParamsMock.mockReturnValue(new URLSearchParams("module=ppt_explanation"));
+
+        render(<SalesTrainerPathsPage />);
+
+        expect(await screen.findByText("正在配置：PPT 讲解录音")).toBeTruthy();
+        expect(screen.getByRole("region", { name: "正在配置 PPT 讲解录音" })).toBeTruthy();
+    });
+
+    it("keeps the configuration center visible when the article binding check fails", async () => {
+        getModuleArticleMock.mockRejectedValueOnce(new Error("article binding check failed"));
+
+        render(<SalesTrainerPathsPage />);
+
+        expect(await screen.findByRole("heading", { name: "新人训练路径配置中心" })).toBeTruthy();
+        expect(screen.getByText("第一关")).toBeTruthy();
+        expect(screen.getByText("商务技巧新修订")).toBeTruthy();
+        expect(screen.getByText("学习文章：见客户前商务礼仪（1 节）")).toBeTruthy();
+        expect(screen.queryByText("缺少已发布商务技巧学习文章绑定。")).toBeNull();
+        expect(screen.getByRole("link", { name: "配置商务技巧文章" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/articles",
+        );
+    });
+
+    it("saves the current path config as a future-only working revision", async () => {
+        render(<SalesTrainerPathsPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "保存当前配置为新修订" }));
+
+        await waitFor(() => {
+            expect(savePathConfigMock).toHaveBeenCalledWith({
+                ...defaultPathConfigResponse().path,
+                reason: "管理员从配置中心保存路径配置修订",
+            });
+        });
+        expect(await screen.findByText("已保存为待发布修订，发布后只影响后续学员。")).toBeTruthy();
+    });
+
+    it("publishes a working revision without requiring administrators to swap bindings", async () => {
+        getPathConfigMock.mockResolvedValue(pathConfigWithWorkingRevision());
+
+        render(<SalesTrainerPathsPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "发布并生效" }));
+
+        await waitFor(() => {
+            expect(publishPathConfigMock).toHaveBeenCalledWith({
+                reason: "管理员从配置中心发布路径配置修订",
+            });
+        });
+        expect(await screen.findByText("路径配置已发布生效；历史学员记录不会被改写。")).toBeTruthy();
+    });
+
+    it("rolls back a non-active path revision through the future-only rollback API", async () => {
+        listPathConfigRevisionsMock.mockResolvedValue(pathRevisionsWithRollbackTarget());
+
+        render(<SalesTrainerPathsPage />);
+
+        const rollbackButtons = await screen.findAllByRole("button", { name: "回滚到此版本" });
+        fireEvent.click(rollbackButtons[1]);
+        expect(rollbackPathConfigMock).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText("回滚原因（版本 v2）"), {
+            target: { value: "恢复到培训试运行版本" },
+        });
+        fireEvent.click(rollbackButtons[1]);
+
+        await waitFor(() => {
+            expect(rollbackPathConfigMock).toHaveBeenCalledWith({
+                revision_id: "path-revision-2",
+                reason: "恢复到培训试运行版本",
+            });
+        });
+        expect(await screen.findByText("路径配置已回滚；回滚只影响后续学员。")).toBeTruthy();
     });
 });

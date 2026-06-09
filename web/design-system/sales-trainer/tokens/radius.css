@@ -1,0 +1,12 @@
+/**
+ * @layer tokens.radius
+ */
+:root {
+  --st-radius-sm: 0.5rem;
+  --st-radius-md: 0.75rem;
+  --st-radius-lg: 1rem;
+  --st-radius-xl: 1.5rem;
+  --st-radius-2xl: 2rem;
+  --st-radius-shell: 2.5rem;
+  --st-radius-full: 9999px;
+}

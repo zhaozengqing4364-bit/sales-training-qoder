@@ -91,6 +91,21 @@ describe("CooChapterReader", () => {
         expect(screen.getByText("确认背景")).toBeTruthy();
     });
 
+    it("renders markdown images with alt text", () => {
+        render(
+            <CooChapterReader
+                {...baseProps}
+                chapter={{
+                    ...baseProps.chapter,
+                    content: "![商务礼仪图](https://example.com/etiquette.png)",
+                }}
+            />,
+        );
+
+        const image = screen.getByRole("img", { name: "商务礼仪图" });
+        expect(image.getAttribute("src")).toBe("https://example.com/etiquette.png");
+    });
+
     it("navigates back to return path and links quiz CTA", () => {
         render(<CooChapterReader {...baseProps} />);
         expect(screen.getByRole("link", { name: /开始本章测验/ }).getAttribute("href")).toBe(

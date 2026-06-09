@@ -1,0 +1,105 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e10]:
+            - generic [ref=e11]: AI 销售教练
+            - generic [ref=e12]: 平台
+        - navigation "主导航" [ref=e13]:
+          - generic [ref=e14]: 菜单
+          - menubar [ref=e15]:
+            - menuitem "首页" [ref=e16] [cursor=pointer]:
+              - img [ref=e17]
+              - generic [ref=e20]: 首页
+            - menuitem "训练模式" [ref=e21] [cursor=pointer]:
+              - img [ref=e22]
+              - generic [ref=e27]: 训练模式
+            - menuitem "销售训练" [ref=e28] [cursor=pointer]:
+              - img [ref=e30]
+              - generic [ref=e33]: 销售训练
+            - menuitem "排行榜" [ref=e34] [cursor=pointer]:
+              - img [ref=e35]
+              - generic [ref=e36]: 排行榜
+            - menuitem "历史记录" [ref=e37] [cursor=pointer]:
+              - img [ref=e38]
+              - generic [ref=e42]: 历史记录
+          - generic [ref=e45]: 系统
+          - menubar [ref=e46]:
+            - menuitem "运行状态" [ref=e47] [cursor=pointer]:
+              - img [ref=e48]
+              - generic [ref=e50]: 运行状态
+            - menuitem "管理后台" [ref=e51] [cursor=pointer]:
+              - img [ref=e52]
+              - generic [ref=e55]: 管理后台
+        - generic [ref=e56]:
+          - button "帮助与反馈" [ref=e58]:
+            - img [ref=e59]
+            - generic [ref=e61]: 帮助与反馈
+          - generic [ref=e62] [cursor=pointer]:
+            - img [ref=e64]
+            - generic [ref=e67]:
+              - generic [ref=e68]: Developer
+              - generic [ref=e69]: Development
+            - img [ref=e71]
+          - button "折叠侧边栏" [ref=e74]:
+            - img [ref=e75]
+            - generic [ref=e78]: 折叠侧边栏
+    - main [ref=e79]:
+      - generic [ref=e81]:
+        - generic [ref=e82]:
+          - link "返回训练大厅" [ref=e83] [cursor=pointer]:
+            - /url: /training
+            - img [ref=e84]
+            - text: 返回训练大厅
+          - generic [ref=e86]:
+            - generic [ref=e87]:
+              - heading "销售训练" [level=1] [ref=e88]
+              - paragraph [ref=e89]: 在一个入口内完成题目训练与录音评分。录音没有固定时长上限，格式与大小限制以后端校验为准。
+            - button "刷新" [ref=e105]:
+              - img [ref=e106]
+              - text: 刷新
+        - generic [ref=e90]:
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - img [ref=e113]
+              - heading "做题训练" [level=2] [ref=e116]
+            - generic [ref=e117]:
+              - generic [ref=e118]:
+                - generic [ref=e120]:
+                  - generic [ref=e121]:
+                    - heading "Goal验收四题型训练单元" [level=3] [ref=e122]
+                    - paragraph [ref=e123]: 覆盖单选、多选、判断、简答四类销售训练题型。
+                  - generic [ref=e124]: 做题训练
+                - paragraph [ref=e125]: 共 4 道题
+                - link "开始做题" [ref=e126] [cursor=pointer]:
+                  - /url: /sales-trainer/quiz/4340d83b-c1c0-48be-bc5a-2109d8ea9f1b
+                  - button "开始做题" [ref=e127]
+              - generic [ref=e128]:
+                - generic [ref=e130]:
+                  - generic [ref=e131]:
+                    - heading "Goal验收做题训练单元" [level=3] [ref=e132]
+                    - paragraph [ref=e133]: 浏览器验收创建，绑定已发布销售训练题目。
+                  - generic [ref=e134]: 做题训练
+                - paragraph [ref=e135]: 共 1 道题
+                - link "开始做题" [ref=e136] [cursor=pointer]:
+                  - /url: /sales-trainer/quiz/6ff4f124-ec0c-4cc2-abc0-4f15289d6d96
+                  - button "开始做题" [ref=e137]
+          - generic [ref=e138]:
+            - generic [ref=e139]:
+              - img [ref=e140]
+              - heading "录音评分" [level=2] [ref=e144]
+            - generic [ref=e146]:
+              - generic [ref=e148]:
+                - generic [ref=e149]:
+                  - heading "浏览器E2E录音评分训练" [level=3] [ref=e150]
+                  - paragraph [ref=e151]: 用于浏览器端到端验证上传、转写、评分、后台记录和日志。
+                - generic [ref=e152]: 录音评分
+              - paragraph [ref=e153]: 上传录音后由后端转写并评分。
+              - link "上传录音" [ref=e154] [cursor=pointer]:
+                - /url: /sales-trainer/audio/74100dac-d1b8-4ce7-971f-5ff34d3a1f6a
+                - button "上传录音" [ref=e155]
+  - button "Open Next.js Dev Tools" [ref=e100] [cursor=pointer]:
+    - img [ref=e101]
+  - alert [ref=e104]

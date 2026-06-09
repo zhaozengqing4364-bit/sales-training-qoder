@@ -1,0 +1,9 @@
+HTTP/1.1 401 Unauthorized
+date: Wed, 03 Jun 2026 16:02:18 GMT
+server: uvicorn
+content-length: 379
+content-type: application/json
+x-trace-id: 7415040ba61b499ca4ef20489fd59d54
+traceparent: 00-7415040ba61b499ca4ef20489fd59d54-60f1efcf3d14eb3c-01
+
+{"success":false,"error":"{'error': '[AUTHENTICATION_REQUIRED]', 'message': '当前请求需要登录后才能继续。'}","message":"{'error': '[AUTHENTICATION_REQUIRED]', 'message': '当前请求需要登录后才能继续。'}","detail":{"error":"[AUTHENTICATION_REQUIRED]","message":"当前请求需要登录后才能继续。"},"trace_id":"7415040ba61b499ca4ef20489fd59d54"}

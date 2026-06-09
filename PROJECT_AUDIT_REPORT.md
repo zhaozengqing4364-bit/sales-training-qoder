@@ -1,6 +1,14 @@
 # 项目全量检测报告
 
-**检测时间**: 2026-04-30
+> **⚠️ 历史快照 (Historical Snapshot)**
+>
+> - **检测时间**: 2026-04-30
+> - **本报告为一次性快照, 仅作历史归档**
+> - 距今 (2026-06-04) 已 5 周, 仓库自此有大量提交 (sales_trainer MVP, RuntimeGate 统一, config_asset B2 HITL ADR, etc.)
+> - **当前真实状态以 `git log` + 最新 lint/test 输出为准**
+> - BUG-001 (payload NameError, prompt_templates/api/routes.py:241) 经代码核对已修复, 关闭
+> - 集成测试 / Vitest 数字 / Alembic 版本 等条目需重新跑 `pytest` + `npx vitest run` + `alembic current` 才能反映当前
+
 **检测范围**: 后端 + 前端 + API + 运行时
 **项目**: Enterprise AI Intelligent Practice System
 

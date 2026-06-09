@@ -42,7 +42,7 @@ export default function EditSalesTrainerScoreStandardPage() {
         setIsSubmitting(true);
         try {
             await api.admin.salesTrainer.updateScorePrompt(params.id, payload);
-            toast.success("录音评分标准已保存");
+            toast.success("录音评分标准修订已保存，发布后只影响后续评分");
             setIsSubmitting(false);
         } catch (submitError) {
             toast.error(getApiErrorMessage(submitError));
@@ -54,7 +54,7 @@ export default function EditSalesTrainerScoreStandardPage() {
         <AdminFormShell
             backHref="/admin/sales-trainer/score-standards"
             title={prompt ? `编辑评分标准：${prompt.name}` : "编辑评分标准"}
-            description="只有 draft 状态允许修改；发布请回到列表页。"
+            description="已发布评分标准也可以直接编辑；保存会生成待发布修订，发布后只影响后续学员和后续评分。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
         >
             {isLoading ? (

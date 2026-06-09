@@ -1,0 +1,4 @@
+created=15
+updated=0
+verified=True
+path_key=newcomer_training_path_v1

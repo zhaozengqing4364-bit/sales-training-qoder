@@ -59,8 +59,8 @@ export default function SalesTrainerQuestionCategoriesPage() {
     return (
         <AdminFormShell
             backHref="/admin/sales-trainer/questions"
-            title="销售题库分类"
-            description="分类只写入 sales_trainer 范围，不影响通用题库。"
+            title="题库分类"
+            description="分类只影响新人训练路径题库，不影响平台通用题库。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
         >
             <GlassCard className="space-y-4 p-6">
@@ -91,7 +91,9 @@ export default function SalesTrainerQuestionCategoriesPage() {
                             <tr key={category.category_id} className="border-b border-slate-100 last:border-b-0">
                                 <td className="px-6 py-4 font-medium text-slate-900">{category.name}</td>
                                 <td className="px-6 py-4 text-slate-600">{category.description || "未填写"}</td>
-                                <td className="px-6 py-4">{category.usage_scope}</td>
+                                <td className="px-6 py-4">
+                                    {category.usage_scope === "sales_trainer" ? "新人训练路径" : category.usage_scope}
+                                </td>
                                 <td className="px-6 py-4">{new Date(category.updated_at).toLocaleString()}</td>
                             </tr>
                         ))}

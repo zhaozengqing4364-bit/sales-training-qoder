@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2 } from "lucide-react";
@@ -18,49 +18,7 @@ import {
     readLearnReturn,
 } from "@/lib/sales-trainer/coo-learn-navigation";
 import { buildHubLearnHref } from "@/lib/sales-trainer/hub-chapters";
-
-const markdownComponents = {
-    h1: ({ children }: { children?: ReactNode }) => (
-        <h1 className="mb-4 mt-6 text-2xl font-black text-slate-900 first:mt-0">{children}</h1>
-    ),
-    h2: ({ children }: { children?: ReactNode }) => (
-        <h2 className="mb-3 mt-5 text-xl font-bold text-slate-900 first:mt-0">{children}</h2>
-    ),
-    h3: ({ children }: { children?: ReactNode }) => (
-        <h3 className="mb-2 mt-4 text-lg font-bold text-slate-900 first:mt-0">{children}</h3>
-    ),
-    p: ({ children }: { children?: ReactNode }) => (
-        <p className="mb-3 text-sm leading-relaxed text-slate-700 last:mb-0">{children}</p>
-    ),
-    ul: ({ children }: { children?: ReactNode }) => (
-        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm text-slate-700">{children}</ul>
-    ),
-    ol: ({ children }: { children?: ReactNode }) => (
-        <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm text-slate-700">{children}</ol>
-    ),
-    li: ({ children }: { children?: ReactNode }) => (
-        <li className="leading-relaxed">{children}</li>
-    ),
-    strong: ({ children }: { children?: ReactNode }) => (
-        <strong className="font-semibold text-slate-900">{children}</strong>
-    ),
-    blockquote: ({ children }: { children?: ReactNode }) => (
-        <blockquote className="mb-3 border-l-4 border-slate-200 pl-4 text-sm italic text-slate-600">
-            {children}
-        </blockquote>
-    ),
-    code: ({ children }: { children?: ReactNode }) => (
-        <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-800">{children}</code>
-    ),
-    pre: ({ children }: { children?: ReactNode }) => (
-        <pre className="mb-3 overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs text-slate-100">{children}</pre>
-    ),
-    a: ({ href, children }: { href?: string; children?: ReactNode }) => (
-        <a href={href} className="font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800">
-            {children}
-        </a>
-    ),
-};
+import { markdownComponents } from "./coo-markdown-components";
 
 export interface CooChapterReaderProps {
     contentId: string;
@@ -195,20 +153,20 @@ export function CooChapterReader({
                                 返回
                             </Button>
                             {prevUnitId ? (
-                                <Link href={chapterLearnHref(prevUnitId)}>
-                                    <Button variant="secondary" className="rounded-full">
+                                <Button asChild variant="secondary" className="rounded-full">
+                                    <Link href={chapterLearnHref(prevUnitId)}>
                                         <ArrowLeft className="mr-2 h-4 w-4" />
                                         上一章
-                                    </Button>
-                                </Link>
+                                    </Link>
+                                </Button>
                             ) : null}
                             {nextUnitId ? (
-                                <Link href={chapterLearnHref(nextUnitId)}>
-                                    <Button variant="secondary" className="rounded-full">
+                                <Button asChild variant="secondary" className="rounded-full">
+                                    <Link href={chapterLearnHref(nextUnitId)}>
                                         下一章
                                         <ArrowRight className="ml-2 h-4 w-4" />
-                                    </Button>
-                                </Link>
+                                    </Link>
+                                </Button>
                             ) : null}
                         </div>
                         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
@@ -228,11 +186,11 @@ export function CooChapterReader({
                                     标记本章已读
                                 </Button>
                             )}
-                            <Link href={`/sales-trainer/quiz/${unitId}`}>
-                                <Button className="rounded-full bg-slate-900 text-white hover:bg-slate-800">
+                            <Button asChild className="rounded-full bg-slate-900 text-white hover:bg-slate-800">
+                                <Link href={`/sales-trainer/quiz/${unitId}`}>
                                     开始本章测验
-                                </Button>
-                            </Link>
+                                </Link>
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -262,7 +220,7 @@ export function CooChapterReaderTerminal({
                 <h3 className="mb-2 text-lg font-bold text-slate-900">{title}</h3>
                 <p className="mb-4 text-sm text-slate-500">{message}</p>
                 <Button onClick={() => router.push(backHref)} className="rounded-full">
-                    返回销售训练
+                    返回新人训练路径
                 </Button>
             </GlassCard>
         </div>

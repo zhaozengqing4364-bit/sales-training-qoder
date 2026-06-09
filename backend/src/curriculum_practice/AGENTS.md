@@ -45,3 +45,7 @@ backend/src/curriculum_practice/
 
 - Curriculum analytics: `backend/src/curriculum_analytics/`
 - Admin analytics: `backend/src/admin/api/analytics_curriculum.py`
+- Newcomer Training Path (异步学习/录音/考卷, **separate contract**): `backend/src/sales_trainer/AGENTS.md` and `docs/api-contract/sales-trainer.md`
+- Realtime sales practice (StepFun WebSocket): `backend/src/sales_bot/AGENTS.md`
+
+> 边界提示：本域的"Examiner 实时语音考核" (`/ws/curriculum/examiner/{session_id}`) 是独立 WS 协议, **不**与 `sales_bot` 实时销售对练或 `sales_trainer` 异步学习复用。任何跨域复用须经显式登记与 review。

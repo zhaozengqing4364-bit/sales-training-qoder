@@ -1,0 +1,19 @@
+{
+  "hasBusiness": true,
+  "hasElevator": true,
+  "hasPpt": true,
+  "hasPracticeLink": false,
+  "hasRealtime": true,
+  "hasTitle": true,
+  "url": "http://localhost:3445/sales-trainer",
+  "visibleActionLinks": [
+    {
+      "href": "/sales-trainer",
+      "text": "新人训练路径"
+    },
+    {
+      "href": "/sales-trainer/business-skills?unitId=355b1cc5-03b8-4ed6-b0e1-4cd046f55145",
+      "text": "阅读文章并考试"
+    }
+  ]
+}

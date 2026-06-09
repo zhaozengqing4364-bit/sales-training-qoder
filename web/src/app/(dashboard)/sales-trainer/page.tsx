@@ -21,6 +21,7 @@ import { SalesTrainerModuleMissionPanel } from "@/components/sales-trainer/sales
 import {
     filterPathsForHome,
     isThreeModulePath,
+    NEWCOMER_TRAINING_PATH_KEY,
 } from "@/lib/sales-trainer/module-path";
 
 import { ExtraUnitsSection } from "./extra-units-section";
@@ -54,9 +55,9 @@ function CatalogSection({
                             <p className="text-sm text-slate-500">
                                 共 {unit.questions.length} 道题
                             </p>
-                            <Link href={`/sales-trainer/quiz/${unit.unit_id}`}>
-                                <Button className="rounded-full bg-slate-900 text-white">开始做题</Button>
-                            </Link>
+                            <Button asChild className="rounded-full bg-slate-900 text-white">
+                                <Link href={`/sales-trainer/quiz/${unit.unit_id}`}>开始做题</Link>
+                            </Button>
                         </GlassCard>
                     ))}
                 </div>
@@ -80,15 +81,22 @@ function CatalogSection({
                             <p className="text-sm text-slate-500">
                                 上传语音后由系统转写并评分。
                             </p>
-                            <Link href={`/sales-trainer/audio/${unit.unit_id}`}>
-                                <Button className="rounded-full bg-slate-900 text-white">上传语音作业</Button>
-                            </Link>
+                            <Button asChild className="rounded-full bg-slate-900 text-white">
+                                <Link href={`/sales-trainer/audio/${unit.unit_id}`}>上传语音作业</Link>
+                            </Button>
                         </GlassCard>
                     ))}
                 </div>
             </section>
         </>
     );
+}
+
+function displayPathTitle(path: SalesTrainerPath): string {
+    if (path.title.includes("新人销售")) {
+        return "新人训练路径";
+    }
+    return path.title;
 }
 
 export default function SalesTrainerPage() {
@@ -139,6 +147,9 @@ export default function SalesTrainerPage() {
     );
     const displayPaths = useMemo(() => filterPathsForHome(paths), [paths]);
     const hasPaths = displayPaths.length > 0;
+    const hasNewcomerPath = displayPaths.some(
+        (path) => path.path_key === NEWCOMER_TRAINING_PATH_KEY,
+    );
 
     return (
         <div className="space-y-6 pb-20">
@@ -152,9 +163,9 @@ export default function SalesTrainerPage() {
                 </Link>
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <h1 className="text-3xl font-black tracking-tight text-slate-900">销售训练</h1>
+                        <h1 className="text-3xl font-black tracking-tight text-slate-900">新人训练路径</h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            在一个入口内完成题目训练与语音作业上传。语音没有固定时长上限，格式与大小限制以后端校验为准。
+                            按后台配置的训练模块完成学习、考试与录音任务；每个模块会显示当前要做什么和下一步去哪里。
                         </p>
                     </div>
                     <Button variant="outline" className="rounded-full" onClick={() => void loadUnits()} disabled={isLoading}>
@@ -181,8 +192,8 @@ export default function SalesTrainerPage() {
                 </div>
             ) : units.length === 0 ? (
                 <EmptyState
-                    title="暂无可用销售训练"
-                    description="当前没有已发布训练单元，请稍后重试或联系管理员发布。"
+                    title="暂无可用新人训练路径"
+                    description="当前没有已发布训练模块，请稍后重试或联系管理员发布。"
                     actionLabel="刷新列表"
                     onAction={() => void loadUnits()}
                 />
@@ -196,9 +207,9 @@ export default function SalesTrainerPage() {
                                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                             <div>
                                                 <Badge className="bg-blue-100 text-blue-700">
-                                                    {isThreeModulePath(path) ? "三模块训练" : "当前目标"}
+                                                    {isThreeModulePath(path) ? "新人训练路径" : "当前目标"}
                                                 </Badge>
-                                                <h2 className="mt-3 text-2xl font-black text-slate-900">{path.title}</h2>
+                                                <h2 className="mt-3 text-2xl font-black text-slate-900">{displayPathTitle(path)}</h2>
                                                 <p className="mt-1 text-sm text-slate-500">
                                                     {path.goal_title || "按模块自选完成训练，无强制解锁。"}
                                                 </p>
@@ -214,7 +225,7 @@ export default function SalesTrainerPage() {
                                         </div>
                                         {isThreeModulePath(path) ? (
                                             <>
-                                                <SalesTrainerModuleMissionPanel />
+                                                <SalesTrainerModuleMissionPanel path={path} unitsById={unitsById} />
                                                 <SalesTrainerModuleGrid path={path} unitsById={unitsById} />
                                             </>
                                         ) : (
@@ -226,7 +237,7 @@ export default function SalesTrainerPage() {
                                     </GlassCard>
                                 ))}
                             </section>
-                            <ExtraUnitsSection units={extraUnits} />
+                            {hasNewcomerPath ? null : <ExtraUnitsSection units={extraUnits} />}
                         </>
                     ) : (
                         <CatalogSection quizUnits={quizUnits} audioUnits={audioUnits} />

@@ -9,6 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerSettings } from "@/lib/api/types";
+import {
+    buildNewcomerOperationalDiagnostics,
+    type NewcomerOperationalDiagnostics,
+} from "@/lib/sales-trainer/operational-diagnostics";
+
+import { OperationalDiagnosticsPanel } from "./operational-diagnostics-panel";
 
 function StatusBadge({ ok }: { ok: boolean }) {
     return (
@@ -21,15 +27,36 @@ function StatusBadge({ ok }: { ok: boolean }) {
 export default function SalesTrainerSettingsPage() {
     const pathname = usePathname();
     const [settings, setSettings] = useState<SalesTrainerSettings | null>(null);
+    const [diagnostics, setDiagnostics] = useState<NewcomerOperationalDiagnostics | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         async function loadSettings() {
             try {
-                setSettings(await api.admin.salesTrainer.getSettings());
+                const [
+                    loadedSettings,
+                    pathConfig,
+                    pathRevisions,
+                    audioSubmissions,
+                    scoreResults,
+                ] = await Promise.all([
+                    api.admin.salesTrainer.getSettings(),
+                    api.admin.newcomerTraining.getPathConfig(),
+                    api.admin.newcomerTraining.listPathConfigRevisions(),
+                    api.admin.salesTrainer.listAudioSubmissions({ limit: 100 }),
+                    api.admin.salesTrainer.listScoreResults({ limit: 100 }),
+                ]);
+                setSettings(loadedSettings);
+                setDiagnostics(buildNewcomerOperationalDiagnostics({
+                    audioSubmissions: audioSubmissions.items,
+                    scoreResults: scoreResults.items,
+                    pathConfig,
+                    pathRevisions: pathRevisions.items,
+                }));
                 setError(null);
             } catch (loadError) {
                 setSettings(null);
+                setDiagnostics(null);
                 setError(getApiErrorMessage(loadError));
             }
         }
@@ -40,7 +67,7 @@ export default function SalesTrainerSettingsPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="销售训练配置"
+                    title="新人训练路径配置"
                     description="展示存储、ASR 和评分服务的健康状态；密钥仍由部署环境管理，页面不展示密钥值。"
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
                 />
@@ -79,6 +106,7 @@ export default function SalesTrainerSettingsPage() {
                             <div><span className="block text-slate-500">允许格式</span><span className="font-medium">{settings.allowed_mime_types.join(", ")}</span></div>
                         </div>
                     </GlassCard>
+                    {diagnostics ? <OperationalDiagnosticsPanel diagnostics={diagnostics} /> : null}
                 </div>
             ) : null}
         </AdminIndexShell>

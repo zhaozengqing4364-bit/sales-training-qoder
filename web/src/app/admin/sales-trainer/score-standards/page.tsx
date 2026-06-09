@@ -11,6 +11,10 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import {
+    formatAdminStatus,
+    formatScorePromptPurpose,
+} from "@/lib/sales-trainer/admin-display";
 import type { SalesTrainerAudioScorePrompt } from "@/lib/api/types";
 
 export default function SalesTrainerScoreStandardsPage() {
@@ -45,11 +49,12 @@ export default function SalesTrainerScoreStandardsPage() {
         setIsPublishing(true);
         try {
             await api.admin.salesTrainer.publishScorePrompt(publishingPrompt.prompt_id);
-            toast.success("录音评分标准已发布");
+            toast.success("录音评分标准已发布并对后续评分生效");
             setPublishingPrompt(null);
             await loadPrompts();
         } catch (publishError) {
             toast.error(getApiErrorMessage(publishError));
+        } finally {
             setIsPublishing(false);
         }
     }
@@ -58,8 +63,8 @@ export default function SalesTrainerScoreStandardsPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="销售训练录音评分标准"
-                    description="列表页不内嵌编辑表单；创建与编辑都在独立页面。"
+                    title="新人训练路径录音评分标准"
+                    description="评分方案同时管理 AI 评分 prompt 和学员可见 rubric；创建与编辑都在独立页面。"
                     primaryAction={(
                         <Button
                             className="rounded-full bg-slate-900 text-white"
@@ -75,9 +80,9 @@ export default function SalesTrainerScoreStandardsPage() {
             <ConfirmDialog
                 open={Boolean(publishingPrompt)}
                 onOpenChange={(open) => !open && setPublishingPrompt(null)}
-                title="发布录音评分标准"
-                description={publishingPrompt?.name || ""}
-                confirmText="确认发布"
+                title="发布并生效"
+                description={`发布“${publishingPrompt?.name ?? ""}”的新修订后，只影响后续学员和后续评分；已提交录音、转写和评分结果继续保留当时快照。`}
+                confirmText="发布并生效"
                 onConfirm={() => void publishPrompt()}
                 isLoading={isPublishing}
             />
@@ -110,9 +115,9 @@ export default function SalesTrainerScoreStandardsPage() {
                                         <p className="mt-1 text-xs text-slate-500 line-clamp-2">{item.system_prompt}</p>
                                     </div>
                                 </td>
-                                <td className="px-6 py-4">{item.purpose}</td>
+                                <td className="px-6 py-4">{formatScorePromptPurpose(item.purpose)}</td>
                                 <td className="px-6 py-4">
-                                    <Badge className="bg-slate-100 text-slate-700">{item.status}</Badge>
+                                    <Badge className="bg-slate-100 text-slate-700">{formatAdminStatus(item.status)}</Badge>
                                 </td>
                                 <td className="px-6 py-4">{item.version}</td>
                                 <td className="px-6 py-4">

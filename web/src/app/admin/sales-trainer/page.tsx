@@ -9,9 +9,9 @@ import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/mod
 import { GlassCard } from "@/components/ui/glass-card";
 
 const WORKBENCH_LINKS = [
-    { href: "/admin/sales-trainer/units", label: "训练单元", icon: Target },
-    { href: "/admin/sales-trainer/paths", label: "训练路径", icon: Milestone },
-    { href: "/admin/sales-trainer/questions", label: "销售题库", icon: FileText },
+    { href: "/admin/sales-trainer/units", label: "模块单元", icon: Target },
+    { href: "/admin/sales-trainer/paths", label: "路径配置", icon: Milestone },
+    { href: "/admin/sales-trainer/questions", label: "题库管理", icon: FileText },
     { href: "/admin/sales-trainer/score-standards", label: "录音评分标准", icon: Mic },
     { href: "/admin/sales-trainer/audio-submissions", label: "学员录音", icon: Activity },
     { href: "/admin/sales-trainer/score-results", label: "评分结果", icon: BarChart3 },
@@ -26,8 +26,8 @@ export default function SalesTrainerWorkbenchPage() {
         <AdminIndexShell
             header={(
                 <AdminPageHeader
-                    title="销售训练工作台"
-                    description="销售训练的题库、训练单元、录音评分、配置健康和操作记录集中在这里管理。"
+                    title="新人训练路径工作台"
+                    description="新人训练路径的模块、文章、考卷、录音评分、配置健康和操作记录集中在这里管理。"
                     secondaryActions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
                 />
             )}

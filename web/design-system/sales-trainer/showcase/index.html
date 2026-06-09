@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>销售训练设计体系 · Token Showcase</title>
+  <link rel="stylesheet" href="../tokens/index.css" />
+  <link rel="stylesheet" href="../primitives/primitives.css" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--st-color-bg-canvas);
+      color: var(--st-color-text-primary);
+      font-family: var(--st-font-sans);
+      font-size: var(--st-text-sm);
+      line-height: var(--st-leading-relaxed);
+    }
+    .page { max-width: 72rem; margin: 0 auto; padding: var(--st-space-8) var(--st-space-6); }
+    h1 { font-size: var(--st-text-3xl); font-weight: var(--st-font-black); margin: 0 0 var(--st-space-2); }
+    .subtitle { color: var(--st-color-text-secondary); margin-bottom: var(--st-space-10); }
+    section { margin-bottom: var(--st-space-12); }
+    h2 {
+      font-size: var(--st-text-lg);
+      font-weight: var(--st-font-bold);
+      margin-bottom: var(--st-space-4);
+      padding-bottom: var(--st-space-2);
+      border-bottom: 1px solid var(--st-border-default);
+    }
+    .grid { display: grid; gap: var(--st-space-4); }
+    .grid-2 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .swatch {
+      border-radius: var(--st-radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--st-border-subtle);
+      background: var(--st-color-bg-card);
+    }
+    .swatch-color { height: 4rem; }
+    .swatch-meta { padding: var(--st-space-3); font-size: var(--st-text-xs); }
+    .swatch-meta code { color: var(--st-color-text-muted); }
+    .row { display: flex; flex-wrap: wrap; gap: var(--st-space-3); align-items: center; }
+    .card-demo { padding: var(--st-space-6); }
+    .card-demo h3 { margin: 0 0 var(--st-space-2); font-size: var(--st-text-xl); font-weight: var(--st-font-black); }
+    .card-demo p { margin: 0 0 var(--st-space-4); color: var(--st-color-text-secondary); }
+    .type-row { display: flex; align-items: baseline; gap: var(--st-space-4); margin-bottom: var(--st-space-3); }
+    .type-label { width: 4rem; font-size: var(--st-text-xs); color: var(--st-color-text-tertiary); }
+    .score-bar { height: 8px; border-radius: var(--st-radius-full); background: var(--st-color-bg-muted); overflow: hidden; }
+    .score-bar span { display: block; height: 100%; border-radius: inherit; }
+    .voice-row { display: flex; align-items: center; gap: var(--st-space-2); }
+    .voice-dot { width: 10px; height: 10px; border-radius: 50%; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>销售训练设计体系</h1>
+    <p class="subtitle">Modern Soft UI · <code>sales-trainer-modern-soft-ui</code></p>
+
+    <section>
+      <h2>画布 & 品牌色</h2>
+      <div class="grid grid-2">
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-bg-main)"></div><div class="swatch-meta"><strong>bg-main</strong><br><code>#FAFAF9</code></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-bg-card)"></div><div class="swatch-meta"><strong>bg-card</strong><br><code>#FFFFFF</code></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-anchor)"></div><div class="swatch-meta"><strong>anchor</strong><br><code>#0F172A</code></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-accent-blue)"></div><div class="swatch-meta"><strong>accent-blue</strong><br><code>#3B82F6</code></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-accent-purple)"></div><div class="swatch-meta"><strong>accent-purple</strong><br><code>#8B5CF6</code></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>语义色</h2>
+      <div class="grid grid-2">
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-success-bg);display:flex;align-items:center;justify-content:center;color:var(--st-color-success-fg);font-weight:600">成功</div><div class="swatch-meta">success</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-warning-bg);display:flex;align-items:center;justify-content:center;color:var(--st-color-warning-fg);font-weight:600">警告</div><div class="swatch-meta">warning</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-error-bg);display:flex;align-items:center;justify-content:center;color:var(--st-color-error-fg);font-weight:600">错误</div><div class="swatch-meta">error</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--st-color-info-bg);display:flex;align-items:center;justify-content:center;color:var(--st-color-info-fg);font-weight:600">信息</div><div class="swatch-meta">info</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>评分 & 销售维度</h2>
+      <div class="grid grid-3">
+        <div><div class="score-bar"><span style="width:92%;background:var(--st-score-excellent)"></span></div><small>优秀 ≥85</small></div>
+        <div><div class="score-bar"><span style="width:75%;background:var(--st-score-good)"></span></div><small>良好 ≥70</small></div>
+        <div><div class="score-bar"><span style="width:55%;background:var(--st-score-poor)"></span></div><small>需改进</small></div>
+      </div>
+      <div class="row" style="margin-top:var(--st-space-4)">
+        <span class="st-badge st-badge--success" style="border-left:3px solid var(--st-dim-value)">价值表达</span>
+        <span class="st-badge st-badge--success" style="border-left:3px solid var(--st-dim-benefit)">客户收益</span>
+        <span class="st-badge st-badge--success" style="border-left:3px solid var(--st-dim-evidence)">证据使用</span>
+        <span class="st-badge st-badge--success" style="border-left:3px solid var(--st-dim-objection)">异议处理</span>
+        <span class="st-badge st-badge--success" style="border-left:3px solid var(--st-dim-closing)">推进下一步</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>语音演练态</h2>
+      <div class="row">
+        <div class="voice-row"><span class="voice-dot" style="background:var(--st-voice-idle)"></span>空闲</div>
+        <div class="voice-row"><span class="voice-dot" style="background:var(--st-voice-listening)"></span>聆听中</div>
+        <div class="voice-row"><span class="voice-dot" style="background:var(--st-voice-speaking)"></span>AI 回应</div>
+        <div class="voice-row"><span class="voice-dot" style="background:var(--st-voice-active)"></span>激活</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>字体 Scale</h2>
+      <div class="type-row"><span class="type-label">3xl</span><span style="font-size:var(--st-text-3xl);font-weight:800">32px 页面标题</span></div>
+      <div class="type-row"><span class="type-label">xl</span><span style="font-size:var(--st-text-xl);font-weight:800">20px 卡片标题</span></div>
+      <div class="type-row"><span class="type-label">sm</span><span style="font-size:var(--st-text-sm);color:var(--st-color-text-secondary)">14px 正文描述</span></div>
+      <div class="type-row"><span class="type-label">xs</span><span style="font-size:var(--st-text-xs);color:var(--st-color-text-tertiary)">12px 标签脚注</span></div>
+    </section>
+
+    <section>
+      <h2>组件 Primitive</h2>
+      <div class="grid grid-3">
+        <div class="st-glass-card card-demo">
+          <h3>GlassCard</h3>
+          <p>毛玻璃卡片 · rounded 32px</p>
+          <button class="st-btn st-btn--primary">开始演练</button>
+        </div>
+        <div class="st-glass-card card-demo">
+          <h3>Button 变体</h3>
+          <div class="row">
+            <button class="st-btn st-btn--primary">Primary</button>
+          </div>
+        </div>
+        <div class="st-glass-card card-demo">
+          <h3>Badge</h3>
+          <span class="st-badge st-badge--success">已完成</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>圆角 & 阴影</h2>
+      <div class="row">
+        <div style="width:80px;height:80px;background:var(--st-color-bg-card);border-radius:var(--st-radius-lg);box-shadow:var(--st-shadow-card);display:flex;align-items:center;justify-content:center;font-size:10px">16px</div>
+        <div style="width:80px;height:80px;background:var(--st-color-bg-card);border-radius:var(--st-radius-2xl);box-shadow:var(--st-shadow-card);display:flex;align-items:center;justify-content:center;font-size:10px">32px</div>
+        <div style="width:80px;height:40px;background:var(--st-color-anchor);border-radius:var(--st-radius-full);box-shadow:var(--st-shadow-anchor);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff">pill</div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

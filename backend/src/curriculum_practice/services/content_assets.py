@@ -1,67 +1,53 @@
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
-from hashlib import sha256
-from json import dumps
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Literal
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.models import Persona
-from curriculum_practice.models import CaseItem, PracticeTemplate, RoleProfile
+from common.db.models import User
+from curriculum_practice.models import CaseItem, RoleProfile
 from curriculum_practice.schemas import CaseItemCreate, RoleProfileCreate
 from curriculum_practice.services.asset_references import CurriculumAssetReferenceReader
+from curriculum_practice.services.case_item_revision_service import (
+    CaseItemRevisionService,
+)
+from curriculum_practice.services.content_asset_duplicates import (
+    build_case_item_duplicate,
+)
+from curriculum_practice.services.content_asset_errors import (
+    ContentAssetAlreadyDraftError,
+    ContentAssetNotEditableError,
+    ContentAssetPublishError,
+    ContentAssetReferencedByTemplatesError,
+)
+from curriculum_practice.services.content_asset_payloads import (
+    case_item_content_hash,
+    case_item_payload,
+    has_disclosure_phase,
+    role_profile_content_hash,
+)
+from curriculum_practice.services.content_asset_payloads import (
+    copy_suffix as _copy_suffix,
+)
+from curriculum_practice.services.content_asset_references import (
+    list_published_template_references,
+)
+from curriculum_practice.services.role_profile_asset_service import (
+    RoleProfileAssetService,
+)
 from curriculum_practice.services.voice_clone import VoiceCloneResult, VoiceCloneService
 
-HASH_EXCLUDED_FIELDS = {
-    "case_item_id",
-    "role_profile_id",
-    "version",
-    "content_hash",
-    "status",
-    "published_at",
-    "published_by",
-    "created_at",
-    "created_by",
-    "updated_at",
-    "updated_by",
-}
-
-
-@runtime_checkable
-class ModelDumpable(Protocol):
-    def model_dump(self) -> dict[str, Any]: ...
-
-
-class ContentAssetPublishError(ValueError):
-    def __init__(self, reason_code: str, message: str) -> None:
-        super().__init__(message)
-        self.reason_code = reason_code
-
-
-class ContentAssetNotEditableError(ValueError):
-    pass
-
-
-class ContentAssetAlreadyDraftError(ValueError):
-    pass
-
-
-class ContentAssetReferencedByTemplatesError(ValueError):
-    def __init__(self, templates: list[dict[str, str]]) -> None:
-        self.referencing_templates = templates
-        super().__init__("Content asset is referenced by published templates.")
+__all__ = ["ContentAssetAlreadyDraftError", "ContentAssetNotEditableError", "ContentAssetPublishError", "ContentAssetReferencedByTemplatesError", "ContentAssetService", "_copy_suffix", "case_item_content_hash", "role_profile_content_hash"]
 
 
 class ContentAssetService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
+        self._role_profiles = RoleProfileAssetService(db)
 
-    async def list_case_items(
-        self, *, status: str | None = None, query: str | None = None
-    ) -> list[CaseItem]:
+    async def list_case_items(self, *, status: str | None = None, query: str | None = None) -> list[CaseItem]:
         stmt = select(CaseItem)
         if status:
             stmt = stmt.where(CaseItem.status == status)
@@ -74,9 +60,7 @@ class ContentAssetService:
                     CaseItem.company_profile.ilike(pattern),
                 )
             )
-        result = await self._db.execute(
-            stmt.order_by(CaseItem.updated_at.desc())
-        )
+        result = await self._db.execute(stmt.order_by(CaseItem.updated_at.desc()))
         return list(result.scalars().all())
 
     async def get_case_item(self, case_item_id: str) -> CaseItem | None:
@@ -94,8 +78,17 @@ class ContentAssetService:
     async def update_case_item(
         self, item: CaseItem, payload: CaseItemCreate, *, actor_id: str | None
     ) -> CaseItem:
-        if item.status != "draft":
+        if item.status == "archived":
             raise ContentAssetNotEditableError
+        if item.status == "published":
+            await CaseItemRevisionService(self._db).save_future_revision(
+                item,
+                payload,
+                actor=await self._require_actor(actor_id),
+            )
+            await self._db.commit()
+            await self._db.refresh(item)
+            return item
         for field, value in payload.model_dump().items():
             setattr(item, field, value)
         item.updated_by = actor_id
@@ -115,59 +108,27 @@ class ContentAssetService:
     async def list_role_profiles(
         self, *, status: str | None = None, query: str | None = None
     ) -> list[RoleProfile]:
-        stmt = select(RoleProfile)
-        if status:
-            stmt = stmt.where(RoleProfile.status == status)
-        if query:
-            pattern = f"%{query.strip()}%"
-            stmt = stmt.where(
-                or_(
-                    RoleProfile.role_name.ilike(pattern),
-                    RoleProfile.role_type.ilike(pattern),
-                    RoleProfile.communication_style.ilike(pattern),
-                )
-            )
-        result = await self._db.execute(
-            stmt.order_by(RoleProfile.updated_at.desc())
-        )
-        return list(result.scalars().all())
+        return await self._role_profiles.list_role_profiles(status=status, query=query)
 
     async def get_role_profile(self, role_profile_id: str) -> RoleProfile | None:
-        return await self._db.get(RoleProfile, role_profile_id)
+        return await self._role_profiles.get_role_profile(role_profile_id)
 
     async def create_role_profile(
         self, payload: RoleProfileCreate, *, actor_id: str | None
     ) -> RoleProfile:
-        await self._ensure_persona_ref_available(payload.persona_ref)
-        item = RoleProfile(
-            **payload.model_dump(), created_by=actor_id, updated_by=actor_id
-        )
-        self._db.add(item)
-        await self._db.commit()
-        await self._db.refresh(item)
-        return item
+        return await self._role_profiles.create_role_profile(payload, actor_id=actor_id)
 
     async def update_role_profile(
         self, item: RoleProfile, payload: RoleProfileCreate, *, actor_id: str | None
     ) -> RoleProfile:
-        if item.status != "draft":
-            raise ContentAssetNotEditableError
-        await self._ensure_persona_ref_available(payload.persona_ref)
-        for field, value in payload.model_dump().items():
-            setattr(item, field, value)
-        item.updated_by = actor_id
-        await self._db.commit()
-        await self._db.refresh(item)
-        return item
+        return await self._role_profiles.update_role_profile(
+            item, payload, actor_id=actor_id
+        )
 
     async def archive_role_profile(
         self, item: RoleProfile, *, actor_id: str | None
     ) -> RoleProfile:
-        item.status = "archived"
-        item.updated_by = actor_id
-        await self._db.commit()
-        await self._db.refresh(item)
-        return item
+        return await self._role_profiles.archive_role_profile(item, actor_id=actor_id)
 
     async def register_role_profile_voice(
         self,
@@ -180,33 +141,33 @@ class ContentAssetService:
         voice_sample_url: str,
         actor_id: str | None,
     ) -> VoiceCloneResult:
-        if item.status != "draft":
-            raise ContentAssetNotEditableError
-        result = await voice_service.create_voice(
+        return await self._role_profiles.register_role_profile_voice(
+            item,
+            voice_service=voice_service,
             voice_name=voice_name,
             audio_bytes=audio_bytes,
             content_type=content_type,
+            voice_sample_url=voice_sample_url,
+            actor_id=actor_id,
         )
-        if not result.ok or not result.voice_id:
-            return result
-        item.voice_id = result.voice_id
-        item.voice_sample_url = voice_sample_url
-        item.content_hash = role_profile_content_hash(_role_profile_payload(item))
-        item.updated_by = actor_id
-        await self._db.commit()
-        await self._db.refresh(item)
-        return result
 
     async def publish_case_item(
         self, item: CaseItem, *, actor_id: str | None
     ) -> CaseItem:
-        expected_hash = case_item_content_hash(_case_item_payload(item))
+        revision_service = CaseItemRevisionService(self._db)
+        if item.status == "published":
+            actor = await self._require_actor(actor_id)
+            if await revision_service.publish_working_revision(item, actor=actor):
+                await self._db.commit()
+                await self._db.refresh(item)
+                return item
+        expected_hash = case_item_content_hash(case_item_payload(item))
         if item.content_hash != expected_hash:
             raise ContentAssetPublishError(
                 "content_hash_mismatch",
                 "CaseItem content_hash does not match current content.",
             )
-        if not _has_disclosure_phase(item.allowed_disclosure_policy):
+        if not has_disclosure_phase(item.allowed_disclosure_policy):
             raise ContentAssetPublishError(
                 "disclosure_policy_invalid",
                 "CaseItem allowed_disclosure_policy must contain at least one phase.",
@@ -215,6 +176,9 @@ class ContentAssetService:
         item.published_by = actor_id
         item.published_at = datetime.now(UTC)
         item.updated_by = actor_id
+        actor = await self._optional_actor(actor_id)
+        if actor is not None:
+            await revision_service.ensure_initial_published_revision(item, actor=actor)
         await self._db.commit()
         await self._db.refresh(item)
         return item
@@ -222,43 +186,12 @@ class ContentAssetService:
     async def publish_role_profile(
         self, item: RoleProfile, *, actor_id: str | None
     ) -> RoleProfile:
-        expected_hash = role_profile_content_hash(_role_profile_payload(item))
-        if item.content_hash != expected_hash:
-            raise ContentAssetPublishError(
-                "content_hash_mismatch",
-                "RoleProfile content_hash does not match current content.",
-            )
-        await self._ensure_persona_ref_available(item.persona_ref)
-        item.status = "published"
-        item.published_by = actor_id
-        item.published_at = datetime.now(UTC)
-        item.updated_by = actor_id
-        await self._db.commit()
-        await self._db.refresh(item)
-        return item
+        return await self._role_profiles.publish_role_profile(item, actor_id=actor_id)
 
     async def duplicate_case_item(
         self, item: CaseItem, *, actor_id: str | None
     ) -> CaseItem:
-        payload = _case_item_payload(item)
-        payload["customer_role"] = _copy_suffix(item.customer_role)
-        content_hash = case_item_content_hash(payload)
-        duplicate = CaseItem(
-            case_item_id=str(uuid.uuid4()),
-            industry=item.industry,
-            company_profile=item.company_profile,
-            customer_role=str(payload["customer_role"]),
-            pain_points=list(item.pain_points or []),
-            objections=list(item.objections or []),
-            hidden_information=item.hidden_information,
-            success_criteria=list(item.success_criteria or []),
-            allowed_disclosure_policy=item.allowed_disclosure_policy or {},
-            version=1,
-            content_hash=content_hash,
-            status="draft",
-            created_by=actor_id,
-            updated_by=actor_id,
-        )
+        duplicate = build_case_item_duplicate(item, actor_id=actor_id)
         self._db.add(duplicate)
         await self._db.commit()
         await self._db.refresh(duplicate)
@@ -267,29 +200,7 @@ class ContentAssetService:
     async def duplicate_role_profile(
         self, item: RoleProfile, *, actor_id: str | None
     ) -> RoleProfile:
-        payload = _role_profile_payload(item)
-        payload["role_name"] = _copy_suffix(item.role_name)
-        content_hash = role_profile_content_hash(payload)
-        duplicate = RoleProfile(
-            role_profile_id=str(uuid.uuid4()),
-            role_type=item.role_type,
-            role_name=str(payload["role_name"]),
-            persona_ref=item.persona_ref,
-            communication_style=item.communication_style,
-            pressure_level=item.pressure_level,
-            knowledge_boundary=list(item.knowledge_boundary or []),
-            behavior_rules=list(item.behavior_rules or []),
-            voice_style_hint=item.voice_style_hint,
-            version=1,
-            content_hash=content_hash,
-            status="draft",
-            created_by=actor_id,
-            updated_by=actor_id,
-        )
-        self._db.add(duplicate)
-        await self._db.commit()
-        await self._db.refresh(duplicate)
-        return duplicate
+        return await self._role_profiles.duplicate_role_profile(item, actor_id=actor_id)
 
     async def unpublish_case_item(
         self, item: CaseItem, *, actor_id: str | None, acknowledge: bool = False
@@ -305,10 +216,8 @@ class ContentAssetService:
     async def unpublish_role_profile(
         self, item: RoleProfile, *, actor_id: str | None, acknowledge: bool = False
     ) -> RoleProfile:
-        return await self._unpublish_content_asset(
+        return await self._role_profiles.unpublish_role_profile(
             item,
-            asset_type="role_profile",
-            asset_id=str(item.role_profile_id),
             actor_id=actor_id,
             acknowledge=acknowledge,
         )
@@ -319,11 +228,7 @@ class ContentAssetService:
         asset_type: Literal["case_item", "role_profile", "examiner_agent"],
         asset_id: str,
     ) -> list[dict[str, str]]:
-        return await list_published_template_references(
-            self._db,
-            asset_type=asset_type,
-            asset_id=asset_id,
-        )
+        return await list_published_template_references(self._db, asset_type=asset_type, asset_id=asset_id)
 
     async def _unpublish_content_asset(
         self,
@@ -352,15 +257,16 @@ class ContentAssetService:
         await self._db.refresh(item)
         return item
 
-    async def _ensure_persona_ref_available(self, persona_ref: str | None) -> None:
-        if not persona_ref:
-            return
-        persona = await self._db.get(Persona, persona_ref)
-        if persona is None or persona.status != "active":
-            raise ContentAssetPublishError(
-                "persona_ref_unavailable",
-                "RoleProfile persona_ref must point to an active Persona.",
-            )
+    async def _require_actor(self, actor_id: str | None) -> User:
+        actor = await self._optional_actor(actor_id)
+        if actor is None:
+            raise ContentAssetNotEditableError
+        return actor
+
+    async def _optional_actor(self, actor_id: str | None) -> User | None:
+        if actor_id is None:
+            return None
+        return await self._db.get(User, actor_id)
 
     async def read_snapshot_reference(
         self, asset_type: str, asset_id: str
@@ -369,123 +275,3 @@ class ContentAssetService:
             asset_type,
             asset_id,
         )
-
-
-async def list_published_template_references(
-    db: AsyncSession,
-    *,
-    asset_type: Literal["case_item", "role_profile", "examiner_agent"],
-    asset_id: str,
-) -> list[dict[str, str]]:
-    column_map = {
-        "case_item": PracticeTemplate.case_item_id,
-        "role_profile": PracticeTemplate.role_profile_id,
-        "examiner_agent": PracticeTemplate.examiner_agent_id,
-    }
-    column = column_map[asset_type]
-    result = await db.execute(
-        select(PracticeTemplate).where(
-            column == asset_id,
-            PracticeTemplate.status == "published",
-        )
-    )
-    return [
-        {
-            "template_id": str(template.template_id),
-            "name": str(template.name),
-            "status": str(template.status),
-        }
-        for template in result.scalars().all()
-    ]
-
-
-def _copy_suffix(value: str) -> str:
-    suffix = " (副本)"
-    trimmed = value.strip()
-    if trimmed.endswith(suffix):
-        return trimmed
-    return f"{trimmed}{suffix}"
-
-
-def case_item_content_hash(payload: object) -> str:
-    return _content_hash(_without_hash_excluded_fields(_to_dict(payload)))
-
-
-def role_profile_content_hash(payload: object) -> str:
-    return _content_hash(_without_hash_excluded_fields(_to_dict(payload)))
-
-
-def _case_item_payload(item: CaseItem) -> dict[str, object]:
-    return {
-        "industry": item.industry,
-        "company_profile": item.company_profile,
-        "customer_role": item.customer_role,
-        "pain_points": list(item.pain_points or []),
-        "objections": list(item.objections or []),
-        "hidden_information": item.hidden_information,
-        "success_criteria": list(item.success_criteria or []),
-        "allowed_disclosure_policy": item.allowed_disclosure_policy or {},
-    }
-
-
-def _role_profile_payload(item: RoleProfile) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "role_type": item.role_type,
-        "role_name": item.role_name,
-        "persona_ref": item.persona_ref,
-        "communication_style": item.communication_style,
-        "pressure_level": item.pressure_level,
-        "knowledge_boundary": list(item.knowledge_boundary or []),
-        "behavior_rules": list(item.behavior_rules or []),
-        "voice_style_hint": item.voice_style_hint,
-    }
-    if item.voice_id:
-        payload["voice_id"] = item.voice_id
-    if item.voice_sample_url:
-        payload["voice_sample_url"] = item.voice_sample_url
-    return payload
-
-
-def _has_disclosure_phase(policy: object) -> bool:
-    return isinstance(policy, dict) and isinstance(policy.get("phases"), list) and bool(policy["phases"])
-
-
-def _content_hash(payload: object) -> str:
-    return (
-        "sha256:"
-        + sha256(
-            dumps(
-                payload,
-                sort_keys=True,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                default=str,
-            ).encode("utf-8")
-        ).hexdigest()
-    )
-
-
-def _without_hash_excluded_fields(payload: object) -> object:
-    if isinstance(payload, dict):
-        return {
-            key: _without_hash_excluded_fields(value)
-            for key, value in payload.items()
-            if key not in HASH_EXCLUDED_FIELDS
-            and not (key in {"voice_id", "voice_sample_url"} and value in (None, ""))
-        }
-    if isinstance(payload, list):
-        return [_without_hash_excluded_fields(item) for item in payload]
-    return payload
-
-
-def _to_dict(value: object) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, ModelDumpable):
-        dumped = value.model_dump()
-        return dumped
-    return {
-        key: getattr(value, key)
-        for key in dir(value)
-        if not key.startswith("_") and not callable(getattr(value, key))
-    }

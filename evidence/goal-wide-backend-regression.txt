@@ -1,0 +1,25 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/zhaozengqing/github/销售训练qoder/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.4.0, hydra-core-1.3.2, langsmith-0.8.5, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 52 items
+
+tests/unit/test_newcomer_training_path_articles.py ....                  [  7%]
+tests/unit/test_newcomer_training_path_audit_logs.py ...                 [ 13%]
+tests/unit/test_newcomer_training_path_boundary.py .....                 [ 23%]
+tests/unit/test_newcomer_training_path_papers.py ....                    [ 30%]
+tests/unit/test_newcomer_training_path_permissions.py .......            [ 44%]
+tests/integration/test_newcomer_training_path_article_api.py .....       [ 53%]
+tests/integration/test_newcomer_training_path_paper_api.py ..            [ 57%]
+tests/integration/test_newcomer_training_path_rbac_api.py .              [ 59%]
+tests/unit/test_sales_trainer_services.py .....................          [100%]
+
+=============================== warnings summary ===============================
+tests/integration/test_newcomer_training_path_article_api.py::test_should_fetch_newcomer_article_via_api
+  /Users/zhaozengqing/github/销售训练qoder/backend/venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(f):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 52 passed, 1 warning in 59.95s ========================

@@ -378,6 +378,7 @@ describe("api.salesTrainer facade", () => {
                     size_bytes: file.size,
                     storage_key: "cos://sales-trainer/audio/user/audio.wav",
                     source_page: "sales_trainer_audio_upload",
+                    confirmed_material_version_id: null,
                     auto_process: true,
                 }),
             }),
@@ -556,6 +557,87 @@ describe("api.salesTrainer facade", () => {
         expect(fetchMock).toHaveBeenCalledWith(
             expect.stringContaining("/admin/sales-trainer/quiz-attempts/attempt-1"),
             expect.any(Object),
+        );
+    });
+
+    it("previews historical quiz-attempt regrade through the central facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    target_type: "quiz_attempt",
+                    target_id: "attempt-1",
+                    target_revision_id: "revision-2",
+                    impact_scope: {
+                        record_count: 1,
+                        affected_attempt_ids: ["attempt-1"],
+                        future_records_changed: false,
+                        history_overwrite: false,
+                        requires_reason: true,
+                    },
+                    before_snapshot: { total_score: 10 },
+                    after_snapshot: { total_score: 0 },
+                },
+            }),
+        });
+
+        const result = await api.admin.salesTrainer.previewQuizAttemptRegrade("attempt-1", {
+            target_revision_id: "revision-2",
+        });
+
+        expect(result.after_snapshot.total_score).toBe(0);
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/admin/sales-trainer/regrades/quiz-attempts/attempt-1/preview"),
+            expect.objectContaining({
+                method: "POST",
+                body: JSON.stringify({ target_revision_id: "revision-2" }),
+            }),
+        );
+    });
+
+    it("runs historical quiz-attempt regrade through the central facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    regrade_run_id: "run-1",
+                    target_type: "quiz_attempt",
+                    target_id: "attempt-1",
+                    target_revision_id: "revision-2",
+                    status: "completed",
+                    reason: "正确答案修订后追加历史重评记录",
+                    impact_scope: {
+                        record_count: 1,
+                        affected_attempt_ids: ["attempt-1"],
+                        future_records_changed: false,
+                        history_overwrite: false,
+                        requires_reason: true,
+                    },
+                    before_snapshot: { total_score: 10 },
+                    after_snapshot: { total_score: 0 },
+                    trace_id: "trace-1",
+                    created_at: "2026-06-04T00:00:00Z",
+                },
+            }),
+        });
+
+        const result = await api.admin.salesTrainer.runQuizAttemptRegrade("attempt-1", {
+            target_revision_id: "revision-2",
+            reason: "正确答案修订后追加历史重评记录",
+        });
+
+        expect(result.regrade_run_id).toBe("run-1");
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/admin/sales-trainer/regrades/quiz-attempts/attempt-1/run"),
+            expect.objectContaining({
+                method: "POST",
+                body: JSON.stringify({
+                    target_revision_id: "revision-2",
+                    reason: "正确答案修订后追加历史重评记录",
+                }),
+            }),
         );
     });
 });

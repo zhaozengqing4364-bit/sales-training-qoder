@@ -1,0 +1,126 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e49]:
+    - complementary [ref=e50]:
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - img [ref=e54]
+          - generic [ref=e57]:
+            - generic [ref=e58]: AI 销售教练
+            - generic [ref=e59]: 平台
+        - navigation "主导航" [ref=e60]:
+          - generic [ref=e61]: 菜单
+          - menubar [ref=e62]:
+            - menuitem "首页" [ref=e63] [cursor=pointer]:
+              - img [ref=e65]
+              - generic [ref=e68]: 首页
+            - menuitem "训练模式" [ref=e69] [cursor=pointer]:
+              - img [ref=e70]
+              - generic [ref=e75]: 训练模式
+            - menuitem "销售训练" [ref=e76] [cursor=pointer]:
+              - img [ref=e77]
+              - generic [ref=e80]: 销售训练
+            - menuitem "排行榜" [ref=e81] [cursor=pointer]:
+              - img [ref=e82]
+              - generic [ref=e83]: 排行榜
+            - menuitem "历史记录" [ref=e84] [cursor=pointer]:
+              - img [ref=e85]
+              - generic [ref=e89]: 历史记录
+          - generic [ref=e92]: 系统
+          - menubar [ref=e93]:
+            - menuitem "运行状态" [ref=e94] [cursor=pointer]:
+              - img [ref=e95]
+              - generic [ref=e97]: 运行状态
+            - menuitem "管理后台" [ref=e98] [cursor=pointer]:
+              - img [ref=e99]
+              - generic [ref=e102]: 管理后台
+        - generic [ref=e103]:
+          - button "帮助与反馈" [ref=e105]:
+            - img [ref=e106]
+            - generic [ref=e108]: 帮助与反馈
+          - generic [ref=e109] [cursor=pointer]:
+            - img [ref=e111]
+            - generic [ref=e114]:
+              - generic [ref=e115]: Developer
+              - generic [ref=e116]: Development
+            - img [ref=e118]
+          - button "折叠侧边栏" [ref=e121]:
+            - img [ref=e122]
+            - generic [ref=e125]: 折叠侧边栏
+    - main [ref=e126]:
+      - generic [ref=e128]:
+        - generic [ref=e129]:
+          - generic [ref=e130]:
+            - button "v0.1.0" [ref=e132]
+            - heading "晚安, Developer 👋" [level=1] [ref=e133]
+            - paragraph [ref=e134]: 查看您的训练概览与最新进展。
+          - generic [ref=e136] [cursor=pointer]:
+            - generic [ref=e138]:
+              - generic [ref=e139]: 本周练习
+              - generic [ref=e140]: 统计加载中
+            - img [ref=e142]
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - generic [ref=e148]:
+              - img [ref=e150]
+              - generic [ref=e152]:
+                - paragraph [ref=e153]: 连续练习
+                - heading "0 天" [level=2] [ref=e154]
+            - paragraph [ref=e155]: 只统计已完成且可评估的训练；证据不足或未完成训练不会计入连续天数。
+          - generic [ref=e156]:
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - img [ref=e161]
+                - generic [ref=e167]:
+                  - paragraph [ref=e168]: 本周目标
+                  - heading "0/3" [level=2] [ref=e169]
+              - generic [ref=e170]: 完成 3 次可评估训练点亮本周轻成就
+            - paragraph [ref=e172]: 本周目标进度只纳入 completed/evaluable 训练，避免把未完成或证据不足记录包装成成就。
+        - generic [ref=e174]:
+          - paragraph [ref=e176]: 训练统计暂不可用
+          - paragraph [ref=e177]: 统计模块加载失败时，首页不会显示 0% 通过率或 0% 次日复练率；请稍后重试首页数据。
+        - generic [ref=e178]:
+          - generic [ref=e181]:
+            - generic [ref=e182]:
+              - generic [ref=e183]: 今日复练任务
+              - heading "提升逻辑性能力" [level=2] [ref=e184]
+              - paragraph [ref=e185]: 您上次练习的逻辑性得分为 0 分，建议针对性练习来提升。
+            - link "针对练习" [ref=e186] [cursor=pointer]:
+              - /url: /training
+              - button "针对练习" [ref=e187]:
+                - text: 针对练习
+                - img [ref=e188]
+          - generic [ref=e192]:
+            - generic [ref=e193]:
+              - img [ref=e195]
+              - generic [ref=e199]:
+                - paragraph [ref=e200]: 学习路径下一步
+                - heading "学习路径加载中" [level=2] [ref=e201]
+                - paragraph [ref=e202]: 根据最近报告弱项生成；冷启动用户会看到默认训练路径。
+            - link "查看学习路径" [ref=e203] [cursor=pointer]:
+              - /url: /learning-path
+              - text: 查看学习路径
+              - img [ref=e204]
+          - generic [ref=e206]:
+            - img [ref=e209]
+            - generic [ref=e212]:
+              - generic [ref=e213]: 加载中
+              - generic [ref=e214]: 上次得分
+            - paragraph [ref=e215]: 训练统计仍在加载，暂不展示默认 0 分。
+        - generic [ref=e216]:
+          - generic [ref=e217]:
+            - heading "最近记录" [level=2] [ref=e218]
+            - generic [ref=e219]:
+              - generic [ref=e220]: 高级筛选请在历史页进行
+              - link "去历史页筛选" [ref=e221] [cursor=pointer]:
+                - /url: /history
+                - button "去历史页筛选" [ref=e222]:
+                  - img [ref=e223]
+                  - text: 去历史页筛选
+          - generic [ref=e227]:
+            - img [ref=e230]
+            - heading "最近记录加载中" [level=3] [ref=e233]
+            - paragraph [ref=e234]: 最近记录仍在加载；你可以先使用训练入口继续练习。
+            - button "开始训练" [ref=e235]
+  - button "Open Next.js Dev Tools" [ref=e41] [cursor=pointer]:
+    - img [ref=e42]
+  - alert [ref=e45]

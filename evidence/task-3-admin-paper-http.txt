@@ -1,0 +1,30 @@
+### CREATE PUBLISHED TARGET PAPER
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 08:33:01 GMT
+server: uvicorn
+content-length: 757
+content-type: application/json
+x-trace-id: aa3e3c10c1fa046322172e7a016aeaa5
+traceparent: 00-aa3e3c10c1fa046322172e7a016aeaa5-255a7bc820bf49f1-01
+
+{"success":true,"data":{"paper_id":"fb70c380-86fc-4c60-86d0-108b3b19955f","paper_key":"task3-http-business-paper","title":"商务礼仪 HTTP QA 考卷","description":null,"module_key":"business_skills","unit_id":"bb94f533-1493-43ce-ad5f-210556fd4515","pass_threshold":10.0,"status":"draft","created_by":"task3-admin","updated_by":"task3-admin","created_at":"2026-06-02T08:33:02.419971","updated_at":"2026-06-02T08:33:02.419975","questions":[{"question_id":"task3-business-question-1","order_index":1,"points":10,"question_type":"single_choice","title":"见客户前礼仪","stem":"见客户前应该如何准备？","options":[{"value":"A","label":"准备客户背景"},{"value":"B","label":"临时发挥"}]}]},"trace_id":"aa3e3c10c1fa046322172e7a016aeaa5"}
+### PUBLISH PAPER 760f6155-7db9-450a-a9d7-b93d00875d67
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 08:33:01 GMT
+server: uvicorn
+content-length: 775
+content-type: application/json
+x-trace-id: 04e9352ea1ded53aa607a578eb66cc35
+traceparent: 00-04e9352ea1ded53aa607a578eb66cc35-3da7465aa3019e2d-01
+
+{"success":true,"data":{"paper_id":"760f6155-7db9-450a-a9d7-b93d00875d67","paper_key":"task3-http-business-paper-publish","title":"商务礼仪 HTTP QA 发布考卷","description":null,"module_key":"business_skills","unit_id":"d941ada2-15a7-4a14-91e9-3cbfa1afee12","pass_threshold":10.0,"status":"published","created_by":"task3-admin","updated_by":"task3-admin","created_at":"2026-06-02T08:33:02.445897","updated_at":"2026-06-02T08:33:02.495152","questions":[{"question_id":"task3-business-question-1","order_index":1,"points":10,"question_type":"single_choice","title":"见客户前礼仪","stem":"见客户前应该如何准备？","options":[{"value":"A","label":"准备客户背景"},{"value":"B","label":"临时发挥"}]}]},"trace_id":"04e9352ea1ded53aa607a578eb66cc35"}
+### FETCH PUBLISHED PAPER 760f6155-7db9-450a-a9d7-b93d00875d67
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 08:33:01 GMT
+server: uvicorn
+content-length: 775
+content-type: application/json
+x-trace-id: cec851bd897934bfa65eaed9b6c90ba1
+traceparent: 00-cec851bd897934bfa65eaed9b6c90ba1-19752b795026bbe3-01
+
+{"success":true,"data":{"paper_id":"760f6155-7db9-450a-a9d7-b93d00875d67","paper_key":"task3-http-business-paper-publish","title":"商务礼仪 HTTP QA 发布考卷","description":null,"module_key":"business_skills","unit_id":"d941ada2-15a7-4a14-91e9-3cbfa1afee12","pass_threshold":10.0,"status":"published","created_by":"task3-admin","updated_by":"task3-admin","created_at":"2026-06-02T08:33:02.445897","updated_at":"2026-06-02T08:33:02.495152","questions":[{"question_id":"task3-business-question-1","order_index":1,"points":10,"question_type":"single_choice","title":"见客户前礼仪","stem":"见客户前应该如何准备？","options":[{"value":"A","label":"准备客户背景"},{"value":"B","label":"临时发挥"}]}]},"trace_id":"cec851bd897934bfa65eaed9b6c90ba1"}

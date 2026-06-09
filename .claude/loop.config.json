@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "name": "ui-ux-audit",
+  "description": "Visual + UX audit loop for the sales-training-qoder web app. Crawls every reachable route, takes desktop+mobile+state screenshots, runs multi-modal analysis, and emits a structured report with 4-layer typography audit, 5-perspective optimization suggestions, and 2x2 feature-pruning matrix.",
+  "scope": "project",
+  "interval": "1m",
+  "interval_policy": {
+    "running": "1m",
+    "stable": "3m",
+    "error": "5m"
+  },
+  "prompt_file": "loop.md",
+  "evidence_log": "logs/ui-ux-audit.log",
+  "last_state": "loop-state/ui-ux-audit.last.json",
+  "todo_file": "loop-state/ui-ux-audit.todo.json",
+  "reflexion_file": "loop-state/ui-ux-audit.reflexion.json",
+  "output_root": "ui-ux-audit/sales-training-qoder-<date>",
+  "forbidden_actions": [
+    "edit web/src or backend/src",
+    "git push/merge/rebase/reset",
+    "delete .claude/logs or ui-ux-audit artifacts",
+    "fabricate screenshots or fake analysis",
+    "skip Stage 0/3/4/5",
+    "npm run build/deploy/dev",
+    "Bash(rm -rf) / Bash(curl|sh) / Bash(sudo*)"
+  ],
+  "exit_conditions": [
+    "pages_done == pages_total AND phase == done",
+    "user input stop/abort",
+    "forced_exit flag set in last.json",
+    "2 consecutive no-op iterations in done phase"
+  ],
+  "escalation_conditions": [
+    "dev server down 3 consecutive probes",
+    "playwright MCP 2 consecutive errors on same call",
+    "reflexion.json same class >= 3",
+    "P0 blocker needing human (e.g. missing auth token)"
+  ],
+  "scenarios": [
+    {
+      "name": "ui-ux-audit",
+      "prompt_file": "loops/ui-ux-audit.md",
+      "enabled": true,
+      "interval": "1m"
+    }
+  ],
+  "project_context": {
+    "stack": ["Next.js 16.2.3", "React 19", "TypeScript 5", "Tailwind 4", "Radix UI", "lucide-react", "framer-motion"],
+    "base_url_dev": "http://localhost:3445",
+    "base_url_staging": null,
+    "auth_required_groups": ["(dashboard)", "(user)", "admin", "sales-trainer"],
+    "design_tokens_path": "web/src/app/globals.css",
+    "route_groups": ["(auth)", "(dashboard)", "(user)", "admin"],
+    "key_admin_submodules": [
+      "agents", "analytics", "business-rules", "curriculum-practice", "governance",
+      "knowledge", "learning-contents", "logs", "personas", "presentation-ai",
+      "presentations", "prompts", "rag-profiles", "records", "retrieval-strategies",
+      "sales-trainer", "scoring-rulesets", "settings", "supervisor-training",
+      "test-bank", "users", "voice-runtime"
+    ],
+    "key_sales_trainer_subroutes": ["audio", "learn", "quiz", "extra-units-section"],
+    "fonts": ["Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei", "Heiti SC"],
+    "viewport_targets": {
+      "desktop": "1440x900",
+      "mobile": "375x812"
+    }
+  },
+  "created_at": "2026-06-01T00:00:00+08:00",
+  "updated_at": "2026-06-01T00:00:00+08:00"
+}

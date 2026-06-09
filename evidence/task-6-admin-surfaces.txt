@@ -1,0 +1,14 @@
+web/src/app/admin/sales-trainer/articles/page.tsx
+web/src/app/admin/sales-trainer/audio-submissions/page.tsx
+web/src/app/admin/sales-trainer/materials/page.tsx
+web/src/app/admin/sales-trainer/operation-logs/page.tsx
+web/src/app/admin/sales-trainer/page.tsx
+web/src/app/admin/sales-trainer/papers/page.tsx
+web/src/app/admin/sales-trainer/paths/page.tsx
+web/src/app/admin/sales-trainer/questions/page.tsx
+web/src/app/admin/sales-trainer/score-prompts/page.tsx
+web/src/app/admin/sales-trainer/score-results/page.tsx
+web/src/app/admin/sales-trainer/score-standards/page.tsx
+web/src/app/admin/sales-trainer/settings/page.tsx
+web/src/app/admin/sales-trainer/training-records/page.tsx
+web/src/app/admin/sales-trainer/units/page.tsx

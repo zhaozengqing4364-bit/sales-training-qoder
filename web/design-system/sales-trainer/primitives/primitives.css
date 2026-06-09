@@ -1,0 +1,50 @@
+@import "../tokens/index.css";
+
+.st-glass-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--st-radius-2xl);
+  background: var(--st-glass-bg-medium);
+  backdrop-filter: blur(var(--st-glass-blur));
+  border: 1px solid var(--st-glass-border);
+  box-shadow: var(--st-shadow-card);
+  transition: all var(--st-duration-slow) var(--st-ease-default);
+}
+
+.st-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--st-radius-full);
+  font-family: var(--st-font-sans);
+  font-weight: var(--st-font-medium);
+  cursor: pointer;
+  transition: all var(--st-duration-normal) var(--st-ease-default);
+}
+
+.st-btn--primary {
+  height: var(--st-btn-height-md);
+  padding: 0 var(--st-space-6);
+  background: var(--st-color-anchor);
+  color: var(--st-color-text-inverse);
+  box-shadow: var(--st-shadow-sm);
+}
+
+.st-btn--primary:hover {
+  background: var(--st-color-anchor-hover);
+  box-shadow: var(--st-shadow-anchor);
+}
+
+.st-badge {
+  display: inline-flex;
+  padding: var(--st-space-1) var(--st-space-3);
+  border-radius: var(--st-radius-sm);
+  font-size: var(--st-text-xs);
+  font-weight: var(--st-font-medium);
+}
+
+.st-badge--success {
+  background: var(--st-color-success-bg);
+  color: var(--st-color-success-fg);
+}

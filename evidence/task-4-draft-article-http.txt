@@ -1,0 +1,10 @@
+### LEARNER FETCH EXPLICIT DRAFT ARTICLE
+HTTP/1.1 404 Not Found
+date: Tue, 02 Jun 2026 08:59:57 GMT
+server: uvicorn
+content-length: 171
+content-type: application/json
+x-trace-id: 893c3dae03e2f6980d842eb7b0e8afbc
+traceparent: 00-893c3dae03e2f6980d842eb7b0e8afbc-2173005203715e3f-01
+
+{"success":false,"data":null,"error":"[LEARNING_CONTENT_NOT_PUBLISHED]","message":"LearningContent 未发布或已归档。","trace_id":"893c3dae03e2f6980d842eb7b0e8afbc"}

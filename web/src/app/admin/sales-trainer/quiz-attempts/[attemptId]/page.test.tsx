@@ -1,10 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerQuizAttemptDetailPage from "./page";
 
-const { getQuizAttemptMock } = vi.hoisted(() => ({
+const { getQuizAttemptMock, previewQuizAttemptRegradeMock, runQuizAttemptRegradeMock } = vi.hoisted(() => ({
     getQuizAttemptMock: vi.fn(),
+    previewQuizAttemptRegradeMock: vi.fn(),
+    runQuizAttemptRegradeMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -23,6 +25,8 @@ vi.mock("@/lib/api/client", async () => {
                 salesTrainer: {
                     ...actual.api.admin.salesTrainer,
                     getQuizAttempt: getQuizAttemptMock,
+                    previewQuizAttemptRegrade: previewQuizAttemptRegradeMock,
+                    runQuizAttemptRegrade: runQuizAttemptRegradeMock,
                 },
             },
         },
@@ -32,6 +36,8 @@ vi.mock("@/lib/api/client", async () => {
 describe("SalesTrainerQuizAttemptDetailPage", () => {
     beforeEach(() => {
         getQuizAttemptMock.mockReset();
+        previewQuizAttemptRegradeMock.mockReset();
+        runQuizAttemptRegradeMock.mockReset();
         getQuizAttemptMock.mockResolvedValue({
             attempt_id: "attempt-1",
             unit_id: "unit-1",
@@ -86,6 +92,55 @@ describe("SalesTrainerQuizAttemptDetailPage", () => {
                 },
             ],
         });
+        previewQuizAttemptRegradeMock.mockResolvedValue({
+            target_type: "quiz_attempt",
+            target_id: "attempt-1",
+            target_revision_id: "revision-2",
+            impact_scope: {
+                record_count: 1,
+                affected_attempt_ids: ["attempt-1"],
+                future_records_changed: false,
+                history_overwrite: false,
+                requires_reason: true,
+            },
+            before_snapshot: {
+                total_score: 18,
+                max_score: 20,
+                passed: true,
+            },
+            after_snapshot: {
+                total_score: 12,
+                max_score: 20,
+                passed: false,
+            },
+        });
+        runQuizAttemptRegradeMock.mockResolvedValue({
+            target_type: "quiz_attempt",
+            target_id: "attempt-1",
+            target_revision_id: "revision-2",
+            impact_scope: {
+                record_count: 1,
+                affected_attempt_ids: ["attempt-1"],
+                future_records_changed: false,
+                history_overwrite: false,
+                requires_reason: true,
+            },
+            before_snapshot: {
+                total_score: 18,
+                max_score: 20,
+                passed: true,
+            },
+            after_snapshot: {
+                total_score: 12,
+                max_score: 20,
+                passed: false,
+            },
+            regrade_run_id: "regrade-run-1",
+            status: "completed",
+            reason: "正确答案修订后追加历史重评记录",
+            trace_id: "trace-regrade-1",
+            created_at: "2026-06-04T00:00:00Z",
+        });
     });
 
     it("renders answer snapshots and AI short-answer scoring feedback for admins", async () => {
@@ -94,6 +149,10 @@ describe("SalesTrainerQuizAttemptDetailPage", () => {
         expect(await screen.findByText("做题结果详情")).toBeTruthy();
         expect(getQuizAttemptMock).toHaveBeenCalledWith("attempt-1");
         expect(screen.getByText("张三 · 销售一部")).toBeTruthy();
+        expect(screen.getByText("已评分")).toBeTruthy();
+        expect(screen.getByText("训练任务")).toBeTruthy();
+        expect(screen.getByText("编号：unit-1")).toBeTruthy();
+        expect(screen.queryByText("scored")).toBeNull();
         expect(screen.getByText("产品定位")).toBeTruthy();
         expect(screen.getByText("石犀核心定位是什么？")).toBeTruthy();
         expect(screen.getByText(/A\./)).toBeTruthy();
@@ -107,5 +166,31 @@ describe("SalesTrainerQuizAttemptDetailPage", () => {
         expect(screen.getByText("回答覆盖核心价值，但可以补充客户场景。")).toBeTruthy();
         expect(screen.getByText(/AI 80/)).toBeTruthy();
         expect(screen.getByText(/评分依据：命中数据流动治理和客户价值。/)).toBeTruthy();
+    });
+
+    it("previews impact and requires a reason before running historical regrade", async () => {
+        render(<SalesTrainerQuizAttemptDetailPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "预览重评影响" }));
+
+        await waitFor(() => {
+            expect(previewQuizAttemptRegradeMock).toHaveBeenCalledWith("attempt-1", {});
+        });
+        expect(screen.getByText("1 条历史记录")).toBeTruthy();
+        expect(screen.getByText("18 / 20")).toBeTruthy();
+        expect(screen.getByText("12 / 20")).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText("重评原因"), {
+            target: { value: "正确答案修订后追加历史重评记录" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "确认重评" }));
+
+        await waitFor(() => {
+            expect(runQuizAttemptRegradeMock).toHaveBeenCalledWith("attempt-1", {
+                target_revision_id: "revision-2",
+                reason: "正确答案修订后追加历史重评记录",
+            });
+        });
+        expect(await screen.findByText(/已生成重评记录，追踪号 trace-regrade-1/)).toBeTruthy();
     });
 });

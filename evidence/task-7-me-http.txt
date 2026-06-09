@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 09:52:33 GMT
+server: uvicorn
+content-length: 277
+content-type: application/json
+x-trace-id: bdf8e328dbfb8e6bf6d9d76e8d553582
+traceparent: 00-bdf8e328dbfb8e6bf6d9d76e8d553582-111bcce563c47ed2-01
+
+{"success":true,"data":{"id":"task7-user","display_name":"Task7 User","avatar_url":null,"role":"user","department":null,"email":"task7-user@example.com","settings":{"notifications_enabled":true,"language":"zh-CN","theme":"light"}},"trace_id":"bdf8e328dbfb8e6bf6d9d76e8d553582"}

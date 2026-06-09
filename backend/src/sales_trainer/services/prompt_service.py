@@ -6,7 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.db.models import User
 from sales_trainer.models import SalesTrainerAudioScorePrompt
 from sales_trainer.schemas import AudioScorePromptCreate, AudioScorePromptUpdate
+from sales_trainer.services.material_service import normalize_learner_rubric
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.prompt_revision_payloads import prompt_lifecycle_snapshot
+from sales_trainer.services.prompt_revision_service import (
+    AudioScorePromptRevisionService,
+    PromptRevisionServiceError,
+)
 
 
 class PromptServiceError(Exception):
@@ -21,6 +27,7 @@ class AudioScorePromptService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
         self._logs = OperationLogService(db)
+        self._revisions = AudioScorePromptRevisionService(db)
 
     async def list_prompts(
         self,
@@ -54,6 +61,7 @@ class AudioScorePromptService:
             system_prompt=payload.system_prompt,
             scoring_template=payload.scoring_template,
             output_schema=payload.output_schema,
+            learner_rubric=normalize_learner_rubric(payload.learner_rubric),
             created_by=str(actor.user_id),
             updated_by=str(actor.user_id),
         )
@@ -76,13 +84,28 @@ class AudioScorePromptService:
         *,
         actor: User,
     ) -> SalesTrainerAudioScorePrompt:
+        if prompt.status == "published":
+            try:
+                return await self._revisions.save_future_revision(
+                    prompt,
+                    payload,
+                    actor=actor,
+                )
+            except PromptRevisionServiceError as exc:
+                raise PromptServiceError(
+                    exc.code,
+                    exc.message,
+                    exc.status_code,
+                ) from exc
         if prompt.status != "draft":
             raise PromptServiceError(
                 "[SCORING_PROMPT_NOT_EDITABLE]",
-                "只有 draft 状态的录音评分标准可以修改。",
+                "已归档录音评分标准不能修改；已发布版本编辑会生成新修订并只影响后续学员。",
                 409,
             )
         data = payload.model_dump(exclude_unset=True)
+        if "learner_rubric" in data:
+            data["learner_rubric"] = normalize_learner_rubric(data["learner_rubric"])
         for key, value in data.items():
             setattr(prompt, key, value)
         prompt.updated_by = str(actor.user_id)
@@ -105,14 +128,37 @@ class AudioScorePromptService:
                 "已归档提示词不能发布。",
                 409,
             )
+        if prompt.status == "published":
+            try:
+                if await self._revisions.publish_working_revision(prompt, actor=actor):
+                    return prompt
+                await self._revisions.ensure_initial_published_revision(
+                    prompt,
+                    actor=actor,
+                    previous_snapshot=prompt_lifecycle_snapshot(prompt),
+                )
+            except PromptRevisionServiceError as exc:
+                raise PromptServiceError(
+                    exc.code,
+                    exc.message,
+                    exc.status_code,
+                ) from exc
+            return prompt
+        previous_snapshot = prompt_lifecycle_snapshot(prompt)
         prompt.status = "published"
         prompt.updated_by = str(actor.user_id)
-        await self._logs.record(
-            actor=actor,
-            action="audio_score_prompt_published",
-            target_type="sales_trainer_audio_score_prompt",
-            target_id=prompt.prompt_id,
-        )
+        try:
+            await self._revisions.ensure_initial_published_revision(
+                prompt,
+                actor=actor,
+                previous_snapshot=previous_snapshot,
+            )
+        except PromptRevisionServiceError as exc:
+            raise PromptServiceError(
+                exc.code,
+                exc.message,
+                exc.status_code,
+            ) from exc
         await self._db.commit()
         await self._db.refresh(prompt)
         return prompt

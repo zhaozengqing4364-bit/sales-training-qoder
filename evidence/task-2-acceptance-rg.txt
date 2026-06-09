@@ -1,0 +1,17 @@
+docs/api-contract/sales-trainer.md:51:  | "article_exam"
+docs/api-contract/sales-trainer.md:53:  | "realtime_placeholder";
+docs/api-contract/sales-trainer.md:70:  module_key:
+docs/api-contract/sales-trainer.md:112:| module_key | 默认名称 | module_type | 默认 enabled | completion_rule | 必要绑定 | 管理入口 | 权限 | audit action |
+docs/api-contract/sales-trainer.md:115:| `business_skills` | `商务技巧` | `"article_exam"` | `true` | `paper_passed` | `learning_content_id`、`exam_paper_id` | admin 新人训练路径文章绑定/考卷管理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_module.business_skills.*` |
+docs/api-contract/sales-trainer.md:116:| `elevator_pitch` | `电梯演讲` | `"audio_scoring_group"` | `true` | `all_audio_options_scored` | `duration_options[].target_unit_id`、已发布评分提示词 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
+docs/api-contract/sales-trainer.md:117:| `realtime_roleplay_placeholder` | `实时对练` | `"realtime_placeholder"` | `false` | `placeholder_disabled` | 无；只允许 `disabled_reason` | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
+docs/api-contract/sales-trainer.md:122:- `module_key` 在同一路径内唯一，`order_index` 必须为正整数且不可重复。
+docs/api-contract/sales-trainer.md:125:- `"article_exam"` 模块必须绑定已发布 `LearningContent` 和已发布 `ExamPaper`；草稿或归档内容对 learner 返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` 或 `[PAPER_NOT_PUBLISHED]`。
+docs/api-contract/sales-trainer.md:127:- `"realtime_placeholder"` 默认 disabled；即使 enabled，也只能展示占位和 `disabled_reason`，不得调用 `/api/v1/practice/sessions`。
+docs/api-contract/sales-trainer.md:128:- 非法 `module_type`、未知 `completion_rule`、重复 `module_key`、重复 `order_index` 或绑定不存在时，后台保存/发布返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` 并写操作日志。
+docs/api-contract/sales-trainer.md:941:| `newcomer_path.modules[].module_key` | 见默认模块矩阵 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 同一路径内唯一；重复或未知返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
+docs/api-contract/sales-trainer.md:942:| `newcomer_path.modules[].module_type` | 无 | learner/admin 新人训练路径聚合服务 | admin 新人训练路径配置 | 只允许 `"audio_scoring"`、`"article_exam"`、`"audio_scoring_group"`、`"realtime_placeholder"` |
+docs/api-contract/sales-trainer.md:946:| `newcomer_path.modules[].learning_content_id` | 无 | 商务技巧文章入口 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |
+docs/api-contract/sales-trainer.md:947:| `newcomer_path.modules[].exam_paper_id` | 无 | 商务技巧考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
+docs/api-contract/sales-trainer.md:948:| `newcomer_path.modules[].duration_options` | `10/20/30` 分钟可由 seed 初始化 | 电梯演讲模块入口 | admin 新人训练路径配置 | 每项必须有正数时长和已发布音频单元；非法返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
+docs/api-contract/sales-trainer.md:949:| `newcomer_path.modules[].audit_events` | `newcomer_module.<module_key>.*` | 操作日志服务 | 系统初始化/后台配置 | 事件名必填；发布、归档、绑定变更必须写 operation log |

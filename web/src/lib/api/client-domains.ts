@@ -73,9 +73,20 @@ import type {
     SalesTrainerAudioSubmissionListResponse,
     SalesTrainerAudioUploadUrlRequest,
     SalesTrainerAudioUploadUrlResponse,
+    SalesTrainerMaterial,
+    SalesTrainerMaterialCreateRequest,
+    SalesTrainerMaterialListResponse,
+    SalesTrainerMaterialUpdateRequest,
+    SalesTrainerMaterialVersion,
+    SalesTrainerMaterialVersionCreateRequest,
+    SalesTrainerMaterialVersionUploadRequest,
     SalesTrainerQuizAttempt,
     SalesTrainerQuizAttemptCreateRequest,
     SalesTrainerQuizAttemptListResponse,
+    SalesTrainerRegradePreviewRequest,
+    SalesTrainerRegradePreviewResponse,
+    SalesTrainerRegradeRunRequest,
+    SalesTrainerRegradeRunResponse,
     SalesTrainerUnit,
     SalesTrainerUnitCreateRequest,
     SalesTrainerUnitListResponse,
@@ -91,6 +102,26 @@ import type {
     SalesTrainerQuestionListResponse,
     SalesTrainerQuestionUpdateRequest,
     SalesTrainerSettings,
+    SalesTrainerTrainingRecord,
+    SalesTrainerTrainingRecordListResponse,
+    SalesTrainerUnitBrief,
+    NewcomerArticle,
+    NewcomerArticleBinding,
+    NewcomerArticleBindingUpdateRequest,
+    NewcomerExamPaper,
+    NewcomerExamPaperCreateRequest,
+    NewcomerExamPaperListResponse,
+    NewcomerExamPaperRevisionListResponse,
+    NewcomerExamPaperUpdateRequest,
+    NewcomerPathConfigActionRequest,
+    NewcomerPathConfigResponse,
+    NewcomerPathConfigSaveRequest,
+    NewcomerPathRevisionListResponse,
+    NewcomerPaperAttempt,
+    NewcomerPaperAttemptCreateRequest,
+    NewcomerPaperRollbackRequest,
+    NewcomerUnitRevisionListResponse,
+    NewcomerUnitRollbackRequest,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -198,17 +229,27 @@ type SalesTrainerDomainDependencies = {
     resolveApiBaseUrl: () => string;
 };
 
+type NewcomerTrainingDomainDependencies = {
+    request: ApiRequest;
+};
+
 type SalesTrainerAudioUploadPayload = {
     file: File;
     unit_id?: string;
     purpose?: string;
     source_page?: string;
+    confirmed_material_version_id?: string | null;
     auto_process?: boolean;
 };
 
 type AdminSalesTrainerDomainDependencies = {
     request: ApiRequest;
+    upload: ApiUpload;
     resolveApiBaseUrl: () => string;
+};
+
+type AdminNewcomerTrainingDomainDependencies = {
+    request: ApiRequest;
 };
 
 type AudioSegmentUploadUrl = {
@@ -825,6 +866,9 @@ function buildSalesTrainerAudioUploadFormData(payload: SalesTrainerAudioUploadPa
     if (payload.source_page) {
         formData.append("source_page", payload.source_page);
     }
+    if (payload.confirmed_material_version_id) {
+        formData.append("confirmed_material_version_id", payload.confirmed_material_version_id);
+    }
     formData.append("auto_process", String(payload.auto_process ?? true));
     return formData;
 }
@@ -849,6 +893,12 @@ export function createSalesTrainerDomain({
 
         getUnit: async (unitId: string) => {
             return request<SalesTrainerUnit>(`/sales-trainer/units/${encodeURIComponent(unitId)}`);
+        },
+
+        getUnitBrief: async (unitId: string) => {
+            return request<SalesTrainerUnitBrief>(
+                `/sales-trainer/units/${encodeURIComponent(unitId)}/brief`,
+            );
         },
 
         submitQuizAttempt: async (payload: SalesTrainerQuizAttemptCreateRequest) => {
@@ -948,6 +998,7 @@ export function createSalesTrainerDomain({
                     size_bytes: payload.file.size,
                     storage_key: uploadUrl.storage_key,
                     source_page: payload.source_page ?? null,
+                    confirmed_material_version_id: payload.confirmed_material_version_id ?? null,
                     auto_process: payload.auto_process ?? true,
                 }),
             });
@@ -969,11 +1020,48 @@ export function createSalesTrainerDomain({
         getAudioSubmissionFileUrl: (submissionId: string) => {
             return `${resolveApiBaseUrl()}/sales-trainer/audio-submissions/${encodeURIComponent(submissionId)}/file`;
         },
+
+        getMaterialVersionFileUrl: (versionId: string) => {
+            return `${resolveApiBaseUrl()}/sales-trainer/materials/versions/${encodeURIComponent(versionId)}/file`;
+        },
+    };
+}
+
+export function createNewcomerTrainingDomain({
+    request,
+}: NewcomerTrainingDomainDependencies) {
+    return {
+        listPaths: async () => {
+            return request<SalesTrainerPathListResponse>("/sales-trainer/paths");
+        },
+
+        getModuleArticle: async (moduleKey: string, params?: { learning_content_id?: string }) => {
+            const query = buildQueryString({
+                learning_content_id: params?.learning_content_id,
+            });
+            return request<NewcomerArticle>(
+                `/newcomer-training/modules/${encodeURIComponent(moduleKey)}/article${query}`,
+            );
+        },
+
+        getPaper: async (paperId: string) => {
+            return request<NewcomerExamPaper>(
+                `/newcomer-training/papers/${encodeURIComponent(paperId)}`,
+            );
+        },
+
+        submitPaperAttempt: async (payload: NewcomerPaperAttemptCreateRequest) => {
+            return request<NewcomerPaperAttempt>("/newcomer-training/paper-attempts", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
     };
 }
 
 export function createAdminSalesTrainerDomain({
     request,
+    upload,
     resolveApiBaseUrl,
 }: AdminSalesTrainerDomainDependencies) {
     return {
@@ -1013,6 +1101,83 @@ export function createAdminSalesTrainerDomain({
         archiveUnit: async (unitId: string) => {
             return request<SalesTrainerUnit>(
                 `/admin/sales-trainer/units/${encodeURIComponent(unitId)}/archive`,
+                { method: "POST" },
+            );
+        },
+
+        listMaterials: async (params?: { include_archived?: boolean; limit?: number; offset?: number }) => {
+            const query = buildQueryString({
+                include_archived: params?.include_archived,
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<SalesTrainerMaterialListResponse>(
+                `/admin/sales-trainer/materials${query}`,
+            );
+        },
+
+        createMaterial: async (payload: SalesTrainerMaterialCreateRequest) => {
+            return request<SalesTrainerMaterial>("/admin/sales-trainer/materials", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        updateMaterial: async (
+            materialId: string,
+            payload: SalesTrainerMaterialUpdateRequest,
+        ) => {
+            return request<SalesTrainerMaterial>(
+                `/admin/sales-trainer/materials/${encodeURIComponent(materialId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        archiveMaterial: async (materialId: string) => {
+            return request<SalesTrainerMaterial>(
+                `/admin/sales-trainer/materials/${encodeURIComponent(materialId)}/archive`,
+                { method: "POST" },
+            );
+        },
+
+        createMaterialVersion: async (
+            materialId: string,
+            payload: SalesTrainerMaterialVersionCreateRequest,
+        ) => {
+            return request<SalesTrainerMaterialVersion>(
+                `/admin/sales-trainer/materials/${encodeURIComponent(materialId)}/versions`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        uploadMaterialVersion: async (
+            materialId: string,
+            payload: SalesTrainerMaterialVersionUploadRequest,
+            signal?: AbortSignal,
+        ) => {
+            const formData = new FormData();
+            formData.append("version_label", payload.version_label);
+            formData.append("title", payload.title);
+            if (payload.release_notes) {
+                formData.append("release_notes", payload.release_notes);
+            }
+            formData.append("file", payload.file);
+            return upload<SalesTrainerMaterialVersion>(
+                `/admin/sales-trainer/materials/${encodeURIComponent(materialId)}/versions/upload`,
+                formData,
+                signal,
+            );
+        },
+
+        publishMaterialVersion: async (versionId: string) => {
+            return request<SalesTrainerMaterialVersion>(
+                `/admin/sales-trainer/materials/versions/${encodeURIComponent(versionId)}/publish`,
                 { method: "POST" },
             );
         },
@@ -1191,6 +1356,31 @@ export function createAdminSalesTrainerDomain({
             );
         },
 
+        listTrainingRecords: async (params?: {
+            user_id?: string;
+            unit_id?: string;
+            material_version_id?: string;
+            limit?: number;
+            offset?: number;
+        }) => {
+            const query = buildQueryString({
+                user_id: params?.user_id,
+                unit_id: params?.unit_id,
+                material_version_id: params?.material_version_id,
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<SalesTrainerTrainingRecordListResponse>(
+                `/admin/sales-trainer/training-records${query}`,
+            );
+        },
+
+        getAudioTrainingRecord: async (submissionId: string) => {
+            return request<SalesTrainerTrainingRecord>(
+                `/admin/sales-trainer/training-records/audio/${encodeURIComponent(submissionId)}`,
+            );
+        },
+
         listQuizAttempts: async (params?: {
             user_id?: string;
             unit_id?: string;
@@ -1211,6 +1401,58 @@ export function createAdminSalesTrainerDomain({
         getQuizAttempt: async (attemptId: string) => {
             return request<SalesTrainerQuizAttempt>(
                 `/admin/sales-trainer/quiz-attempts/${encodeURIComponent(attemptId)}`,
+            );
+        },
+
+        previewQuizAttemptRegrade: async (
+            attemptId: string,
+            payload: SalesTrainerRegradePreviewRequest,
+        ) => {
+            return request<SalesTrainerRegradePreviewResponse>(
+                `/admin/sales-trainer/regrades/quiz-attempts/${encodeURIComponent(attemptId)}/preview`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        runQuizAttemptRegrade: async (
+            attemptId: string,
+            payload: SalesTrainerRegradeRunRequest,
+        ) => {
+            return request<SalesTrainerRegradeRunResponse>(
+                `/admin/sales-trainer/regrades/quiz-attempts/${encodeURIComponent(attemptId)}/run`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        previewAudioSubmissionRegrade: async (
+            submissionId: string,
+            payload: SalesTrainerRegradePreviewRequest,
+        ) => {
+            return request<SalesTrainerRegradePreviewResponse>(
+                `/admin/sales-trainer/regrades/audio-submissions/${encodeURIComponent(submissionId)}/preview`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        runAudioSubmissionRegrade: async (
+            submissionId: string,
+            payload: SalesTrainerRegradeRunRequest,
+        ) => {
+            return request<SalesTrainerRegradeRunResponse>(
+                `/admin/sales-trainer/regrades/audio-submissions/${encodeURIComponent(submissionId)}/run`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
             );
         },
 
@@ -1235,6 +1477,193 @@ export function createAdminSalesTrainerDomain({
 
         getSettings: async () => {
             return request<SalesTrainerSettings>("/admin/sales-trainer/settings");
+        },
+    };
+}
+
+export function createAdminNewcomerTrainingDomain({
+    request,
+}: AdminNewcomerTrainingDomainDependencies) {
+    return {
+        listUnits: async (params?: { include_archived?: boolean; limit?: number; offset?: number }) => {
+            const query = buildQueryString({
+                include_archived: params?.include_archived,
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<SalesTrainerUnitListResponse>(
+                `/admin/newcomer-training/units${query}`,
+            );
+        },
+
+        createUnit: async (payload: SalesTrainerUnitCreateRequest) => {
+            return request<SalesTrainerUnit>("/admin/newcomer-training/units", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        updateUnit: async (unitId: string, payload: SalesTrainerUnitUpdateRequest) => {
+            return request<SalesTrainerUnit>(
+                `/admin/newcomer-training/units/${encodeURIComponent(unitId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listUnitRevisions: async (unitId: string) => {
+            return request<NewcomerUnitRevisionListResponse>(
+                `/admin/newcomer-training/units/${encodeURIComponent(unitId)}/revisions`,
+                { method: "GET" },
+            );
+        },
+
+        publishUnit: async (unitId: string) => {
+            return request<SalesTrainerUnit>(
+                `/admin/newcomer-training/units/${encodeURIComponent(unitId)}/publish`,
+                { method: "POST" },
+            );
+        },
+
+        archiveUnit: async (unitId: string) => {
+            return request<SalesTrainerUnit>(
+                `/admin/newcomer-training/units/${encodeURIComponent(unitId)}/archive`,
+                { method: "POST" },
+            );
+        },
+
+        rollbackUnit: async (
+            unitId: string,
+            payload: NewcomerUnitRollbackRequest,
+        ) => {
+            return request<SalesTrainerUnit>(
+                `/admin/newcomer-training/units/${encodeURIComponent(unitId)}/rollback`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        getPathConfig: async () => {
+            return request<NewcomerPathConfigResponse>(
+                "/admin/newcomer-training/path-config",
+                { method: "GET" },
+            );
+        },
+
+        savePathConfig: async (payload: NewcomerPathConfigSaveRequest) => {
+            return request<NewcomerPathConfigResponse>(
+                "/admin/newcomer-training/path-config",
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        publishPathConfig: async (payload: NewcomerPathConfigActionRequest) => {
+            return request<NewcomerPathConfigResponse>(
+                "/admin/newcomer-training/path-config/publish",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listPathConfigRevisions: async () => {
+            return request<NewcomerPathRevisionListResponse>(
+                "/admin/newcomer-training/path-config/revisions",
+                { method: "GET" },
+            );
+        },
+
+        rollbackPathConfig: async (payload: NewcomerPathConfigActionRequest) => {
+            return request<NewcomerPathConfigResponse>(
+                "/admin/newcomer-training/path-config/rollback",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listPapers: async (params?: { include_archived?: boolean; limit?: number; offset?: number }) => {
+            const query = buildQueryString({
+                include_archived: params?.include_archived,
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<NewcomerExamPaperListResponse>(
+                `/admin/newcomer-training/papers${query}`,
+            );
+        },
+
+        createPaper: async (payload: NewcomerExamPaperCreateRequest) => {
+            return request<NewcomerExamPaper>("/admin/newcomer-training/papers", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        updatePaper: async (paperId: string, payload: NewcomerExamPaperUpdateRequest) => {
+            return request<NewcomerExamPaper>(
+                `/admin/newcomer-training/papers/${encodeURIComponent(paperId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listPaperRevisions: async (paperId: string) => {
+            return request<NewcomerExamPaperRevisionListResponse>(
+                `/admin/newcomer-training/papers/${encodeURIComponent(paperId)}/revisions`,
+                { method: "GET" },
+            );
+        },
+
+        publishPaper: async (paperId: string) => {
+            return request<NewcomerExamPaper>(
+                `/admin/newcomer-training/papers/${encodeURIComponent(paperId)}/publish`,
+                { method: "POST" },
+            );
+        },
+
+        rollbackPaper: async (
+            paperId: string,
+            payload: NewcomerPaperRollbackRequest,
+        ) => {
+            return request<NewcomerExamPaper>(
+                `/admin/newcomer-training/papers/${encodeURIComponent(paperId)}/rollback`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        archivePaper: async (paperId: string) => {
+            return request<NewcomerExamPaper>(
+                `/admin/newcomer-training/papers/${encodeURIComponent(paperId)}/archive`,
+                { method: "POST" },
+            );
+        },
+
+        bindModuleArticle: async (
+            moduleKey: string,
+            payload: NewcomerArticleBindingUpdateRequest,
+        ) => {
+            return request<NewcomerArticleBinding>(
+                `/admin/newcomer-training/modules/${encodeURIComponent(moduleKey)}/article-binding`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
         },
     };
 }

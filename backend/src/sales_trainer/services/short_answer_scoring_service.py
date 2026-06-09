@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from common.ai.config_manager import get_config_manager
 from common.ai.llm_service import LLMService
 from common.ai.models import ModelConfig, ModelType
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
-from curriculum_practice.models import QuestionItem
 from sales_trainer.rules import (
     DEFAULT_SHORT_ANSWER_PASS_THRESHOLD,
     DEFAULT_SHORT_ANSWER_PROMPT_TEMPLATE,
@@ -18,6 +17,27 @@ from sales_trainer.rules import (
 )
 
 logger = get_logger(__name__)
+
+
+class ShortAnswerQuestion(Protocol):
+    @property
+    def question_id(self) -> str: ...
+
+    @property
+    def title(self) -> str: ...
+
+    @property
+    def stem(self) -> str: ...
+
+    @property
+    def reference_answer(self) -> str | None: ...
+
+    @property
+    def scoring_criteria(self) -> dict[str, Any]: ...
+
+    @property
+    def scoring_dimensions(self) -> list[str] | None: ...
+
 
 @dataclass(frozen=True)
 class ShortAnswerScoreOutcome:
@@ -40,7 +60,7 @@ class ShortAnswerScoringService:
 
     async def score(
         self,
-        question: QuestionItem,
+        question: ShortAnswerQuestion,
         *,
         answer_text: str,
     ) -> Result[ShortAnswerScoreOutcome]:
@@ -136,7 +156,7 @@ def _model_config_from_ai_config(ai_config: dict[str, Any]) -> ModelConfig | Non
 
 
 def _render_prompt(
-    question: QuestionItem,
+    question: ShortAnswerQuestion,
     *,
     answer: str,
     ai_config: dict[str, Any],
@@ -170,8 +190,11 @@ def _parse_score_payload(raw_text: str) -> dict[str, Any] | None:
         return None
     if not isinstance(payload, dict):
         return None
+    raw_score = payload.get("score")
+    if raw_score is None:
+        return None
     try:
-        score = float(payload.get("score"))
+        score = float(raw_score)
     except (TypeError, ValueError):
         return None
     feedback = payload.get("feedback")

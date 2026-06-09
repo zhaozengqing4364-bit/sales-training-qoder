@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from hashlib import sha256
-from json import dumps
-from typing import Any
-
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,26 +7,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.error_handling.result import Result
 from curriculum_practice.models import QuestionCategory, QuestionItem, TestBankImportJob
 from curriculum_practice.schemas import (
-    GateResult,
-    PublishGateDecision,
     QuestionCategoryCreate,
     QuestionCategoryResponse,
     QuestionCategoryUpdate,
-    QuestionItemCreate,
     QuestionItemResponse,
-    QuestionItemUpdate,
     TestBankImportJobResponse,
     TestBankImportResultResponse,
 )
+from curriculum_practice.services.test_bank_constants import SERVER_ERROR
 from curriculum_practice.services.test_bank_importer import (
     ImportRowError,
     TestBankImporter,
 )
+from curriculum_practice.services.test_bank_questions import (
+    TestBankQuestionServiceMixin,
+)
 
-SERVER_ERROR = "[TEST_BANK_SERVICE_FAILED]"
 
-
-class TestBankService:
+class TestBankService(TestBankQuestionServiceMixin):
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
@@ -128,133 +121,6 @@ class TestBankService:
             await self._db.rollback()
             return Result.fail(SERVER_ERROR)
         return Result.ok(None)
-
-    async def list_questions(
-        self,
-        *,
-        category_id: str | None = None,
-        difficulty: str | None = None,
-        status: str | None = None,
-        tag: str | None = None,
-        usage_scope: str | None = None,
-    ) -> Result[list[QuestionItem]]:
-        stmt = select(QuestionItem)
-        if category_id:
-            stmt = stmt.where(QuestionItem.category_id == category_id)
-        if usage_scope:
-            stmt = stmt.where(QuestionItem.usage_scope == usage_scope)
-        if difficulty:
-            stmt = stmt.where(QuestionItem.difficulty == difficulty)
-        if status:
-            stmt = stmt.where(QuestionItem.status == status)
-        try:
-            result = await self._db.execute(stmt.order_by(QuestionItem.updated_at.desc()))
-        except SQLAlchemyError:
-            return Result.fail(SERVER_ERROR)
-        questions = list(result.scalars().all())
-        if tag:
-            questions = [question for question in questions if tag in (question.tags or [])]
-        return Result.ok(questions)
-
-    async def get_question(self, question_id: str) -> Result[QuestionItem]:
-        try:
-            question = await self._db.get(QuestionItem, question_id)
-        except SQLAlchemyError:
-            return Result.fail(SERVER_ERROR)
-        if question is None:
-            return Result.fail("[QUESTION_ITEM_NOT_FOUND]")
-        return Result.ok(question)
-
-    async def create_question(
-        self, payload: QuestionItemCreate, *, actor_id: str | None
-    ) -> Result[QuestionItem]:
-        category_result = await self.get_category(payload.category_id)
-        if not category_result.is_success:
-            return Result.fail(category_result.fallback or "[QUESTION_CATEGORY_NOT_FOUND]")
-        data = payload.model_dump()
-        data["scoring_criteria"] = _criteria_with_dimensions(
-            data.get("scoring_criteria"), data.get("scoring_dimensions")
-        )
-        question = QuestionItem(
-            **data, created_by=actor_id, updated_by=actor_id
-        )
-        self._db.add(question)
-        try:
-            await self._db.commit()
-            await self._db.refresh(question)
-        except SQLAlchemyError:
-            await self._db.rollback()
-            return Result.fail(SERVER_ERROR)
-        return Result.ok(question)
-
-    async def update_question(
-        self,
-        question: QuestionItem,
-        payload: QuestionItemUpdate,
-        *,
-        actor_id: str | None,
-    ) -> Result[QuestionItem]:
-        if question.status != "draft":
-            return Result.fail("[QUESTION_ITEM_NOT_EDITABLE]")
-        data = payload.model_dump(exclude_unset=True)
-        category_id = data.get("category_id")
-        if category_id is not None:
-            category_result = await self.get_category(str(category_id))
-            if not category_result.is_success:
-                return Result.fail(category_result.fallback or "[QUESTION_CATEGORY_NOT_FOUND]")
-        if "scoring_dimensions" in data:
-            data["scoring_criteria"] = _criteria_with_dimensions(
-                data.get("scoring_criteria", question.scoring_criteria),
-                data.get("scoring_dimensions"),
-            )
-        for field, value in data.items():
-            setattr(question, field, value)
-        question.updated_by = actor_id
-        try:
-            await self._db.commit()
-            await self._db.refresh(question)
-        except SQLAlchemyError:
-            await self._db.rollback()
-            return Result.fail(SERVER_ERROR)
-        return Result.ok(question)
-
-    async def publish_question(
-        self, question: QuestionItem, *, actor_id: str | None
-    ) -> Result[QuestionItem]:
-        if question.status == "archived":
-            return Result.fail("[QUESTION_ITEM_NOT_EDITABLE]")
-        decision = _publish_decision(question)
-        if not decision.can_publish:
-            return Result(
-                value=decision,
-                fallback="[QUESTION_ITEM_PUBLISH_GATE_FAILED]",
-                is_success=False,
-            )
-        question.status = "published"
-        question.published_by = actor_id
-        question.published_at = datetime.now(UTC)
-        question.content_hash = _question_hash(question)
-        question.updated_by = actor_id
-        try:
-            await self._db.commit()
-            await self._db.refresh(question)
-        except SQLAlchemyError:
-            await self._db.rollback()
-            return Result.fail(SERVER_ERROR)
-        return Result.ok(question)
-
-    async def archive_question(
-        self, question: QuestionItem, *, actor_id: str | None
-    ) -> Result[QuestionItem]:
-        question.status = "archived"
-        question.updated_by = actor_id
-        try:
-            await self._db.commit()
-            await self._db.refresh(question)
-        except SQLAlchemyError:
-            await self._db.rollback()
-            return Result.fail(SERVER_ERROR)
-        return Result.ok(question)
 
     async def create_import_job(
         self,
@@ -353,6 +219,7 @@ class TestBankService:
         return Result.ok(job)
 
 
+
 def serialize_category(category: QuestionCategory) -> QuestionCategoryResponse:
     return QuestionCategoryResponse.model_validate(category)
 
@@ -371,82 +238,3 @@ def serialize_import_job(job: TestBankImportJob) -> TestBankImportJobResponse:
             errors=job.errors or [],
         ),
     )
-
-
-def _publish_decision(question: QuestionItem) -> PublishGateDecision:
-    results: list[GateResult] = []
-    if not (question.reference_answer or "").strip():
-        results.append(
-            _gate(
-                "reference_answer",
-                "missing_reference_answer",
-                "QuestionItem requires a reference answer before publish.",
-            )
-        )
-    criteria_dimensions = (question.scoring_criteria or {}).get("dimensions")
-    if not isinstance(criteria_dimensions, list) or not criteria_dimensions:
-        results.append(
-            _gate(
-                "scoring_criteria",
-                "invalid_scoring_criteria",
-                "QuestionItem scoring_criteria.dimensions must be non-empty.",
-            )
-        )
-    if not isinstance(question.scoring_dimensions, list) or not question.scoring_dimensions:
-        results.append(
-            _gate(
-                "scoring_dimensions",
-                "invalid_scoring_dimensions",
-                "QuestionItem scoring_dimensions must be non-empty.",
-            )
-        )
-    if question.safety_flagged:
-        results.append(
-            _gate(
-                "question_safety",
-                "security_flagged_question",
-                "Security flagged questions cannot be published.",
-            )
-        )
-    return PublishGateDecision(can_publish=not results, results=results)
-
-
-def _criteria_with_dimensions(
-    scoring_criteria: object, scoring_dimensions: object
-) -> dict[str, Any]:
-    criteria = dict(scoring_criteria) if isinstance(scoring_criteria, dict) else {}
-    if not isinstance(scoring_dimensions, list) or not scoring_dimensions:
-        return criteria
-    criteria_dimensions = criteria.get("dimensions")
-    if not isinstance(criteria_dimensions, list) or not criteria_dimensions:
-        criteria["dimensions"] = list(scoring_dimensions)
-    return criteria
-
-
-def _gate(gate_name: str, reason_code: str, message: str) -> GateResult:
-    return GateResult(
-        gate_name=gate_name,
-        status="failed",
-        reason_code=reason_code,
-        message=message,
-    )
-
-
-def _question_hash(question: QuestionItem) -> str:
-    payload: dict[str, Any] = {
-        "category_id": question.category_id,
-        "title": question.title,
-        "stem": question.stem,
-        "reference_answer": question.reference_answer,
-        "scoring_criteria": question.scoring_criteria,
-        "scoring_dimensions": question.scoring_dimensions,
-        "tags": question.tags,
-        "difficulty": question.difficulty,
-        "department": question.department,
-        "version": question.version,
-    }
-    return "sha256:" + sha256(
-        dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
-            "utf-8"
-        )
-    ).hexdigest()

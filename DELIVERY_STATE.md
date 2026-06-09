@@ -1,5 +1,13 @@
 # DELIVERY_STATE
 
+> **⚠️ 状态冻结 (Status Frozen at 2026-05-12)**
+>
+> - 本文件为 Phase 1-5 原子任务执行记录, 191KB。
+> - 状态: `phase_3_acceptance_smoke_complete_paused_before_phase_4` (冻结于 2026-05-12)。
+> - **2026-05-12 之后**: sales-trainer MVP 已落地 (commit 3c14f5d5), RuntimeGate 统一, config_asset B2 HITL ADR, audit-2026-06 8-agent 审计等大量工作已完成, **本文件未滚动更新**。
+> - 当前真实进度以 `git log --oneline -20` + `docs/adr/` + `docs/agents/audit-2026-06/` 为准。
+> - 如需最新执行看板, 请查看 `docs/agents/audit-2026-06/10-issue-drafts.md` 与 `docs/agents/audit-2026-06/12-code-issues-record.md`。
+
 ## Execution Rules
 
 - Current phase must advance serially from Phase 1 to Phase 5.

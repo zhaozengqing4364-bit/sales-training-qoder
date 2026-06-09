@@ -58,7 +58,7 @@ export default function SalesTrainerLearnPage() {
             const learner = readLearnerConfig(unitResult.config);
             const chapterOrderIndex = learner?.chapter_order_index;
             if (typeof chapterOrderIndex !== "number" || chapterOrderIndex < 1) {
-                setAccessError("本训练单元未配置章节阅读，请从销售训练路径进入。");
+                setAccessError("本训练单元未配置章节阅读，请从新人训练路径进入。");
                 return;
             }
 
@@ -185,7 +185,7 @@ export default function SalesTrainerLearnPage() {
         return (
             <CooChapterReaderTerminal
                 title="无法阅读本章"
-                message="章节数据不完整，请从销售训练路径重新进入。"
+                message="章节数据不完整，请从新人训练路径重新进入。"
                 returnTo={returnTo}
             />
         );
@@ -195,7 +195,7 @@ export default function SalesTrainerLearnPage() {
         return (
             <CooChapterReaderTerminal
                 title="无法阅读本章"
-                message="章节数据不完整，请从销售训练路径重新进入。"
+                message="章节数据不完整，请从新人训练路径重新进入。"
                 returnTo={returnTo}
             />
         );
@@ -208,7 +208,7 @@ export default function SalesTrainerLearnPage() {
             contentSummary={content.summary}
             chapter={resolvedChapter}
             progress={progress}
-            pathTitle={hubMode ? "拜访前商务" : pathContext!.path.title}
+            pathTitle={hubMode ? "商务技巧" : pathContext!.path.title}
             levelTitle={hubMode
                 ? `第 ${chapterOrderIndex} 章`
                 : pathContext!.level.level_title}

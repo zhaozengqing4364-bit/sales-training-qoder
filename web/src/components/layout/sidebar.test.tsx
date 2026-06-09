@@ -94,10 +94,10 @@ describe("SidebarContent learner seams", () => {
         expect(historyLink.getAttribute("href")).toBe("/history");
     });
 
-    it("exposes the learner sales-trainer entry from the shared sidebar nav", () => {
+    it("exposes the learner newcomer training path entry from the shared sidebar nav", () => {
         render(<SidebarContent currentUser={learnerUser} />);
 
-        const salesTrainerLink = screen.getByRole("menuitem", { name: "销售训练" }) as HTMLAnchorElement;
+        const salesTrainerLink = screen.getByRole("menuitem", { name: "新人训练路径" }) as HTMLAnchorElement;
         expect(salesTrainerLink.getAttribute("href")).toBe("/sales-trainer");
     });
 

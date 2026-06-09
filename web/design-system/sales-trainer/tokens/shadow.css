@@ -1,0 +1,13 @@
+/**
+ * @layer tokens.shadow
+ */
+:root {
+  --st-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --st-shadow-card: 0 8px 30px rgb(0, 0, 0, 0.04);
+  --st-shadow-card-hover: 0 20px 40px rgba(0, 0, 0, 0.06);
+  --st-shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.05),
+    0 10px 10px -5px rgba(0, 0, 0, 0.01);
+  --st-shadow-glow: 0 0 40px -10px rgba(59, 130, 246, 0.15);
+  --st-shadow-anchor: 0 10px 15px -3px rgba(15, 23, 42, 0.2);
+  --st-shadow-sidebar: 0 8px 32px rgba(0, 0, 0, 0.04);
+}

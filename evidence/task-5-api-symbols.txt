@@ -1,0 +1,43 @@
+web/src/lib/api/client-domains.ts:103:    NewcomerArticle,
+web/src/lib/api/client-domains.ts:104:    NewcomerArticleBinding,
+web/src/lib/api/client-domains.ts:105:    NewcomerArticleBindingUpdateRequest,
+web/src/lib/api/client-domains.ts:106:    NewcomerExamPaper,
+web/src/lib/api/client-domains.ts:107:    NewcomerExamPaperCreateRequest,
+web/src/lib/api/client-domains.ts:108:    NewcomerExamPaperListResponse,
+web/src/lib/api/client-domains.ts:109:    NewcomerExamPaperUpdateRequest,
+web/src/lib/api/client-domains.ts:1024:        getModuleArticle: async (moduleKey: string, params?: { learning_content_id?: string }) => {
+web/src/lib/api/client-domains.ts:1028:            return request<NewcomerArticle>(
+web/src/lib/api/client-domains.ts:1034:            return request<NewcomerExamPaper>(
+web/src/lib/api/client-domains.ts:1408:            return request<NewcomerExamPaperListResponse>(
+web/src/lib/api/client-domains.ts:1413:        createPaper: async (payload: NewcomerExamPaperCreateRequest) => {
+web/src/lib/api/client-domains.ts:1414:            return request<NewcomerExamPaper>("/admin/newcomer-training/papers", {
+web/src/lib/api/client-domains.ts:1420:        updatePaper: async (paperId: string, payload: NewcomerExamPaperUpdateRequest) => {
+web/src/lib/api/client-domains.ts:1421:            return request<NewcomerExamPaper>(
+web/src/lib/api/client-domains.ts:1431:            return request<NewcomerExamPaper>(
+web/src/lib/api/client-domains.ts:1438:            return request<NewcomerExamPaper>(
+web/src/lib/api/client-domains.ts:1444:        bindModuleArticle: async (
+web/src/lib/api/client-domains.ts:1446:            payload: NewcomerArticleBindingUpdateRequest,
+web/src/lib/api/client-domains.ts:1448:            return request<NewcomerArticleBinding>(
+web/src/lib/api/types.ts:4770:export interface NewcomerArticleChapter {
+web/src/lib/api/types.ts:4777:export interface NewcomerArticle {
+web/src/lib/api/types.ts:4784:    chapters: NewcomerArticleChapter[];
+web/src/lib/api/types.ts:4787:export interface NewcomerArticleBinding {
+web/src/lib/api/types.ts:4792:export interface NewcomerArticleBindingUpdateRequest {
+web/src/lib/api/types.ts:4797:export interface NewcomerExamPaperQuestion {
+web/src/lib/api/types.ts:4807:export interface NewcomerExamPaper {
+web/src/lib/api/types.ts:4820:    questions: NewcomerExamPaperQuestion[];
+web/src/lib/api/types.ts:4823:export interface NewcomerExamPaperListResponse {
+web/src/lib/api/types.ts:4824:    items: NewcomerExamPaper[];
+web/src/lib/api/types.ts:4828:export interface NewcomerExamPaperCreateRequest {
+web/src/lib/api/types.ts:4837:export interface NewcomerExamPaperUpdateRequest {
+web/src/lib/api/newcomer-training.test.ts:7:describe("api.newcomerTraining facade", () => {
+web/src/lib/api/newcomer-training.test.ts:34:        const result = await api.newcomerTraining.getModuleArticle("business_skills");
+web/src/lib/api/newcomer-training.test.ts:84:        await api.newcomerTraining.getPaper("paper-1");
+web/src/lib/api/newcomer-training.test.ts:85:        await api.newcomerTraining.submitPaperAttempt({
+web/src/lib/api/newcomer-training.test.ts:109:describe("api.admin.newcomerTraining facade", () => {
+web/src/lib/api/newcomer-training.test.ts:131:        await api.admin.newcomerTraining.bindModuleArticle("business_skills", {
+web/src/lib/api/newcomer-training.test.ts:167:        await api.admin.newcomerTraining.createPaper({
+web/src/lib/api/newcomer-training.test.ts:172:        await api.admin.newcomerTraining.publishPaper("paper-1");
+web/src/lib/api/client.ts:1979:const newcomerTrainingDomain = createNewcomerTrainingDomain({
+web/src/lib/api/client.ts:2000:    newcomerTraining: newcomerTrainingDomain,
+web/src/lib/api/client.ts:2806:        newcomerTraining: adminNewcomerTrainingDomain,

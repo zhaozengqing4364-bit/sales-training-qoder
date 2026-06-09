@@ -1,0 +1,5 @@
+web/src/app/admin/sales-trainer/settings/page.tsx      107
+web/src/app/admin/sales-trainer/settings/operational-diagnostics-panel.tsx      193
+web/src/lib/sales-trainer/operational-diagnostics.ts      201
+web/src/lib/sales-trainer/operational-diagnostics.test.ts      186
+web/src/app/admin/sales-trainer/settings/page.test.tsx      241

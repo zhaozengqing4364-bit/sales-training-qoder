@@ -1,0 +1,22 @@
+/**
+ * @layer tokens.layout
+ */
+:root {
+  --st-z-dropdown: 30;
+  --st-z-sticky: 40;
+  --st-z-sidebar: 50;
+  --st-z-modal: 100;
+  --st-z-toast: 200;
+
+  --st-sidebar-width: 16rem;
+  --st-sidebar-collapsed: 5rem;
+  --st-content-max: 80rem;
+  --st-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --st-btn-height-sm: 2rem;
+  --st-btn-height-md: 2.75rem;
+  --st-btn-height-lg: 3.5rem;
+  --st-btn-height-icon: 2.5rem;
+  --st-input-height: 2.75rem;
+  --st-touch-min: 2.75rem;
+}

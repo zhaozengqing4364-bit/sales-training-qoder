@@ -1,0 +1,65 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - img [ref=e6]
+        - generic [ref=e8]: 管理控制台
+      - button [ref=e9]:
+        - img [ref=e10]
+    - main [ref=e11]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - generic [ref=e15]:
+            - heading "销售题库" [level=1] [ref=e17]
+            - paragraph [ref=e18]: 销售训练专用题库，底层复用通用题库数据，但只读写 sales_trainer 范围。
+          - generic [ref=e19]:
+            - generic [ref=e20]:
+              - link "工作台" [ref=e21] [cursor=pointer]:
+                - /url: /admin/sales-trainer
+              - link "训练单元" [ref=e22] [cursor=pointer]:
+                - /url: /admin/sales-trainer/units
+              - link "销售题库" [ref=e23] [cursor=pointer]:
+                - /url: /admin/sales-trainer/questions
+              - link "录音评分标准" [ref=e24] [cursor=pointer]:
+                - /url: /admin/sales-trainer/score-standards
+              - link "学员录音" [ref=e25] [cursor=pointer]:
+                - /url: /admin/sales-trainer/audio-submissions
+              - link "评分结果" [ref=e26] [cursor=pointer]:
+                - /url: /admin/sales-trainer/score-results
+              - link "配置" [ref=e27] [cursor=pointer]:
+                - /url: /admin/sales-trainer/settings
+              - link "操作记录" [ref=e28] [cursor=pointer]:
+                - /url: /admin/sales-trainer/operation-logs
+            - generic [ref=e29]:
+              - button "分类管理" [ref=e30]
+              - button "新建题目" [ref=e31]
+        - generic [ref=e32]:
+          - combobox [ref=e34]:
+            - option "全部分类" [selected]
+          - combobox [ref=e35]:
+            - option "全部状态" [selected]
+            - option "draft"
+            - option "published"
+            - option "archived"
+          - combobox [ref=e36]:
+            - option "全部难度" [selected]
+            - option "简单"
+            - option "中等"
+            - option "困难"
+          - textbox "标签筛选" [ref=e37]
+          - button "刷新" [ref=e38]
+        - table [ref=e42]:
+          - rowgroup [ref=e43]:
+            - row "题目 题型 分类 难度 状态 操作" [ref=e44]:
+              - columnheader "题目" [ref=e45]
+              - columnheader "题型" [ref=e46]
+              - columnheader "分类" [ref=e47]
+              - columnheader "难度" [ref=e48]
+              - columnheader "状态" [ref=e49]
+              - columnheader "操作" [ref=e50]
+          - rowgroup [ref=e51]:
+            - row "正在加载题目..." [ref=e52]:
+              - cell "正在加载题目..." [ref=e53]
+  - button "Open Next.js Dev Tools" [ref=e59] [cursor=pointer]:
+    - img [ref=e60]
+  - alert [ref=e63]

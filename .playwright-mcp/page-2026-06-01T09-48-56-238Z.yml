@@ -1,0 +1,78 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e10]:
+            - generic [ref=e11]: AI 销售教练
+            - generic [ref=e12]: 平台
+        - navigation "主导航" [ref=e13]:
+          - generic [ref=e14]: 菜单
+          - menubar [ref=e15]:
+            - menuitem "首页" [ref=e16] [cursor=pointer]:
+              - img [ref=e17]
+              - generic [ref=e20]: 首页
+            - menuitem "训练模式" [ref=e21] [cursor=pointer]:
+              - img [ref=e22]
+              - generic [ref=e27]: 训练模式
+            - menuitem "销售训练" [ref=e28] [cursor=pointer]:
+              - img [ref=e29]
+              - generic [ref=e32]: 销售训练
+            - menuitem "排行榜" [ref=e33] [cursor=pointer]:
+              - img [ref=e35]
+              - generic [ref=e36]: 排行榜
+            - menuitem "历史记录" [ref=e37] [cursor=pointer]:
+              - img [ref=e38]
+              - generic [ref=e42]: 历史记录
+          - generic [ref=e45]: 系统
+          - menubar [ref=e46]:
+            - menuitem "运行状态" [ref=e47] [cursor=pointer]:
+              - img [ref=e48]
+              - generic [ref=e50]: 运行状态
+            - menuitem "管理后台" [ref=e51] [cursor=pointer]:
+              - img [ref=e52]
+              - generic [ref=e55]: 管理后台
+        - generic [ref=e56]:
+          - button "帮助与反馈" [ref=e58]:
+            - img [ref=e59]
+            - generic [ref=e61]: 帮助与反馈
+          - generic [ref=e62] [cursor=pointer]:
+            - img [ref=e64]
+            - generic [ref=e67]:
+              - generic [ref=e68]: Developer
+              - generic [ref=e69]: Development
+            - img [ref=e71]
+          - button "折叠侧边栏" [ref=e74]:
+            - img [ref=e75]
+            - generic [ref=e78]: 折叠侧边栏
+    - main [ref=e79]:
+      - generic [ref=e81]:
+        - generic [ref=e82]:
+          - generic [ref=e83]:
+            - heading "排行榜" [level=1] [ref=e84]
+            - paragraph [ref=e85]: 均分与排名只纳入可评估的已完成训练，证据不足会话会单独记账，不会混入榜单。
+            - paragraph [ref=e86]: 当前榜单纳入 0 次可评估训练，0 次证据不足训练未计入排名。
+          - generic [ref=e87]:
+            - button "本周" [ref=e88]
+            - button "本月" [ref=e89]
+            - button "总榜" [ref=e90]
+        - generic [ref=e91]:
+          - button "全部场景" [ref=e92]
+          - button "销售对练" [ref=e93]
+          - button "PPT 演练" [ref=e94]
+        - generic [ref=e95]:
+          - generic [ref=e97]:
+            - button "综合分榜" [ref=e98]
+            - button "进步榜" [ref=e99]
+            - button "同目标榜" [ref=e100]
+          - paragraph [ref=e101]: 按可评估训练均分排名，延续当前排行榜口径。
+        - generic [ref=e102]:
+          - img [ref=e104]
+          - text: 正在加载排行榜...
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - text: 若某次训练因证据不足暂不可评估，它会保留在训练记录里，但不会拉高或拉低排行榜均分。
+  - button "Open Next.js Dev Tools" [ref=e118] [cursor=pointer]:
+    - img [ref=e119]
+  - alert [ref=e122]

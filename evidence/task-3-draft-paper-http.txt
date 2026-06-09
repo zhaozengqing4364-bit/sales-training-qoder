@@ -1,0 +1,10 @@
+### FETCH DRAFT PAPER 7c31b491-adad-42d0-b91b-3bae47d055c0 AS LEARNER
+HTTP/1.1 404 Not Found
+date: Tue, 02 Jun 2026 08:33:18 GMT
+server: uvicorn
+content-length: 150
+content-type: application/json
+x-trace-id: 526fdd05129da0fd68cd12311f26ccb4
+traceparent: 00-526fdd05129da0fd68cd12311f26ccb4-439f4c66404d0bee-01
+
+{"success":false,"data":null,"error":"[PAPER_NOT_PUBLISHED]","message":"考卷不存在或未发布。","trace_id":"526fdd05129da0fd68cd12311f26ccb4"}

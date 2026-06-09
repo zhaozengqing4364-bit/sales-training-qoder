@@ -1,0 +1,32 @@
+/**
+ * @layer tokens.color
+ * Canvas · Surface · Text · Brand
+ */
+:root {
+  --st-color-bg-main: #fafaf9;
+  --st-color-bg-canvas: #f8fafc;
+  --st-color-bg-card: #ffffff;
+  --st-color-bg-muted: #f1f5f9;
+  --st-color-bg-subtle: #f8fafc;
+  --st-color-bg-inverse: #0f172a;
+  --st-color-bg-code: #0f172a;
+
+  --st-color-text-primary: #18181b;
+  --st-color-text-secondary: #71717a;
+  --st-color-text-tertiary: #a1a1aa;
+  --st-color-text-muted: #64748b;
+  --st-color-text-inverse: #ffffff;
+  --st-color-text-code: #f1f5f9;
+
+  --st-color-accent-blue: #3b82f6;
+  --st-color-accent-blue-hover: #2563eb;
+  --st-color-accent-blue-soft: #eff6ff;
+  --st-color-accent-purple: #8b5cf6;
+  --st-color-accent-purple-soft: #f5f3ff;
+  --st-color-anchor: #0f172a;
+  --st-color-anchor-hover: #1e293b;
+
+  --st-border-default: #e2e8f0;
+  --st-border-subtle: #f1f5f9;
+  --st-border-strong: #cbd5e1;
+}

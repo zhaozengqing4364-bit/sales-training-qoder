@@ -1,0 +1,56 @@
+F401 [*] `pathlib.Path` imported but unused
+  --> scripts/seed_newcomer_training_path.py:10:21
+   |
+ 8 | from collections.abc import Sequence
+ 9 | from datetime import UTC, datetime
+10 | from pathlib import Path
+   |                     ^^^^
+11 | from typing import Any, Literal, TypeVar
+   |
+help: Remove unused import: `pathlib.Path`
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> scripts/seed_newcomer_training_path.py:18:1
+   |
+16 |   sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+17 |
+18 | / import agent.models as _agent_models  # noqa: F401 - register ORM mappers
+19 | | import curriculum_practice.models as _curriculum_models  # noqa: F401 - register ORM mappers
+20 | | import sales_trainer.models as _sales_trainer_models  # noqa: F401 - register ORM mappers
+21 | | from common.db.models import User
+22 | | from common.db.session import AsyncSessionLocal
+23 | | from curriculum_practice.models import LearningChapter, LearningContent, QuestionCategory, QuestionItem
+24 | | from sales_trainer.models import SalesTrainerExamPaper, SalesTrainerUnit
+25 | | from sales_trainer.schemas import ExamPaperQuestionBinding, SalesTrainerPathConfig
+   | |__________________________________________________________________________________^
+26 |
+27 |   PATH_KEY = "newcomer_training_path_v1"
+   |
+help: Organize imports
+
+F841 Local variable `m1` is assigned to but never used
+   --> scripts/seed_newcomer_training_path.py:531:5
+    |
+529 |         },
+530 |     )
+531 |     m1 = await _upsert_unit(
+    |     ^^
+532 |         db,
+533 |         summary,
+    |
+help: Remove assignment to unused variable `m1`
+
+F841 Local variable `m3` is assigned to but never used
+   --> scripts/seed_newcomer_training_path.py:555:5
+    |
+553 |         },
+554 |     )
+555 |     m3 = await _upsert_unit(
+    |     ^^
+556 |         db,
+557 |         summary,
+    |
+help: Remove assignment to unused variable `m3`
+
+Found 4 errors.
+[*] 2 fixable with the `--fix` option (2 hidden fixes can be enabled with the `--unsafe-fixes` option).

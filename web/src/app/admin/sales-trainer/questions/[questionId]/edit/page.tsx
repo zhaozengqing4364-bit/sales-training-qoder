@@ -43,7 +43,7 @@ export default function EditSalesTrainerQuestionPage() {
         try {
             const updated = await api.admin.salesTrainer.updateQuestion(params.questionId, payload);
             setQuestion(updated);
-            toast.success("题目已保存");
+            toast.success("题目修订已保存，发布后只影响后续组卷和学员作答");
         } catch (submitError) {
             toast.error(getApiErrorMessage(submitError));
         } finally {
@@ -55,7 +55,7 @@ export default function EditSalesTrainerQuestionPage() {
         <AdminFormShell
             backHref="/admin/sales-trainer/questions"
             title={question ? `编辑题目：${question.title}` : "编辑题目"}
-            description="只有 draft 状态允许修改；发布与归档请回到列表页操作。"
+            description="已发布题目也可以编辑；保存会生成待发布修订，发布后只影响后续组卷和后续学员作答。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
         >
             {isLoading ? (

@@ -8,7 +8,6 @@ from http import HTTPStatus
 from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
-import dashscope
 import httpx
 
 from common.error_handling.result import Result
@@ -54,7 +53,7 @@ class ParaformerFileASRProvider:
     ) -> None:
         self._api_key = api_key or os.getenv("DASHSCOPE_API_KEY", "")
         if self._api_key:
-            dashscope.api_key = self._api_key
+            _set_dashscope_api_key(self._api_key)
         self._client = client
         self._transcript_fetcher = transcript_fetcher or _fetch_transcription_json
         self._config = config or load_paraformer_file_asr_config()
@@ -233,6 +232,14 @@ def _load_dashscope_transcription() -> Any:
     from dashscope.audio.asr import Transcription
 
     return Transcription
+
+
+def _set_dashscope_api_key(api_key: str) -> None:
+    try:
+        import dashscope
+    except ImportError:
+        return
+    dashscope.api_key = api_key
 
 
 def _response_output(response: Any) -> dict[str, object]:

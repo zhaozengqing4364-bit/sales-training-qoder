@@ -8,8 +8,11 @@ import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/mod
 import { SalesTrainerUnitForm } from "@/components/admin/sales-trainer/unit-form";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { normalizeNewcomerUnitDisplay } from "@/lib/sales-trainer/admin-display";
+import { NEWCOMER_QUESTION_TAG } from "@/lib/sales-trainer/question-scope";
 import type {
     SalesTrainerAudioScorePrompt,
+    SalesTrainerMaterial,
     SalesTrainerQuestion,
     SalesTrainerUnit,
     SalesTrainerUnitUpdateRequest,
@@ -23,6 +26,7 @@ export default function EditSalesTrainerUnitPage() {
     const [units, setUnits] = useState<SalesTrainerUnit[]>([]);
     const [questions, setQuestions] = useState<SalesTrainerQuestion[]>([]);
     const [prompts, setPrompts] = useState<SalesTrainerAudioScorePrompt[]>([]);
+    const [materials, setMaterials] = useState<SalesTrainerMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -30,14 +34,16 @@ export default function EditSalesTrainerUnitPage() {
         async function loadDependencies() {
             setIsLoading(true);
             try {
-                const [unitsResult, questionsResult, promptsResult] = await Promise.all([
-                    api.admin.salesTrainer.listUnits({ include_archived: true, limit: 100 }),
-                    api.admin.salesTrainer.listQuestions({ status: "published" }),
+                const [unitsResult, questionsResult, promptsResult, materialsResult] = await Promise.all([
+                    api.admin.newcomerTraining.listUnits({ include_archived: true, limit: 100 }),
+                    api.admin.salesTrainer.listQuestions({ status: "published", tag: NEWCOMER_QUESTION_TAG }),
                     api.admin.salesTrainer.listScorePrompts({ include_archived: true }),
+                    api.admin.salesTrainer.listMaterials({ include_archived: true, limit: 100 }),
                 ]);
                 setUnits(unitsResult.items);
                 setQuestions(questionsResult.items);
                 setPrompts(promptsResult.items);
+                setMaterials(materialsResult.items);
             } catch (loadError) {
                 toast.error(getApiErrorMessage(loadError));
             } finally {
@@ -51,12 +57,16 @@ export default function EditSalesTrainerUnitPage() {
         () => units.find((item) => item.unit_id === params.unitId) ?? null,
         [params.unitId, units],
     );
+    const displayUnit = useMemo(
+        () => (unit ? normalizeNewcomerUnitDisplay(unit) : null),
+        [unit],
+    );
 
     async function handleSubmit(payload: SalesTrainerUnitUpdateRequest) {
         setIsSubmitting(true);
         try {
-            await api.admin.salesTrainer.updateUnit(params.unitId, payload);
-            toast.success("训练单元已保存");
+            await api.admin.newcomerTraining.updateUnit(params.unitId, payload);
+            toast.success("训练单元修订已保存，发布后只影响后续学员");
             router.refresh();
         } catch (submitError) {
             toast.error(getApiErrorMessage(submitError));
@@ -67,8 +77,8 @@ export default function EditSalesTrainerUnitPage() {
     return (
         <AdminFormShell
             backHref="/admin/sales-trainer/units"
-            title={unit ? `编辑训练单元：${unit.name}` : "编辑训练单元"}
-            description="只有 draft 状态允许修改；发布与归档请回到列表页操作。"
+            title={displayUnit ? `编辑训练单元：${displayUnit.name}` : "编辑训练单元"}
+            description="已发布训练单元可以直接编辑；保存会生成待发布修订，发布后只影响后续学员。归档版本仅用于审计追溯。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
         >
             {isLoading ? (
@@ -76,9 +86,10 @@ export default function EditSalesTrainerUnitPage() {
             ) : unit ? (
                 <SalesTrainerUnitForm
                     mode="edit"
-                    initialUnit={unit}
+                    initialUnit={displayUnit}
                     availableQuestions={questions}
                     availablePrompts={prompts}
+                    availableMaterials={materials}
                     isSubmitting={isSubmitting}
                     onSubmit={(payload) => void handleSubmit(payload as SalesTrainerUnitUpdateRequest)}
                 />

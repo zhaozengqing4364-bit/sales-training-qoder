@@ -38,6 +38,8 @@ describe("SalesTrainerQuestionForm", () => {
         fireEvent.change(screen.getByLabelText("题型"), {
             target: { value: "short_answer" },
         });
+        expect(screen.getByPlaceholderText("留空使用新人训练路径默认简答评分角色")).toBeTruthy();
+        expect(screen.queryByPlaceholderText("留空使用销售训练默认简答评分角色")).toBeNull();
         fireEvent.change(screen.getByLabelText("题干"), {
             target: { value: "请说明石犀如何帮助客户治理数据流动。" },
         });
@@ -160,5 +162,56 @@ describe("SalesTrainerQuestionForm", () => {
 
         expect(await screen.findByText("简答通过线不能大于 100。")).toBeTruthy();
         expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("allows editing published questions as future-only revisions", () => {
+        render(
+            <SalesTrainerQuestionForm
+                mode="edit"
+                initialQuestion={{
+                    question_id: "question-1",
+                    title: "商务礼仪",
+                    stem: "见客户前应做什么？",
+                    reference_answer: null,
+                    category_id: "category-1",
+                    question_type: "single_choice",
+                    difficulty: "medium",
+                    status: "published",
+                    tags: [],
+                    scoring_dimensions: [],
+                    scoring_criteria: {},
+                    safety_flagged: false,
+                    department: null,
+                    usage_scope: "sales_trainer",
+                    version: 1,
+                    content_hash: null,
+                    published_at: "2026-06-02T00:00:00Z",
+                    created_at: "2026-06-01T00:00:00Z",
+                    updated_at: "2026-06-02T00:00:00Z",
+                    options: [{ value: "A", label: "确认客户背景" }],
+                    correct_answer: "A",
+                    correct_answers: [],
+                    correct_bool: null,
+                    explanation: null,
+                    ai_scoring: null,
+                }}
+                categories={categories}
+                isSubmitting={false}
+                onSubmit={onSubmit}
+            />,
+        );
+
+        expect(screen.getByText("编辑将生成题目新修订")).toBeTruthy();
+        expect(screen.getByText(/只影响后续组卷和后续学员作答/)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "复制为新草稿" })).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "保存题目" }));
+
+        expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+            title: "商务礼仪",
+            stem: "见客户前应做什么？",
+            question_type: "single_choice",
+            correct_answer: "A",
+        }));
     });
 });

@@ -1,14 +1,3 @@
-"""Seed three self-select modules for sales-trainer home (replaces 17-level COO timeline on home).
-
-Usage:
-  PYTHONPATH=src python scripts/seed_sales_trainer_three_modules.py
-  PYTHONPATH=src python scripts/seed_sales_trainer_three_modules.py --verify-only
-
-Depends on (module 2 hub links to COO chapters):
-  scripts/import_coo_learning_content.py  (writes config-assets/coo-learning-content.id)
-  Optional: scripts/seed_coo_questions.py + seed_coo_path_extension.py for per-chapter quiz units
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -45,15 +34,15 @@ OWNER_EMAIL = "sales-trainer.modules.seed.admin@example.com"
 LEARNER_EMAIL = "sales-trainer.goal.demo.learner@example.com"
 
 PATH_KEY = "new_seller_modules_v1"
-PATH_TITLE = "新人销售三模块训练"
+PATH_TITLE = "新人训练路径"
 GOAL_TITLE = "按模块自选完成核心能力训练"
 LEGACY_PATH_KEY = "new_seller_goal_path"
 
-M1_NAME = "模块一：PPT演练"
-M2_NAME = "模块二：拜访前商务"
-M3_5_NAME = "模块三：金字塔演讲（5分钟）"
-M3_10_NAME = "模块三：金字塔演讲（10分钟）"
-M3_15_NAME = "模块三：金字塔演讲（15分钟）"
+M1_NAME = "模块一：PPT 讲解录音"
+M2_NAME = "模块二：商务技巧"
+M3_5_NAME = "模块三：电梯演讲（5分钟）"
+M3_10_NAME = "模块三：电梯演讲（10分钟）"
+M3_15_NAME = "模块三：电梯演讲（15分钟）"
 PPT_PROMPT_NAME = "主胶片讲解录音评分"
 PYRAMID_PROMPT_NAME = "金字塔演讲录音评分"
 
@@ -378,7 +367,7 @@ async def seed(db: AsyncSession) -> SeedSummary:
             },
             "path": _path_config(
                 order_index=1,
-                level_title="第1关：PPT演练",
+                level_title="第1关：PPT 讲解录音",
                 level_description="按公司主胶片逻辑讲解并上传录音，获取 AI 评分反馈。",
                 completion_rule="scored",
                 primary_action_label="上传 PPT 讲解录音",
@@ -395,14 +384,14 @@ async def seed(db: AsyncSession) -> SeedSummary:
         summary,
         owner_id=str(owner.user_id),
         name=M2_NAME,
-        description="阅读 COO 谈市场十五讲，章节可任意顺序浏览，无强制通关顺序。",
+        description="阅读见客户前商务礼仪学习内容，并完成商务技巧考卷。",
         unit_type="quiz",
         config={
             "quiz": {"pass_threshold": 0},
             "path": _path_config(
                 order_index=2,
-                level_title="第2关：拜访前商务",
-                level_description="从章节目录进入阅读；每章可配合测验（若已发布）。",
+                level_title="第2关：商务技巧",
+                level_description="先学习商务礼仪章节，再完成已发布的商务技巧考卷。",
                 completion_rule="submitted",
                 primary_action_label="进入学习目录",
             ),

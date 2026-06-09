@@ -98,6 +98,7 @@ describe("client domain factories", () => {
         });
         const adminSalesTrainer = createAdminSalesTrainerDomain({
             request,
+            upload,
             resolveApiBaseUrl: () => "http://localhost:3444/api/v1",
         });
 
@@ -106,6 +107,73 @@ describe("client domain factories", () => {
         );
         expect(adminSalesTrainer.getAudioSubmissionFileUrl("submission-1")).toBe(
             "http://localhost:3444/api/v1/admin/sales-trainer/audio-submissions/submission-1/file",
+        );
+    });
+
+    it("uploads admin sales-trainer material versions through multipart form data", async () => {
+        const request = vi.fn();
+        const upload = vi.fn().mockResolvedValue({ version_id: "version-1" });
+        const adminSalesTrainer = createAdminSalesTrainerDomain({
+            request,
+            upload,
+            resolveApiBaseUrl: () => "http://localhost:3444/api/v1",
+        });
+
+        const file = new File(["deck"], "company-master.pptx", {
+            type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        });
+        await adminSalesTrainer.uploadMaterialVersion("material-1", {
+            file,
+            version_label: "v2026.06",
+            title: "公司主胶片 2026-06",
+            release_notes: "替换错别字",
+        });
+
+        expect(upload).toHaveBeenCalledTimes(1);
+        expect(upload.mock.calls[0][0]).toBe(
+            "/admin/sales-trainer/materials/material-1/versions/upload",
+        );
+        const formData = upload.mock.calls[0][1] as FormData;
+        expect(formData.get("version_label")).toBe("v2026.06");
+        expect(formData.get("title")).toBe("公司主胶片 2026-06");
+        expect(formData.get("release_notes")).toBe("替换错别字");
+        expect(formData.get("file")).toBe(file);
+    });
+
+    it("previews and runs admin audio-submission regrade through the shared request seam", async () => {
+        const request = vi.fn().mockResolvedValue({ regrade_run_id: "run-1" });
+        const adminSalesTrainer = createAdminSalesTrainerDomain({
+            request,
+            upload: vi.fn(),
+            resolveApiBaseUrl: () => "http://localhost:3444/api/v1",
+        });
+
+        await adminSalesTrainer.previewAudioSubmissionRegrade("submission-1", {
+            target_revision_id: "prompt-revision-2",
+        });
+        await adminSalesTrainer.runAudioSubmissionRegrade("submission-1", {
+            target_revision_id: "prompt-revision-2",
+            reason: "评分 prompt 发布新版后追加重评记录",
+        });
+
+        expect(request).toHaveBeenNthCalledWith(
+            1,
+            "/admin/sales-trainer/regrades/audio-submissions/submission-1/preview",
+            {
+                method: "POST",
+                body: JSON.stringify({ target_revision_id: "prompt-revision-2" }),
+            },
+        );
+        expect(request).toHaveBeenNthCalledWith(
+            2,
+            "/admin/sales-trainer/regrades/audio-submissions/submission-1/run",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    target_revision_id: "prompt-revision-2",
+                    reason: "评分 prompt 发布新版后追加重评记录",
+                }),
+            },
         );
     });
 });

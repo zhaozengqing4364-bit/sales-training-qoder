@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>UI/UX 审计可视化总览 — sales-training-qoder (2026-06-01)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: linear-gradient(135deg, #FAFAF9 0%, #F4F4F5 100%);
+    color: #18181B;
+    padding: 40px 24px;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 36px; font-weight: 800; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 700; margin: 32px 0 16px; }
+  h3 { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+  .subtitle { color: #71717A; font-size: 14px; margin-bottom: 32px; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: white;
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.02);
+  }
+  .stat-label { font-size: 12px; color: #71717A; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-value { font-size: 36px; font-weight: 800; margin: 8px 0; }
+  .stat-p0 { color: #DC2626; }
+  .stat-p1 { color: #D97706; }
+  .stat-p2 { color: #2563EB; }
+  .stat-done { color: #059669; }
+
+  .section {
+    background: white;
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.02);
+    margin-bottom: 16px;
+  }
+  .p0-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .p0-item {
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    border-left: 4px solid #DC2626;
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .p0-item .badge {
+    display: inline-block;
+    background: #DC2626;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    margin-right: 6px;
+  }
+  .wave-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .wave-chip {
+    background: #F4F4F5;
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-size: 12px;
+    text-align: center;
+  }
+  .wave-chip.done { background: #D1FAE5; color: #065F46; }
+  .wave-chip.partial { background: #FEF3C7; color: #92400E; }
+  .wave-chip.pending { background: #F3F4F6; color: #6B7280; }
+  .wave-chip.blocked { background: #FEE2E2; color: #991B1B; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #E4E4E7; }
+  th { font-weight: 600; color: #71717A; font-size: 11px; text-transform: uppercase; }
+  .p0-row { background: #FEF2F2; }
+  .p1-row { background: #FFFBEB; }
+  .p2-row { background: #EFF6FF; }
+  .verdict { font-weight: 600; }
+  .verdict.remove { color: #DC2626; }
+  .verdict.merge { color: #D97706; }
+  .verdict.keep { color: #059669; }
+
+  .footer {
+    text-align: center;
+    color: #A1A1AA;
+    font-size: 12px;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>UI/UX 审计总览</h1>
+  <p class="subtitle">sales-training-qoder · 2026-06-01 · 代表性 27 / 70 页</p>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">已审计</div>
+      <div class="stat-value stat-done">27/70</div>
+      <div style="font-size: 12px; color: #71717A;">39% 覆盖</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">P0（阻塞）</div>
+      <div class="stat-value stat-p0">25</div>
+      <div style="font-size: 12px; color: #71717A;">必须修（4 个合规级）</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">P1（1 周内）</div>
+      <div class="stat-value stat-p1">65</div>
+      <div style="font-size: 12px; color: #71717A;">优化体验</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">P2（可优化）</div>
+      <div class="stat-value stat-p2">70</div>
+      <div style="font-size: 12px; color: #71717A;">锦上添花</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>🔥 Top 6 P0 问题</h2>
+    <div class="p0-list">
+      <div class="p0-item">
+        <span class="badge">P0-1</span>
+        <strong>后端调试信息直显</strong>（合规级）：/support/runtime 18 条 JSON dump + /learning-path "fail-test" 标识
+      </div>
+      <div class="p0-item">
+        <span class="badge">P0-2</span>
+        <strong>4 套独立 layout</strong>：auth / dashboard / user / admin 各自不同 sidebar
+      </div>
+      <div class="p0-item">
+        <span class="badge">P0-3</span>
+        <strong>测试数据污染</strong>：Smoke / UUID / 505874232 / 落库回归 6+ 处同源
+      </div>
+      <div class="p0-item">
+        <span class="badge">P0-4</span>
+        <strong>表单无 inline 错误</strong>：密码不一致按钮 enabled
+      </div>
+      <div class="p0-item">
+        <span class="badge">P0-5</span>
+        <strong>删除无 confirm</strong>：admin 50+ 页面同模式
+      </div>
+      <div class="p0-item">
+        <span class="badge">P0-6</span>
+        <strong>移动端按钮崩 + FAB</strong>：字符级垂直换行 / 覆盖底部内容
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>📊 审计 wave 状态</h2>
+    <div class="wave-grid">
+      <div class="wave-chip done">public 4/4</div>
+      <div class="wave-chip partial">dashboard 7/14</div>
+      <div class="wave-chip done">user 1/4 (其余 dynamic)</div>
+      <div class="wave-chip partial">admin 12/50+</div>
+    </div>
+    <p style="font-size: 12px; color: #71717A; margin-top: 12px;">
+      public wave 100% 完成；dashboard 7/14（新增 /support + /sales-trainer* + /agents 404）；user 1/4 (其他 dynamic blocked)；admin 12/50+ top 页
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>🎨 4 层排版审计总评</h2>
+    <table>
+      <thead>
+        <tr><th>层</th><th>状态</th><th>主要问题</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Token</strong></td><td>🟡</td><td>状态色（success/warn/error）未走 token；slate/zinc 混用</td></tr>
+        <tr><td><strong>组件</strong></td><td>🔴</td><td>表单错误反馈项目级缺失；删除无 confirm</td></tr>
+        <tr><td><strong>布局</strong></td><td>🔴</td><td>dashboard / admin 双 layout；移动 FAB 覆盖内容</td></tr>
+        <tr><td><strong>信息</strong></td><td>🔴</td><td>双 sidebar IA 问题；文案错别字 + 英文泄漏</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>✂️ 功能裁剪矩阵</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>功能</th><th>位置</th><th class="verdict">建议</th></tr>
+      </thead>
+      <tbody>
+        <tr class="p0-row">
+          <td>1</td><td>"通过邮箱重置密码" 入口</td><td>/profile</td>
+          <td class="verdict remove">移除（改 /change-password）</td>
+        </tr>
+        <tr class="p0-row">
+          <td>2</td><td>开发者快速登录按钮</td><td>/login</td>
+          <td class="verdict remove">生产移除</td>
+        </tr>
+        <tr class="p1-row">
+          <td>3</td><td>"销售训练 MVP" 横幅</td><td>/training</td>
+          <td class="verdict merge">合并到"销售对练"卡</td>
+        </tr>
+        <tr class="p0-row">
+          <td>4</td><td>测试 agent 卡（3 张）</td><td>/training/sales</td>
+          <td class="verdict remove">移除（生产前）</td>
+        </tr>
+        <tr>
+          <td>5</td><td>dashboard / admin 两套 sidebar</td><td>跨区</td>
+          <td class="verdict merge">合并 + 区域徽章</td>
+        </tr>
+        <tr>
+          <td>6</td><td>4 个训练 metric 数字</td><td>/</td>
+          <td class="verdict merge">合并到能力地图</td>
+        </tr>
+        <tr>
+          <td>7</td><td>训练 agent 库</td><td>/training/sales</td>
+          <td class="verdict keep">保留并强化（核心 OKR）</td>
+        </tr>
+        <tr>
+          <td>8</td><td>空状态引导 CTA</td><td>/leaderboard</td>
+          <td class="verdict keep">保留（设计亮点）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>🗺️ 优化路线图</h2>
+    <h3>短期（≤ 1 周，10.5 人天）</h3>
+    <ul style="margin-left: 24px; line-height: 1.8;">
+      <li>合并 dashboard / admin sidebar（5 天）</li>
+      <li>上线 lint 禁 smoke/UUID/落库（0.5 天）</li>
+      <li>表单 inline 错误反馈（3 天）</li>
+      <li>移动端 FAB + 按钮换行（0.5 天）</li>
+      <li>路由保护 middleware（0.5 天）</li>
+      <li>删除 confirm dialog（1 天）</li>
+    </ul>
+    <h3>中期（1-4 周，13 人天）</h3>
+    <ul style="margin-left: 24px; line-height: 1.8;">
+      <li>token 体系补齐 success / warn / error（1 天）</li>
+      <li>视觉锚点修复（2 天）</li>
+      <li>统一顶栏：搜索 / 通知 / 面包屑（3 天）</li>
+      <li>a11y 全量审查（2 天）</li>
+      <li>空状态 0 数据弱化（1 天）</li>
+      <li>文案校对（1 天）</li>
+      <li>功能裁剪实施（3 天）</li>
+    </ul>
+    <h3>长期（&gt; 1 月，16 人天）</h3>
+    <ul style="margin-left: 24px; line-height: 1.8;">
+      <li>完整 design system 文档化（5 天）</li>
+      <li>微交互体系化（3 天）</li>
+      <li>暗色模式 + prefers-reduced-motion（5 天）</li>
+      <li>tablet 视口断点优化（3 天）</li>
+    </ul>
+    <p style="margin-top: 16px; font-size: 13px; color: #71717A;">
+      <strong>总计：约 40 人天 / 5-6 周</strong>
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>📁 完整报告位置</h2>
+    <p style="font-size: 14px; line-height: 1.8;">
+      <code>ui-ux-audit/sales-training-qoder-2026-06-01/report.md</code> — 主报告<br>
+      <code>ui-ux-audit/sales-training-qoder-2026-06-01/audit/*.md</code> — 4 层排版审计<br>
+      <code>ui-ux-audit/sales-training-qoder-2026-06-01/vision/*.md</code> — 11 页多模态分析<br>
+      <code>ui-ux-audit/sales-training-qoder-2026-06-01/screenshots/</code> — 20 张原始截图
+    </p>
+  </div>
+
+  <div class="footer">
+    <p>Generated by Mavis via ui-ux-audit skill · 2026-06-01</p>
+    <p>cron 调度: <code>2c0dded7</code> · 间隔 1m · 可 <code>CronDelete</code> 停止</p>
+  </div>
+</div>
+</body>
+</html>

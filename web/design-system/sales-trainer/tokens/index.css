@@ -1,0 +1,45 @@
+/**
+ * Sales Trainer Design Tokens — aggregate entry
+ * @id sales-trainer-modern-soft-ui
+ */
+@import "./colors.css";
+@import "./semantic.css";
+@import "./score.css";
+@import "./glass.css";
+@import "./typography.css";
+@import "./spacing.css";
+@import "./radius.css";
+@import "./shadow.css";
+@import "./motion.css";
+@import "./layout.css";
+
+/* Tailwind v4 bridge (optional) */
+@theme inline {
+  --color-background: var(--st-color-bg-main);
+  --color-foreground: var(--st-color-text-primary);
+  --font-sans: var(--st-font-sans);
+  --shadow-sm: var(--st-shadow-sm);
+  --shadow-card: var(--st-shadow-card);
+  --shadow-float: var(--st-shadow-float);
+  --shadow-glow: var(--st-shadow-glow);
+  --radius-subtle: var(--st-radius-lg);
+  --radius-medium: var(--st-radius-xl);
+  --radius-full: var(--st-radius-full);
+}
+
+/* Legacy aliases — migrate globals.css gradually */
+:root {
+  --color-bg-main: var(--st-color-bg-main);
+  --color-bg-card: var(--st-color-bg-card);
+  --color-text-primary: var(--st-color-text-primary);
+  --color-text-secondary: var(--st-color-text-secondary);
+  --color-text-tertiary: var(--st-color-text-tertiary);
+  --color-accent-blue: var(--st-color-accent-blue);
+  --color-accent-blue-soft: var(--st-color-accent-blue-soft);
+  --color-accent-purple: var(--st-color-accent-purple);
+  --color-accent-purple-soft: var(--st-color-accent-purple-soft);
+  --font-jakarta: var(--st-font-sans);
+  --glass-bg: var(--st-glass-bg);
+  --glass-border: var(--st-glass-border);
+  --glass-shine: var(--st-glass-shine);
+}

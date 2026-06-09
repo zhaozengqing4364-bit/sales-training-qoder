@@ -1,0 +1,45 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/zhaozengqing/github/销售训练qoder/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.3.0, langsmith-0.8.3, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 2 items
+
+tests/unit/test_seed_newcomer_training_path.py FF                        [100%]
+
+=================================== FAILURES ===================================
+________________ test_seed_newcomer_training_path_is_idempotent ________________
+
+test_db = <sqlalchemy.orm.session.AsyncSession object at 0x109df8650>
+
+    @pytest.mark.asyncio
+    async def test_seed_newcomer_training_path_is_idempotent(
+        test_db: AsyncSession,
+    ) -> None:
+>       from scripts.seed_newcomer_training_path import (
+            BUSINESS_SKILLS_PAPER_KEY,
+            MODULE_KEYS,
+            PATH_KEY,
+            seed,
+            verify,
+        )
+E       ModuleNotFoundError: No module named 'scripts'
+
+tests/unit/test_seed_newcomer_training_path.py:15: ModuleNotFoundError
+_________ test_verify_newcomer_training_path_reports_missing_baseline __________
+
+test_db = <sqlalchemy.orm.session.AsyncSession object at 0x109e6d910>
+
+    @pytest.mark.asyncio
+    async def test_verify_newcomer_training_path_reports_missing_baseline(
+        test_db: AsyncSession,
+    ) -> None:
+>       from scripts.seed_newcomer_training_path import VerifyError, verify
+E       ModuleNotFoundError: No module named 'scripts'
+
+tests/unit/test_seed_newcomer_training_path.py:64: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED tests/unit/test_seed_newcomer_training_path.py::test_seed_newcomer_training_path_is_idempotent
+FAILED tests/unit/test_seed_newcomer_training_path.py::test_verify_newcomer_training_path_reports_missing_baseline
+============================== 2 failed in 3.39s ===============================

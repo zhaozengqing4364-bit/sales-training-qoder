@@ -91,11 +91,11 @@ export function PathMissionPanel({ path, unitsById }: PathMissionPanelProps) {
                         ) : null}
                     </div>
                 </div>
-                <Link href={primaryAction.targetPath}>
-                    <Button className="rounded-full bg-white text-slate-900 hover:bg-slate-100">
+                <Button asChild className="rounded-full bg-white text-slate-900 hover:bg-slate-100">
+                    <Link href={primaryAction.targetPath}>
                         {primaryAction.actionLabel}
-                    </Button>
-                </Link>
+                    </Link>
+                </Button>
             </div>
         </div>
     );

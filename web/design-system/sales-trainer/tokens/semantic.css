@@ -1,0 +1,26 @@
+/**
+ * @layer tokens.semantic
+ * Success · Warning · Error · Info · Voice
+ */
+:root {
+  --st-color-success-bg: #f0fdf4;
+  --st-color-success-fg: #16a34a;
+  --st-color-success-border: #bbf7d0;
+
+  --st-color-warning-bg: #fffbeb;
+  --st-color-warning-fg: #d97706;
+  --st-color-warning-border: #fde68a;
+
+  --st-color-error-bg: #fef2f2;
+  --st-color-error-fg: #dc2626;
+  --st-color-error-border: #fecaca;
+
+  --st-color-info-bg: #eff6ff;
+  --st-color-info-fg: #2563eb;
+  --st-color-info-border: #bfdbfe;
+
+  --st-voice-active: #06b6d4;
+  --st-voice-listening: #3b82f6;
+  --st-voice-speaking: #8b5cf6;
+  --st-voice-idle: #94a3b8;
+}

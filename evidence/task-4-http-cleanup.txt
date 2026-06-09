@@ -1,0 +1,5 @@
+### CHECK PORT 8014
+### TEMP SQLITE BEFORE REMOVE
+-rw-r--r--  1 zhaozengqing  staff  2158592 Jun  2 16:59 evidence/task-4-http-qa.sqlite
+### TEMP SQLITE AFTER REMOVE
+temp sqlite removed

@@ -78,11 +78,11 @@ from curriculum_practice.services.learner_profiles import LearnerProfileService
 from curriculum_practice.services.learning_contents import (
     SERVER_ERROR as LEARNING_CONTENT_SERVICE_FAILED,
 )
-from curriculum_practice.services.learning_contents import (
-    LearningContentService,
+from curriculum_practice.services.learning_content_serializers import (
     serialize_chapter,
     serialize_learning_content,
 )
+from curriculum_practice.services.learning_contents import LearningContentService
 from curriculum_practice.services.learning_path import LearningPathService
 from curriculum_practice.services.learning_progress_service import (
     SERVER_ERROR as LEARNING_PROGRESS_SERVICE_FAILED,
@@ -1285,7 +1285,9 @@ async def delete_learning_chapter(
             server_message="LearningChapter 删除失败。",
         )
     delete_result = await service.delete_chapter(
-        content_result.value, chapter_result.value
+        content_result.value,
+        chapter_result.value,
+        actor_id=str(current_user.user_id),
     )
     if not delete_result.is_success:
         return _learning_content_result_error(

@@ -1,0 +1,15 @@
+    record    |               score_id               | total_score |    prompt_hash     | error_code 
+--------------+--------------------------------------+-------------+--------------------+------------
+ score_result | df61c91c-527e-46ef-b50e-5239715eda77 |       88.00 | source-prompt-hash | 
+(1 row)
+
+   record    |                run_id                |   target_type    |              target_id               |  status   |                                        reason                                        |             trace_id             | before_score | after_score |      after_error_code      | history_overwrite 
+-------------+--------------------------------------+------------------+--------------------------------------+-----------+--------------------------------------------------------------------------------------+----------------------------------+--------------+-------------+----------------------------+-------------------
+ regrade_run | 67a1c3b8-35f9-46d3-bc37-9900ae02a997 | audio_submission | 49ec020b-b761-4580-86b8-28e5afac69c7 | completed | 浏览器验收：评分 prompt 发布新修订后，追加一条历史录音重评记录，验证不覆盖原始评分。 | 6c00ed25edded09fd0a2d174ed99b946 | 88.0         |             | [DEUCATE_RESPONSE_INVALID] | false
+(1 row)
+
+    record     |                log_id                |            action            |          target_type           |              target_id               |            request_id            | append_only | history_overwrite |                                        reason                                        
+---------------+--------------------------------------+------------------------------+--------------------------------+--------------------------------------+----------------------------------+-------------+-------------------+--------------------------------------------------------------------------------------
+ operation_log | 28b4c71b-6036-46cc-a5f7-52aeffcceea8 | historical_regrade.completed | sales_trainer_audio_submission | 49ec020b-b761-4580-86b8-28e5afac69c7 | 6c00ed25edded09fd0a2d174ed99b946 | true        | false             | 浏览器验收：评分 prompt 发布新修订后，追加一条历史录音重评记录，验证不覆盖原始评分。
+(1 row)
+

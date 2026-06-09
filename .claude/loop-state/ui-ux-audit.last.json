@@ -1,0 +1,25 @@
+{
+  "phase": "audit",
+  "current_wave": "admin",
+  "current_page": "/admin/presentations",
+  "iteration": 32,
+  "last_run_at": "2026-06-02T00:00:00Z",
+  "status": "continue",
+  "pages_total": 70,
+  "pages_done": 27,
+  "screenshot_count_desktop": 30,
+  "screenshot_count_mobile": 6,
+  "screenshot_count_states": 2,
+  "audit_layers_complete": {
+    "token": true,
+    "components": true,
+    "layout": true,
+    "information": true
+  },
+  "p0_count": 25,
+  "p1_count": 65,
+  "p2_count": 70,
+  "prune_remove_count": 4,
+  "next_action": "用户命令继续。审剩余 10 高价值页：/admin/presentations, /admin/governance, /admin/logs, /admin/test-bank, /admin/scoring-rulesets, /admin/business-rules/ai-coach, /admin/business-rules/objection-ledger, /admin/curriculum-practice, /admin/sales-trainer, /admin/learning-contents。然后聚合 v3。",
+  "auth_state": "logged_in_via_dev"
+}

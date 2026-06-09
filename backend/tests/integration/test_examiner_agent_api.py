@@ -12,6 +12,7 @@ from common.db.models import Base, PracticeSession, ScoringRuleset, User
 from common.db.session import get_db
 from curriculum_practice.models import QuestionCategory, QuestionItem
 from main import app
+from sales_trainer.models import SalesTrainerAssetRevision
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -240,7 +241,7 @@ async def test_should_reject_examiner_agent_publish_for_unpublished_or_flagged_r
 
 
 @pytest.mark.asyncio
-async def test_should_publish_examiner_agent_and_reject_update_after_publish(
+async def test_should_stage_future_revision_when_published_examiner_agent_is_edited(
     async_client: AsyncClient,
     db_session: AsyncSession,
     admin_headers: dict[str, str],
@@ -261,14 +262,61 @@ async def test_should_publish_examiner_agent_and_reject_update_after_publish(
     published = publish_response.json()["data"]
     assert published["status"] == "published"
     assert published["content_hash"].startswith("sha256:")
+    initial_revision = await _latest_revision(
+        db_session,
+        resource_type="curriculum_examiner_agent",
+        logical_id=examiner_agent_id,
+        status="published",
+    )
+    assert initial_revision.payload_json["prompt_config"] == {
+        "system_prompt": "严格但友好地提问。"
+    }
 
     update_response = await async_client.put(
         f"/api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}",
         headers=admin_headers,
-        json={"description": "published records are immutable"},
+        json={"prompt_config": {"system_prompt": "按新版评分追问客户预算。"}},
     )
-    assert update_response.status_code == 409
-    assert update_response.json()["error"] == "[EXAMINER_AGENT_NOT_EDITABLE]"
+    assert update_response.status_code == 200
+    unchanged = update_response.json()["data"]
+    assert unchanged["prompt_config"] == {"system_prompt": "严格但友好地提问。"}
+
+    working_revision = await _latest_revision(
+        db_session,
+        resource_type="curriculum_examiner_agent",
+        logical_id=examiner_agent_id,
+        status="working",
+    )
+    assert working_revision.payload_json["prompt_config"] == {
+        "system_prompt": "按新版评分追问客户预算。"
+    }
+
+    read_before_republish = await async_client.get(
+        f"/api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}",
+        headers=admin_headers,
+    )
+    assert read_before_republish.status_code == 200
+    assert read_before_republish.json()["data"]["prompt_config"] == {
+        "system_prompt": "严格但友好地提问。"
+    }
+
+    republish_response = await async_client.post(
+        f"/api/v1/admin/curriculum-practice/examiner-agents/{examiner_agent_id}/publish",
+        headers=admin_headers,
+    )
+    assert republish_response.status_code == 200
+    republished = republish_response.json()["data"]
+    assert republished["prompt_config"] == {
+        "system_prompt": "按新版评分追问客户预算。"
+    }
+    assert republished["version"] == 2
+    published_revision = await _latest_revision(
+        db_session,
+        resource_type="curriculum_examiner_agent",
+        logical_id=examiner_agent_id,
+        status="published",
+    )
+    assert published_revision.revision_id == working_revision.revision_id
 
 
 @pytest.mark.asyncio
@@ -310,3 +358,27 @@ async def test_should_simulate_examiner_agent_without_creating_formal_records(
         "question_title": "预算确认",
     }
     assert (await db_session.execute(PracticeSession.__table__.select())).all() == []
+
+
+async def _latest_revision(
+    db: AsyncSession,
+    *,
+    resource_type: str,
+    logical_id: str,
+    status: str,
+) -> SalesTrainerAssetRevision:
+    result = await db.execute(
+        SalesTrainerAssetRevision.__table__
+        .select()
+        .where(
+            SalesTrainerAssetRevision.resource_type == resource_type,
+            SalesTrainerAssetRevision.logical_id == logical_id,
+            SalesTrainerAssetRevision.status == status,
+        )
+        .order_by(SalesTrainerAssetRevision.revision_no.desc())
+    )
+    row = result.mappings().first()
+    assert row is not None
+    revision = await db.get(SalesTrainerAssetRevision, row["revision_id"])
+    assert revision is not None
+    return revision

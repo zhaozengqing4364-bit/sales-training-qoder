@@ -214,6 +214,7 @@ alwaysApply: true
 | ADR | [docs/adr/](docs/adr/) |
 | 域语言 | `CONTEXT.md`、`docs/agents/domain.md` |
 | 后端 / 前端 / 测试 | [backend/AGENTS.md](backend/AGENTS.md)、[web/AGENTS.md](web/AGENTS.md) 等 |
+| 销售训练子域 | [backend/src/sales_trainer/AGENTS.md](backend/src/sales_trainer/AGENTS.md)、[web/src/app/admin/sales-trainer/AGENTS.md](web/src/app/admin/sales-trainer/AGENTS.md)、[docs/api-contract/sales-trainer.md](docs/api-contract/sales-trainer.md) |
 | Trellis 流程与 spec | [.trellis/workflow.md](.trellis/workflow.md)、[.trellis/spec/](.trellis/spec/) |
 | Issue | [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) |
 

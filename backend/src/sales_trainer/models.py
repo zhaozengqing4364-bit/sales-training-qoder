@@ -19,6 +19,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
+import sales_trainer.regrade_models  # noqa: F401
 from common.db.models import Base
 
 
@@ -96,6 +97,134 @@ class SalesTrainerUnitQuestion(Base):
     )
 
 
+class SalesTrainerExamPaper(Base):
+    __tablename__ = "sales_trainer_exam_papers"
+
+    paper_id = Column(String(36), primary_key=True, default=_uuid)
+    paper_key = Column(String(120), nullable=False, unique=True, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    module_key = Column(String(80), nullable=False, default="business_skills", index=True)
+    unit_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_units.unit_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    pass_threshold = Column(Numeric(5, 2), nullable=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_sales_trainer_exam_paper_status",
+        ),
+        CheckConstraint(
+            "pass_threshold IS NULL OR pass_threshold >= 0",
+            name="ck_sales_trainer_exam_paper_pass_threshold",
+        ),
+        Index(
+            "idx_sales_trainer_exam_papers_module_status",
+            "module_key",
+            "status",
+            "updated_at",
+        ),
+    )
+
+
+class SalesTrainerAssetRevision(Base):
+    __tablename__ = "sales_trainer_asset_revisions"
+
+    revision_id = Column(String(36), primary_key=True, default=_uuid)
+    resource_type = Column(String(80), nullable=False, index=True)
+    logical_id = Column(String(120), nullable=False, index=True)
+    revision_no = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="working", index=True)
+    payload_json = Column("payload", JSON, nullable=False, default=dict)
+    payload_hash = Column(String(128), nullable=False)
+    change_class = Column(String(40), nullable=False, default="semantic")
+    source_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id"),
+        nullable=True,
+    )
+    reason = Column(Text, nullable=True)
+    trace_id = Column(String(100), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    published_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "resource_type",
+            "logical_id",
+            "revision_no",
+            name="uq_sales_trainer_asset_revision_no",
+        ),
+        CheckConstraint(
+            "status IN ('working', 'published', 'archived')",
+            name="ck_sales_trainer_asset_revision_status",
+        ),
+        CheckConstraint(
+            "change_class IN ('non_semantic', 'semantic', 'binding', 'scoring_high_risk')",
+            name="ck_sales_trainer_asset_revision_change_class",
+        ),
+        Index(
+            "idx_sales_trainer_asset_revisions_lookup",
+            "resource_type",
+            "logical_id",
+            "status",
+            "revision_no",
+        ),
+    )
+
+
+class SalesTrainerAssetActiveRevision(Base):
+    __tablename__ = "sales_trainer_asset_active_revisions"
+
+    active_ref_id = Column(String(36), primary_key=True, default=_uuid)
+    resource_type = Column(String(80), nullable=False, index=True)
+    logical_id = Column(String(120), nullable=False, index=True)
+    active_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id"),
+        nullable=False,
+    )
+    activated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    activation_reason = Column(Text, nullable=True)
+    trace_id = Column(String(100), nullable=True)
+    activated_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "resource_type",
+            "logical_id",
+            name="uq_sales_trainer_asset_active_ref",
+        ),
+        Index(
+            "idx_sales_trainer_asset_active_lookup",
+            "resource_type",
+            "logical_id",
+        ),
+    )
+
+
 class SalesTrainerQuizAttempt(Base):
     __tablename__ = "sales_trainer_quiz_attempts"
 
@@ -104,6 +233,12 @@ class SalesTrainerQuizAttempt(Base):
         String(36), ForeignKey("sales_trainer_units.unit_id"), nullable=False, index=True
     )
     user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    paper_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id"),
+        nullable=True,
+        index=True,
+    )
     total_score = Column(Numeric(5, 2), nullable=True)
     max_score = Column(Numeric(5, 2), nullable=True)
     passed = Column(Boolean, nullable=True)
@@ -163,6 +298,15 @@ class SalesTrainerAudioSubmission(Base):
     file_hash = Column(String(128), nullable=True)
     duration_seconds = Column(Numeric(10, 2), nullable=True)
     source_page = Column(String(100), nullable=True)
+    confirmed_material_version_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_material_versions.version_id"),
+        nullable=True,
+    )
+    confirmed_material_at = Column(DateTime(timezone=True), nullable=True)
+    material_snapshot = Column(JSON, nullable=True)
+    score_scheme_snapshot = Column(JSON, nullable=True)
+    task_brief_snapshot = Column(JSON, nullable=True)
     status = Column(String(40), nullable=False, default="uploaded", index=True)
     error_code = Column(String(100), nullable=True)
     error_message = Column(Text, nullable=True)
@@ -188,6 +332,101 @@ class SalesTrainerAudioSubmission(Base):
             "idx_sales_trainer_audio_user_created",
             "user_id",
             "created_at",
+        ),
+        Index(
+            "idx_sales_trainer_audio_confirmed_material_version",
+            "confirmed_material_version_id",
+        ),
+    )
+
+
+class SalesTrainerMaterial(Base):
+    __tablename__ = "sales_trainer_materials"
+
+    material_id = Column(String(36), primary_key=True, default=_uuid)
+    material_key = Column(String(120), nullable=False, unique=True, index=True)
+    name = Column(String(200), nullable=False)
+    material_type = Column(String(40), nullable=False, default="ppt_deck", index=True)
+    description = Column(Text, nullable=True)
+    purpose = Column(String(50), nullable=False, default="ppt_pitch", index=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    current_version_id = Column(String(36), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "material_type IN ('ppt_deck', 'script', 'example_audio', 'attachment')",
+            name="ck_sales_trainer_material_type",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_sales_trainer_material_status",
+        ),
+        Index("idx_sales_trainer_material_status_updated", "status", "updated_at"),
+    )
+
+
+class SalesTrainerMaterialVersion(Base):
+    __tablename__ = "sales_trainer_material_versions"
+
+    version_id = Column(String(36), primary_key=True, default=_uuid)
+    material_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_materials.material_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_label = Column(String(80), nullable=False)
+    title = Column(String(200), nullable=False)
+    file_name = Column(String(500), nullable=False)
+    content_type = Column(String(120), nullable=False)
+    file_size_bytes = Column(BigInteger, nullable=False)
+    storage_key = Column(Text, nullable=False)
+    file_hash = Column(String(128), nullable=True)
+    release_notes = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    published_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "material_id",
+            "version_label",
+            name="uq_sales_trainer_material_version_label",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_sales_trainer_material_version_status",
+        ),
+        CheckConstraint(
+            "file_size_bytes > 0",
+            name="ck_sales_trainer_material_version_file_size",
+        ),
+        Index(
+            "idx_sales_trainer_material_versions_material_status",
+            "material_id",
+            "status",
+            "updated_at",
         ),
     )
 
@@ -222,6 +461,7 @@ class SalesTrainerAudioScorePrompt(Base):
     system_prompt = Column(Text, nullable=False)
     scoring_template = Column(Text, nullable=False)
     output_schema = Column(JSON, nullable=False, default=dict)
+    learner_rubric = Column(JSON, nullable=False, default=dict)
     version = Column(Integer, nullable=False, default=1)
     status = Column(String(20), nullable=False, default="draft", index=True)
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)

@@ -14,6 +14,7 @@ Scope: Next.js App Router pages and layouts. UI rules: `.kiro/steering/frontend-
   - `layout.tsx` — session gate only; `practice/layout.tsx` — practice chrome
 - `admin/` — Operator console (`AdminShell`, `requiredRoles: ["admin"]`). Nav source of truth: `components/layout/admin-sidebar.tsx`.
   - **Assets**: `agents/`, `personas/`, `knowledge/`, `retrieval-strategies/`, `presentations/`, `curriculum-practice/` (`case-items/`, `role-profiles/`, `templates/`, `examiner-agents/` via shared `content-asset-index.tsx`), `learning-contents/`, `test-bank/`
+  - **Sales trainer**: `sales-trainer/` (`units/`, `questions/`, `score-prompts/`, `score-standards/`, `materials/`, `paths/`, `audio-submissions/`, `quiz-attempts/`, `score-results/`, `training-records/`, `operation-logs/`, `settings/`). Read `admin/sales-trainer/AGENTS.md` first.
   - **Policy**: `prompts/`, `business-rules/` (sales-combinations, growth-achievements, ai-coach, next-practice-recommendations, objection-ledger), `scoring-rulesets/`, `governance/`, `voice-runtime/`, `presentation-ai/`, `rag-profiles/` (linked from knowledge, not sidebar)
   - **Analytics**: `records/`, `analytics/`, `analytics/curriculum/`, `supervisor-training/`
   - **Org & system**: `users/`, `settings/`, `logs/`

@@ -1,0 +1,8 @@
+Task 6 cleanup receipt
+Ports after teardown:
+Remove temporary QA DB:
+temporary QA DB removed
+Screenshots retained:
+-rw-r--r--  1 zhaozengqing  staff  535237 Jun  2 17:30 evidence/task-6-admin-article-browser.png
+-rw-r--r--  1 zhaozengqing  staff  534422 Jun  2 17:30 evidence/task-6-admin-naming-browser.png
+-rw-r--r--  1 zhaozengqing  staff  395887 Jun  2 17:31 evidence/task-6-admin-paper-browser.png

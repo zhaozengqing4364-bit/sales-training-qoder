@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 
 import { AdminDetailShell } from "@/components/admin/admin-layout-shells";
+import { AudioSubmissionRegradePanel } from "@/components/admin/sales-trainer/audio-submission-regrade-panel";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import { formatAdminRecordStatus, formatAudioSourceLabel } from "@/lib/sales-trainer/admin-display";
 import type { SalesTrainerAudioSubmission } from "@/lib/api/types";
 
 function formatSubmissionUser(submission: SalesTrainerAudioSubmission): string {
@@ -18,6 +20,17 @@ function formatSubmissionUser(submission: SalesTrainerAudioSubmission): string {
         ? submission.user_email
         : submission.user_department;
     return secondary ? `${primary} · ${secondary}` : primary;
+}
+
+function getSnapshotItems(snapshot: Record<string, unknown> | null): Array<{
+    name?: string;
+    current_version?: { version_label?: string; title?: string; version_id?: string };
+}> {
+    const items = snapshot?.items;
+    return Array.isArray(items) ? items as Array<{
+        name?: string;
+        current_version?: { version_label?: string; title?: string; version_id?: string };
+    }> : [];
 }
 
 export default function SalesTrainerAudioSubmissionDetailPage() {
@@ -83,7 +96,7 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
                 <div className="space-y-6">
                     <GlassCard className="space-y-4 p-6">
                         <div className="flex flex-wrap items-center gap-2">
-                            <Badge className="bg-slate-100 text-slate-700">{submission.status}</Badge>
+                            <Badge className="bg-slate-100 text-slate-700">{formatAdminRecordStatus(submission.status)}</Badge>
                             <a href={fileUrl} target="_blank" rel="noreferrer">
                                 <Button variant="outline" size="sm">授权播放</Button>
                             </a>
@@ -109,7 +122,7 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
                             </div>
                             <div>
                                 <p className="text-xs text-slate-500">来源页面</p>
-                                <p className="mt-1 text-sm text-slate-900">{submission.source_page || "未知来源"}</p>
+                                <p className="mt-1 text-sm text-slate-900">{formatAudioSourceLabel(submission.source_page)}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-slate-500">上传时间</p>
@@ -122,6 +135,40 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
                             </div>
                         ) : null}
                     </GlassCard>
+
+                    {submission.material_snapshot || submission.score_scheme_snapshot || submission.task_brief_snapshot ? (
+                        <GlassCard className="space-y-4 p-6">
+                            <h2 className="text-lg font-bold text-slate-900">训练快照</h2>
+                            {submission.task_brief_snapshot ? (
+                                <div>
+                                    <p className="text-xs text-slate-500">任务简报</p>
+                                    <p className="mt-1 text-sm text-slate-900">
+                                        {String(submission.task_brief_snapshot.title || submission.task_brief_snapshot.purpose || "--")}
+                                    </p>
+                                </div>
+                            ) : null}
+                            {getSnapshotItems(submission.material_snapshot).length ? (
+                                <div>
+                                    <p className="text-xs text-slate-500">材料版本</p>
+                                    <div className="mt-2 space-y-2">
+                                        {getSnapshotItems(submission.material_snapshot).map((item) => (
+                                            <p key={`${item.name}-${item.current_version?.version_id}`} className="text-sm text-slate-900">
+                                                {item.name || "训练材料"} · {item.current_version?.version_label || "--"} · {item.current_version?.title || "--"}
+                                            </p>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+                            {submission.score_scheme_snapshot ? (
+                                <div>
+                                    <p className="text-xs text-slate-500">评分方案</p>
+                                    <p className="mt-1 text-sm text-slate-900">
+                                        {String(submission.score_scheme_snapshot.name || "--")} · v{String(submission.score_scheme_snapshot.version || "--")}
+                                    </p>
+                                </div>
+                            ) : null}
+                        </GlassCard>
+                    ) : null}
 
                     <GlassCard className="space-y-3 p-6">
                         <h2 className="text-lg font-bold text-slate-900">转写结果</h2>
@@ -152,6 +199,9 @@ export default function SalesTrainerAudioSubmissionDetailPage() {
                             <p className="text-sm text-slate-500">评分尚未完成。</p>
                         )}
                     </GlassCard>
+                    {submission.score_result ? (
+                        <AudioSubmissionRegradePanel submission={submission} />
+                    ) : null}
                 </div>
             )}
         </AdminDetailShell>

@@ -1,0 +1,6 @@
+### BEFORE CLEANUP
+57791
+### AFTER KILL
+### REMOVE TEMP SQLITE
+-rw-r--r--  1 zhaozengqing  staff  2306048 Jun  2 16:33 evidence/task-3-http-qa.sqlite
+temp sqlite removed

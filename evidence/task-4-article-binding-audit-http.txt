@@ -1,0 +1,10 @@
+### ADMIN FETCH ARTICLE BINDING OPERATION LOG
+HTTP/1.1 200 OK
+date: Tue, 02 Jun 2026 09:00:11 GMT
+server: uvicorn
+content-length: 541
+content-type: application/json
+x-trace-id: 66c37bee39c019037eadba04b8965ef4
+traceparent: 00-66c37bee39c019037eadba04b8965ef4-e009ed5ba9610e86-01
+
+{"success":true,"data":{"items":[{"log_id":"31acaaeb-d6af-4b5e-a3aa-21d6a4bdbdd4","actor_id":"task4-admin","actor_role":"admin","action":"newcomer_module.article_binding_changed","target_type":"newcomer_training_module","target_id":"business_skills","request_id":null,"ip_address":null,"user_agent":null,"metadata":{"path_key":"newcomer_training_path_v1","previous_learning_content_id":null,"learning_content_id":"task4-published-article"},"created_at":"2026-06-02T08:59:58.077239"}],"total":1},"trace_id":"66c37bee39c019037eadba04b8965ef4"}

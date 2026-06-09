@@ -45,6 +45,9 @@ def test_should_round_trip_published_asset_ref_through_schema() -> None:
         "snapshot_selector": "packs[code=first_visit]",
         "source_snapshot_hash": "sha256:snapshot-json",
         "resolved_at": "2026-05-27T10:00:00+00:00",
+        "logical_id": None,
+        "revision_id": None,
+        "revision_no": None,
     }
 
 

@@ -1,0 +1,11 @@
+
+ RUN  v4.1.4 /Users/zhaozengqing/github/销售训练qoder/web
+
+ ❯ src/components/admin/sales-trainer/module-nav.test.tsx (1 test | 1 failed) 90ms
+     × presents newcomer training path management entries 89ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:10:39
+   Duration  610ms (transform 25ms, setup 0ms, import 103ms, tests 90ms, environment 330ms)
+

@@ -1,0 +1,17 @@
+/**
+ * @layer tokens.motion
+ */
+:root {
+  --st-duration-instant: 100ms;
+  --st-duration-fast: 150ms;
+  --st-duration-normal: 200ms;
+  --st-duration-slow: 300ms;
+  --st-duration-score: 800ms;
+  --st-ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --st-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --st-scale-active: 0.98;
+
+  --st-ring-color: #94a3b8;
+  --st-ring-width: 2px;
+  --st-ring-offset: 2px;
+}

@@ -1,0 +1,60 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/zhaozengqing/github/销售训练qoder/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.3.0, langsmith-0.8.3, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 4 items
+
+tests/unit/test_newcomer_training_path_boundary.py ..F.                  [100%]
+
+=================================== FAILURES ===================================
+___________ test_newcomer_module_invalid_config_reports_typed_error ____________
+
+test_db = <sqlalchemy.orm.session.AsyncSession object at 0x10ec13e50>
+
+    @pytest.mark.asyncio
+    async def test_newcomer_module_invalid_config_reports_typed_error(
+        test_db: AsyncSession,
+    ) -> None:
+        user = _user()
+        category, question = _question()
+        test_db.add_all([user, category, question])
+        await test_db.commit()
+    
+        with pytest.raises(SalesTrainerUnitError) as exc:
+            await UnitService(test_db).create_unit(
+                SalesTrainerUnitCreate(
+                    name="非法新人模块",
+                    unit_type="quiz",
+                    config={
+                        "quiz": {"pass_threshold": 10},
+                        "path": {
+                            "enabled": True,
+                            "path_key": "newcomer_training_path_v1",
+                            "module_key": "business_skills",
+                            "module_type": "sales_queue",
+                            "order_index": 1,
+                        },
+                    },
+                    questions=[
+                        UnitQuestionBinding(
+                            question_id=question.question_id,
+                            order_index=1,
+                            points=10,
+                        )
+                    ],
+                ),
+                actor=user,
+            )
+    
+>       assert exc.value.code == "[NEWCOMER_MODULE_CONFIG_INVALID]"
+E       AssertionError: assert '[SALES_TRAIN...NFIG_INVALID]' == '[NEWCOMER_MO...NFIG_INVALID]'
+E         
+E         - [NEWCOMER_MODULE_CONFIG_INVALID]
+E         + [SALES_TRAINER_PATH_CONFIG_INVALID]
+
+tests/unit/test_newcomer_training_path_boundary.py:147: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_newcomer_training_path_boundary.py::test_newcomer_module_invalid_config_reports_typed_error
+========================= 1 failed, 3 passed in 0.97s ==========================

@@ -22,6 +22,7 @@ docs/api-contract/
 ├── learning-content.md     # 学习内容 API 契约
 ├── test-bank.md            # 题库 API 契约
 ├── sales-trainer.md        # 销售训练 MVP API 契约
+├── api-audit-anomaly-report.md  # 全量路由/端点异常清单 (审计基线)
 └── websocket.md            # WebSocket 消息契约
 ```
 

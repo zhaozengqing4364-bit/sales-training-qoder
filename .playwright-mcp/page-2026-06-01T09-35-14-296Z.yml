@@ -1,0 +1,37 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]: 开发工具 · 不属于学员训练主流程
+    - heading "麦克风调试工具" [level=1] [ref=e5]
+    - paragraph [ref=e6]: 仅供开发/支持排查设备与后端连通性时使用；正常学员练习请从 practice 主页面进入。
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - generic [ref=e9]: 后端连通状态
+        - generic [ref=e10]: 检测中
+      - button "重新检测后端" [ref=e11]
+    - generic [ref=e12]:
+      - generic [ref=e13]: 实时音频频谱
+      - generic [ref=e40]: 音量级别
+      - paragraph [ref=e42]: 点击开始录音查看音频波形
+    - generic [ref=e43]:
+      - generic [ref=e44] [cursor=pointer]:
+        - checkbox "直接监听" [ref=e45]
+        - generic [ref=e46]: 直接监听
+      - generic [ref=e47]: 静默模式
+    - generic [ref=e48]:
+      - button "开始录音" [ref=e49]:
+        - img [ref=e50]
+        - text: 开始录音
+      - button "列出设备" [ref=e53]
+      - button "清空日志" [ref=e54]
+      - button "后端诊断" [ref=e55]
+    - generic [ref=e57]: "[17:35:14] Checking backend connectivity..."
+    - generic [ref=e58]:
+      - paragraph [ref=e59]: 调试说明：
+      - list [ref=e60]:
+        - listitem [ref=e61]: 如果频谱条不动，说明麦克风没有捕获到声音
+        - listitem [ref=e62]: 检查浏览器地址栏是否有麦克风图标，点击确认权限
+        - listitem [ref=e63]: 检查系统设置中的麦克风输入设备是否正确
+        - listitem [ref=e64]: 尝试在系统偏好设置中测试麦克风
+  - button "Open Next.js Dev Tools" [ref=e70] [cursor=pointer]:
+    - img [ref=e71]
+  - alert [ref=e74]

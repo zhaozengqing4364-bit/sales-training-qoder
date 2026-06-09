@@ -1,0 +1,8 @@
+125:- `"article_exam"` 模块必须绑定已发布 `LearningContent` 和已发布 `ExamPaper`；草稿或归档内容对 learner 返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` 或 `[PAPER_NOT_PUBLISHED]`。
+599:### `GET /api/v1/newcomer-training/modules/{module_key}/article`
+632:- 模块未绑定已发布内容、内容为草稿或已归档: `[LEARNING_CONTENT_NOT_PUBLISHED]`。
+796:| `PUT` | `/api/v1/admin/newcomer-training/modules/{module_key}/article-binding` | 绑定/重绑模块文章，写入模块单元 `config.path.learning_content_id` |
+813:- `module_key` + `path_key` 必须定位到已发布且 enabled 的 `"article_exam"` 模块配置；缺失返回 `[NEWCOMER_MODULE_CONFIG_MISSING]`。
+814:- 成功后写入 `SalesTrainerOperationLog`：`action="newcomer_module.article_binding_changed"`、`target_type="newcomer_training_module"`、`target_id=module_key`，metadata 记录新旧 `learning_content_id` 与 `path_key`。
+1076:| `[LEARNING_CONTENT_NOT_PUBLISHED]` | 404/409 | 绑定学习内容不存在、未发布或已归档 |
+1119:| `newcomer_path.modules[].learning_content_id` | 无 | 商务技巧文章入口 | admin 新人训练路径文章绑定 | 必须指向已发布 `LearningContent`；缺失或草稿返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` |

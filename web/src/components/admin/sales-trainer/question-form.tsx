@@ -5,6 +5,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
+import {
+    canEditQuestionRevision,
+    QuestionArchivedReadOnlyGuidance,
+    QuestionPublishedRevisionGuidance,
+} from "@/components/admin/sales-trainer/question-form-governance";
 import type {
     QuestionDifficulty,
     SalesTrainerQuestion,
@@ -138,7 +143,9 @@ export function SalesTrainerQuestionForm({
     const [aiSystemPrompt, setAiSystemPrompt] = useState(configString(initialAiScoring, "system_prompt"));
     const [aiPromptTemplate, setAiPromptTemplate] = useState(configString(initialAiScoring, "prompt_template"));
     const [error, setError] = useState<string | null>(null);
-    const canEdit = !initialQuestion || initialQuestion.status === "draft";
+    const canEdit = canEditQuestionRevision(initialQuestion?.status);
+    const isPublished = initialQuestion?.status === "published";
+    const isArchived = initialQuestion?.status === "archived";
 
     function updateOption(index: number, patch: Partial<SalesTrainerQuestionOption>) {
         setOptions((current) =>
@@ -160,8 +167,8 @@ export function SalesTrainerQuestionForm({
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setError(null);
-        if (!canEdit) {
-            setError("只有 draft 状态的题目可以修改。");
+        if (isArchived) {
+            setError("归档题目仅用于审计和历史追溯，不能继续编辑；请在历史版本中回滚后再用于后续组卷。");
             return;
         }
         if (!title.trim() || !stem.trim() || !categoryId) {
@@ -477,7 +484,7 @@ export function SalesTrainerQuestionForm({
                             disabled={isSubmitting || !canEdit}
                             rows={3}
                             className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                            placeholder="留空使用销售训练默认简答评分角色"
+                            placeholder="留空使用新人训练路径默认简答评分角色"
                         />
                     </div>
                     <div className="space-y-2">
@@ -499,14 +506,11 @@ export function SalesTrainerQuestionForm({
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
             ) : null}
 
-            {!canEdit ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    当前状态为 {initialQuestion?.status}，只能查看，不能继续修改。
-                </div>
-            ) : null}
+            {isPublished ? <QuestionPublishedRevisionGuidance /> : null}
+            {isArchived ? <QuestionArchivedReadOnlyGuidance /> : null}
 
             <div className="flex justify-end">
-                <Button type="submit" disabled={isSubmitting || !canEdit}>
+                <Button type="submit" disabled={isSubmitting || isArchived}>
                     {isSubmitting ? "保存中..." : mode === "create" ? "创建题目" : "保存题目"}
                 </Button>
             </div>

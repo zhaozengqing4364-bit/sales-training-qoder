@@ -1,0 +1,77 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/zhaozengqing/github/销售训练qoder/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.3.0, langsmith-0.8.3, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 3 items
+
+tests/unit/test_newcomer_training_path_articles.py .F.                   [100%]
+
+=================================== FAILURES ===================================
+__________ test_should_resolve_article_from_published_module_binding ___________
+
+test_db = <sqlalchemy.orm.session.AsyncSession object at 0x10df40750>
+
+    @pytest.mark.asyncio
+    async def test_should_resolve_article_from_published_module_binding(
+        test_db: AsyncSession,
+    ) -> None:
+        admin = _user("admin")
+        content = _content("bound-business-skills-article", status="published")
+        chapter = LearningChapter(
+            chapter_id="bound-business-skills-chapter-1",
+            learning_content_id=content.learning_content_id,
+            title="客户背景",
+            content="![客户资料](https://example.com/client-profile.png)\n\n先确认客户画像。",
+            order_index=1,
+            created_by=str(admin.user_id),
+            updated_by=str(admin.user_id),
+        )
+        module_unit = SalesTrainerUnit(
+            unit_id="business-skills-module-binding",
+            name="商务技巧",
+            unit_type="quiz",
+            status="published",
+            config={
+                "path": {
+                    "enabled": True,
+                    "path_key": "newcomer_training_path_v1",
+                    "module_key": "business_skills",
+                    "module_type": "article_exam",
+                    "order_index": 2,
+                    "learning_content_id": content.learning_content_id,
+                }
+            },
+            created_by=str(admin.user_id),
+            updated_by=str(admin.user_id),
+        )
+        test_db.add_all([admin, content, chapter, module_unit])
+        await test_db.commit()
+    
+>       article = await ArticleBindingService(test_db).resolve_module_article(
+            NewcomerArticleBinding(module_key="business_skills")
+        )
+
+tests/unit/test_newcomer_training_path_articles.py:108: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sales_trainer.services.article_binding_service.ArticleBindingService object at 0x10e10e810>
+binding = NewcomerArticleBinding(module_key='business_skills', learning_content_id=None)
+
+    async def resolve_module_article(
+        self,
+        binding: NewcomerArticleBinding,
+    ) -> dict[str, object]:
+        if binding.learning_content_id is None:
+>           raise ArticleBindingServiceError(
+                "[LEARNING_CONTENT_NOT_PUBLISHED]",
+                "商务技巧文章未绑定已发布内容。",
+                404,
+            )
+E           sales_trainer.services.article_binding_service.ArticleBindingServiceError: 商务技巧文章未绑定已发布内容。
+
+src/sales_trainer/services/article_binding_service.py:27: ArticleBindingServiceError
+=========================== short test summary info ============================
+FAILED tests/unit/test_newcomer_training_path_articles.py::test_should_resolve_article_from_published_module_binding
+========================= 1 failed, 2 passed in 0.46s ==========================
