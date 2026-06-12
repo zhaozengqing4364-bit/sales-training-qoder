@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from tenacity import RetryError
+
 from common.ai.config_manager import get_config_manager
 from common.ai.llm_service import LLMService
 from common.ai.models import ModelConfig, ModelType
@@ -83,14 +85,29 @@ class ShortAnswerScoringService:
 
         service = self._resolve_llm_service(ai_config)
         prompt = _render_prompt(question, answer=answer, ai_config=ai_config)
-        result = await service.generate(
-            prompt=prompt,
-            session_id=f"sales_trainer_short_answer:{question.question_id}",
-            system_message=str(
-                ai_config.get("system_prompt") or DEFAULT_SHORT_ANSWER_SYSTEM_PROMPT
-            ),
-            allow_fallback_response=False,
-        )
+        try:
+            result = await service.generate(
+                prompt=prompt,
+                session_id=f"sales_trainer_short_answer:{question.question_id}",
+                system_message=str(
+                    ai_config.get("system_prompt")
+                    or DEFAULT_SHORT_ANSWER_SYSTEM_PROMPT
+                ),
+                allow_fallback_response=False,
+            )
+        except (
+            RetryError,
+            ConnectionError,
+            TimeoutError,
+            RuntimeError,
+            OSError,
+        ) as exc:
+            logger.warning(
+                "sales_trainer_short_answer_scoring_provider_error",
+                question_id=str(question.question_id),
+                error_type=type(exc).__name__,
+            )
+            return Result.fail("[SHORT_ANSWER_AI_SCORING_FAILED]")
         if not result.is_success or not result.value:
             logger.warning(
                 "sales_trainer_short_answer_scoring_failed",

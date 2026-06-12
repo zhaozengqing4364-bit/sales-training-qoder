@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from sales_trainer.models import (
+    SalesTrainerAiCoachSession,
     SalesTrainerAudioSubmission,
     SalesTrainerOperationLog,
     SalesTrainerQuizAttempt,
@@ -49,12 +50,19 @@ class TrainingRecordService:
             team_department=team_department,
             include=material_version_id is None,
         )
+        ai_coach_records, ai_coach_total = await self._list_ai_coach_records(
+            user_id=user_id,
+            team_department=team_department,
+            include=material_version_id is None,
+        )
         records = sorted(
-            [*audio_records, *quiz_records],
+            [*audio_records, *quiz_records, *ai_coach_records],
             key=lambda item: item.get("submitted_at") or "",
             reverse=True,
         )
-        return records[offset : offset + limit], audio_total + quiz_total
+        return records[
+            offset : offset + limit
+        ], audio_total + quiz_total + ai_coach_total
 
     async def get_audio_record(self, submission_id: str) -> dict[str, Any] | None:
         submission = await self._db.get(SalesTrainerAudioSubmission, submission_id)
@@ -74,10 +82,14 @@ class TrainingRecordService:
         count_stmt = select(func.count()).select_from(SalesTrainerAudioSubmission)
         if user_id:
             stmt = stmt.where(SalesTrainerAudioSubmission.user_id == user_id)
-            count_stmt = count_stmt.where(SalesTrainerAudioSubmission.user_id == user_id)
+            count_stmt = count_stmt.where(
+                SalesTrainerAudioSubmission.user_id == user_id
+            )
         if unit_id:
             stmt = stmt.where(SalesTrainerAudioSubmission.unit_id == unit_id)
-            count_stmt = count_stmt.where(SalesTrainerAudioSubmission.unit_id == unit_id)
+            count_stmt = count_stmt.where(
+                SalesTrainerAudioSubmission.unit_id == unit_id
+            )
         if material_version_id:
             stmt = stmt.where(
                 SalesTrainerAudioSubmission.confirmed_material_version_id
@@ -147,13 +159,21 @@ class TrainingRecordService:
         *,
         include_logs: bool,
     ) -> dict[str, Any]:
-        unit = await self._db.get(SalesTrainerUnit, submission.unit_id) if submission.unit_id else None
+        unit = (
+            await self._db.get(SalesTrainerUnit, submission.unit_id)
+            if submission.unit_id
+            else None
+        )
         user = await self._db.get(User, submission.user_id)
         audio_payload = await self._audio.serialize_submission(submission)
-        logs = await self._target_logs(
-            "sales_trainer_audio_submission",
-            submission.submission_id,
-        ) if include_logs else []
+        logs = (
+            await self._target_logs(
+                "sales_trainer_audio_submission",
+                submission.submission_id,
+            )
+            if include_logs
+            else []
+        )
         score = audio_payload.get("score_result") or {}
         lineage = training_record_lineage_fields(audio_payload)
         return {
@@ -177,7 +197,95 @@ class TrainingRecordService:
             "task_brief_snapshot": submission.task_brief_snapshot,
             "audio_submission": audio_payload,
             "quiz_attempt": None,
+            "ai_coach_session": None,
             "operation_logs": logs,
+        }
+
+    async def _list_ai_coach_records(
+        self,
+        *,
+        user_id: str | None,
+        team_department: str | None,
+        include: bool,
+    ) -> tuple[list[dict[str, Any]], int]:
+        if not include:
+            return [], 0
+        stmt = select(SalesTrainerAiCoachSession)
+        count_stmt = select(func.count()).select_from(SalesTrainerAiCoachSession)
+        if user_id:
+            stmt = stmt.where(SalesTrainerAiCoachSession.user_id == user_id)
+            count_stmt = count_stmt.where(SalesTrainerAiCoachSession.user_id == user_id)
+        if team_department is not None:
+            stmt = stmt.join(User, SalesTrainerAiCoachSession.user_id == User.user_id)
+            count_stmt = count_stmt.join(
+                User, SalesTrainerAiCoachSession.user_id == User.user_id
+            )
+            stmt = stmt.where(User.department == team_department)
+            count_stmt = count_stmt.where(User.department == team_department)
+        result = await self._db.execute(
+            stmt.order_by(SalesTrainerAiCoachSession.created_at.desc()).limit(500)
+        )
+        total = await self._db.scalar(count_stmt)
+        records = [
+            await self._serialize_ai_coach_record(session)
+            for session in result.scalars().all()
+        ]
+        return records, int(total or 0)
+
+    async def _serialize_ai_coach_record(
+        self,
+        session: SalesTrainerAiCoachSession,
+    ) -> dict[str, Any]:
+        user = await self._db.get(User, session.user_id)
+        path_config = (
+            session.path_config_snapshot
+            if isinstance(session.path_config_snapshot, dict)
+            else {}
+        )
+        lineage = training_record_lineage_fields(path_config)
+        return {
+            "record_id": session.session_id,
+            "record_type": "ai_coach_session",
+            **lineage,
+            "unit_id": "",
+            "unit_name": None,
+            "unit_type": "ai_coach",
+            "user_id": session.user_id,
+            "user_name": user.name if user else None,
+            "user_email": user.email if user else None,
+            "user_department": user.department if user else None,
+            "status": session.status,
+            "score": float(session.total_score)
+            if session.total_score is not None
+            else None,
+            "max_score": float(session.max_score)
+            if session.max_score is not None
+            else None,
+            "passed": session.mastery_state == "mastered"
+            if session.mastery_state
+            else None,
+            "submitted_at": session.created_at,
+            "material_snapshot": None,
+            "score_scheme_snapshot": None,
+            "task_brief_snapshot": None,
+            "audio_submission": None,
+            "quiz_attempt": None,
+            "ai_coach_session": {
+                "session_id": session.session_id,
+                "module_key": session.module_key,
+                "mastery_state": session.mastery_state,
+                "total_score": float(session.total_score)
+                if session.total_score is not None
+                else None,
+                "max_score": float(session.max_score)
+                if session.max_score is not None
+                else None,
+                "status": session.status,
+                "trace_id": session.trace_id,
+                "created_at": session.created_at,
+                "updated_at": session.updated_at,
+            },
+            "operation_logs": [],
         }
 
     async def _serialize_quiz_record(
@@ -200,8 +308,12 @@ class TrainingRecordService:
             "user_email": user.email if user else None,
             "user_department": user.department if user else None,
             "status": attempt.status,
-            "score": float(attempt.total_score) if attempt.total_score is not None else None,
-            "max_score": float(attempt.max_score) if attempt.max_score is not None else None,
+            "score": float(attempt.total_score)
+            if attempt.total_score is not None
+            else None,
+            "max_score": float(attempt.max_score)
+            if attempt.max_score is not None
+            else None,
             "passed": attempt.passed,
             "submitted_at": attempt.submitted_at,
             "material_snapshot": None,
@@ -209,6 +321,7 @@ class TrainingRecordService:
             "task_brief_snapshot": None,
             "audio_submission": None,
             "quiz_attempt": quiz_payload,
+            "ai_coach_session": None,
             "operation_logs": [],
         }
 

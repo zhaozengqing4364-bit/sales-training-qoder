@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
@@ -10,20 +10,32 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api } from "@/lib/api/client";
 import type { NewcomerArticle, NewcomerArticleChapter, SalesTrainerUnit } from "@/lib/api/types";
+import { findBusinessSkillsCoachHref } from "@/lib/sales-trainer/ai-coach-availability";
 
 import {
+    BUSINESS_SKILLS_COACH_ACTION_LABEL,
     BUSINESS_SKILLS_MODULE_KEY,
     businessSkillsArticleErrorMessage,
     businessSkillsExamHref,
     chapterDisplayLabel,
     learningContentIdFromUnit,
-    readBusinessSkillsCompletedChapterIds,
     resolveBusinessSkillsUnit,
-    saveBusinessSkillsCompletedChapterIds,
 } from "./config";
 
 function sortChapters(chapters: readonly NewcomerArticleChapter[]): NewcomerArticleChapter[] {
     return [...chapters].sort((left, right) => left.order_index - right.order_index);
+}
+
+async function resolveCoachHref(unitId: string | null): Promise<string | null> {
+    try {
+        const pathResponse = await api.salesTrainer.listPaths();
+        return findBusinessSkillsCoachHref(pathResponse.items, unitId);
+    } catch (loadError) {
+        if (loadError instanceof Error) {
+            return null;
+        }
+        throw loadError;
+    }
 }
 
 function ChapterList({
@@ -69,8 +81,9 @@ export default function BusinessSkillsPage() {
     const unitId = searchParams.get("unitId");
     const [units, setUnits] = useState<SalesTrainerUnit[]>([]);
     const [article, setArticle] = useState<NewcomerArticle | null>(null);
-    const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
     const [completedChapterIds, setCompletedChapterIds] = useState<readonly string[]>([]);
+    const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
+    const [coachHref, setCoachHref] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -93,47 +106,65 @@ export default function BusinessSkillsPage() {
     const allChaptersCompleted = sortedChapters.length > 0
         && sortedChapters.every((chapter) => currentCompletedIds.has(chapter.chapter_id));
 
-    const load = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        setArticle(null);
-        try {
-            const unitResponse = await api.salesTrainer.listUnits();
-            const nextSelectedUnit = resolveBusinessSkillsUnit(unitResponse.items, unitId);
-            const learningContentId = learningContentIdFromUnit(nextSelectedUnit);
-            const nextArticle = await api.newcomerTraining.getModuleArticle(
-                BUSINESS_SKILLS_MODULE_KEY,
-                learningContentId ? { learning_content_id: learningContentId } : undefined,
-            );
-            const nextChapters = sortChapters(nextArticle.chapters);
-            setUnits(unitResponse.items);
-            setArticle(nextArticle);
-            setCompletedChapterIds(readBusinessSkillsCompletedChapterIds(nextArticle.learning_content_id));
-            setSelectedChapterId(nextChapters[0]?.chapter_id ?? null);
-        } catch (loadError) {
-            setError(businessSkillsArticleErrorMessage(loadError));
-        } finally {
-            setIsLoading(false);
-        }
+    useEffect(() => {
+        let isActive = true;
+        void api.salesTrainer.listUnits()
+            .then(async (unitResponse) => {
+                const nextSelectedUnit = resolveBusinessSkillsUnit(unitResponse.items, unitId);
+                const learningContentId = learningContentIdFromUnit(nextSelectedUnit);
+                const [nextArticle, progress, nextCoachHref] = await Promise.all([
+                    api.newcomerTraining.getModuleArticle(
+                        BUSINESS_SKILLS_MODULE_KEY,
+                        learningContentId ? { learning_content_id: learningContentId } : undefined,
+                    ),
+                    api.newcomerTraining.getModuleArticleProgress(BUSINESS_SKILLS_MODULE_KEY),
+                    resolveCoachHref(nextSelectedUnit?.unit_id ?? unitId),
+                ]);
+                return { nextArticle, nextCoachHref, progress, unitResponse };
+            }).then(({ nextArticle, nextCoachHref, progress, unitResponse }) => {
+                if (!isActive) {
+                    return;
+                }
+                const nextChapters = sortChapters(nextArticle.chapters);
+                setUnits(unitResponse.items);
+                setArticle(nextArticle);
+                setCoachHref(nextCoachHref);
+                setCompletedChapterIds(progress.completed_chapter_ids);
+                setSelectedChapterId(nextChapters[0]?.chapter_id ?? null);
+                setError(null);
+            }).catch((loadError) => {
+                if (!isActive) {
+                    return;
+                }
+                setError(businessSkillsArticleErrorMessage(loadError));
+            }).finally(() => {
+                if (isActive) {
+                    setIsLoading(false);
+                }
+            });
+        return () => {
+            isActive = false;
+        };
     }, [unitId]);
 
-    useEffect(() => {
-        void load();
-    }, [load]);
-
-    function completeCurrentChapter(): void {
+    async function completeCurrentChapter(): Promise<void> {
         if (!article || !selectedChapter) {
             return;
         }
-        const nextCompletedIds = sortedChapters
-            .filter((chapter) => currentCompletedIds.has(chapter.chapter_id) || chapter.chapter_id === selectedChapter.chapter_id)
-            .map((chapter) => chapter.chapter_id);
-        setCompletedChapterIds(nextCompletedIds);
-        saveBusinessSkillsCompletedChapterIds(article.learning_content_id, nextCompletedIds);
-        const selectedIndex = sortedChapters.findIndex((chapter) => chapter.chapter_id === selectedChapter.chapter_id);
-        const nextChapter = selectedIndex >= 0 ? sortedChapters[selectedIndex + 1] : undefined;
-        if (nextChapter) {
-            setSelectedChapterId(nextChapter.chapter_id);
+        try {
+            const result = await api.newcomerTraining.completeModuleArticleChapter(
+                BUSINESS_SKILLS_MODULE_KEY,
+                selectedChapter.chapter_id,
+                { learning_content_id: article.learning_content_id },
+            );
+            setCompletedChapterIds(result.completed_chapter_ids);
+            const selectedIndex = sortedChapters.findIndex((chapter) => chapter.chapter_id === selectedChapter.chapter_id);
+            const nextChapter = selectedIndex >= 0 ? sortedChapters[selectedIndex + 1] : undefined;
+            if (nextChapter) {
+                setSelectedChapterId(nextChapter.chapter_id);
+            }
+        } catch (completeError) {
+            setError(businessSkillsArticleErrorMessage(completeError));
         }
     }
 
@@ -183,9 +214,16 @@ export default function BusinessSkillsPage() {
                                 <ReactMarkdown>{selectedChapter.content || "暂无文章内容。"}</ReactMarkdown>
                             </div>
                             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-6">
-                                <Button className="rounded-full bg-slate-900 text-white" onClick={completeCurrentChapter}>
+                                <Button className="rounded-full bg-slate-900 text-white" onClick={() => void completeCurrentChapter()}>
                                     完成本节
                                 </Button>
+                                {coachHref ? (
+                                    <Button asChild variant="outline" className="rounded-full border-slate-200">
+                                        <Link href={coachHref}>
+                                            {BUSINESS_SKILLS_COACH_ACTION_LABEL}
+                                        </Link>
+                                    </Button>
+                                ) : null}
                                 {allChaptersCompleted ? (
                                     <Button asChild className="rounded-full bg-slate-900 text-white">
                                         <Link href={examHref}>

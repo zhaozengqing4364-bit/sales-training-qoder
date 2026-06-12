@@ -4,11 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BusinessSkillsExamPage from "./page";
 
-const { getArticleMock, getPaperMock, listUnitsMock, submitAttemptMock, useSearchParamsMock } = vi.hoisted(() => ({
+const { getArticleMock, getArticleProgressMock, getPaperMock, listUnitsMock, pushMock, submitAttemptMock, useRouterMock, useSearchParamsMock } = vi.hoisted(() => ({
     getArticleMock: vi.fn(),
+    getArticleProgressMock: vi.fn(),
     getPaperMock: vi.fn(),
     listUnitsMock: vi.fn(),
+    pushMock: vi.fn(),
     submitAttemptMock: vi.fn(),
+    useRouterMock: vi.fn(),
     useSearchParamsMock: vi.fn(),
 }));
 
@@ -17,6 +20,7 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
+    useRouter: () => useRouterMock(),
     useSearchParams: () => useSearchParamsMock(),
 }));
 
@@ -41,6 +45,7 @@ vi.mock("@/lib/api/client", async () => {
             newcomerTraining: {
                 ...actual.api.newcomerTraining,
                 getModuleArticle: getArticleMock,
+                getModuleArticleProgress: getArticleProgressMock,
                 getPaper: getPaperMock,
                 submitPaperAttempt: submitAttemptMock,
             },
@@ -53,12 +58,20 @@ describe("BusinessSkillsExamPage", () => {
         vi.clearAllMocks();
         window.localStorage.clear();
         useSearchParamsMock.mockReturnValue(new URLSearchParams("unitId=business-unit"));
+        useRouterMock.mockReturnValue({ push: pushMock });
         listUnitsMock.mockResolvedValue({
             items: [{
                 unit_id: "business-unit",
                 config: { path: { learning_content_id: "article-1", exam_paper_id: "paper-1" } },
             }],
             total: 1,
+        });
+        getArticleProgressMock.mockResolvedValue({
+            module_key: "business_skills",
+            learning_content_id: "article-1",
+            completed_chapter_ids: [],
+            total_chapters: 2,
+            is_completed: true,
         });
         getArticleMock.mockResolvedValue({
             module_key: "business_skills",
@@ -144,10 +157,22 @@ describe("BusinessSkillsExamPage", () => {
                 ],
             });
         });
-        expect(await screen.findByText(/已提交/)).toBeTruthy();
+        await waitFor(() => {
+            expect(pushMock).toHaveBeenCalledWith(
+                "/sales-trainer/quiz/result/attempt-1",
+            );
+        });
     });
 
     it("requires completed learning chapters before loading the paper", async () => {
+        getArticleProgressMock.mockResolvedValueOnce({
+            module_key: "business_skills",
+            learning_content_id: "article-1",
+            completed_chapter_ids: [],
+            total_chapters: 2,
+            is_completed: false,
+        });
+
         render(<BusinessSkillsExamPage />);
 
         expect(await screen.findByText("请先完成商务技巧学习")).toBeTruthy();

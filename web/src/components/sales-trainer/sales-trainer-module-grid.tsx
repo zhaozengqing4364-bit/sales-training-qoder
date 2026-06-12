@@ -77,6 +77,13 @@ export function SalesTrainerModuleGrid({ path, unitsById }: SalesTrainerModuleGr
                                         </Link>
                                     </Button>
                                 ) : null}
+                                {module.key === "business_skills" && module.coachHref ? (
+                                    <Button asChild variant="outline" className="w-full rounded-full border-slate-200">
+                                        <Link href={module.coachHref}>
+                                            AI 教练
+                                        </Link>
+                                    </Button>
+                                ) : null}
                                 {module.key === "elevator_pitch"
                                     ? module.audioOptions.map((option) => (
                                         <Button

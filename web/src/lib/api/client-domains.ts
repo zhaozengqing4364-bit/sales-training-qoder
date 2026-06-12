@@ -108,6 +108,7 @@ import type {
     NewcomerArticle,
     NewcomerArticleBinding,
     NewcomerArticleBindingUpdateRequest,
+    NewcomerArticleProgressResponse,
     NewcomerExamPaper,
     NewcomerExamPaperCreateRequest,
     NewcomerExamPaperListResponse,
@@ -122,6 +123,13 @@ import type {
     NewcomerPaperRollbackRequest,
     NewcomerUnitRevisionListResponse,
     NewcomerUnitRollbackRequest,
+    AiCoachSessionPublicV1,
+    AiCoachChatEventAnswerSubmitRequest,
+    AiCoachChatMessageCreateRequest,
+    AiCoachChatSessionCreateRequest,
+    AiCoachChatSessionPublicV1,
+    AiCoachTurnFeedbackV1,
+    AiCoachTurnSubmitRequest,
 } from "./types";
 
 type ApiRequestOptions = RequestInit & {
@@ -1056,6 +1064,120 @@ export function createNewcomerTrainingDomain({
                 body: JSON.stringify(payload),
             });
         },
+
+        getModuleArticleProgress: async (moduleKey: string) => {
+            return request<NewcomerArticleProgressResponse>(
+                `/newcomer-training/modules/${encodeURIComponent(moduleKey)}/article-progress`,
+            );
+        },
+
+        completeModuleArticleChapter: async (
+            moduleKey: string,
+            chapterId: string,
+            options?: { learning_content_id?: string | null },
+        ) => {
+            return request<NewcomerArticleProgressResponse>(
+                `/newcomer-training/modules/${encodeURIComponent(moduleKey)}/article-progress`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        chapter_id: chapterId,
+                        learning_content_id: options?.learning_content_id ?? null,
+                    }),
+                },
+            );
+        },
+
+        startAiCoachSession: async (
+            moduleKey: string,
+            payload: {
+                coach_mode?: string;
+                interaction_type?: string;
+            } = {},
+        ) => {
+            return request<AiCoachSessionPublicV1>(
+                "/newcomer-training/ai-coach/sessions",
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        module_key: moduleKey,
+                        coach_mode: payload.coach_mode ?? null,
+                        interaction_type: payload.interaction_type ?? null,
+                    }),
+                },
+            );
+        },
+
+        submitAiCoachTurn: async (
+            sessionId: string,
+            turnId: string,
+            answerPayload: AiCoachTurnSubmitRequest,
+        ) => {
+            return request<AiCoachTurnFeedbackV1>(
+                `/newcomer-training/ai-coach/sessions/${encodeURIComponent(
+                    sessionId,
+                )}/turns/${encodeURIComponent(turnId)}/submit`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(answerPayload),
+                },
+            );
+        },
+
+        getAiCoachSession: async (sessionId: string) => {
+            return request<AiCoachSessionPublicV1>(
+                `/newcomer-training/ai-coach/sessions/${encodeURIComponent(sessionId)}`,
+            );
+        },
+
+        startAiCoachChatSession: async (
+            payload: AiCoachChatSessionCreateRequest,
+        ) => {
+            return request<AiCoachChatSessionPublicV1>(
+                "/newcomer-training/ai-coach/chat/sessions",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        getAiCoachChatSession: async (sessionId: string) => {
+            return request<AiCoachChatSessionPublicV1>(
+                `/newcomer-training/ai-coach/chat/sessions/${encodeURIComponent(sessionId)}`,
+            );
+        },
+
+        sendAiCoachChatMessage: async (
+            sessionId: string,
+            payload: AiCoachChatMessageCreateRequest,
+        ) => {
+            return request<AiCoachChatSessionPublicV1>(
+                `/newcomer-training/ai-coach/chat/sessions/${encodeURIComponent(
+                    sessionId,
+                )}/messages`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        submitAiCoachChatEventAnswer: async (
+            sessionId: string,
+            eventId: string,
+            payload: AiCoachChatEventAnswerSubmitRequest,
+        ) => {
+            return request<AiCoachChatSessionPublicV1>(
+                `/newcomer-training/ai-coach/chat/sessions/${encodeURIComponent(
+                    sessionId,
+                )}/events/${encodeURIComponent(eventId)}/answer`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
     };
 }
 
@@ -1665,5 +1787,82 @@ export function createAdminNewcomerTrainingDomain({
                 },
             );
         },
+
+        getAiCoachConfig: async (moduleKey: string) => {
+            const response = await request<AiCoachAdminConfigResponse>(
+                `/admin/newcomer-training/modules/${encodeURIComponent(moduleKey)}/ai-coach/config`,
+            );
+            return response.ai_coach ?? null;
+        },
+
+        saveAiCoachConfig: async (
+            moduleKey: string,
+            payload: AiCoachAdminConfigLike,
+        ) => {
+            return request<AiCoachAdminConfigSaveResponse>(
+                `/admin/newcomer-training/modules/${encodeURIComponent(moduleKey)}/ai-coach/config`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        publishAiCoachConfig: async (moduleKey: string) => {
+            return request<AiCoachAdminConfigPublishResponse>(
+                `/admin/newcomer-training/modules/${encodeURIComponent(moduleKey)}/ai-coach/config/publish`,
+                { method: "POST" },
+            );
+        },
     };
+}
+
+export interface AiCoachAdminConfigLike {
+    enabled: boolean;
+    chat_enabled: boolean;
+    coach_mode: string;
+    allowed_interaction_types: string[];
+    allowed_ui_event_types: string[];
+    max_cards_per_message: number;
+    proactive_coaching_enabled: boolean;
+    session_start_behavior: string;
+    auto_advance_enabled: boolean;
+    max_auto_steps_per_session: number;
+    correct_streak_to_increase_difficulty: number;
+    incorrect_streak_to_remediate: number;
+    incorrect_streak_to_pause: number;
+    remediation_strategy: string;
+    summary_when_mastery_reached: boolean;
+    allowed_next_actions: string[];
+    chat_welcome_message: string;
+    min_turns: number;
+    max_turns: number;
+    mastery_threshold: number;
+    prompt_template_id: string | null;
+    prompt_revision_id: string | null;
+    prompt_contract_hash: string | null;
+    scoring_prompt_template_id: string | null;
+    scoring_prompt_revision_id: string | null;
+    scoring_contract_hash: string | null;
+    output_schema_version: string;
+    [key: string]: unknown;
+}
+
+export interface AiCoachAdminConfigResponse {
+    readonly module_key: string;
+    readonly ai_coach: AiCoachAdminConfigLike;
+}
+
+export interface AiCoachAdminConfigSaveResponse extends AiCoachAdminConfigResponse {
+    readonly revision_id?: string;
+    readonly revision_no?: number;
+}
+
+export interface AiCoachAdminConfigPublishResponse {
+    readonly module_key: string;
+    readonly active_revision_id: string;
+    readonly active_revision_no: number;
+    readonly previous_revision_id?: string | null;
+    readonly change_class: string;
+    readonly impact_scope: string;
 }

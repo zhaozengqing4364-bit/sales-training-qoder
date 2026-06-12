@@ -1,0 +1,134 @@
+import type {
+    AiCoachAnswerPayloadV1,
+    AiCoachChatSessionPublicV1,
+    AiCoachInteractionPublicV1,
+    AiCoachUiEventPublicV1,
+} from "@/lib/api/types";
+
+export const MODULE_KEY = "business_skills";
+export type CoachCommand = "continue" | "explain" | "switch_scenario" | "summarize" | "end" | "retry";
+
+export type DraftByEventId = Readonly<Record<string, AiCoachAnswerPayloadV1 | null>>;
+
+export function activeEventIdForSession(
+    session: AiCoachChatSessionPublicV1 | null,
+): string | null {
+    const state = session?.coach_state;
+    if (state && Object.prototype.hasOwnProperty.call(state, "active_event_id")) {
+        return state.active_event_id;
+    }
+    return firstPendingQuizEvent(session)?.event_id ?? null;
+}
+
+export function firstPendingQuizEvent(
+    session: AiCoachChatSessionPublicV1 | null,
+): Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }> | null {
+    return (
+        session?.ui_events.find(
+            (event): event is Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }> =>
+                event.type === "quiz_card"
+                && event.status === "pending"
+                && event.answer_payload === null
+                && event.score_result === null,
+        ) ?? null
+    );
+}
+
+export function activeQuizEventForSession(
+    session: AiCoachChatSessionPublicV1 | null,
+): Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }> | null {
+    const activeEventId = activeEventIdForSession(session);
+    if (!activeEventId) {
+        return null;
+    }
+    return (
+        session?.ui_events.find(
+            (event): event is Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }> =>
+                event.type === "quiz_card"
+                && event.event_id === activeEventId
+                && event.status === "pending"
+                && event.answer_payload === null
+                && event.score_result === null,
+        ) ?? null
+    );
+}
+
+function readConstraint(
+    interaction: AiCoachInteractionPublicV1,
+    key: "min_selected" | "max_selected" | "min_length" | "max_length",
+): number | null {
+    const value = interaction.answer_constraints[key];
+    return typeof value === "number" ? value : null;
+}
+
+export function isAnswerPayloadSubmittable(
+    interaction: AiCoachInteractionPublicV1,
+    payload: AiCoachAnswerPayloadV1 | null,
+): boolean {
+    switch (interaction.interaction_type) {
+        case "single_choice":
+            return payload?.variant === "choice" && payload.option_ids.length === 1;
+        case "multiple_choice": {
+            if (payload?.variant !== "choice") {
+                return false;
+            }
+            const selectedCount = payload.option_ids.length;
+            const minSelected = readConstraint(interaction, "min_selected") ?? 1;
+            const maxSelected = readConstraint(interaction, "max_selected");
+            return (
+                selectedCount >= minSelected
+                && (maxSelected === null || selectedCount <= maxSelected)
+            );
+        }
+        case "short_answer": {
+            if (payload?.variant !== "text") {
+                return false;
+            }
+            const length = payload.text.trim().length;
+            const minLength = readConstraint(interaction, "min_length") ?? 1;
+            const maxLength = readConstraint(interaction, "max_length");
+            return length >= minLength && (maxLength === null || length <= maxLength);
+        }
+        default: {
+            const exhaustive: never = interaction.interaction_type;
+            return exhaustive;
+        }
+    }
+}
+
+export function draftForChoice(
+    current: AiCoachAnswerPayloadV1 | null,
+    optionId: string,
+    multiple: boolean,
+): AiCoachAnswerPayloadV1 {
+    if (!multiple) {
+        return { variant: "choice", option_ids: [optionId] };
+    }
+    const previous = current?.variant === "choice" ? current.option_ids : [];
+    const exists = previous.includes(optionId);
+    return {
+        variant: "choice",
+        option_ids: exists
+            ? previous.filter((value) => value !== optionId)
+            : [...previous, optionId],
+    };
+}
+
+export function draftForText(text: string): AiCoachAnswerPayloadV1 {
+    return { variant: "text", text };
+}
+
+export function selectedOptionIds(payload: AiCoachAnswerPayloadV1 | null): readonly string[] {
+    return payload?.variant === "choice" ? payload.option_ids : [];
+}
+
+export function textAnswer(payload: AiCoachAnswerPayloadV1 | null): string {
+    return payload?.variant === "text" ? payload.text : "";
+}
+
+export function eventScoreState(event: AiCoachUiEventPublicV1): "correct" | "wrong" | "pending" {
+    if (event.type !== "quiz_card" || !event.score_result) {
+        return "pending";
+    }
+    return event.score_result.score >= event.score_result.max_score ? "correct" : "wrong";
+}

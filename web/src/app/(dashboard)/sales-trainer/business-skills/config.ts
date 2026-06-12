@@ -2,11 +2,28 @@ import type { NewcomerArticleChapter, SalesTrainerUnit } from "@/lib/api/types";
 import { ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
 
 export const BUSINESS_SKILLS_MODULE_KEY = "business_skills";
+export const BUSINESS_SKILLS_COACH_ACTION_LABEL = "先去 AI 教练练一轮";
+
+export const BUSINESS_SKILLS_EXAM_COPY = {
+    pageTitle: "商务技巧考试",
+    pageSubtitle: "完成学习后提交商务技巧考卷。",
+    submitButton: "提交考卷",
+    backLink: "返回商务技巧学习",
+    paperMissingTitle: "暂未绑定商务技巧考卷",
+    paperMissingDescription:
+        "请管理员到 新人训练路径配置中心 → 商务技巧 → 考卷管理 绑定已发布考卷。",
+    learningGateTitle: "请先完成商务技巧学习",
+    learningGateDescription: "完成全部章节后再进入考试，系统会自动开放考卷入口。",
+    learningMismatchTitle: "请先匹配当前学习内容",
+    learningMismatchDescription:
+        "当前学习进度与最新绑定不一致。返回学习页重新完成全部章节后再次进入考试。",
+    learningGateActionLabel: "返回学习页",
+} as const;
 
 export const BUSINESS_SKILLS_EXAM_GATE_COPY = {
-    actionLabel: "返回学习页",
-    description: "完成全部章节后再进入考试，系统会自动开放考卷入口。",
-    title: "请先完成商务技巧学习",
+    actionLabel: BUSINESS_SKILLS_EXAM_COPY.learningGateActionLabel,
+    description: BUSINESS_SKILLS_EXAM_COPY.learningGateDescription,
+    title: BUSINESS_SKILLS_EXAM_COPY.learningGateTitle,
 } as const;
 
 export function businessSkillsCompletionStorageKey(contentId: string): string {

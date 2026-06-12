@@ -42,7 +42,10 @@ from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_service import SalesTrainerPathService
 from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
 from sales_trainer.services.quiz_service import QuizService
-from sales_trainer.services.short_answer_scoring_service import ShortAnswerScoreOutcome
+from sales_trainer.services.short_answer_scoring_service import (
+    ShortAnswerScoreOutcome,
+    ShortAnswerScoringService,
+)
 from sales_trainer.services.transcription_service import (
     TranscriptionResult,
     TranscriptionService,
@@ -113,6 +116,11 @@ class FakeShortAnswerScoringService:
                 raw_response={"score": 80},
             )
         )
+
+
+class FailingShortAnswerLLMService:
+    async def generate(self, **kwargs):
+        raise RuntimeError("invalid token")
 
 
 class FakeAsrService:
@@ -604,6 +612,84 @@ async def test_should_score_short_answer_with_ai_and_store_feedback_snapshot(
     assert answer["is_correct"] is True
     assert answer["scoring_feedback"] == "回答覆盖核心价值，但可以补充客户场景。"
     assert answer["scoring_reason"] == "命中数据流动治理和客户价值。"
+
+
+@pytest.mark.asyncio
+async def test_should_submit_short_answer_attempt_when_ai_scoring_provider_fails(
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    category = QuestionCategory(
+        category_id="sales-trainer-short-answer-failed-provider-category",
+        name="简答题评分失败题库",
+        order_index=1,
+    )
+    question = QuestionItem(
+        question_id="short-answer-provider-fails-q1",
+        category_id=category.category_id,
+        title="客户价值理解",
+        stem="请说明石犀如何帮助客户治理数据流动。",
+        reference_answer="石犀帮助客户围绕数据流动建立可控、可审计、可运营的治理体系。",
+        scoring_criteria={
+            "question_type": "short_answer",
+            "ai_scoring": {"enabled": True, "pass_threshold": 70},
+        },
+        scoring_dimensions=["value_logic"],
+        status="published",
+        usage_scope="sales_trainer",
+    )
+    test_db.add_all([category, question])
+    await test_db.commit()
+
+    unit_service = UnitService(test_db)
+    unit = await unit_service.create_unit(
+        SalesTrainerUnitCreate(
+            name="客户价值简答评分失败",
+            unit_type="quiz",
+            config={"quiz": {"pass_threshold": 8}},
+            questions=[
+                UnitQuestionBinding(
+                    question_id=question.question_id,
+                    order_index=1,
+                    points=10,
+                )
+            ],
+        ),
+        actor=test_user,
+    )
+    unit = await unit_service.publish_unit(unit, actor=test_user)
+    quiz_service = QuizService(
+        test_db,
+        short_answer_scoring_service=ShortAnswerScoringService(
+            llm_service=FailingShortAnswerLLMService(),
+        ),
+    )
+
+    attempt = await quiz_service.submit_attempt(
+        QuizAttemptCreate(
+            unit_id=unit.unit_id,
+            answers=[
+                QuizAnswerSubmit(
+                    question_id=question.question_id,
+                    answer_payload="石犀能围绕数据流动治理帮助客户形成可审计的管理闭环。",
+                )
+            ],
+        ),
+        actor=test_user,
+    )
+
+    assert attempt.status == "submitted"
+    assert attempt.total_score is None
+    assert attempt.max_score is None
+    assert attempt.passed is None
+
+    serialized = await quiz_service.serialize_attempt(attempt)
+    answer = serialized["answers"][0]
+    assert answer["question_title"] == "客户价值理解"
+    assert answer["answer_payload"] == "石犀能围绕数据流动治理帮助客户形成可审计的管理闭环。"
+    assert answer["score"] is None
+    assert answer["normalized_score"] is None
+    assert answer["scoring_feedback"] is None
 
 
 @pytest.mark.asyncio

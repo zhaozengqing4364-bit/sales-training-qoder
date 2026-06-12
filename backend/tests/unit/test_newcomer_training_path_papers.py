@@ -8,12 +8,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.models import QuestionCategory, QuestionItem
+from curriculum_practice.models import (
+    LearningChapter,
+    LearningContent,
+    QuestionCategory,
+    QuestionItem,
+)
+from curriculum_practice.services.learning_progress_service import (
+    LearningProgressService,
+)
 from sales_trainer.models import SalesTrainerAssetRevision
 from sales_trainer.schemas import (
     ExamPaperCreate,
     ExamPaperQuestionBinding,
     ExamPaperUpdate,
+    NewcomerPathConfigSaveRequest,
+    NewcomerPathModuleConfig,
     PaperAttemptCreate,
     PaperRollbackRequest,
     QuizAnswerSubmit,
@@ -22,6 +32,7 @@ from sales_trainer.services.exam_paper_service import (
     ExamPaperService,
     ExamPaperServiceError,
 )
+from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
 
 
 class PaperQuestionBindingPayload(TypedDict):
@@ -199,6 +210,111 @@ async def test_should_submit_published_paper_attempt_through_quiz_scoring(
     assert serialized["paper_title"] == "商务技巧提交考卷"
     assert serialized["status"] == "scored"
     assert serialized["total_score"] == 10
+    assert serialized["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_should_require_article_completion_before_article_exam_attempt(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    category = QuestionCategory(
+        category_id="business-paper-reading-gate-category",
+        name="商务技巧阅读门禁",
+        order_index=1,
+        usage_scope="sales_trainer",
+    )
+    question = _question(
+        "business-reading-gate-question-1",
+        category_id=category.category_id,
+        title="客户拜访阅读门禁",
+    )
+    content = LearningContent(
+        learning_content_id="business-reading-gate-content",
+        title="见客户前商务礼仪",
+        summary="阅读完成后才可以考试。",
+        owner="新人训练路径",
+        source="unit_test",
+        status="published",
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    chapter = LearningChapter(
+        chapter_id="business-reading-gate-chapter-1",
+        learning_content_id=content.learning_content_id,
+        title="拜访前准备",
+        content="先确认客户背景、到访时间和接待安排。",
+        order_index=1,
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    test_db.add_all([admin, learner, category, question, content, chapter])
+    await test_db.commit()
+
+    service = ExamPaperService(test_db)
+    paper = await service.create_paper(
+        ExamPaperCreate(
+            paper_key="business-reading-gate-paper",
+            title="商务技巧阅读门禁考卷",
+            module_key="business_skills",
+            pass_threshold=10,
+            questions=[
+                ExamPaperQuestionBinding(
+                    question_id=question.question_id,
+                    order_index=1,
+                    points=10,
+                )
+            ],
+        ),
+        actor=admin,
+    )
+    published = await service.publish_paper(paper.paper_id, actor=admin)
+    path_service = SalesTrainerPathConfigService(test_db)
+    await path_service.save_config(
+        NewcomerPathConfigSaveRequest(
+            title="新人训练路径",
+            reason="绑定商务技巧阅读门禁",
+            modules=[
+                NewcomerPathModuleConfig(
+                    module_key="business_skills",
+                    module_type="article_exam",
+                    enabled=True,
+                    order_index=1,
+                    title="商务技巧",
+                    target_unit_id=published.unit_id,
+                    learning_content_id=content.learning_content_id,
+                    exam_paper_id=published.paper_id,
+                    completion_rule="passed",
+                )
+            ],
+        ),
+        actor=admin,
+    )
+    await path_service.publish_config(actor=admin, reason="发布阅读门禁路径")
+    attempt_payload = PaperAttemptCreate(
+        paper_id=published.paper_id,
+        answers=[
+            QuizAnswerSubmit(question_id=question.question_id, answer_payload="A")
+        ],
+    )
+
+    with pytest.raises(ExamPaperServiceError) as exc_info:
+        await service.submit_paper_attempt(attempt_payload, actor=learner)
+
+    assert exc_info.value.code == "[NEWCOMER_ARTICLE_PROGRESS_REQUIRED]"
+    assert exc_info.value.status_code == 403
+
+    complete_result = await LearningProgressService(test_db).complete_chapter(
+        user_id=str(learner.user_id),
+        content_id=content.learning_content_id,
+        chapter_id=chapter.chapter_id,
+    )
+    assert complete_result.is_success
+
+    attempt = await service.submit_paper_attempt(attempt_payload, actor=learner)
+    serialized = await service.serialize_attempt(attempt)
+    assert serialized["status"] == "scored"
     assert serialized["passed"] is True
 
 

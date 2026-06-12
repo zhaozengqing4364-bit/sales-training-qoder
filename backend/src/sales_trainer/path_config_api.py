@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response, success_response
@@ -11,7 +12,15 @@ from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_trace_id
-from sales_trainer.permissions import can_manage_sales_trainer
+from sales_trainer.ai_coach_policy import (
+    changed_ai_coach_high_risk_fields,
+    changed_ai_coach_high_risk_fields_for_publish,
+    changed_ai_coach_high_risk_fields_for_rollback,
+)
+from sales_trainer.permissions import (
+    can_manage_sales_trainer,
+    can_manage_sales_trainer_prompts,
+)
 from sales_trainer.schemas import (
     NewcomerPathConfigActionRequest,
     NewcomerPathConfigResponse,
@@ -47,6 +56,9 @@ def _require_manager(user: User) -> JSONResponse | None:
     return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号权限不足。")
 
 
+_changed_ai_coach_high_risk_fields = changed_ai_coach_high_risk_fields
+
+
 @newcomer_admin_path_config_router.get("/path-config", response_model=None)
 async def get_path_config(
     current_user: User = Depends(get_current_user),
@@ -69,7 +81,35 @@ async def save_path_config(
 ) -> dict[str, Any] | JSONResponse:
     if error := _require_manager(current_user):
         return error
+
+    # Field-level RBAC for the embedded ``ai_coach`` config. Without this
+    # gate, a content_admin could rewrite mastery_threshold, prompt
+    # bindings, scoring policy, etc. through the generic path-config
+    # endpoint and bypass the dedicated ``/admin/.../ai-coach/config``
+    # route's stricter checks. We diff against the currently-persisted
+    # payload to detect only changed fields.
     service = SalesTrainerPathConfigService(db)
+    current_response = await service.get_config()
+    try:
+        changed_high_risk = _changed_ai_coach_high_risk_fields(
+            current_response.get("path"),
+            payload,
+        )
+    except ValidationError:
+        return _api_error(
+            "[AI_COACH_CONFIG_RBAC_CHECK_FAILED]",
+            status_code=500,
+            message="AI 教练配置权限校验失败，已拒绝保存。",
+        )
+    if changed_high_risk and not can_manage_sales_trainer_prompts(current_user):
+        return _api_error(
+            "[PERMISSION_DENIED]",
+            status_code=403,
+            message=(
+                "无权通过通用 path-config 修改以下 AI 教练高风险字段："
+                + ", ".join(sorted(changed_high_risk))
+            ),
+        )
     trace_id = get_trace_id()
     try:
         await service.save_config(payload, actor=current_user, trace_id=trace_id)
@@ -98,6 +138,17 @@ async def publish_path_config(
     service = SalesTrainerPathConfigService(db)
     trace_id = get_trace_id()
     try:
+        changed_high_risk = await changed_ai_coach_high_risk_fields_for_publish(db)
+        if changed_high_risk and not can_manage_sales_trainer_prompts(current_user):
+            return _api_error(
+                "[PERMISSION_DENIED]",
+                status_code=403,
+                message=(
+                    "无权发布以下 AI 教练高风险字段："
+                    + ", ".join(sorted(changed_high_risk))
+                ),
+                trace_id=trace_id,
+            )
         await service.publish_config(
             actor=current_user,
             reason=payload.reason,
@@ -154,6 +205,20 @@ async def rollback_path_config(
     service = SalesTrainerPathConfigService(db)
     trace_id = get_trace_id()
     try:
+        changed_high_risk = await changed_ai_coach_high_risk_fields_for_rollback(
+            db,
+            payload.revision_id,
+        )
+        if changed_high_risk and not can_manage_sales_trainer_prompts(current_user):
+            return _api_error(
+                "[PERMISSION_DENIED]",
+                status_code=403,
+                message=(
+                    "无权回滚以下 AI 教练高风险字段："
+                    + ", ".join(sorted(changed_high_risk))
+                ),
+                trace_id=trace_id,
+            )
         await service.rollback_config(
             revision_id=payload.revision_id,
             actor=current_user,

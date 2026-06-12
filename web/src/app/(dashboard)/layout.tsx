@@ -8,7 +8,5 @@ export default async function DashboardLayout({
 }) {
     const currentUser = await requireServerSession();
 
-    return (
-        <DashboardShell currentUser={currentUser}>{children}</DashboardShell>
-    );
+    return <DashboardShell currentUser={currentUser}>{children}</DashboardShell>;
 }

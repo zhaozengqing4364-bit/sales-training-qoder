@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any, TypeAlias
 
+from pydantic import ValidationError
+
 from sales_trainer.models import SalesTrainerUnit
-from sales_trainer.schemas import SalesTrainerPathConfig
+from sales_trainer.schemas import AiCoachConfig, SalesTrainerPathConfig
 from sales_trainer.services.path_guidance import (
     DEFAULT_GUIDANCE_TEMPLATES,
     build_goal_context,
@@ -108,6 +110,7 @@ def _serialize_level(
         "retry_action_label": path_config.retry_action_label or "重练本关",
         "review_action_label": path_config.review_action_label or "查看结果",
         "target_path": _unit_target_path(unit, path_config),
+        "ai_coach_availability": _ai_coach_availability(path_config),
         "latest_result": _progress_payload(progress),
         "unlock_after_unit_ids": path_config.unlock_after_unit_ids,
         "guidance_templates": {
@@ -151,6 +154,48 @@ def _unit_target_path(
     if unit.unit_type == "quiz":
         return f"/sales-trainer/quiz/{unit.unit_id}"
     return f"/sales-trainer/audio/{unit.unit_id}"
+
+
+def _ai_coach_availability(path_config: SalesTrainerPathConfig) -> dict[str, Any] | None:
+    if path_config.module_key != "business_skills":
+        return None
+    raw_config = path_config.ai_coach
+    if not isinstance(raw_config, dict):
+        return {
+            "enabled": False,
+            "configured": False,
+            "available": False,
+            "coach_path": None,
+            "disabled_reason": "AI 教练未启用。",
+            "allowed_interaction_types": [],
+    }
+    try:
+        ai_coach = AiCoachConfig.model_validate(raw_config)
+    except ValidationError:
+        return {
+            "enabled": False,
+            "configured": False,
+            "available": False,
+            "coach_path": None,
+            "disabled_reason": "AI 教练配置非法，请联系管理员处理。",
+            "allowed_interaction_types": [],
+        }
+
+    configured = bool(ai_coach.prompt_template_id)
+    available = ai_coach.enabled and configured
+    disabled_reason = None
+    if not ai_coach.enabled:
+        disabled_reason = "AI 教练未启用。"
+    elif not configured:
+        disabled_reason = "AI 教练未绑定生成 Prompt。"
+    return {
+        "enabled": ai_coach.enabled,
+        "configured": configured,
+        "available": available,
+        "coach_path": "/sales-trainer/business-skills/coach" if available else None,
+        "disabled_reason": disabled_reason,
+        "allowed_interaction_types": list(ai_coach.allowed_interaction_types),
+    }
 
 
 def _progress_payload(progress: UnitProgress | None) -> dict[str, Any] | None:

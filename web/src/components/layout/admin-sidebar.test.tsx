@@ -70,6 +70,9 @@ describe("AdminSidebarContent", () => {
         const workbenchLink = await screen.findByRole("link", { name: "工作台" });
         expect(workbenchLink.getAttribute("href")).toBe("/admin/sales-trainer");
         expect(screen.getByRole("link", { name: "路径配置" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "AI 教练配置" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/ai-coach",
+        );
         expect(screen.getByRole("link", { name: "题库管理" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "录音评分标准" })).not.toBeNull();
     });
@@ -134,6 +137,7 @@ describe("AdminSidebarContent", () => {
         fireEvent.click(await screen.findByRole("button", { name: "新人训练路径" }));
 
         expect(await screen.findByRole("link", { name: "路径配置" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "AI 教练配置" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "商务技巧文章" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "考卷管理" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "材料库" })).not.toBeNull();
@@ -163,5 +167,22 @@ describe("AdminSidebarContent", () => {
         expect(screen.queryByRole("link", { name: "题库管理" })).toBeNull();
         expect(screen.queryByRole("link", { name: "考卷管理" })).toBeNull();
         expect(screen.queryByRole("link", { name: "材料库" })).toBeNull();
+    });
+
+    it("renames the global AI coach policy entry to avoid confusing it with module config", async () => {
+        render(
+            <AdminSidebarContent
+                currentUser={{
+                    id: "admin-1",
+                    display_name: "管理员",
+                    role: "admin",
+                }}
+            />,
+        );
+
+        fireEvent.click(await screen.findByRole("button", { name: "策略中心" }));
+
+        expect(await screen.findByRole("link", { name: "AI 教练触达规则" })).not.toBeNull();
+        expect(screen.queryByRole("link", { name: "AI 教练规则" })).toBeNull();
     });
 });

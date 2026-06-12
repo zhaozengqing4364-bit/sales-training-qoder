@@ -1,0 +1,13 @@
+{"file":"AGENTS.md","reason":"仓库 L0 工程宪章、配置化和症状修复边界"}
+{"file":"CLAUDE.md","reason":"仓库命令、产品宪法和验证要求"}
+{"file":"backend/AGENTS.md","reason":"FastAPI 后端目录、迁移、测试和硬规则"}
+{"file":"backend/src/sales_trainer/AGENTS.md","reason":"新人训练路径后端边界、配置和审计规则"}
+{"file":"web/AGENTS.md","reason":"Next 前端边界、禁止 API route 和验证命令"}
+{"file":"web/src/app/AGENTS.md","reason":"App Router 页面与管理台路由规则"}
+{"file":"web/src/app/admin/sales-trainer/AGENTS.md","reason":"新人训练路径 admin 配置入口规则"}
+{"file":"web/src/components/AGENTS.md","reason":"共享 UI 组件边界和反馈模式"}
+{"file":"web/src/lib/AGENTS.md","reason":"API client/type surface 变更规则"}
+{"file":"docs/api-contract/sales-trainer.md","reason":"Sales Trainer API、AI Coach 配置和 learner public DTO 契约"}
+{"file":".trellis/spec/backend/index.md","reason":"后端开发前置清单和验证命令"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端开发前置清单和验证命令"}
+{"file":"/Users/zhaozengqing/.codex/attachments/5bc073be-cfdc-48af-b3f6-39b5993eeda2/pasted-text.txt","reason":"本任务附件实施计划"}

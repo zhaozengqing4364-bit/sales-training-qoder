@@ -5,8 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import BusinessSkillsPage from "./page";
 import { ApiRequestError } from "@/lib/api/client";
 
-const { getArticleMock, listUnitsMock, useSearchParamsMock } = vi.hoisted(() => ({
+const { completeChapterMock, getArticleMock, getArticleProgressMock, listPathsMock, listUnitsMock, useSearchParamsMock } = vi.hoisted(() => ({
+    completeChapterMock: vi.fn(),
     getArticleMock: vi.fn(),
+    getArticleProgressMock: vi.fn(),
+    listPathsMock: vi.fn(),
     listUnitsMock: vi.fn(),
     useSearchParamsMock: vi.fn(),
 }));
@@ -35,11 +38,14 @@ vi.mock("@/lib/api/client", async () => {
             ...actual.api,
             salesTrainer: {
                 ...actual.api.salesTrainer,
+                listPaths: listPathsMock,
                 listUnits: listUnitsMock,
             },
             newcomerTraining: {
                 ...actual.api.newcomerTraining,
+                completeModuleArticleChapter: completeChapterMock,
                 getModuleArticle: getArticleMock,
+                getModuleArticleProgress: getArticleProgressMock,
             },
         },
     };
@@ -61,6 +67,63 @@ describe("BusinessSkillsPage", () => {
                 },
             }],
             total: 1,
+        });
+        listPathsMock.mockResolvedValue({
+            items: [{
+                path_key: "newcomer_training_path_v1",
+                title: "新人训练路径",
+                goal_title: "掌握新人训练路径",
+                total_levels: 1,
+                completed_levels: 0,
+                current_level_id: "business-unit",
+                next_level_id: "business-unit",
+                levels: [{
+                    unit_id: "business-unit",
+                    name: "商务技巧",
+                    description: null,
+                    unit_type: "quiz",
+                    module_key: "business_skills",
+                    module_type: "article_exam",
+                    order_index: 2,
+                    level_title: "第二关：商务技巧",
+                    level_description: null,
+                    locked: false,
+                    lock_reason: null,
+                    status: "available",
+                    completion_rule: "passed",
+                    primary_action_label: "开始学习",
+                    retry_action_label: "重练本关",
+                    review_action_label: "查看结果",
+                    target_path: "/sales-trainer/business-skills",
+                    ai_coach_availability: null,
+                    latest_result: null,
+                }],
+                goal_context: {
+                    goal_title: "掌握新人训练路径",
+                    score_basis: "sales_trainer_path_projection_v1",
+                    evidence_items: [],
+                    weak_points: [],
+                    next_recommendation: null,
+                },
+            }],
+            total: 1,
+        });
+        getArticleProgressMock.mockResolvedValue({
+            module_key: "business_skills",
+            learning_content_id: "article-1",
+            completed_chapter_ids: [],
+            total_chapters: 2,
+            is_completed: false,
+        });
+        completeChapterMock.mockImplementation(async (_moduleKey, chapterId) => {
+            const isComplete = chapterId === "chapter-2";
+            return {
+                module_key: "business_skills",
+                learning_content_id: "article-1",
+                completed_chapter_ids: isComplete ? ["chapter-1", "chapter-2"] : ["chapter-1"],
+                total_chapters: 2,
+                is_completed: isComplete,
+            };
         });
         getArticleMock.mockResolvedValue({
             module_key: "business_skills",
@@ -87,6 +150,14 @@ describe("BusinessSkillsPage", () => {
     });
 
     it("requires reading all configurable chapters before linking to the exam page", async () => {
+        getArticleProgressMock.mockResolvedValueOnce({
+            module_key: "business_skills",
+            learning_content_id: "article-1",
+            completed_chapter_ids: [],
+            total_chapters: 2,
+            is_completed: false,
+        });
+
         render(<BusinessSkillsPage />);
 
         expect(await screen.findByRole("heading", { name: "商务技巧学习" })).toBeTruthy();
@@ -100,14 +171,23 @@ describe("BusinessSkillsPage", () => {
         expect(screen.queryByRole("link", { name: /进入考试/ })).toBeNull();
 
         fireEvent.click(screen.getByRole("button", { name: "完成本节" }));
+        await waitFor(() => {
+            expect(completeChapterMock).toHaveBeenCalledWith(
+                "business_skills",
+                "chapter-1",
+                { learning_content_id: "article-1" },
+            );
+        });
         fireEvent.click(screen.getByRole("button", { name: /第二节 到场礼仪/ }));
         expect(screen.getByText("提前到场并确认会议材料。")).toBeTruthy();
         expect(screen.queryByRole("link", { name: /进入考试/ })).toBeNull();
 
         fireEvent.click(screen.getByRole("button", { name: "完成本节" }));
-        expect(screen.getByRole("link", { name: /进入考试/ }).getAttribute("href")).toBe(
-            "/sales-trainer/business-skills/exam?unitId=business-unit",
-        );
+        await waitFor(() => {
+            expect(screen.getByRole("link", { name: /进入考试/ }).getAttribute("href")).toBe(
+                "/sales-trainer/business-skills/exam?unitId=business-unit",
+            );
+        });
         await waitFor(() => {
             expect(getArticleMock).toHaveBeenCalledWith("business_skills", {
                 learning_content_id: "article-1",
@@ -116,10 +196,13 @@ describe("BusinessSkillsPage", () => {
     });
 
     it("ignores stale completed chapter ids from an older article version", async () => {
-        window.localStorage.setItem(
-            "newcomer-business-skills:article-1:completed-chapters",
-            JSON.stringify(["old-chapter-1", "old-chapter-2"]),
-        );
+        getArticleProgressMock.mockResolvedValueOnce({
+            module_key: "business_skills",
+            learning_content_id: "article-1",
+            completed_chapter_ids: [],
+            total_chapters: 2,
+            is_completed: false,
+        });
 
         render(<BusinessSkillsPage />);
 
@@ -142,6 +225,63 @@ describe("BusinessSkillsPage", () => {
 
         expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
         expect(getArticleMock).toHaveBeenCalledWith("business_skills", undefined);
+    });
+
+    it("shows the AI coach entry when path availability is enabled", async () => {
+        listPathsMock.mockResolvedValueOnce({
+            items: [{
+                path_key: "newcomer_training_path_v1",
+                title: "新人训练路径",
+                goal_title: "掌握新人训练路径",
+                total_levels: 1,
+                completed_levels: 0,
+                current_level_id: "business-unit",
+                next_level_id: "business-unit",
+                levels: [{
+                    unit_id: "business-unit",
+                    name: "商务技巧",
+                    description: null,
+                    unit_type: "quiz",
+                    module_key: "business_skills",
+                    module_type: "article_exam",
+                    order_index: 2,
+                    level_title: "第二关：商务技巧",
+                    level_description: null,
+                    locked: false,
+                    lock_reason: null,
+                    status: "available",
+                    completion_rule: "passed",
+                    primary_action_label: "开始学习",
+                    retry_action_label: "重练本关",
+                    review_action_label: "查看结果",
+                    target_path: "/sales-trainer/business-skills",
+                    ai_coach_availability: {
+                        enabled: true,
+                        configured: true,
+                        available: true,
+                        coach_path: "/sales-trainer/business-skills/coach",
+                        disabled_reason: null,
+                        allowed_interaction_types: ["single_choice", "multiple_choice"],
+                    },
+                    latest_result: null,
+                }],
+                goal_context: {
+                    goal_title: "掌握新人训练路径",
+                    score_basis: "sales_trainer_path_projection_v1",
+                    evidence_items: [],
+                    weak_points: [],
+                    next_recommendation: null,
+                },
+            }],
+            total: 1,
+        });
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "先去 AI 教练练一轮" }).getAttribute("href")).toBe(
+            "/sales-trainer/business-skills/coach",
+        );
     });
 
     it("shows an actionable remediation message when the article binding is missing", async () => {

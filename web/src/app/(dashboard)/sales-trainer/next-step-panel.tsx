@@ -8,6 +8,13 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerGoalNextRecommendation, SalesTrainerPath } from "@/lib/api/types";
+import { findBusinessSkillsCoachHref } from "@/lib/sales-trainer/ai-coach-availability";
+
+const BUSINESS_SKILLS_COACH_RECOMMENDATION_COPY = {
+    title: "去 AI 教练练一轮",
+    reason: "商务技巧 AI 教练已启用，可先通过互动题巩固拜访前的关键动作。",
+    actionLabel: "进入 AI 教练",
+} as const;
 
 function findRecommendation(
     paths: SalesTrainerPath[],
@@ -16,7 +23,23 @@ function findRecommendation(
     const currentPath = paths.find((path) =>
         path.levels.some((level) => level.unit_id === unitId),
     );
-    return currentPath?.goal_context.next_recommendation ?? null;
+    const recommendation = currentPath?.goal_context.next_recommendation ?? null;
+    if (recommendation) {
+        return recommendation;
+    }
+    const coachHref = findBusinessSkillsCoachHref(paths, unitId);
+    if (!coachHref) {
+        return null;
+    }
+    return {
+        title: BUSINESS_SKILLS_COACH_RECOMMENDATION_COPY.title,
+        reason: BUSINESS_SKILLS_COACH_RECOMMENDATION_COPY.reason,
+        action_label: BUSINESS_SKILLS_COACH_RECOMMENDATION_COPY.actionLabel,
+        target_path: coachHref,
+        unit_id: unitId,
+        level_title: "商务技巧",
+        recommendation_kind: "start_level",
+    };
 }
 
 interface SalesTrainerNextStepPanelProps {

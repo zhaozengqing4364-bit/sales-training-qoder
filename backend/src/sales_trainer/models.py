@@ -20,6 +20,7 @@ from sqlalchemy import (
 )
 
 import sales_trainer.regrade_models  # noqa: F401
+import sales_trainer.ai_coach_chat_models  # noqa: F401
 from common.db.models import Base
 
 
@@ -104,7 +105,9 @@ class SalesTrainerExamPaper(Base):
     paper_key = Column(String(120), nullable=False, unique=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
-    module_key = Column(String(80), nullable=False, default="business_skills", index=True)
+    module_key = Column(
+        String(80), nullable=False, default="business_skills", index=True
+    )
     unit_id = Column(
         String(36),
         ForeignKey("sales_trainer_units.unit_id", ondelete="RESTRICT"),
@@ -230,9 +233,14 @@ class SalesTrainerQuizAttempt(Base):
 
     attempt_id = Column(String(36), primary_key=True, default=_uuid)
     unit_id = Column(
-        String(36), ForeignKey("sales_trainer_units.unit_id"), nullable=False, index=True
+        String(36),
+        ForeignKey("sales_trainer_units.unit_id"),
+        nullable=False,
+        index=True,
     )
-    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    user_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
     paper_revision_id = Column(
         String(36),
         ForeignKey("sales_trainer_asset_revisions.revision_id"),
@@ -289,7 +297,9 @@ class SalesTrainerAudioSubmission(Base):
     unit_id = Column(
         String(36), ForeignKey("sales_trainer_units.unit_id"), nullable=True, index=True
     )
-    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    user_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
     purpose = Column(String(50), nullable=False, default="general_audio_scoring")
     original_filename = Column(String(500), nullable=False)
     content_type = Column(String(100), nullable=False)
@@ -520,11 +530,124 @@ class SalesTrainerAudioScoreResult(Base):
     )
 
 
+class SalesTrainerAiCoachSession(Base):
+    __tablename__ = "sales_trainer_ai_coach_sessions"
+
+    session_id = Column(String(36), primary_key=True, default=_uuid)
+    user_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    module_key = Column(String(80), nullable=False, index=True)
+    path_key = Column(String(80), nullable=True, index=True)
+    path_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id"),
+        nullable=True,
+    )
+    path_revision_no = Column(Integer, nullable=True)
+    article_snapshot = Column(JSON, nullable=False, default=dict)
+    path_config_snapshot = Column(JSON, nullable=False, default=dict)
+    prompt_template_id = Column(String(36), nullable=True)
+    prompt_revision_id = Column(String(36), nullable=True)
+    prompt_contract_hash = Column(String(128), nullable=True)
+    config_snapshot = Column(JSON, nullable=False, default=dict)
+    coach_state = Column(JSON, nullable=False, default=dict)
+    status = Column(String(20), nullable=False, default="in_progress", index=True)
+    mastery_state = Column(String(20), nullable=True)
+    total_score = Column(Numeric(5, 2), nullable=True)
+    max_score = Column(Numeric(5, 2), nullable=True)
+    trace_id = Column(String(100), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('in_progress', 'completed', 'failed')",
+            name="ck_sales_trainer_ai_coach_session_status",
+        ),
+        CheckConstraint(
+            "mastery_state IS NULL OR mastery_state IN ('mastered', 'not_mastered')",
+            name="ck_sales_trainer_ai_coach_session_mastery",
+        ),
+        Index(
+            "idx_sales_trainer_ai_coach_sessions_user_status",
+            "user_id",
+            "status",
+        ),
+        Index(
+            "idx_sales_trainer_ai_coach_sessions_module_created",
+            "module_key",
+            "created_at",
+        ),
+    )
+
+
+class SalesTrainerAiCoachTurn(Base):
+    __tablename__ = "sales_trainer_ai_coach_turns"
+
+    turn_id = Column(String(36), primary_key=True, default=_uuid)
+    session_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_ai_coach_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    turn_number = Column(Integer, nullable=False)
+    question = Column(Text, nullable=False)
+    user_answer = Column(Text, nullable=False)
+    ai_feedback = Column(Text, nullable=True)
+    score = Column(Numeric(5, 2), nullable=True)
+    max_score = Column(Numeric(5, 2), nullable=True)
+    missed_points = Column(JSON, nullable=False, default=list)
+    next_question = Column(Text, nullable=True)
+    raw_model_output = Column(JSON, nullable=True)
+    validated_output = Column(JSON, nullable=True)
+    # Layered interaction v1 fields (added by migration 078b)
+    interaction_snapshot = Column(JSON, nullable=True)
+    public_interaction = Column(JSON, nullable=True)
+    schema_version = Column(String(32), nullable=True)
+    answer_payload = Column(JSON, nullable=True)
+    score_result = Column(JSON, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "turn_number >= 1",
+            name="ck_sales_trainer_ai_coach_turn_number",
+        ),
+        UniqueConstraint(
+            "session_id",
+            "turn_number",
+            name="uq_sales_trainer_ai_coach_turn_session_number",
+        ),
+        Index(
+            "idx_sales_trainer_ai_coach_turns_session",
+            "session_id",
+            "turn_number",
+        ),
+        Index(
+            "idx_sales_trainer_ai_coach_turns_schema_version",
+            "schema_version",
+        ),
+    )
+
+
 class SalesTrainerOperationLog(Base):
     __tablename__ = "sales_trainer_operation_logs"
 
     log_id = Column(String(36), primary_key=True, default=_uuid)
-    actor_id = Column(String(36), ForeignKey("users.user_id"), nullable=True, index=True)
+    actor_id = Column(
+        String(36), ForeignKey("users.user_id"), nullable=True, index=True
+    )
     actor_role = Column(String(50), nullable=True)
     action = Column(String(100), nullable=False, index=True)
     target_type = Column(String(50), nullable=False, index=True)

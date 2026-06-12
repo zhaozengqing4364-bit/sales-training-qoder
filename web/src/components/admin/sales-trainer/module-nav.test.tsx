@@ -31,4 +31,15 @@ describe("SalesTrainerAdminModuleNav", () => {
         expect(screen.queryByRole("link", { name: "模块" })).toBeNull();
         expect(screen.queryByRole("link", { name: "录音" })).toBeNull();
     });
+
+    it("groups path config and AI coach config together", () => {
+        render(<SalesTrainerAdminModuleNav currentPath="/admin/sales-trainer/ai-coach" />);
+
+        expect(screen.getByRole("link", { name: "路径配置" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/paths",
+        );
+        expect(screen.getByRole("link", { name: "AI 教练配置" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/ai-coach",
+        );
+    });
 });

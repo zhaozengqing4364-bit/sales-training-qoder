@@ -1,24 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type {
-    NewcomerExamPaper,
-    NewcomerPaperAttempt,
-} from "@/lib/api/types";
+import type { NewcomerExamPaper } from "@/lib/api/types";
 
 import {
+    BUSINESS_SKILLS_EXAM_COPY,
     BUSINESS_SKILLS_MODULE_KEY,
-    BUSINESS_SKILLS_EXAM_GATE_COPY,
     businessSkillsArticleErrorMessage,
     fallbackPaperId,
-    hasCompletedBusinessSkillsChapters,
     learningContentIdFromUnit,
     paperIdFromUnit,
     resolveBusinessSkillsUnit,
@@ -31,63 +27,97 @@ import {
 } from "./business-skills-exam-fields";
 
 export default function BusinessSkillsExamPage() {
+    const router = useRouter();
     const searchParams = useSearchParams();
     const unitId = searchParams.get("unitId");
     const [paper, setPaper] = useState<NewcomerExamPaper | null>(null);
     const [answers, setAnswers] = useState<AnswersState>({});
-    const [attempt, setAttempt] = useState<NewcomerPaperAttempt | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [missingPaper, setMissingPaper] = useState(false);
     const [learningRequired, setLearningRequired] = useState(false);
+    const [learningMismatch, setLearningMismatch] = useState(false);
     const learningHref = unitId
         ? `/sales-trainer/business-skills?unitId=${encodeURIComponent(unitId)}`
         : "/sales-trainer/business-skills";
 
-    const load = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        setMissingPaper(false);
-        setLearningRequired(false);
-        try {
-            const unitResponse = await api.salesTrainer.listUnits();
-            const selectedUnit = resolveBusinessSkillsUnit(unitResponse.items, unitId);
-            const paperId = paperIdFromUnit(selectedUnit) ?? fallbackPaperId(unitResponse.items);
-            if (!paperId) {
-                setPaper(null);
-                setMissingPaper(true);
-                return;
-            }
-            const learningContentId = learningContentIdFromUnit(selectedUnit);
-            const article = await api.newcomerTraining.getModuleArticle(
-                BUSINESS_SKILLS_MODULE_KEY,
-                learningContentId ? { learning_content_id: learningContentId } : undefined,
-            );
-            if (!hasCompletedBusinessSkillsChapters(article.learning_content_id, article.chapters)) {
-                setPaper(null);
-                setLearningRequired(true);
-                return;
-            }
-            const nextPaper = await api.newcomerTraining.getPaper(paperId);
-            setPaper(nextPaper);
-            setAnswers(Object.fromEntries(
-                nextPaper.questions.map((question) => [
-                    question.question_id,
-                    initialAnswer(question),
-                ]),
-            ));
-        } catch (loadError) {
-            setPaper(null);
-            setError(businessSkillsArticleErrorMessage(loadError) || getApiErrorMessage(loadError));
-        } finally {
-            setIsLoading(false);
-        }
-    }, [unitId]);
-
     useEffect(() => {
-        void load();
-    }, [load]);
+        let isActive = true;
+        void api.salesTrainer.listUnits()
+            .then(async (unitResponse) => {
+                const selectedUnit = resolveBusinessSkillsUnit(unitResponse.items, unitId);
+                const paperId = paperIdFromUnit(selectedUnit) ?? fallbackPaperId(unitResponse.items);
+                if (!paperId) {
+                    if (!isActive) {
+                        return;
+                    }
+                    setPaper(null);
+                    setMissingPaper(true);
+                    setLearningRequired(false);
+                    setLearningMismatch(false);
+                    setError(null);
+                    return;
+                }
+                const learningContentId = learningContentIdFromUnit(selectedUnit);
+                const [nextArticle, progress] = await Promise.all([
+                    api.newcomerTraining.getModuleArticle(
+                        BUSINESS_SKILLS_MODULE_KEY,
+                        learningContentId ? { learning_content_id: learningContentId } : undefined,
+                    ),
+                    api.newcomerTraining.getModuleArticleProgress(BUSINESS_SKILLS_MODULE_KEY),
+                ]);
+                if (!isActive) {
+                    return;
+                }
+                // 后端 gate: 进度完成 && learning_content_id 与文章匹配
+                if (!progress.is_completed) {
+                    setPaper(null);
+                    setMissingPaper(false);
+                    setLearningRequired(true);
+                    setLearningMismatch(false);
+                    setError(null);
+                    return;
+                }
+                if (
+                    nextArticle.learning_content_id
+                    && progress.learning_content_id
+                    && nextArticle.learning_content_id !== progress.learning_content_id
+                ) {
+                    setPaper(null);
+                    setMissingPaper(false);
+                    setLearningRequired(false);
+                    setLearningMismatch(true);
+                    setError(null);
+                    return;
+                }
+                const nextPaper = await api.newcomerTraining.getPaper(paperId);
+                setPaper(nextPaper);
+                setAnswers(Object.fromEntries(
+                    nextPaper.questions.map((question) => [
+                        question.question_id,
+                        initialAnswer(question),
+                    ]),
+                ));
+                setMissingPaper(false);
+                setLearningRequired(false);
+                setLearningMismatch(false);
+                setError(null);
+            }).catch((loadError) => {
+                if (!isActive) {
+                    return;
+                }
+                setPaper(null);
+                setError(businessSkillsArticleErrorMessage(loadError) || getApiErrorMessage(loadError));
+            }).finally(() => {
+                if (isActive) {
+                    setIsLoading(false);
+                }
+            });
+        return () => {
+            isActive = false;
+        };
+    }, [unitId]);
 
     async function submitPaper() {
         if (!paper) {
@@ -103,13 +133,25 @@ export default function BusinessSkillsExamPage() {
                     answer_payload: answerPayload(question, answers),
                 })),
             });
-            setAttempt(result);
+            router.push(`/sales-trainer/quiz/result/${result.attempt_id}`);
         } catch (submitError) {
             setError(getApiErrorMessage(submitError));
-        } finally {
             setIsSubmitting(false);
         }
     }
+
+    const showLearningGate = learningRequired || learningMismatch;
+    const gateCopy = learningMismatch
+        ? {
+            title: BUSINESS_SKILLS_EXAM_COPY.learningMismatchTitle,
+            description: BUSINESS_SKILLS_EXAM_COPY.learningMismatchDescription,
+            actionLabel: BUSINESS_SKILLS_EXAM_COPY.learningGateActionLabel,
+        }
+        : {
+            title: BUSINESS_SKILLS_EXAM_COPY.learningGateTitle,
+            description: BUSINESS_SKILLS_EXAM_COPY.learningGateDescription,
+            actionLabel: BUSINESS_SKILLS_EXAM_COPY.learningGateActionLabel,
+        };
 
     return (
         <div className="space-y-6 pb-20">
@@ -118,12 +160,16 @@ export default function BusinessSkillsExamPage() {
                 className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
             >
                 <ArrowLeft className="h-4 w-4" />
-                返回商务技巧学习
+                {BUSINESS_SKILLS_EXAM_COPY.backLink}
             </Link>
 
             <div>
-                <h1 className="text-3xl font-black tracking-tight text-slate-900">商务技巧考试</h1>
-                <p className="mt-1 text-sm text-slate-500">完成学习后提交商务技巧考卷。</p>
+                <h1 className="text-3xl font-black tracking-tight text-slate-900">
+                    {BUSINESS_SKILLS_EXAM_COPY.pageTitle}
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                    {BUSINESS_SKILLS_EXAM_COPY.pageSubtitle}
+                </p>
             </div>
 
             {error ? <GlassCard className="p-4 text-sm font-medium text-red-700">{error}</GlassCard> : null}
@@ -134,22 +180,24 @@ export default function BusinessSkillsExamPage() {
                 <GlassCard className="mx-auto max-w-3xl space-y-5 p-6">
                     {missingPaper ? (
                         <div className="space-y-2">
-                            <h2 className="text-lg font-bold text-slate-900">暂未绑定商务技巧考卷</h2>
+                            <h2 className="text-lg font-bold text-slate-900">
+                                {BUSINESS_SKILLS_EXAM_COPY.paperMissingTitle}
+                            </h2>
                             <p className="text-sm text-slate-500">
-                                请管理员到 新人训练路径配置中心 → 商务技巧 → 考卷管理 绑定已发布考卷。
+                                {BUSINESS_SKILLS_EXAM_COPY.paperMissingDescription}
                             </p>
                         </div>
-                    ) : learningRequired ? (
+                    ) : showLearningGate ? (
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <h2 className="text-lg font-bold text-slate-900">{BUSINESS_SKILLS_EXAM_GATE_COPY.title}</h2>
+                                <h2 className="text-lg font-bold text-slate-900">{gateCopy.title}</h2>
                                 <p className="text-sm text-slate-500">
-                                    {BUSINESS_SKILLS_EXAM_GATE_COPY.description}
+                                    {gateCopy.description}
                                 </p>
                             </div>
                             <Button asChild className="rounded-full bg-slate-900 text-white">
                                 <Link href={learningHref}>
-                                    {BUSINESS_SKILLS_EXAM_GATE_COPY.actionLabel}
+                                    {gateCopy.actionLabel}
                                 </Link>
                             </Button>
                         </div>
@@ -171,14 +219,13 @@ export default function BusinessSkillsExamPage() {
                                     </div>
                                 ))}
                             </div>
-                            <Button className="w-full rounded-full bg-slate-900 text-white" onClick={() => void submitPaper()} disabled={isSubmitting}>
-                                提交考卷
+                            <Button
+                                className="w-full rounded-full bg-slate-900 text-white"
+                                onClick={() => void submitPaper()}
+                                disabled={isSubmitting}
+                            >
+                                {BUSINESS_SKILLS_EXAM_COPY.submitButton}
                             </Button>
-                            {attempt ? (
-                                <p className="text-sm font-medium text-emerald-700">
-                                    已提交：{attempt.total_score ?? "--"}/{attempt.max_score ?? "--"}
-                                </p>
-                            ) : null}
                         </>
                     ) : null}
                 </GlassCard>

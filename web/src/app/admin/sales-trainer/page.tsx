@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, FileText, Milestone, Mic, ScrollText, Settings, Target } from "lucide-react";
+import { Activity, BarChart3, Bot, FileText, Milestone, Mic, ScrollText, Settings, Target } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
@@ -11,6 +11,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 const WORKBENCH_LINKS = [
     { href: "/admin/sales-trainer/units", label: "模块单元", icon: Target },
     { href: "/admin/sales-trainer/paths", label: "路径配置", icon: Milestone },
+    { href: "/admin/sales-trainer/ai-coach", label: "AI 教练配置", icon: Bot },
     { href: "/admin/sales-trainer/questions", label: "题库管理", icon: FileText },
     { href: "/admin/sales-trainer/score-standards", label: "录音评分标准", icon: Mic },
     { href: "/admin/sales-trainer/audio-submissions", label: "学员录音", icon: Activity },

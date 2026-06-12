@@ -18,7 +18,7 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import and_, select, update
+from sqlalchemy import String, and_, cast as sql_cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.config_manager import get_config_manager
@@ -547,7 +547,9 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+            select(PromptTemplateDB).where(
+                sql_cast(PromptTemplateDB.id, String) == str(template_id)
+            )
         )
         db_template = result.scalar_one_or_none()
 

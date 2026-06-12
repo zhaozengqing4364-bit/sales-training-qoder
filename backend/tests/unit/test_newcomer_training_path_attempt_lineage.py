@@ -6,7 +6,15 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.models import QuestionCategory, QuestionItem
+from curriculum_practice.models import (
+    LearningChapter,
+    LearningContent,
+    QuestionCategory,
+    QuestionItem,
+)
+from curriculum_practice.services.learning_progress_service import (
+    LearningProgressService,
+)
 from sales_trainer.schemas import (
     ExamPaperCreate,
     ExamPaperQuestionBinding,
@@ -54,6 +62,43 @@ def _question(question_id: str, *, category_id: str) -> QuestionItem:
     )
 
 
+async def _completed_article(
+    test_db: AsyncSession,
+    *,
+    content_id: str,
+    admin: User,
+    learner: User,
+) -> LearningContent:
+    content = LearningContent(
+        learning_content_id=content_id,
+        title="见客户前商务礼仪",
+        summary="阅读后提交商务技巧考卷。",
+        owner="新人训练路径",
+        source="unit_test",
+        status="published",
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    chapter = LearningChapter(
+        chapter_id=f"{content_id}-chapter-1",
+        learning_content_id=content.learning_content_id,
+        title="拜访前准备",
+        content="先确认客户背景、到访时间和接待安排。",
+        order_index=1,
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    test_db.add_all([content, chapter])
+    await test_db.commit()
+    result = await LearningProgressService(test_db).complete_chapter(
+        user_id=str(learner.user_id),
+        content_id=content.learning_content_id,
+        chapter_id=chapter.chapter_id,
+    )
+    assert result.is_success
+    return content
+
+
 @pytest.mark.asyncio
 async def test_should_freeze_path_revision_lineage_when_submitting_paper_attempt(
     test_db: AsyncSession,
@@ -69,6 +114,12 @@ async def test_should_freeze_path_revision_lineage_when_submitting_paper_attempt
     question = _question("attempt-lineage-question", category_id=category.category_id)
     test_db.add_all([admin, learner, category, question])
     await test_db.commit()
+    content = await _completed_article(
+        test_db,
+        content_id="attempt-lineage-content",
+        admin=admin,
+        learner=learner,
+    )
 
     paper_service = ExamPaperService(test_db)
     paper = await paper_service.create_paper(
@@ -102,8 +153,9 @@ async def test_should_freeze_path_revision_lineage_when_submitting_paper_attempt
                     order_index=1,
                     title="商务技巧",
                     target_unit_id=published.unit_id,
+                    learning_content_id=content.learning_content_id,
                     exam_paper_id=published.paper_id,
-                    completion_rule="submitted",
+                    completion_rule="passed",
                 )
             ],
         ),
@@ -161,6 +213,12 @@ async def test_should_freeze_path_revision_lineage_for_legacy_paper_attempt(
     )
     test_db.add_all([admin, learner, category, question])
     await test_db.commit()
+    content = await _completed_article(
+        test_db,
+        content_id="attempt-lineage-legacy-content",
+        admin=admin,
+        learner=learner,
+    )
 
     paper_service = ExamPaperService(test_db)
     paper = await paper_service.create_paper(
@@ -212,8 +270,9 @@ async def test_should_freeze_path_revision_lineage_for_legacy_paper_attempt(
                     order_index=1,
                     title="商务技巧",
                     target_unit_id=published.unit_id,
+                    learning_content_id=content.learning_content_id,
                     exam_paper_id=published.paper_id,
-                    completion_rule="submitted",
+                    completion_rule="passed",
                 )
             ],
         ),

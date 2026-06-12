@@ -44,7 +44,11 @@ if "websockets" not in sys.modules:
     class ConnectionClosed(Exception):
         pass
 
+    class InvalidStatus(Exception):
+        pass
+
     setattr(exceptions_stub, "ConnectionClosed", ConnectionClosed)
+    setattr(exceptions_stub, "InvalidStatus", InvalidStatus)
     sys.modules["websockets"] = websockets_stub
     sys.modules["websockets.exceptions"] = exceptions_stub
 
@@ -223,3 +227,28 @@ async def test_create_app_cors_wraps_error_handler_responses(monkeypatch) -> Non
     assert response.headers["access-control-allow-origin"] == "http://localhost:3445"
     assert response.headers["access-control-allow-credentials"] == "true"
     assert response.json()["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_create_app_cors_wraps_csrf_rejection_responses(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/newcomer-training/ai-coach/chat/sessions",
+            headers={
+                "Origin": "http://localhost:3445",
+                "Content-Type": "application/json",
+                "Cookie": "app_session=fake-session",
+            },
+            json={"module_key": "business_skills"},
+        )
+
+    assert response.status_code == 403
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3445"
+    assert response.headers["access-control-allow-credentials"] == "true"
+    assert response.json()["error"] == "[CSRF_VALIDATION_FAILED]"

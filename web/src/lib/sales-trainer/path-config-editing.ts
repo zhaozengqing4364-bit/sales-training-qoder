@@ -49,11 +49,11 @@ export function audioBindingValueForModule(
     path: NewcomerPathConfigPayload,
     moduleKey: AudioEditableModuleKey,
 ): PathAudioBindingValue {
-    const module = path.modules.find((item) => item.module_key === moduleKey) ?? null;
+    const pathModule = path.modules.find((item) => item.module_key === moduleKey) ?? null;
     return {
-        materialId: module?.material_id ?? "",
-        materialVersionId: module?.material_version_id ?? "",
-        scoringPromptId: module?.scoring_prompt_id ?? "",
+        materialId: pathModule?.material_id ?? "",
+        materialVersionId: pathModule?.material_version_id ?? "",
+        scoringPromptId: pathModule?.scoring_prompt_id ?? "",
     };
 }
 
@@ -62,17 +62,17 @@ export function updatePathAudioBinding(
     moduleKey: AudioEditableModuleKey,
     value: PathAudioBindingValue,
 ): NewcomerPathConfigPayload {
-    const nextModule = (module: NewcomerPathModuleConfig): NewcomerPathModuleConfig => ({
-        ...module,
+    const nextModule = (pathModule: NewcomerPathModuleConfig): NewcomerPathModuleConfig => ({
+        ...pathModule,
         material_id: nullable(value.materialId),
         material_version_id: nullable(value.materialVersionId),
         scoring_prompt_id: nullable(value.scoringPromptId),
     });
-    if (path.modules.some((module) => module.module_key === moduleKey)) {
+    if (path.modules.some((pathModule) => pathModule.module_key === moduleKey)) {
         return {
             ...path,
-            modules: path.modules.map((module) => (
-                module.module_key === moduleKey ? nextModule(module) : module
+            modules: path.modules.map((pathModule) => (
+                pathModule.module_key === moduleKey ? nextModule(pathModule) : pathModule
             )),
         };
     }
@@ -85,10 +85,10 @@ export function updatePathAudioBinding(
 export function businessBindingValueForModule(
     path: NewcomerPathConfigPayload,
 ): PathBusinessBindingValue {
-    const module = path.modules.find((item) => item.module_key === "business_skills") ?? null;
+    const pathModule = path.modules.find((item) => item.module_key === "business_skills") ?? null;
     return {
-        examPaperId: module?.exam_paper_id ?? "",
-        learningContentId: module?.learning_content_id ?? "",
+        examPaperId: pathModule?.exam_paper_id ?? "",
+        learningContentId: pathModule?.learning_content_id ?? "",
     };
 }
 
@@ -96,16 +96,16 @@ export function updatePathBusinessBinding(
     path: NewcomerPathConfigPayload,
     value: PathBusinessBindingValue,
 ): NewcomerPathConfigPayload {
-    const nextModule = (module: NewcomerPathModuleConfig): NewcomerPathModuleConfig => ({
-        ...module,
+    const nextModule = (pathModule: NewcomerPathModuleConfig): NewcomerPathModuleConfig => ({
+        ...pathModule,
         exam_paper_id: nullable(value.examPaperId),
         learning_content_id: nullable(value.learningContentId),
     });
-    if (path.modules.some((module) => module.module_key === "business_skills")) {
+    if (path.modules.some((pathModule) => pathModule.module_key === "business_skills")) {
         return {
             ...path,
-            modules: path.modules.map((module) => (
-                module.module_key === "business_skills" ? nextModule(module) : module
+            modules: path.modules.map((pathModule) => (
+                pathModule.module_key === "business_skills" ? nextModule(pathModule) : pathModule
             )),
         };
     }
@@ -152,7 +152,7 @@ function defaultBusinessModule(): NewcomerPathModuleConfig {
         exam_paper_id: null,
         disabled_reason: null,
         unlock_after_unit_ids: [],
-        completion_rule: "submitted",
+        completion_rule: "passed",
         primary_action_label: "开始学习",
         retry_action_label: null,
         review_action_label: null,

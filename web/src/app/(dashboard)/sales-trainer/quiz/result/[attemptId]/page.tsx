@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerQuizAnswer, SalesTrainerQuizAttempt } from "@/lib/api/types";
+import { findBusinessSkillsCoachHref } from "@/lib/sales-trainer/ai-coach-availability";
 import { SalesTrainerNextStepPanel } from "../../../next-step-panel";
 
 function stringifyAnswer(value: unknown): string {
@@ -64,9 +65,22 @@ function getAttemptResultBadge(attempt: SalesTrainerQuizAttempt): {
     return { label: "仅计分", className: "bg-blue-100 text-blue-700" };
 }
 
+async function resolveAiCoachHref(unitId: string): Promise<string | null> {
+    try {
+        const paths = await api.salesTrainer.listPaths();
+        return findBusinessSkillsCoachHref(paths.items, unitId);
+    } catch (loadError) {
+        if (loadError instanceof Error) {
+            return null;
+        }
+        throw loadError;
+    }
+}
+
 export default function SalesTrainerQuizResultPage() {
     const params = useParams<{ attemptId: string }>();
-    const [attempt, setAttempt] = useState<SalesTrainerQuizAttempt | null>(null);
+    const [attempt, setAttempt] = useState<(SalesTrainerQuizAttempt & { paper_title?: string | null }) | null>(null);
+    const [coachHref, setCoachHref] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -76,9 +90,12 @@ export default function SalesTrainerQuizResultPage() {
             setError(null);
             try {
                 const result = await api.salesTrainer.getQuizAttempt(params.attemptId);
+                const nextCoachHref = await resolveAiCoachHref(result.unit_id);
                 setAttempt(result);
+                setCoachHref(nextCoachHref);
             } catch (loadError) {
                 setAttempt(null);
+                setCoachHref(null);
                 setError(getApiErrorMessage(loadError));
             } finally {
                 setIsLoading(false);
@@ -117,11 +134,30 @@ export default function SalesTrainerQuizResultPage() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h1 className="text-3xl font-black tracking-tight text-slate-900">做题结果</h1>
+                        {attempt.paper_title ? (
+                            <p className="mt-1 text-sm font-medium text-slate-700">{attempt.paper_title}</p>
+                        ) : null}
                         <p className="mt-1 text-sm text-slate-500">提交时间：{new Date(attempt.submitted_at).toLocaleString()}</p>
                     </div>
-                    <Badge className={resultBadge.className}>
-                        {resultBadge.label}
-                    </Badge>
+                    <div className="flex items-center gap-3">
+                        <Badge className={resultBadge.className}>
+                            {resultBadge.label}
+                        </Badge>
+                        {attempt.passed === false ? (
+                            <Button asChild variant="outline" className="rounded-full">
+                                <Link href={`/sales-trainer/business-skills/exam?unitId=${encodeURIComponent(attempt.unit_id)}`}>
+                                    重新考试
+                                </Link>
+                            </Button>
+                        ) : null}
+                        {coachHref ? (
+                            <Button asChild className="rounded-full bg-slate-900 text-white">
+                                <Link href={coachHref}>
+                                    进入 AI 教练
+                                </Link>
+                            </Button>
+                        ) : null}
+                    </div>
                 </div>
             </div>
 

@@ -60,6 +60,7 @@ export function buildLegacyModuleViews(
             pptUploadHref: pptItem?.level.target_path ?? null,
             learnHubHref: null,
             learnHref: null,
+            coachHref: null,
             hubUnitId: null,
             audioOptions: [],
             disabled: false,
@@ -76,6 +77,7 @@ export function buildLegacyModuleViews(
             learnHref: hubItem?.level.unit_id
                 ? `/sales-trainer/business-skills?unitId=${encodeURIComponent(hubItem.level.unit_id)}`
                 : "/sales-trainer/business-skills",
+            coachHref: null,
             hubUnitId: hubItem?.level.unit_id ?? null,
             audioOptions: [],
             disabled: false,
@@ -92,6 +94,7 @@ export function buildLegacyModuleViews(
             pptUploadHref: null,
             learnHubHref: null,
             learnHref: null,
+            coachHref: null,
             hubUnitId: null,
             audioOptions: audioLevels.map((level) => ({
                 level,
@@ -109,6 +112,7 @@ export function buildLegacyModuleViews(
             pptUploadHref: null,
             learnHubHref: null,
             learnHref: null,
+            coachHref: null,
             hubUnitId: null,
             audioOptions: [],
             disabled: true,

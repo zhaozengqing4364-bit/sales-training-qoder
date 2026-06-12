@@ -129,6 +129,122 @@ interface NewcomerTrainingPathModuleConfig {
 - 非法 `module_type`、未知 `completion_rule`、重复 `module_key`、重复 `order_index` 或绑定不存在时，后台保存/发布返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` 并写操作日志。
 - 配置读取失败或配置缺失时 learner 不展示伪成功；返回空路径、诊断错误或 disabled 模块，由 UI 显示可配置空状态。
 
+### AI Coach 模块配置
+
+`modules[].ai_coach` 是商务技巧 AI 教练的可选配置。它只控制 chatbot 训练模式，不替代固定试卷考试、后端评分记录或掌握状态聚合。
+
+默认值：
+
+- `enabled=false`
+- `chat_enabled=true`
+- `coach_mode="mixed_drill"`
+- `allowed_interaction_types=["single_choice","multiple_choice"]`
+- `allowed_ui_event_types=["quiz_card","explanation_card","summary_card","followup_prompt"]`
+- `max_cards_per_message=3`
+- `proactive_coaching_enabled=false`；demo/local seed 为 `true`
+- `session_start_behavior="welcome_only"`；可选 `"welcome_only" | "plan_then_wait" | "plan_and_first_card"`，demo/local seed 为 `"plan_and_first_card"`
+- `auto_advance_enabled=false`；demo/local seed 为 `true`
+- `max_auto_steps_per_session=5`，范围 `1..10`
+- `correct_streak_to_increase_difficulty=2`，范围 `1..10`
+- `incorrect_streak_to_remediate=1`，范围 `1..10`
+- `incorrect_streak_to_pause=2`，范围 `1..10` 且必须 `>= incorrect_streak_to_remediate`
+- `remediation_strategy="explain_then_retry"`；可选 `"explain_then_retry" | "ask_user_choice" | "simplify_then_retry"`
+- `summary_when_mastery_reached=true`
+- `allowed_next_actions=["continue_drill","increase_difficulty","remediate","switch_scenario","summarize","ask_user_choice","end_session"]`
+- `chat_welcome_message="你好，我是商务技巧 AI 教练。你可以直接说想练什么，我会把练习卡片放在对话里。"`
+- `min_turns=3`
+- `max_turns=10`
+- `mastery_threshold=80`
+- `output_schema_version="ai_coach_interaction_v1"`
+- `prompt_contract_hash`、`scoring_contract_hash` 是运行时审计字段。admin 配置请求中的值会被忽略，模块配置中保持为 `null`；真实 hash 在会话生成/评分时由后端根据已渲染 prompt contract 计算并记录。
+
+简答题配置：
+
+- 当 `allowed_interaction_types` 包含 `"short_answer"` 时，`scoring_prompt_template_id` 必填。
+- 单选/多选训练不要求 scoring prompt。
+- `prompt_template_id` 用于生成互动卡片；`scoring_prompt_template_id` 只用于简答评分，两者独立治理。
+- `prompt_template_id` 和 `scoring_prompt_template_id` 必须是 `PromptTemplate` UUID；非法格式保存或运行时解析返回 `[AI_COACH_PROMPT_CONFIG_INVALID]`。
+
+权限：
+
+- 查看/普通模块配置需要 `sales_trainer.manage_modules` 对应角色。
+- 修改普通开关、进入后行为或自动推进步数需要 `sales_trainer.manage_modules` 对应角色。
+- 修改 `coach_mode`、`allowed_interaction_types`、`chat_enabled`、`allowed_ui_event_types`、`max_cards_per_message`、`chat_welcome_message`、`min_turns`、`max_turns`、`mastery_threshold`、连续答对/答错阈值、补救策略、总结策略、`allowed_next_actions`、prompt 绑定、模型、重试策略或失败策略等高风险字段，需要 `sales_trainer.manage_prompts` 对应角色。
+- 通用 `/admin/newcomer-training/path-config` 保存也必须执行同一字段级 RBAC；权限 diff 失败时返回 `[AI_COACH_CONFIG_RBAC_CHECK_FAILED]`，不得 fail-open 保存。
+- learner 创建 AI Coach session 时，客户端传入的 `coach_mode` / `interaction_type` 必须落在模块 `allowed_interaction_types` 允许范围内；否则返回 `[AI_COACH_INTERACTION_TYPE_NOT_ALLOWED]`。
+
+公开投影与入口：
+
+- Learner 只能通过 `GET /api/v1/sales-trainer/paths` 读取 `levels[].ai_coach_availability` 判断入口是否展示。
+- `ai_coach_availability` 只包含 `enabled`、`configured`、`available`、`coach_path`、`disabled_reason`、`allowed_interaction_types`。
+- Learner `SalesTrainerUnit.config.path` 不返回完整 `ai_coach` 配置；不得暴露 `prompt_template_id`、`prompt_revision_id`、`prompt_contract_hash`、`scoring_prompt_template_id`、`scoring_prompt_revision_id`、answer key、rubric、interaction snapshot 或 path/config snapshot。
+- `enabled=false`、缺少生成 Prompt、配置非法或未发布时，learner 首页和商务技巧页不展示入口；直达 `/sales-trainer/business-skills/coach` 必须显示明确不可用错误。
+- 考试结果页只要 `ai_coach_availability.available=true` 就可以展示 AI 教练入口，不要求 `attempt.passed=true`。
+
+管理入口与路由：
+
+| 方法 | 路径 | 说明 | 权限 |
+|---|---|---|---|
+| `GET` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config` | 读取模块 AI 教练配置 | `sales_trainer.manage_modules` |
+| `PUT` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config` | 保存 AI 教练配置到路径待发布修订 | 普通字段 `sales_trainer.manage_modules`；高风险字段和 Prompt 绑定 `sales_trainer.manage_prompts` |
+| `POST` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config/publish` | 发布包含 AI 教练配置的路径修订 | `sales_trainer.manage_modules` |
+| `POST` | `/api/v1/admin/newcomer-training/path-config/rollback` | 回滚路径修订，包含 AI 教练配置回滚 | `sales_trainer.manage_modules` |
+
+Learner AI 教练会话路由：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions` | 创建或恢复 Chatbot 式 AI 教练 session，返回训练局 snapshot |
+| `GET` | `/api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}` | 读取本人 AI 教练 chat session、messages 和 ui_events |
+| `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/messages` | 发送自由文本或标准训练命令，后端生成 assistant 文本和白名单 UI events |
+| `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/events/{event_id}/answer` | 提交某张 quiz_card 的答案；后端评分、更新 `coach_state`，并在允许时自动生成一个 `next_coach_action` 对应的 assistant message + UI events，返回更新后的 session snapshot |
+| `POST` | `/api/v1/newcomer-training/ai-coach/sessions` | 兼容旧逐题 session；不作为商务技巧 Chatbot 页面主入口 |
+| `GET` | `/api/v1/newcomer-training/ai-coach/sessions/{session_id}` | 兼容旧逐题 session 和 public turns |
+| `POST` | `/api/v1/newcomer-training/ai-coach/sessions/{session_id}/turns/{turn_id}/submit` | 兼容旧逐题提交 |
+
+Chatbot runtime 输出契约：
+
+```ts
+type AiCoachChatResponseInternalV1 = {
+  schema_version: "ai_coach_chat_response_v1";
+  assistant_text: string;
+  ui_events: Array<{
+    type: "quiz_card" | "explanation_card" | "summary_card" | "followup_prompt";
+    payload: unknown;
+  }>;
+};
+```
+
+Learner public projection:
+
+- 创建 session 请求：
+  - `module_key: string`
+  - `resume_strategy?: "latest_in_progress" | "new"`；未传时保持创建新 session 的兼容行为，商务技巧页面必须显式传 `latest_in_progress`。
+- 发送 message 请求：
+  - 自由文本：`content: string`
+  - 标准训练命令：`command: "continue" | "explain" | "switch_scenario" | "summarize" | "end" | "retry"`，可附 `event_id`。
+  - `command` 存在时，后端按确定性 `next_coach_action` 分支推进，不把按钮文案当自然语言意图猜测。
+- `messages[]` 只包含 `message_id`、`role`、`content`、`order_index`、`created_at`。
+- `ui_events[]` 只包含 `event_id`、`message_id`、`type`、`status`、public `payload`、`answer_payload`、`score_result`、`order_index`、`created_at`。
+- `coach_state` 只包含 `session_phase`、`active_event_id`、`auto_step_count`、`answered_card_count`、`correct_streak`、`incorrect_streak`、`current_focus`、`difficulty`、`last_action`、`can_auto_advance`、`stopped_reason`，不返回内部分数累计、prompt 或配置快照。
+- `session_phase` 由后端 projection 派生，取值为 `"starting" | "answering" | "reviewing" | "choosing" | "summarizing" | "completed"`。
+- `active_event_id` 只指向当前可操作的 pending `quiz_card`；没有待答题卡时为 `null`。前端可用第一张 pending `quiz_card` 做兼容兜底，但不得把多张 pending 题卡同时作为主流程展示。
+- `quiz_card.payload.interaction` 使用 `AiCoachInteractionPublicV1`，不得暴露 `answer_key`、`scoring_rubric`、`source_evidence`、Prompt ID、revision、hash 或内部 snapshot。
+- `summary_card.payload` 除 `title`、`items` 外，可包含 `score_percent`、`mastered`、`strengths`、`weaknesses`、`next_steps`。
+- 后端只接受 `allowed_ui_event_types` 中的事件类型；未知类型返回 `[AI_COACH_UI_EVENT_TYPE_NOT_ALLOWED]` 或 `[AI_COACH_INTERACTION_INVALID:*]`。
+- 单轮 `quiz_card` 数量超过 `max_cards_per_message` 时返回 `[AI_COACH_INTERACTION_INVALID]`。
+- `next_coach_action` 生成结果还必须满足动作级 UI 约束；不匹配时返回或记录 `[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]`：
+  - `continue_drill` / `increase_difficulty`：只能生成 1 张 `quiz_card`。
+  - `remediate`：必须生成 1 张 `explanation_card` 和 1 张 `quiz_card`。
+  - `switch_scenario`：必须生成 1 张 `quiz_card`，可附 1 个 `followup_prompt`。
+  - `summarize`：必须生成 1 张 `summary_card`，可附 1 个 `followup_prompt`，不得生成新题。
+  - `ask_user_choice`：必须只生成 1 个 `followup_prompt`。
+  - `end_session`：必须只生成 1 张 `summary_card`。
+- `plan_and_first_card` 开局也必须满足 `continue_drill` 的动作级 UI 约束，只生成 1 张首题卡。首卡生成失败时不应让 learner 页面进入笼统网络错误；后端必须记录 failed action，并返回安全 `followup_prompt` 作为可恢复状态。
+- 提交 `quiz_card` 答案时，后端先持久化答案、评分和 `ai_coach_chat_card_submitted_v1` 操作日志，再调用 LLM 生成下一步，避免 LLM 调用期间持有评分事务。
+- `failure_behavior="abort"` 时，下一步生成失败会记录 `sales_trainer_ai_coach_coach_actions.status="failed"` 和 `ai_coach_chat_next_action_failed_v1` 操作日志，并向 API 调用方返回 typed error；`skip_turn` / `continue_with_fallback` 时，评分保留，追加安全 `followup_prompt`，同样记录 failed action 和 error_code。
+- `chat_enabled=false`、`enabled=false`、缺少生成 Prompt、配置非法或 prompt revision 不可用时，直达 chat URL 显示明确不可用/不可重试错误；前端不得展示旧考试页替代。
+
 ## 统一响应
 
 成功:
@@ -289,7 +405,22 @@ interface SalesTrainerPathLevel {
   retry_action_label: string;
   review_action_label: string;
   target_path: string;
+  ai_coach_availability?: AiCoachAvailability | null;
   latest_result?: unknown | null;
+}
+
+type AiCoachInteractionType =
+  | "single_choice"
+  | "multiple_choice"
+  | "short_answer";
+
+interface AiCoachAvailability {
+  enabled: boolean;
+  configured: boolean;
+  available: boolean;
+  coach_path?: string | null;
+  disabled_reason?: string | null;
+  allowed_interaction_types: AiCoachInteractionType[];
 }
 ```
 
@@ -700,7 +831,7 @@ Response `data`: `ExamPaper`
 
 ### `POST /api/v1/sales-trainer/paper-attempts`
 
-提交已发布考卷答案。服务端按 `paper_id` 找到考卷 active revision 和兼容 quiz 执行单元并复用当前题型评分逻辑。`answers[].question_id` 必须属于该考卷当前 active revision，额外题目返回 `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]`。提交成功后，attempt 必须记录当时的 `paper_revision_id`；answer payload 必须冻结题目快照和 `attempt_context`，其中包含提交时命中的 `path_key`、`path_revision_id`、`path_revision_no`、`module_key`、`paper_revision_id`。旧数据无法可靠匹配路径修订时返回 `legacy_snapshot_only=true`，不得从最新路径配置伪造历史 revision。
+提交已发布考卷答案。服务端按 `paper_id` 找到考卷 active revision 和兼容 quiz 执行单元并复用当前题型评分逻辑。`answers[].question_id` 必须属于该考卷当前 active revision，额外题目返回 `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]`。如果当前新人训练路径把该考卷或 backing unit 绑定为 `article_exam`，提交前必须完成当前绑定文章的全部章节阅读；未完成返回 403 `[NEWCOMER_ARTICLE_PROGRESS_REQUIRED]`，不得进入评分。提交成功后，attempt 必须记录当时的 `paper_revision_id`；answer payload 必须冻结题目快照和 `attempt_context`，其中包含提交时命中的 `path_key`、`path_revision_id`、`path_revision_no`、`module_key`、`paper_revision_id`。旧数据无法可靠匹配路径修订时返回 `legacy_snapshot_only=true`，不得从最新路径配置伪造历史 revision。简答题 AI 批改依赖外部模型配置；外部模型鉴权、连接、超时或重试失败时，服务端必须保存本次提交与答案快照，返回 `status="submitted"`、简答题 `score=null`，不得因批改服务不可用让整张考卷提交失败。
 
 Request:
 
@@ -1315,6 +1446,7 @@ interface OperationLogListResponse {
 | `[QUIZ_PASS_THRESHOLD_INVALID]` | 400 | 做题通过线配置非法 |
 | `[QUIZ_ATTEMPT_NOT_FOUND]` | 404 | 做题记录不存在 |
 | `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]` | 400 | 提交了不属于该单元的题目 |
+| `[SHORT_ANSWER_AI_SCORING_FAILED]` | 无 HTTP 错误；提交成功并保持 `submitted` | 简答题外部 AI 批改鉴权、连接、超时或重试失败，答案已保存但该题未评分 |
 | `[QUESTION_TYPE_UNSUPPORTED]` | 422 | 当前题型或题库结构不支持自动判分或展示 |
 | `[AUDIO_TYPE_NOT_ALLOWED]` | 422 | 音频格式不在允许列表 |
 | `[AUDIO_FILE_TOO_LARGE]` | 413 | 音频超过配置的文件大小上限 |
@@ -1338,6 +1470,12 @@ interface OperationLogListResponse {
 | `[SCORING_PROMPT_NOT_PUBLISHED]` | 400 | 评分提示词未发布 |
 | `[SCORING_PROMPT_NOT_EDITABLE]` | 409 | 修改已归档评分提示词；已发布提示词编辑应生成待发布修订 |
 | `[SCORING_PROMPT_ARCHIVED]` | 400 | 发布已归档提示词 |
+| `[NEWCOMER_ARTICLE_PROGRESS_REQUIRED]` | 403 | 文章考试模块提交考卷前未完成当前绑定文章阅读 |
+| `[AI_COACH_PROMPT_TEMPLATE_MISSING]` | 409 | AI 教练会话缺少互动卡片生成 Prompt 绑定 |
+| `[AI_COACH_PROMPT_CONFIG_INVALID]` | 409 | AI 教练 Prompt 配置非法，例如 template id 不是 UUID |
+| `[AI_COACH_PROMPT_REVISION_NOT_FOUND]` | 404 | AI 教练 Prompt 模板或指定修订不可用 |
+| `[AI_COACH_PROMPT_REVISION_AUDIT_MISSING]` | 409 | AI 教练指定 Prompt revision 缺少可审计历史，运行时拒绝回退 |
+| `[AI_COACH_PROMPT_REVISION_FALLBACK]` | 409 | AI 教练未按已发布 Prompt revision 渲染，运行时拒绝使用 head fallback |
 | `[AUDIO_PASS_THRESHOLD_INVALID]` | 400 | 通过线不在 `0-100` 范围 |
 | `[DEUCATE_CONFIG_INVALID]` | 500 | Deucate 模型参数配置非法 |
 | `[DEUCATE_CONFIG_MISSING]` | 500 | Deucate 配置缺失 |

@@ -111,6 +111,7 @@ def module_from_unit(
         retry_action_label=config.retry_action_label,
         review_action_label=config.review_action_label,
         guidance_templates=config.guidance_templates,
+        ai_coach=config.ai_coach,
     )
 
 
@@ -156,6 +157,7 @@ def path_config_from_module(
         retry_action_label=module.retry_action_label,
         review_action_label=module.review_action_label,
         guidance_templates=module.guidance_templates,
+        ai_coach=module.ai_coach.model_dump(mode="json") if module.ai_coach else None,
     )
 
 

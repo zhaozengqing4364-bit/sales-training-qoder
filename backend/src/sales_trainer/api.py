@@ -86,6 +86,7 @@ from sales_trainer.services.question_service import (
 from sales_trainer.services.quiz_service import QuizService, QuizServiceError
 from sales_trainer.services.training_record_service import TrainingRecordService
 from sales_trainer.services.unit_service import SalesTrainerUnitError, UnitService
+from sales_trainer.services.unit_public_payloads import learner_safe_unit_payload
 
 router = APIRouter(prefix="/sales-trainer", tags=["sales-trainer"])
 admin_router = APIRouter(prefix="/admin/sales-trainer", tags=["admin-sales-trainer"])
@@ -135,6 +136,10 @@ def _team_scope(user: User) -> str | None:
 
 def _as_unit_response(payload: dict[str, Any]) -> dict[str, Any]:
     return SalesTrainerUnitResponse.model_validate(payload).model_dump()
+
+
+def _as_learner_unit_response(payload: dict[str, Any]) -> dict[str, Any]:
+    return _as_unit_response(learner_safe_unit_payload(payload))
 
 
 def _as_operation_log_response(log: Any) -> OperationLogResponse:
@@ -225,7 +230,7 @@ async def list_published_units(
     units, total = await UnitService(db).list_units(published_only=True)
     service = UnitService(db)
     payload = [
-        _as_unit_response(await service.serialize_unit(unit))
+        _as_learner_unit_response(await service.serialize_unit(unit))
         for unit in units
     ]
     return success_response(SalesTrainerUnitListResponse(items=payload, total=total))
@@ -261,7 +266,7 @@ async def get_published_unit(
             status_code=404,
             message="训练单元不存在或未发布。",
         )
-    return success_response(_as_unit_response(await service.serialize_unit(unit)))
+    return success_response(_as_learner_unit_response(await service.serialize_unit(unit)))
 
 
 @router.get("/units/{unit_id}/brief")
@@ -284,7 +289,7 @@ async def get_published_unit_brief(
     except MaterialServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     payload = {
-        "unit": _as_unit_response(await service.serialize_unit(unit)),
+        "unit": _as_learner_unit_response(await service.serialize_unit(unit)),
         "task_brief": brief["task_brief"],
         "materials": brief["materials"],
         "score_scheme": brief["score_scheme"],

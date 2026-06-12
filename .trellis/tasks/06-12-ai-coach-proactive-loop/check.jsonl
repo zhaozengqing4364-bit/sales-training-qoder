@@ -1,0 +1,8 @@
+{"file":"AGENTS.md","reason":"完成定义、调查范围和配置化交付说明"}
+{"file":"CLAUDE.md","reason":"测试、lint、构建命令和产品宪法"}
+{"file":"backend/AGENTS.md","reason":"后端验证 surface 和硬规则"}
+{"file":"backend/src/sales_trainer/AGENTS.md","reason":"销售训练后端配置、审计、测试要求"}
+{"file":"web/AGENTS.md","reason":"前端 typecheck、lint、vitest 和 API 调用边界"}
+{"file":"docs/api-contract/sales-trainer.md","reason":"核对实现与 API 契约一致"}
+{"file":".trellis/spec/backend/index.md","reason":"后端质量检查清单"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端质量检查清单"}

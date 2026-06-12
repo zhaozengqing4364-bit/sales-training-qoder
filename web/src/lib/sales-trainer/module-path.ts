@@ -48,6 +48,7 @@ export interface SalesTrainerModuleView {
     pptUploadHref: string | null;
     learnHubHref: string | null;
     learnHref: string | null;
+    coachHref: string | null;
     hubUnitId: string | null;
     audioOptions: ModuleAudioOption[];
     disabled: boolean;
@@ -142,6 +143,7 @@ function buildPptView(enriched: EnrichedLevel): SalesTrainerModuleView {
         pptUploadHref: disabled ? null : enriched.level.target_path,
         learnHubHref: null,
         learnHref: null,
+        coachHref: null,
         hubUnitId: null,
         audioOptions: [],
         disabled,
@@ -151,6 +153,10 @@ function buildPptView(enriched: EnrichedLevel): SalesTrainerModuleView {
 
 function buildBusinessSkillsView(enriched: EnrichedLevel): SalesTrainerModuleView {
     const disabled = isDisabled(enriched, false);
+    const availability = enriched.level.ai_coach_availability;
+    const coachHref = availability?.available && availability.coach_path
+        ? availability.coach_path
+        : null;
     return {
         key: "business_skills",
         title: titleFor(enriched, "商务技巧"),
@@ -160,6 +166,7 @@ function buildBusinessSkillsView(enriched: EnrichedLevel): SalesTrainerModuleVie
         pptUploadHref: null,
         learnHubHref: disabled ? null : "/sales-trainer/business-skills",
         learnHref: disabled ? null : businessSkillsHref(enriched.level),
+        coachHref: disabled ? null : coachHref,
         hubUnitId: enriched.level.unit_id,
         audioOptions: [],
         disabled,
@@ -182,6 +189,7 @@ function buildElevatorPitchView(enrichedLevels: EnrichedLevel[]): SalesTrainerMo
         pptUploadHref: null,
         learnHubHref: null,
         learnHref: null,
+        coachHref: null,
         hubUnitId: null,
         audioOptions: enrichedLevels
             .filter((item) => !isDisabled(item, false))
@@ -205,6 +213,7 @@ function buildRealtimePlaceholderView(enriched: EnrichedLevel): SalesTrainerModu
         pptUploadHref: null,
         learnHubHref: null,
         learnHref: null,
+        coachHref: null,
         hubUnitId: null,
         audioOptions: [],
         disabled: true,

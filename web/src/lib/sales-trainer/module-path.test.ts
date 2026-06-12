@@ -157,6 +157,38 @@ describe("module-path", () => {
         });
     });
 
+    it("adds coach href for available business skills AI coach", () => {
+        const businessLevel: SalesTrainerPathLevel = {
+            ...level({
+                unit_id: "business-unit",
+                unit_type: "quiz",
+                order_index: 2,
+                level_title: "第二关：商务技巧",
+                target_path: "/sales-trainer/business-skills",
+            }),
+            module_key: "business_skills" as const,
+            module_type: "article_exam" as const,
+            ai_coach_availability: {
+                enabled: true,
+                configured: true,
+                available: true,
+                coach_path: "/sales-trainer/business-skills/coach",
+                disabled_reason: null,
+                allowed_interaction_types: ["single_choice", "multiple_choice"],
+            },
+        };
+
+        const views = buildModuleViews(
+            path([businessLevel], NEWCOMER_TRAINING_PATH_KEY),
+            new Map<string, SalesTrainerUnit>(),
+        );
+
+        expect(views[0]).toMatchObject({
+            key: "business_skills",
+            coachHref: "/sales-trainer/business-skills/coach",
+        });
+    });
+
     it("prefers active path revision module identity over stale unit config", () => {
         const activeLevel = {
             ...level({

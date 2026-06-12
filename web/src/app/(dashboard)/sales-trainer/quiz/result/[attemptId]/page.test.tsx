@@ -186,6 +186,100 @@ describe("SalesTrainerQuizResultPage", () => {
         expect(screen.queryByText("仅计分")).toBeNull();
     });
 
+    it("shows AI coach entry for failed business skills attempts when available", async () => {
+        getQuizAttemptMock.mockResolvedValue({
+            attempt_id: "attempt-1",
+            unit_id: "unit-1",
+            user_id: "user-1",
+            total_score: 60,
+            max_score: 100,
+            passed: false,
+            status: "scored",
+            submitted_at: "2026-05-28T00:00:00Z",
+            answers: [
+                {
+                    answer_id: "answer-1",
+                    question_id: "question-1",
+                    question_type: "single_choice",
+                    answer_payload: "B",
+                    question_title: "商务礼仪",
+                    question_stem: "见客户前应先确认什么？",
+                    options: [],
+                    correct_answer: "A",
+                    reference_answer: "A. 客户背景",
+                    explanation: null,
+                    scoring_feedback: null,
+                    scoring_reason: null,
+                    normalized_score: null,
+                    is_correct: false,
+                    score: 0,
+                    created_at: "2026-05-28T00:00:00Z",
+                },
+            ],
+        });
+        listPathsMock.mockResolvedValue({
+            items: [
+                {
+                    path_key: "newcomer_training_path_v1",
+                    title: "新人训练路径",
+                    goal_title: "掌握新人训练路径",
+                    total_levels: 1,
+                    completed_levels: 0,
+                    current_level_id: "unit-1",
+                    next_level_id: "unit-1",
+                    levels: [
+                        {
+                            unit_id: "unit-1",
+                            name: "商务技巧",
+                            description: null,
+                            unit_type: "quiz",
+                            module_key: "business_skills",
+                            module_type: "article_exam",
+                            order_index: 2,
+                            level_title: "第二关：商务技巧",
+                            level_description: "商务技巧",
+                            locked: false,
+                            lock_reason: null,
+                            status: "available",
+                            completion_rule: "passed",
+                            primary_action_label: "开始学习",
+                            retry_action_label: "重练本关",
+                            review_action_label: "查看结果",
+                            target_path: "/sales-trainer/business-skills",
+                            ai_coach_availability: {
+                                enabled: true,
+                                configured: true,
+                                available: true,
+                                coach_path: "/sales-trainer/business-skills/coach",
+                                disabled_reason: null,
+                                allowed_interaction_types: ["single_choice", "multiple_choice"],
+                            },
+                            latest_result: null,
+                        },
+                    ],
+                    goal_context: {
+                        goal_title: "掌握新人训练路径",
+                        score_basis: "sales_trainer_path_projection_v1",
+                        evidence_items: [],
+                        weak_points: [],
+                        next_recommendation: null,
+                    },
+                },
+            ],
+            total: 1,
+        });
+
+        render(<SalesTrainerQuizResultPage />);
+
+        expect(await screen.findByText("未通过")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "重新考试" }).getAttribute("href")).toBe(
+            "/sales-trainer/business-skills/exam?unitId=unit-1",
+        );
+        expect(screen.getAllByRole("link", { name: /进入 AI 教练/ })[0].getAttribute("href")).toBe(
+            "/sales-trainer/business-skills/coach",
+        );
+    });
+
     it("renders AI short-answer feedback when scoring succeeds", async () => {
         getQuizAttemptMock.mockResolvedValue({
             attempt_id: "attempt-1",

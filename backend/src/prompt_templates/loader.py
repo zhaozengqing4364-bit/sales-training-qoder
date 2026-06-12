@@ -128,12 +128,14 @@ class PromptTemplateLoader:
         Returns:
             PromptTemplate or None
         """
-        from sqlalchemy import select
+        from sqlalchemy import String, cast, select
 
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await db_session.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)
+            select(PromptTemplateDB).where(
+                cast(PromptTemplateDB.id, String) == str(template_id)
+            )
         )
         db_template = result.scalar_one_or_none()
 

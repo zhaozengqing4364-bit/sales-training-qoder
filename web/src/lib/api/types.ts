@@ -4634,6 +4634,17 @@ export interface SalesTrainerUnitListResponse {
     total: number;
 }
 
+export type SalesTrainerAiCoachInteractionType = "single_choice" | "multiple_choice" | "short_answer";
+
+export interface SalesTrainerAiCoachAvailability {
+    enabled: boolean;
+    configured: boolean;
+    available: boolean;
+    coach_path: string | null;
+    disabled_reason: string | null;
+    allowed_interaction_types: SalesTrainerAiCoachInteractionType[];
+}
+
 export interface SalesTrainerPathLevel {
     unit_id: string;
     name: string;
@@ -4652,6 +4663,7 @@ export interface SalesTrainerPathLevel {
     retry_action_label: string;
     review_action_label: string;
     target_path: string;
+    ai_coach_availability?: SalesTrainerAiCoachAvailability | null;
     latest_result: {
         status: string;
         passed: boolean | null;
@@ -4799,6 +4811,14 @@ export interface NewcomerPathModuleConfig {
     readonly retry_action_label: string | null;
     readonly review_action_label: string | null;
     readonly guidance_templates: Readonly<Record<string, string>>;
+}
+
+export interface NewcomerArticleProgressResponse {
+    module_key: string;
+    learning_content_id: string;
+    completed_chapter_ids: string[];
+    total_chapters: number;
+    is_completed: boolean;
 }
 
 export interface NewcomerPathConfigPayload {
@@ -5670,6 +5690,302 @@ export interface ExaminerAgentSimulationRequest {
     learner_level?: ExaminerAgentLearnerLevel;
     sample_answer: string;
     question_id?: string;
+}
+
+// ─── AI Coach types (v1 — public renderer contract) ───
+//
+// Mirrors backend `sales_trainer/schemas.py`:
+//   - AiCoachInteractionPublicV1 / PublicListV1
+//   - AiCoachAnswerPayloadV1
+//   - AiCoachScoreResultV1
+//   - AiCoachTurnPublicV1
+//   - AiCoachSessionPublicResponse
+//
+// The frontend renderer (`components/ai-coach/interactions/`) only
+// accepts values shaped by these types — never LLM-supplied executable
+// structure or arbitrary components.
+
+export type AiCoachInteractionTypeV1 =
+    | "single_choice"
+    | "multiple_choice"
+    | "short_answer";
+
+export interface AiCoachInteractionOptionV1 {
+    readonly option_id: string;
+    readonly text: string;
+}
+
+export interface AiCoachInteractionPublicV1 {
+    readonly schema_version: "ai_coach_interaction_public_v1";
+    readonly interaction_id: string;
+    readonly session_id: string;
+    readonly turn_number: number;
+    readonly interaction_type: AiCoachInteractionTypeV1;
+    readonly stem: string;
+    readonly options?: readonly AiCoachInteractionOptionV1[] | null;
+    readonly answer_constraints: {
+        readonly min_selected?: number;
+        readonly max_selected?: number;
+        readonly min_length?: number;
+        readonly max_length?: number;
+    };
+}
+
+export type AiCoachScoreFeedbackStateV1 = "pending" | "scored" | "failed";
+
+export interface AiCoachInteractionPublicListV1 {
+    readonly interaction: AiCoachInteractionPublicV1;
+    readonly score_feedback_state: AiCoachScoreFeedbackStateV1;
+}
+
+export type AiCoachAnswerPayloadV1 =
+    | {
+          readonly variant: "choice";
+          readonly option_ids: readonly string[];
+      }
+    | {
+          readonly variant: "text";
+          readonly text: string;
+      };
+
+export interface AiCoachScoreResultV1 {
+    readonly score: number;
+    readonly max_score: number;
+    readonly feedback: string;
+    readonly missed_points: readonly string[];
+    readonly next_turn_available: boolean;
+    readonly finished: boolean;
+}
+
+export interface AiCoachTurnPublicV1 {
+    readonly turn_id: string;
+    readonly turn_number: number;
+    readonly public_interaction: AiCoachInteractionPublicV1 | null;
+    readonly user_answer_payload: Record<string, unknown> | null;
+    readonly score: number | null;
+    readonly max_score: number | null;
+    readonly ai_feedback: string | null;
+    readonly missed_points: readonly string[];
+    readonly next_turn_available: boolean;
+}
+
+export type AiCoachSessionStatusV1 = "in_progress" | "completed" | "failed";
+export type AiCoachMasteryStateV1 = "mastered" | "not_mastered";
+
+export interface AiCoachSessionPublicV1 {
+    readonly session_id: string;
+    readonly module_key: string;
+    readonly status: AiCoachSessionStatusV1;
+    readonly mastery_state: AiCoachMasteryStateV1 | null;
+    readonly total_score: number | null;
+    readonly max_score: number | null;
+    readonly current_turn: number;
+    readonly min_turns: number;
+    readonly max_turns: number;
+    readonly mastery_threshold: number;
+    readonly overall_mastered: boolean;
+    readonly created_at: string;
+    readonly updated_at: string;
+    readonly turns: readonly AiCoachTurnPublicV1[];
+}
+
+/**
+ * Per-turn feedback payload returned by POST `/turns`. This is the
+ * discriminated wrapper that delivers the score result for a single
+ * submitted answer; the parent session is re-fetched via
+ * `getAiCoachSession` if a full state snapshot is needed.
+ */
+export interface AiCoachConfig {
+    enabled: boolean;
+    prompt_template_id: string | null;
+    min_turns: number;
+    max_turns: number;
+    mastery_threshold: number;
+}
+
+/**
+ * Deprecated: legacy turn shape (uses `question` / `user_answer` text fields
+ * and a `mastered` flag). Replaced by `AiCoachTurnPublicV1` which carries
+ * the typed public interaction. Kept for one migration cycle for any
+ * non-renderer code that still reads the old shape; new code must use
+ * `AiCoachTurnPublicV1`.
+ *
+ * @deprecated Use `AiCoachTurnPublicV1` from the v1 public contract.
+ */
+export interface AiCoachTurn {
+    turn_number: number;
+    question: string;
+    user_answer: string | null;
+    ai_feedback: string | null;
+    score: number | null;
+    missed_points: string[];
+    suggestions: string[];
+    mastered: boolean;
+}
+
+/**
+ * The renderer entry-point uses the v1 public contract. Aliases are kept
+ * so existing imports of `AiCoachSession` / `AiCoachTurn` continue to
+ * resolve at compile time during the migration window.
+ *
+ * @deprecated Use `AiCoachSessionPublicV1` / `AiCoachTurnPublicV1`.
+ */
+export type AiCoachSession = AiCoachSessionPublicV1;
+export type AiCoachTurnPublic = AiCoachTurnPublicV1;
+
+export interface AiCoachSessionCreateRequest {
+    module_key: string;
+}
+
+export interface AiCoachTurnSubmitRequest {
+    answer_payload: AiCoachAnswerPayloadV1;
+}
+
+export interface AiCoachTurnFeedbackV1 {
+    readonly session_id: string;
+    readonly turn: AiCoachTurnPublicV1;
+    readonly score_result: AiCoachScoreResultV1 | null;
+    readonly next_turn_available: boolean;
+    readonly overall_mastered: boolean;
+}
+
+export type AiCoachUiEventTypeV1 =
+    | "assistant_text"
+    | "quiz_card"
+    | "quiz_result"
+    | "explanation_card"
+    | "summary_card"
+    | "followup_prompt";
+
+export type AiCoachUiEventStatusV1 =
+    | "pending"
+    | "submitted"
+    | "scored"
+    | "failed";
+
+export type AiCoachNextActionV1 =
+    | "continue_drill"
+    | "increase_difficulty"
+    | "remediate"
+    | "switch_scenario"
+    | "summarize"
+    | "ask_user_choice"
+    | "end_session";
+
+export interface AiCoachCoachStatePublicV1 {
+    readonly session_phase: "starting" | "answering" | "reviewing" | "choosing" | "summarizing" | "completed";
+    readonly active_event_id: string | null;
+    readonly auto_step_count: number;
+    readonly answered_card_count: number;
+    readonly correct_streak: number;
+    readonly incorrect_streak: number;
+    readonly current_focus: string | null;
+    readonly difficulty: "warmup" | "normal" | "challenge";
+    readonly last_action: AiCoachNextActionV1 | null;
+    readonly can_auto_advance: boolean;
+    readonly stopped_reason: string | null;
+}
+
+export interface AiCoachQuizCardPayloadPublicV1 {
+    readonly interaction: AiCoachInteractionPublicV1;
+    readonly explanation?: string | null;
+}
+
+export interface AiCoachExplanationCardPayloadV1 {
+    readonly title?: string | null;
+    readonly body: string;
+}
+
+export interface AiCoachSummaryCardPayloadV1 {
+    readonly title?: string | null;
+    readonly items: readonly string[];
+    readonly score_percent?: number | null;
+    readonly mastered?: boolean | null;
+    readonly strengths?: readonly string[];
+    readonly weaknesses?: readonly string[];
+    readonly next_steps?: readonly string[];
+}
+
+export interface AiCoachFollowupPromptPayloadV1 {
+    readonly prompts: readonly string[];
+}
+
+export interface AiCoachAssistantTextPayloadV1 {
+    readonly text: string;
+}
+
+export interface AiCoachQuizResultPayloadV1 {
+    readonly score_result: AiCoachScoreResultV1;
+}
+
+interface AiCoachUiEventPublicBaseV1 {
+    readonly event_id: string;
+    readonly message_id: string;
+    readonly status: AiCoachUiEventStatusV1;
+    readonly answer_payload: AiCoachAnswerPayloadV1 | null;
+    readonly score_result: AiCoachScoreResultV1 | null;
+    readonly order_index: number;
+    readonly created_at: string;
+}
+
+export type AiCoachUiEventPublicV1 =
+    | (AiCoachUiEventPublicBaseV1 & {
+          readonly type: "quiz_card";
+          readonly payload: AiCoachQuizCardPayloadPublicV1;
+      })
+    | (AiCoachUiEventPublicBaseV1 & {
+          readonly type: "explanation_card";
+          readonly payload: AiCoachExplanationCardPayloadV1;
+      })
+    | (AiCoachUiEventPublicBaseV1 & {
+          readonly type: "summary_card";
+          readonly payload: AiCoachSummaryCardPayloadV1;
+      })
+    | (AiCoachUiEventPublicBaseV1 & {
+          readonly type: "followup_prompt";
+          readonly payload: AiCoachFollowupPromptPayloadV1;
+      })
+    | (AiCoachUiEventPublicBaseV1 & {
+          readonly type: "assistant_text";
+          readonly payload: AiCoachAssistantTextPayloadV1;
+      })
+    | (AiCoachUiEventPublicBaseV1 & {
+          readonly type: "quiz_result";
+          readonly payload: AiCoachQuizResultPayloadV1;
+      });
+
+export interface AiCoachChatMessagePublicV1 {
+    readonly message_id: string;
+    readonly role: "user" | "assistant";
+    readonly content: string;
+    readonly order_index: number;
+    readonly created_at: string;
+}
+
+export interface AiCoachChatSessionPublicV1 {
+    readonly session_id: string;
+    readonly module_key: string;
+    readonly status: AiCoachSessionStatusV1;
+    readonly created_at: string;
+    readonly updated_at: string;
+    readonly messages: readonly AiCoachChatMessagePublicV1[];
+    readonly ui_events: readonly AiCoachUiEventPublicV1[];
+    readonly coach_state?: AiCoachCoachStatePublicV1 | null;
+}
+
+export interface AiCoachChatSessionCreateRequest {
+    readonly module_key: string;
+    readonly resume_strategy?: "latest_in_progress" | "new";
+}
+
+export interface AiCoachChatMessageCreateRequest {
+    readonly content?: string;
+    readonly command?: "continue" | "explain" | "switch_scenario" | "summarize" | "end" | "retry";
+    readonly event_id?: string;
+}
+
+export interface AiCoachChatEventAnswerSubmitRequest {
+    readonly answer_payload: AiCoachAnswerPayloadV1;
 }
 
 export interface ExaminerAgentErrorDetails {

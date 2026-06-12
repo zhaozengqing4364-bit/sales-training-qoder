@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
     BookOpen,
+    Bot,
     ClipboardList,
     FileText,
     Headphones,
@@ -30,9 +31,10 @@ interface ContextNavGroup {
     readonly items: readonly ContextNavItem[];
     readonly label: string;
     readonly root: string;
+    readonly roots?: readonly string[];
 }
 
-const CONTEXT_NAV_GROUPS = [
+const CONTEXT_NAV_GROUPS: readonly ContextNavGroup[] = [
     {
         root: "/admin/sales-trainer/questions",
         label: "题库管理",
@@ -51,7 +53,11 @@ const CONTEXT_NAV_GROUPS = [
     {
         root: "/admin/sales-trainer/paths",
         label: "路径配置",
-        items: [{ href: "/admin/sales-trainer/paths", label: "路径配置", icon: Route }],
+        roots: ["/admin/sales-trainer/paths", "/admin/sales-trainer/ai-coach"],
+        items: [
+            { href: "/admin/sales-trainer/paths", label: "路径配置", icon: Route },
+            { href: "/admin/sales-trainer/ai-coach", label: "AI 教练配置", icon: Bot },
+        ],
     },
     {
         root: "/admin/sales-trainer/articles",
@@ -98,7 +104,7 @@ const CONTEXT_NAV_GROUPS = [
         label: "工作台",
         items: [{ href: "/admin/sales-trainer", label: "工作台", icon: LayoutDashboard }],
     },
-] as const satisfies readonly ContextNavGroup[];
+];
 
 interface SalesTrainerAdminModuleNavProps {
     currentPath: string;
@@ -112,7 +118,9 @@ function isPathInGroup(currentPath: string, root: string): boolean {
 }
 
 function getContextNavGroup(currentPath: string): ContextNavGroup {
-    return CONTEXT_NAV_GROUPS.find((group) => isPathInGroup(currentPath, group.root))
+    return CONTEXT_NAV_GROUPS.find((group) =>
+        (group.roots ?? [group.root]).some((root) => isPathInGroup(currentPath, root)),
+    )
         ?? CONTEXT_NAV_GROUPS[CONTEXT_NAV_GROUPS.length - 1];
 }
 

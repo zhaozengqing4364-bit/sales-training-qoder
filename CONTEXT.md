@@ -42,6 +42,8 @@
 - 电梯演讲：按 10/20/30 分钟等后台配置选项完成 PPT 演讲录音和评分。
 - 实时对练占位：仅展示未开放状态；本阶段不创建 realtime practice session。
 
+**商务技巧 AI 教练**：商务技巧模块下的可选 Chatbot 训练入口。学员进入 `/sales-trainer/business-skills/coach` 后与 AI 教练自由对话，AI 在消息流中插入后端白名单 `ui_event` 卡片（如 `quiz_card`、`explanation_card`、`summary_card`、`followup_prompt`）；前端只渲染注册好的 React 组件，不执行 LLM 返回的 JSX/HTML/脚本。它通过 `modules[].ai_coach` 配置启停、允许题型、允许 UI 事件、每轮卡片数、欢迎语、掌握阈值和 Prompt 绑定。主动训练闭环称为“教练主导训练局”：学员提交题卡后，后端根据评分和 `coach_state` 决定 `next_coach_action`（继续练、加难、补救、换场景、总结、让学员选择或结束），每次最多自动推进一步，再等待学员下一次作答或输入。它不同于策略中心的 `growth.ai_coach.rules`：后者是增长/触达规则，不管理新人训练路径商务技巧模块的生成式 UI 对话、评分 Prompt 或学员训练 session。
+
 **与 AI 实时对练的边界**：AI 实时对练由 `sales_bot`、`practice_sessions`、`training_runtime` 和 `/practice/[sessionId]` 负责，是语音实时对话运行时。新人训练路径不得绕过该边界直接创建、复用或变更实时对练会话；未来集成必须通过独立契约和启用开关进入。
 
 **禁止**：

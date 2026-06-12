@@ -148,6 +148,7 @@ describe("SalesTrainerModuleGrid", () => {
         expect(screen.getByRole("link", { name: /开始学习/ }).getAttribute("href")).toBe(
             "/sales-trainer/business-skills?unitId=a2",
         );
+        expect(screen.queryByRole("link", { name: "AI 教练" })).toBeNull();
         expect(screen.getByRole("link", { name: "5 分钟" }).getAttribute("href")).toBe(
             "/sales-trainer/audio/a3",
         );
@@ -163,10 +164,20 @@ describe("SalesTrainerModuleGrid", () => {
                 {
                     ...path.levels[1],
                     unit_id: "business-unit",
+                    module_key: "business_skills",
+                    module_type: "article_exam",
                     level_title: "第二关：商务技巧",
                     level_description: "先完成学习章节，再进入考试。",
                     primary_action_label: "进入学习页",
                     target_path: "/sales-trainer/business-skills",
+                    ai_coach_availability: {
+                        enabled: true,
+                        configured: true,
+                        available: true,
+                        coach_path: "/sales-trainer/business-skills/coach",
+                        disabled_reason: null,
+                        allowed_interaction_types: ["single_choice", "multiple_choice"],
+                    },
                 },
             ],
         };
@@ -190,6 +201,9 @@ describe("SalesTrainerModuleGrid", () => {
         expect(screen.getByText("先完成学习章节，再进入考试。")).toBeTruthy();
         expect(screen.getByRole("link", { name: "进入学习页" }).getAttribute("href")).toBe(
             "/sales-trainer/business-skills?unitId=business-unit",
+        );
+        expect(screen.getByRole("link", { name: "AI 教练" }).getAttribute("href")).toBe(
+            "/sales-trainer/business-skills/coach",
         );
         expect(screen.queryByText("PPT讲解录音")).toBeNull();
         expect(screen.queryByText("实时对练")).toBeNull();

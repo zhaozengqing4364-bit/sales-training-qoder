@@ -46,6 +46,16 @@ def can_manage_sales_trainer(user: User) -> bool:
     return is_sales_trainer_admin(user) or is_sales_trainer_content_admin(user)
 
 
+def can_manage_sales_trainer_modules(user: User) -> bool:
+    """管理模块开关、入口文案、轮数等配置。"""
+    return is_sales_trainer_admin(user) or is_sales_trainer_content_admin(user)
+
+
+def can_manage_sales_trainer_prompts(user: User) -> bool:
+    """管理 prompt 绑定、评分规则、掌握阈值等高风险训练规则。"""
+    return is_sales_trainer_admin(user)
+
+
 def can_view_sales_trainer_records(user: User) -> bool:
     return (
         is_sales_trainer_admin(user)

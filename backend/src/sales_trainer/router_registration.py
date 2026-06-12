@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import Depends, FastAPI
 
 from common.auth.service import require_role
+from sales_trainer.ai_coach_admin_api import router as ai_coach_admin_router
+from sales_trainer.ai_coach_api import router as ai_coach_router
 from sales_trainer.api import admin_router as sales_trainer_admin_router
 from sales_trainer.api import router as sales_trainer_router
 from sales_trainer.article_api import (
@@ -101,4 +103,15 @@ def register_sales_trainer_routers(app: FastAPI) -> None:
         newcomer_admin_unit_router,
         prefix="/api/v1",
         tags=["admin-newcomer-training-units"],
+    )
+    app.include_router(
+        ai_coach_router,
+        prefix="/api/v1",
+        tags=["newcomer-training-ai-coach"],
+        dependencies=[Depends(require_role(["admin", "user"]))],
+    )
+    app.include_router(
+        ai_coach_admin_router,
+        prefix="/api/v1",
+        tags=["admin-newcomer-training-ai-coach"],
     )

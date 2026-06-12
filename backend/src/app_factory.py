@@ -191,8 +191,8 @@ def create_app() -> FastAPI:
         environment=os.getenv("ENVIRONMENT", "development").strip().lower(),
     )
 
-    _configure_middleware(app)
     register_http_routes(app)
+    _configure_middleware(app)
     register_routers(app)
     register_websocket_routes(app)
 

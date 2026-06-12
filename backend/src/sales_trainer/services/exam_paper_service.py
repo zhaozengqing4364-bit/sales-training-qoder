@@ -12,6 +12,9 @@ from sales_trainer.schemas import (
     PaperRollbackRequest,
     QuizAttemptCreate,
 )
+from sales_trainer.services.article_exam_prerequisite_service import (
+    ArticleExamPrerequisiteService,
+)
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
@@ -162,6 +165,10 @@ class ExamPaperService:
         actor: User,
     ) -> SalesTrainerQuizAttempt:
         paper = await self.get_published_paper(payload.paper_id)
+        await ArticleExamPrerequisiteService(self._db).require_article_completed(
+            paper,
+            actor=actor,
+        )
         revision = await SalesTrainerAssetRevisionService(self._db).active_revision(
             resource_type=PAPER_RESOURCE_TYPE,
             logical_id=paper.paper_id,

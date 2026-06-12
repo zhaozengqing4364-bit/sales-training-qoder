@@ -81,6 +81,34 @@ def _path_payload(unit_id: str, title: str) -> dict[str, object]:
     }
 
 
+def _path_payload_with_ai_coach(unit_id: str, title: str) -> dict[str, object]:
+    payload = _path_payload(unit_id, title)
+    modules = payload["modules"]
+    assert isinstance(modules, list)
+    first_module = modules[0]
+    assert isinstance(first_module, dict)
+    first_module["ai_coach"] = {
+        "enabled": True,
+        "coach_mode": "mixed_drill",
+        "allowed_interaction_types": ["single_choice", "multiple_choice"],
+        "prompt_template_id": "11111111-1111-1111-1111-111111111111",
+        "prompt_revision_id": None,
+        "prompt_contract_hash": None,
+        "scoring_prompt_template_id": None,
+        "scoring_prompt_revision_id": None,
+        "scoring_contract_hash": None,
+        "min_turns": 3,
+        "max_turns": 10,
+        "mastery_threshold": 90,
+        "output_schema_version": "ai_coach_interaction_v1",
+        "generation_model": None,
+        "scoring_model": None,
+        "retry_policy": {"max_retries": 2, "retry_backoff": 1.0},
+        "failure_behavior": "skip_turn",
+    }
+    return payload
+
+
 @pytest.mark.asyncio
 async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     async_client: AsyncClient,
@@ -216,3 +244,159 @@ async def test_should_persist_path_config_revision_across_request_sessions(
     saved_revisions = list(revisions.scalars().all())
     assert len(saved_revisions) == 1
     assert saved_revisions[0].status == "working"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_ai_coach_high_risk_fields_via_path_config_for_content_admin(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    content_admin = _user("content_admin")
+    unit = _unit("path-config-ai-coach-rbac-unit", "商务技巧")
+    test_db.add_all([content_admin, unit])
+    await test_db.commit()
+
+    response = await async_client.put(
+        "/api/v1/admin/newcomer-training/path-config",
+        headers=_auth_headers(content_admin),
+        json=_path_payload_with_ai_coach(unit.unit_id, "商务技巧"),
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"] == "[PERMISSION_DENIED]"
+    assert "mastery_threshold" in body["message"]
+
+
+@pytest.mark.asyncio
+async def test_should_reject_ai_coach_high_risk_publish_for_content_admin(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    content_admin = _user("content_admin")
+    unit = _unit("ai-coach-publish-rbac-unit", "商务技巧")
+    test_db.add_all([admin, content_admin, unit])
+    await test_db.commit()
+
+    save_response = await async_client.put(
+        "/api/v1/admin/newcomer-training/path-config",
+        headers=_auth_headers(admin),
+        json=_path_payload_with_ai_coach(unit.unit_id, "商务技巧"),
+    )
+    assert save_response.status_code == 200, save_response.text
+
+    response = await async_client.post(
+        "/api/v1/admin/newcomer-training/path-config/publish",
+        headers=_auth_headers(content_admin),
+        json={"reason": "发布 AI 教练高风险配置"},
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"] == "[PERMISSION_DENIED]"
+    assert "mastery_threshold" in body["message"]
+
+
+@pytest.mark.asyncio
+async def test_should_reject_ai_coach_high_risk_rollback_for_content_admin(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    content_admin = _user("content_admin")
+    unit = _unit("ai-coach-rollback-rbac-unit", "商务技巧")
+    test_db.add_all([admin, content_admin, unit])
+    await test_db.commit()
+
+    save_first_response = await async_client.put(
+        "/api/v1/admin/newcomer-training/path-config",
+        headers=_auth_headers(admin),
+        json=_path_payload(unit.unit_id, "商务技巧第一版"),
+    )
+    assert save_first_response.status_code == 200, save_first_response.text
+    publish_first_response = await async_client.post(
+        "/api/v1/admin/newcomer-training/path-config/publish",
+        headers=_auth_headers(admin),
+        json={"reason": "第一版生效"},
+    )
+    assert publish_first_response.status_code == 200, publish_first_response.text
+    first_revision_id = publish_first_response.json()["data"]["active_revision_id"]
+
+    save_second_response = await async_client.put(
+        "/api/v1/admin/newcomer-training/path-config",
+        headers=_auth_headers(admin),
+        json=_path_payload_with_ai_coach(unit.unit_id, "商务技巧第二版"),
+    )
+    assert save_second_response.status_code == 200, save_second_response.text
+    publish_second_response = await async_client.post(
+        "/api/v1/admin/newcomer-training/path-config/publish",
+        headers=_auth_headers(admin),
+        json={"reason": "第二版生效"},
+    )
+    assert publish_second_response.status_code == 200, publish_second_response.text
+
+    response = await async_client.post(
+        "/api/v1/admin/newcomer-training/path-config/rollback",
+        headers=_auth_headers(content_admin),
+        json={"revision_id": first_revision_id, "reason": "回滚到无 AI 教练配置"},
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"] == "[PERMISSION_DENIED]"
+    assert "prompt_template_id" in body["message"]
+
+
+@pytest.mark.asyncio
+async def test_should_not_echo_fake_ai_coach_prompt_hash_on_admin_save(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    unit = _unit("path-config-ai-coach-admin-save-unit", "商务技巧")
+    test_db.add_all([admin, unit])
+    await test_db.commit()
+
+    response = await async_client.put(
+        "/api/v1/admin/newcomer-training/modules/business_skills/ai-coach/config",
+        headers=_auth_headers(admin),
+        json={
+            "enabled": True,
+            "coach_mode": "mixed_drill",
+            "allowed_interaction_types": ["single_choice", "multiple_choice"],
+            "prompt_template_id": "11111111-1111-1111-1111-111111111111",
+            "prompt_revision_id": None,
+            "prompt_contract_hash": "client-must-not-pin",
+            "scoring_prompt_template_id": None,
+            "scoring_prompt_revision_id": None,
+            "scoring_contract_hash": "client-must-not-pin-scoring",
+            "min_turns": 3,
+            "max_turns": 10,
+            "mastery_threshold": 80,
+            "output_schema_version": "client-version",
+            "generation_model": None,
+            "scoring_model": None,
+            "retry_policy": {"max_retries": 2, "retry_backoff": 1.0},
+            "failure_behavior": "skip_turn",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    ai_coach = response.json()["data"]["ai_coach"]
+    assert ai_coach["output_schema_version"] == "ai_coach_interaction_v1"
+    assert ai_coach["prompt_contract_hash"] is None
+    assert ai_coach["scoring_contract_hash"] is None
+
+    revision = (
+        await test_db.execute(
+            select(SalesTrainerAssetRevision).where(
+                SalesTrainerAssetRevision.resource_type
+                == NEWCOMER_PATH_RESOURCE_TYPE,
+                SalesTrainerAssetRevision.logical_id == NEWCOMER_PATH_LOGICAL_ID,
+            )
+        )
+    ).scalar_one()
+    module = revision.payload_json["modules"][0]
+    assert module["ai_coach"]["prompt_contract_hash"] is None
+    assert module["ai_coach"]["scoring_contract_hash"] is None
