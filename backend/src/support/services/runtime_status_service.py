@@ -22,20 +22,6 @@ from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, Presentation, SystemLog
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument
 from common.monitoring.logger import get_logger
-from curriculum_practice.services.roleplay.dual_read_observability import (
-    build_config_asset_center_overview_payload,
-)
-from curriculum_practice.services.roleplay.dual_read_promotion_gate import (
-    DualReadPromotionGateService,
-)
-from curriculum_practice.services.roleplay_contracts import (
-    ROLEPLAY_COMPLIANCE_METRICS_KEY,
-    roleplay_compliance_summary_from_session,
-)
-from presentation_coach.services.presentation_report_service import (
-    PresentationReportService,
-)
-from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 from support.services.asset_registry import (
     build_empty_asset_governance_indexes,
     get_asset_registration,
@@ -45,6 +31,13 @@ from support.services.asset_registry import (
     iter_asset_refs as iter_registered_asset_refs,
 )
 from support.services.runtime_roleplay_faults import build_roleplay_fault_candidate
+from support.services.runtime_contributors import (
+    build_empty_config_asset_center_payload,
+    build_registered_config_asset_center,
+    build_registered_presentation_review,
+    build_registered_roleplay_diagnostics,
+    build_registered_voice_policy_tool_types,
+)
 
 logger = get_logger(__name__)
 
@@ -537,8 +530,8 @@ class RuntimeStatusService:
         supplemental_logs = await self._load_supplemental_logs(
             window_start=window_start
         )
-        promotion_gate = await DualReadPromotionGateService(self.db).evaluate(
-            write_audit=False,
+        config_asset_center = await build_registered_config_asset_center(
+            self.db,
             now=now,
         )
         faults = self.build_faults_payload(
@@ -555,9 +548,7 @@ class RuntimeStatusService:
             now=now,
             window_hours=window_hours,
             supplemental_logs=supplemental_logs,
-            config_asset_center=build_config_asset_center_overview_payload(
-                promotion_gate=promotion_gate.to_payload()
-            ),
+            config_asset_center=config_asset_center,
         )
 
         logger.info(
@@ -633,17 +624,13 @@ class RuntimeStatusService:
         messages_by_session: dict[str, list[ConversationMessage]],
     ) -> list[RuntimeSessionRecord]:
         records: list[RuntimeSessionRecord] = []
-        tool_service = VoiceRuntimePolicyService(self.db)
-        presentation_report_service = PresentationReportService(self.db)
 
         for session in sessions:
             snapshot = extract_voice_policy_snapshot(session)
-            preview_tools = tool_service.build_stepfun_tools(snapshot)
-            effective_tool_types = [
-                str(tool.get("type") or "")
-                for tool in preview_tools
-                if isinstance(tool, dict)
-            ]
+            effective_tool_types = await build_registered_voice_policy_tool_types(
+                self.db,
+                snapshot,
+            )
             knowledge_diagnostics = build_session_runtime_diagnostics(
                 session=session,
                 snapshot=snapshot,
@@ -665,17 +652,12 @@ class RuntimeStatusService:
                     projection_error = f"[SESSION_EVIDENCE_FAILED] {exc}"
 
                 if projection_error is None and scenario_type == "presentation":
-                    review_result = (
-                        await presentation_report_service.build_presentation_review(
-                            str(session.session_id)
-                        )
+                    review = await build_registered_presentation_review(
+                        self.db,
+                        str(session.session_id),
                     )
-                    if review_result.is_success:
-                        presentation_review = review_result.value
-                    else:
-                        projection_error = (
-                            review_result.fallback or "[PRESENTATION_REVIEW_FAILED]"
-                        )
+                    presentation_review = review.payload
+                    projection_error = review.error
 
             # Extract audio audit diagnostics from voice_policy_snapshot.runtime_metrics
             audio_diagnostics = self._extract_audio_diagnostics(snapshot)
@@ -737,38 +719,7 @@ class RuntimeStatusService:
         session: PracticeSession,
         voice_policy_snapshot: dict[str, Any],
     ) -> dict[str, Any]:
-        runtime_state = getattr(session, "runtime_state", None)
-        curriculum_snapshot = getattr(session, "curriculum_snapshot", None)
-        summary = roleplay_compliance_summary_from_session(
-            curriculum_snapshot=curriculum_snapshot,
-            voice_policy_snapshot=voice_policy_snapshot,
-            runtime_state=runtime_state,
-        )
-        runtime_metrics = (
-            voice_policy_snapshot.get("runtime_metrics")
-            if isinstance(voice_policy_snapshot, dict)
-            else None
-        )
-        roleplay_metrics = (
-            runtime_metrics.get(ROLEPLAY_COMPLIANCE_METRICS_KEY)
-            if isinstance(runtime_metrics, dict)
-            else None
-        )
-        if not isinstance(roleplay_metrics, dict):
-            roleplay_metrics = {}
-        config_asset_runtime = (
-            summary.get("config_asset_runtime")
-            if isinstance(summary.get("config_asset_runtime"), dict)
-            else {}
-        )
-        return {
-            "summary": summary,
-            "asset_resolution": summary.get("asset_resolution"),
-            "config_asset_runtime": config_asset_runtime,
-            "timeline_count": len(roleplay_metrics.get("timeline") or [])
-            if isinstance(roleplay_metrics.get("timeline"), list)
-            else 0,
-        }
+        return build_registered_roleplay_diagnostics(session, voice_policy_snapshot)
 
     async def _load_supplemental_logs(
         self,
@@ -890,7 +841,7 @@ class RuntimeStatusService:
             },
             "roleplay": roleplay,
             "config_asset_center": config_asset_center
-            or build_config_asset_center_overview_payload(),
+            or build_empty_config_asset_center_payload(),
         }
 
     @classmethod

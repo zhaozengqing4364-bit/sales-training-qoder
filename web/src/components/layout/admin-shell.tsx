@@ -12,17 +12,21 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { isAuthenticationError } from "@/lib/api/client";
 import { authHandler } from "@/lib/auth-handler";
 import { cn } from "@/lib/utils";
-import type { CurrentUser } from "@/lib/auth/current-user";
+import {
+    canUseAdminConsoleRole,
+    shouldStayInSalesTrainerAdmin,
+    type CurrentUser,
+} from "@/lib/auth/current-user";
 
 const SALES_TRAINER_ADMIN_PREFIX = "/admin/sales-trainer";
 const SALES_TRAINER_MANAGER_ENTRY = "/admin/sales-trainer/units";
 
 function canUseAdminShell(role: string): boolean {
-    return role === "admin" || role === "support";
+    return canUseAdminConsoleRole(role);
 }
 
 function isSalesTrainerManagerRole(role: string): boolean {
-    return role === "support";
+    return shouldStayInSalesTrainerAdmin(role);
 }
 
 export function AdminShell({

@@ -7,6 +7,7 @@ from sales_trainer.permissions import (
     can_retry_sales_trainer_jobs,
     can_view_sales_trainer_logs,
     can_view_sales_trainer_records,
+    sales_trainer_admin_capability_projection,
     team_scope_department,
 )
 
@@ -87,3 +88,22 @@ def test_should_use_granular_route_guards_for_admin_surfaces() -> None:
     assert retry_error is not None
     assert retry_error.status_code == 403
     assert sales_trainer_api._require_job_retry(ops) is None
+
+
+def test_admin_capability_projection_uses_permission_authority() -> None:
+    content_admin = sales_trainer_admin_capability_projection(_user("content_admin"))
+    training_lead = sales_trainer_admin_capability_projection(_user("support"))
+    ops = sales_trainer_admin_capability_projection(_user("operations"))
+
+    assert content_admin["role_label"] == "内容管理员"
+    assert content_admin["capabilities"]["manage_content"] is True
+    assert content_admin["capabilities"]["view_records"] is False
+
+    assert training_lead["role_label"] == "培训负责人"
+    assert training_lead["capabilities"]["view_records"] is True
+    assert training_lead["capabilities"]["manage_content"] is False
+
+    assert ops["role_label"] == "运维人员"
+    assert ops["capabilities"]["retry_jobs"] is True
+    assert ops["capabilities"]["view_logs"] is True
+    assert ops["capabilities"]["manage_content"] is False

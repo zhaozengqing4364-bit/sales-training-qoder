@@ -1,0 +1,14 @@
+{"file":"AGENTS.md","reason":"项目 L0 工程宪章、配置化和完成定义约束"}
+{"file":"CLAUDE.md","reason":"项目命令、产品宪法和运行时边界"}
+{"file":"docs/architecture.md","reason":"模块边界、销售训练与实时运行时分离、评估/主管系统上下文"}
+{"file":"docs/api-contract/sales-trainer.md","reason":"新人训练路径 API、配置、AI Coach、训练记录和重评契约"}
+{"file":"docs/design/sales-trainer-system.md","reason":"05-28 销售训练 MVP 设计和已实现状态"}
+{"file":".trellis/spec/backend/index.md","reason":"后端实现前检查和验证命令"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"SQLAlchemy、索引、迁移和测试数据库约束"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Result、error_response、trace_id 和 typed error 约束"}
+{"file":".trellis/spec/frontend/admin-console-patterns.md","reason":"后台页面意图分层、入口整合和列表页约束"}
+{"file":"backend/src/sales_trainer/AGENTS.md","reason":"sales_trainer 子域职责、配置化和非实时边界"}
+{"file":"web/AGENTS.md","reason":"前端 API facade、测试和 UI 硬规则"}
+{"file":"web/src/app/admin/sales-trainer/AGENTS.md","reason":"销售训练后台页面和配置治理约束"}
+{"file":".trellis/tasks/05-28-sales-trainer-mvp/prd.md","reason":"MVP 基础闭环历史任务范围"}
+{"file":".trellis/tasks/06-12-ai-coach-proactive-loop/prd.md","reason":"AI Coach 主动训练闭环历史任务范围"}

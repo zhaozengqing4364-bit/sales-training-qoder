@@ -144,6 +144,7 @@ Rules, strategies, global defaults: 提示词管理, 业务规则, 评分规则�
 
 - Read-only first; export is a separate dialog or page, not mixed with detail browsing.
 - Session snapshot detail in a dialog (e.g. records Eye icon) is acceptable; export stays a distinct header entry.
+- When analytics pages depend on governed backend policy, display the effective policy diagnostics returned by the API and link to `management_entry`; do not duplicate thresholds, labels, or remediation rules in page code.
 
 ### 组织与权限 / 系统治理 (Org & System)
 
@@ -230,6 +231,20 @@ Curriculum assets (`CaseItem`, `RoleProfile`, `ExaminerAgent`) and `PracticeTemp
 | Template binding change | Save template draft + **republish template** | Amber `AdminContextBar` on template edit when case/role refs change |
 
 **Do not** encourage unpublish as the default change path. Duplicate preserves existing `curriculum_snapshot` references until the operator explicitly rebinds templates.
+
+---
+
+## Governed Policy Diagnostics
+
+Domain settings pages may show read-only snapshots of backend-managed policies when the API returns a diagnostic payload such as `phase2_policy`.
+
+Required behavior:
+
+- Render values from the API payload (`source`, `config_version`, `fallback_applied`, `fallback_reason`, thresholds), never page-local constants.
+- Show a navigation link to `management_entry` when provided.
+- Keep edits in the policy-center/business-rule surface, not the domain settings or analytics page.
+- Treat missing diagnostics as unknown/read-only, not as permission to invent defaults in the page.
+- Add a page test that proves the values shown came from the mocked API payload.
 
 **API surfaces** (admin):
 

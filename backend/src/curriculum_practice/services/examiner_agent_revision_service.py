@@ -23,11 +23,11 @@ from curriculum_practice.services.examiner_agent_revision_metadata import (
     examiner_agent_change_class,
     examiner_agent_lifecycle_metadata,
 )
-from sales_trainer.models import SalesTrainerAssetRevision
-from sales_trainer.services.asset_revision_service import (
+from curriculum_practice.services.sales_trainer_revision_adapter import (
+    OperationLogService,
+    SalesTrainerAssetRevision,
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.services.operation_log_service import OperationLogService
 
 
 class ExaminerAgentRevisionService:

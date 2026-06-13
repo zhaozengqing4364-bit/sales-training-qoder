@@ -5,13 +5,19 @@ import userEvent from "@testing-library/user-event";
 const mockStartChat = vi.fn();
 const mockSendChat = vi.fn();
 const mockSubmitEvent = vi.fn();
+const mockStartChatStream = vi.fn();
+const mockSendChatStream = vi.fn();
+const mockSubmitEventStream = vi.fn();
 
 vi.mock("@/lib/api/client", () => ({
     api: {
         newcomerTraining: {
             startAiCoachChatSession: (...args: unknown[]) => mockStartChat(...args),
+            startAiCoachChatSessionStream: (...args: unknown[]) => mockStartChatStream(...args),
             sendAiCoachChatMessage: (...args: unknown[]) => mockSendChat(...args),
+            sendAiCoachChatMessageStream: (...args: unknown[]) => mockSendChatStream(...args),
             submitAiCoachChatEventAnswer: (...args: unknown[]) => mockSubmitEvent(...args),
+            submitAiCoachChatEventAnswerStream: (...args: unknown[]) => mockSubmitEventStream(...args),
         },
     },
     getApiErrorMessage: (err: unknown) =>
@@ -25,6 +31,22 @@ vi.mock("next/link", () => ({
 }));
 
 import AiCoachPage from "./page";
+
+type ChatSession = { readonly session_id: string };
+
+async function* streamSession<T extends ChatSession>(session: T) {
+    yield {
+        type: "status" as const,
+        phase: "generating_next_card" as const,
+        message: "正在生成训练内容。",
+        session_id: session.session_id,
+    };
+    yield {
+        type: "session_snapshot" as const,
+        phase: "completed" as const,
+        session,
+    };
+}
 
 const welcomeSession = {
     session_id: "s1",
@@ -123,6 +145,8 @@ const scoredSession = {
             score_result: {
                 score: 100,
                 max_score: 100,
+                mastery_threshold: 80,
+                mastered: true,
                 feedback: "处理得当。",
                 missed_points: [],
                 next_turn_available: true,
@@ -228,15 +252,18 @@ describe("AiCoachPage", () => {
     });
 
     it("resumes a training session and renders the active card first", async () => {
-        mockStartChat.mockResolvedValue(cardSession);
+        mockStartChatStream.mockImplementation(() => streamSession(cardSession));
 
         render(<AiCoachPage />);
 
         await waitFor(() => {
-            expect(mockStartChat).toHaveBeenCalledWith({
-                module_key: "business_skills",
-                resume_strategy: "latest_in_progress",
-            });
+            expect(mockStartChatStream).toHaveBeenCalledWith(
+                {
+                    module_key: "business_skills",
+                    resume_strategy: "latest_active_or_new",
+                },
+                expect.any(AbortSignal),
+            );
         });
         expect(await screen.findByText("商务技巧 AI 教练")).toBeTruthy();
         expect(screen.getByText("当前阶段")).toBeTruthy();
@@ -249,8 +276,8 @@ describe("AiCoachPage", () => {
 
     it("keeps free text as an auxiliary coach question", async () => {
         const user = userEvent.setup();
-        mockStartChat.mockResolvedValue(welcomeSession);
-        mockSendChat.mockResolvedValue(cardSession);
+        mockStartChatStream.mockImplementation(() => streamSession(welcomeSession));
+        mockSendChatStream.mockImplementation(() => streamSession(cardSession));
 
         render(<AiCoachPage />);
 
@@ -259,9 +286,10 @@ describe("AiCoachPage", () => {
         await user.click(screen.getByRole("button", { name: "发送" }));
 
         await waitFor(() => {
-            expect(mockSendChat).toHaveBeenCalledWith(
+            expect(mockSendChatStream).toHaveBeenCalledWith(
                 "s1",
                 { content: "这个场景有什么注意点？" },
+                expect.any(AbortSignal),
             );
         });
         expect(await screen.findByText("可以，我们先做三张商务礼仪情境卡。")).toBeTruthy();
@@ -270,8 +298,8 @@ describe("AiCoachPage", () => {
 
     it("submits a quiz card answer and shows scored feedback", async () => {
         const user = userEvent.setup();
-        mockStartChat.mockResolvedValue(cardSession);
-        mockSubmitEvent.mockResolvedValue(scoredSession);
+        mockStartChatStream.mockImplementation(() => streamSession(cardSession));
+        mockSubmitEventStream.mockImplementation(() => streamSession(scoredSession));
 
         render(<AiCoachPage />);
 
@@ -285,20 +313,25 @@ describe("AiCoachPage", () => {
         await user.click(card.getByRole("button", { name: "提交" }));
 
         await waitFor(() => {
-            expect(mockSubmitEvent).toHaveBeenCalledWith(
+            expect(mockSubmitEventStream).toHaveBeenCalledWith(
                 "s1",
                 "e1",
                 { answer_payload: { variant: "choice", option_ids: ["A"] } },
+                expect.any(AbortSignal),
             );
         });
         expect(await screen.findByText("已提交")).toBeTruthy();
         expect(screen.getByText("处理得当。")).toBeTruthy();
-        expect(screen.getByText("100 / 100")).toBeTruthy();
+        expect(screen.getByText("答对")).toBeTruthy();
+        expect(screen.getByText("已达到本轮掌握标准：80%")).toBeTruthy();
+        expect(screen.queryByText("100 / 100")).toBeNull();
         expect(screen.getByText("拜访前先确认接待条件。")).toBeTruthy();
     });
 
     it("shows a clear unavailable state when chat config is disabled", async () => {
-        mockStartChat.mockRejectedValue(new Error("该模块未启用对话式 AI 教练。"));
+        mockStartChatStream.mockImplementation(() => {
+            throw new Error("该模块未启用对话式 AI 教练。");
+        });
 
         render(<AiCoachPage />);
 
@@ -308,8 +341,8 @@ describe("AiCoachPage", () => {
 
     it("renders learner-facing coach state and sends followup prompt through chat", async () => {
         const user = userEvent.setup();
-        mockStartChat.mockResolvedValue(promptedSession);
-        mockSendChat.mockResolvedValue({
+        mockStartChatStream.mockImplementation(() => streamSession(promptedSession));
+        mockSendChatStream.mockImplementation(() => streamSession({
             ...promptedSession,
             messages: [
                 ...promptedSession.messages,
@@ -321,7 +354,7 @@ describe("AiCoachPage", () => {
                     created_at: "2026-06-12T00:02:05Z",
                 },
             ],
-        });
+        }));
 
         render(<AiCoachPage />);
 
@@ -330,15 +363,16 @@ describe("AiCoachPage", () => {
         await user.click(screen.getByRole("button", { name: "换成客户异议" }));
 
         await waitFor(() => {
-            expect(mockSendChat).toHaveBeenCalledWith(
+            expect(mockSendChatStream).toHaveBeenCalledWith(
                 "s1",
                 { content: "换成客户异议" },
+                expect.any(AbortSignal),
             );
         });
     });
 
     it("does not activate pending quiz cards when backend clears active event id", async () => {
-        mockStartChat.mockResolvedValue(summarizedSession);
+        mockStartChatStream.mockImplementation(() => streamSession(summarizedSession));
 
         render(<AiCoachPage />);
 
@@ -350,8 +384,8 @@ describe("AiCoachPage", () => {
 
     it("sends fixed coach commands with the active event id", async () => {
         const user = userEvent.setup();
-        mockStartChat.mockResolvedValue(cardSession);
-        mockSendChat.mockResolvedValue(cardSession);
+        mockStartChatStream.mockImplementation(() => streamSession(cardSession));
+        mockSendChatStream.mockImplementation(() => streamSession(cardSession));
 
         render(<AiCoachPage />);
 
@@ -359,19 +393,22 @@ describe("AiCoachPage", () => {
         await user.click(screen.getByRole("button", { name: "讲解一下" }));
 
         await waitFor(() => {
-            expect(mockSendChat).toHaveBeenCalledWith(
+            expect(mockSendChatStream).toHaveBeenCalledWith(
                 "s1",
                 { command: "explain", event_id: "e1" },
+                expect.any(AbortSignal),
             );
         });
     });
 
     it("requires an explicit action before creating a new session", async () => {
         const user = userEvent.setup();
-        mockStartChat.mockResolvedValueOnce(cardSession).mockResolvedValueOnce({
-            ...cardSession,
-            session_id: "s2",
-        });
+        mockStartChatStream
+            .mockImplementationOnce(() => streamSession(cardSession))
+            .mockImplementationOnce(() => streamSession({
+                ...cardSession,
+                session_id: "s2",
+            }));
 
         render(<AiCoachPage />);
 
@@ -379,10 +416,13 @@ describe("AiCoachPage", () => {
         await user.click(screen.getByRole("button", { name: "新开一局" }));
 
         await waitFor(() => {
-            expect(mockStartChat).toHaveBeenLastCalledWith({
-                module_key: "business_skills",
-                resume_strategy: "new",
-            });
+            expect(mockStartChatStream).toHaveBeenLastCalledWith(
+                {
+                    module_key: "business_skills",
+                    resume_strategy: "new",
+                },
+                expect.any(AbortSignal),
+            );
         });
     });
 });

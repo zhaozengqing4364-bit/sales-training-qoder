@@ -6,7 +6,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.models import LearningChapter
 from curriculum_practice.services.learning_progress_service import (
     LearningProgressService,
 )
@@ -16,6 +15,7 @@ from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
     ArticleBindingServiceError,
 )
+from sales_trainer.services.curriculum_practice_adapter import LearningChapter
 from sales_trainer.services.exam_paper_config import ExamPaperServiceError
 from sales_trainer.services.path_config_models import path_config
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService

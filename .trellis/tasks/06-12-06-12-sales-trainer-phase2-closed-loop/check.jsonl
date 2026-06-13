@@ -1,0 +1,9 @@
+{"file":"AGENTS.md","reason":"检查是否满足配置化、审计、权限和完成证据要求"}
+{"file":"docs/api-contract/sales-trainer.md","reason":"检查 API DTO、错误语义、重评和训练记录契约是否同步"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试、lint、类型检查和禁止模式"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查查询分页、索引、迁移和 async SQLAlchemy 模式"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"检查 typed error、trace_id 和响应包裹"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端测试、类型检查和页面验证"}
+{"file":".trellis/spec/frontend/admin-console-patterns.md","reason":"检查后台入口整合和页面意图是否符合规范"}
+{"file":"backend/src/sales_trainer/AGENTS.md","reason":"检查 sales_trainer 子域边界、配置和审计规则"}
+{"file":"web/src/app/admin/sales-trainer/AGENTS.md","reason":"检查销售训练后台页面和 API facade 使用"}

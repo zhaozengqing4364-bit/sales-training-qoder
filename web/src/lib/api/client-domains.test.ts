@@ -7,6 +7,7 @@ import {
     createNewcomerTrainingDomain,
     createPracticeDomain,
     createSalesTrainerDomain,
+    createSupportRuntimeDomain,
 } from "./client-domains";
 
 describe("client domain factories", () => {
@@ -112,9 +113,93 @@ describe("client domain factories", () => {
         );
     });
 
+    it("loads admin sales-trainer capabilities through the domain facade", async () => {
+        const request = vi.fn().mockResolvedValue({
+            role: "support",
+            role_label: "培训负责人",
+            capabilities: {
+                admin_full_access: false,
+                manage_content: false,
+                manage_questions: true,
+                manage_modules: false,
+                manage_prompts: false,
+                view_records: true,
+                view_global_records: false,
+                retry_jobs: false,
+                regrade_history: false,
+                view_logs: true,
+                view_settings: true,
+            },
+            capability_keys: ["manage_questions", "view_records", "view_logs", "view_settings"],
+        });
+        const adminSalesTrainer = createAdminSalesTrainerDomain({
+            request,
+            upload: vi.fn(),
+            resolveApiBaseUrl: () => "http://localhost:3444/api/v1",
+        });
+
+        const result = await adminSalesTrainer.getCapabilities();
+
+        expect(request).toHaveBeenCalledWith("/admin/sales-trainer/capabilities");
+        expect(result.capabilities.view_records).toBe(true);
+    });
+
+    it("loads support runtime faults through the extracted domain normalizer", async () => {
+        const request = vi.fn().mockResolvedValue({
+            generated_at: "2026-06-13T00:00:00Z",
+            items: [
+                {
+                    source: "session",
+                    severity: "warning",
+                    kind: "asset_changed",
+                    summary: "配置资产变更后存在异常。",
+                    detected_at: "2026-06-13T00:01:00Z",
+                    session_id: "session-1",
+                    scenario_type: "sales",
+                    session_status: "completed",
+                    report_status: "completed",
+                    diagnostics: {
+                        linked_asset_changes: [
+                            {
+                                asset_type: "voice_runtime_profile",
+                                asset_label: "语音策略",
+                                asset_id: "asset-1",
+                                asset_name: "默认策略",
+                                admin_path: "/admin/voice-runtime",
+                                latest_change_label: "发布新版",
+                                latest_change_type: "publish",
+                                change_count_7d: "2",
+                            },
+                            {
+                                asset_name: "",
+                                admin_path: "",
+                                latest_change_label: "",
+                            },
+                        ],
+                    },
+                },
+            ],
+            count: "1",
+            limit: "20",
+            severity: "warning",
+        });
+        const supportRuntime = createSupportRuntimeDomain({ request });
+
+        const result = await supportRuntime.getFaults({
+            limit: 20,
+            severity: "warning",
+        });
+
+        expect(request).toHaveBeenCalledWith("/support/runtime/faults?limit=20&severity=warning");
+        expect(result.count).toBe(1);
+        expect(result.items[0].diagnostics.linked_asset_changes).toHaveLength(1);
+        expect(result.items[0].diagnostics.linked_asset_changes[0].change_count_7d).toBe(2);
+    });
+
     it("submits AI coach turn answers to the backend per-turn submit endpoint", async () => {
         const request = vi.fn().mockResolvedValue({ ok: true });
-        const newcomerTraining = createNewcomerTrainingDomain({ request });
+        const stream = vi.fn();
+        const newcomerTraining = createNewcomerTrainingDomain({ request, stream });
 
         await newcomerTraining.submitAiCoachTurn(
             "session-1",
@@ -137,6 +222,9 @@ describe("client domain factories", () => {
         const aiCoach = {
             enabled: true,
             chat_enabled: true,
+            streaming_enabled: true,
+            entry_resume_policy: "latest_active_or_new",
+            generation_timeout_seconds: 30,
             coach_mode: "mixed_drill",
             allowed_interaction_types: ["single_choice", "multiple_choice"],
             allowed_ui_event_types: [
@@ -165,6 +253,10 @@ describe("client domain factories", () => {
                 "end_session",
             ],
             chat_welcome_message: "你好，我是商务技巧 AI 教练。",
+            empty_response_recovery_message: "我没有拿到可操作的训练卡片。",
+            empty_response_recovery_prompts: ["继续下一题", "换个场景", "总结本轮"],
+            generation_failure_recovery_message: "我已保留当前训练局。",
+            generation_failure_recovery_prompts: ["重试下一题", "换主题", "总结一下"],
             min_turns: 3,
             max_turns: 10,
             mastery_threshold: 80,

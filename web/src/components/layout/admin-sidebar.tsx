@@ -51,10 +51,15 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/glass-tooltip";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
 import { authHandler } from "@/lib/auth-handler";
+import { isPlatformAdminRole } from "@/lib/auth/current-user";
 import type { CurrentUser } from "@/lib/auth/current-user";
+import type {
+    SalesTrainerAdminCapabilities,
+    SalesTrainerAdminCapabilityKey,
+} from "@/lib/api/types";
 
 interface UserInfo {
     id: string;
@@ -89,6 +94,7 @@ interface AdminSidebarContentProps {
     isCollapsed?: boolean;
     toggleSidebar?: () => void;
     showToggle?: boolean;
+    salesTrainerCapabilities?: SalesTrainerAdminCapabilities | null;
 }
 
 interface AdminNavItem {
@@ -138,14 +144,6 @@ const SALES_TRAINER_RECORD_ITEMS: AdminNavItem[] = [
     SALES_TRAINER_ITEMS.trainingRecords,
     SALES_TRAINER_ITEMS.audioSubmissions,
     SALES_TRAINER_ITEMS.scoreResults,
-];
-
-const SALES_TRAINER_OPS_ITEMS: AdminNavItem[] = [
-    SALES_TRAINER_ITEMS.trainingRecords,
-    SALES_TRAINER_ITEMS.audioSubmissions,
-    SALES_TRAINER_ITEMS.scoreResults,
-    SALES_TRAINER_ITEMS.settings,
-    SALES_TRAINER_ITEMS.operationLogs,
 ];
 
 const SALES_TRAINER_ALL_ITEMS: AdminNavItem[] = [
@@ -256,20 +254,51 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     },
 ];
 
-const SALES_TRAINER_CONTENT_NAV_SECTIONS: AdminNavSection[] = [
-    salesTrainerSection(SALES_TRAINER_CONTENT_ITEMS),
-];
-const SALES_TRAINER_RECORD_NAV_SECTIONS: AdminNavSection[] = [
-    salesTrainerSection(SALES_TRAINER_RECORD_ITEMS),
-];
-const SALES_TRAINER_OPS_NAV_SECTIONS: AdminNavSection[] = [
-    salesTrainerSection(SALES_TRAINER_OPS_ITEMS),
-];
-
 const EXACT_ACTIVE_HREFS: ReadonlySet<string> = new Set([
     "/admin",
     "/admin/sales-trainer",
 ] as const);
+
+const SALES_TRAINER_CAPABILITY_NAV: ReadonlyArray<{
+    capability: SalesTrainerAdminCapabilityKey;
+    items: AdminNavItem[];
+}> = [
+    {
+        capability: "manage_content",
+        items: [
+            SALES_TRAINER_ITEMS.workbench,
+            SALES_TRAINER_ITEMS.aiCoach,
+            SALES_TRAINER_ITEMS.scoreStandards,
+            SALES_TRAINER_ITEMS.articles,
+            SALES_TRAINER_ITEMS.papers,
+            SALES_TRAINER_ITEMS.materials,
+        ],
+    },
+    {
+        capability: "manage_modules",
+        items: [SALES_TRAINER_ITEMS.units, SALES_TRAINER_ITEMS.paths],
+    },
+    {
+        capability: "manage_prompts",
+        items: [SALES_TRAINER_ITEMS.aiCoach],
+    },
+    {
+        capability: "manage_questions",
+        items: [SALES_TRAINER_ITEMS.questions],
+    },
+    {
+        capability: "view_records",
+        items: SALES_TRAINER_RECORD_ITEMS,
+    },
+    {
+        capability: "view_settings",
+        items: [SALES_TRAINER_ITEMS.settings],
+    },
+    {
+        capability: "view_logs",
+        items: [SALES_TRAINER_ITEMS.operationLogs],
+    },
+];
 
 function isPathActive(pathname: string, href: string): boolean {
     if (EXACT_ACTIVE_HREFS.has(href)) {
@@ -290,41 +319,59 @@ function resolveActiveSectionKey(pathname: string, sections: AdminNavSection[]):
     return null;
 }
 
-function visibleAdminNavSections(currentUser: UserInfo | null): AdminNavSection[] {
-    const role = currentUser?.role;
-    if (role === "admin" || role === "super_admin") {
+function salesTrainerItemsForCapabilities(
+    capabilities: SalesTrainerAdminCapabilities | null | undefined,
+): AdminNavItem[] {
+    if (!capabilities) {
+        return [];
+    }
+    if (capabilities.capabilities.admin_full_access) {
+        return SALES_TRAINER_ALL_ITEMS;
+    }
+    const items: AdminNavItem[] = [];
+    const seen = new Set<string>();
+    for (const entry of SALES_TRAINER_CAPABILITY_NAV) {
+        if (!capabilities.capabilities[entry.capability]) {
+            continue;
+        }
+        for (const item of entry.items) {
+            if (seen.has(item.href)) {
+                continue;
+            }
+            seen.add(item.href);
+            items.push(item);
+        }
+    }
+    return items;
+}
+
+function visibleAdminNavSections(
+    currentUser: UserInfo | null,
+    salesTrainerCapabilities: SalesTrainerAdminCapabilities | null | undefined,
+): AdminNavSection[] {
+    if (isPlatformAdminRole(currentUser?.role)) {
         return ADMIN_NAV_SECTIONS;
     }
-    if (role === "content_admin" || role === "newcomer_content_admin") {
-        return SALES_TRAINER_CONTENT_NAV_SECTIONS;
+    if (salesTrainerCapabilities?.capabilities.admin_full_access) {
+        return ADMIN_NAV_SECTIONS;
     }
-    if (role === "support" || role === "training_lead" || role === "training_manager") {
-        return SALES_TRAINER_RECORD_NAV_SECTIONS;
-    }
-    if (role === "operations" || role === "ops" || role === "operator" || role === "sre") {
-        return SALES_TRAINER_OPS_NAV_SECTIONS;
-    }
-    return [];
+    const salesTrainerItems = salesTrainerItemsForCapabilities(salesTrainerCapabilities);
+    return salesTrainerItems.length > 0 ? [salesTrainerSection(salesTrainerItems)] : [];
 }
 
 function adminRoleLabel(
     role: string | undefined,
+    salesTrainerCapabilities?: SalesTrainerAdminCapabilities | null,
     options: { expanded?: boolean } = {},
 ): string {
-    if (role === "admin") {
-        return options.expanded ? "超级管理员" : "超级用户";
+    if (salesTrainerCapabilities?.role_label) {
+        return salesTrainerCapabilities.role_label;
     }
-    if (role === "super_admin") {
+    if (isPlatformAdminRole(role)) {
         return "超级管理员";
     }
-    if (role === "content_admin" || role === "newcomer_content_admin") {
-        return "内容管理员";
-    }
-    if (role === "support" || role === "training_lead" || role === "training_manager") {
-        return "培训负责人";
-    }
-    if (role === "operations" || role === "ops" || role === "operator" || role === "sre") {
-        return "运维人员";
+    if (options.expanded && role) {
+        return role;
     }
     return "普通用户";
 }
@@ -334,10 +381,42 @@ export function AdminSidebarContent({
     isCollapsed = false,
     toggleSidebar,
     showToggle = false,
+    salesTrainerCapabilities: providedSalesTrainerCapabilities,
 }: AdminSidebarContentProps) {
     const pathname = usePathname();
     const [openSectionKeys, setOpenSectionKeys] = useState<Record<string, boolean>>({});
-    const sections = visibleAdminNavSections(currentUser);
+    const [loadedSalesTrainerCapabilities, setLoadedSalesTrainerCapabilities] =
+        useState<SalesTrainerAdminCapabilities | null>(null);
+    const salesTrainerCapabilities = providedSalesTrainerCapabilities !== undefined
+        ? providedSalesTrainerCapabilities
+        : loadedSalesTrainerCapabilities;
+
+    useEffect(() => {
+        if (
+            !currentUser
+            || isPlatformAdminRole(currentUser.role)
+            || providedSalesTrainerCapabilities !== undefined
+        ) {
+            return;
+        }
+        let cancelled = false;
+        api.admin.salesTrainer.getCapabilities()
+            .then((capabilities) => {
+                if (!cancelled) {
+                    setLoadedSalesTrainerCapabilities(capabilities);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setLoadedSalesTrainerCapabilities(null);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [currentUser, providedSalesTrainerCapabilities]);
+
+    const sections = visibleAdminNavSections(currentUser, salesTrainerCapabilities);
     const activeSectionKey = resolveActiveSectionKey(pathname, sections);
 
     return (
@@ -387,7 +466,11 @@ export function AdminSidebarContent({
                 {/* Back to User Portal */}
                 <BackToUserLink isCollapsed={isCollapsed} />
                 {/* Admin User Card */}
-                <AdminUserCard currentUser={currentUser} isCollapsed={isCollapsed} />
+                <AdminUserCard
+                    currentUser={currentUser}
+                    isCollapsed={isCollapsed}
+                    salesTrainerCapabilities={salesTrainerCapabilities}
+                />
 
                 {/* Collapse Trigger */}
                 {showToggle && toggleSidebar && (
@@ -416,13 +499,15 @@ export function AdminSidebarContent({
 function AdminUserCard({
     currentUser,
     isCollapsed,
+    salesTrainerCapabilities,
 }: {
     currentUser: UserInfo | null;
     isCollapsed: boolean;
+    salesTrainerCapabilities?: SalesTrainerAdminCapabilities | null;
 }) {
     const userInfo = currentUser;
     const displayName = userInfo?.display_name || "管理员";
-    const roleLabel = adminRoleLabel(userInfo?.role);
+    const roleLabel = adminRoleLabel(userInfo?.role, salesTrainerCapabilities);
 
     if (isCollapsed) {
         return (
@@ -441,7 +526,10 @@ function AdminUserCard({
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
-                <AdminProfileModal userInfo={userInfo} />
+                <AdminProfileModal
+                    userInfo={userInfo}
+                    salesTrainerCapabilities={salesTrainerCapabilities}
+                />
             </Dialog>
         );
     }
@@ -462,12 +550,21 @@ function AdminUserCard({
                     </div>
                 </div>
             </DialogTrigger>
-            <AdminProfileModal userInfo={userInfo} />
+            <AdminProfileModal
+                userInfo={userInfo}
+                salesTrainerCapabilities={salesTrainerCapabilities}
+            />
         </Dialog>
     );
 }
 
-function AdminProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
+function AdminProfileModal({
+    userInfo,
+    salesTrainerCapabilities,
+}: {
+    userInfo: UserInfo | null;
+    salesTrainerCapabilities?: SalesTrainerAdminCapabilities | null;
+}) {
     const handleLogout = async () => {
         try {
             await api.auth.logout();
@@ -483,7 +580,9 @@ function AdminProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
     };
 
     const displayName = userInfo?.display_name || "管理员";
-    const roleLabel = adminRoleLabel(userInfo?.role, { expanded: true });
+    const roleLabel = adminRoleLabel(userInfo?.role, salesTrainerCapabilities, {
+        expanded: true,
+    });
 
     return (
         <DialogContent>

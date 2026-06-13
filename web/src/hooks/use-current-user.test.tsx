@@ -1,7 +1,7 @@
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { CurrentUser } from "@/lib/auth/current-user";
+import { normalizeCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 
 import { useCurrentUser } from "./use-current-user";
 
@@ -26,5 +26,15 @@ describe("useCurrentUser", () => {
     it("uses server-provided current user during SSR without requiring an app query provider", () => {
         expect(() => renderToString(<CurrentUserProbe />)).not.toThrow();
         expect(renderToString(<CurrentUserProbe />)).toContain("王小明");
+    });
+
+    it("preserves project-specific admin roles instead of coercing them to user", () => {
+        const user = normalizeCurrentUser({
+            id: "content-1",
+            display_name: "内容管理员",
+            role: "content_admin",
+        });
+
+        expect(user.role).toBe("content_admin");
     });
 });

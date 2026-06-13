@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AssetRefPickerOption } from "@/components/admin/asset-ref-picker";
+import type { AssetRefPickerOption } from "@/lib/admin/asset-ref-types";
 import { validateTemplateFormPreflight } from "@/lib/admin/template-form-preflight";
 
 const publishedOption = (id: string, label: string): AssetRefPickerOption => ({

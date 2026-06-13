@@ -27,9 +27,17 @@ from sales_trainer.unit_api import (
     newcomer_admin_unit_router,
     sales_trainer_admin_unit_revision_router,
 )
+from sales_trainer.dashboard_recommendation import (
+    register_sales_trainer_dashboard_recommendation_provider,
+)
+from sales_trainer.services.asset_revision_lineage_provider import (
+    register_sales_trainer_asset_revision_lineage_provider,
+)
 
 
 def register_sales_trainer_routers(app: FastAPI) -> None:
+    register_sales_trainer_dashboard_recommendation_provider()
+    register_sales_trainer_asset_revision_lineage_provider()
     app.include_router(
         sales_trainer_router,
         prefix="/api/v1",

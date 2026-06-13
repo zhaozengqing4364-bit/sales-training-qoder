@@ -66,6 +66,17 @@ describe("SalesTrainerSettingsPage", () => {
             max_file_size_mb: 200,
             allowed_mime_types: ["audio/wav"],
             file_url_expires_seconds: 3600,
+            phase2_policy: {
+                version: "sales_trainer_phase2_closed_loop_policy_v1",
+                low_score_threshold: 70,
+                repeat_practice_threshold: 2,
+                dashboard_record_limit: 500,
+                source: "database",
+                config_version: 3,
+                fallback_applied: false,
+                fallback_reason: null,
+                management_entry: "/admin/business-rules/sales-trainer-phase2",
+            },
         });
         getPathConfigMock.mockResolvedValue({
             source: "active_revision",
@@ -227,6 +238,13 @@ describe("SalesTrainerSettingsPage", () => {
         expect(listScoreResultsMock).toHaveBeenCalledWith({ limit: 100 });
 
         expect(screen.getByText("路径配置诊断")).toBeTruthy();
+        expect(screen.getByText("阶段 2 训练闭环策略")).toBeTruthy();
+        expect(screen.getByText("500")).toBeTruthy();
+        expect(screen.getByText("database")).toBeTruthy();
+        expect(screen.getByText("sales_trainer_phase2_closed_loop_policy_v1")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "打开策略治理" }).getAttribute("href")).toBe(
+            "/admin/business-rules/sales-trainer-phase2",
+        );
         expect(screen.getByText("当前生效版本 v3")).toBeTruthy();
         expect(screen.getByText("最近发布原因：发布绑定")).toBeTruthy();
         expect(screen.getByText("legacy 快照记录 2 条")).toBeTruthy();

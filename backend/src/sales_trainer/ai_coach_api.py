@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,9 @@ from sales_trainer.schemas import (
 from sales_trainer.services.ai_coach_chat_service import (
     AiCoachChatService,
     AiCoachChatServiceError,
+)
+from sales_trainer.services.ai_coach_chat_stream_service import (
+    AiCoachChatStreamService,
 )
 from sales_trainer.services.ai_coach_session_service import (
     AiCoachSessionService,
@@ -224,6 +227,20 @@ async def create_ai_coach_chat_session(
     )
 
 
+@router.post("/chat/sessions/stream")
+async def create_ai_coach_chat_session_stream(
+    payload: AiCoachChatSessionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    service = AiCoachChatStreamService(db)
+    return StreamingResponse(
+        service.stream_create_session(payload=payload, actor=current_user),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.get("/chat/sessions/{session_id}")
 async def get_ai_coach_chat_session(
     session_id: str,
@@ -239,6 +256,25 @@ async def get_ai_coach_chat_session(
     except AiCoachChatServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     return _success_json(data=session.model_dump(mode="json"))
+
+
+@router.post("/chat/sessions/{session_id}/messages/stream")
+async def send_ai_coach_chat_message_stream(
+    session_id: str,
+    payload: AiCoachChatMessageCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    service = AiCoachChatStreamService(db)
+    return StreamingResponse(
+        service.stream_send_message(
+            session_id=session_id,
+            payload=payload,
+            actor=current_user,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/chat/sessions/{session_id}/messages")
@@ -261,6 +297,27 @@ async def send_ai_coach_chat_message(
     return _success_json(
         data=session.model_dump(mode="json"),
         message="AI 教练已生成回复。",
+    )
+
+
+@router.post("/chat/sessions/{session_id}/events/{event_id}/answer/stream")
+async def submit_ai_coach_chat_event_answer_stream(
+    session_id: str,
+    event_id: str,
+    payload: AiCoachChatEventAnswerSubmit,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    service = AiCoachChatStreamService(db)
+    return StreamingResponse(
+        service.stream_submit_answer(
+            session_id=session_id,
+            event_id=event_id,
+            payload=payload,
+            actor=current_user,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

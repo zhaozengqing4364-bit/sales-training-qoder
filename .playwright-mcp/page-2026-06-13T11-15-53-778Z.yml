@@ -1,0 +1,132 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e10]:
+            - generic [ref=e11]: AI 销售教练
+            - generic [ref=e12]: 平台
+        - navigation "主导航" [ref=e13]:
+          - generic [ref=e14]: 菜单
+          - menubar [ref=e15]:
+            - menuitem "首页" [ref=e16] [cursor=pointer]:
+              - img [ref=e17]
+              - generic [ref=e20]: 首页
+            - menuitem "训练模式" [ref=e21] [cursor=pointer]:
+              - img [ref=e22]
+              - generic [ref=e27]: 训练模式
+            - menuitem "新人训练路径" [ref=e28] [cursor=pointer]:
+              - img [ref=e30]
+              - generic [ref=e33]: 新人训练路径
+            - menuitem "排行榜" [ref=e34] [cursor=pointer]:
+              - img [ref=e35]
+              - generic [ref=e36]: 排行榜
+            - menuitem "历史记录" [ref=e37] [cursor=pointer]:
+              - img [ref=e38]
+              - generic [ref=e42]: 历史记录
+          - generic [ref=e45]: 系统
+          - menubar [ref=e46]:
+            - menuitem "运行状态" [ref=e47] [cursor=pointer]:
+              - img [ref=e48]
+              - generic [ref=e50]: 运行状态
+            - menuitem "管理后台" [ref=e51] [cursor=pointer]:
+              - img [ref=e52]
+              - generic [ref=e55]: 管理后台
+        - generic [ref=e56]:
+          - button "帮助与反馈" [ref=e58]:
+            - img [ref=e59]
+            - generic [ref=e61]: 帮助与反馈
+          - generic [ref=e62] [cursor=pointer]:
+            - img [ref=e64]
+            - generic [ref=e67]:
+              - generic [ref=e68]: Developer
+              - generic [ref=e69]: Development
+            - img [ref=e71]
+          - button "折叠侧边栏" [ref=e74]:
+            - img [ref=e75]
+            - generic [ref=e78]: 折叠侧边栏
+    - main [ref=e79]:
+      - generic [ref=e81]:
+        - link "返回新人训练路径" [ref=e181] [cursor=pointer]:
+          - /url: /sales-trainer
+          - img [ref=e182]
+          - text: 返回新人训练路径
+        - generic [ref=e184]:
+          - generic [ref=e185]:
+            - generic [ref=e186]:
+              - img [ref=e188]
+              - generic [ref=e191]:
+                - heading "商务技巧 AI 教练" [level=1] [ref=e192]
+                - paragraph [ref=e193]: 教练主导训练局
+            - generic [ref=e194]:
+              - button "继续当前局" [ref=e195]:
+                - img [ref=e196]
+                - text: 继续当前局
+              - button "新开一局" [ref=e201]:
+                - img [ref=e202]
+                - text: 新开一局
+              - button "结束并总结" [ref=e205]:
+                - img [ref=e206]
+                - text: 结束并总结
+          - generic [ref=e209]:
+            - generic [ref=e210]:
+              - paragraph [ref=e211]: 当前阶段
+              - paragraph [ref=e212]: 作答中
+            - generic [ref=e213]:
+              - paragraph [ref=e214]: 训练主题
+              - paragraph [ref=e215]: 商务技巧
+            - generic [ref=e216]:
+              - paragraph [ref=e217]: 难度/进度
+              - paragraph [ref=e218]: 标准 · 已完成 0 题
+            - generic [ref=e219]:
+              - paragraph [ref=e220]: 下一步
+              - paragraph [ref=e221]: 继续同主题训练
+          - log "商务技巧 AI 教练对话" [ref=e222]:
+            - article [ref=e223]:
+              - img [ref=e225]
+              - generic [ref=e229]: 你好，我是商务技巧 AI 教练。你可以直接告诉我想练什么，比如“出 3 道商务礼仪单选题”。
+            - article [ref=e230]:
+              - img [ref=e232]
+              - generic [ref=e235]:
+                - generic [ref=e236]: 好的，我来为你发起一轮教练主导训练局。 **简短训练计划：** 1. **热身题**：1道关于客户拜访前商务礼仪的单选题，快速唤醒你的礼仪意识。 2. **核心练习**（后续）：更多场景题与反馈。 3. **总结复盘**：关键技巧提炼。 现在先来一道热身题，试试手吧！
+                - generic [ref=e238]:
+                  - generic [ref=e240]: 单选
+                  - heading "拜访客户前，以下哪项是最核心的商务礼仪准备？" [level=2] [ref=e241]
+                  - generic [ref=e242]:
+                    - button "A 提前了解客户背景与需求" [disabled] [ref=e243]:
+                      - generic [ref=e244]: A
+                      - generic [ref=e245]: 提前了解客户背景与需求
+                    - button "B 穿上最昂贵的西装" [disabled] [ref=e246]:
+                      - generic [ref=e247]: B
+                      - generic [ref=e248]: 穿上最昂贵的西装
+                    - button "C 准备大量礼物以表诚意" [disabled] [ref=e249]:
+                      - generic [ref=e250]: C
+                      - generic [ref=e251]: 准备大量礼物以表诚意
+                    - button "D 背诵产品介绍词" [disabled] [ref=e252]:
+                      - generic [ref=e253]: D
+                      - generic [ref=e254]: 背诵产品介绍词
+                  - generic [ref=e255]:
+                    - button "提交" [disabled]:
+                      - img
+                      - text: 提交
+            - article [ref=e272]:
+              - img [ref=e274]
+              - generic [ref=e277]:
+                - img [ref=e278]
+                - text: 正在批改，并判断下一步训练
+          - generic [ref=e257]:
+            - generic [ref=e258]:
+              - img [ref=e259]
+              - text: 教练动作
+            - button "继续下一题" [disabled]
+            - button "讲解一下" [disabled]
+            - button "换个场景" [disabled]
+            - button "总结本轮" [disabled]
+          - generic [ref=e266]:
+            - textbox "作答卡片是主流程；这里可以问教练一句" [ref=e267]
+            - button "发送" [disabled]:
+              - img
+  - button "Open Next.js Dev Tools" [ref=e88] [cursor=pointer]:
+    - img [ref=e89]
+  - alert [ref=e92]

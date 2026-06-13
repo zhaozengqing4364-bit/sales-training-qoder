@@ -16,6 +16,7 @@ import {
     Settings,
     SlidersHorizontal,
     Tags,
+    Target,
     type LucideIcon,
 } from "lucide-react";
 
@@ -35,6 +36,11 @@ interface ContextNavGroup {
 }
 
 const CONTEXT_NAV_GROUPS: readonly ContextNavGroup[] = [
+    {
+        root: "/admin/sales-trainer/units",
+        label: "模块单元",
+        items: [{ href: "/admin/sales-trainer/units", label: "模块单元", icon: Target }],
+    },
     {
         root: "/admin/sales-trainer/questions",
         label: "题库管理",
@@ -105,6 +111,11 @@ const CONTEXT_NAV_GROUPS: readonly ContextNavGroup[] = [
         items: [{ href: "/admin/sales-trainer", label: "工作台", icon: LayoutDashboard }],
     },
 ];
+
+export const SALES_TRAINER_ADMIN_WORKBENCH_LINKS: readonly ContextNavItem[] =
+    CONTEXT_NAV_GROUPS
+        .filter((group) => group.root !== "/admin/sales-trainer")
+        .map((group) => group.items[0]);
 
 interface SalesTrainerAdminModuleNavProps {
     currentPath: string;

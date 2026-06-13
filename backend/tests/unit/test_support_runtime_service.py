@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -17,6 +18,7 @@ from support.services.runtime_status_service import (
 )
 from common.config import Settings
 from curriculum_practice.services.roleplay.dual_read_observability import (
+    build_config_asset_center_overview_payload,
     record_dual_read_mismatch,
     reset_dual_read_observability_for_tests,
 )
@@ -454,6 +456,7 @@ def test_config_asset_center_overview_includes_dual_read_observability(
         now=now,
         window_hours=24,
         supplemental_logs=[],
+        config_asset_center=build_config_asset_center_overview_payload(),
     )
 
     config_asset_center = overview["config_asset_center"]
@@ -472,6 +475,22 @@ def test_config_asset_center_overview_includes_dual_read_observability(
             "phase_b1_hash": "hash-b1",
         }
     ]
+
+
+def test_runtime_status_service_does_not_import_domain_runtime_services() -> None:
+    service_path = (
+        Path(__file__).parents[2] / "src/support/services/runtime_status_service.py"
+    )
+    service_source = service_path.read_text()
+
+    forbidden_imports = (
+        "curriculum_practice.services.roleplay",
+        "curriculum_practice.services.roleplay_contracts",
+        "presentation_coach.services.presentation_report_service",
+        "sales_bot.services.voice_runtime_policy",
+    )
+    for forbidden_import in forbidden_imports:
+        assert forbidden_import not in service_source
 
 
 def test_asset_registry_covers_current_asset_types_and_extracts_refs() -> None:

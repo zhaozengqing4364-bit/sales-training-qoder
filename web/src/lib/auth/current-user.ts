@@ -1,4 +1,30 @@
-export type CurrentUserRole = "admin" | "user" | "support";
+export type CurrentUserRole = "admin" | "user" | "support" | (string & {});
+
+const PLATFORM_ADMIN_ROLES = new Set(["admin", "super_admin"]);
+const SALES_TRAINER_ADMIN_CONSOLE_ROLES = new Set([
+    "admin",
+    "super_admin",
+    "support",
+    "content_admin",
+    "newcomer_content_admin",
+    "training_lead",
+    "training_manager",
+    "ops",
+    "operator",
+    "operations",
+    "sre",
+]);
+const SALES_TRAINER_MANAGER_ENTRY_ROLES = new Set([
+    "support",
+    "content_admin",
+    "newcomer_content_admin",
+    "training_lead",
+    "training_manager",
+    "ops",
+    "operator",
+    "operations",
+    "sre",
+]);
 
 type CurrentUserRecord = {
     id?: unknown;
@@ -35,8 +61,8 @@ function toStringValue(value: unknown, fallback = ""): string {
 }
 
 function normalizeRole(value: unknown): CurrentUserRole {
-    if (value === "admin" || value === "support" || value === "user") {
-        return value;
+    if (typeof value === "string" && value.trim()) {
+        return value.trim().toLowerCase();
     }
     return "user";
 }
@@ -71,4 +97,16 @@ export function hasRequiredRole(
         return true;
     }
     return Boolean(user && requiredRoles.includes(user.role));
+}
+
+export function isPlatformAdminRole(role: string | undefined): boolean {
+    return Boolean(role && PLATFORM_ADMIN_ROLES.has(role));
+}
+
+export function canUseAdminConsoleRole(role: string | undefined): boolean {
+    return Boolean(role && SALES_TRAINER_ADMIN_CONSOLE_ROLES.has(role));
+}
+
+export function shouldStayInSalesTrainerAdmin(role: string | undefined): boolean {
+    return Boolean(role && SALES_TRAINER_MANAGER_ENTRY_ROLES.has(role));
 }

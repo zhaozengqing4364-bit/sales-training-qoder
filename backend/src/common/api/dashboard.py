@@ -30,8 +30,8 @@ from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
+from common.recommendations.dashboard_provider import first_dashboard_recommendation
 from common.services.practice_session_service import PracticeRetryEntryAssembler
-from sales_trainer.services.path_service import SalesTrainerPathService
 
 logger = get_logger(__name__)
 
@@ -176,45 +176,6 @@ def _build_next_goal_recommendation(session: PracticeSession) -> Recommendation 
         suggested_duration_minutes=12,
         is_due_today=True,
     )
-
-
-def _build_sales_trainer_path_recommendation(
-    paths: list[dict[str, Any]],
-) -> Recommendation | None:
-    for path in paths:
-        goal_context = path.get("goal_context")
-        if not isinstance(goal_context, dict):
-            continue
-        next_recommendation = goal_context.get("next_recommendation")
-        if not isinstance(next_recommendation, dict):
-            continue
-        target_path = next_recommendation.get("target_path")
-        if not isinstance(target_path, str) or not target_path:
-            continue
-        title = str(next_recommendation.get("title") or path.get("title") or "继续销售训练")
-        reason = str(
-            next_recommendation.get("reason")
-            or goal_context.get("goal_title")
-            or "继续推进当前销售训练目标。"
-        )
-        return Recommendation(
-            title=title,
-            reason=reason,
-            action_label=str(next_recommendation.get("action_label") or "继续训练"),
-            target_path=target_path,
-            score_basis=str(
-                goal_context.get("score_basis")
-                or "sales_trainer_path_projection_v1"
-            ),
-            recommendation_kind="sales_trainer_path",
-            scenario_type="sales_trainer",
-            source_session_id=str(next_recommendation.get("unit_id") or ""),
-            due_reason="销售训练路径已生成下一步关卡建议。",
-            focus=str(next_recommendation.get("level_title") or ""),
-            suggested_duration_minutes=10,
-            is_due_today=True,
-        )
-    return None
 
 
 def _count_page_issues(page_summary: dict[str, Any]) -> int:
@@ -588,11 +549,10 @@ async def get_recommendation(
         last_completed_result = await db.execute(last_completed_stmt)
         last_completed = last_completed_result.scalar_one_or_none()
 
-        sales_trainer_recommendation = _build_sales_trainer_path_recommendation(
-            await SalesTrainerPathService(db).list_paths_for_user(user_id)
-        )
-        if sales_trainer_recommendation is not None:
-            return success_response(sales_trainer_recommendation.model_dump())
+        domain_recommendation = await first_dashboard_recommendation(db, user_id)
+        if domain_recommendation is not None:
+            recommendation = Recommendation.model_validate(domain_recommendation)
+            return success_response(recommendation.model_dump())
 
         # Generate recommendation based on user's practice patterns
         if len(recent_sessions) == 0:

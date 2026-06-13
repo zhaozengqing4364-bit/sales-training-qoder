@@ -3,7 +3,6 @@
 from common.api.dashboard import (
     _build_next_goal_recommendation,
     _build_presentation_page_recommendation,
-    _build_sales_trainer_path_recommendation,
 )
 from common.db.models import PracticeSession, Scenario
 
@@ -105,31 +104,11 @@ def test_dashboard_presentation_recommendation_points_to_most_actionable_page():
     )
 
 
-def test_dashboard_sales_trainer_recommendation_uses_goal_context_next_action():
-    recommendation = _build_sales_trainer_path_recommendation(
-        [
-            {
-                "path_key": "new_seller",
-                "title": "新人销售闯关",
-                "goal_context": {
-                    "goal_title": "掌握首次客户沟通",
-                    "score_basis": "sales_trainer_path_projection_v1",
-                    "next_recommendation": {
-                        "title": "下一关：价值表达",
-                        "reason": "本关还没有训练证据。",
-                        "action_label": "开始做题",
-                        "target_path": "/sales-trainer/quiz/unit-2",
-                        "unit_id": "unit-2",
-                        "level_title": "价值表达",
-                    },
-                },
-            },
-        ]
+def test_common_dashboard_does_not_import_sales_trainer_domain():
+    from pathlib import Path
+
+    dashboard_source = (
+        Path(__file__).resolve().parents[3] / "src" / "common" / "api" / "dashboard.py"
     )
 
-    assert recommendation is not None
-    assert recommendation.recommendation_kind == "sales_trainer_path"
-    assert recommendation.scenario_type == "sales_trainer"
-    assert recommendation.score_basis == "sales_trainer_path_projection_v1"
-    assert recommendation.title == "下一关：价值表达"
-    assert recommendation.target_path == "/sales-trainer/quiz/unit-2"
+    assert "sales_trainer" not in dashboard_source.read_text(encoding="utf-8")

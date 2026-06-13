@@ -19,8 +19,8 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
-import sales_trainer.regrade_models  # noqa: F401
 import sales_trainer.ai_coach_chat_models  # noqa: F401
+import sales_trainer.regrade_models  # noqa: F401
 from common.db.models import Base
 
 
@@ -265,6 +265,11 @@ class SalesTrainerQuizAttempt(Base):
             "user_id",
             "submitted_at",
         ),
+        Index(
+            "idx_sales_trainer_quiz_attempt_submitted_id",
+            "submitted_at",
+            "attempt_id",
+        ),
     )
 
 
@@ -342,6 +347,11 @@ class SalesTrainerAudioSubmission(Base):
             "idx_sales_trainer_audio_user_created",
             "user_id",
             "created_at",
+        ),
+        Index(
+            "idx_sales_trainer_audio_created_id",
+            "created_at",
+            "submission_id",
         ),
         Index(
             "idx_sales_trainer_audio_confirmed_material_version",
@@ -585,6 +595,11 @@ class SalesTrainerAiCoachSession(Base):
             "idx_sales_trainer_ai_coach_sessions_module_created",
             "module_key",
             "created_at",
+        ),
+        Index(
+            "idx_sales_trainer_ai_coach_sessions_created_id",
+            "created_at",
+            "session_id",
         ),
     )
 

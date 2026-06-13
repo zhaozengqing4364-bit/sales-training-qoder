@@ -104,6 +104,11 @@ def _serialize_answer(answer: SalesTrainerQuizAnswer) -> dict[str, Any]:
             answer.answer_payload,
             "normalized_score",
         ),
+        "max_score": _answer_snapshot_number(answer.answer_payload, "points"),
+        "scoring_dimensions": _answer_snapshot_str_list(
+            answer.answer_payload,
+            "scoring_dimensions",
+        ),
         "attempt_context": _answer_attempt_context(answer.answer_payload),
         "is_correct": answer.is_correct,
         "score": float(answer.score) if answer.score is not None else None,
@@ -139,6 +144,21 @@ def _answer_snapshot_value(payload: Any, key: str) -> Any:
 def _answer_snapshot_list(payload: Any, key: str) -> list[dict[str, Any]]:
     value = _answer_snapshot(payload).get(key)
     return value if isinstance(value, list) else []
+
+
+def _answer_snapshot_str_list(payload: Any, key: str) -> list[str]:
+    value = _answer_snapshot(payload).get(key)
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item is not None]
+
+
+def _answer_snapshot_number(payload: Any, key: str) -> float | None:
+    value = _answer_snapshot(payload).get(key)
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _answer_scoring(payload: Any) -> dict[str, Any]:

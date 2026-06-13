@@ -5,17 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Loader2, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
+import type { AssetRefPickerOption } from "@/lib/admin/asset-ref-types";
 
-export interface AssetRefPickerOption {
-    id: string;
-    label: string;
-    subtitle?: string;
-    status: string;
-    editHref: string;
-    /** When false, option is shown grayed with a publish link. */
-    selectable: boolean;
-    publishHint?: string;
-}
+export type { AssetRefPickerOption } from "@/lib/admin/asset-ref-types";
 
 interface AdminAssetRefPickerProps {
     label: string;

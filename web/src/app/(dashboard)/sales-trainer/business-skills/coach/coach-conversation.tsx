@@ -23,9 +23,11 @@ interface AiCoachChatSurfaceProps {
     readonly input: string;
     readonly drafts: DraftByEventId;
     readonly pendingUserMessage: string | null;
+    readonly isStarting: boolean;
     readonly isSending: boolean;
     readonly pendingCommand: CoachCommand | null;
     readonly submittingEventIds: ReadonlySet<string>;
+    readonly streamActivityLabel: string | null;
     readonly error: string | null;
     readonly onInputChange: (value: string) => void;
     readonly onSend: () => void;
@@ -42,9 +44,11 @@ export function AiCoachChatSurface({
     input,
     drafts,
     pendingUserMessage,
+    isStarting,
     isSending,
     pendingCommand,
     submittingEventIds,
+    streamActivityLabel,
     error,
     onInputChange,
     onSend,
@@ -56,12 +60,14 @@ export function AiCoachChatSurface({
     onNewSession,
 }: AiCoachChatSurfaceProps) {
     const isAdvancing = submittingEventIds.size > 0;
+    const isBusy = isStarting || isSending || isAdvancing;
     const activeEventId = activeEventIdForSession(session);
     const activeQuiz = activeQuizEventForSession(session);
-    const activityLabel = activityLabelFor(pendingCommand, isSending, isAdvancing);
+    const activityLabel = streamActivityLabel
+        ?? activityLabelFor(pendingCommand, isSending, isAdvancing, isStarting);
     return (
-        <section className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] shadow-sm">
-            <header className="flex flex-col gap-4 border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
+        <section className="mx-auto flex h-[calc(100dvh-7rem)] min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] shadow-sm">
+            <header className="shrink-0 flex flex-col gap-4 border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white">
                         <Bot className="h-5 w-5" />
@@ -76,19 +82,31 @@ export function AiCoachChatSurface({
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" className="rounded-xl" onClick={onResume}>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        disabled={isBusy}
+                        onClick={onResume}
+                    >
                         <RefreshCw className="mr-2 h-4 w-4" />
-                        继续当前局
+                        {isStarting ? "处理中" : "继续当前局"}
                     </Button>
-                    <Button variant="outline" size="sm" className="rounded-xl" onClick={onNewSession}>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        disabled={isBusy}
+                        onClick={onNewSession}
+                    >
                         <RotateCcw className="mr-2 h-4 w-4" />
-                        新开一局
+                        {isStarting ? "新开中" : "新开一局"}
                     </Button>
                     <Button
                         variant="outline"
                         size="sm"
                         className="rounded-xl border-amber-200 text-amber-700 hover:bg-amber-50"
-                        disabled={!session || isSending}
+                        disabled={!session || isBusy}
                         onClick={() => onCoachCommand("end")}
                     >
                         <ClipboardList className="mr-2 h-4 w-4" />
@@ -102,6 +120,7 @@ export function AiCoachChatSurface({
                 pendingUserMessage={pendingUserMessage}
                 drafts={drafts}
                 submittingEventIds={submittingEventIds}
+                isStarting={isStarting}
                 isSending={isSending}
                 isAdvancing={isAdvancing}
                 activityLabel={activityLabel}
@@ -112,14 +131,14 @@ export function AiCoachChatSurface({
                 onSubmitEvent={onSubmitEvent}
             />
             <CoachCommandBar
-                disabled={!session || isSending || isAdvancing}
+                disabled={!session || isBusy}
                 hasActiveQuiz={activeQuiz !== null}
                 pendingCommand={pendingCommand}
                 onCommand={onCoachCommand}
             />
             <Composer
                 value={input}
-                disabled={!session || isSending}
+                disabled={!session || isBusy}
                 hasActiveQuiz={activeQuiz !== null}
                 onChange={onInputChange}
                 onSubmit={onSend}
@@ -152,7 +171,7 @@ function CoachStateBar({
     }[state.session_phase];
     const actionLabel = state.last_action ? nextActionLabel(state.last_action) : "准备第一题";
     return (
-        <div className="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 text-sm text-slate-700 md:grid-cols-4">
+        <div className="grid shrink-0 gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 text-sm text-slate-700 md:grid-cols-4">
             <StatusTile label="当前阶段" value={phaseLabel} />
             <StatusTile label="训练主题" value={state.current_focus || "商务技巧"} />
             <StatusTile label="难度/进度" value={`${difficultyLabel} · 已完成 ${state.answered_card_count} 题`} />
@@ -198,7 +217,7 @@ function CoachCommandBar({
         { command: "summarize", label: "总结本轮" },
     ];
     return (
-        <div className="border-t border-slate-200 bg-white/90 px-4 py-3 md:px-8">
+        <div className="shrink-0 border-t border-slate-200 bg-white/90 px-4 py-3 md:px-8">
             <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-1 inline-flex items-center text-xs font-semibold text-slate-500">
                     <CheckCircle2 className="mr-1 h-4 w-4 text-emerald-600" />
@@ -242,7 +261,7 @@ function Composer({
     return (
         <form
             onSubmit={submit}
-            className="border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur md:px-8"
+            className="shrink-0 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur md:px-8"
         >
             <div className="flex items-end gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
                 <textarea
@@ -274,7 +293,11 @@ function activityLabelFor(
     pendingCommand: CoachCommand | null,
     isSending: boolean,
     isAdvancing: boolean,
+    isStarting: boolean,
 ): string | null {
+    if (isStarting) {
+        return "正在准备训练局";
+    }
     if (isAdvancing) {
         return "正在批改，并判断下一步训练";
     }

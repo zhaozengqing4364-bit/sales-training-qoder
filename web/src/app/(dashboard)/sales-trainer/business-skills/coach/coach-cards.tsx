@@ -217,24 +217,64 @@ function ScoreFeedback({
 }: {
     readonly event: Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }>;
 }) {
-    if (!event.score_result) {
+    const result = event.score_result;
+    if (!result) {
         return null;
     }
+    const interaction = event.payload.interaction;
+    const isChoice =
+        interaction.interaction_type === "single_choice"
+        || interaction.interaction_type === "multiple_choice";
+    const mastered = result.mastered ?? result.score >= result.max_score;
+    const percent = result.max_score > 0
+        ? Math.round((result.score / result.max_score) * 100)
+        : null;
+    const thresholdLabel = formatThreshold(result.mastery_threshold);
+    const title = isChoice
+        ? mastered ? "答对" : "未掌握"
+        : mastered ? "已达到掌握标准" : "未达到掌握标准";
+    const standardText = thresholdLabel
+        ? mastered
+            ? `已达到本轮掌握标准：${thresholdLabel}`
+            : `未达到本轮掌握标准：${thresholdLabel}`
+        : mastered
+            ? "已达到本轮掌握标准"
+            : "未达到本轮掌握标准";
     return (
         <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <p className="font-semibold text-slate-900">
-                {event.score_result.score} / {event.score_result.max_score}
-            </p>
-            <p className="mt-1 leading-relaxed">{event.score_result.feedback}</p>
-            {event.score_result.missed_points.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${mastered
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}>
+                    {title}
+                </span>
+                <span className="text-xs font-medium text-slate-500">
+                    {standardText}
+                </span>
+                {!isChoice && percent !== null ? (
+                    <span className="text-xs font-medium text-slate-500">
+                        本题掌握度：{percent}%
+                    </span>
+                ) : null}
+            </div>
+            <p className="mt-2 leading-relaxed">{result.feedback}</p>
+            {result.missed_points.length > 0 ? (
                 <ul className="mt-2 list-disc space-y-1 pl-5">
-                    {event.score_result.missed_points.map((point) => (
+                    {result.missed_points.map((point) => (
                         <li key={point}>{point}</li>
                     ))}
                 </ul>
             ) : null}
         </div>
     );
+}
+
+function formatThreshold(threshold: number | null | undefined): string | null {
+    if (typeof threshold !== "number") {
+        return null;
+    }
+    return `${Math.round(threshold)}%`;
 }
 
 function SummaryDetails({

@@ -129,8 +129,6 @@ import {
     HistoryTrendPoint,
     OpenAnalyticsDashboard,
     OpenScoreDistribution,
-    SupportRuntimeFaultsResponse,
-    SupportRuntimeOverview,
     SessionStatus,
     RetryFocusIntent,
     PresentationAIPolicyScopeResponse,
@@ -151,8 +149,6 @@ import {
     AssetGovernanceImpactSummary,
     AssetGovernanceRecentChangeSummary,
     AssetGovernanceSummary,
-    LinkedAssetChangeReference,
-    SupportRuntimeFaultDiagnostics,
     RagProfile,
     CreateRagProfileRequest,
     UpdateRagProfileRequest,
@@ -253,6 +249,7 @@ import {
     createPresentationsDomain,
     createSalesTrainerDomain,
     createSessionsDomain,
+    createSupportRuntimeDomain,
     createTrainingTasksDomain,
 } from "./client-domains";
 
@@ -402,6 +399,8 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[SHORT_ANSWER_AI_SCORING_FAILED]": "简答题 AI 批改暂时不可用，请稍后重试；客观题仍可正常提交。",
     "[SHORT_ANSWER_AI_SCORING_RESPONSE_INVALID]": "简答题 AI 批改结果异常，请稍后重试。",
     "[SHORT_ANSWER_AI_SCORING_DISABLED]": "简答题暂未开启 AI 批改，请联系管理员。",
+    "[STREAM_RESPONSE_UNAVAILABLE]": "当前浏览器无法读取流式响应，请刷新后重试。",
+    "[STREAM_PARSE_ERROR]": "流式响应解析失败，请刷新后重试。",
 };
 
 type NormalizedApiErrorPayload = {
@@ -806,77 +805,6 @@ function normalizeAssetGovernanceSummary(value: unknown): AssetGovernanceSummary
         impact_summary: impactSummary,
         recent_change_summary: recentChangeSummary,
         health_summary: healthSummary,
-    };
-}
-
-function normalizeLinkedAssetChangeReference(value: unknown): LinkedAssetChangeReference | null {
-    const raw = toRecord(value);
-    const assetName = toStringValue(raw.asset_name).trim();
-    const adminPath = toStringValue(raw.admin_path).trim();
-    const latestChangeLabel = toStringValue(raw.latest_change_label).trim();
-
-    if (!assetName || !adminPath || !latestChangeLabel) {
-        return null;
-    }
-
-    return {
-        asset_type: toStringValue(raw.asset_type),
-        asset_label: toStringValue(raw.asset_label),
-        asset_id: toStringValue(raw.asset_id),
-        asset_name: assetName,
-        admin_path: adminPath,
-        latest_change_label: latestChangeLabel,
-        latest_change_type: toStringValue(raw.latest_change_type),
-        last_changed_at: toNullableStringValue(raw.last_changed_at),
-        change_count_7d: toNumberValue(raw.change_count_7d, 0),
-        sessions_since_change: toNumberValue(raw.sessions_since_change, 0),
-        impact_level: toStringValue(raw.impact_level, "low"),
-        health_status: toStringValue(raw.health_status, "healthy"),
-    };
-}
-
-function normalizeSupportRuntimeFaultDiagnostics(value: unknown): SupportRuntimeFaultDiagnostics {
-    const raw = toRecord(value);
-    const linkedAssetChanges = Array.isArray(raw.linked_asset_changes)
-        ? raw.linked_asset_changes
-            .map(normalizeLinkedAssetChangeReference)
-            .filter((item): item is LinkedAssetChangeReference => Boolean(item))
-        : [];
-
-    return {
-        ...raw,
-        linked_asset_changes: linkedAssetChanges,
-    };
-}
-
-function normalizeSupportRuntimeFaultItem(
-    input: unknown,
-): SupportRuntimeFaultsResponse["items"][number] {
-    const raw = toRecord(input);
-    return {
-        source: toStringValue(raw.source),
-        severity: raw.severity === "warning" ? "warning" : "blocking",
-        kind: toStringValue(raw.kind),
-        summary: toStringValue(raw.summary),
-        detected_at: toNullableStringValue(raw.detected_at),
-        session_id: toNullableStringValue(raw.session_id),
-        scenario_type: toNullableStringValue(raw.scenario_type),
-        session_status: toNullableStringValue(raw.session_status),
-        report_status: toNullableStringValue(raw.report_status),
-        diagnostics: normalizeSupportRuntimeFaultDiagnostics(raw.diagnostics),
-    };
-}
-
-function normalizeSupportRuntimeFaultsResponse(input: unknown): SupportRuntimeFaultsResponse {
-    const raw = toRecord(input);
-    return {
-        generated_at: toStringValue(raw.generated_at),
-        items: Array.isArray(raw.items) ? raw.items.map(normalizeSupportRuntimeFaultItem) : [],
-        count: toNumberValue(raw.count, 0),
-        limit: toNumberValue(raw.limit, 0),
-        severity: raw.severity === "warning" || raw.severity === "blocking"
-            ? raw.severity
-            : null,
     };
 }
 
@@ -1772,6 +1700,140 @@ async function apiFetch<T>(
     }
 }
 
+function parseSseFrame<T>(frame: string): T | null {
+    const dataLines = frame
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart());
+
+    if (dataLines.length === 0) {
+        return null;
+    }
+
+    const payload = dataLines.join("\n").trim();
+    if (!payload || payload === "[DONE]") {
+        return null;
+    }
+
+    try {
+        return JSON.parse(payload) as T;
+    } catch {
+        throw new ApiRequestError({
+            status: 0,
+            errorCode: "[STREAM_PARSE_ERROR]",
+            message: "Stream response is not valid JSON.",
+        });
+    }
+}
+
+async function* apiStream<T>(
+    endpoint: string,
+    options: ApiFetchOptions = {},
+): AsyncGenerator<T> {
+    const url = `${resolveApiBaseUrl()}${endpoint}`;
+    const requestId = `stream_${++requestCounter}`;
+    const { skipSessionExpiredHandling = false, ...requestOptions } = options;
+    const controller = new AbortController();
+    const externalSignal = requestOptions.signal;
+    const signal = externalSignal || controller.signal;
+
+    if (externalSignal) {
+        externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+
+    activeRequests.set(requestId, controller);
+
+    try {
+        const resolvedCredentials = requestOptions.credentials || "include";
+        const headers = attachCsrfHeader(
+            createHeaders(requestOptions.headers),
+            {
+                method: requestOptions.method,
+                credentials: resolvedCredentials,
+            },
+        );
+        headers.set("Accept", "text/event-stream");
+        const response = await fetchWithLoopbackRetry(url, {
+            ...requestOptions,
+            signal,
+            credentials: resolvedCredentials,
+            headers,
+        });
+
+        if (!response.ok) {
+            const responseJson = await response.json().catch(() => ({}));
+            const normalized = normalizeApiErrorPayload(response.status, responseJson);
+
+            if (response.status === 401 && !skipSessionExpiredHandling) {
+                triggerSessionExpired();
+            }
+
+            throw new ApiRequestError(normalized);
+        }
+
+        if (!response.body) {
+            throw new ApiRequestError({
+                status: 0,
+                errorCode: "[STREAM_RESPONSE_UNAVAILABLE]",
+                message: "Readable stream is unavailable.",
+            });
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) {
+                break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            let separatorIndex = buffer.indexOf("\n\n");
+            while (separatorIndex >= 0) {
+                const frame = buffer.slice(0, separatorIndex);
+                buffer = buffer.slice(separatorIndex + 2);
+                const parsed = parseSseFrame<T>(frame);
+                if (parsed) {
+                    yield parsed;
+                }
+                separatorIndex = buffer.indexOf("\n\n");
+            }
+        }
+
+        buffer += decoder.decode();
+        const tail = buffer.trim();
+        if (tail) {
+            const parsed = parseSseFrame<T>(tail);
+            if (parsed) {
+                yield parsed;
+            }
+        }
+    } catch (error) {
+        if (error instanceof ApiRequestError) {
+            throw error;
+        }
+
+        if (error instanceof Error && error.name === "AbortError") {
+            throw error;
+        }
+
+        const message = error instanceof Error && error.message.trim()
+            ? error.message
+            : "请求失败，请稍后重试。";
+
+        throw new ApiRequestError({
+            status: 0,
+            errorCode: "[NETWORK_ERROR]",
+            message,
+        });
+    } finally {
+        activeRequests.delete(requestId);
+    }
+}
+
 // File upload fetch wrapper with AbortController support
 async function apiUpload<T>(
     endpoint: string,
@@ -1918,8 +1980,8 @@ async function apiFetchBlob(
  *
  * Domain surfaces currently exposed through the outward `api` façade:
  * - extracted in `client-domains.ts`: auth, practice, sessions, agents, presentations,
- *   and admin report helpers consumed through `api.admin`
- * - currently still inline in `client.ts`: user, dashboard, analyticsOpen, supportRuntime,
+ *   supportRuntime, and admin report helpers consumed through `api.admin`
+ * - currently still inline in `client.ts`: user, dashboard, analyticsOpen,
  *   training, scenarios, analytics, admin, adminTools, internal
  *
  * High-fan-out consumers confirmed by repo inventory:
@@ -1977,7 +2039,9 @@ const salesTrainerDomain = createSalesTrainerDomain({
 });
 const newcomerTrainingDomain = createNewcomerTrainingDomain({
     request: apiFetch,
+    stream: apiStream,
 });
+const supportRuntimeDomain = createSupportRuntimeDomain({ request: apiFetch });
 const adminSalesTrainerDomain = createAdminSalesTrainerDomain({
     request: apiFetch,
     upload: apiUpload,
@@ -2615,27 +2679,7 @@ export const api = {
         },
     },
 
-    supportRuntime: {
-        getOverview: async (params?: { window_hours?: number }) => {
-            const searchParams = new URLSearchParams();
-            if (typeof params?.window_hours === "number") {
-                searchParams.set("window_hours", String(params.window_hours));
-            }
-            return apiFetch<SupportRuntimeOverview>(`/support/runtime/overview?${searchParams}`);
-        },
-
-        getFaults: async (params?: { limit?: number; severity?: "blocking" | "warning" }) => {
-            const searchParams = new URLSearchParams();
-            if (typeof params?.limit === "number") {
-                searchParams.set("limit", String(params.limit));
-            }
-            if (params?.severity) {
-                searchParams.set("severity", params.severity);
-            }
-            const result = await apiFetch<SupportRuntimeFaultsResponse>(`/support/runtime/faults?${searchParams}`);
-            return normalizeSupportRuntimeFaultsResponse(result);
-        },
-    },
+    supportRuntime: supportRuntimeDomain,
 
     // Training / Practice
     training: {

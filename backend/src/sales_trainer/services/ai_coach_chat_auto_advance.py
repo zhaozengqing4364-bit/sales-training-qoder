@@ -25,7 +25,10 @@ from sales_trainer.services.ai_coach_chat_coach_state import (
     update_state_after_action,
     update_state_after_score,
 )
-from sales_trainer.services.ai_coach_chat_errors import AiCoachChatGenerationError
+from sales_trainer.services.ai_coach_chat_errors import (
+    AI_COACH_STREAM_TIMEOUT_CODE,
+    AiCoachChatGenerationError,
+)
 from sales_trainer.services.ai_coach_chat_event_writer import AiCoachChatEventWriter
 from sales_trainer.services.ai_coach_chat_generation import AiCoachChatGenerator
 from sales_trainer.services.ai_coach_chat_next_action import AiCoachNextActionDecider
@@ -103,7 +106,7 @@ class AiCoachChatAutoAdvance:
                     )
                     await self._append_response(
                         session=session,
-                        response=self._fallback_response(exc.code),
+                        response=self._fallback_response(exc.code, config),
                         action=action,
                         reason=reason,
                         trigger_type="session_start",
@@ -207,7 +210,7 @@ class AiCoachChatAutoAdvance:
                     actor=actor,
                 )
                 raise
-            response = self._fallback_response(exc.code)
+            response = self._fallback_response(exc.code, config)
             await self._append_response(
                 session=session,
                 response=response,
@@ -295,7 +298,7 @@ class AiCoachChatAutoAdvance:
                     actor=actor,
                 )
                 raise
-            response = self._fallback_response(exc.code)
+            response = self._fallback_response(exc.code, config)
             await self._append_response(
                 session=session,
                 response=response,
@@ -320,6 +323,46 @@ class AiCoachChatAutoAdvance:
             state_before=state_before,
             state_after=next_state,
             actor=actor,
+        )
+
+    async def record_timeout_after_answer(
+        self,
+        *,
+        session: SalesTrainerAiCoachSession,
+        config: AiCoachConfig,
+        event_id: str,
+        score_result: AiCoachScoreResultV1,
+        actor: User | None,
+    ) -> None:
+        state_before = coach_state_from_snapshot(session.coach_state)
+        scored_state = update_state_after_score(
+            state_before,
+            score_result=score_result,
+            mastery_threshold=config.mastery_threshold,
+        )
+        decision = self._decider.decide_after_score(
+            config=config,
+            state=scored_state,
+            score_result=score_result,
+        )
+        failed_state = scored_state.model_copy(
+            update={
+                "can_auto_advance": False,
+                "stopped_reason": AI_COACH_STREAM_TIMEOUT_CODE,
+            }
+        )
+        await self._append_response(
+            session=session,
+            response=self._fallback_response(AI_COACH_STREAM_TIMEOUT_CODE, config),
+            action=decision.action,
+            reason=f"{decision.reason}; generation timed out",
+            trigger_type="event_answer",
+            trigger_event_id=event_id,
+            state_before=state_before,
+            state_after=failed_state,
+            actor=actor,
+            status="failed",
+            error_code=AI_COACH_STREAM_TIMEOUT_CODE,
         )
 
     async def _append_response(
@@ -505,14 +548,17 @@ class AiCoachChatAutoAdvance:
         )
 
     @staticmethod
-    def _fallback_response(_error_code: str) -> AiCoachChatResponseInternalV1:
+    def _fallback_response(
+        _error_code: str,
+        config: AiCoachConfig,
+    ) -> AiCoachChatResponseInternalV1:
         return AiCoachChatResponseInternalV1(
-            assistant_text="我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。",
+            assistant_text=config.generation_failure_recovery_message,
             ui_events=[
                 AiCoachChatUiEventInternalV1(
                     type="followup_prompt",
                     payload=AiCoachFollowupPromptPayloadV1(
-                        prompts=["重试下一题", "换主题", "总结一下"],
+                        prompts=list(config.generation_failure_recovery_prompts),
                     ),
                 )
             ],

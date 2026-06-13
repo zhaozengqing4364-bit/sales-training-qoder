@@ -31,7 +31,8 @@ const AUDIO_SUBMISSION_STATUS_LABELS = {
 const UNIT_TYPE_LABELS = {
     quiz: "考试",
     audio_scoring: "录音",
-} as const satisfies Record<SalesTrainerUnitType, string>;
+    ai_coach: "AI 教练",
+} as const satisfies Record<SalesTrainerUnitType | "ai_coach", string>;
 
 export const TRAINING_PURPOSE_OPTIONS = [
     { value: "ppt_pitch", label: "PPT 讲解录音" },
@@ -80,10 +81,16 @@ export function formatAdminRecordStatus(status: string | null | undefined): stri
     if (status === "draft" || status === "published" || status === "archived") {
         return LIFECYCLE_STATUS_LABELS[status];
     }
+    if (status === "in_progress") {
+        return "进行中";
+    }
+    if (status === "completed") {
+        return "已完成";
+    }
     return "未识别状态";
 }
 
-export function formatUnitTypeLabel(unitType: SalesTrainerUnitType): string {
+export function formatUnitTypeLabel(unitType: SalesTrainerUnitType | "ai_coach"): string {
     return UNIT_TYPE_LABELS[unitType];
 }
 

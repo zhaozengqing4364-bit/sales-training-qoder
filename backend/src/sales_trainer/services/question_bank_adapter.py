@@ -1,66 +1,39 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from curriculum_practice.models import QuestionItem
+from common.question_bank.ports import (
+    QuestionBankProvider,
+    QuestionType,
+    ResolvedQuestion,
+    UnsupportedQuestionType,
+    resolve_question_bank_provider,
+)
 
-QuestionType = Literal[
-    "single_choice", "multiple_choice", "true_false", "short_answer"
-]
-
-
-@dataclass(frozen=True)
-class ResolvedQuestion:
-    question_id: str
-    title: str
-    stem: str
-    question_type: QuestionType
-    reference_answer: str | None
-    scoring_criteria: dict[str, Any]
-    points: int
-    order_index: int
-
-
-@dataclass(frozen=True)
-class UnsupportedQuestionType:
-    question_id: str
-    declared_type: str
-    reason: str
+SALES_TRAINER_QUESTION_SCOPE = "sales_trainer"
 
 
 class QuestionBankAdapter:
-    """Read existing QuestionItem records without coupling callers to test-bank internals."""
+    """Read question records through the question-bank port."""
 
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
     async def get_published_questions(
-        self, question_ids: list[str]
-    ) -> dict[str, QuestionItem]:
-        if not question_ids:
-            return {}
-        result = await self._db.execute(
-            select(QuestionItem).where(
-                QuestionItem.question_id.in_(question_ids),
-                QuestionItem.status == "published",
-                QuestionItem.usage_scope == "sales_trainer",
-            )
-        )
-        return {str(question.question_id): question for question in result.scalars().all()}
+        self,
+        question_ids: list[str],
+    ) -> dict[str, ResolvedQuestion]:
+        return await self._provider().get_published_questions(question_ids)
 
-    async def get_questions(self, question_ids: list[str]) -> dict[str, QuestionItem]:
-        if not question_ids:
-            return {}
-        result = await self._db.execute(
-            select(QuestionItem).where(QuestionItem.question_id.in_(question_ids))
-        )
-        return {str(question.question_id): question for question in result.scalars().all()}
+    async def get_questions(
+        self,
+        question_ids: list[str],
+    ) -> dict[str, ResolvedQuestion]:
+        return await self._provider().get_questions(question_ids)
 
-    def resolve_type(self, question: QuestionItem) -> QuestionType:
+    def resolve_type(self, question: ResolvedQuestion) -> QuestionType:
         criteria = question.scoring_criteria or {}
         raw_type = str(criteria.get("question_type") or "short_answer")
         if raw_type == "single_choice" and self._has_choice_contract(criteria):
@@ -71,7 +44,10 @@ class QuestionBankAdapter:
             return "true_false"
         return "short_answer"
 
-    def unsupported_reason(self, question: QuestionItem) -> UnsupportedQuestionType | None:
+    def unsupported_reason(
+        self,
+        question: ResolvedQuestion,
+    ) -> UnsupportedQuestionType | None:
         criteria = question.scoring_criteria or {}
         raw_type = str(criteria.get("question_type") or "")
         if raw_type == "single_choice":
@@ -110,7 +86,7 @@ class QuestionBankAdapter:
 
     def serialize_for_learner(
         self,
-        question: QuestionItem,
+        question: ResolvedQuestion,
         *,
         points: int,
         order_index: int,
@@ -131,7 +107,7 @@ class QuestionBankAdapter:
 
     def grade(
         self,
-        question: QuestionItem,
+        question: ResolvedQuestion,
         *,
         answer_payload: Any,
         points: int,
@@ -167,6 +143,15 @@ class QuestionBankAdapter:
         if not isinstance(options, list) or not options:
             return False
         return True
+
+    def _provider(self) -> QuestionBankProvider:
+        provider = resolve_question_bank_provider(
+            SALES_TRAINER_QUESTION_SCOPE,
+            self._db,
+        )
+        if provider is None:
+            raise RuntimeError("sales trainer question bank provider is not registered")
+        return provider
 
 
 def _parse_bool(value: Any) -> bool | None:

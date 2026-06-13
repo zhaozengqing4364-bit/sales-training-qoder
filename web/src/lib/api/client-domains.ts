@@ -31,9 +31,13 @@ import type {
     HighlightReviewResponse,
     HighlightReviewShareSummary,
     HighlightReviewShareCreateResponse,
+    LinkedAssetChangeReference,
     SessionLifecycleAction,
     SessionLifecycleRequest,
     SessionLifecycleResponse,
+    SupportRuntimeFaultDiagnostics,
+    SupportRuntimeFaultsResponse,
+    SupportRuntimeOverview,
     ComprehensiveReport,
     AdminPresentationListItem,
     AdminPresentationDetailItem,
@@ -63,6 +67,7 @@ import type {
     LearnerStudyChapterCompletionResponse,
     LearnerStudyStartExamResponse,
     ExaminerSessionReport,
+    SalesTrainerAdminCapabilities,
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScorePromptCreateRequest,
     SalesTrainerAudioScorePromptListResponse,
@@ -80,6 +85,7 @@ import type {
     SalesTrainerMaterialVersion,
     SalesTrainerMaterialVersionCreateRequest,
     SalesTrainerMaterialVersionUploadRequest,
+    SalesTrainerManagerDashboard,
     SalesTrainerQuizAttempt,
     SalesTrainerQuizAttemptCreateRequest,
     SalesTrainerQuizAttemptListResponse,
@@ -104,6 +110,7 @@ import type {
     SalesTrainerSettings,
     SalesTrainerTrainingRecord,
     SalesTrainerTrainingRecordListResponse,
+    SalesTrainerTrainingRecordType,
     SalesTrainerUnitBrief,
     NewcomerArticle,
     NewcomerArticleBinding,
@@ -128,6 +135,7 @@ import type {
     AiCoachChatMessageCreateRequest,
     AiCoachChatSessionCreateRequest,
     AiCoachChatSessionPublicV1,
+    AiCoachChatStreamEvent,
     AiCoachTurnFeedbackV1,
     AiCoachTurnSubmitRequest,
 } from "./types";
@@ -138,6 +146,7 @@ type ApiRequestOptions = RequestInit & {
 };
 
 type ApiRequest = <T>(endpoint: string, options?: ApiRequestOptions) => Promise<T>;
+type ApiStream = <T>(endpoint: string, options?: ApiRequestOptions) => AsyncIterable<T>;
 type ApiUpload = <T>(
     endpoint: string,
     formData: FormData,
@@ -215,6 +224,10 @@ type TrainingTasksDomainDependencies = {
     request: ApiRequest;
 };
 
+type SupportRuntimeDomainDependencies = {
+    request: ApiRequest;
+};
+
 type LearningPathDomainDependencies = {
     request: ApiRequest;
 };
@@ -239,6 +252,7 @@ type SalesTrainerDomainDependencies = {
 
 type NewcomerTrainingDomainDependencies = {
     request: ApiRequest;
+    stream: ApiStream;
 };
 
 type SalesTrainerAudioUploadPayload = {
@@ -864,6 +878,126 @@ function buildQueryString(params: Record<string, string | number | boolean | nul
     return query ? `?${query}` : "";
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function toStringValue(value: unknown, fallback = ""): string {
+    return typeof value === "string" ? value : fallback;
+}
+
+function toNumberValue(value: unknown, fallback = 0): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) {
+            return parsed;
+        }
+    }
+    return fallback;
+}
+
+function toNullableStringValue(value: unknown): string | null {
+    return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function normalizeLinkedAssetChangeReference(value: unknown): LinkedAssetChangeReference | null {
+    const raw = toRecord(value);
+    const assetName = toStringValue(raw.asset_name).trim();
+    const adminPath = toStringValue(raw.admin_path).trim();
+    const latestChangeLabel = toStringValue(raw.latest_change_label).trim();
+
+    if (!assetName || !adminPath || !latestChangeLabel) {
+        return null;
+    }
+
+    return {
+        asset_type: toStringValue(raw.asset_type),
+        asset_label: toStringValue(raw.asset_label),
+        asset_id: toStringValue(raw.asset_id),
+        asset_name: assetName,
+        admin_path: adminPath,
+        latest_change_label: latestChangeLabel,
+        latest_change_type: toStringValue(raw.latest_change_type),
+        last_changed_at: toNullableStringValue(raw.last_changed_at),
+        change_count_7d: toNumberValue(raw.change_count_7d, 0),
+        sessions_since_change: toNumberValue(raw.sessions_since_change, 0),
+        impact_level: toStringValue(raw.impact_level, "low"),
+        health_status: toStringValue(raw.health_status, "healthy"),
+    };
+}
+
+function normalizeSupportRuntimeFaultDiagnostics(value: unknown): SupportRuntimeFaultDiagnostics {
+    const raw = toRecord(value);
+    const linkedAssetChanges = Array.isArray(raw.linked_asset_changes)
+        ? raw.linked_asset_changes
+            .map(normalizeLinkedAssetChangeReference)
+            .filter((item): item is LinkedAssetChangeReference => Boolean(item))
+        : [];
+
+    return {
+        ...raw,
+        linked_asset_changes: linkedAssetChanges,
+    };
+}
+
+function normalizeSupportRuntimeFaultItem(
+    input: unknown,
+): SupportRuntimeFaultsResponse["items"][number] {
+    const raw = toRecord(input);
+    return {
+        source: toStringValue(raw.source),
+        severity: raw.severity === "warning" ? "warning" : "blocking",
+        kind: toStringValue(raw.kind),
+        summary: toStringValue(raw.summary),
+        detected_at: toNullableStringValue(raw.detected_at),
+        session_id: toNullableStringValue(raw.session_id),
+        scenario_type: toNullableStringValue(raw.scenario_type),
+        session_status: toNullableStringValue(raw.session_status),
+        report_status: toNullableStringValue(raw.report_status),
+        diagnostics: normalizeSupportRuntimeFaultDiagnostics(raw.diagnostics),
+    };
+}
+
+function normalizeSupportRuntimeFaultsResponse(input: unknown): SupportRuntimeFaultsResponse {
+    const raw = toRecord(input);
+    return {
+        generated_at: toStringValue(raw.generated_at),
+        items: Array.isArray(raw.items) ? raw.items.map(normalizeSupportRuntimeFaultItem) : [],
+        count: toNumberValue(raw.count, 0),
+        limit: toNumberValue(raw.limit, 0),
+        severity: raw.severity === "warning" || raw.severity === "blocking"
+            ? raw.severity
+            : null,
+    };
+}
+
+export function createSupportRuntimeDomain({
+    request,
+}: SupportRuntimeDomainDependencies) {
+    return {
+        getOverview: async (params?: { window_hours?: number }) => {
+            const query = buildQueryString({
+                window_hours: params?.window_hours,
+            });
+            return request<SupportRuntimeOverview>(`/support/runtime/overview${query}`);
+        },
+
+        getFaults: async (params?: { limit?: number; severity?: "blocking" | "warning" }) => {
+            const query = buildQueryString({
+                limit: params?.limit,
+                severity: params?.severity,
+            });
+            const result = await request<SupportRuntimeFaultsResponse>(
+                `/support/runtime/faults${query}`,
+            );
+            return normalizeSupportRuntimeFaultsResponse(result);
+        },
+    };
+}
+
 function buildSalesTrainerAudioUploadFormData(payload: SalesTrainerAudioUploadPayload): FormData {
     const formData = new FormData();
     formData.append("file", payload.file);
@@ -1037,6 +1171,7 @@ export function createSalesTrainerDomain({
 
 export function createNewcomerTrainingDomain({
     request,
+    stream,
 }: NewcomerTrainingDomainDependencies) {
     return {
         listPaths: async () => {
@@ -1142,6 +1277,20 @@ export function createNewcomerTrainingDomain({
             );
         },
 
+        startAiCoachChatSessionStream: (
+            payload: AiCoachChatSessionCreateRequest,
+            signal?: AbortSignal,
+        ) => {
+            return stream<AiCoachChatStreamEvent>(
+                "/newcomer-training/ai-coach/chat/sessions/stream",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                    signal,
+                },
+            );
+        },
+
         getAiCoachChatSession: async (sessionId: string) => {
             return request<AiCoachChatSessionPublicV1>(
                 `/newcomer-training/ai-coach/chat/sessions/${encodeURIComponent(sessionId)}`,
@@ -1163,6 +1312,23 @@ export function createNewcomerTrainingDomain({
             );
         },
 
+        sendAiCoachChatMessageStream: (
+            sessionId: string,
+            payload: AiCoachChatMessageCreateRequest,
+            signal?: AbortSignal,
+        ) => {
+            return stream<AiCoachChatStreamEvent>(
+                `/newcomer-training/ai-coach/chat/sessions/${encodeURIComponent(
+                    sessionId,
+                )}/messages/stream`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                    signal,
+                },
+            );
+        },
+
         submitAiCoachChatEventAnswer: async (
             sessionId: string,
             eventId: string,
@@ -1178,6 +1344,24 @@ export function createNewcomerTrainingDomain({
                 },
             );
         },
+
+        submitAiCoachChatEventAnswerStream: (
+            sessionId: string,
+            eventId: string,
+            payload: AiCoachChatEventAnswerSubmitRequest,
+            signal?: AbortSignal,
+        ) => {
+            return stream<AiCoachChatStreamEvent>(
+                `/newcomer-training/ai-coach/chat/sessions/${encodeURIComponent(
+                    sessionId,
+                )}/events/${encodeURIComponent(eventId)}/answer/stream`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                    signal,
+                },
+            );
+        },
     };
 }
 
@@ -1187,6 +1371,12 @@ export function createAdminSalesTrainerDomain({
     resolveApiBaseUrl,
 }: AdminSalesTrainerDomainDependencies) {
     return {
+        getCapabilities: async () => {
+            return request<SalesTrainerAdminCapabilities>(
+                "/admin/sales-trainer/capabilities",
+            );
+        },
+
         listUnits: async (params?: { include_archived?: boolean; limit?: number; offset?: number }) => {
             const query = buildQueryString({
                 include_archived: params?.include_archived,
@@ -1497,9 +1687,24 @@ export function createAdminSalesTrainerDomain({
             );
         },
 
+        getManagerDashboard: async () => {
+            return request<SalesTrainerManagerDashboard>(
+                "/admin/sales-trainer/manager-dashboard",
+            );
+        },
+
         getAudioTrainingRecord: async (submissionId: string) => {
             return request<SalesTrainerTrainingRecord>(
                 `/admin/sales-trainer/training-records/audio/${encodeURIComponent(submissionId)}`,
+            );
+        },
+
+        getTrainingRecordDetail: async (
+            recordType: SalesTrainerTrainingRecordType,
+            recordId: string,
+        ) => {
+            return request<SalesTrainerTrainingRecord>(
+                `/admin/sales-trainer/training-records/detail/${encodeURIComponent(recordType)}/${encodeURIComponent(recordId)}`,
             );
         },
 
@@ -1820,6 +2025,9 @@ export function createAdminNewcomerTrainingDomain({
 export interface AiCoachAdminConfigLike {
     enabled: boolean;
     chat_enabled: boolean;
+    streaming_enabled: boolean;
+    entry_resume_policy: string;
+    generation_timeout_seconds: number;
     coach_mode: string;
     allowed_interaction_types: string[];
     allowed_ui_event_types: string[];
@@ -1835,6 +2043,10 @@ export interface AiCoachAdminConfigLike {
     summary_when_mastery_reached: boolean;
     allowed_next_actions: string[];
     chat_welcome_message: string;
+    empty_response_recovery_message: string;
+    empty_response_recovery_prompts: string[];
+    generation_failure_recovery_message: string;
+    generation_failure_recovery_prompts: string[];
     min_turns: number;
     max_turns: number;
     mastery_threshold: number;

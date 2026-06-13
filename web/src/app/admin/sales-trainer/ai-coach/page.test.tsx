@@ -73,6 +73,9 @@ import AdminAiCoachConfigPage from "./page";
 const aiCoachConfig = {
     enabled: true,
     chat_enabled: true,
+    streaming_enabled: true,
+    entry_resume_policy: "latest_active_or_new",
+    generation_timeout_seconds: 30,
     coach_mode: "mixed_drill",
     allowed_interaction_types: ["single_choice", "multiple_choice"],
     allowed_ui_event_types: [
@@ -101,6 +104,10 @@ const aiCoachConfig = {
         "end_session",
     ],
     chat_welcome_message: "你好，我是商务技巧 AI 教练。",
+    empty_response_recovery_message: "我没有拿到可操作的训练卡片。",
+    empty_response_recovery_prompts: ["继续下一题", "换个场景", "总结本轮"],
+    generation_failure_recovery_message: "我已保留当前训练局。",
+    generation_failure_recovery_prompts: ["重试下一题", "换主题", "总结一下"],
     min_turns: 3,
     max_turns: 10,
     mastery_threshold: 80,
@@ -146,6 +153,17 @@ describe("AdminAiCoachConfigPage", () => {
         expect((screen.getByLabelText(/答后自动推进/) as HTMLInputElement).checked).toBe(
             true,
         );
+        expect((screen.getByLabelText(/启用流式训练体验/) as HTMLInputElement).checked).toBe(
+            true,
+        );
+        expect(
+            (screen.getByLabelText(/entry_resume_policy/) as HTMLSelectElement)
+                .value,
+        ).toBe("latest_active_or_new");
+        expect(
+            (screen.getByLabelText(/generation_timeout_seconds/) as HTMLInputElement)
+                .value,
+        ).toBe("30");
         expect(
             (screen.getByLabelText(/session_start_behavior/) as HTMLSelectElement)
                 .value,
@@ -187,7 +205,12 @@ describe("AdminAiCoachConfigPage", () => {
                     proactive_coaching_enabled: true,
                     session_start_behavior: "plan_and_first_card",
                     auto_advance_enabled: true,
+                    streaming_enabled: true,
+                    entry_resume_policy: "latest_active_or_new",
+                    generation_timeout_seconds: 30,
                     max_auto_steps_per_session: 5,
+                    empty_response_recovery_prompts: ["继续下一题", "换个场景", "总结本轮"],
+                    generation_failure_recovery_prompts: ["重试下一题", "换主题", "总结一下"],
                 }),
             );
         });

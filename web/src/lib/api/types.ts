@@ -5067,6 +5067,8 @@ export interface SalesTrainerQuizAnswer {
     scoring_feedback: string | null;
     scoring_reason: string | null;
     normalized_score: number | null;
+    max_score: number | null;
+    scoring_dimensions: string[];
     attempt_context?: Record<string, unknown> | null;
     is_correct: boolean | null;
     score: number | null;
@@ -5414,9 +5416,94 @@ export interface SalesTrainerOperationLogListResponse {
     total: number;
 }
 
+export type SalesTrainerAdminCapabilityKey =
+    | "admin_full_access"
+    | "manage_content"
+    | "manage_questions"
+    | "manage_modules"
+    | "manage_prompts"
+    | "view_records"
+    | "view_global_records"
+    | "retry_jobs"
+    | "regrade_history"
+    | "view_logs"
+    | "view_settings";
+
+export interface SalesTrainerAdminCapabilities {
+    role: string;
+    role_label: string;
+    capabilities: Record<SalesTrainerAdminCapabilityKey, boolean>;
+    capability_keys: SalesTrainerAdminCapabilityKey[];
+}
+
+export type SalesTrainerTrainingRecordType =
+    | "audio_submission"
+    | "quiz_attempt"
+    | "ai_coach_session";
+
+export interface SalesTrainerEffectiveScore {
+    score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    source: "original_record" | "latest_regrade";
+    original_score: number | null;
+    original_max_score: number | null;
+    original_passed: boolean | null;
+    score_delta: number | null;
+    latest_regrade_run_id: string | null;
+    latest_regrade_error_code: string | null;
+    history_overwrite: false;
+}
+
+export interface SalesTrainerScoreExplanation {
+    basis: string;
+    summary: string | null;
+    dimensions: Array<Record<string, unknown>>;
+    evidence: Array<Record<string, unknown>>;
+    strengths?: string[];
+    issues: Array<Record<string, unknown>>;
+    next_actions: Array<Record<string, unknown>>;
+}
+
+export interface SalesTrainerAbilityProfile {
+    basis: "sales_trainer_phase2_projection_v1";
+    overall_score: number | null;
+    overall_passed: boolean | null;
+    dimensions: Array<Record<string, unknown>>;
+    weak_dimensions: Array<Record<string, unknown>>;
+    evidence_count: number;
+}
+
+export interface SalesTrainerRemediation {
+    needed: boolean;
+    reason: string;
+    action_label: string;
+    target_path: string;
+    priority: "low" | "medium" | "high";
+    weak_dimension_keys?: string[];
+}
+
+export interface SalesTrainerPhase2Policy {
+    key: string;
+    version: string;
+    enabled: boolean;
+    low_score_threshold: number;
+    repeat_practice_threshold: number;
+    dashboard_record_limit: number;
+    source: string;
+    config_id: string | null;
+    config_version: number | null;
+    status: string | null;
+    fallback_applied: boolean;
+    fallback_reason: string | null;
+    management_entry: string;
+    permission: string;
+    effective_timing: string;
+}
+
 export interface SalesTrainerTrainingRecord {
     record_id: string;
-    record_type: "audio_submission" | "quiz_attempt";
+    record_type: SalesTrainerTrainingRecordType;
     path_key: string | null;
     path_revision_id: string | null;
     path_revision_no: number | null;
@@ -5424,7 +5511,7 @@ export interface SalesTrainerTrainingRecord {
     legacy_snapshot_only: boolean;
     unit_id: string;
     unit_name: string | null;
-    unit_type: SalesTrainerUnitType;
+    unit_type: SalesTrainerUnitType | "ai_coach";
     user_id: string;
     user_name: string | null;
     user_email: string | null;
@@ -5439,12 +5526,28 @@ export interface SalesTrainerTrainingRecord {
     task_brief_snapshot: Record<string, unknown> | null;
     audio_submission: SalesTrainerAudioSubmission | null;
     quiz_attempt: SalesTrainerQuizAttempt | null;
+    ai_coach_session?: Record<string, unknown> | null;
     operation_logs: SalesTrainerOperationLog[];
+    effective_score?: SalesTrainerEffectiveScore | null;
+    latest_regrade?: Record<string, unknown> | null;
+    score_explanation?: SalesTrainerScoreExplanation | null;
+    ability_profile?: SalesTrainerAbilityProfile | null;
+    remediation?: SalesTrainerRemediation | null;
 }
 
 export interface SalesTrainerTrainingRecordListResponse {
     items: SalesTrainerTrainingRecord[];
     total: number;
+}
+
+export interface SalesTrainerManagerDashboard {
+    generated_at: string;
+    policy: SalesTrainerPhase2Policy;
+    summary: Record<string, unknown>;
+    module_summaries: Array<Record<string, unknown>>;
+    weak_dimensions: Array<Record<string, unknown>>;
+    risk_learners: Array<Record<string, unknown>>;
+    intervention_suggestions: Array<Record<string, unknown>>;
 }
 
 export interface SalesTrainerSettings {
@@ -5461,6 +5564,7 @@ export interface SalesTrainerSettings {
     max_file_size_mb: number;
     allowed_mime_types: string[];
     file_url_expires_seconds: number;
+    phase2_policy?: SalesTrainerPhase2Policy;
 }
 
 export interface SalesTrainerUnitCreateRequest {
@@ -5751,6 +5855,8 @@ export type AiCoachAnswerPayloadV1 =
 export interface AiCoachScoreResultV1 {
     readonly score: number;
     readonly max_score: number;
+    readonly mastery_threshold?: number | null;
+    readonly mastered?: boolean | null;
     readonly feedback: string;
     readonly missed_points: readonly string[];
     readonly next_turn_available: boolean;
@@ -5975,7 +6081,7 @@ export interface AiCoachChatSessionPublicV1 {
 
 export interface AiCoachChatSessionCreateRequest {
     readonly module_key: string;
-    readonly resume_strategy?: "latest_in_progress" | "new";
+    readonly resume_strategy?: "latest_active_or_new" | "latest_in_progress" | "new";
 }
 
 export interface AiCoachChatMessageCreateRequest {
@@ -5987,6 +6093,39 @@ export interface AiCoachChatMessageCreateRequest {
 export interface AiCoachChatEventAnswerSubmitRequest {
     readonly answer_payload: AiCoachAnswerPayloadV1;
 }
+
+export type AiCoachChatStreamPhase =
+    | "resolving_session"
+    | "creating_session"
+    | "session_ready"
+    | "saving_user_message"
+    | "scoring_answer"
+    | "answer_scored"
+    | "deciding_next_action"
+    | "generating_first_card"
+    | "generating_next_card"
+    | "completed"
+    | "failed";
+
+export type AiCoachChatStreamEvent =
+    | {
+          readonly type: "status";
+          readonly phase: AiCoachChatStreamPhase;
+          readonly message: string;
+          readonly session_id?: string | null;
+      }
+    | {
+          readonly type: "session_snapshot";
+          readonly phase: AiCoachChatStreamPhase;
+          readonly session: AiCoachChatSessionPublicV1;
+      }
+    | {
+          readonly type: "error";
+          readonly phase: "failed";
+          readonly error_code: string;
+          readonly message: string;
+          readonly recoverable: boolean;
+      };
 
 export interface ExaminerAgentErrorDetails {
     gate_results?: ExaminerAgentGateResult[];

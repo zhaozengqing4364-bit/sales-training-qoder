@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useRef } from "react";
 import { Bot, Loader2, UserRound } from "lucide-react";
 
 import type {
@@ -25,6 +26,7 @@ export function CoachMessageList({
     pendingUserMessage,
     drafts,
     submittingEventIds,
+    isStarting,
     isSending,
     isAdvancing,
     activityLabel,
@@ -38,6 +40,7 @@ export function CoachMessageList({
     readonly pendingUserMessage: string | null;
     readonly drafts: DraftByEventId;
     readonly submittingEventIds: ReadonlySet<string>;
+    readonly isStarting: boolean;
     readonly isSending: boolean;
     readonly isAdvancing: boolean;
     readonly activityLabel: string | null;
@@ -49,11 +52,41 @@ export function CoachMessageList({
 }) {
     const messages = buildMessages(session, pendingUserMessage);
     const eventsByMessage = groupEventsByMessage(session?.ui_events ?? []);
+    const logRef = useRef<HTMLDivElement | null>(null);
+    const eventScrollKey = useMemo(
+        () =>
+            (session?.ui_events ?? [])
+                .map((event) => `${event.event_id}:${event.status}:${event.score_result?.mastered ?? ""}`)
+                .join("|"),
+        [session?.ui_events],
+    );
+
+    useEffect(() => {
+        const log = logRef.current;
+        if (!log) {
+            return;
+        }
+        if (typeof log.scrollTo === "function") {
+            log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+            return;
+        }
+        log.scrollTop = log.scrollHeight;
+    }, [
+        activeEventId,
+        error,
+        eventScrollKey,
+        isAdvancing,
+        isSending,
+        isStarting,
+        messages.length,
+    ]);
+
     return (
         <div
+            ref={logRef}
             role="log"
             aria-label="商务技巧 AI 教练对话"
-            className="flex-1 space-y-5 overflow-y-auto px-4 py-5 md:px-8"
+            className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 md:px-8"
         >
             {messages.map((message) => (
                 <ChatMessage
@@ -68,7 +101,7 @@ export function CoachMessageList({
                     onSubmitEvent={onSubmitEvent}
                 />
             ))}
-            {isSending || isAdvancing ? (
+            {isStarting || isSending || isAdvancing ? (
                 <AssistantLoading label={activityLabel ?? "正在推进训练"} />
             ) : null}
             {error ? (

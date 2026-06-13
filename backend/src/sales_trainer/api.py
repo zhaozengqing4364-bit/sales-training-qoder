@@ -13,12 +13,14 @@ from common.db.models import User
 from common.db.session import get_db
 from sales_trainer.permissions import (
     can_manage_sales_trainer,
+    can_manage_sales_trainer_questions,
     can_retry_sales_trainer_jobs,
     can_view_sales_trainer_global_records,
     can_view_sales_trainer_logs,
     can_view_sales_trainer_records,
     can_view_sales_trainer_settings,
     is_sales_trainer_admin,
+    sales_trainer_admin_capability_projection,
     team_scope_department,
 )
 from sales_trainer.schemas import (
@@ -37,6 +39,7 @@ from sales_trainer.schemas import (
     QuizAttemptCreate,
     QuizAttemptListResponse,
     QuizAttemptResponse,
+    SalesTrainerManagerDashboardResponse,
     SalesTrainerMaterialCreate,
     SalesTrainerMaterialListResponse,
     SalesTrainerMaterialResponse,
@@ -73,6 +76,10 @@ from sales_trainer.services.material_service import (
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_service import SalesTrainerPathService
+from sales_trainer.services.phase2_dashboard_service import (
+    SalesTrainerPhase2DashboardService,
+)
+from sales_trainer.services.phase2_policy import resolve_phase2_policy
 from sales_trainer.services.prompt_service import (
     AudioScorePromptService,
     PromptServiceError,
@@ -85,8 +92,8 @@ from sales_trainer.services.question_service import (
 )
 from sales_trainer.services.quiz_service import QuizService, QuizServiceError
 from sales_trainer.services.training_record_service import TrainingRecordService
-from sales_trainer.services.unit_service import SalesTrainerUnitError, UnitService
 from sales_trainer.services.unit_public_payloads import learner_safe_unit_payload
+from sales_trainer.services.unit_service import SalesTrainerUnitError, UnitService
 
 router = APIRouter(prefix="/sales-trainer", tags=["sales-trainer"])
 admin_router = APIRouter(prefix="/admin/sales-trainer", tags=["admin-sales-trainer"])
@@ -101,6 +108,12 @@ def _api_error(code: str, *, status_code: int = 400, message: str | None = None)
 
 def _require_manager(user: User) -> JSONResponse | None:
     if can_manage_sales_trainer(user):
+        return None
+    return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号权限不足。")
+
+
+def _require_question_manager(user: User) -> JSONResponse | None:
+    if can_manage_sales_trainer_questions(user):
         return None
     return _api_error("[ROLE_REQUIRED]", status_code=403, message="当前账号权限不足。")
 
@@ -160,7 +173,8 @@ def _as_operation_log_response(log: Any) -> OperationLogResponse:
     )
 
 
-def _sales_trainer_settings_payload() -> dict[str, Any]:
+async def _sales_trainer_settings_payload(db: AsyncSession) -> dict[str, Any]:
+    _, phase2_policy = await resolve_phase2_policy(db)
     storage_backend = os.getenv("SALES_TRAINER_AUDIO_STORAGE_BACKEND", "local").lower()
     cos_configured = _all_env_present(
         "TENCENT_COS_SECRET_ID",
@@ -202,6 +216,7 @@ def _sales_trainer_settings_payload() -> dict[str, Any]:
             "SALES_TRAINER_AUDIO_FILE_URL_EXPIRES_SECONDS",
             3600,
         ),
+        "phase2_policy": phase2_policy,
     }
 
 
@@ -219,6 +234,13 @@ def _int_env(key: str, default: int) -> int:
     except ValueError:
         return default
     return value if value > 0 else default
+
+
+@admin_router.get("/capabilities")
+async def admin_get_capabilities(
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    return success_response(sales_trainer_admin_capability_projection(current_user))
 
 
 @router.get("/units")
@@ -702,7 +724,7 @@ async def admin_list_sales_trainer_question_categories(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if error := _require_manager(current_user):
+    if error := _require_question_manager(current_user):
         return error
     try:
         categories, total = await SalesTrainerQuestionService(db).list_categories()
@@ -725,7 +747,7 @@ async def admin_create_sales_trainer_question_category(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if error := _require_manager(current_user):
+    if error := _require_question_manager(current_user):
         return error
     try:
         category = await SalesTrainerQuestionService(db).create_category(
@@ -748,7 +770,7 @@ async def admin_update_sales_trainer_question_category(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if error := _require_manager(current_user):
+    if error := _require_question_manager(current_user):
         return error
     try:
         category = await SalesTrainerQuestionService(db).update_category(
@@ -774,7 +796,7 @@ async def admin_list_sales_trainer_questions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if error := _require_manager(current_user):
+    if error := _require_question_manager(current_user):
         return error
     try:
         questions, total = await SalesTrainerQuestionService(db).list_questions(
@@ -800,7 +822,7 @@ async def admin_create_sales_trainer_question(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if error := _require_manager(current_user):
+    if error := _require_question_manager(current_user):
         return error
     try:
         question = await SalesTrainerQuestionService(db).create_question(
@@ -822,7 +844,7 @@ async def admin_get_sales_trainer_question(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if error := _require_manager(current_user):
+    if error := _require_question_manager(current_user):
         return error
     try:
         question = await SalesTrainerQuestionService(db).get_question(question_id)
@@ -842,7 +864,7 @@ async def admin_update_sales_trainer_question(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if error := _require_manager(current_user):
+    if error := _require_question_manager(current_user):
         return error
     try:
         question = await SalesTrainerQuestionService(db).update_question(
@@ -1097,6 +1119,21 @@ async def admin_list_training_records(
     )
 
 
+@admin_router.get("/manager-dashboard")
+async def admin_get_manager_dashboard(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if error := _require_records_viewer(current_user):
+        return error
+    payload = await SalesTrainerPhase2DashboardService(db).get_dashboard(
+        team_department=_team_scope(current_user),
+    )
+    return success_response(
+        SalesTrainerManagerDashboardResponse.model_validate(payload).model_dump()
+    )
+
+
 @admin_router.get("/training-records/audio/{submission_id}")
 async def admin_get_audio_training_record(
     submission_id: str,
@@ -1121,6 +1158,31 @@ async def admin_get_audio_training_record(
     if record is None:
         return _api_error("[TRAINING_RECORD_NOT_FOUND]", status_code=404)
     return success_response(SalesTrainerTrainingRecordResponse.model_validate(record).model_dump())
+
+
+@admin_router.get("/training-records/detail/{record_type}/{record_id}")
+async def admin_get_training_record_detail(
+    record_type: str,
+    record_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if error := _require_records_viewer(current_user):
+        return error
+    if record_type not in {"audio_submission", "quiz_attempt", "ai_coach_session"}:
+        return _api_error("[TRAINING_RECORD_TYPE_INVALID]", status_code=400)
+    record = await TrainingRecordService(db).get_record(record_type, record_id)
+    if record is None:
+        return _api_error("[TRAINING_RECORD_NOT_FOUND]", status_code=404)
+    team_department = _team_scope(current_user)
+    if (
+        team_department is not None
+        and record.get("user_department") != team_department
+    ):
+        return _api_error("[TRAINING_RECORD_NOT_FOUND]", status_code=404)
+    return success_response(
+        SalesTrainerTrainingRecordResponse.model_validate(record).model_dump()
+    )
 
 
 @admin_router.get("/quiz-attempts")
@@ -1252,12 +1314,13 @@ async def admin_publish_audio_score_prompt(
 @admin_router.get("/settings")
 async def admin_get_sales_trainer_settings(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     if error := _require_settings_viewer(current_user):
         return error
     return success_response(
         SalesTrainerSettingsResponse.model_validate(
-            _sales_trainer_settings_payload()
+            await _sales_trainer_settings_payload(db)
         ).model_dump()
     )
 

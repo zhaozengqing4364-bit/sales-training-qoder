@@ -21,12 +21,45 @@
 - 字段命名: API 入参与返回字段统一使用 `snake_case`。
 - learner 权限: 只能读取已发布训练单元，只能提交、读取本人做题记录和本人音频提交。
 - 超级管理员权限: `admin` / `super_admin` 可管理内容配置、发布/归档、查看全局记录、查看日志、重试失败任务和显式重评历史成绩。
-- 内容管理员权限: `content_admin` / `newcomer_content_admin` 可管理训练单元、文章绑定、题库、考卷、材料和评分提示词；不能查看学员记录、配置健康、操作日志或重试任务。
-- 培训负责人权限: `support` / `training_lead` / `training_manager` 可查看本人 `department` 范围内的学员录音、评分结果、做题记录和训练记录；不能修改内容配置、查看系统日志或重试任务。无部门时使用空范围兜底，不放大全局权限。
+- 内容管理员权限: `content_admin` / `newcomer_content_admin` 可管理训练单元、文章绑定、题库、考卷、材料和录音评分标准；不能查看学员记录、配置健康、操作日志或重试任务。AI Coach 高风险字段仍需 `sales_trainer.manage_prompts`。
+- 培训负责人权限: `support` / `training_lead` / `training_manager` 可查看本人 `department` 范围内的学员录音、评分结果、做题记录和训练记录；当前后端同时保留题库维护兼容能力 `sales_trainer.manage_questions`；不能修改其他内容配置、查看系统日志或重试任务。无部门时使用空范围兜底，不放大全局权限。
 - 运维人员权限: `operations` / `ops` / `operator` / `sre` 可查看配置健康、操作日志、全局记录，并可重试转写/评分任务、显式重评历史成绩；不能管理文章、题库、考卷、材料等内容配置。
 - 销售训练材料单独管理: 销售训练 PPT、逐字稿、示例录音和附件属于 `sales_trainer` 域，不复用 `/admin/presentations` 的业务语义。
 - PPT 演练门禁: `unit.config.audio.purpose="ppt_pitch"` 的任务必须绑定已发布材料，学员提交前必须确认当前要求版本；提交记录冻结材料、任务简报和评分方案快照。
 - 兼容命名: API 路径和模块目录暂不改名；新增 DTO、后台导航和学员页面文案必须以“新人训练路径”为展示名。
+
+### Admin Capability Projection
+
+前端后台导航不得复制角色字符串矩阵。进入新人训练路径后台后，客户端应调用 `GET /api/v1/admin/sales-trainer/capabilities` 获取当前用户的机器可读能力，再按能力展示入口。该接口只投影 `sales_trainer.permissions` 中的现有权限权威，不新建独立权限配置源。
+
+```typescript
+type SalesTrainerAdminCapabilityKey =
+  | "admin_full_access"
+  | "manage_content"
+  | "manage_questions"
+  | "manage_modules"
+  | "manage_prompts"
+  | "view_records"
+  | "view_global_records"
+  | "retry_jobs"
+  | "regrade_history"
+  | "view_logs"
+  | "view_settings";
+
+interface SalesTrainerAdminCapabilities {
+  role: string;
+  role_label: string;
+  capabilities: Record<SalesTrainerAdminCapabilityKey, boolean>;
+  capability_keys: SalesTrainerAdminCapabilityKey[];
+}
+```
+
+默认值与兜底:
+
+- 未登录或 learner 角色调用由认证层拒绝或返回全部 `false` 能力；前端 fail-closed，不展示受限入口。
+- `role_label` 由后端权限模块统一生成；前端只可在 capability 缺失时展示保守默认文案。
+- `SALES_TRAINER_MANAGER_ROLES` 仍是培训负责人兼容角色来源；非法或缺失时使用默认 `support,training_lead,training_manager`。
+- 该接口不写审计日志，因为它只读取当前会话权限；真实操作仍由具体 admin API 写操作日志。
 
 ## 联调对齐说明
 
@@ -137,6 +170,9 @@ interface NewcomerTrainingPathModuleConfig {
 
 - `enabled=false`
 - `chat_enabled=true`
+- `streaming_enabled=true`
+- `entry_resume_policy="latest_active_or_new"`；可选 `"latest_active_or_new" | "latest_in_progress" | "new"`。缺省会话创建请求必须读取该配置。
+- `generation_timeout_seconds=30`，范围 `5..120`
 - `coach_mode="mixed_drill"`
 - `allowed_interaction_types=["single_choice","multiple_choice"]`
 - `allowed_ui_event_types=["quiz_card","explanation_card","summary_card","followup_prompt"]`
@@ -152,11 +188,16 @@ interface NewcomerTrainingPathModuleConfig {
 - `summary_when_mastery_reached=true`
 - `allowed_next_actions=["continue_drill","increase_difficulty","remediate","switch_scenario","summarize","ask_user_choice","end_session"]`
 - `chat_welcome_message="你好，我是商务技巧 AI 教练。你可以直接说想练什么，我会把练习卡片放在对话里。"`
+- `empty_response_recovery_message="我没有拿到可操作的训练卡片。你可以继续下一题、换个场景，或先总结本轮。"`
+- `empty_response_recovery_prompts=["继续下一题","换个场景","总结本轮"]`，范围 `1..4` 个非空字符串
+- `generation_failure_recovery_message="我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。"`
+- `generation_failure_recovery_prompts=["重试下一题","换主题","总结一下"]`，范围 `1..4` 个非空字符串；用于下一步动作生成失败或答题后流式生成超时的可恢复 followup。
 - `min_turns=3`
 - `max_turns=10`
 - `mastery_threshold=80`
 - `output_schema_version="ai_coach_interaction_v1"`
 - `prompt_contract_hash`、`scoring_contract_hash` 是运行时审计字段。admin 配置请求中的值会被忽略，模块配置中保持为 `null`；真实 hash 在会话生成/评分时由后端根据已渲染 prompt contract 计算并记录。
+- `retry_policy={"max_retries":1,"retry_backoff":1.0}`；默认只允许 1 次重试，避免多轮 LLM 不合约时让学员等待过久。管理员可按模型稳定性调高，但仍受 `generation_timeout_seconds` 总预算约束。
 
 简答题配置：
 
@@ -169,7 +210,7 @@ interface NewcomerTrainingPathModuleConfig {
 
 - 查看/普通模块配置需要 `sales_trainer.manage_modules` 对应角色。
 - 修改普通开关、进入后行为或自动推进步数需要 `sales_trainer.manage_modules` 对应角色。
-- 修改 `coach_mode`、`allowed_interaction_types`、`chat_enabled`、`allowed_ui_event_types`、`max_cards_per_message`、`chat_welcome_message`、`min_turns`、`max_turns`、`mastery_threshold`、连续答对/答错阈值、补救策略、总结策略、`allowed_next_actions`、prompt 绑定、模型、重试策略或失败策略等高风险字段，需要 `sales_trainer.manage_prompts` 对应角色。
+- 修改 `coach_mode`、`allowed_interaction_types`、`chat_enabled`、`streaming_enabled`、`entry_resume_policy`、`generation_timeout_seconds`、`allowed_ui_event_types`、`max_cards_per_message`、`chat_welcome_message`、`empty_response_recovery_message`、`empty_response_recovery_prompts`、`generation_failure_recovery_message`、`generation_failure_recovery_prompts`、`min_turns`、`max_turns`、`mastery_threshold`、连续答对/答错阈值、补救策略、总结策略、`allowed_next_actions`、prompt 绑定、模型、重试策略或失败策略等高风险字段，需要 `sales_trainer.manage_prompts` 对应角色。
 - 通用 `/admin/newcomer-training/path-config` 保存也必须执行同一字段级 RBAC；权限 diff 失败时返回 `[AI_COACH_CONFIG_RBAC_CHECK_FAILED]`，不得 fail-open 保存。
 - learner 创建 AI Coach session 时，客户端传入的 `coach_mode` / `interaction_type` 必须落在模块 `allowed_interaction_types` 允许范围内；否则返回 `[AI_COACH_INTERACTION_TYPE_NOT_ALLOWED]`。
 
@@ -195,9 +236,12 @@ Learner AI 教练会话路由：
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions` | 创建或恢复 Chatbot 式 AI 教练 session，返回训练局 snapshot |
+| `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions/stream` | 创建或恢复 Chatbot 式 AI 教练 session，以 SSE 返回阶段状态和 session snapshot |
 | `GET` | `/api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}` | 读取本人 AI 教练 chat session、messages 和 ui_events |
 | `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/messages` | 发送自由文本或标准训练命令，后端生成 assistant 文本和白名单 UI events |
+| `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/messages/stream` | 发送自由文本或标准训练命令，以 SSE 返回保存、生成和 session snapshot |
 | `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/events/{event_id}/answer` | 提交某张 quiz_card 的答案；后端评分、更新 `coach_state`，并在允许时自动生成一个 `next_coach_action` 对应的 assistant message + UI events，返回更新后的 session snapshot |
+| `POST` | `/api/v1/newcomer-training/ai-coach/chat/sessions/{session_id}/events/{event_id}/answer/stream` | 提交某张 quiz_card 的答案，以 SSE 先返回 `answer_scored` snapshot，再返回下一步生成状态和最终 snapshot |
 | `POST` | `/api/v1/newcomer-training/ai-coach/sessions` | 兼容旧逐题 session；不作为商务技巧 Chatbot 页面主入口 |
 | `GET` | `/api/v1/newcomer-training/ai-coach/sessions/{session_id}` | 兼容旧逐题 session 和 public turns |
 | `POST` | `/api/v1/newcomer-training/ai-coach/sessions/{session_id}/turns/{turn_id}/submit` | 兼容旧逐题提交 |
@@ -219,13 +263,15 @@ Learner public projection:
 
 - 创建 session 请求：
   - `module_key: string`
-  - `resume_strategy?: "latest_in_progress" | "new"`；未传时保持创建新 session 的兼容行为，商务技巧页面必须显式传 `latest_in_progress`。
+  - `resume_strategy?: "latest_active_or_new" | "latest_in_progress" | "new" | null`；未传或传 `null` 时后端读取模块配置 `entry_resume_policy`。商务技巧学员页默认显式传 `latest_active_or_new`，只恢复仍有 active pending `quiz_card` 的训练局；总结态、已结束态或无可答题卡的旧会话必须新开。
+  - 点击“继续当前局”传 `latest_in_progress`；点击“新开一局”传 `new`。新开或继续期间前端必须保留旧页面状态并渲染流式进度，不得清空成无反馈等待。
 - 发送 message 请求：
   - 自由文本：`content: string`
   - 标准训练命令：`command: "continue" | "explain" | "switch_scenario" | "summarize" | "end" | "retry"`，可附 `event_id`。
   - `command` 存在时，后端按确定性 `next_coach_action` 分支推进，不把按钮文案当自然语言意图猜测。
 - `messages[]` 只包含 `message_id`、`role`、`content`、`order_index`、`created_at`。
 - `ui_events[]` 只包含 `event_id`、`message_id`、`type`、`status`、public `payload`、`answer_payload`、`score_result`、`order_index`、`created_at`。
+- `score_result` 的 `score/max_score` 是后端状态机使用的内部掌握度数值；学员选择题界面不得裸展示为 `100 / 100` 考试分。后端必须同时返回 `mastery_threshold` 与 `mastered`（旧历史数据可缺失），前端以“答对/未掌握/达到掌握标准”解释结果。
 - `coach_state` 只包含 `session_phase`、`active_event_id`、`auto_step_count`、`answered_card_count`、`correct_streak`、`incorrect_streak`、`current_focus`、`difficulty`、`last_action`、`can_auto_advance`、`stopped_reason`，不返回内部分数累计、prompt 或配置快照。
 - `session_phase` 由后端 projection 派生，取值为 `"starting" | "answering" | "reviewing" | "choosing" | "summarizing" | "completed"`。
 - `active_event_id` 只指向当前可操作的 pending `quiz_card`；没有待答题卡时为 `null`。前端可用第一张 pending `quiz_card` 做兼容兜底，但不得把多张 pending 题卡同时作为主流程展示。
@@ -244,6 +290,27 @@ Learner public projection:
 - 提交 `quiz_card` 答案时，后端先持久化答案、评分和 `ai_coach_chat_card_submitted_v1` 操作日志，再调用 LLM 生成下一步，避免 LLM 调用期间持有评分事务。
 - `failure_behavior="abort"` 时，下一步生成失败会记录 `sales_trainer_ai_coach_coach_actions.status="failed"` 和 `ai_coach_chat_next_action_failed_v1` 操作日志，并向 API 调用方返回 typed error；`skip_turn` / `continue_with_fallback` 时，评分保留，追加安全 `followup_prompt`，同样记录 failed action 和 error_code。
 - `chat_enabled=false`、`enabled=false`、缺少生成 Prompt、配置非法或 prompt revision 不可用时，直达 chat URL 显示明确不可用/不可重试错误；前端不得展示旧考试页替代。
+
+SSE 流式响应契约：
+
+- 以上三个 `*/stream` 端点返回 `Content-Type: text/event-stream`。
+- 每个 frame 的 `event` 与 JSON `data.type` 一致，取值为 `"status" | "session_snapshot" | "error"`。
+- `status` frame：
+  - `phase: "resolving_session" | "creating_session" | "session_ready" | "saving_user_message" | "scoring_answer" | "answer_scored" | "deciding_next_action" | "generating_first_card" | "generating_next_card" | "completed" | "failed"`
+  - `message: string`
+  - `session_id?: string | null`
+- `session_snapshot` frame：
+  - `phase` 使用同一 phase 集合。
+  - `session` 等同普通 JSON 接口返回的 `AiCoachChatSessionPublicV1`。
+- `error` frame：
+  - `phase="failed"`
+  - `error_code: string`
+  - `message: string`
+  - `recoverable: boolean`
+- 答题流必须先提交并持久化评分，再发送 `phase="answer_scored"` 的 `session_snapshot`，然后才进入 `deciding_next_action` / `generating_next_card`。这样前端可以先渲染已提交、掌握判定和反馈，不等待 LLM 下一题生成完成。
+- 当 LLM 自由文本回复没有返回任何白名单 `ui_events` 时，后端必须追加配置化 `followup_prompt`，`prompts` 来自 `empty_response_recovery_prompts`；若 `assistant_text` 为空，则使用 `empty_response_recovery_message`。不得让页面停在只有“开始一道题目”但没有题卡或动作的状态。
+- 答题已评分后，如果下一步动作生成超过 `generation_timeout_seconds`，后端必须回滚被取消的生成事务并通过 AI Coach 服务层记录失败 action。随后返回 `phase="completed"` 的 `session_snapshot`，其中包含来自 `generation_failure_recovery_message` / `generation_failure_recovery_prompts` 的可恢复 followup；不得只返回红色 error frame 让学员卡在当前局。
+- 当 `streaming_enabled=false` 时，SSE 端点返回 `error` frame，`error_code="[AI_COACH_STREAMING_DISABLED]"`；普通 JSON 端点保持兼容。
 
 ## 统一响应
 
@@ -1005,6 +1072,7 @@ admin 接口按角色能力分级，而不是只有 `admin/support` 两档大权
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| `GET` | `/api/v1/admin/sales-trainer/capabilities` | 当前用户新人训练路径后台 capability projection，前端导航和页面入口以此为准 |
 | `GET` | `/api/v1/admin/sales-trainer/units` | 训练单元列表，支持 `include_archived`、`limit`、`offset` |
 | `GET` | `/api/v1/admin/sales-trainer/units/{unit_id}` | 训练单元详情 |
 | `POST` | `/api/v1/admin/sales-trainer/units` | 创建训练单元，默认 `draft` |
@@ -1301,7 +1369,9 @@ interface AudioScorePromptUpdate {
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `GET` | `/api/v1/admin/sales-trainer/training-records` | 统一训练记录列表，支持 `user_id`、`unit_id`、`material_version_id`、`limit`、`offset` |
-| `GET` | `/api/v1/admin/sales-trainer/training-records/audio/{submission_id}` | 录音训练记录详情，聚合材料/录音/转写/评分/操作记录 |
+| `GET` | `/api/v1/admin/sales-trainer/training-records/detail/{record_type}/{record_id}` | 统一训练记录详情，`record_type` 只允许 `audio_submission`、`quiz_attempt`、`ai_coach_session` |
+| `GET` | `/api/v1/admin/sales-trainer/training-records/audio/{submission_id}` | 录音训练记录详情兼容入口；内部委托统一详情接口 |
+| `GET` | `/api/v1/admin/sales-trainer/manager-dashboard` | 阶段 2 管理者看板，聚合完成率、通过率、风险学员、弱项维度和干预建议 |
 
 Response `data`:
 
@@ -1309,7 +1379,7 @@ Response `data`:
 interface SalesTrainerTrainingRecordListResponse {
   items: Array<{
     record_id: string;
-    record_type: "audio_submission" | "quiz_attempt";
+    record_type: "audio_submission" | "quiz_attempt" | "ai_coach_session";
     path_key?: string | null;
     path_revision_id?: string | null;
     path_revision_no?: number | null;
@@ -1317,7 +1387,7 @@ interface SalesTrainerTrainingRecordListResponse {
     legacy_snapshot_only: boolean;
     unit_id: string;
     unit_name?: string | null;
-    unit_type: "quiz" | "audio_scoring";
+    unit_type: "quiz" | "audio_scoring" | "ai_coach";
     user_id: string;
     user_name?: string | null;
     user_department?: string | null;
@@ -1331,11 +1401,131 @@ interface SalesTrainerTrainingRecordListResponse {
     task_brief_snapshot?: Record<string, unknown> | null;
     audio_submission?: AudioSubmission | null;
     quiz_attempt?: QuizAttempt | null;
+    ai_coach_session?: Record<string, unknown> | null;
     operation_logs?: OperationLog[];
+    effective_score?: {
+      score?: number | null;
+      max_score?: number | null;
+      passed?: boolean | null;
+      source: "original_record" | "latest_regrade";
+      original_score?: number | null;
+      original_max_score?: number | null;
+      original_passed?: boolean | null;
+      score_delta?: number | null;
+      latest_regrade_run_id?: string | null;
+      latest_regrade_error_code?: string | null;
+      history_overwrite: false;
+    } | null;
+    latest_regrade?: Record<string, unknown> | null;
+    score_explanation?: {
+      basis: string;
+      summary?: string | null;
+      dimensions: Array<Record<string, unknown>>;
+      evidence: Array<Record<string, unknown>>;
+      issues: Array<Record<string, unknown>>;
+      next_actions: Array<Record<string, unknown>>;
+    } | null;
+    ability_profile?: {
+      basis: "sales_trainer_phase2_projection_v1";
+      overall_score?: number | null;
+      overall_passed?: boolean | null;
+      dimensions: Array<Record<string, unknown>>;
+      weak_dimensions: Array<Record<string, unknown>>;
+      evidence_count: number;
+    } | null;
+    remediation?: {
+      needed: boolean;
+      reason: string;
+      action_label: string;
+      target_path: string;
+      priority: "low" | "medium" | "high";
+      weak_dimension_keys?: string[];
+    } | null;
   }>;
   total: number;
 }
+
+type SalesTrainerTrainingRecordDetailResponse =
+  SalesTrainerTrainingRecordListResponse["items"][number];
 ```
+
+顶层 `score`、`max_score`、`passed` 是原始记录分，必须来自原始 `AudioScoreResult`、`SalesTrainerQuizAttempt` 或 AI Coach session summary；历史重评不得覆盖这些字段。`effective_score` 是面向管理和学员反馈的当前有效分投影。若存在最近一次成功历史重评且 `after_snapshot` 形成可用分数，则 `source="latest_regrade"`，`score` / `passed` 取重评结果；否则取原始记录。能力画像、补救动作和管理者看板必须使用 `effective_score`。
+
+列表分页必须由数据库层统一窗口负责：audio、quiz、AI Coach 三类记录使用 `UNION ALL` 后按 `submitted_at DESC` 全局排序，再执行 `limit/offset`。`total` 必须使用同一套 union 查询。筛选语义固定为：`user_id` 三类记录都过滤；`unit_id` 只命中 audio/quiz，AI Coach 当前无 `unit_id` 时排除；`material_version_id` 只命中 audio 的 `confirmed_material_version_id`，quiz/AI Coach 排除；`team_department` 三类记录都通过 `User.department` 限定。
+
+统一详情接口返回单条 `SalesTrainerTrainingRecordDetailResponse`，必须包含当前有效分、原始分、最近重评、评分解释、能力画像、补救动作、原始记录摘要和可见操作日志。非法 `record_type` 返回 `[TRAINING_RECORD_TYPE_INVALID]`，不存在或不在 `_team_scope` 内返回 `[TRAINING_RECORD_NOT_FOUND]`。
+
+管理者看板响应:
+
+```typescript
+interface SalesTrainerManagerDashboard {
+  generated_at: string;
+  policy: {
+    key: "sales_trainer.phase2.closed_loop_policy";
+    version: string;
+    enabled: boolean;
+    low_score_threshold: number;
+    repeat_practice_threshold: number;
+    dashboard_record_limit: number;
+    source: "database" | "database_previous" | "default";
+    config_id?: string | null;
+    config_version?: number | null;
+    status?: string | null;
+    fallback_applied: boolean;
+    fallback_reason?: string | null;
+    management_entry: "/admin/business-rules/sales-trainer-phase2";
+    permission: "admin_publish_only";
+    effective_timing: "request_time";
+  };
+  summary: {
+    record_count: number;
+    loaded_record_count: number;
+    learner_count: number;
+    completed_record_count: number;
+    completion_rate?: number | null;
+    pass_rate?: number | null;
+    low_score_record_count: number;
+    repeat_practice_learner_count: number;
+  };
+  module_summaries: Array<Record<string, unknown>>;
+  weak_dimensions: Array<Record<string, unknown>>;
+  risk_learners: Array<Record<string, unknown>>;
+  intervention_suggestions: Array<Record<string, unknown>>;
+}
+```
+
+看板阈值、主管动作和补救动作不是页面常量，也不再读取阶段 2 专用环境变量。运行时通过 `BusinessRuleConfigService` 读取 `sales_trainer.phase2.closed_loop_policy` 的 published 配置；缺失、非法或 disabled 时使用 bundled default，并在 `policy` / `settings.phase2_policy` 返回 `fallback_applied=true` 和原因。发布、回滚、禁用、预览和审计全部走现有 business-rule 生命周期。
+
+阶段 2 闭环策略配置:
+
+```typescript
+interface SalesTrainerPhase2ClosedLoopPolicyConfig {
+  version: string; // 默认 "sales_trainer_phase2_closed_loop_policy_v1"
+  enabled: boolean; // 默认 true
+  low_score_threshold: number; // 0..100，默认 70
+  repeat_practice_threshold: number; // 1..20，默认 2
+  dashboard_record_limit: number; // 1..5000，默认 500
+  manager_actions: Array<{
+    code: "not_passed" | "low_score" | "repeated_practice" | "fallback";
+    label: string;
+    priority: "low" | "medium" | "high";
+  }>;
+  remediation_actions: Array<{
+    record_type:
+      | "audio_submission"
+      | "quiz_attempt"
+      | "ai_coach_session"
+      | "default"
+      | "no_action";
+    action_label: string;
+    reason_template: string;
+    target_path_template: string;
+    priority: "low" | "medium" | "high";
+  }>;
+}
+```
+
+校验规则: action code / record_type 不得重复，且必须覆盖默认集合；`label`、`action_label`、`reason_template`、`target_path_template` 必须是非空字符串；`priority` 只能是 `low | medium | high`。治理入口是 `/admin/business-rules/sales-trainer-phase2`，settings 页只展示摘要、source/version/fallback 状态和治理入口，不作为只读 env 管理页。
 
 ### 历史成绩重评
 
@@ -1513,6 +1703,7 @@ interface OperationLogListResponse {
 | `[MATERIAL_FILE_NOT_FOUND]` | 404 | 材料文件不存在 |
 | `[MATERIAL_FILE_ACCESS_DENIED]` | 403 | 本地材料文件不在允许存储目录内 |
 | `[MATERIAL_FILE_URL_EXPIRES_CONFIG_INVALID]` | 500 | 材料文件访问链接有效期配置非法 |
+| `[TRAINING_RECORD_TYPE_INVALID]` | 400 | 统一训练记录详情的 `record_type` 不是 `audio_submission`、`quiz_attempt` 或 `ai_coach_session` |
 | `[TRAINING_RECORD_NOT_FOUND]` | 404 | 训练记录不存在 |
 
 ## 配置项
@@ -1537,6 +1728,7 @@ interface OperationLogListResponse {
 | `DASHSCOPE_API_KEY` | 无 | DashScope 文件识别 | 环境配置/密钥管理 | `SALES_TRAINER_ASR_MODE=file` 时必填，缺失返回 `[ASR_API_KEY_REQUIRED]` |
 | `SALES_TRAINER_ASR_MODEL` | `fun-asr` | DashScope 文件识别 | 环境配置/系统配置 | `language_hints` 仅在 `paraformer-v2` 时传入 |
 | `SALES_TRAINER_MANAGER_ROLES` | `support,training_lead,training_manager` | 培训负责人记录查看能力兼容配置 | 环境配置/系统配置 | 逗号分隔角色列表；缺失使用默认培训负责人角色；只授予团队记录读取能力，不授予内容管理、日志、配置健康或任务重试能力 |
+| `sales_trainer.phase2.closed_loop_policy` | `sales_trainer_phase2_closed_loop_policy_v1`、`enabled=true`、`low_score_threshold=70`、`repeat_practice_threshold=2`、`dashboard_record_limit=500`、默认主管动作与补救动作 | 阶段 2 训练记录投影、能力画像、补救动作、管理者看板和 settings 策略摘要 | `/admin/business-rules/sales-trainer-phase2`，复用 `BusinessRuleConfig` 发布/回滚/禁用/审计 | 阈值范围 `0..100`、`1..20`、`1..5000`；action code/record_type 必须覆盖且不重复；文案/模板非空；缺失、非法或 disabled 使用 bundled default，并返回 `phase2_policy.fallback_applied=true` |
 | `DEUCATE_BASE_URL` | 无 | Deucate 评分服务 | 环境配置/模型配置 | 缺失返回 `[DEUCATE_CONFIG_MISSING]` |
 | `DEUCATE_API_KEY` | 无 | Deucate 评分服务 | 环境配置/模型配置 | 缺失返回 `[DEUCATE_CONFIG_MISSING]` |
 | `DEUCATE_MODEL` | `deucate` | Deucate 评分服务 | 环境配置/模型配置 | 缺失使用默认值 |
@@ -1563,6 +1755,7 @@ interface OperationLogListResponse {
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-06-12 | 补充阶段 2 训练闭环契约 | 统一训练记录有效分投影、评分解释、能力画像、管理者看板和策略配置诊断 |
 | 2026-06-03 | 细化新人训练路径 RBAC 与生命周期审计契约 | 区分超级管理员、内容管理员、培训负责人、运维人员、学员；关键日志要求记录 previous/next/status 变更 |
 | 2026-05-28 | 补充培训负责人团队范围契约 | `support` 作为培训负责人兼容别名；跨用户记录按同部门过滤 |
 | 2026-05-28 | 补充 COS 私有桶与 DashScope 文件识别契约 | 明确 COS 服务端上传、私有桶签名 GET URL、DashScope `fun-asr` 默认模型和敏感 URL 不落库 |

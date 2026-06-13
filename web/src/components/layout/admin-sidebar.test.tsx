@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminSidebarContent } from "./admin-sidebar";
+import type { SalesTrainerAdminCapabilities } from "@/lib/api/types";
 
 const { usePathnameMock } = vi.hoisted(() => ({
     usePathnameMock: vi.fn(),
@@ -42,6 +43,34 @@ vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
     return actual;
 });
+
+function salesTrainerCapabilities(
+    overrides: Partial<SalesTrainerAdminCapabilities["capabilities"]>,
+    roleLabel = "培训负责人",
+): SalesTrainerAdminCapabilities {
+    const capabilities = {
+        admin_full_access: false,
+        manage_content: false,
+        manage_questions: false,
+        manage_modules: false,
+        manage_prompts: false,
+        view_records: false,
+        view_global_records: false,
+        retry_jobs: false,
+        regrade_history: false,
+        view_logs: false,
+        view_settings: false,
+        ...overrides,
+    };
+    return {
+        role: "support",
+        role_label: roleLabel,
+        capabilities,
+        capability_keys: Object.entries(capabilities)
+            .filter(([, enabled]) => enabled)
+            .map(([key]) => key as SalesTrainerAdminCapabilities["capability_keys"][number]),
+    };
+}
 
 describe("AdminSidebarContent", () => {
     beforeEach(() => {
@@ -107,15 +136,21 @@ describe("AdminSidebarContent", () => {
                     display_name: "培训负责人",
                     role: "support",
                 }}
+                salesTrainerCapabilities={salesTrainerCapabilities({
+                    manage_questions: true,
+                    view_records: true,
+                    view_logs: true,
+                    view_settings: true,
+                })}
             />,
         );
 
         fireEvent.click(await screen.findByRole("button", { name: "新人训练路径" }));
 
         expect(screen.queryByRole("link", { name: "工作台" })).toBeNull();
-        expect(screen.queryByRole("link", { name: "题库管理" })).toBeNull();
-        expect(screen.queryByRole("link", { name: "配置" })).toBeNull();
-        expect(screen.queryByRole("link", { name: "操作记录" })).toBeNull();
+        expect(await screen.findByRole("link", { name: "题库管理" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "配置" })).not.toBeNull();
+        expect(screen.getByRole("link", { name: "操作记录" })).not.toBeNull();
         expect(await screen.findByRole("link", { name: "学员录音" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "评分结果" })).not.toBeNull();
         expect(screen.getByRole("link", { name: "训练记录" })).not.toBeNull();
@@ -131,6 +166,14 @@ describe("AdminSidebarContent", () => {
                     display_name: "内容管理员",
                     role: "content_admin",
                 }}
+                salesTrainerCapabilities={salesTrainerCapabilities(
+                    {
+                        manage_content: true,
+                        manage_questions: true,
+                        manage_modules: true,
+                    },
+                    "内容管理员",
+                )}
             />,
         );
 
@@ -155,6 +198,16 @@ describe("AdminSidebarContent", () => {
                     display_name: "运维人员",
                     role: "operations",
                 }}
+                salesTrainerCapabilities={salesTrainerCapabilities(
+                    {
+                        view_records: true,
+                        retry_jobs: true,
+                        regrade_history: true,
+                        view_logs: true,
+                        view_settings: true,
+                    },
+                    "运维人员",
+                )}
             />,
         );
 

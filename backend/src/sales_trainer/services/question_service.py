@@ -3,14 +3,18 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.models import QuestionCategory, QuestionItem
-from curriculum_practice.schemas import QuestionCategoryCreate, QuestionCategoryUpdate
 from curriculum_practice.services.test_bank import TestBankService
 from sales_trainer.schemas import (
     SalesTrainerQuestionCategoryCreate,
     SalesTrainerQuestionCategoryUpdate,
     SalesTrainerQuestionCreate,
     SalesTrainerQuestionUpdate,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    QuestionCategory,
+    QuestionCategoryCreate,
+    QuestionCategoryUpdate,
+    QuestionItem,
 )
 from sales_trainer.services.question_contracts import (
     SALES_TRAINER_QUESTION_SCOPE,

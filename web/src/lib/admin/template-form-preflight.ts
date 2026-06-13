@@ -1,4 +1,4 @@
-import type { AssetRefPickerOption } from "@/components/admin/asset-ref-picker";
+import type { AssetRefPickerOption } from "@/lib/admin/asset-ref-types";
 import type { AdminKnowledgeBase } from "@/lib/api/types";
 
 export interface TemplatePreflightContext {

@@ -1,0 +1,168 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e9]:
+            - generic [ref=e10]: 管理
+            - generic [ref=e11]: 控制台
+        - navigation [ref=e12]:
+          - link "总览" [ref=e14] [cursor=pointer]:
+            - /url: /admin
+            - img [ref=e15]
+            - generic [ref=e20]: 总览
+          - button "新人训练路径" [ref=e22]:
+            - img [ref=e23]
+            - generic [ref=e26]: 新人训练路径
+            - img [ref=e27]
+          - button "课程训练" [ref=e30]:
+            - img [ref=e31]
+            - generic [ref=e35]: 课程训练
+            - img [ref=e36]
+          - button "内容与知识" [ref=e39]:
+            - img [ref=e40]
+            - generic [ref=e42]: 内容与知识
+            - img [ref=e43]
+          - button "智能体与角色" [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e50]: 智能体与角色
+            - img [ref=e51]
+          - button "策略中心" [ref=e54]:
+            - img [ref=e55]
+            - generic [ref=e58]: 策略中心
+            - img [ref=e59]
+          - button "运营分析" [ref=e62]:
+            - img [ref=e63]
+            - generic [ref=e65]: 运营分析
+            - img [ref=e66]
+          - button "组织与权限" [ref=e69]:
+            - img [ref=e70]
+            - generic [ref=e75]: 组织与权限
+            - img [ref=e76]
+          - button "系统治理" [ref=e79]:
+            - img [ref=e80]
+            - generic [ref=e83]: 系统治理
+            - img [ref=e84]
+        - generic [ref=e86]:
+          - link "回到用户端" [ref=e87] [cursor=pointer]:
+            - /url: /
+            - img [ref=e88]
+            - generic [ref=e90]: 回到用户端
+          - generic [ref=e91] [cursor=pointer]:
+            - img [ref=e93]
+            - generic [ref=e95]:
+              - generic [ref=e96]: Developer
+              - generic [ref=e97]: 超级用户
+            - img [ref=e99]
+          - button "折叠侧边栏" [ref=e102]:
+            - img [ref=e103]
+            - generic [ref=e106]: 折叠侧边栏
+    - main [ref=e107]:
+      - generic [ref=e109]:
+        - generic [ref=e111]:
+          - heading "新人训练路径工作台" [level=1] [ref=e113]
+          - paragraph [ref=e114]: 新人训练路径的模块、文章、考卷、录音评分、配置健康和操作记录集中在这里管理。
+        - generic [ref=e115]:
+          - generic [ref=e116]:
+            - paragraph [ref=e118]: 训练记录
+            - paragraph [ref=e119]: "--"
+          - generic [ref=e120]:
+            - paragraph [ref=e122]: 完成率
+            - paragraph [ref=e123]: "--"
+          - generic [ref=e124]:
+            - paragraph [ref=e126]: 通过率
+            - paragraph [ref=e127]: "--"
+          - generic [ref=e128]:
+            - paragraph [ref=e130]: 风险学员
+            - paragraph [ref=e131]:
+              - img [ref=e132]
+              - text: "--"
+          - generic [ref=e134]:
+            - paragraph [ref=e136]: 集中弱项
+            - paragraph [ref=e137]:
+              - img [ref=e138]
+              - text: 暂无集中弱项
+        - generic [ref=e141]:
+          - generic [ref=e142]:
+            - generic [ref=e144]:
+              - heading "风险学员" [level=2] [ref=e145]
+              - paragraph [ref=e146]: 低分、未通过或多次重练的学员。
+            - paragraph [ref=e148]: 暂无风险学员
+          - generic [ref=e149]:
+            - generic [ref=e151]:
+              - heading "模块弱项" [level=2] [ref=e152]
+              - paragraph [ref=e153]: 按评分维度聚合的团队薄弱点。
+            - paragraph [ref=e155]: 暂无集中弱项
+          - generic [ref=e156]:
+            - generic [ref=e158]:
+              - heading "干预建议" [level=2] [ref=e159]
+              - paragraph [ref=e160]: 把看板风险转成主管下一步动作。
+            - paragraph [ref=e162]: 暂无干预建议
+        - generic [ref=e163]:
+          - link "模块单元" [ref=e164] [cursor=pointer]:
+            - /url: /admin/sales-trainer/units
+            - generic [ref=e165]:
+              - img [ref=e168]
+              - generic [ref=e172]: 模块单元
+          - link "路径配置" [ref=e173] [cursor=pointer]:
+            - /url: /admin/sales-trainer/paths
+            - generic [ref=e174]:
+              - img [ref=e177]
+              - generic [ref=e179]: 路径配置
+          - link "AI 教练配置" [ref=e180] [cursor=pointer]:
+            - /url: /admin/sales-trainer/ai-coach
+            - generic [ref=e181]:
+              - img [ref=e184]
+              - generic [ref=e187]: AI 教练配置
+          - link "文章绑定" [ref=e188] [cursor=pointer]:
+            - /url: /admin/sales-trainer/articles
+            - generic [ref=e189]:
+              - img [ref=e192]
+              - generic [ref=e195]: 文章绑定
+          - link "考卷管理" [ref=e196] [cursor=pointer]:
+            - /url: /admin/sales-trainer/papers
+            - generic [ref=e197]:
+              - img [ref=e200]
+              - generic [ref=e203]: 考卷管理
+          - link "材料库" [ref=e204] [cursor=pointer]:
+            - /url: /admin/sales-trainer/materials
+            - generic [ref=e205]:
+              - img [ref=e208]
+              - generic [ref=e211]: 材料库
+          - link "题库管理" [ref=e212] [cursor=pointer]:
+            - /url: /admin/sales-trainer/questions
+            - generic [ref=e213]:
+              - img [ref=e216]
+              - generic [ref=e219]: 题库管理
+          - link "录音评分标准" [ref=e220] [cursor=pointer]:
+            - /url: /admin/sales-trainer/score-standards
+            - generic [ref=e221]:
+              - img [ref=e224]
+              - generic [ref=e227]: 录音评分标准
+          - link "训练记录中心" [ref=e228] [cursor=pointer]:
+            - /url: /admin/sales-trainer/training-records
+            - generic [ref=e229]:
+              - img [ref=e232]
+              - generic [ref=e237]: 训练记录中心
+          - link "学员录音" [ref=e238] [cursor=pointer]:
+            - /url: /admin/sales-trainer/audio-submissions
+            - generic [ref=e239]:
+              - img [ref=e242]
+              - generic [ref=e244]: 学员录音
+          - link "评分结果" [ref=e245] [cursor=pointer]:
+            - /url: /admin/sales-trainer/score-results
+            - generic [ref=e246]:
+              - img [ref=e249]
+              - generic [ref=e251]: 评分结果
+          - link "配置" [ref=e252] [cursor=pointer]:
+            - /url: /admin/sales-trainer/settings
+            - generic [ref=e253]:
+              - img [ref=e256]
+              - generic [ref=e259]: 配置
+          - link "操作记录" [ref=e260] [cursor=pointer]:
+            - /url: /admin/sales-trainer/operation-logs
+            - generic [ref=e261]:
+              - img [ref=e264]
+              - generic [ref=e267]: 操作记录
+  - alert [ref=e268]

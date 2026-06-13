@@ -13,9 +13,10 @@ from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatMessageCreate,
     AiCoachChatSessionPublicV1,
     AiCoachChatUiEventInternalV1,
+    AiCoachFollowupPromptPayloadV1,
 )
 from sales_trainer.models import SalesTrainerAiCoachSession
-from sales_trainer.schemas import AiCoachAnswerPayloadV1
+from sales_trainer.schemas import AiCoachAnswerPayloadV1, AiCoachScoreResultV1
 from sales_trainer.services.ai_coach_chat_auto_advance import AiCoachChatAutoAdvance
 from sales_trainer.services.ai_coach_chat_errors import (
     AiCoachChatGenerationError,
@@ -42,24 +43,41 @@ from sales_trainer.services.ai_coach_chat_store import (
     AiCoachChatStoreError,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
+from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
 
 
 class AiCoachChatService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        logs: OperationLogService | None = None,
+        scoring: AiCoachChatScorer | None = None,
+        runtime: AiCoachChatRuntime | None = None,
+        projection: AiCoachChatProjection | None = None,
+        store: AiCoachChatStore | None = None,
+        events: AiCoachChatEventWriter | None = None,
+        auto_advance: AiCoachChatAutoAdvance | None = None,
+        session_creator: AiCoachChatSessionCreator | None = None,
+    ) -> None:
         self._db = db
-        self._logs = OperationLogService(db)
-        self._scoring = AiCoachChatScorer(db)
-        self._runtime = AiCoachChatRuntime(db)
-        self._projection = AiCoachChatProjection()
-        self._store = AiCoachChatStore(db)
-        self._events = AiCoachChatEventWriter(db, self._projection, self._store)
-        self._auto_advance = AiCoachChatAutoAdvance(
+        self._logs = logs or OperationLogService(db)
+        self._scoring = scoring or AiCoachChatScorer(db)
+        self._runtime = runtime or AiCoachChatRuntime(db)
+        self._projection = projection or AiCoachChatProjection()
+        self._store = store or AiCoachChatStore(db)
+        self._events = events or AiCoachChatEventWriter(
+            db,
+            self._projection,
+            self._store,
+        )
+        self._auto_advance = auto_advance or AiCoachChatAutoAdvance(
             db,
             self._store,
             self._events,
             self._logs,
         )
-        self._session_creator = AiCoachChatSessionCreator(
+        self._session_creator = session_creator or AiCoachChatSessionCreator(
             db,
             self._runtime,
             self._logs,
@@ -72,9 +90,13 @@ class AiCoachChatService:
         *,
         user_id: str,
         module_key: str,
-        resume_strategy: str = "new",
+        resume_strategy: str | None = None,
         actor: User | None = None,
     ) -> AiCoachChatSessionPublicV1:
+        resume_strategy = await self._resolve_resume_strategy(
+            module_key=module_key,
+            resume_strategy=resume_strategy,
+        )
         if resume_strategy == "latest_in_progress":
             existing = await self._store.latest_in_progress_session(
                 user_id=user_id,
@@ -82,11 +104,70 @@ class AiCoachChatService:
             )
             if existing is not None:
                 return await self.public_session(str(existing.session_id), user_id)
+        if resume_strategy == "latest_active_or_new":
+            existing = await self._latest_active_session(
+                user_id=user_id,
+                module_key=module_key,
+            )
+            if existing is not None:
+                return existing
         session_id = await self._session_creator.create_session_id(
             actor=actor,
             user_id=user_id,
             module_key=module_key,
         )
+        return await self.public_session(session_id, user_id)
+
+    async def create_session_shell(
+        self,
+        *,
+        user_id: str,
+        module_key: str,
+        resume_strategy: str | None = None,
+        actor: User | None = None,
+    ) -> AiCoachChatSessionPublicV1:
+        resume_strategy = await self._resolve_resume_strategy(
+            module_key=module_key,
+            resume_strategy=resume_strategy,
+        )
+        if resume_strategy == "latest_in_progress":
+            existing = await self._store.latest_in_progress_session(
+                user_id=user_id,
+                module_key=module_key,
+            )
+            if existing is not None:
+                return await self.public_session(str(existing.session_id), user_id)
+        if resume_strategy == "latest_active_or_new":
+            existing = await self._latest_active_session(
+                user_id=user_id,
+                module_key=module_key,
+            )
+            if existing is not None:
+                return existing
+        session_id = await self._session_creator.create_session_id(
+            actor=actor,
+            user_id=user_id,
+            module_key=module_key,
+            start_auto_advance=False,
+        )
+        return await self.public_session(session_id, user_id)
+
+    async def start_session_auto_advance(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        actor: User | None = None,
+    ) -> AiCoachChatSessionPublicV1:
+        session = await self._require_owned_session(session_id, user_id)
+        try:
+            await self._auto_advance.start_session_if_configured(
+                session=session,
+                config=self._runtime.config_from_session(session),
+                actor=actor,
+            )
+        except AiCoachChatGenerationError as exc:
+            raise service_error_from_exception(exc) from exc
         return await self.public_session(session_id, user_id)
 
     async def public_session(
@@ -144,15 +225,29 @@ class AiCoachChatService:
                 raise service_error_from_exception(exc) from exc
             return await self.public_session(session_id, user_id)
         history = await self._store.messages(session_id)
+        config = self._runtime.config_from_session(session)
         try:
             response = await self._runtime.generate_chat_response(
                 session=session,
-                config=self._runtime.config_from_session(session),
+                config=config,
                 user_message=message,
                 history=history,
             )
         except AiCoachChatRuntimeError as exc:
             raise service_error_from_exception(exc) from exc
+        if not response.ui_events:
+            response.ui_events.append(
+                AiCoachChatUiEventInternalV1(
+                    type="followup_prompt",
+                    payload=AiCoachFollowupPromptPayloadV1(
+                        prompts=list(config.empty_response_recovery_prompts),
+                    ),
+                )
+            )
+            response.assistant_text = (
+                response.assistant_text.strip()
+                or config.empty_response_recovery_message
+            )
         assistant = SalesTrainerAiCoachChatMessage(
             session_id=session_id,
             role="assistant",
@@ -196,9 +291,41 @@ class AiCoachChatService:
         answer_payload: AiCoachAnswerPayloadV1,
         actor: User | None = None,
     ) -> AiCoachChatSessionPublicV1:
+        event_payload, score_result = await self.score_and_persist_event_answer(
+            session_id=session_id,
+            event_id=event_id,
+            user_id=user_id,
+            answer_payload=answer_payload,
+            actor=actor,
+        )
+        await self.advance_after_scored_event(
+            session_id=session_id,
+            event_id=event_id,
+            user_id=user_id,
+            event_payload=event_payload,
+            score_result=score_result,
+            answer_payload=answer_payload,
+            actor=actor,
+        )
+        return await self.public_session(session_id, user_id)
+
+    async def score_and_persist_event_answer(
+        self,
+        *,
+        session_id: str,
+        event_id: str,
+        user_id: str,
+        answer_payload: AiCoachAnswerPayloadV1,
+        actor: User | None = None,
+    ) -> tuple[dict[str, object], AiCoachScoreResultV1]:
         session = await self._require_owned_session(session_id, user_id)
         event = await self._event(session_id, event_id)
         score_result = await self.score_quiz_event(event, answer_payload=answer_payload)
+        score_result = self._with_mastery_context(
+            score_result,
+            threshold=self._runtime.config_from_session(session).mastery_threshold,
+        )
+        event_payload = dict(event.payload_json or {})
         event.answer_payload = answer_payload.model_dump(mode="json")
         event.score_result = score_result.model_dump(mode="json")
         event.status = "scored"
@@ -211,11 +338,25 @@ class AiCoachChatService:
         )
         await self._db.flush()
         await self._db.commit()
+        return event_payload, score_result
+
+    async def advance_after_scored_event(
+        self,
+        *,
+        session_id: str,
+        event_id: str,
+        user_id: str,
+        event_payload: dict[str, object],
+        score_result,
+        answer_payload: AiCoachAnswerPayloadV1,
+        actor: User | None = None,
+    ) -> None:
+        session = await self._require_owned_session(session_id, user_id)
         try:
             await self._auto_advance.advance_after_answer(
                 session=session,
                 config=self._runtime.config_from_session(session),
-                event_payload=event.payload_json,
+                event_payload=event_payload,
                 event_id=event_id,
                 score_result=score_result,
                 answer_payload=answer_payload,
@@ -223,7 +364,27 @@ class AiCoachChatService:
             )
         except AiCoachChatGenerationError as exc:
             raise service_error_from_exception(exc) from exc
-        return await self.public_session(session_id, user_id)
+
+    async def rollback_cancelled_generation(self) -> None:
+        await self._db.rollback()
+
+    async def record_advance_timeout_after_scored_event(
+        self,
+        *,
+        session_id: str,
+        event_id: str,
+        user_id: str,
+        score_result: AiCoachScoreResultV1,
+        actor: User | None = None,
+    ) -> None:
+        session = await self._require_owned_session(session_id, user_id)
+        await self._auto_advance.record_timeout_after_answer(
+            session=session,
+            config=self._runtime.config_from_session(session),
+            event_id=event_id,
+            score_result=score_result,
+            actor=actor,
+        )
 
     async def score_quiz_event(
         self,
@@ -250,6 +411,19 @@ class AiCoachChatService:
             )
         except AiCoachChatScoringError as exc:
             raise service_error_from_exception(exc) from exc
+
+    @staticmethod
+    def _with_mastery_context(
+        score_result: AiCoachScoreResultV1,
+        *,
+        threshold: float,
+    ) -> AiCoachScoreResultV1:
+        return score_result.model_copy(
+            update={
+                "mastery_threshold": threshold,
+                "mastered": score_result.score >= threshold,
+            }
+        )
 
     def build_stored_event_payload(
         self,
@@ -281,6 +455,46 @@ class AiCoachChatService:
             return await self._store.require_owned_session(session_id, user_id)
         except AiCoachChatStoreError as exc:
             raise service_error_from_exception(exc) from exc
+
+    async def _latest_active_session(
+        self,
+        *,
+        user_id: str,
+        module_key: str,
+    ) -> AiCoachChatSessionPublicV1 | None:
+        existing = await self._store.latest_in_progress_session(
+            user_id=user_id,
+            module_key=module_key,
+        )
+        if existing is None:
+            return None
+        public = await self.public_session(str(existing.session_id), user_id)
+        if (
+            public.coach_state is not None
+            and public.coach_state.session_phase == "answering"
+            and public.coach_state.active_event_id
+        ):
+            return public
+        return None
+
+    async def _resolve_resume_strategy(
+        self,
+        *,
+        module_key: str,
+        resume_strategy: str | None,
+    ) -> str:
+        if resume_strategy is not None:
+            return resume_strategy
+        path_response = await SalesTrainerPathConfigService(self._db).get_config()
+        try:
+            _, config = self._runtime.module_ai_coach_config(
+                path_response.get("path"),
+                module_key,
+            )
+            self._runtime.validate_chat_config(config)
+        except AiCoachChatRuntimeError as exc:
+            raise service_error_from_exception(exc) from exc
+        return config.entry_resume_policy
 
     async def _event(
         self,

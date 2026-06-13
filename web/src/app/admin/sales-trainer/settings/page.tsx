@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type { SalesTrainerSettings } from "@/lib/api/types";
@@ -22,6 +24,10 @@ function StatusBadge({ ok }: { ok: boolean }) {
             {ok ? "已配置" : "未配置"}
         </Badge>
     );
+}
+
+function policyValue(value: unknown): string {
+    return value == null ? "--" : String(value);
 }
 
 export default function SalesTrainerSettingsPage() {
@@ -104,6 +110,26 @@ export default function SalesTrainerSettingsPage() {
                             <div><span className="block text-slate-500">最大文件</span><span className="font-medium">{settings.max_file_size_mb} MB</span></div>
                             <div><span className="block text-slate-500">访问链接有效期</span><span className="font-medium">{settings.file_url_expires_seconds} 秒</span></div>
                             <div><span className="block text-slate-500">允许格式</span><span className="font-medium">{settings.allowed_mime_types.join(", ")}</span></div>
+                        </div>
+                    </GlassCard>
+                    <GlassCard className="space-y-4 p-6 lg:col-span-2">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <h2 className="text-lg font-bold text-slate-900">阶段 2 训练闭环策略</h2>
+                            {settings.phase2_policy?.management_entry ? (
+                                <Link href={settings.phase2_policy.management_entry}>
+                                    <Button variant="outline" size="sm">打开策略治理</Button>
+                                </Link>
+                            ) : null}
+                        </div>
+                        <div className="grid gap-3 text-sm md:grid-cols-4">
+                            <div><span className="block text-slate-500">弱项阈值</span><span className="font-medium">{policyValue(settings.phase2_policy?.low_score_threshold)}</span></div>
+                            <div><span className="block text-slate-500">重复训练阈值</span><span className="font-medium">{policyValue(settings.phase2_policy?.repeat_practice_threshold)}</span></div>
+                            <div><span className="block text-slate-500">看板记录上限</span><span className="font-medium">{policyValue(settings.phase2_policy?.dashboard_record_limit)}</span></div>
+                            <div><span className="block text-slate-500">兜底状态</span><StatusBadge ok={!settings.phase2_policy?.fallback_applied} /></div>
+                            <div><span className="block text-slate-500">来源</span><span className="font-medium">{policyValue(settings.phase2_policy?.source)}</span></div>
+                            <div><span className="block text-slate-500">策略版本</span><span className="font-medium">{policyValue(settings.phase2_policy?.version)}</span></div>
+                            <div><span className="block text-slate-500">配置版本</span><span className="font-medium">{policyValue(settings.phase2_policy?.config_version)}</span></div>
+                            <div><span className="block text-slate-500">兜底原因</span><span className="font-medium">{policyValue(settings.phase2_policy?.fallback_reason)}</span></div>
                         </div>
                     </GlassCard>
                     {diagnostics ? <OperationalDiagnosticsPanel diagnostics={diagnostics} /> : null}

@@ -5,9 +5,12 @@ from hashlib import sha256
 from json import dumps
 from typing import Any
 
-from curriculum_practice.models import QuestionCategory, QuestionItem
 from sales_trainer.schemas import SalesTrainerQuestionUpdate
 from sales_trainer.services.asset_revision_service import AssetChangeClass
+from sales_trainer.services.curriculum_practice_adapter import (
+    QuestionCategory,
+    QuestionItem,
+)
 from sales_trainer.services.question_contracts import to_question_item_update
 
 SALES_TRAINER_QUESTION_SCOPE = "sales_trainer"

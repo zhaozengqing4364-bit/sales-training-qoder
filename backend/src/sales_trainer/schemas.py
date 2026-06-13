@@ -360,7 +360,7 @@ class SalesTrainerPathListResponse(BaseModel):
 class AiCoachRetryPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    max_retries: int = Field(2, ge=0, le=5)
+    max_retries: int = Field(1, ge=0, le=5)
     retry_backoff: float = Field(1.0, gt=0, le=30)
 
 
@@ -377,6 +377,11 @@ AiCoachSessionStartBehaviorV1 = Literal[
     "welcome_only",
     "plan_then_wait",
     "plan_and_first_card",
+]
+AiCoachEntryResumePolicyV1 = Literal[
+    "latest_active_or_new",
+    "latest_in_progress",
+    "new",
 ]
 AiCoachRemediationStrategyV1 = Literal[
     "explain_then_retry",
@@ -442,6 +447,9 @@ class AiCoachConfig(BaseModel):
         ]
     )
     max_cards_per_message: int = Field(3, ge=1, le=5)
+    streaming_enabled: bool = True
+    entry_resume_policy: AiCoachEntryResumePolicyV1 = "latest_active_or_new"
+    generation_timeout_seconds: int = Field(30, ge=5, le=120)
     proactive_coaching_enabled: bool = False
     session_start_behavior: AiCoachSessionStartBehaviorV1 = "welcome_only"
     auto_advance_enabled: bool = False
@@ -458,6 +466,26 @@ class AiCoachConfig(BaseModel):
         "你好，我是商务技巧 AI 教练。你可以直接说想练什么，我会把练习卡片放在对话里。",
         min_length=1,
         max_length=300,
+    )
+    empty_response_recovery_message: str = Field(
+        "我没有拿到可操作的训练卡片。你可以继续下一题、换个场景，或先总结本轮。",
+        min_length=1,
+        max_length=300,
+    )
+    empty_response_recovery_prompts: list[str] = Field(
+        default_factory=lambda: ["继续下一题", "换个场景", "总结本轮"],
+        min_length=1,
+        max_length=4,
+    )
+    generation_failure_recovery_message: str = Field(
+        "我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。",
+        min_length=1,
+        max_length=300,
+    )
+    generation_failure_recovery_prompts: list[str] = Field(
+        default_factory=lambda: ["重试下一题", "换主题", "总结一下"],
+        min_length=1,
+        max_length=4,
     )
     prompt_template_id: str | None = Field(None, min_length=1, max_length=36)
     prompt_revision_id: str | None = Field(None, min_length=1, max_length=36)
@@ -510,6 +538,17 @@ class AiCoachConfig(BaseModel):
             return str(UUID(value))
         except ValueError as exc:
             raise ValueError("prompt template id must be a UUID") from exc
+
+    @field_validator(
+        "empty_response_recovery_prompts",
+        "generation_failure_recovery_prompts",
+    )
+    @classmethod
+    def validate_recovery_prompts(cls, value: list[str]) -> list[str]:
+        prompts = [item.strip() for item in value]
+        if any(not item for item in prompts):
+            raise ValueError("recovery prompts must not contain empty strings")
+        return prompts
 
     @model_validator(mode="after")
     def validate_turn_range(self) -> AiCoachConfig:
@@ -804,6 +843,8 @@ class AiCoachScoreResultV1(BaseModel):
 
     score: float = Field(..., ge=0, le=100)
     max_score: float = Field(100.0, ge=0, le=100)
+    mastery_threshold: float | None = Field(None, ge=0, le=100)
+    mastered: bool | None = None
     feedback: str = Field(..., min_length=1, max_length=4000)
     missed_points: list[str] = Field(default_factory=list)
     next_turn_available: bool = True
@@ -1061,6 +1102,8 @@ class QuizAnswerResponse(BaseModel):
     scoring_feedback: str | None = None
     scoring_reason: str | None = None
     normalized_score: float | None = None
+    max_score: float | None = None
+    scoring_dimensions: list[str] = Field(default_factory=list)
     attempt_context: dict[str, Any] | None = None
     is_correct: bool | None = None
     score: float | None = None
@@ -1418,11 +1461,26 @@ class SalesTrainerTrainingRecordResponse(BaseModel):
     quiz_attempt: dict[str, Any] | None = None
     ai_coach_session: dict[str, Any] | None = None
     operation_logs: list[dict[str, Any]] = Field(default_factory=list)
+    effective_score: dict[str, Any] | None = None
+    latest_regrade: dict[str, Any] | None = None
+    score_explanation: dict[str, Any] | None = None
+    ability_profile: dict[str, Any] | None = None
+    remediation: dict[str, Any] | None = None
 
 
 class SalesTrainerTrainingRecordListResponse(BaseModel):
     items: list[SalesTrainerTrainingRecordResponse]
     total: int
+
+
+class SalesTrainerManagerDashboardResponse(BaseModel):
+    generated_at: object
+    policy: dict[str, Any]
+    summary: dict[str, Any]
+    module_summaries: list[dict[str, Any]] = Field(default_factory=list)
+    weak_dimensions: list[dict[str, Any]] = Field(default_factory=list)
+    risk_learners: list[dict[str, Any]] = Field(default_factory=list)
+    intervention_suggestions: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AudioScorePromptCreate(BaseModel):
@@ -1652,6 +1710,7 @@ class SalesTrainerSettingsResponse(BaseModel):
     max_file_size_mb: int
     allowed_mime_types: list[str]
     file_url_expires_seconds: int
+    phase2_policy: dict[str, Any] = Field(default_factory=dict)
 
 
 class AudioSubmissionResponse(BaseModel):

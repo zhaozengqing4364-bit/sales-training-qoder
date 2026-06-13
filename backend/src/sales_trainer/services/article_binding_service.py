@@ -6,12 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from curriculum_practice.models import LearningChapter, LearningContent
 from sales_trainer.schemas import (
     NewcomerArticleBinding,
     NewcomerPathConfigPayload,
     NewcomerPathConfigSaveRequest,
     NewcomerPathModuleConfig,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    LearningChapter,
+    LearningContent,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (

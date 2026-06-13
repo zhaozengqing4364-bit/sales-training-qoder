@@ -15,6 +15,7 @@ Before writing backend code, read the guides relevant to your change:
 | Sales realtime / WebSocket | `backend/src/sales_bot/AGENTS.md` |
 | New module or file placement | [Directory Structure](./directory-structure.md) |
 | DB models / queries / migrations | [Database Guidelines](./database-guidelines.md) |
+| Governed business rules / configurable policies | [Business Rule Configs](./business-rule-configs.md) |
 | Service failures / API errors | [Error Handling](./error-handling.md) |
 | Logging / trace_id | [Logging Guidelines](./logging-guidelines.md) |
 | Tests / lint / type-check | [Quality Guidelines](./quality-guidelines.md) |
@@ -34,6 +35,7 @@ Before writing backend code, read the guides relevant to your change:
 |-------|-------------|--------|
 | [Directory Structure](./directory-structure.md) | Module layout, routes, services, WebSocket handlers | Ready |
 | [Database Guidelines](./database-guidelines.md) | SQLAlchemy 2.0 async, Alembic, query patterns | Ready |
+| [Business Rule Configs](./business-rule-configs.md) | Governed runtime policy config, validation, fallback, audit | Ready |
 | [Error Handling](./error-handling.md) | `Result[T]`, API responses, middleware fallbacks | Ready |
 | [Quality Guidelines](./quality-guidelines.md) | pytest, ruff, mypy, forbidden patterns | Ready |
 | [Logging Guidelines](./logging-guidelines.md) | structlog, trace_id, redaction | Ready |

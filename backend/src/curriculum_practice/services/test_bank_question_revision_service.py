@@ -19,11 +19,11 @@ from curriculum_practice.services.test_bank_question_revision_payloads import (
     question_item_publish_decision_from_payload,
     question_item_revision_payload_from_update,
 )
-from sales_trainer.models import SalesTrainerAssetRevision
-from sales_trainer.services.asset_revision_service import (
+from curriculum_practice.services.sales_trainer_revision_adapter import (
+    OperationLogService,
+    SalesTrainerAssetRevision,
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.services.operation_log_service import OperationLogService
 
 
 class TestBankQuestionRevisionService:

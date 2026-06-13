@@ -11,7 +11,7 @@ from curriculum_practice.schemas import (
     LearningContentUpdate,
     PublishGateDecision,
 )
-from sales_trainer.services.asset_revision_service import AssetChangeClass
+from curriculum_practice.services.sales_trainer_revision_adapter import AssetChangeClass
 
 LEARNING_CONTENT_RESOURCE_TYPE: Final = "curriculum_learning_content"
 LEARNING_CONTENT_TARGET_TYPE: Final = "curriculum_learning_content"

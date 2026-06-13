@@ -1,0 +1,137 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e23]:
+    - complementary [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - img [ref=e28]
+          - generic [ref=e31]:
+            - generic [ref=e32]: AI 销售教练
+            - generic [ref=e33]: 平台
+        - navigation "主导航" [ref=e34]:
+          - generic [ref=e35]: 菜单
+          - menubar [ref=e36]:
+            - menuitem "首页" [ref=e37] [cursor=pointer]:
+              - img [ref=e38]
+              - generic [ref=e41]: 首页
+            - menuitem "训练模式" [ref=e42] [cursor=pointer]:
+              - img [ref=e43]
+              - generic [ref=e48]: 训练模式
+            - menuitem "新人训练路径" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+              - generic [ref=e54]: 新人训练路径
+            - menuitem "排行榜" [ref=e55] [cursor=pointer]:
+              - img [ref=e56]
+              - generic [ref=e57]: 排行榜
+            - menuitem "历史记录" [ref=e58] [cursor=pointer]:
+              - img [ref=e59]
+              - generic [ref=e63]: 历史记录
+          - generic [ref=e66]: 系统
+          - menubar [ref=e67]:
+            - menuitem "运行状态" [ref=e68] [cursor=pointer]:
+              - img [ref=e69]
+              - generic [ref=e71]: 运行状态
+            - menuitem "管理后台" [ref=e72] [cursor=pointer]:
+              - img [ref=e73]
+              - generic [ref=e76]: 管理后台
+        - generic [ref=e77]:
+          - button "帮助与反馈" [ref=e79]:
+            - img [ref=e80]
+            - generic [ref=e82]: 帮助与反馈
+          - generic [ref=e83] [cursor=pointer]:
+            - img [ref=e85]
+            - generic [ref=e88]:
+              - generic [ref=e89]: Developer
+              - generic [ref=e90]: Development
+            - img [ref=e92]
+          - button "折叠侧边栏" [ref=e95]:
+            - img [ref=e96]
+            - generic [ref=e99]: 折叠侧边栏
+    - main [ref=e100]:
+      - generic [ref=e102]:
+        - link "返回新人训练路径" [ref=e103] [cursor=pointer]:
+          - /url: /sales-trainer
+          - img [ref=e104]
+          - text: 返回新人训练路径
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - img [ref=e110]
+              - generic [ref=e113]:
+                - heading "商务技巧 AI 教练" [level=1] [ref=e114]
+                - paragraph [ref=e115]: 教练主导训练局
+            - generic [ref=e116]:
+              - button "继续当前局" [disabled]:
+                - img
+                - text: 继续当前局
+              - button "新开一局" [disabled]:
+                - img
+                - text: 新开一局
+              - button "结束并总结" [disabled]:
+                - img
+                - text: 结束并总结
+          - generic [ref=e131]:
+            - generic [ref=e132]:
+              - paragraph [ref=e133]: 当前阶段
+              - paragraph [ref=e134]: 复盘中
+            - generic [ref=e135]:
+              - paragraph [ref=e136]: 训练主题
+              - paragraph [ref=e137]: 商务技巧
+            - generic [ref=e138]:
+              - paragraph [ref=e139]: 难度/进度
+              - paragraph [ref=e140]: 标准 · 已完成 0 题
+            - generic [ref=e141]:
+              - paragraph [ref=e142]: 下一步
+              - paragraph [ref=e143]: 继续同主题训练
+          - log "商务技巧 AI 教练对话" [ref=e144]:
+            - article [ref=e145]:
+              - img [ref=e147]
+              - generic [ref=e151]: 你好，我是商务技巧 AI 教练。你可以直接告诉我想练什么，比如“出 3 道商务礼仪单选题”。
+            - article [ref=e152]:
+              - img [ref=e154]
+              - generic [ref=e157]:
+                - generic [ref=e158]: 好的，我们开始吧！热身题来了，先测测你对拜访前准备和商务礼仪的掌握程度。请完成下面的选择题。
+                - generic [ref=e160]:
+                  - generic [ref=e161]:
+                    - generic [ref=e162]: 单选
+                    - generic [ref=e194]: 已提交
+                  - heading "拜访客户前，以下哪项行为最能体现商务礼仪？" [level=2] [ref=e163]
+                  - generic [ref=e164]:
+                    - button "A 提前10-15分钟到达，整理仪表并确认会议资料" [disabled] [ref=e165]:
+                      - generic [ref=e166]: A
+                      - generic [ref=e167]: 提前10-15分钟到达，整理仪表并确认会议资料
+                      - img [ref=e195]
+                    - button "B 提前半小时到达，在客户公司附近闲逛等候" [disabled] [ref=e168]:
+                      - generic [ref=e169]: B
+                      - generic [ref=e170]: 提前半小时到达，在客户公司附近闲逛等候
+                    - button "C 准时到达即可，不必提前准备" [disabled] [ref=e171]:
+                      - generic [ref=e172]: C
+                      - generic [ref=e173]: 准时到达即可，不必提前准备
+                    - button "D 提前一天发送议程，当天迟到5分钟以示忙碌" [disabled] [ref=e174]:
+                      - generic [ref=e175]: D
+                      - generic [ref=e176]: 提前一天发送议程，当天迟到5分钟以示忙碌
+                  - paragraph [ref=e197]: 这道题考察拜访客户前的时间管理和个人准备，属于商务礼仪中的基本功。
+                  - generic [ref=e198]:
+                    - generic [ref=e199]:
+                      - generic [ref=e200]: 答对
+                      - generic [ref=e201]: 已达到本轮掌握标准：80%
+                    - paragraph [ref=e202]: 很好！提前10-15分钟到达给客户留下专业印象，从容整理仪表和资料是基本礼仪。
+            - article [ref=e203]:
+              - img [ref=e205]
+              - generic [ref=e208]:
+                - img [ref=e209]
+                - text: 正在生成下一张题卡或阶段复盘。
+          - generic [ref=e179]:
+            - generic [ref=e180]:
+              - img [ref=e181]
+              - text: 教练动作
+            - button "继续下一题" [disabled]
+            - button "讲解一下" [disabled]
+            - button "换个场景" [disabled]
+            - button "总结本轮" [disabled]
+          - generic [ref=e188]:
+            - textbox "问教练一句，或使用上方操作" [disabled] [ref=e211]
+            - button "发送" [disabled]:
+              - img
+  - button "Open Next.js Dev Tools" [ref=e18] [cursor=pointer]:
+    - img [ref=e19]
+  - alert [ref=e22]

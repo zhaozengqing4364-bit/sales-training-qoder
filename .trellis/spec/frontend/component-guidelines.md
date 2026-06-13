@@ -54,6 +54,20 @@ import { cn } from "@/lib/utils";
 - **Buttons**: `rounded-full` in `components/ui/button.tsx`.
 - Avoid full-page `bg-white` backgrounds; white is for cards/inputs.
 
+### Viewport-Bound Chat Surfaces
+
+Practice/chat surfaces with persistent headers, status bars, command bars, or composers must be bounded to the viewport. Use a fixed-height flex shell plus `min-h-0` on the scrollable message region so historical messages scroll inside the conversation area instead of pushing the whole page taller.
+
+```tsx
+<section className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col overflow-hidden">
+  <header className="shrink-0">...</header>
+  <div role="log" className="min-h-0 flex-1 overflow-y-auto">...</div>
+  <footer className="shrink-0">...</footer>
+</section>
+```
+
+Do not rely on `min-h-*` alone for chat shells. `min-height` lets content expand the shell, which defeats the internal scroll container and causes the page to grow indefinitely.
+
 ### Radix wrappers
 
 | Primitive | Wrapper |

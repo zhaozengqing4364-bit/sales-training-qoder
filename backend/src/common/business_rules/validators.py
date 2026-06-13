@@ -16,6 +16,7 @@ from common.business_rules.defaults import (
     ROLEPLAY_EVAL_RELEASE_GATE_KEY,
     ROLEPLAY_SITUATION_PACKS_KEY,
     SALES_COMBINATION_RULES_KEY,
+    SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY,
     get_business_rule_definition,
 )
 
@@ -73,6 +74,20 @@ _ROLEPLAY_POLICY_KEYS = {
 }
 _ROLEPLAY_EVAL_GATE_MODES = {"blocking", "warn_only", "disabled"}
 _ROLEPLAY_GRADER_MODES = {"blocking", "warn_only", "disabled"}
+_PHASE2_MANAGER_ACTION_CODES = {
+    "not_passed",
+    "low_score",
+    "repeated_practice",
+    "fallback",
+}
+_PHASE2_REMEDIATION_RECORD_TYPES = {
+    "audio_submission",
+    "quiz_attempt",
+    "ai_coach_session",
+    "default",
+    "no_action",
+}
+_PRIORITY_VALUES = {"low", "medium", "high"}
 
 
 class BusinessRuleValidationError(ValueError):
@@ -105,6 +120,8 @@ def validate_business_rule_value(key: str, value: dict[str, Any]) -> dict[str, A
         return _validate_admin_security_settings(value)
     if key == ADMIN_SETTINGS_NOTIFICATIONS_KEY:
         return _validate_admin_notification_settings(value)
+    if key == SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY:
+        return _validate_sales_trainer_phase2_policy(value)
     raise BusinessRuleValidationError(f"unsupported business rule key: {key}")
 
 
@@ -159,6 +176,51 @@ def _format_template(template: str, *, field: str) -> str:
     except (KeyError, IndexError, ValueError) as exc:
         raise BusinessRuleValidationError(f"{field} has invalid placeholders") from exc
     return template
+
+
+def _format_phase2_template(template: str, *, field: str) -> str:
+    try:
+        template.format(
+            record_id="record-1",
+            record_type="quiz_attempt",
+            unit_id="unit-1",
+            module_key="business_skills",
+            score=55.0,
+            threshold=70.0,
+            result_path="/sales-trainer/quiz/result/record-1",
+        )
+    except (KeyError, IndexError, ValueError) as exc:
+        raise BusinessRuleValidationError(f"{field} has invalid placeholders") from exc
+    return template
+
+
+def _priority(payload: dict[str, Any], field: str, *, default: str) -> str:
+    raw = _optional_string(payload, field, default=default, max_length=20)
+    if raw not in _PRIORITY_VALUES:
+        raise BusinessRuleValidationError(f"{field} must be low, medium, or high")
+    return raw
+
+
+def _phase2_score_threshold(value: Any, *, field: str) -> float:
+    try:
+        threshold = float(value)
+    except (TypeError, ValueError) as exc:
+        raise BusinessRuleValidationError(f"{field} must be numeric") from exc
+    if threshold < 0 or threshold > 100:
+        raise BusinessRuleValidationError(f"{field} must be within [0, 100]")
+    return threshold
+
+
+def _integer_range(value: Any, *, field: str, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise BusinessRuleValidationError(f"{field} must be an integer") from exc
+    if parsed < minimum or parsed > maximum:
+        raise BusinessRuleValidationError(
+            f"{field} must be within [{minimum}, {maximum}]"
+        )
+    return parsed
 
 
 def _validate_achievement_ruleset(value: dict[str, Any]) -> dict[str, Any]:
@@ -373,6 +435,108 @@ def _validate_recommendation_ruleset(value: dict[str, Any]) -> dict[str, Any]:
         "action_label": _required_string(fallback, "action_label", max_length=80),
         "target_path": _required_string(fallback, "target_path", max_length=500),
     }
+    return normalized
+
+
+def _validate_sales_trainer_phase2_policy(value: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(value)
+    normalized["version"] = _required_string(normalized, "version", max_length=120)
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    normalized["low_score_threshold"] = _phase2_score_threshold(
+        normalized.get("low_score_threshold", 70.0),
+        field="low_score_threshold",
+    )
+    normalized["repeat_practice_threshold"] = _integer_range(
+        normalized.get("repeat_practice_threshold", 2),
+        field="repeat_practice_threshold",
+        minimum=1,
+        maximum=20,
+    )
+    normalized["dashboard_record_limit"] = _integer_range(
+        normalized.get("dashboard_record_limit", 500),
+        field="dashboard_record_limit",
+        minimum=1,
+        maximum=5000,
+    )
+
+    manager_actions = normalized.get("manager_actions")
+    if not isinstance(manager_actions, list) or not manager_actions:
+        raise BusinessRuleValidationError("manager_actions must be a non-empty list")
+    seen_manager_codes: set[str] = set()
+    normalized_manager_actions: list[dict[str, str]] = []
+    for index, action in enumerate(manager_actions):
+        if not isinstance(action, dict):
+            raise BusinessRuleValidationError(
+                f"manager_actions[{index}] must be an object"
+            )
+        code = _required_string(action, "code", max_length=80)
+        if code not in _PHASE2_MANAGER_ACTION_CODES:
+            raise BusinessRuleValidationError(f"unsupported manager action code: {code}")
+        if code in seen_manager_codes:
+            raise BusinessRuleValidationError(f"duplicate manager action code: {code}")
+        seen_manager_codes.add(code)
+        normalized_manager_actions.append(
+            {
+                "code": code,
+                "label": _required_string(action, "label", max_length=120),
+                "priority": _priority(action, "priority", default="medium"),
+            }
+        )
+    missing_codes = _PHASE2_MANAGER_ACTION_CODES - seen_manager_codes
+    if missing_codes:
+        raise BusinessRuleValidationError(
+            f"missing manager action codes: {', '.join(sorted(missing_codes))}"
+        )
+    normalized["manager_actions"] = normalized_manager_actions
+
+    remediation_actions = normalized.get("remediation_actions")
+    if not isinstance(remediation_actions, list) or not remediation_actions:
+        raise BusinessRuleValidationError(
+            "remediation_actions must be a non-empty list"
+        )
+    seen_record_types: set[str] = set()
+    normalized_remediation_actions: list[dict[str, str]] = []
+    for index, action in enumerate(remediation_actions):
+        if not isinstance(action, dict):
+            raise BusinessRuleValidationError(
+                f"remediation_actions[{index}] must be an object"
+            )
+        record_type = _required_string(action, "record_type", max_length=80)
+        if record_type not in _PHASE2_REMEDIATION_RECORD_TYPES:
+            raise BusinessRuleValidationError(
+                f"unsupported remediation record_type: {record_type}"
+            )
+        if record_type in seen_record_types:
+            raise BusinessRuleValidationError(
+                f"duplicate remediation record_type: {record_type}"
+            )
+        seen_record_types.add(record_type)
+        normalized_remediation_actions.append(
+            {
+                "record_type": record_type,
+                "action_label": _required_string(
+                    action,
+                    "action_label",
+                    max_length=120,
+                ),
+                "reason_template": _format_phase2_template(
+                    _required_string(action, "reason_template", max_length=1200),
+                    field=f"remediation_actions[{index}].reason_template",
+                ),
+                "target_path_template": _format_phase2_template(
+                    _required_string(action, "target_path_template", max_length=500),
+                    field=f"remediation_actions[{index}].target_path_template",
+                ),
+                "priority": _priority(action, "priority", default="medium"),
+            }
+        )
+    missing_record_types = _PHASE2_REMEDIATION_RECORD_TYPES - seen_record_types
+    if missing_record_types:
+        raise BusinessRuleValidationError(
+            "missing remediation record_types: "
+            + ", ".join(sorted(missing_record_types))
+        )
+    normalized["remediation_actions"] = normalized_remediation_actions
     return normalized
 
 

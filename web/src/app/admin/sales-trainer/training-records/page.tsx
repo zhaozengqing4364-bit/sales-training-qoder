@@ -35,6 +35,30 @@ function formatScore(record: SalesTrainerTrainingRecord): string {
     return `${record.score} / ${record.max_score}`;
 }
 
+function formatEffectiveScore(record: SalesTrainerTrainingRecord): string {
+    const score = record.effective_score?.score;
+    const maxScore = record.effective_score?.max_score;
+    if (score == null) {
+        return "--";
+    }
+    if (maxScore == null) {
+        return String(score);
+    }
+    return `${score} / ${maxScore}`;
+}
+
+function formatScoreDelta(record: SalesTrainerTrainingRecord): string | null {
+    const delta = record.effective_score?.score_delta;
+    if (typeof delta !== "number" || delta === 0) {
+        return null;
+    }
+    return `${delta > 0 ? "+" : ""}${delta}`;
+}
+
+function detailPath(record: SalesTrainerTrainingRecord): string {
+    return `/admin/sales-trainer/training-records/${record.record_type}/${record.record_id}`;
+}
+
 export default function SalesTrainerTrainingRecordsPage() {
     const pathname = usePathname();
     const router = useRouter();
@@ -67,7 +91,10 @@ export default function SalesTrainerTrainingRecordsPage() {
     }
 
     useEffect(() => {
-        void loadRecords();
+        const timer = window.setTimeout(() => {
+            void loadRecords();
+        }, 0);
+        return () => window.clearTimeout(timer);
     }, []);
 
     function applyFilters(event: React.FormEvent<HTMLFormElement>) {
@@ -133,6 +160,7 @@ export default function SalesTrainerTrainingRecordsPage() {
                             <th className="px-6 py-4">类型</th>
                             <th className="px-6 py-4">材料版本</th>
                             <th className="px-6 py-4">得分</th>
+                            <th className="px-6 py-4">补救</th>
                             <th className="px-6 py-4">状态</th>
                             <th className="px-6 py-4">提交时间</th>
                             <th className="px-6 py-4">操作</th>
@@ -140,9 +168,9 @@ export default function SalesTrainerTrainingRecordsPage() {
                     </thead>
                     <tbody>
                         {isLoading ? (
-                            <tr><td colSpan={8} className="px-6 py-10 text-center text-slate-500">正在加载训练记录...</td></tr>
+                            <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500">正在加载训练记录...</td></tr>
                         ) : items.length === 0 ? (
-                            <tr><td colSpan={8} className="px-6 py-10 text-center text-slate-500">暂无训练记录</td></tr>
+                            <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500">暂无训练记录</td></tr>
                         ) : items.map((item) => {
                             const snapshot = item.material_snapshot;
                             const taskDisplay = formatTrainingTaskDisplay(item.unit_name, item.unit_id);
@@ -162,19 +190,32 @@ export default function SalesTrainerTrainingRecordsPage() {
                                     </td>
                                     <td className="px-6 py-4">{formatUnitTypeLabel(item.unit_type)}</td>
                                     <td className="px-6 py-4">{firstMaterial?.current_version?.version_label ?? "--"}</td>
-                                    <td className="px-6 py-4">{formatScore(item)}</td>
+                                    <td className="px-6 py-4">
+                                        <p className="font-semibold text-slate-900">{formatEffectiveScore(item)}</p>
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            原始分 {formatScore(item)}
+                                        </p>
+                                        {item.latest_regrade ? (
+                                            <p className="mt-1 text-xs text-emerald-700">
+                                                当前有效分 · 重评 {formatScoreDelta(item) ?? "无变化"}
+                                            </p>
+                                        ) : null}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {item.remediation?.needed ? (
+                                            <Badge className="bg-amber-50 text-amber-700">
+                                                {item.remediation.action_label}
+                                            </Badge>
+                                        ) : (
+                                            <span className="text-slate-400">--</span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4"><Badge className="bg-slate-100 text-slate-700">{formatAdminRecordStatus(item.status)}</Badge></td>
                                     <td className="px-6 py-4">{item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "--"}</td>
                                     <td className="px-6 py-4">
-                                        {item.record_type === "audio_submission" ? (
-                                            <Button variant="outline" size="sm" onClick={() => router.push(`/admin/sales-trainer/audio-submissions/${item.record_id}`)}>
-                                                查看详情
-                                            </Button>
-                                        ) : (
-                                            <Button variant="outline" size="sm" onClick={() => router.push(`/admin/sales-trainer/quiz-attempts/${item.record_id}`)}>
-                                                查看详情
-                                            </Button>
-                                        )}
+                                        <Button variant="outline" size="sm" onClick={() => router.push(detailPath(item))}>
+                                            查看详情
+                                        </Button>
                                     </td>
                                 </tr>
                             );

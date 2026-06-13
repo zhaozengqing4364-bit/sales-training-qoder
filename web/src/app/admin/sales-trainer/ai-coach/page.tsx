@@ -15,6 +15,7 @@ type InteractionType = "single_choice" | "multiple_choice" | "short_answer";
 type UiEventType = "quiz_card" | "explanation_card" | "summary_card" | "followup_prompt";
 type SessionStartBehavior = "welcome_only" | "plan_then_wait" | "plan_and_first_card";
 type RemediationStrategy = "explain_then_retry" | "ask_user_choice" | "simplify_then_retry";
+type EntryResumePolicy = "latest_active_or_new" | "latest_in_progress" | "new";
 type NextAction =
     | "continue_drill"
     | "increase_difficulty"
@@ -56,6 +57,12 @@ const REMEDIATION_STRATEGY_OPTIONS: ReadonlyArray<{ value: RemediationStrategy; 
     { value: "simplify_then_retry", label: "简化后重练" },
 ];
 
+const ENTRY_RESUME_POLICY_OPTIONS: ReadonlyArray<{ value: EntryResumePolicy; label: string }> = [
+    { value: "latest_active_or_new", label: "只恢复可作答局，否则新开" },
+    { value: "latest_in_progress", label: "恢复最近未结束会话" },
+    { value: "new", label: "每次都新开" },
+];
+
 const NEXT_ACTION_OPTIONS: ReadonlyArray<{ value: NextAction; label: string }> = [
     { value: "continue_drill", label: "继续训练" },
     { value: "increase_difficulty", label: "提高难度" },
@@ -86,6 +93,10 @@ function isRemediationStrategy(value: string): value is RemediationStrategy {
     return REMEDIATION_STRATEGY_OPTIONS.some((option) => option.value === value);
 }
 
+function isEntryResumePolicy(value: string): value is EntryResumePolicy {
+    return ENTRY_RESUME_POLICY_OPTIONS.some((option) => option.value === value);
+}
+
 function isNextAction(value: string): value is NextAction {
     return NEXT_ACTION_OPTIONS.some((option) => option.value === value);
 }
@@ -93,6 +104,9 @@ function isNextAction(value: string): value is NextAction {
 interface AiCoachAdminConfig {
     enabled: boolean;
     chat_enabled: boolean;
+    streaming_enabled: boolean;
+    entry_resume_policy: EntryResumePolicy;
+    generation_timeout_seconds: number;
     coach_mode: CoachMode;
     allowed_interaction_types: InteractionType[];
     allowed_ui_event_types: UiEventType[];
@@ -108,6 +122,10 @@ interface AiCoachAdminConfig {
     summary_when_mastery_reached: boolean;
     allowed_next_actions: NextAction[];
     chat_welcome_message: string;
+    empty_response_recovery_message: string;
+    empty_response_recovery_prompts: string[];
+    generation_failure_recovery_message: string;
+    generation_failure_recovery_prompts: string[];
     min_turns: number;
     max_turns: number;
     mastery_threshold: number;
@@ -129,6 +147,9 @@ interface ConfigResponse {
 const DEFAULT_CONFIG: AiCoachAdminConfig = {
     enabled: false,
     chat_enabled: true,
+    streaming_enabled: true,
+    entry_resume_policy: "latest_active_or_new",
+    generation_timeout_seconds: 30,
     coach_mode: "mixed_drill",
     allowed_interaction_types: ["single_choice", "multiple_choice"],
     allowed_ui_event_types: ["quiz_card", "explanation_card", "summary_card", "followup_prompt"],
@@ -152,6 +173,10 @@ const DEFAULT_CONFIG: AiCoachAdminConfig = {
         "end_session",
     ],
     chat_welcome_message: "你好，我是商务技巧 AI 教练。你可以直接说想练什么，我会把练习卡片放在对话里。",
+    empty_response_recovery_message: "我没有拿到可操作的训练卡片。你可以继续下一题、换个场景，或先总结本轮。",
+    empty_response_recovery_prompts: ["继续下一题", "换个场景", "总结本轮"],
+    generation_failure_recovery_message: "我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。",
+    generation_failure_recovery_prompts: ["重试下一题", "换主题", "总结一下"],
     min_turns: 3,
     max_turns: 10,
     mastery_threshold: 80,
@@ -174,10 +199,24 @@ const MAX_AUTO_STEPS_MIN = 1;
 const MAX_AUTO_STEPS_MAX = 10;
 const STREAK_MIN = 1;
 const STREAK_MAX = 10;
+const GENERATION_TIMEOUT_MIN = 5;
+const GENERATION_TIMEOUT_MAX = 120;
+const RECOVERY_PROMPT_MIN = 1;
+const RECOVERY_PROMPT_MAX = 4;
 
 function validate(config: AiCoachAdminConfig): string | null {
     if (!isCoachMode(config.coach_mode)) {
         return `coach_mode 非法: ${String(config.coach_mode)}`;
+    }
+    if (!isEntryResumePolicy(config.entry_resume_policy)) {
+        return `entry_resume_policy 非法: ${String(config.entry_resume_policy)}`;
+    }
+    if (
+        !Number.isFinite(config.generation_timeout_seconds)
+        || config.generation_timeout_seconds < GENERATION_TIMEOUT_MIN
+        || config.generation_timeout_seconds > GENERATION_TIMEOUT_MAX
+    ) {
+        return `generation_timeout_seconds 必须在 ${GENERATION_TIMEOUT_MIN}-${GENERATION_TIMEOUT_MAX} 之间`;
     }
     if (!Array.isArray(config.allowed_interaction_types) || config.allowed_interaction_types.length === 0) {
         return "allowed_interaction_types 必须非空";
@@ -253,6 +292,36 @@ function validate(config: AiCoachAdminConfig): string | null {
     if (!config.chat_welcome_message.trim()) {
         return "chat_welcome_message 不能为空";
     }
+    if (!config.empty_response_recovery_message.trim()) {
+        return "empty_response_recovery_message 不能为空";
+    }
+    if (!config.generation_failure_recovery_message.trim()) {
+        return "generation_failure_recovery_message 不能为空";
+    }
+    if (
+        !Array.isArray(config.empty_response_recovery_prompts)
+        || config.empty_response_recovery_prompts.length < RECOVERY_PROMPT_MIN
+        || config.empty_response_recovery_prompts.length > RECOVERY_PROMPT_MAX
+    ) {
+        return `empty_response_recovery_prompts 必须保留 ${RECOVERY_PROMPT_MIN}-${RECOVERY_PROMPT_MAX} 个`;
+    }
+    for (const value of config.empty_response_recovery_prompts) {
+        if (!value.trim()) {
+            return "empty_response_recovery_prompts 不能包含空字符串";
+        }
+    }
+    if (
+        !Array.isArray(config.generation_failure_recovery_prompts)
+        || config.generation_failure_recovery_prompts.length < RECOVERY_PROMPT_MIN
+        || config.generation_failure_recovery_prompts.length > RECOVERY_PROMPT_MAX
+    ) {
+        return `generation_failure_recovery_prompts 必须保留 ${RECOVERY_PROMPT_MIN}-${RECOVERY_PROMPT_MAX} 个`;
+    }
+    for (const value of config.generation_failure_recovery_prompts) {
+        if (!value.trim()) {
+            return "generation_failure_recovery_prompts 不能包含空字符串";
+        }
+    }
     if (!Number.isFinite(config.min_turns) || config.min_turns < MIN_TURNS_MIN || config.min_turns > MIN_TURNS_MAX) {
         return `min_turns 必须在 ${MIN_TURNS_MIN}-${MIN_TURNS_MAX} 之间`;
     }
@@ -310,10 +379,25 @@ function normalize(raw: unknown): AiCoachAdminConfig {
     const remediationRaw = typeof record.remediation_strategy === "string"
         ? record.remediation_strategy
         : DEFAULT_CONFIG.remediation_strategy;
+    const entryResumePolicyRaw = typeof record.entry_resume_policy === "string"
+        ? record.entry_resume_policy
+        : DEFAULT_CONFIG.entry_resume_policy;
     const nextActionRaw = Array.isArray(record.allowed_next_actions)
         ? record.allowed_next_actions.filter((value): value is string => typeof value === "string")
         : DEFAULT_CONFIG.allowed_next_actions;
     const allowedNextActions = nextActionRaw.filter(isNextAction);
+    const recoveryPromptsRaw = Array.isArray(record.empty_response_recovery_prompts)
+        ? record.empty_response_recovery_prompts.filter((value): value is string => (
+            typeof value === "string" && value.trim().length > 0
+        ))
+        : DEFAULT_CONFIG.empty_response_recovery_prompts;
+    const recoveryPrompts = recoveryPromptsRaw.slice(0, RECOVERY_PROMPT_MAX);
+    const generationFailurePromptsRaw = Array.isArray(record.generation_failure_recovery_prompts)
+        ? record.generation_failure_recovery_prompts.filter((value): value is string => (
+            typeof value === "string" && value.trim().length > 0
+        ))
+        : DEFAULT_CONFIG.generation_failure_recovery_prompts;
+    const generationFailurePrompts = generationFailurePromptsRaw.slice(0, RECOVERY_PROMPT_MAX);
     return {
         ...DEFAULT_CONFIG,
         ...record,
@@ -321,6 +405,15 @@ function normalize(raw: unknown): AiCoachAdminConfig {
         chat_enabled: typeof record.chat_enabled === "boolean"
             ? record.chat_enabled
             : DEFAULT_CONFIG.chat_enabled,
+        streaming_enabled: typeof record.streaming_enabled === "boolean"
+            ? record.streaming_enabled
+            : DEFAULT_CONFIG.streaming_enabled,
+        entry_resume_policy: isEntryResumePolicy(entryResumePolicyRaw)
+            ? entryResumePolicyRaw
+            : DEFAULT_CONFIG.entry_resume_policy,
+        generation_timeout_seconds: Number.isFinite(record.generation_timeout_seconds)
+            ? Number(record.generation_timeout_seconds)
+            : DEFAULT_CONFIG.generation_timeout_seconds,
         coach_mode: isCoachMode(coachModeRaw) ? coachModeRaw : "mixed_drill",
         allowed_interaction_types: allowedInteractionTypes.length > 0
             ? allowedInteractionTypes
@@ -364,6 +457,18 @@ function normalize(raw: unknown): AiCoachAdminConfig {
         chat_welcome_message: typeof record.chat_welcome_message === "string" && record.chat_welcome_message.trim()
             ? record.chat_welcome_message
             : DEFAULT_CONFIG.chat_welcome_message,
+        empty_response_recovery_message: typeof record.empty_response_recovery_message === "string" && record.empty_response_recovery_message.trim()
+            ? record.empty_response_recovery_message
+            : DEFAULT_CONFIG.empty_response_recovery_message,
+        empty_response_recovery_prompts: recoveryPrompts.length > 0
+            ? recoveryPrompts
+            : DEFAULT_CONFIG.empty_response_recovery_prompts,
+        generation_failure_recovery_message: typeof record.generation_failure_recovery_message === "string" && record.generation_failure_recovery_message.trim()
+            ? record.generation_failure_recovery_message
+            : DEFAULT_CONFIG.generation_failure_recovery_message,
+        generation_failure_recovery_prompts: generationFailurePrompts.length > 0
+            ? generationFailurePrompts
+            : DEFAULT_CONFIG.generation_failure_recovery_prompts,
         min_turns: Number.isFinite(record.min_turns) ? Number(record.min_turns) : DEFAULT_CONFIG.min_turns,
         max_turns: Number.isFinite(record.max_turns) ? Number(record.max_turns) : DEFAULT_CONFIG.max_turns,
         mastery_threshold: Number.isFinite(record.mastery_threshold)
@@ -493,6 +598,28 @@ export default function AdminAiCoachConfigPage() {
             return {
                 ...current,
                 allowed_next_actions: next.length > 0 ? next : current.allowed_next_actions,
+            };
+        });
+    }
+
+    function updateRecoveryPrompt(index: number, value: string) {
+        setConfig((current) => {
+            const next = [...current.empty_response_recovery_prompts];
+            next[index] = value;
+            return {
+                ...current,
+                empty_response_recovery_prompts: next,
+            };
+        });
+    }
+
+    function updateGenerationFailurePrompt(index: number, value: string) {
+        setConfig((current) => {
+            const next = [...current.generation_failure_recovery_prompts];
+            next[index] = value;
+            return {
+                ...current,
+                generation_failure_recovery_prompts: next,
             };
         });
     }
@@ -720,6 +847,18 @@ export default function AdminAiCoachConfigPage() {
                                         onChange={(event) => updateField("auto_advance_enabled", event.target.checked)}
                                     />
                                 </label>
+                                <label className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-white p-3">
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-900">启用流式训练体验</p>
+                                        <p className="text-xs text-slate-500">开启后学员端通过 SSE 展示生成、批改和下一步状态。</p>
+                                    </div>
+                                    <input
+                                        type="checkbox"
+                                        className="h-5 w-5 rounded border-slate-300"
+                                        checked={config.streaming_enabled}
+                                        onChange={(event) => updateField("streaming_enabled", event.target.checked)}
+                                    />
+                                </label>
                                 <label className="flex flex-col gap-1 text-sm">
                                     <span className="font-medium text-slate-700">session_start_behavior</span>
                                     <select
@@ -732,6 +871,24 @@ export default function AdminAiCoachConfigPage() {
                                         }}
                                     >
                                         {SESSION_START_BEHAVIOR_OPTIONS.map((option) => (
+                                            <option key={option.value} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="flex flex-col gap-1 text-sm">
+                                    <span className="font-medium text-slate-700">entry_resume_policy</span>
+                                    <select
+                                        className="h-10 rounded-xl border border-slate-200 bg-white px-3"
+                                        value={config.entry_resume_policy}
+                                        onChange={(event) => {
+                                            if (isEntryResumePolicy(event.target.value)) {
+                                                updateField("entry_resume_policy", event.target.value);
+                                            }
+                                        }}
+                                    >
+                                        {ENTRY_RESUME_POLICY_OPTIONS.map((option) => (
                                             <option key={option.value} value={option.value}>
                                                 {option.label}
                                             </option>
@@ -756,6 +913,14 @@ export default function AdminAiCoachConfigPage() {
                                         ))}
                                     </select>
                                 </label>
+                                <FieldInput
+                                    label="generation_timeout_seconds（5-120）"
+                                    type="number"
+                                    min={GENERATION_TIMEOUT_MIN}
+                                    max={GENERATION_TIMEOUT_MAX}
+                                    value={config.generation_timeout_seconds}
+                                    onChange={(value) => updateField("generation_timeout_seconds", Number(value))}
+                                />
                                 <FieldInput
                                     label="max_auto_steps_per_session（1-10）"
                                     type="number"
@@ -800,6 +965,50 @@ export default function AdminAiCoachConfigPage() {
                                         onChange={(event) => updateField("summary_when_mastery_reached", event.target.checked)}
                                     />
                                 </label>
+                                <label className="flex flex-col gap-1 text-sm md:col-span-2">
+                                    <span className="font-medium text-slate-700">empty_response_recovery_message</span>
+                                    <textarea
+                                        value={config.empty_response_recovery_message}
+                                        onChange={(event) => updateField("empty_response_recovery_message", event.target.value)}
+                                        rows={2}
+                                        className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+                                    />
+                                </label>
+                                <div className="space-y-2 md:col-span-2">
+                                    <p className="text-sm font-semibold text-slate-900">empty_response_recovery_prompts</p>
+                                    <div className="grid gap-2 md:grid-cols-3">
+                                        {config.empty_response_recovery_prompts.map((prompt, index) => (
+                                            <FieldInput
+                                                key={`recovery-prompt-${index}`}
+                                                label={`兜底动作 ${index + 1}`}
+                                                value={prompt}
+                                                onChange={(value) => updateRecoveryPrompt(index, String(value))}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                                <label className="flex flex-col gap-1 text-sm md:col-span-2">
+                                    <span className="font-medium text-slate-700">generation_failure_recovery_message</span>
+                                    <textarea
+                                        value={config.generation_failure_recovery_message}
+                                        onChange={(event) => updateField("generation_failure_recovery_message", event.target.value)}
+                                        rows={2}
+                                        className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+                                    />
+                                </label>
+                                <div className="space-y-2 md:col-span-2">
+                                    <p className="text-sm font-semibold text-slate-900">generation_failure_recovery_prompts</p>
+                                    <div className="grid gap-2 md:grid-cols-3">
+                                        {config.generation_failure_recovery_prompts.map((prompt, index) => (
+                                            <FieldInput
+                                                key={`generation-failure-prompt-${index}`}
+                                                label={`失败恢复动作 ${index + 1}`}
+                                                value={prompt}
+                                                onChange={(value) => updateGenerationFailurePrompt(index, String(value))}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                             <div className="mt-4">
                                 <p className="text-sm font-semibold text-slate-900">allowed_next_actions</p>

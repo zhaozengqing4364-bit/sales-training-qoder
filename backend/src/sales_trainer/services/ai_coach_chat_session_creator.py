@@ -40,6 +40,7 @@ class AiCoachChatSessionCreator:
         user_id: str,
         module_key: str,
         actor: User | None,
+        start_auto_advance: bool = True,
     ) -> str:
         path_response = await SalesTrainerPathConfigService(self._db).get_config()
         try:
@@ -84,9 +85,12 @@ class AiCoachChatSessionCreator:
             target_id=session.session_id,
             metadata={"module_key": module_key, "runtime": "chat"},
         )
-        await self._auto_advance.start_session_if_configured(
-            session=session,
-            config=config,
-            actor=actor,
-        )
+        if start_auto_advance:
+            await self._auto_advance.start_session_if_configured(
+                session=session,
+                config=config,
+                actor=actor,
+            )
+        else:
+            await self._db.commit()
         return str(session.session_id)

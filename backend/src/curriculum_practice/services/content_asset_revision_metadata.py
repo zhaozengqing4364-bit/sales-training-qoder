@@ -4,7 +4,7 @@ from hashlib import sha256
 from json import dumps
 from typing import Any, Final
 
-from sales_trainer.services.asset_revision_service import AssetChangeClass
+from curriculum_practice.services.sales_trainer_revision_adapter import AssetChangeClass
 
 CASE_ITEM_RESOURCE_TYPE: Final = "curriculum_case_item"
 CASE_ITEM_TARGET_TYPE: Final = "curriculum_case_item"

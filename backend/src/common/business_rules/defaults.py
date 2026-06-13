@@ -16,6 +16,9 @@ ROLEPLAY_EVAL_RELEASE_GATE_KEY = "roleplay.eval.release_gate"
 ADMIN_SETTINGS_GENERAL_KEY = "admin.settings.general"
 ADMIN_SETTINGS_SECURITY_KEY = "admin.settings.security"
 ADMIN_SETTINGS_NOTIFICATIONS_KEY = "admin.settings.notifications"
+SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY = (
+    "sales_trainer.phase2.closed_loop_policy"
+)
 
 BUSINESS_RULE_SCHEMA_VERSION = "business_rule_config_v1"
 
@@ -48,6 +51,57 @@ DEFAULT_ADMIN_NOTIFICATION_SETTINGS: dict[str, Any] = {
         "weekly_report": False,
         "knowledge_base_update": False,
     },
+}
+
+DEFAULT_SALES_TRAINER_PHASE2_POLICY: dict[str, Any] = {
+    "version": "sales_trainer_phase2_closed_loop_policy_v1",
+    "enabled": True,
+    "low_score_threshold": 70.0,
+    "repeat_practice_threshold": 2,
+    "dashboard_record_limit": 500,
+    "manager_actions": [
+        {"code": "not_passed", "label": "打回并安排补救训练", "priority": "high"},
+        {"code": "low_score", "label": "指定弱项复习", "priority": "medium"},
+        {"code": "repeated_practice", "label": "主管介入陪练", "priority": "medium"},
+        {"code": "fallback", "label": "查看训练记录", "priority": "low"},
+    ],
+    "remediation_actions": [
+        {
+            "record_type": "audio_submission",
+            "action_label": "安排重录",
+            "reason_template": "最近一次训练未达通过标准，需要主管跟进补救。",
+            "target_path_template": "/sales-trainer/audio/{unit_id}",
+            "priority": "high",
+        },
+        {
+            "record_type": "quiz_attempt",
+            "action_label": "安排错题复习",
+            "reason_template": "当前有效分低于弱项阈值，需要安排针对性复练。",
+            "target_path_template": "/sales-trainer/quiz/{unit_id}",
+            "priority": "medium",
+        },
+        {
+            "record_type": "ai_coach_session",
+            "action_label": "继续 AI 教练训练",
+            "reason_template": "AI 教练训练尚未完成或未达到掌握状态，需要继续训练。",
+            "target_path_template": "/sales-trainer/business-skills/coach",
+            "priority": "medium",
+        },
+        {
+            "record_type": "default",
+            "action_label": "查看训练记录",
+            "reason_template": "训练尚未形成可用评分，需要先完成评分或排查失败任务。",
+            "target_path_template": "/sales-trainer",
+            "priority": "medium",
+        },
+        {
+            "record_type": "no_action",
+            "action_label": "查看结果",
+            "reason_template": "当前记录已达标，建议进入下一任务或回看结果。",
+            "target_path_template": "{result_path}",
+            "priority": "low",
+        },
+    ],
 }
 
 DEFAULT_ACHIEVEMENT_RULESET: dict[str, Any] = {
@@ -934,6 +988,37 @@ _BUSINESS_RULE_DEFINITIONS = {
         audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
         fallback_policy="use bundled defaults; disabled active config prevents notification automation from enabling new sends",
         rollback_policy="restore a prior archived/published notification settings version",
+    ),
+    SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY: BusinessRuleDefinition(
+        key=SALES_TRAINER_PHASE2_CLOSED_LOOP_POLICY_KEY,
+        domain="sales_trainer",
+        schema_version=BUSINESS_RULE_SCHEMA_VERSION,
+        default_value=DEFAULT_SALES_TRAINER_PHASE2_POLICY,
+        type="rule_json",
+        range_or_allowlist={
+            "low_score_threshold": {"min_inclusive": 0, "max_inclusive": 100},
+            "repeat_practice_threshold": {"min_inclusive": 1, "max_inclusive": 20},
+            "dashboard_record_limit": {"min_inclusive": 1, "max_inclusive": 5000},
+            "manager_action_codes": [
+                "not_passed",
+                "low_score",
+                "repeated_practice",
+                "fallback",
+            ],
+            "remediation_record_types": [
+                "audio_submission",
+                "quiz_attempt",
+                "ai_coach_session",
+                "default",
+                "no_action",
+            ],
+        },
+        read_path="sales_trainer.services.phase2_policy.resolve_phase2_policy",
+        admin_entry="/admin/business-rules/sales-trainer-phase2",
+        permission="admin_publish_only",
+        audit_policy="draft/validate/preview/publish/rollback require actor, before/after version, reason, trace_id",
+        fallback_policy="use bundled default phase-2 policy when database config is missing, invalid, or disabled",
+        rollback_policy="restore a prior archived/published phase-2 policy version",
     ),
 }
 

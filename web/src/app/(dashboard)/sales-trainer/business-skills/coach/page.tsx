@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     AiCoachAnswerPayloadV1,
     AiCoachChatSessionPublicV1,
+    AiCoachChatStreamEvent,
     AiCoachUiEventPublicV1,
 } from "@/lib/api/types";
 
@@ -21,6 +22,8 @@ import {
     MODULE_KEY,
 } from "./coach-session";
 
+type ResumeStrategy = "latest_active_or_new" | "latest_in_progress" | "new";
+
 export default function AiCoachPage() {
     const [session, setSession] = useState<AiCoachChatSessionPublicV1 | null>(null);
     const [input, setInput] = useState("");
@@ -28,61 +31,110 @@ export default function AiCoachPage() {
     const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
     const [pendingCommand, setPendingCommand] = useState<CoachCommand | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isStarting, setIsStarting] = useState(false);
     const [isSending, setIsSending] = useState(false);
     const [submittingEventIds, setSubmittingEventIds] = useState<ReadonlySet<string>>(
         () => new Set(),
     );
+    const [streamActivityLabel, setStreamActivityLabel] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const streamOperationRef = useRef(0);
+    const streamAbortRef = useRef<AbortController | null>(null);
 
-    const startSession = useCallback(async (resumeStrategy: "latest_in_progress" | "new" = "latest_in_progress") => {
-        setIsLoading(true);
-        setError(null);
-        setDrafts({});
-        setPendingUserMessage(null);
-        setPendingCommand(null);
-        try {
-            const next = await api.newcomerTraining.startAiCoachChatSession({
-                module_key: MODULE_KEY,
-                resume_strategy: resumeStrategy,
-            });
-            setSession(next);
-        } catch (startError) {
-            setSession(null);
-            setError(getApiErrorMessage(startError));
-        } finally {
-            setIsLoading(false);
+    const applyStreamEvent = useCallback((event: AiCoachChatStreamEvent) => {
+        if (event.type === "status") {
+            setStreamActivityLabel(event.message);
+            return;
         }
+        if (event.type === "session_snapshot") {
+            setSession(event.session);
+            setIsLoading(false);
+            setError(null);
+            return;
+        }
+        setStreamActivityLabel(null);
+        setError(event.message);
     }, []);
 
-    useEffect(() => {
-        let isActive = true;
-        void api.newcomerTraining.startAiCoachChatSession({
-            module_key: MODULE_KEY,
-            resume_strategy: "latest_in_progress",
-        })
-            .then((next) => {
-                if (!isActive) {
-                    return;
-                }
-                setSession(next);
-                setError(null);
-            })
-            .catch((startError) => {
-                if (!isActive) {
-                    return;
-                }
-                setSession(null);
-                setError(getApiErrorMessage(startError));
-            })
-            .finally(() => {
-                if (isActive) {
-                    setIsLoading(false);
-                }
-            });
-        return () => {
-            isActive = false;
+    const beginStreamOperation = useCallback(() => {
+        streamAbortRef.current?.abort();
+        const controller = new AbortController();
+        streamAbortRef.current = controller;
+        streamOperationRef.current += 1;
+        return {
+            controller,
+            operationId: streamOperationRef.current,
         };
     }, []);
+
+    const isCurrentStreamOperation = useCallback((operationId: number) => {
+        return streamOperationRef.current === operationId;
+    }, []);
+
+    const startSession = useCallback(async (
+        resumeStrategy: ResumeStrategy = "latest_active_or_new",
+        options: {
+            readonly initialLoad?: boolean;
+            readonly clearOnError?: boolean;
+        } = {},
+    ) => {
+        const { controller, operationId } = beginStreamOperation();
+        setError(null);
+        setIsStarting(true);
+        setStreamActivityLabel(
+            resumeStrategy === "new" ? "正在新开训练局" : "正在恢复训练局",
+        );
+        setPendingUserMessage(null);
+        setPendingCommand(null);
+        if (options.initialLoad) {
+            setIsLoading(true);
+        }
+        try {
+            const events = api.newcomerTraining.startAiCoachChatSessionStream(
+                {
+                    module_key: MODULE_KEY,
+                    resume_strategy: resumeStrategy,
+                },
+                controller.signal,
+            );
+            for await (const event of events) {
+                if (!isCurrentStreamOperation(operationId)) {
+                    return;
+                }
+                applyStreamEvent(event);
+            }
+            if (isCurrentStreamOperation(operationId)) {
+                setDrafts({});
+            }
+        } catch (startError) {
+            if (!isCurrentStreamOperation(operationId)) {
+                return;
+            }
+            if (startError instanceof Error && startError.name === "AbortError") {
+                return;
+            }
+            if (options.clearOnError) {
+                setSession(null);
+            }
+            setError(getApiErrorMessage(startError));
+        } finally {
+            if (isCurrentStreamOperation(operationId)) {
+                setIsStarting(false);
+                setIsLoading(false);
+                setStreamActivityLabel(null);
+            }
+        }
+    }, [applyStreamEvent, beginStreamOperation, isCurrentStreamOperation]);
+
+    useEffect(() => {
+        void startSession("latest_active_or_new", {
+            initialLoad: true,
+            clearOnError: true,
+        });
+        return () => {
+            streamAbortRef.current?.abort();
+        };
+    }, [startSession]);
 
     const updateDraft = useCallback(
         (eventId: string, payload: AiCoachAnswerPayloadV1) => {
@@ -92,57 +144,109 @@ export default function AiCoachPage() {
     );
 
     const sendText = useCallback(async (content: string) => {
-        if (!session || isSending) {
+        if (!session || isSending || isStarting) {
             return;
         }
         const message = content.trim();
         if (!message) {
             return;
         }
+        const { controller, operationId } = beginStreamOperation();
         setInput("");
         setError(null);
         setIsSending(true);
         setPendingUserMessage(message);
+        setStreamActivityLabel("正在发送给教练");
         try {
-            const next = await api.newcomerTraining.sendAiCoachChatMessage(
+            const events = api.newcomerTraining.sendAiCoachChatMessageStream(
                 session.session_id,
                 { content: message },
+                controller.signal,
             );
-            setSession(next);
-            setDrafts({});
+            for await (const event of events) {
+                if (!isCurrentStreamOperation(operationId)) {
+                    return;
+                }
+                applyStreamEvent(event);
+            }
+            if (isCurrentStreamOperation(operationId)) {
+                setDrafts({});
+            }
         } catch (sendError) {
+            if (!isCurrentStreamOperation(operationId)) {
+                return;
+            }
+            if (sendError instanceof Error && sendError.name === "AbortError") {
+                return;
+            }
             setError(getApiErrorMessage(sendError));
         } finally {
-            setPendingUserMessage(null);
-            setIsSending(false);
+            if (isCurrentStreamOperation(operationId)) {
+                setPendingUserMessage(null);
+                setIsSending(false);
+                setStreamActivityLabel(null);
+            }
         }
-    }, [session, isSending]);
+    }, [
+        applyStreamEvent,
+        beginStreamOperation,
+        isCurrentStreamOperation,
+        isSending,
+        isStarting,
+        session,
+    ]);
 
     const sendCommand = useCallback(async (command: CoachCommand) => {
-        if (!session || isSending) {
+        if (!session || isSending || isStarting) {
             return;
         }
+        const { controller, operationId } = beginStreamOperation();
         setError(null);
         setIsSending(true);
         setPendingCommand(command);
+        setStreamActivityLabel(null);
         try {
             const activeEventId = activeEventIdForSession(session);
-            const next = await api.newcomerTraining.sendAiCoachChatMessage(
+            const events = api.newcomerTraining.sendAiCoachChatMessageStream(
                 session.session_id,
                 {
                     command,
                     event_id: activeEventId ?? undefined,
                 },
+                controller.signal,
             );
-            setSession(next);
-            setDrafts({});
+            for await (const event of events) {
+                if (!isCurrentStreamOperation(operationId)) {
+                    return;
+                }
+                applyStreamEvent(event);
+            }
+            if (isCurrentStreamOperation(operationId)) {
+                setDrafts({});
+            }
         } catch (sendError) {
+            if (!isCurrentStreamOperation(operationId)) {
+                return;
+            }
+            if (sendError instanceof Error && sendError.name === "AbortError") {
+                return;
+            }
             setError(getApiErrorMessage(sendError));
         } finally {
-            setPendingCommand(null);
-            setIsSending(false);
+            if (isCurrentStreamOperation(operationId)) {
+                setPendingCommand(null);
+                setIsSending(false);
+                setStreamActivityLabel(null);
+            }
         }
-    }, [session, isSending]);
+    }, [
+        applyStreamEvent,
+        beginStreamOperation,
+        isCurrentStreamOperation,
+        isSending,
+        isStarting,
+        session,
+    ]);
 
     const sendMessage = useCallback(async () => {
         await sendText(input);
@@ -157,31 +261,56 @@ export default function AiCoachPage() {
             if (!answerPayload) {
                 return;
             }
+            const { controller, operationId } = beginStreamOperation();
             setError(null);
+            setStreamActivityLabel("正在批改你的答案");
             setSubmittingEventIds((current) => new Set(current).add(event.event_id));
             try {
-                const next = await api.newcomerTraining.submitAiCoachChatEventAnswer(
+                const events = api.newcomerTraining.submitAiCoachChatEventAnswerStream(
                     session.session_id,
                     event.event_id,
                     { answer_payload: answerPayload },
+                    controller.signal,
                 );
-                setSession(next);
-                setDrafts((current) => {
-                    const nextDrafts = { ...current };
-                    delete nextDrafts[event.event_id];
-                    return nextDrafts;
-                });
+                for await (const streamEvent of events) {
+                    if (!isCurrentStreamOperation(operationId)) {
+                        return;
+                    }
+                    applyStreamEvent(streamEvent);
+                }
+                if (isCurrentStreamOperation(operationId)) {
+                    setDrafts((current) => {
+                        const nextDrafts = { ...current };
+                        delete nextDrafts[event.event_id];
+                        return nextDrafts;
+                    });
+                }
             } catch (submitError) {
+                if (!isCurrentStreamOperation(operationId)) {
+                    return;
+                }
+                if (submitError instanceof Error && submitError.name === "AbortError") {
+                    return;
+                }
                 setError(getApiErrorMessage(submitError));
             } finally {
-                setSubmittingEventIds((current) => {
-                    const next = new Set(current);
-                    next.delete(event.event_id);
-                    return next;
-                });
+                if (isCurrentStreamOperation(operationId)) {
+                    setSubmittingEventIds((current) => {
+                        const next = new Set(current);
+                        next.delete(event.event_id);
+                        return next;
+                    });
+                    setStreamActivityLabel(null);
+                }
             }
         },
-        [session, drafts],
+        [
+            applyStreamEvent,
+            beginStreamOperation,
+            drafts,
+            isCurrentStreamOperation,
+            session,
+        ],
     );
 
     if (isLoading) {
@@ -236,9 +365,11 @@ export default function AiCoachPage() {
                 input={input}
                 drafts={drafts}
                 pendingUserMessage={pendingUserMessage}
+                isStarting={isStarting}
                 isSending={isSending}
                 pendingCommand={pendingCommand}
                 submittingEventIds={submittingEventIds}
+                streamActivityLabel={streamActivityLabel}
                 error={error}
                 onInputChange={setInput}
                 onSend={() => void sendMessage()}

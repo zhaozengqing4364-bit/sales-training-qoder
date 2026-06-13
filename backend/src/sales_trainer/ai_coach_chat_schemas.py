@@ -26,7 +26,11 @@ AiCoachUiEventTypeV1: TypeAlias = Literal[
     "followup_prompt",
 ]
 AiCoachUiEventStatusV1: TypeAlias = Literal["pending", "submitted", "scored", "failed"]
-AiCoachChatResumeStrategyV1: TypeAlias = Literal["latest_in_progress", "new"]
+AiCoachChatResumeStrategyV1: TypeAlias = Literal[
+    "latest_active_or_new",
+    "latest_in_progress",
+    "new",
+]
 AiCoachChatCommandV1: TypeAlias = Literal[
     "continue",
     "explain",
@@ -42,6 +46,24 @@ AiCoachChatSessionPhaseV1: TypeAlias = Literal[
     "choosing",
     "summarizing",
     "completed",
+]
+AiCoachChatStreamEventTypeV1: TypeAlias = Literal[
+    "status",
+    "session_snapshot",
+    "error",
+]
+AiCoachChatStreamPhaseV1: TypeAlias = Literal[
+    "resolving_session",
+    "creating_session",
+    "session_ready",
+    "saving_user_message",
+    "scoring_answer",
+    "answer_scored",
+    "deciding_next_action",
+    "generating_first_card",
+    "generating_next_card",
+    "completed",
+    "failed",
 ]
 
 
@@ -177,7 +199,7 @@ class AiCoachChatSessionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     module_key: str = Field(..., min_length=1, max_length=80)
-    resume_strategy: AiCoachChatResumeStrategyV1 = "new"
+    resume_strategy: AiCoachChatResumeStrategyV1 | None = None
 
 
 class AiCoachChatMessageCreate(BaseModel):
@@ -235,3 +257,37 @@ class AiCoachChatSessionPublicV1(BaseModel):
     messages: list[AiCoachChatMessagePublicV1] = Field(default_factory=list)
     ui_events: list[AiCoachUiEventPublicV1] = Field(default_factory=list)
     coach_state: AiCoachCoachStatePublicV1 | None = None
+
+
+class AiCoachChatStreamStatusEventV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["status"] = "status"
+    phase: AiCoachChatStreamPhaseV1
+    message: str = Field(..., min_length=1, max_length=300)
+    session_id: str | None = Field(None, max_length=36)
+
+
+class AiCoachChatStreamSessionSnapshotEventV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["session_snapshot"] = "session_snapshot"
+    phase: AiCoachChatStreamPhaseV1 = "session_ready"
+    session: AiCoachChatSessionPublicV1
+
+
+class AiCoachChatStreamErrorEventV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["error"] = "error"
+    phase: Literal["failed"] = "failed"
+    error_code: str = Field(..., min_length=1, max_length=120)
+    message: str = Field(..., min_length=1, max_length=300)
+    recoverable: bool = True
+
+
+AiCoachChatStreamEventV1: TypeAlias = (
+    AiCoachChatStreamStatusEventV1
+    | AiCoachChatStreamSessionSnapshotEventV1
+    | AiCoachChatStreamErrorEventV1
+)

@@ -130,5 +130,8 @@ export function eventScoreState(event: AiCoachUiEventPublicV1): "correct" | "wro
     if (event.type !== "quiz_card" || !event.score_result) {
         return "pending";
     }
+    if (typeof event.score_result.mastered === "boolean") {
+        return event.score_result.mastered ? "correct" : "wrong";
+    }
     return event.score_result.score >= event.score_result.max_score ? "correct" : "wrong";
 }

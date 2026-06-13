@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
 from common.monitoring.logger import get_trace_id
-from curriculum_practice.models import QuestionItem
 from sales_trainer.schemas import SalesTrainerQuestionUpdate
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionError,
     SalesTrainerAssetRevisionService,
 )
+from sales_trainer.services.curriculum_practice_adapter import QuestionItem
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.question_errors import SalesTrainerQuestionServiceError
 from sales_trainer.services.question_payloads import (

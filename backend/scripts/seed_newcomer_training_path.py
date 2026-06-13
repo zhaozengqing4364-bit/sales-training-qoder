@@ -385,6 +385,7 @@ def _ai_coach_seed_config(prompt_template_id: str) -> dict[str, Any]:
             "followup_prompt",
         ],
         "max_cards_per_message": 3,
+        "generation_timeout_seconds": 30,
         "proactive_coaching_enabled": True,
         "session_start_behavior": "plan_and_first_card",
         "auto_advance_enabled": True,
@@ -404,6 +405,10 @@ def _ai_coach_seed_config(prompt_template_id: str) -> dict[str, Any]:
             "end_session",
         ],
         "chat_welcome_message": "你好，我是商务技巧 AI 教练。你可以直接告诉我想练什么，比如“出 3 道商务礼仪单选题”。",
+        "empty_response_recovery_message": "我没有拿到可操作的训练卡片。你可以继续下一题、换个场景，或先总结本轮。",
+        "empty_response_recovery_prompts": ["继续下一题", "换个场景", "总结本轮"],
+        "generation_failure_recovery_message": "我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。",
+        "generation_failure_recovery_prompts": ["重试下一题", "换主题", "总结一下"],
         "prompt_template_id": prompt_template_id,
         "prompt_revision_id": None,
         "prompt_contract_hash": None,
@@ -416,7 +421,7 @@ def _ai_coach_seed_config(prompt_template_id: str) -> dict[str, Any]:
         "output_schema_version": "ai_coach_interaction_v1",
         "generation_model": None,
         "scoring_model": None,
-        "retry_policy": {"max_retries": 2, "retry_backoff": 1.0},
+        "retry_policy": {"max_retries": 1, "retry_backoff": 1.0},
         "failure_behavior": "skip_turn",
     }
 
@@ -798,6 +803,10 @@ async def _verify_ai_coach_seed_config(
         raise VerifyError(f"{context} AI coach ui event types mismatch")
     if ai_coach.get("max_cards_per_message") != 3:
         raise VerifyError(f"{context} AI coach max_cards_per_message mismatch")
+    if ai_coach.get("generation_timeout_seconds") != 30:
+        raise VerifyError(f"{context} AI coach generation_timeout_seconds mismatch")
+    if (ai_coach.get("retry_policy") or {}).get("max_retries") != 1:
+        raise VerifyError(f"{context} AI coach retry_policy.max_retries mismatch")
     if ai_coach.get("proactive_coaching_enabled") is not True:
         raise VerifyError(f"{context} AI coach proactive_coaching_enabled mismatch")
     if ai_coach.get("session_start_behavior") != "plan_and_first_card":
@@ -808,6 +817,14 @@ async def _verify_ai_coach_seed_config(
         raise VerifyError(f"{context} AI coach max_auto_steps_per_session mismatch")
     if "continue_drill" not in (ai_coach.get("allowed_next_actions") or []):
         raise VerifyError(f"{context} AI coach allowed_next_actions mismatch")
+    if not ai_coach.get("generation_failure_recovery_message"):
+        raise VerifyError(f"{context} AI coach generation failure message missing")
+    if ai_coach.get("generation_failure_recovery_prompts") != [
+        "重试下一题",
+        "换主题",
+        "总结一下",
+    ]:
+        raise VerifyError(f"{context} AI coach generation failure prompts mismatch")
     if not ai_coach.get("prompt_template_id"):
         raise VerifyError(f"{context} AI coach prompt_template_id missing")
     prompt = await _first(

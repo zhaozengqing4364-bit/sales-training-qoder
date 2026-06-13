@@ -33,11 +33,11 @@ from curriculum_practice.services.published_asset_refs import (
     resolve_template_situation_pack_code,
 )
 from curriculum_practice.services.publishing_gates import PublishingGateService
-from sales_trainer.models import SalesTrainerAssetRevision
-from sales_trainer.services.asset_revision_service import (
+from curriculum_practice.services.sales_trainer_revision_adapter import (
+    OperationLogService,
+    SalesTrainerAssetRevision,
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.services.operation_log_service import OperationLogService
 
 
 class PracticeTemplateRevisionService:

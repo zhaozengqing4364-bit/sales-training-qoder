@@ -21,11 +21,11 @@ from curriculum_practice.services.learning_content_revision_payloads import (
     learning_content_lifecycle_metadata,
     learning_content_lifecycle_snapshot,
 )
-from sales_trainer.models import SalesTrainerAssetRevision
-from sales_trainer.services.asset_revision_service import (
+from curriculum_practice.services.sales_trainer_revision_adapter import (
+    OperationLogService,
+    SalesTrainerAssetRevision,
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.services.operation_log_service import OperationLogService
 
 
 class LearningContentChapterRevisionService:

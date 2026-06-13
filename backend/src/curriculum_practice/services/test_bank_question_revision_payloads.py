@@ -11,7 +11,7 @@ from curriculum_practice.schemas import (
     PublishGateDecision,
     QuestionItemUpdate,
 )
-from sales_trainer.services.asset_revision_service import AssetChangeClass
+from curriculum_practice.services.sales_trainer_revision_adapter import AssetChangeClass
 
 QUESTION_ITEM_RESOURCE_TYPE: Final = "curriculum_question_item"
 QUESTION_ITEM_TARGET_TYPE: Final = "curriculum_question_item"

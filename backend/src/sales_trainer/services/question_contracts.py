@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from curriculum_practice.models import QuestionItem
-from curriculum_practice.schemas import QuestionItemCreate, QuestionItemUpdate
 from sales_trainer.rules import DEFAULT_QUESTION_DIMENSION
 from sales_trainer.schemas import (
     SalesTrainerQuestionCreate,
     SalesTrainerQuestionUpdate,
+)
+from sales_trainer.services.curriculum_practice_adapter import (
+    QuestionItem,
+    QuestionItemCreate,
+    QuestionItemUpdate,
 )
 from sales_trainer.services.question_errors import SalesTrainerQuestionServiceError
 

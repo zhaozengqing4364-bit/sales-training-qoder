@@ -25,6 +25,15 @@ import agent.models  # noqa: E402,F401  # Register agent/voice-runtime tables on
 import curriculum_practice.models  # noqa: E402,F401  # Register curriculum tables for FK targets.
 import sales_trainer.models  # noqa: E402,F401  # Register sales trainer MVP tables.
 from common.db.models import Base  # noqa: E402
+from curriculum_practice.services.question_bank_provider import (  # noqa: E402
+    register_curriculum_question_bank_provider,
+)
+from sales_trainer.services.asset_revision_lineage_provider import (  # noqa: E402
+    register_sales_trainer_asset_revision_lineage_provider,
+)
+
+register_curriculum_question_bank_provider()
+register_sales_trainer_asset_revision_lineage_provider()
 
 
 @pytest.fixture(autouse=True)
