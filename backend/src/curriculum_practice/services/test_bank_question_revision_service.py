@@ -9,6 +9,11 @@ from common.error_handling.result import Result
 from common.monitoring.logger import get_trace_id
 from curriculum_practice.models import QuestionItem
 from curriculum_practice.schemas import QuestionItemUpdate
+from curriculum_practice.services.sales_trainer_revision_adapter import (
+    OperationLogService,
+    SalesTrainerAssetRevision,
+    SalesTrainerAssetRevisionService,
+)
 from curriculum_practice.services.test_bank_question_revision_payloads import (
     QUESTION_ITEM_RESOURCE_TYPE,
     QUESTION_ITEM_TARGET_TYPE,
@@ -18,11 +23,6 @@ from curriculum_practice.services.test_bank_question_revision_payloads import (
     question_item_lifecycle_snapshot,
     question_item_publish_decision_from_payload,
     question_item_revision_payload_from_update,
-)
-from curriculum_practice.services.sales_trainer_revision_adapter import (
-    OperationLogService,
-    SalesTrainerAssetRevision,
-    SalesTrainerAssetRevisionService,
 )
 
 

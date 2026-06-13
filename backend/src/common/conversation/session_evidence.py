@@ -10,6 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.conversation.evidence_contributors import (
+    build_registered_presentation_evidence_review,
+)
 from common.conversation.models import ConversationMessage
 from common.conversation.runtime_diagnostics import build_retrieval_facts
 from common.conversation.score_snapshot import normalize_score_snapshot
@@ -314,17 +317,14 @@ class SessionEvidenceService:
         session_id: str,
         projection: SessionEvidenceProjection,
     ) -> Result[SessionEvidenceProjection]:
-        from presentation_coach.services.presentation_report_service import (
-            PresentationReportService,
+        review_result = await build_registered_presentation_evidence_review(
+            self.db,
+            session_id,
         )
+        if review_result.payload is None:
+            return Result.fail(review_result.error or "[PRESENTATION_REVIEW_FAILED]")
 
-        review_result = await PresentationReportService(
-            self.db
-        ).build_presentation_review(session_id)
-        if not review_result.is_success or review_result.value is None:
-            return Result.fail(review_result.fallback or "[PRESENTATION_REVIEW_FAILED]")
-
-        review = review_result.value
+        review = review_result.payload
         dimension_scores = review.get("dimension_scores")
         if not isinstance(dimension_scores, list):
             dimension_scores = []

@@ -10,10 +10,10 @@ from curriculum_practice.models import (
     PracticeTemplate,
 )
 from curriculum_practice.services.asset_references import CurriculumAssetReferenceReader
-from curriculum_practice.services.learner_profiles import DEFAULT_LEARNER_LEVEL
 from curriculum_practice.services.asset_resolution import (
     merge_curriculum_into_voice_policy_snapshot,
 )
+from curriculum_practice.services.learner_profiles import DEFAULT_LEARNER_LEVEL
 from curriculum_practice.services.practice_templates import published_ref
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,

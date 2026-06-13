@@ -15,6 +15,9 @@ from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.db.models import PracticeSession, Presentation, Scenario, User
 from common.error_handling.result import Result
 from common.services import practice_session_service
+from sales_bot.services import (
+    practice_session_contributor as sales_practice_session_contributor,
+)
 
 
 def _require_dict(value: object, field_name: str) -> dict:
@@ -26,7 +29,7 @@ def _require_dict(value: object, field_name: str) -> dict:
 def _stub_sales_cleanup(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     cleanup_mock = AsyncMock(return_value=Result.ok({"session_id": "contract-session"}))
     monkeypatch.setattr(
-        practice_session_service.sales_bot_service,
+        sales_practice_session_contributor.sales_bot_service,
         "end_session",
         cleanup_mock,
     )

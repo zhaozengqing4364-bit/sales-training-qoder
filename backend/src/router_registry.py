@@ -30,6 +30,10 @@ from agent.api.agent_personas import admin_router as agent_persona_admin_router
 from agent.api.agents import admin_router as agent_admin_router
 from agent.api.agents import user_router as agent_user_router
 from agent.api.personas import admin_router as persona_admin_router
+from agent.services.knowledge_contributor import register_agent_knowledge_contributor
+from agent.services.practice_session_contributor import (
+    register_agent_practice_session_contributor,
+)
 from common.api import (
     analytics,
     business_rules,
@@ -55,26 +59,50 @@ from curriculum_practice.api import learner_router as curriculum_learning_path_r
 from curriculum_practice.api import learning_content_router, test_bank_router
 from curriculum_practice.api import router as curriculum_practice_router
 from curriculum_practice.api import study_router as curriculum_study_router
+from curriculum_practice.services.practice_report_contributor import (
+    register_curriculum_practice_report_contributor,
+)
+from curriculum_practice.services.practice_session_contributor import (
+    register_curriculum_practice_session_contributor,
+)
 from curriculum_practice.services.question_bank_provider import (
     register_curriculum_question_bank_provider,
+)
+from curriculum_practice.services.runtime_gate_contributor import (
+    register_curriculum_practice_runtime_gate_contributors,
 )
 from curriculum_practice.services.support_runtime_contributor import (
     register_curriculum_practice_support_runtime_contributors,
 )
 from evaluation.api import router as evaluation_router
+from evaluation.services.practice_report_contributor import (
+    register_evaluation_practice_report_contributor,
+)
 from presentation_coach.api import presentations
+from presentation_coach.services.practice_session_contributor import (
+    register_presentation_coach_practice_session_contributor,
+)
 from presentation_coach.services.support_runtime_contributor import (
     register_presentation_coach_support_runtime_contributor,
 )
 from prompt_templates.api.routes import router as prompt_templates_router
 from prompt_templates.api.routes import scenario_router as scenario_prompts_router
 from sales_bot.api.scenarios import router as scenarios_router
+from sales_bot.services.practice_session_contributor import (
+    register_sales_bot_practice_session_contributor,
+)
 from sales_bot.services.support_runtime_contributor import (
     register_sales_bot_support_runtime_contributor,
 )
 from sales_trainer.router_registration import register_sales_trainer_routers
 from supervisor.api import router as supervisor_router
 from support.api.runtime_status import router as support_runtime_router
+from support.services.knowledge_contributor import (
+    register_support_knowledge_contributor,
+)
+from training_runtime.practice_session_contributor import (
+    register_training_runtime_practice_session_contributor,
+)
 
 
 def _build_knowledge_bases_alias_router() -> APIRouter:
@@ -104,9 +132,19 @@ def _build_knowledge_bases_alias_router() -> APIRouter:
 def register_routers(app: FastAPI) -> None:
     """Mount all non-WebSocket API routers on the FastAPI app."""
     register_curriculum_question_bank_provider()
+    register_agent_knowledge_contributor()
+    register_agent_practice_session_contributor()
     register_sales_bot_support_runtime_contributor()
     register_presentation_coach_support_runtime_contributor()
     register_curriculum_practice_support_runtime_contributors()
+    register_curriculum_practice_runtime_gate_contributors()
+    register_sales_bot_practice_session_contributor()
+    register_presentation_coach_practice_session_contributor()
+    register_curriculum_practice_session_contributor()
+    register_curriculum_practice_report_contributor()
+    register_evaluation_practice_report_contributor()
+    register_support_knowledge_contributor()
+    register_training_runtime_practice_session_contributor()
     app.include_router(
         presentations.router,
         prefix="/api/v1",

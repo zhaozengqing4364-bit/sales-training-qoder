@@ -16,7 +16,7 @@ from sales_trainer.models import (
 from sales_trainer.rules import resolve_quiz_pass_threshold
 from sales_trainer.schemas import QuizAttemptCreate
 from sales_trainer.services.operation_log_service import OperationLogService
-from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
+from sales_trainer.services.question_bank import QuestionBankAdapter
 from sales_trainer.services.quiz_attempt_payloads import (
     answer_payload_snapshot,
     serialize_quiz_attempt,

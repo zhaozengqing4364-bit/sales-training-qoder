@@ -84,7 +84,7 @@ from sales_trainer.services.prompt_service import (
     AudioScorePromptService,
     PromptServiceError,
 )
-from sales_trainer.services.question_service import (
+from sales_trainer.services.question_bank import (
     SalesTrainerQuestionService,
     SalesTrainerQuestionServiceError,
     serialize_sales_trainer_category,

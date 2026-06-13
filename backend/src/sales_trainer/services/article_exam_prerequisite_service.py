@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
@@ -15,7 +14,10 @@ from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
     ArticleBindingServiceError,
 )
-from sales_trainer.services.curriculum_practice_adapter import LearningChapter
+from sales_trainer.services.curriculum_practice_adapter import (
+    LearningChapterSummary,
+    list_learning_chapters,
+)
 from sales_trainer.services.exam_paper_config import ExamPaperServiceError
 from sales_trainer.services.path_config_models import path_config
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
@@ -113,10 +115,5 @@ class ArticleExamPrerequisiteService:
             learning_content_id=legacy_config.learning_content_id,
         )
 
-    async def _chapters(self, content_id: str) -> list[LearningChapter]:
-        result = await self._db.execute(
-            select(LearningChapter)
-            .where(LearningChapter.learning_content_id == content_id)
-            .order_by(LearningChapter.order_index.asc())
-        )
-        return list(result.scalars().all())
+    async def _chapters(self, content_id: str) -> list[LearningChapterSummary]:
+        return await list_learning_chapters(self._db, content_id)

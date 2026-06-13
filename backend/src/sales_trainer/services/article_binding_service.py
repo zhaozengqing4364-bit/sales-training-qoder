@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
@@ -13,8 +12,9 @@ from sales_trainer.schemas import (
     NewcomerPathModuleConfig,
 )
 from sales_trainer.services.curriculum_practice_adapter import (
-    LearningChapter,
-    LearningContent,
+    LearningChapterSummary,
+    get_learning_content,
+    list_learning_chapters,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
@@ -54,7 +54,7 @@ class ArticleBindingService:
                 "商务技巧文章未绑定已发布内容。",
                 404,
             )
-        content = await self._db.get(LearningContent, learning_content_id)
+        content = await get_learning_content(self._db, learning_content_id)
         if content is None:
             raise ArticleBindingServiceError(
                 "[LEARNING_CONTENT_NOT_FOUND]",
@@ -92,13 +92,8 @@ class ArticleBindingService:
             ],
         }
 
-    async def _chapters(self, content_id: str) -> list[LearningChapter]:
-        result = await self._db.execute(
-            select(LearningChapter)
-            .where(LearningChapter.learning_content_id == content_id)
-            .order_by(LearningChapter.order_index.asc())
-        )
-        return list(result.scalars().all())
+    async def _chapters(self, content_id: str) -> list[LearningChapterSummary]:
+        return await list_learning_chapters(self._db, content_id)
 
     async def bind_module_article(
         self,
@@ -121,7 +116,7 @@ class ArticleBindingService:
                 "商务技巧文章必须绑定已发布 LearningContent。",
                 404,
             )
-        content = await self._db.get(LearningContent, binding.learning_content_id)
+        content = await get_learning_content(self._db, binding.learning_content_id)
         if content is None:
             raise ArticleBindingServiceError(
                 "[LEARNING_CONTENT_NOT_FOUND]",

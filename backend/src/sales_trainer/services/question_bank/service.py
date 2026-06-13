@@ -16,18 +16,18 @@ from sales_trainer.services.curriculum_practice_adapter import (
     QuestionCategoryUpdate,
     QuestionItem,
 )
-from sales_trainer.services.question_contracts import (
+from sales_trainer.services.question_bank.contracts import (
     SALES_TRAINER_QUESTION_SCOPE,
     to_question_item_create,
     to_question_item_update,
 )
-from sales_trainer.services.question_errors import SalesTrainerQuestionServiceError
-from sales_trainer.services.question_payloads import (
+from sales_trainer.services.question_bank.errors import SalesTrainerQuestionServiceError
+from sales_trainer.services.question_bank.payloads import (
     question_lifecycle_snapshot,
     serialize_sales_trainer_category,
     serialize_sales_trainer_question,
 )
-from sales_trainer.services.question_revision_service import (
+from sales_trainer.services.question_bank.revision_service import (
     SalesTrainerQuestionRevisionService,
 )
 

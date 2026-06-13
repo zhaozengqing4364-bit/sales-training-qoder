@@ -27,9 +27,9 @@ from curriculum_practice.services.asset_resolution import (
     template_legacy_warnings,
 )
 from curriculum_practice.services.frozen_asset_refs import (
+    LEGACY_SOURCE_CONFIG_RESOLUTION_MODE,
     FrozenAssetRefError,
     FrozenSituationPackResolver,
-    LEGACY_SOURCE_CONFIG_RESOLUTION_MODE,
     parse_published_asset_refs,
 )
 from curriculum_practice.services.roleplay.situation_pack_repository import (

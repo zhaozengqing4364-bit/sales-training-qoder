@@ -2,25 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.ai.llm_service import LLMService
 from common.db.models import PracticeSession, Scenario
 from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
-from curriculum_practice.models import ExaminerAgent, QuestionItem
-from curriculum_practice.services.examiner_scoring_service import build_llm_exam_scorer
-from curriculum_practice.services.asset_resolution import resolve_session_asset_resolution
-from curriculum_practice.services.roleplay_contracts import (
-    roleplay_readiness_from_contract,
-)
-from curriculum_practice.websocket.examiner_runtime import (
-    ExaminerRuntime,
-    FrozenExamQuestion,
-)
+from common.monitoring.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -125,6 +118,48 @@ class ExamCompletionWriter(Protocol):
     ) -> str: ...
 
 
+RuntimeGateDiagnosticsContributor = Callable[[PracticeSession], dict[str, Any]]
+RuntimeGateChecker = Callable[
+    [AsyncSession, PracticeSession],
+    Awaitable[RuntimeGateResult],
+]
+RuntimeGateBuilder = Callable[
+    [AsyncSession, str, ExamCompletionWriter | None],
+    Awaitable[tuple[Any | None, str | None]],
+]
+
+_runtime_gate_diagnostics_contributors: dict[str, RuntimeGateDiagnosticsContributor] = {}
+_runtime_gate_checkers: dict[str, RuntimeGateChecker] = {}
+_runtime_gate_builders: dict[str, RuntimeGateBuilder] = {}
+
+
+def register_runtime_gate_diagnostics_contributor(
+    provider_key: str,
+    contributor: RuntimeGateDiagnosticsContributor,
+) -> None:
+    _runtime_gate_diagnostics_contributors[provider_key] = contributor
+
+
+def register_runtime_gate_checker(
+    runtime_type: str,
+    checker: RuntimeGateChecker,
+) -> None:
+    _runtime_gate_checkers[runtime_type] = checker
+
+
+def register_runtime_gate_builder(
+    runtime_type: str,
+    builder: RuntimeGateBuilder,
+) -> None:
+    _runtime_gate_builders[runtime_type] = builder
+
+
+def clear_runtime_gate_contributors() -> None:
+    _runtime_gate_diagnostics_contributors.clear()
+    _runtime_gate_checkers.clear()
+    _runtime_gate_builders.clear()
+
+
 def _not_runnable(
     *,
     runtime_type: str,
@@ -145,26 +180,9 @@ def _runnable(*, runtime_type: str) -> RuntimeGateResult:
     return RuntimeGateResult(runnable=True, runtime_type=runtime_type)
 
 
-def _diagnostic_fields(session: PracticeSession) -> dict[str, Any]:
-    template_id = _optional_text(getattr(session, "practice_template_id", None))
+def _base_diagnostic_fields(session: PracticeSession) -> dict[str, Any]:
     curriculum_snapshot = getattr(session, "curriculum_snapshot", None)
     voice_snapshot = getattr(session, "voice_policy_snapshot", None)
-    published_asset_refs = None
-    if isinstance(curriculum_snapshot, dict):
-        snapshot_resolution = curriculum_snapshot.get("asset_resolution")
-        if isinstance(snapshot_resolution, dict):
-            published_asset_refs = snapshot_resolution.get("published_asset_refs")
-    if published_asset_refs is None and isinstance(voice_snapshot, dict):
-        runtime_metrics = voice_snapshot.get("runtime_metrics")
-        if isinstance(runtime_metrics, dict):
-            center = runtime_metrics.get("config_asset_center")
-            if isinstance(center, dict):
-                published_asset_refs = center.get("published_asset_refs")
-    asset_resolution = resolve_session_asset_resolution(
-        practice_template_id=template_id,
-        published_asset_refs=published_asset_refs,
-        curriculum_snapshot=curriculum_snapshot,
-    )
     if isinstance(curriculum_snapshot, dict):
         runtime = curriculum_snapshot.get("runtime")
         runtime_identity = _runtime_identity(runtime if isinstance(runtime, dict) else {})
@@ -176,10 +194,6 @@ def _diagnostic_fields(session: PracticeSession) -> dict[str, Any]:
                 else None
             ),
             "runtime_identity": runtime_identity,
-            "roleplay_contract": roleplay_readiness_from_contract(
-                curriculum_snapshot.get("roleplay_contract")
-            ),
-            "asset_resolution": asset_resolution,
         }
 
     if isinstance(voice_snapshot, dict):
@@ -195,10 +209,6 @@ def _diagnostic_fields(session: PracticeSession) -> dict[str, Any]:
                     getattr(session, "voice_runtime_profile_id", None)
                 ),
             },
-            "roleplay_contract": roleplay_readiness_from_contract(
-                voice_snapshot.get("roleplay_contract")
-            ),
-            "asset_resolution": asset_resolution,
         }
     return {
         "snapshot_hash": None,
@@ -210,9 +220,21 @@ def _diagnostic_fields(session: PracticeSession) -> dict[str, Any]:
                 getattr(session, "voice_runtime_profile_id", None)
             ),
         },
-        "roleplay_contract": roleplay_readiness_from_contract(None),
-        "asset_resolution": asset_resolution,
     }
+
+
+def _diagnostic_fields(session: PracticeSession) -> dict[str, Any]:
+    diagnostics = _base_diagnostic_fields(session)
+    for provider_key, contributor in _runtime_gate_diagnostics_contributors.items():
+        try:
+            contributed = contributor(session)
+        except Exception as exc:  # noqa: BLE001
+            _log_contributor_failure(provider_key, exc)
+            continue
+        diagnostics.update(
+            {key: value for key, value in contributed.items() if value is not None}
+        )
+    return diagnostics
 
 
 def _with_diagnostics(
@@ -243,7 +265,7 @@ def _runtime_identity(runtime: dict[str, Any]) -> dict[str, str | None]:
     }
 
 
-def _check_curriculum_runtime_identity(
+def check_snapshot_runtime_identity(
     session: PracticeSession,
 ) -> RuntimeGateResult | None:
     snapshot = getattr(session, "curriculum_snapshot", None)
@@ -280,6 +302,44 @@ def _check_curriculum_runtime_identity(
         ),
         code="CURRICULUM_RUNTIME_IDENTITY_MISMATCH",
         missing=mismatches,
+    )
+
+
+async def _check_registered_runtime(
+    db: AsyncSession,
+    *,
+    runtime_type: str,
+    session: PracticeSession,
+) -> RuntimeGateResult:
+    checker = _runtime_gate_checkers.get(runtime_type)
+    if checker is None:
+        return _not_runnable(
+            runtime_type=runtime_type,
+            code="EXAMINER_RUNTIME_CONFIG_MISSING",
+            missing=["runtime_gate_contributor"],
+        )
+    return await checker(db, session)
+
+
+async def _build_registered_runtime(
+    db: AsyncSession,
+    *,
+    runtime_type: str,
+    session_id: str,
+    completion_writer: ExamCompletionWriter | None,
+) -> tuple[Any | None, str | None]:
+    builder = _runtime_gate_builders.get(runtime_type)
+    if builder is None:
+        return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
+    return await builder(db, session_id, completion_writer)
+
+
+def _log_contributor_failure(provider_key: str, exc: Exception) -> None:
+    logger.warning(
+        "runtime_gate_contributor_failed",
+        provider_key=provider_key,
+        error=str(exc),
+        exc_info=True,
     )
 
 
@@ -374,47 +434,6 @@ def resolve_runtime_type(
     return "sales"
 
 
-def _asset_refs(content_assets: list[object], asset_type: str) -> list[dict[str, object]]:
-    return [
-        asset
-        for asset in content_assets
-        if isinstance(asset, dict)
-        and asset.get("asset_type") == asset_type
-        and isinstance(asset.get("asset_id"), str)
-    ]
-
-
-def _first_asset_ref(
-    content_assets: list[object], asset_type: str
-) -> dict[str, object] | None:
-    refs = _asset_refs(content_assets, asset_type)
-    return refs[0] if refs else None
-
-
-def _asset_matches_ref(asset: object, ref: dict[str, object]) -> bool:
-    return str(getattr(asset, "content_hash", "")) == str(
-        ref.get("hash")
-    ) and _as_int(getattr(asset, "version", 0)) == _as_int(ref.get("version"))
-
-
-def _as_int(value: object) -> int:
-    if not isinstance(value, int | str):
-        return 0
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _timeout_seconds(config: object) -> int:
-    if not isinstance(config, dict):
-        return 0
-    try:
-        return max(0, int(config.get("max_seconds") or 0))
-    except (TypeError, ValueError):
-        return 0
-
-
 class RuntimeGate:
     """Single authority for sales/examiner/presentation runtime readiness checks."""
 
@@ -448,7 +467,14 @@ class RuntimeGate:
             curriculum_snapshot=getattr(session, "curriculum_snapshot", None),
         )
         if runtime_type == "examiner":
-            return _with_diagnostics(await self._check_examiner(session), session)
+            return _with_diagnostics(
+                await _check_registered_runtime(
+                    self._db,
+                    runtime_type=runtime_type,
+                    session=session,
+                ),
+                session,
+            )
         if runtime_type == "presentation":
             return _with_diagnostics(
                 await self._check_presentation(session, scenario_type=scenario_type),
@@ -539,82 +565,13 @@ class RuntimeGate:
         session_id: str,
         *,
         completion_writer: ExamCompletionWriter | None = None,
-    ) -> tuple[ExaminerRuntime | None, str | None]:
-        session = await self._db.get(PracticeSession, session_id)
-        if session is None:
-            return None, "EXAMINER_RUNTIME_SNAPSHOT_MISSING"
-
-        gate_result = await self._check_examiner(session)
-        if not gate_result.runnable:
-            return None, gate_result.code or "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-        snapshot = getattr(session, "curriculum_snapshot", None)
-        if not isinstance(snapshot, dict):
-            return None, "EXAMINER_RUNTIME_SNAPSHOT_MISSING"
-
-        content_assets = snapshot.get("content_assets")
-        if not isinstance(content_assets, list):
-            return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-        examiner_ref = _first_asset_ref(content_assets, "examiner_agent")
-        if examiner_ref is None:
-            return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-        agent = await self._db.get(ExaminerAgent, str(examiner_ref["asset_id"]))
-        if agent is None:
-            return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-        questions, failure_reason = await self._load_frozen_questions(content_assets)
-        if not questions:
-            return None, failure_reason or "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-        if completion_writer is None:
-            return None, "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-        return (
-            ExaminerRuntime(
-                session_id=session_id,
-                examiner_agent_id=str(agent.examiner_agent_id),
-                timeout_seconds=_timeout_seconds(agent.timeout_config),
-                questions=questions,
-                scorer=build_llm_exam_scorer(
-                    llm_service=LLMService(),
-                    session_id=session_id,
-                ),
-                completion_writer=completion_writer,
-            ),
-            None,
+    ) -> tuple[Any | None, str | None]:
+        return await _build_registered_runtime(
+            self._db,
+            runtime_type="examiner",
+            session_id=session_id,
+            completion_writer=completion_writer,
         )
-
-    async def _load_frozen_questions(
-        self,
-        content_assets: list[object],
-    ) -> tuple[list[FrozenExamQuestion], str | None]:
-        question_refs = _asset_refs(content_assets, "question_item")
-        if not question_refs:
-            return [], "EXAMINER_RUNTIME_CONFIG_MISSING"
-
-        questions: list[FrozenExamQuestion] = []
-        for question_ref in question_refs:
-            question = await self._db.get(QuestionItem, str(question_ref["asset_id"]))
-            if (
-                question is None
-                or getattr(question, "status", None) != "published"
-                or bool(getattr(question, "safety_flagged", False))
-            ):
-                return [], "EXAMINER_RUNTIME_CONFIG_MISSING"
-            if not _asset_matches_ref(question, question_ref):
-                return [], "EXAMINER_RUNTIME_SNAPSHOT_STALE"
-            questions.append(
-                FrozenExamQuestion(
-                    question_id=str(question.question_id),
-                    title=str(question.title),
-                    stem=str(question.stem),
-                    reference_answer=getattr(question, "reference_answer", None),
-                    scoring_criteria=dict(question.scoring_criteria or {}),
-                )
-            )
-        return questions, None
 
     async def _check_sales(
         self,
@@ -629,7 +586,7 @@ class RuntimeGate:
                 code="SESSION_SCENARIO_MISMATCH",
                 missing=["scenario_type"],
             )
-        identity_failure = _check_curriculum_runtime_identity(session)
+        identity_failure = check_snapshot_runtime_identity(session)
         if identity_failure is not None:
             return identity_failure
 
@@ -684,7 +641,7 @@ class RuntimeGate:
                 code="SESSION_SCENARIO_MISMATCH",
                 missing=["scenario_type"],
             )
-        identity_failure = _check_curriculum_runtime_identity(session)
+        identity_failure = check_snapshot_runtime_identity(session)
         if identity_failure is not None:
             identity_failure.runtime_type = runtime_type
             return identity_failure
@@ -708,60 +665,6 @@ class RuntimeGate:
                 runtime_type=runtime_type,
                 code="KB_LOCK_UNBOUND",
                 missing=["persona.knowledge_base_ids"],
-            )
-
-        return _runnable(runtime_type=runtime_type)
-
-    async def _check_examiner(self, session: PracticeSession) -> RuntimeGateResult:
-        runtime_type = "examiner"
-        snapshot = getattr(session, "curriculum_snapshot", None)
-        if not isinstance(snapshot, dict):
-            return _not_runnable(
-                runtime_type=runtime_type,
-                code="EXAMINER_RUNTIME_SNAPSHOT_MISSING",
-                missing=["curriculum_snapshot"],
-            )
-        identity_failure = _check_curriculum_runtime_identity(session)
-        if identity_failure is not None:
-            identity_failure.runtime_type = runtime_type
-            return identity_failure
-
-        content_assets = snapshot.get("content_assets")
-        if not isinstance(content_assets, list):
-            return _not_runnable(
-                runtime_type=runtime_type,
-                code="EXAMINER_RUNTIME_CONFIG_MISSING",
-                missing=["curriculum_snapshot.content_assets"],
-            )
-
-        examiner_ref = _first_asset_ref(content_assets, "examiner_agent")
-        if examiner_ref is None:
-            return _not_runnable(
-                runtime_type=runtime_type,
-                code="EXAMINER_RUNTIME_CONFIG_MISSING",
-                missing=["curriculum_snapshot.examiner_agent"],
-            )
-
-        agent = await self._db.get(ExaminerAgent, str(examiner_ref["asset_id"]))
-        if agent is None or getattr(agent, "status", None) != "published":
-            return _not_runnable(
-                runtime_type=runtime_type,
-                code="EXAMINER_RUNTIME_CONFIG_MISSING",
-                missing=["examiner_agent"],
-            )
-        if not _asset_matches_ref(agent, examiner_ref):
-            return _not_runnable(
-                runtime_type=runtime_type,
-                code="EXAMINER_RUNTIME_SNAPSHOT_STALE",
-                missing=["examiner_agent.version"],
-            )
-
-        questions, failure_reason = await self._load_frozen_questions(content_assets)
-        if not questions:
-            return _not_runnable(
-                runtime_type=runtime_type,
-                code=failure_reason or "EXAMINER_RUNTIME_CONFIG_MISSING",
-                missing=["question_item"],
             )
 
         return _runnable(runtime_type=runtime_type)

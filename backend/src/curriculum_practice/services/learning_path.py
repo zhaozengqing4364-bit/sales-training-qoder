@@ -19,9 +19,10 @@ from common.db.models import (
 )
 from common.recommendations.next_practice import NextPracticeRecommendationService
 from curriculum_practice.models import PracticeTemplate
-from curriculum_practice.schemas import CurriculumPlanSchema
-from curriculum_practice.schemas import CurriculumPlanStage
-from curriculum_practice.services.examiner_report_service import examiner_report_frontend_path
+from curriculum_practice.schemas import CurriculumPlanSchema, CurriculumPlanStage
+from curriculum_practice.services.examiner_report_service import (
+    examiner_report_frontend_path,
+)
 from curriculum_practice.services.learning_progress_service import (
     LearningProgressService,
 )

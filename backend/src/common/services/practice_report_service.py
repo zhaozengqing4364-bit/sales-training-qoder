@@ -27,13 +27,14 @@ from common.oss.signing import (
     OssSigningService,
     get_oss_signing_service,
 )
+from common.services.practice_report_contributors import (
+    build_registered_roleplay_compliance_summary,
+    maybe_generate_registered_comprehensive_sales_report,
+)
 from common.services.practice_session_service import (
     PracticeRetryEntryAssembler,
     PracticeServiceError,
     ensure_effectiveness_snapshot,
-)
-from curriculum_practice.services.roleplay_contracts import (
-    roleplay_compliance_summary_from_session,
 )
 
 if TYPE_CHECKING:
@@ -507,11 +508,7 @@ class PracticeReportService:
 
     @staticmethod
     def _roleplay_compliance_summary(session: PracticeSession) -> dict[str, Any]:
-        return roleplay_compliance_summary_from_session(
-            curriculum_snapshot=getattr(session, "curriculum_snapshot", None),
-            voice_policy_snapshot=getattr(session, "voice_policy_snapshot", None),
-            runtime_state=getattr(session, "runtime_state", None),
-        )
+        return build_registered_roleplay_compliance_summary(session)
 
     @staticmethod
     def _projection_suggestions(
@@ -531,48 +528,10 @@ class PracticeReportService:
         return suggestions
 
     async def _maybe_generate_comprehensive_sales_report(self, session_id: str) -> None:
-        try:
-            from common.ai.llm_service import LLMService
-            from evaluation.services.comprehensive_report import (
-                ComprehensiveReportService,
-            )
-            from evaluation.services.staged_evaluation import StagedEvaluationService
-            from prompt_templates.service import PromptTemplateService
-
-            llm_service = LLMService()
-            prompt_service = PromptTemplateService(self.db)
-            staged_eval_service = StagedEvaluationService(
-                db_session=self.db,
-                prompt_service=prompt_service,
-                llm_service=llm_service,
-            )
-            report_service = ComprehensiveReportService(
-                db_session=self.db,
-                staged_eval_service=staged_eval_service,
-                prompt_service=prompt_service,
-                llm_service=llm_service,
-            )
-            comprehensive_result = await report_service.generate_report(
-                session_id,
-                scenario_type="sales",
-            )
-            if comprehensive_result.is_success:
-                logger.info(
-                    "Comprehensive report generated",
-                    session_id=session_id,
-                )
-            else:
-                logger.warning(
-                    "Comprehensive report generation failed",
-                    session_id=session_id,
-                    error_code=comprehensive_result.fallback,
-                )
-        except (RuntimeError, ValueError, OSError, ImportError) as exc:
-            logger.warning(
-                "Comprehensive report generation skipped",
-                session_id=session_id,
-                error=str(exc),
-            )
+        await maybe_generate_registered_comprehensive_sales_report(
+            self.db,
+            session_id,
+        )
 
 
 class PracticeAudioSegmentService:

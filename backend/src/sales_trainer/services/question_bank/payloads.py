@@ -11,7 +11,7 @@ from sales_trainer.services.curriculum_practice_adapter import (
     QuestionCategory,
     QuestionItem,
 )
-from sales_trainer.services.question_contracts import to_question_item_update
+from sales_trainer.services.question_bank.contracts import to_question_item_update
 
 SALES_TRAINER_QUESTION_SCOPE = "sales_trainer"
 QUESTION_RESOURCE_TYPE = "sales_trainer_question"

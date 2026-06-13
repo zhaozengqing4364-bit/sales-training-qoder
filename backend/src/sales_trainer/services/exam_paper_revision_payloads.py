@@ -10,7 +10,7 @@ from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
 from sales_trainer.services.curriculum_practice_adapter import QuestionItem
-from sales_trainer.services.question_payloads import (
+from sales_trainer.services.question_bank import (
     QUESTION_RESOURCE_TYPE,
     question_lifecycle_snapshot,
 )

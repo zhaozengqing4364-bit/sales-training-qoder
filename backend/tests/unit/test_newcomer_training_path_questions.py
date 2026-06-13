@@ -21,7 +21,7 @@ from sales_trainer.schemas import (
     SalesTrainerQuestionUpdate,
 )
 from sales_trainer.services.exam_paper_service import ExamPaperService
-from sales_trainer.services.question_service import SalesTrainerQuestionService
+from sales_trainer.services.question_bank import SalesTrainerQuestionService
 
 
 class PaperQuestionBindingPayload(TypedDict):

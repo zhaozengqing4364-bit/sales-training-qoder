@@ -27,6 +27,9 @@ from common.error_handling.result import Result
 from common.services import practice_session_service as practice_service
 from common.websocket.session_manager import get_session_manager
 from evaluation.services.report_generation_trigger import trigger_report_generation
+from sales_bot.services import (
+    practice_session_contributor as sales_practice_session_contributor,
+)
 
 LIFECYCLE_API_CONCURRENCY_CONTRACT = {
     "intentional_terminal_statuses": {
@@ -98,11 +101,15 @@ def _stub_sales_end_dependencies(monkeypatch: pytest.MonkeyPatch):
     )
     cleanup_mock = AsyncMock(return_value=Result.ok({"session_id": "stub-session"}))
     monkeypatch.setattr(
-        practice_service.summary_service,
+        sales_practice_session_contributor.summary_service,
         "generate_summary",
         summary_mock,
     )
-    monkeypatch.setattr(practice_service.sales_bot_service, "end_session", cleanup_mock)
+    monkeypatch.setattr(
+        sales_practice_session_contributor.sales_bot_service,
+        "end_session",
+        cleanup_mock,
+    )
     return summary_mock, cleanup_mock
 
 

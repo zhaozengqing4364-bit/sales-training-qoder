@@ -40,7 +40,7 @@ from sales_trainer.services.deucate_scoring_service import (
 from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_service import SalesTrainerPathService
-from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
+from sales_trainer.services.question_bank import QuestionBankAdapter
 from sales_trainer.services.quiz_service import QuizService
 from sales_trainer.services.short_answer_scoring_service import (
     ShortAnswerScoreOutcome,

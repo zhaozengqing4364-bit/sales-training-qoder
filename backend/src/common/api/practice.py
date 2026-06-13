@@ -1163,7 +1163,6 @@ async def get_enhanced_session_report(
     - Suggestions
     - Highlights from the session
     """
-    from common.conversation.models import ConversationMessage
     from common.db.schemas import (
         DimensionScore,
         EnhancedSessionReport,

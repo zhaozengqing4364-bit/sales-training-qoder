@@ -30,7 +30,6 @@ from support.services.asset_registry import (
 from support.services.asset_registry import (
     iter_asset_refs as iter_registered_asset_refs,
 )
-from support.services.runtime_roleplay_faults import build_roleplay_fault_candidate
 from support.services.runtime_contributors import (
     build_empty_config_asset_center_payload,
     build_registered_config_asset_center,
@@ -38,6 +37,7 @@ from support.services.runtime_contributors import (
     build_registered_roleplay_diagnostics,
     build_registered_voice_policy_tool_types,
 )
+from support.services.runtime_roleplay_faults import build_roleplay_fault_candidate
 
 logger = get_logger(__name__)
 

@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -9,6 +12,17 @@ import {
     createSalesTrainerDomain,
     createSupportRuntimeDomain,
 } from "./client-domains";
+
+function collectSourceFiles(directory: string): string[] {
+    return readdirSync(directory).flatMap((entry) => {
+        const path = join(directory, entry);
+        const stats = statSync(path);
+        if (stats.isDirectory()) {
+            return collectSourceFiles(path);
+        }
+        return /\.(ts|tsx)$/.test(entry) ? [path] : [];
+    });
+}
 
 describe("client domain factories", () => {
     it("keeps auth login on the shared request seam with session-expiry handling disabled", async () => {
@@ -360,5 +374,17 @@ describe("client domain factories", () => {
                 }),
             },
         );
+    });
+
+    it("keeps UI layers importing the public api facade instead of domain internals", () => {
+        const roots = ["src/app", "src/components", "src/hooks"]
+            .map((root) => join(process.cwd(), root));
+        const forbiddenImport = /from\s+["'](?:@\/lib\/api\/(?:client-domains|domains\/[^"']+)|(?:\.\.?\/)+.*api\/(?:client-domains|domains\/[^"']+))["']/;
+        const offenders = roots
+            .flatMap(collectSourceFiles)
+            .filter((path) => forbiddenImport.test(readFileSync(path, "utf8")))
+            .map((path) => relative(process.cwd(), path));
+
+        expect(offenders).toEqual([]);
     });
 });

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { AiCoachAdminConfigLike } from "@/lib/api/client-domains";
+import type { AiCoachAdminConfigLike } from "@/lib/api/types";
 
 type CoachMode = "single_choice_drill" | "multiple_choice_drill" | "short_answer_drill" | "mixed_drill";
 type InteractionType = "single_choice" | "multiple_choice" | "short_answer";
@@ -1246,7 +1246,7 @@ async function requestConfig(moduleKey: string): Promise<AiCoachAdminConfig> {
 async function saveConfig(moduleKey: string, payload: AiCoachAdminConfig): Promise<ConfigResponse> {
     const response = await api.admin.newcomerTraining.saveAiCoachConfig(
         moduleKey,
-        payload as unknown as AiCoachAdminConfigLike,
+        payload as AiCoachAdminConfigLike,
     );
     if (!response) {
         throw new Error("保存响应为空");

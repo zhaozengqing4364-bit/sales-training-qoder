@@ -16,6 +16,9 @@ from common.services.practice_session_service import (
     PracticeSessionLifecycleApplicationService,
 )
 from common.websocket.session_state_service import SessionStateSnapshot
+from sales_bot.services import (
+    practice_session_contributor as sales_practice_session_contributor,
+)
 from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
@@ -543,11 +546,15 @@ async def test_prepare_terminal_lifecycle_result_marks_stepfun_session_not_evalu
         sync_evidence_mock,
     )
     monkeypatch.setattr(
-        practice_service.summary_service,
+        sales_practice_session_contributor.summary_service,
         "generate_summary",
         summary_mock,
     )
-    monkeypatch.setattr(practice_service.sales_bot_service, "end_session", cleanup_mock)
+    monkeypatch.setattr(
+        sales_practice_session_contributor.sales_bot_service,
+        "end_session",
+        cleanup_mock,
+    )
     monkeypatch.setattr(
         practice_service,
         "ensure_effectiveness_snapshot",

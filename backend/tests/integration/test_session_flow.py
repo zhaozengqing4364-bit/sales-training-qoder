@@ -30,8 +30,10 @@ from agent.models import Agent, AgentPersona, Persona
 from common.db.models import Base, PracticeSession, Presentation, Scenario, User
 from common.db.session import get_db
 from common.error_handling.result import Result
-from common.services import practice_session_service
 from main import app
+from sales_bot.services import (
+    practice_session_contributor as sales_practice_session_contributor,
+)
 
 
 async def _get_auth_user_id(headers: dict[str, str]) -> str:
@@ -58,12 +60,12 @@ def _stub_sales_end_dependencies(monkeypatch: pytest.MonkeyPatch):
     )
     cleanup_mock = AsyncMock(return_value=Result.ok({"session_id": "flow-session"}))
     monkeypatch.setattr(
-        practice_session_service.summary_service,
+        sales_practice_session_contributor.summary_service,
         "generate_summary",
         summary_mock,
     )
     monkeypatch.setattr(
-        practice_session_service.sales_bot_service,
+        sales_practice_session_contributor.sales_bot_service,
         "end_session",
         cleanup_mock,
     )

@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from inspect import isawaitable
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Persona

@@ -28,7 +28,7 @@ from sales_trainer.services.material_service import (
     validate_unit_material_and_brief_config,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
-from sales_trainer.services.question_bank_adapter import QuestionBankAdapter
+from sales_trainer.services.question_bank import QuestionBankAdapter
 from sales_trainer.services.unit_revision_payloads import (
     payload_dict,
     unit_question_bindings_from_payload,

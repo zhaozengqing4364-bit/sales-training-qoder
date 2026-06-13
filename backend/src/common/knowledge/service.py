@@ -34,6 +34,7 @@ from common.ai.embedding_service import get_embedding_service
 from common.cache.redis_cache import get_cache
 from common.error_handling.result import Result
 from common.knowledge.bm25_index import get_bm25_index_manager
+from common.knowledge.contributors import check_registered_knowledge_references
 from common.knowledge.semantic_cache import get_semantic_search_cache
 from common.monitoring.logger import get_logger
 from common.storage import get_document_storage_service
@@ -512,54 +513,7 @@ class KnowledgeService:
         Returns:
             Error message if referenced, None if safe to delete
         """
-        try:
-            # Import here to avoid circular imports
-            from agent.models import Agent, Persona
-
-            # Check Agents - use text search for JSON compatibility across databases
-            # This works for both SQLite and PostgreSQL
-            agent_stmt = select(Agent)
-            agent_result = await self.db.execute(agent_stmt)
-            agents = agent_result.scalars().all()
-
-            # Filter in Python for JSON array contains (database-agnostic)
-            referencing_agents = [
-                a
-                for a in agents
-                if self._orm_field(a, "default_knowledge_base_ids")
-                and kb_id in self._orm_field(a, "default_knowledge_base_ids")
-            ]
-
-            if referencing_agents:
-                names = ", ".join(
-                    self._orm_str(agent, "name") for agent in referencing_agents[:3]
-                )
-                return f"Referenced by Agents: {names}"
-
-            # Check Personas
-            persona_stmt = select(Persona)
-            persona_result = await self.db.execute(persona_stmt)
-            personas = persona_result.scalars().all()
-
-            referencing_personas = [
-                p
-                for p in personas
-                if self._orm_field(p, "knowledge_base_ids")
-                and kb_id in self._orm_field(p, "knowledge_base_ids")
-            ]
-
-            if referencing_personas:
-                names = ", ".join(
-                    self._orm_str(persona, "name")
-                    for persona in referencing_personas[:3]
-                )
-                return f"Referenced by Personas: {names}"
-
-            return None
-
-        except (RuntimeError, ValueError, OSError) as e:
-            logger.warning(f"Reference check failed (continuing): {e}")
-            return None
+        return await check_registered_knowledge_references(self.db, kb_id)
 
     # ========== Document Operations ==========
 

@@ -12,7 +12,7 @@ from sales_trainer.services.curriculum_practice_adapter import (
     QuestionItemCreate,
     QuestionItemUpdate,
 )
-from sales_trainer.services.question_errors import SalesTrainerQuestionServiceError
+from sales_trainer.services.question_bank.errors import SalesTrainerQuestionServiceError
 
 SALES_TRAINER_QUESTION_SCOPE = "sales_trainer"
 

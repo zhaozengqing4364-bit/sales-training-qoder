@@ -19,7 +19,11 @@ from curriculum_practice.services.examiner_report_service import (
     ExaminerReportService,
     examiner_report_frontend_path,
 )
+from curriculum_practice.services.runtime_gate_contributor import (
+    register_curriculum_practice_runtime_gate_contributors,
+)
 from curriculum_practice.websocket.examiner_runtime import (
+    ExaminerRuntime,
     ExaminerWebSocketHandler,
 )
 
@@ -31,6 +35,7 @@ class _AuthUser(NamedTuple):
 
 logger = get_logger(__name__)
 router = APIRouter()
+register_curriculum_practice_runtime_gate_contributors()
 
 
 @router.websocket("/ws/curriculum/examiner")

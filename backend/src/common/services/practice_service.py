@@ -20,6 +20,10 @@ from common.services.practice_report_service import (
     PracticeAudioSegmentService,
     PracticeReportService,
 )
+from common.services.practice_session_ports import (
+    RuntimePolicyResolver,
+    get_runtime_policy_resolver,
+)
 from common.services.practice_session_service import (
     PracticeRetryEntryAssembler,
     PracticeRuntimeDescriptorService,
@@ -27,7 +31,6 @@ from common.services.practice_session_service import (
     PracticeSessionCreateService,
     PracticeSessionLifecycleApplicationService,
 )
-from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 
 PRACTICE_APPLICATION_SEAMS: tuple[str, ...] = (
     "session_create_policy",
@@ -42,7 +45,7 @@ PRACTICE_APPLICATION_SEAMS: tuple[str, ...] = (
 class PracticeRouteServices:
     """Minimal seam bundle consumed by practice routes during extraction."""
 
-    runtime_policy: VoiceRuntimePolicyService
+    runtime_policy: RuntimePolicyResolver
     lifecycle: SessionLifecycleService
     evidence: SessionEvidenceService
     audio_audit: PracticeAudioAuditService
@@ -56,7 +59,7 @@ class PracticeRouteServices:
 
 
 def build_practice_route_services(db: AsyncSession) -> PracticeRouteServices:
-    runtime_policy_service = VoiceRuntimePolicyService(db)
+    runtime_policy_service = get_runtime_policy_resolver(db)
     lifecycle_service = SessionLifecycleService(db)
     evidence_service = SessionEvidenceService(db)
     audio_audit_service = PracticeAudioAuditService(db)

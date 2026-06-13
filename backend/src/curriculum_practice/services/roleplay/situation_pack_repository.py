@@ -38,12 +38,12 @@ class SituationPackRepository(ABC):
         from curriculum_practice.services.roleplay.adapters.entity_projection_adapter import (
             EntitySituationPackProjectionAdapter,
         )
-        from curriculum_practice.services.roleplay.dual_read_repository import (
-            DualReadSituationPackRepository,
-        )
         from curriculum_practice.services.roleplay.dual_read_promotion_gate import (
             DualReadPromotionGateService,
             record_dual_read_projection_mismatch_audits,
+        )
+        from curriculum_practice.services.roleplay.dual_read_repository import (
+            DualReadSituationPackRepository,
         )
 
         phase_b1 = await EntitySituationPackProjectionAdapter.from_database(db)

@@ -40,22 +40,26 @@ from common.effectiveness import (
 from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.logger import get_logger, get_trace_id
 from common.services.practice_helpers import PracticeRetryEntryAssembler
+from common.services.practice_session_ports import (
+    PracticeSessionCreateContext,
+    PracticeSessionPortError,
+    PracticeSessionTerminalContext,
+    PracticeTemplateRuntimeIdentity,
+    RuntimePolicyResolver,
+    apply_registered_practice_session_snapshot,
+    build_registered_runtime_descriptor,
+    get_practice_session_creator,
+    get_practice_session_terminal_handler,
+    get_runtime_policy_resolver,
+    resolve_registered_practice_template_runtime_identity,
+    validate_registered_agent_persona_pair,
+)
 from common.services.session_runtime_state_service import (
     SessionRuntimeStateService,
     read_lifecycle_snapshot,
 )
 from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
-from curriculum_practice.models import PracticeTemplate
-from curriculum_practice.services.session_snapshots import (
-    CurriculumSessionSnapshotError,
-    apply_curriculum_snapshot_to_session,
-)
-from presentation_coach.services.coach_service import PresentationCoachService
-from sales_bot.services.bot_service import sales_bot_service
-from sales_bot.services.summary_service import summary_service
-from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
-from training_runtime.service import build_training_runtime_descriptor
 
 logger = get_logger(__name__)
 
@@ -98,14 +102,6 @@ class PracticeSessionUpdateResult:
     scenario_type: str | None
 
 
-@dataclass(slots=True)
-class PracticeTemplateRuntimeIdentity:
-    template: PracticeTemplate
-    agent_id: str
-    persona_id: str
-    runtime_profile_id: str
-
-
 class PracticeRuntimeDescriptorService:
     """Assemble runtime-aware session payloads without route glue."""
 
@@ -127,12 +123,13 @@ class PracticeRuntimeDescriptorService:
         except ValueError:
             payload.scenario_type = ScenarioType.SALES
 
-        runtime_descriptor = build_training_runtime_descriptor(
+        runtime_descriptor = build_registered_runtime_descriptor(
             session,
             scenario_type=payload.scenario_type.value,
         )
-        payload.runtime_subject = runtime_descriptor.subject
-        payload.runtime_descriptor = runtime_descriptor
+        if runtime_descriptor is not None:
+            payload.runtime_subject = runtime_descriptor.subject
+            payload.runtime_descriptor = runtime_descriptor
         runtime_profile_id = getattr(session, "voice_runtime_profile_id", None)
         payload.runtime_profile_id = (
             uuid.UUID(str(runtime_profile_id)) if runtime_profile_id else None
@@ -154,11 +151,11 @@ class PracticeSessionCreateService:
         self,
         db: AsyncSession,
         *,
-        runtime_policy_service: VoiceRuntimePolicyService | None = None,
+        runtime_policy_service: RuntimePolicyResolver | None = None,
     ) -> None:
         self.db = db
         self.runtime_policy_service = (
-            runtime_policy_service or VoiceRuntimePolicyService(db)
+            runtime_policy_service or get_runtime_policy_resolver(db)
         )
         self.logger = logger
 
@@ -206,7 +203,7 @@ class PracticeSessionCreateService:
                 agent_id=agent_id_str,
                 persona_id=persona_id_str,
                 voice_mode_override=(
-                    template_identity.template.voice_mode
+                    template_identity.voice_mode
                     if template_identity is not None
                     else session_data.voice_mode
                 ),
@@ -355,58 +352,16 @@ class PracticeSessionCreateService:
         requested_agent_id: str | None,
         requested_persona_id: str | None,
     ) -> PracticeTemplateRuntimeIdentity | None:
-        if session_data.practice_template_id is None:
-            return None
-
-        template = await self.db.get(
-            PracticeTemplate,
-            str(session_data.practice_template_id),
-        )
-        if template is None:
-            raise PracticeServiceError("[PRACTICE_TEMPLATE_NOT_FOUND]", status_code=404)
-        if template.status != "published":
-            raise PracticeServiceError(
-                "[PRACTICE_TEMPLATE_NOT_PUBLISHED]",
-                status_code=400,
+        try:
+            return await resolve_registered_practice_template_runtime_identity(
+                self.db,
+                session_data=session_data,
+                scenario_type_value=scenario_type_value,
+                requested_agent_id=requested_agent_id,
+                requested_persona_id=requested_persona_id,
             )
-        if template.scenario_type != scenario_type_value:
-            raise PracticeServiceError(
-                "[PRACTICE_TEMPLATE_SCENARIO_TYPE_MISMATCH]",
-                status_code=400,
-            )
-
-        template_agent_id = str(template.agent_id)
-        template_persona_id = str(template.persona_id)
-        template_runtime_profile_id = str(template.runtime_profile_id)
-        requested_runtime_profile_id = (
-            str(session_data.runtime_profile_id)
-            if session_data.runtime_profile_id
-            else None
-        )
-        mismatched_fields: list[str] = []
-        if requested_agent_id and requested_agent_id != template_agent_id:
-            mismatched_fields.append("agent_id")
-        if requested_persona_id and requested_persona_id != template_persona_id:
-            mismatched_fields.append("persona_id")
-        if (
-            requested_runtime_profile_id
-            and requested_runtime_profile_id != template_runtime_profile_id
-        ):
-            mismatched_fields.append("runtime_profile_id")
-        if mismatched_fields:
-            raise PracticeServiceError(
-                "[PRACTICE_TEMPLATE_RUNTIME_IDENTITY_MISMATCH]",
-                status_code=400,
-                message="practice_template_id 已绑定固定 agent/persona/runtime_profile，请使用模板身份创建会话。",
-                details={"mismatched_fields": mismatched_fields},
-            )
-
-        return PracticeTemplateRuntimeIdentity(
-            template=template,
-            agent_id=template_agent_id,
-            persona_id=template_persona_id,
-            runtime_profile_id=template_runtime_profile_id,
-        )
+        except PracticeSessionPortError as exc:
+            _raise_practice_port_error(exc)
 
     @staticmethod
     def _resolve_agent_persona_pair(
@@ -441,42 +396,14 @@ class PracticeSessionCreateService:
         agent_id_str: str | None,
         persona_id_str: str | None,
     ) -> dict[str, Any] | None:
-        if not (agent_id_str and persona_id_str):
-            return None
-
-        from agent.models import Agent, AgentPersona
-        from agent.models import Persona as AgentPersonaModel
-
-        agent_result = await self.db.execute(
-            select(Agent).where(Agent.id == agent_id_str)
-        )
-        agent = agent_result.scalar_one_or_none()
-        if not agent:
-            raise PracticeServiceError("[AGENT_NOT_FOUND]", status_code=404)
-        if agent.status == "archived":
-            raise PracticeServiceError("[AGENT_ARCHIVED]", status_code=400)
-        if agent.status != "published":
-            raise PracticeServiceError("[AGENT_NOT_PUBLISHED]", status_code=400)
-
-        persona_result = await self.db.execute(
-            select(AgentPersonaModel).where(AgentPersonaModel.id == persona_id_str)
-        )
-        persona_obj = persona_result.scalar_one_or_none()
-        if not persona_obj:
-            raise PracticeServiceError("[PERSONA_NOT_FOUND]", status_code=404)
-        if persona_obj.status != "active":
-            raise PracticeServiceError("[PERSONA_INACTIVE]", status_code=400)
-
-        link_result = await self.db.execute(
-            select(AgentPersona).where(
-                AgentPersona.agent_id == agent_id_str,
-                AgentPersona.persona_id == persona_id_str,
+        try:
+            return await validate_registered_agent_persona_pair(
+                self.db,
+                agent_id_str=agent_id_str,
+                persona_id_str=persona_id_str,
             )
-        )
-        link = link_result.scalar_one_or_none()
-        if not link:
-            raise PracticeServiceError("[PERSONA_NOT_LINKED_TO_AGENT]", status_code=400)
-        return link.override_config or None
+        except PracticeSessionPortError as exc:
+            _raise_practice_port_error(exc)
 
     def _log_voice_policy_resolution(
         self,
@@ -548,68 +475,27 @@ class PracticeSessionCreateService:
         session_policy_snapshot: dict[str, Any],
         effective_voice_policy: dict[str, Any],
     ) -> PracticeSession:
-        if not session_data.presentation_id:
-            raise PracticeServiceError("[PRESENTATION_ID_REQUIRED]", status_code=400)
-
-        coach_service = PresentationCoachService(self.db)
-        result = await coach_service.create_session(
-            user_id=str(current_user.user_id),
-            presentation_id=str(session_data.presentation_id),
-        )
-        if not result.is_success:
-            fallback = str(result.fallback or "").strip()
-            fallback_lower = fallback.lower()
-            if "presentation not found or not ready" in fallback_lower:
-                raise PracticeServiceError(
-                    "[PRESENTATION_NOT_READY]",
-                    status_code=400,
-                    message="演练PPT不存在或尚未就绪",
-                )
+        creator = get_practice_session_creator("presentation")
+        if creator is None:
             raise PracticeServiceError(
-                "[SESSION_CREATE_FAILED]",
+                "[PRESENTATION_SESSION_CREATOR_NOT_REGISTERED]",
                 status_code=500,
-                message=fallback or "会话创建失败",
             )
-
-        session = result.value
-        if session is None:
-            raise PracticeServiceError(
-                "[SESSION_CREATE_FAILED]",
-                status_code=500,
-                message="会话创建失败",
-            )
-        if agent_id_str:
-            session.agent_id = agent_id_str
-        if persona_id_str:
-            session.persona_id = persona_id_str
-        session.voice_mode = effective_voice_policy.get(
-            "voice_mode", "stepfun_realtime"
-        )
-        session.voice_runtime_profile_id = effective_voice_policy.get(
-            "runtime_profile_id"
-        )
-        session.voice_policy_snapshot = deepcopy(session_policy_snapshot)
-        if requested_scenario:
-            session.scenario_id = requested_scenario.scenario_id
         try:
-            await self._apply_curriculum_snapshot(
-                session=session,
-                practice_template_id=session_data.practice_template_id,
-                scenario_type_value="presentation",
-                current_user=current_user,
+            return await creator(
+                self.db,
+                PracticeSessionCreateContext(
+                    session_data=session_data,
+                    current_user=current_user,
+                    requested_scenario=requested_scenario,
+                    agent_id_str=agent_id_str,
+                    persona_id_str=persona_id_str,
+                    session_policy_snapshot=session_policy_snapshot,
+                    effective_voice_policy=effective_voice_policy,
+                ),
             )
-        except PracticeServiceError:
-            await self.db.delete(session)
-            await self.db.commit()
-            raise
-        await self.db.commit()
-        await self.db.refresh(session)
-        await SessionRuntimeStateService(self.db).initialize_on_create(
-            str(session.session_id),
-            has_runtime_snapshot=bool(session.voice_policy_snapshot),
-            source="practice_session_create",
-        )
-        return session
+        except PracticeSessionPortError as exc:
+            _raise_practice_port_error(exc)
 
     async def _create_sales_session(
         self,
@@ -677,20 +563,21 @@ class PracticeSessionCreateService:
         scenario_type_value: str,
         current_user: User,
     ) -> None:
+        if practice_template_id is None:
+            return
         try:
-            await apply_curriculum_snapshot_to_session(
-                db=self.db,
+            await apply_registered_practice_session_snapshot(
+                self.db,
                 session=session,
-                practice_template_id=practice_template_id,
+                session_data=SessionCreate(
+                    scenario_type=ScenarioType(scenario_type_value),
+                    practice_template_id=practice_template_id,
+                ),
                 scenario_type_value=scenario_type_value,
-                actor_id=str(current_user.user_id),
+                current_user=current_user,
             )
-        except CurriculumSessionSnapshotError as exc:
-            raise PracticeServiceError(
-                exc.error_code,
-                status_code=exc.status_code,
-                message=exc.message,
-            ) from exc
+        except PracticeSessionPortError as exc:
+            _raise_practice_port_error(exc)
 
 
 class PracticeSessionLifecycleApplicationService:
@@ -857,74 +744,29 @@ class PracticeSessionLifecycleApplicationService:
             )
 
         normalized_scenario_type = (scenario_type or "sales").lower()
-        summary: Any | None = None
-
-        if normalized_scenario_type == "presentation":
-            coach_service = PresentationCoachService(self.db)
-            coach_result = await coach_service.end_session(session_id, commit=False)
-            if not coach_result.is_success:
-                raise PracticeServiceError(
-                    "[SESSION_END_FAILED]",
-                    status_code=500,
-                    message="会话结束失败",
-                )
-
-            session = coach_result.value
-            transition.session = session
-            snapshot = ensure_effectiveness_snapshot(session)
-        elif normalized_scenario_type == "sales":
-            evidence_source: str | None = None
-            if _session_has_persisted_scores(session):
-                evidence_source = "session_scores"
-            else:
-                evidence_source = await _sync_sales_realtime_terminal_evidence(
-                    session_id=session_id,
-                    session=session,
-                    db=self.db,
-                )
-                if evidence_source is None:
-                    summary_result = await summary_service.generate_summary(
-                        uuid.UUID(session_id)
-                    )
-                    if not summary_result.is_success:
-                        self.logger.warning(
-                            "practice_session_summary_generation_failed",
-                            session_id=session_id,
-                            voice_mode=getattr(session, "voice_mode", None),
-                            summary_fallback=summary_result.fallback,
-                        )
-                        raise PracticeServiceError(
-                            "[SUMMARY_GENERATION_FAILED]",
-                            status_code=500,
-                            message="总结生成失败",
-                        )
-                    summary = summary_result.value
-                    _apply_sales_summary_scores_if_missing(session, summary)
-                    evidence_source = "summary"
-
-            snapshot = ensure_effectiveness_snapshot(session)
-            if evidence_source is not None:
-                _log_sales_terminal_evidence_state(
-                    session_id=session_id,
-                    session=session,
-                    snapshot=snapshot,
-                    evidence_source=evidence_source,
-                )
-
-            end_result = await sales_bot_service.end_session(uuid.UUID(session_id))
-            if not end_result.is_success:
-                self.logger.warning(
-                    "Sales bot end_session returned non-success",
-                    session_id=session_id,
-                    fallback=end_result.fallback,
-                )
-        else:
+        handler = get_practice_session_terminal_handler(normalized_scenario_type)
+        if handler is None:
             raise PracticeServiceError("[INVALID_SCENARIO_TYPE]", status_code=400)
+        try:
+            terminal_result = await handler(
+                self.db,
+                PracticeSessionTerminalContext(
+                    session_id=session_id,
+                    session=session,
+                    scenario_type=normalized_scenario_type,
+                    transition=transition,
+                ),
+            )
+        except PracticeSessionPortError as exc:
+            _raise_practice_port_error(exc)
+
+        session = terminal_result.session
+        transition.session = session
 
         return PracticeLifecycleActionResult(
             transition=transition,
-            snapshot=snapshot,
-            summary=summary,
+            snapshot=terminal_result.snapshot,
+            summary=terminal_result.summary,
         )
 
     async def _close_live_handler_if_terminal(
@@ -953,6 +795,15 @@ def ensure_effectiveness_snapshot(session: PracticeSession) -> dict[str, Any]:
     )
 
     return ensure_session_evidence_snapshot(session)
+
+
+def _raise_practice_port_error(exc: PracticeSessionPortError) -> None:
+    raise PracticeServiceError(
+        exc.error_code,
+        status_code=exc.status_code,
+        message=exc.message,
+        details=exc.details,
+    ) from exc
 
 
 def _is_true_env(name: str, default: str = "false") -> bool:

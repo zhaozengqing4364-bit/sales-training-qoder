@@ -13,8 +13,8 @@ from sales_trainer.services.asset_revision_service import (
 )
 from sales_trainer.services.curriculum_practice_adapter import QuestionItem
 from sales_trainer.services.operation_log_service import OperationLogService
-from sales_trainer.services.question_errors import SalesTrainerQuestionServiceError
-from sales_trainer.services.question_payloads import (
+from sales_trainer.services.question_bank.errors import SalesTrainerQuestionServiceError
+from sales_trainer.services.question_bank.payloads import (
     QUESTION_RESOURCE_TYPE,
     apply_question_revision_payload,
     question_change_class,

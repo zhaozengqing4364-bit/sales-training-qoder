@@ -5909,6 +5909,63 @@ export interface AiCoachConfig {
     mastery_threshold: number;
 }
 
+export interface AiCoachAdminConfigLike {
+    enabled: boolean;
+    chat_enabled: boolean;
+    streaming_enabled: boolean;
+    entry_resume_policy: string;
+    generation_timeout_seconds: number;
+    coach_mode: string;
+    allowed_interaction_types: string[];
+    allowed_ui_event_types: string[];
+    max_cards_per_message: number;
+    proactive_coaching_enabled: boolean;
+    session_start_behavior: string;
+    auto_advance_enabled: boolean;
+    max_auto_steps_per_session: number;
+    correct_streak_to_increase_difficulty: number;
+    incorrect_streak_to_remediate: number;
+    incorrect_streak_to_pause: number;
+    remediation_strategy: string;
+    summary_when_mastery_reached: boolean;
+    allowed_next_actions: string[];
+    chat_welcome_message: string;
+    empty_response_recovery_message: string;
+    empty_response_recovery_prompts: string[];
+    generation_failure_recovery_message: string;
+    generation_failure_recovery_prompts: string[];
+    min_turns: number;
+    max_turns: number;
+    mastery_threshold: number;
+    prompt_template_id: string | null;
+    prompt_revision_id: string | null;
+    prompt_contract_hash: string | null;
+    scoring_prompt_template_id: string | null;
+    scoring_prompt_revision_id: string | null;
+    scoring_contract_hash: string | null;
+    output_schema_version: string;
+    [key: string]: unknown;
+}
+
+export interface AiCoachAdminConfigResponse {
+    readonly module_key: string;
+    readonly ai_coach: AiCoachAdminConfigLike;
+}
+
+export interface AiCoachAdminConfigSaveResponse extends AiCoachAdminConfigResponse {
+    readonly revision_id?: string;
+    readonly revision_no?: number;
+}
+
+export interface AiCoachAdminConfigPublishResponse {
+    readonly module_key: string;
+    readonly active_revision_id: string;
+    readonly active_revision_no: number;
+    readonly previous_revision_id?: string | null;
+    readonly change_class: string;
+    readonly impact_scope: string;
+}
+
 /**
  * Deprecated: legacy turn shape (uses `question` / `user_answer` text fields
  * and a `mastered` flag). Replaced by `AiCoachTurnPublicV1` which carries
