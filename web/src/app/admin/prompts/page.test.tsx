@@ -220,6 +220,36 @@ describe("AdminPromptsPage governance UI", () => {
                 governance_status: "needs_review",
                 governance_issues: ["variables_object_schema", "invalid_prompt_type"],
             },
+            {
+                id: "123e4567-e89b-12d3-a456-426614174005",
+                name: "新人训练路径商务技巧 AI 对话教练生成 v1",
+                prompt_type: "stage",
+                category: "sales_trainer_ai_coach",
+                template: "为商务技巧 AI 教练生成对话与互动卡片。",
+                variables: ["module_key"],
+                is_active: true,
+                is_default: false,
+                is_system: true,
+                created_at: "2026-06-15T00:00:00.000Z",
+                updated_at: "2026-06-15T00:00:00.000Z",
+                governance_status: "valid",
+                governance_issues: [],
+            },
+            {
+                id: "123e4567-e89b-12d3-a456-426614174006",
+                name: "新人训练路径商务技巧 AI 教练题目生成 v1",
+                prompt_type: "stage",
+                category: "sales_trainer_ai_coach",
+                template: "为商务礼仪章节生成题目草稿。",
+                variables: ["chapter_content"],
+                is_active: true,
+                is_default: false,
+                is_system: true,
+                created_at: "2026-06-15T00:00:00.000Z",
+                updated_at: "2026-06-15T00:00:00.000Z",
+                governance_status: "valid",
+                governance_issues: [],
+            },
         ]);
     });
 
@@ -253,6 +283,18 @@ describe("AdminPromptsPage governance UI", () => {
         render(<AdminPromptsPage />);
         expect(await screen.findByText(/提示词治理发现 1 条非法历史模板/)).toBeTruthy();
         expect(screen.getAllByText(/历史变量对象已标记待迁移/).length).toBeGreaterThan(0);
+    });
+
+    it("surfaces newcomer AI coach conversation and question prompt entry points", async () => {
+        render(<AdminPromptsPage />);
+
+        expect(await screen.findByText("新人训练 AI 教练提示词")).toBeTruthy();
+        expect(await screen.findByText("Needs review template")).toBeTruthy();
+        expect(screen.getByText("AI 教练对话系统提示词")).toBeTruthy();
+        expect(screen.getByText("商务礼仪题目生成提示词")).toBeTruthy();
+        expect(screen.getAllByText("新人训练路径商务技巧 AI 对话教练生成 v1").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("新人训练路径商务技巧 AI 教练题目生成 v1").length).toBeGreaterThan(0);
+        expect(screen.getByText("分类：新人训练 AI 教练")).toBeTruthy();
     });
 
     it("keeps loaded prompt data visible when the governance status request fails", async () => {

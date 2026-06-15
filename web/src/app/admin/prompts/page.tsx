@@ -55,12 +55,92 @@ function templateCategory(template: PromptTemplate): string {
   return template.display_category || formatCategoryLabel(template.category);
 }
 
+const AI_COACH_PROMPT_CATEGORY = "sales_trainer_ai_coach";
+const BUSINESS_ETIQUETTE_PROMPT_CATEGORY = "business_etiquette";
+const QUESTION_TEMPLATE_KEYWORDS = ["题目生成", "题目草稿", "试题生成", "question"] as const;
+const QUESTION_TEMPLATE_EXCLUDE_KEYWORDS = ["对话教练", "互动卡片", "chatbot"] as const;
+const AI_COACH_CONVERSATION_KEYWORDS = ["对话教练", "互动卡片", "chatbot", "教练回复"] as const;
+const QUESTION_PROMPT_TEMPLATE_NAME = "新人训练路径商务技巧 AI 教练题目生成 v1";
+const AI_COACH_SYSTEM_PROMPT_TEMPLATE_NAME = "新人训练路径商务技巧 AI 对话教练生成 v1";
+
+const CATEGORY_FILTER_OPTIONS = [
+  { value: "all", label: "全部分类" },
+  { value: AI_COACH_PROMPT_CATEGORY, label: "新人训练 AI 教练" },
+  { value: BUSINESS_ETIQUETTE_PROMPT_CATEGORY, label: "商务礼仪" },
+  { value: "sales", label: "销售训练" },
+  { value: "sales_bot", label: "销售实时对练" },
+  { value: "presentation", label: "PPT 演练" },
+  { value: "system", label: "系统报告" },
+  { value: "common", label: "通用" },
+] as const;
+
 const MATRIX_GROUPS: Array<{ key: string; title: string; categories: string[] }> = [
   { key: "sales", title: "销售训练", categories: ["sales", "sales_bot"] },
   { key: "presentation", title: "PPT 演练", categories: ["presentation"] },
-  { key: "coach", title: "AI 教练", categories: ["sales_trainer_ai_coach"] },
+  { key: "coach", title: "AI 教练", categories: [AI_COACH_PROMPT_CATEGORY] },
   { key: "system", title: "系统报告", categories: ["system", "common"] },
 ];
+
+const AI_COACH_PROMPT_SLOTS = [
+  {
+    key: "coach_conversation",
+    title: "AI 教练对话系统提示词",
+    description: "控制新人训练路径商务技巧 AI 教练如何生成对话、卡片和下一步动作。",
+    createName: AI_COACH_SYSTEM_PROMPT_TEMPLATE_NAME,
+    listKeyword: "对话教练",
+    managementCopy: "绑定入口：新人训练路径 → AI 教练配置",
+    managementHref: "/admin/sales-trainer/ai-coach",
+    match: isAiCoachConversationTemplate,
+  },
+  {
+    key: "question_generation",
+    title: "商务礼仪题目生成提示词",
+    description: "控制学习内容详情页如何按章节生成单选、多选、简答题草稿。",
+    createName: QUESTION_PROMPT_TEMPLATE_NAME,
+    listKeyword: "题目生成",
+    managementCopy: "使用入口：学习内容详情页 → 商务礼仪 AI 出题",
+    managementHref: "/admin/learning-contents",
+    match: isBusinessEtiquetteQuestionTemplate,
+  },
+] as const;
+
+function normalizedTemplateText(template: PromptTemplate): string {
+  return [
+    template.name,
+    template.display_name,
+    template.category,
+    template.display_category,
+    template.prompt_type,
+    template.display_type,
+    template.template,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function textHasAny(text: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => text.includes(keyword.toLowerCase()));
+}
+
+function isBusinessEtiquetteQuestionTemplate(template: PromptTemplate): boolean {
+  const text = normalizedTemplateText(template);
+  return (
+    [AI_COACH_PROMPT_CATEGORY, BUSINESS_ETIQUETTE_PROMPT_CATEGORY, "sales_trainer"].includes(template.category)
+    && textHasAny(text, QUESTION_TEMPLATE_KEYWORDS)
+    && !textHasAny(text, QUESTION_TEMPLATE_EXCLUDE_KEYWORDS)
+  );
+}
+
+function isAiCoachConversationTemplate(template: PromptTemplate): boolean {
+  const text = normalizedTemplateText(template);
+  return (
+    template.category === AI_COACH_PROMPT_CATEGORY
+    && textHasAny(text, AI_COACH_CONVERSATION_KEYWORDS)
+    && !isBusinessEtiquetteQuestionTemplate(template)
+  );
+}
+
+function promptTemplateCreateHref(name: string): string {
+  return `/admin/prompts/new?category=${AI_COACH_PROMPT_CATEGORY}&prompt_type=stage&name=${encodeURIComponent(name)}`;
+}
 
 export default function AdminPromptsPage() {
   const router = useRouter();
@@ -72,6 +152,7 @@ export default function AdminPromptsPage() {
   const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<PromptType | "all">("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [showInactive, setShowInactive] = useState(false);
   const [userRole, setUserRole] = useState("user");
   const [isOperating, setIsOperating] = useState(false);
@@ -124,16 +205,14 @@ export default function AdminPromptsPage() {
     ].join(" ").toLowerCase();
     const matchesSearch = haystack.includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "all" || template.prompt_type === typeFilter;
-    return matchesSearch && matchesType;
-  }), [searchQuery, templates, typeFilter]);
+    const matchesCategory = categoryFilter === "all" || template.category === categoryFilter;
+    return matchesSearch && matchesType && matchesCategory;
+  }), [categoryFilter, searchQuery, templates, typeFilter]);
 
-  const activeDefaults = useMemo(() => {
-    const map = new Map<string, PromptTemplate>();
-    for (const template of templates) {
-      if (template.is_active && template.is_default) map.set(template.prompt_type, template);
-    }
-    return map;
-  }, [templates]);
+  const aiCoachSlots = useMemo(() => AI_COACH_PROMPT_SLOTS.map((slot) => ({
+    ...slot,
+    templates: templates.filter((template) => template.is_active && slot.match(template)),
+  })), [templates]);
 
   const healthCards = useMemo(() => {
     const defaultConflictCount = governanceStatus?.default_conflict_count || 0;
@@ -323,35 +402,130 @@ export default function AdminPromptsPage() {
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-5">
             <GlassCard className="p-5">
+              <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">新人训练 AI 教练提示词</h2>
+                  <p className="text-sm text-slate-500">
+                    这里集中显示商务礼仪 AI 教练对话与题目生成模板；分类为「新人训练 AI 教练」，不会再藏在全部模板列表里。
+                  </p>
+                </div>
+                <Badge className="bg-indigo-100 text-indigo-700">分类：新人训练 AI 教练</Badge>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {aiCoachSlots.map((slot) => {
+                  const primaryTemplate = slot.templates[0];
+                  return (
+                    <div key={slot.key} className="rounded-xl border border-slate-200 bg-white/70 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold text-slate-900">{slot.title}</h3>
+                          <p className="mt-1 text-sm leading-5 text-slate-500">{slot.description}</p>
+                        </div>
+                        <Badge className={slot.templates.length ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
+                          {slot.templates.length ? `${slot.templates.length} 个模板` : "未配置"}
+                        </Badge>
+                      </div>
+                      <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm">
+                        <div className="text-xs font-medium text-slate-500">当前模板</div>
+                        {primaryTemplate ? (
+                          <div className="mt-1">
+                            <button
+                              type="button"
+                              className="text-left font-semibold text-slate-900 hover:underline"
+                              onClick={() => router.push(`/admin/prompts/${primaryTemplate.id}/edit`)}
+                            >
+                              {templateTitle(primaryTemplate)}
+                            </button>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {primaryTemplate.is_system ? <Badge className="bg-slate-100 text-slate-700">系统只读</Badge> : <Badge className="bg-blue-100 text-blue-700">自定义</Badge>}
+                              {primaryTemplate.is_runtime_effective ? <Badge className="bg-teal-100 text-teal-700">运行时生效</Badge> : null}
+                              {primaryTemplate.is_default ? <Badge className="bg-amber-100 text-amber-700">默认</Badge> : null}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-amber-700">未找到对应模板，请先新建或检查模板分类。</p>
+                        )}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {primaryTemplate ? (
+                          <Button variant="outline" size="sm" onClick={() => router.push(`/admin/prompts/${primaryTemplate.id}/edit`)}>
+                            查看/编辑
+                          </Button>
+                        ) : null}
+                        <Button variant="outline" size="sm" onClick={() => router.push(promptTemplateCreateHref(slot.createName))}>
+                          新建模板
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setCategoryFilter(AI_COACH_PROMPT_CATEGORY);
+                            setTypeFilter("all");
+                            setSearchQuery(slot.listKeyword);
+                          }}
+                        >
+                          在列表中筛选
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => router.push(slot.managementHref)}>
+                          {slot.managementCopy}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </GlassCard>
+
+            <GlassCard className="p-5">
               <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">运行时生效矩阵</h2>
-                  <p className="text-sm text-slate-500">显示各业务域当前默认模板与场景绑定数量；没有场景绑定时系统会回退到默认模板。</p>
+                  <p className="text-sm text-slate-500">显示各业务域当前默认模板与场景绑定数量；分类与用途会分开显示，避免把不同业务模板混在一起。</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => router.push("/admin/prompts/bindings")}>配置生效场景</Button>
               </div>
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 {MATRIX_GROUPS.map((group) => {
                   const groupTemplates = templates.filter((template) => group.categories.includes(template.category));
-                  const promptTypes = Array.from(new Set(groupTemplates.map((template) => template.prompt_type)));
+                  const rows = Array.from(
+                    groupTemplates.reduce((map, template) => {
+                      const key = `${template.category}:${template.prompt_type}`;
+                      const existing = map.get(key);
+                      if (existing) {
+                        existing.templates.push(template);
+                      } else {
+                        map.set(key, {
+                          key,
+                          category: template.category,
+                          prompt_type: template.prompt_type,
+                          templates: [template],
+                        });
+                      }
+                      return map;
+                    }, new Map<string, { key: string; category: string; prompt_type: PromptType; templates: PromptTemplate[] }>()),
+                  ).map(([, value]) => value);
                   return (
                     <div key={group.key} className="rounded-xl border border-slate-200 bg-white/70 p-4">
                       <div className="mb-3 flex items-center justify-between">
                         <h3 className="font-semibold text-slate-900">{group.title}</h3>
                         <Badge className="bg-slate-100 text-slate-700">{groupTemplates.filter((item) => item.is_runtime_effective).length} 个生效</Badge>
                       </div>
-                      {promptTypes.length === 0 ? (
+                      {rows.length === 0 ? (
                         <p className="text-sm text-slate-500">暂无模板</p>
                       ) : (
                         <div className="space-y-2">
-                          {promptTypes.map((type) => {
-                            const defaultTemplate = activeDefaults.get(type);
-                            const bindingCount = scenarioPrompts.filter((item) => item.is_active && item.prompt_type === type).length;
+                          {rows.map((row) => {
+                            const defaultTemplate = row.templates.find((template) => template.is_active && template.is_default);
+                            const bindingCount = scenarioPrompts.filter((item) => item.is_active && item.prompt_type === row.prompt_type).length;
                             return (
-                              <div key={type} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                                <div className="font-medium text-slate-800">{PROMPT_TYPE_LABELS[type]}</div>
+                              <div key={row.key} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                                <div className="font-medium text-slate-800">
+                                  {formatCategoryLabel(row.category)} · {PROMPT_TYPE_LABELS[row.prompt_type]}
+                                </div>
                                 <div className="mt-1 text-slate-600">默认：{defaultTemplate ? templateTitle(defaultTemplate) : "未设置"}</div>
-                                <div className="mt-1 text-xs text-slate-500">场景绑定：{bindingCount} 条</div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  模板：{row.templates.length} 个 · 场景绑定：{bindingCount} 条
+                                </div>
                               </div>
                             );
                           })}
@@ -364,7 +538,7 @@ export default function AdminPromptsPage() {
             </GlassCard>
 
             <GlassCard className="p-4">
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-5">
                 <div className="relative md:col-span-2">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                   <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索中文模板名、用途或分类" className="pl-9" />
@@ -372,6 +546,11 @@ export default function AdminPromptsPage() {
                 <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as PromptType | "all")} className="rounded-lg border px-3 py-2 text-sm">
                   <option value="all">全部用途</option>
                   {Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (<option key={type} value={type}>{label}</option>))}
+                </select>
+                <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+                  {CATEGORY_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />显示停用模板

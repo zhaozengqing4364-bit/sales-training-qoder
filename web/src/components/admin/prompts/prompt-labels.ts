@@ -36,6 +36,7 @@ export function formatCategoryLabel(category: string): string {
         case "common": return "通用";
         case "sales": return "销售训练";
         case "sales_bot": return "销售实时对练";
+        case "business_etiquette": return "商务礼仪";
         case "sales_trainer_ai_coach": return "新人训练 AI 教练";
         case "presentation": return "PPT 演练";
         case "system": return "系统报告";

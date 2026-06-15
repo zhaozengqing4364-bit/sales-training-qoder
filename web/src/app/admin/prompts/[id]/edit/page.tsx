@@ -19,6 +19,7 @@ const PROMPT_CATEGORY_OPTIONS = [
   { value: "common", label: "通用" },
   { value: "sales", label: "销售训练" },
   { value: "sales_bot", label: "销售实时对练" },
+  { value: "business_etiquette", label: "商务礼仪" },
   { value: "sales_trainer_ai_coach", label: "新人训练 AI 教练" },
   { value: "presentation", label: "PPT 演练" },
   { value: "system", label: "系统报告" },
