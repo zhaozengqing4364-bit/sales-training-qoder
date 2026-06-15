@@ -127,3 +127,4 @@ docs/api-contract/
 | 2026-04-14 | 新增销售方法论 / rubric contract，明确 canonical kernel 与 realtime/report/read-side 的首轮映射 | effectiveness |
 | 2026-03-14 | 统一契约认证语义为 “Bearer 或 HttpOnly session cookie”，补充训练运行时主语说明 | sessions, replay, agents, personas, analytics, knowledge, support-runtime |
 | 2026-05-28 | 新增销售训练 MVP 基础闭环契约，覆盖 learner/admin 做题、录音上传、转写评分、提示词和操作日志接口 | sales-trainer |
+| 2026-06-15 | 补充提示词治理台中文化、系统模板只读、默认冲突修复、影响查询和场景绑定唯一性契约 | prompt-templates |

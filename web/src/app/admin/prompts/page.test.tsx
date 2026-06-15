@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminPromptsPage from "./page";
@@ -13,7 +13,7 @@ const {
     getScenarioPromptsMock,
     getPromptTemplateGovernanceStatusMock,
     getPromptTemplateOptionsMock,
-    remediateInvalidPromptTemplatesMock,
+    repairPromptTemplateDefaultsMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     errorToastMock: vi.fn(),
@@ -23,7 +23,7 @@ const {
     getScenarioPromptsMock: vi.fn(),
     getPromptTemplateGovernanceStatusMock: vi.fn(),
     getPromptTemplateOptionsMock: vi.fn(),
-    remediateInvalidPromptTemplatesMock: vi.fn(),
+    repairPromptTemplateDefaultsMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -100,7 +100,10 @@ vi.mock("@/lib/api/client", async () => {
                 getScenarioPrompts: getScenarioPromptsMock,
                 getPromptTemplateGovernanceStatus: getPromptTemplateGovernanceStatusMock,
                 getPromptTemplateOptions: getPromptTemplateOptionsMock,
-                remediateInvalidPromptTemplates: remediateInvalidPromptTemplatesMock,
+                repairPromptTemplateDefaults: repairPromptTemplateDefaultsMock,
+                getPromptTemplateImpact: vi.fn(),
+                clonePromptTemplate: vi.fn(),
+                remediateInvalidPromptTemplates: vi.fn(),
                 migrateInvalidPromptTemplates: vi.fn(),
                 rollbackPromptTemplateGovernance: vi.fn(),
                 updatePromptTemplate: vi.fn(),
@@ -146,6 +149,7 @@ const governanceStatus: PromptTemplateGovernanceStatus = {
     checked_count: 1,
     active_invalid_count: 1,
     invalid_active_count: 1,
+    default_conflict_count: 0,
     issues: [
         {
             template_id: "123e4567-e89b-12d3-a456-426614174003",
@@ -176,13 +180,29 @@ describe("AdminPromptsPage governance UI", () => {
             invalid_history_runtime_behavior: "visible_in_governance_and_disabled_before_runtime_lookup",
             rollback_policy: "restore from audit snapshot",
         });
-        remediateInvalidPromptTemplatesMock.mockResolvedValue({
-            remediated_count: 1,
-            items: [],
-            audit: {
-                action: "prompt_template.governance.remediate_invalid",
-                reason: "A-009 prompt template governance remediation",
-            },
+        repairPromptTemplateDefaultsMock.mockImplementation((request: { dry_run?: boolean }) => {
+            if (request.dry_run) {
+                return Promise.resolve({
+                    dry_run: true,
+                    checked: 1,
+                    repaired: 1,
+                    items: [
+                        {
+                            template_id: "123e4567-e89b-12d3-a456-426614174003",
+                            name: "legacy variable object",
+                            actions: ["migrate_variables_to_list"],
+                        },
+                    ],
+                    audit_action: null,
+                });
+            }
+            return Promise.resolve({
+                dry_run: false,
+                checked: 1,
+                repaired: 1,
+                items: [],
+                audit_action: "prompt_template.governance.repair_defaults",
+            });
         });
         getPromptTemplatesMock.mockResolvedValue([
             {
@@ -207,24 +227,32 @@ describe("AdminPromptsPage governance UI", () => {
         render(<AdminPromptsPage />);
 
         expect(await screen.findByText(/提示词治理发现 1 条非法历史模板/)).toBeTruthy();
-        expect(screen.getByText(/变量规则：list\[str\]/)).toBeTruthy();
+        expect(screen.getByText(/变量规则：字符串数组/)).toBeTruthy();
 
         fireEvent.click(screen.getAllByRole("button", { name: "禁用非法历史模板" })[0]);
-        expect(remediateInvalidPromptTemplatesMock).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole("button", { name: "确认停用" }));
+        await waitFor(() => {
+            expect(repairPromptTemplateDefaultsMock).toHaveBeenCalledWith({
+                reason: "运营后台预览提示词治理修复",
+                dry_run: true,
+            });
+        });
+        fireEvent.click(await screen.findByRole("button", { name: "执行修复" }));
+        const dialog = screen.getByRole("dialog", { name: "执行治理修复" });
+        fireEvent.click(within(dialog).getByRole("button", { name: "执行修复" }));
 
         await waitFor(() => {
-            expect(remediateInvalidPromptTemplatesMock).toHaveBeenCalledWith(
-                "A-009 prompt template governance remediation",
-            );
+            expect(repairPromptTemplateDefaultsMock).toHaveBeenCalledWith({
+                reason: "运营后台执行提示词治理修复",
+                dry_run: false,
+            });
         });
-        expect(successToastMock).toHaveBeenCalledWith("已停用 1 个非法历史模板");
+        expect(successToastMock).toHaveBeenCalledWith("治理修复完成：1 项");
     });
 
     it("renders backend governance issue codes as operator-readable copy", async () => {
         render(<AdminPromptsPage />);
         expect(await screen.findByText(/提示词治理发现 1 条非法历史模板/)).toBeTruthy();
-        expect(screen.getByText(/历史变量对象已标记待迁移/)).toBeTruthy();
+        expect(screen.getAllByText(/历史变量对象已标记待迁移/).length).toBeGreaterThan(0);
     });
 
     it("keeps loaded prompt data visible when the governance status request fails", async () => {

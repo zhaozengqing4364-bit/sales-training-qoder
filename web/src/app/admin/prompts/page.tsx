@@ -1,11 +1,19 @@
 "use client";
+
 import { debug } from "@/lib/debug";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { Copy, Eye, Plus, RefreshCw, Search, ShieldCheck, Wrench } from "lucide-react";
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { PromptGovernanceContextBar } from "@/components/admin/prompts/prompt-governance-context-bar";
-import { formatCategoryLabel, PROMPT_TYPE_COLORS, PROMPT_TYPE_LABELS } from "@/components/admin/prompts/prompt-labels";
+import {
+  formatCategoryLabel,
+  formatGovernanceIssue,
+  formatPromptType,
+  formatTemplateName,
+  PROMPT_TYPE_COLORS,
+  PROMPT_TYPE_LABELS,
+} from "@/components/admin/prompts/prompt-labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -13,15 +21,20 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { PromptTemplate, PromptTemplateGovernanceStatus, PromptType } from "@/lib/api/types";
+import type {
+  PromptTemplate,
+  PromptTemplateGovernanceStatus,
+  PromptTemplateImpactResponse,
+  PromptTemplateRepairDefaultsResponse,
+  PromptType,
+  ScenarioPrompt,
+} from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 type ConfirmAction =
   | { type: "toggle"; template: PromptTemplate }
   | { type: "default"; template: PromptTemplate }
-  | { type: "migrate" }
-  | { type: "rollback"; template: PromptTemplate }
-  | { type: "remediate" }
+  | { type: "executeRepair" }
   | null;
 
 function getRoleLabel(role: string): string {
@@ -30,10 +43,30 @@ function getRoleLabel(role: string): string {
   return "只读";
 }
 
+function templateTitle(template: PromptTemplate): string {
+  return formatTemplateName(template.name, template.display_name);
+}
+
+function templateType(template: PromptTemplate): string {
+  return formatPromptType(template.prompt_type, template.display_type);
+}
+
+function templateCategory(template: PromptTemplate): string {
+  return template.display_category || formatCategoryLabel(template.category);
+}
+
+const MATRIX_GROUPS: Array<{ key: string; title: string; categories: string[] }> = [
+  { key: "sales", title: "销售训练", categories: ["sales", "sales_bot"] },
+  { key: "presentation", title: "PPT 演练", categories: ["presentation"] },
+  { key: "coach", title: "AI 教练", categories: ["sales_trainer_ai_coach"] },
+  { key: "system", title: "系统报告", categories: ["system", "common"] },
+];
+
 export default function AdminPromptsPage() {
   const router = useRouter();
   const toast = useToast();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [scenarioPrompts, setScenarioPrompts] = useState<ScenarioPrompt[]>([]);
   const [governanceStatus, setGovernanceStatus] = useState<PromptTemplateGovernanceStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
@@ -43,6 +76,8 @@ export default function AdminPromptsPage() {
   const [userRole, setUserRole] = useState("user");
   const [isOperating, setIsOperating] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [impact, setImpact] = useState<PromptTemplateImpactResponse | null>(null);
+  const [repairPreview, setRepairPreview] = useState<PromptTemplateRepairDefaultsResponse | null>(null);
   const isAdmin = userRole === "admin";
   const canOperate = isAdmin;
 
@@ -50,14 +85,17 @@ export default function AdminPromptsPage() {
     setLoading(true);
     setLoadWarnings([]);
     try {
-      const [templatesResult, userResult, governanceResult] = await Promise.allSettled([
+      const [templatesResult, scenarioPromptsResult, userResult, governanceResult] = await Promise.allSettled([
         api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
+        api.admin.getScenarioPrompts(),
         api.user.getMe(),
         api.admin.getPromptTemplateGovernanceStatus(),
       ]);
       const warnings: string[] = [];
       if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
       else { setTemplates([]); warnings.push(`模板列表加载失败：${getApiErrorMessage(templatesResult.reason)}`); }
+      if (scenarioPromptsResult.status === "fulfilled") setScenarioPrompts(scenarioPromptsResult.value);
+      else { setScenarioPrompts([]); warnings.push(`场景绑定加载失败：${getApiErrorMessage(scenarioPromptsResult.reason)}`); }
       if (userResult.status === "fulfilled") setUserRole(String(userResult.value.role || "user"));
       else { setUserRole("user"); warnings.push("当前用户权限加载失败"); }
       if (governanceResult.status === "fulfilled") setGovernanceStatus(governanceResult.value);
@@ -72,26 +110,62 @@ export default function AdminPromptsPage() {
   };
 
   useEffect(() => {
-    const t = window.setTimeout(() => { void loadData(); }, 0);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => { void loadData(); }, 0);
+    return () => window.clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInactive]);
 
   const filteredTemplates = useMemo(() => templates.filter((template) => {
-    const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase()) || template.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const haystack = [
+      templateTitle(template),
+      template.name,
+      templateType(template),
+      templateCategory(template),
+    ].join(" ").toLowerCase();
+    const matchesSearch = haystack.includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "all" || template.prompt_type === typeFilter;
     return matchesSearch && matchesType;
   }), [searchQuery, templates, typeFilter]);
 
-  const refreshAfterMutation = async (msg: string) => { await loadData(); toast.success(msg); };
+  const activeDefaults = useMemo(() => {
+    const map = new Map<string, PromptTemplate>();
+    for (const template of templates) {
+      if (template.is_active && template.is_default) map.set(template.prompt_type, template);
+    }
+    return map;
+  }, [templates]);
+
+  const healthCards = useMemo(() => {
+    const defaultConflictCount = governanceStatus?.default_conflict_count || 0;
+    const invalidCount = governanceStatus?.invalid_count || 0;
+    const bindingCount = scenarioPrompts.filter((item) => item.is_active).length;
+    const runtimeCount = templates.filter((item) => item.is_runtime_effective).length;
+    return [
+      { label: "治理健康", value: defaultConflictCount + invalidCount === 0 ? "正常" : "需处理", tone: defaultConflictCount + invalidCount === 0 ? "good" : "bad" },
+      { label: "默认冲突", value: `${defaultConflictCount} 个`, tone: defaultConflictCount ? "bad" : "good" },
+      { label: "非法变量", value: `${invalidCount} 个`, tone: invalidCount ? "bad" : "good" },
+      { label: "场景绑定", value: `${bindingCount} 条`, tone: bindingCount ? "good" : "muted" },
+      { label: "运行时生效", value: `${runtimeCount} 个`, tone: runtimeCount ? "good" : "muted" },
+    ];
+  }, [governanceStatus, scenarioPrompts, templates]);
+
+  const refreshAfterMutation = async (message: string) => {
+    await loadData();
+    toast.success(message);
+  };
 
   const handleToggleActive = async (template: PromptTemplate) => {
     if (!canOperate) return;
     setIsOperating(true);
     try {
-      await api.admin.updatePromptTemplate(template.id, { is_active: !template.is_active });
+      if (template.is_active) await api.admin.deletePromptTemplate(template.id);
+      else await api.admin.updatePromptTemplate(template.id, { is_active: true });
       await refreshAfterMutation(template.is_active ? "模板已停用" : "模板已启用");
-    } catch (error) { toast.error(getApiErrorMessage(error)); } finally { setIsOperating(false); }
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
   };
 
   const handleSetDefault = async (template: PromptTemplate) => {
@@ -99,36 +173,71 @@ export default function AdminPromptsPage() {
     setIsOperating(true);
     try {
       await api.admin.setDefaultPromptTemplate(template.id, template.prompt_type);
-      await refreshAfterMutation("已设为默认模板");
-    } catch (error) { toast.error(getApiErrorMessage(error)); } finally { setIsOperating(false); }
+      await refreshAfterMutation("已设为该用途默认模板");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
   };
 
-  const handleMigrate = async () => {
+  const handlePreviewRepair = async () => {
     if (!canOperate) return;
     setIsOperating(true);
     try {
-      const result = await api.admin.migrateInvalidPromptTemplates({ reason: "Admin prompt governance migration", dry_run: false });
+      const result = await api.admin.repairPromptTemplateDefaults({
+        reason: "运营后台预览提示词治理修复",
+        dry_run: true,
+      });
+      setRepairPreview(result);
+      toast.success(`已生成修复预览：${result.repaired} 项`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
+  };
+
+  const handleExecuteRepair = async () => {
+    if (!canOperate) return;
+    setIsOperating(true);
+    try {
+      const result = await api.admin.repairPromptTemplateDefaults({
+        reason: "运营后台执行提示词治理修复",
+        dry_run: false,
+      });
+      setRepairPreview(null);
       await loadData();
-      toast.success(`治理迁移完成：${result.data.remediated} 条`);
-    } catch (error) { toast.error(getApiErrorMessage(error)); } finally { setIsOperating(false); }
+      toast.success(`治理修复完成：${result.repaired} 项`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
   };
 
-  const handleRollback = async (template: PromptTemplate) => {
+  const handleClone = async (template: PromptTemplate) => {
     if (!canOperate) return;
     setIsOperating(true);
     try {
-      await api.admin.rollbackPromptTemplateGovernance(template.id, { reason: "Admin prompt governance rollback" });
-      await refreshAfterMutation("提示词治理变更已回滚");
-    } catch (error) { toast.error(getApiErrorMessage(error)); } finally { setIsOperating(false); }
+      const cloned = await api.admin.clonePromptTemplate(template.id, {
+        reason: "运营复制系统模板后编辑",
+      });
+      toast.success("已复制为自定义模板");
+      router.push(`/admin/prompts/${cloned.id}/edit`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
   };
 
-  const handleRemediate = async () => {
-    if (!canOperate) return;
-    setIsOperating(true);
+  const handleShowImpact = async (template: PromptTemplate) => {
     try {
-      const result = await api.admin.remediateInvalidPromptTemplates("A-009 prompt template governance remediation");
-      await refreshAfterMutation(`已停用 ${result.remediated_count} 个非法历史模板`);
-    } catch (error) { toast.error(getApiErrorMessage(error)); } finally { setIsOperating(false); }
+      setImpact(await api.admin.getPromptTemplateImpact(template.id));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    }
   };
 
   const handleConfirmAction = () => {
@@ -136,34 +245,41 @@ export default function AdminPromptsPage() {
     setConfirmAction(null);
     if (!action) return;
     if (action.type === "toggle") void handleToggleActive(action.template);
-    else if (action.type === "default") void handleSetDefault(action.template);
-    else if (action.type === "migrate") void handleMigrate();
-    else if (action.type === "rollback") void handleRollback(action.template);
-    else if (action.type === "remediate") void handleRemediate();
+    if (action.type === "default") void handleSetDefault(action.template);
+    if (action.type === "executeRepair") void handleExecuteRepair();
   };
 
   const confirmCopy = (() => {
     if (!confirmAction) return { title: "确认操作", description: "", confirmText: "确认", variant: "warning" as const };
-    if (confirmAction.type === "toggle") return { title: confirmAction.template.is_active ? "停用模板" : "启用模板", description: confirmAction.template.name, confirmText: "确认", variant: "warning" as const };
-    if (confirmAction.type === "default") return { title: "设为默认", description: confirmAction.template.name, confirmText: "确认", variant: "warning" as const };
-    if (confirmAction.type === "migrate") return { title: "执行治理迁移", description: "批量修复历史变量格式", confirmText: "确认迁移", variant: "danger" as const };
-    if (confirmAction.type === "rollback") return { title: "回滚治理变更", description: confirmAction.template.name, confirmText: "确认回滚", variant: "warning" as const };
-    return { title: "停用非法历史模板", description: "批量停用非法活跃模板", confirmText: "确认停用", variant: "danger" as const };
+    if (confirmAction.type === "toggle") {
+      const title = confirmAction.template.is_active ? "停用模板" : "启用模板";
+      const description = `${templateTitle(confirmAction.template)}。停用前系统会检查默认与场景绑定影响。`;
+      return { title, description, confirmText: "确认", variant: "warning" as const };
+    }
+    if (confirmAction.type === "default") {
+      return { title: "设为该用途默认", description: templateTitle(confirmAction.template), confirmText: "设为默认", variant: "warning" as const };
+    }
+    return { title: "执行治理修复", description: "将修复默认冲突、非法变量对象和系统模板中文名，并记录审计。", confirmText: "执行修复", variant: "danger" as const };
   })();
 
   return (
     <AdminIndexShell
       header={(
         <AdminPageHeader
-          title="评估/报告提示词管理"
-          description="列表页仅用于浏览与行操作；编辑请进入模板详情，场景绑定请使用独立入口。"
-          primaryAction={isAdmin ? <Button className="rounded-full bg-slate-900 text-white" onClick={() => router.push("/admin/prompts/new")}><Plus className="mr-2 h-4 w-4" />新建模板</Button> : undefined}
+          title="提示词治理台"
+          description="管理提示词模板、默认兜底和场景绑定；系统模板只读，运营需复制为自定义模板后再调整。"
+          primaryAction={isAdmin ? (
+            <Button className="rounded-full bg-slate-900 text-white" onClick={() => router.push("/admin/prompts/new")}>
+              <Plus className="mr-2 h-4 w-4" />新建自定义模板
+            </Button>
+          ) : undefined}
           secondaryActions={(
             <>
               <Badge className="bg-slate-100 text-slate-700">当前角色：{getRoleLabel(userRole)}</Badge>
-              <Button variant="outline" className="rounded-full" onClick={() => router.push("/admin/prompts/bindings")}>场景绑定</Button>
-              {isAdmin ? <Button variant="outline" className="rounded-full" onClick={() => setConfirmAction({ type: "migrate" })} disabled={isOperating}>治理扫描/迁移</Button> : null}
-              <Button variant="outline" className="rounded-full" onClick={() => void loadData()} disabled={loading}><RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />刷新</Button>
+              <Button variant="outline" className="rounded-full" onClick={() => router.push("/admin/prompts/bindings")}>配置生效场景</Button>
+              <Button variant="outline" className="rounded-full" onClick={() => void loadData()} disabled={loading}>
+                <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />刷新
+              </Button>
             </>
           )}
         />
@@ -174,41 +290,223 @@ export default function AdminPromptsPage() {
           governanceStatus={governanceStatus}
           canOperate={canOperate}
           isOperating={isOperating}
-          onRemediate={() => setConfirmAction({ type: "remediate" })}
+          onRemediate={() => void handlePreviewRepair()}
         />
       )}
     >
-      <ConfirmDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)} title={confirmCopy.title} description={confirmCopy.description} confirmText={confirmCopy.confirmText} variant={confirmCopy.variant} onConfirm={handleConfirmAction} isLoading={isOperating} />
-      <GlassCard className="p-4">
-        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="relative md:col-span-2"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" /><Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="搜索模板名称/分类" className="pl-9" /></div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as PromptType | "all")} className="rounded-lg border px-3 py-2 text-sm"><option value="all">全部类型</option>{Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (<option key={type} value={type}>{label}</option>))}</select>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />显示停用模板</label>
+      <ConfirmDialog
+        open={!!confirmAction}
+        onOpenChange={(open) => !open && setConfirmAction(null)}
+        title={confirmCopy.title}
+        description={confirmCopy.description}
+        confirmText={confirmCopy.confirmText}
+        variant={confirmCopy.variant}
+        onConfirm={handleConfirmAction}
+        isLoading={isOperating}
+      />
+
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          {healthCards.map((card) => (
+            <GlassCard key={card.label} className="p-4">
+              <div className="text-xs text-slate-500">{card.label}</div>
+              <div className={cn(
+                "mt-2 text-xl font-bold",
+                card.tone === "good" && "text-emerald-700",
+                card.tone === "bad" && "text-red-700",
+                card.tone === "muted" && "text-slate-700",
+              )}>{card.value}</div>
+            </GlassCard>
+          ))}
         </div>
-        <div className="overflow-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-slate-200 text-left text-slate-500"><th className="py-2 pr-3">模板</th><th className="py-2 pr-3">类型</th><th className="py-2 pr-3">分类</th><th className="py-2 pr-3">状态</th><th className="py-2 pr-3">默认</th><th className="py-2">操作</th></tr></thead>
-            <tbody>
-              {loading ? <tr><td colSpan={6} className="py-8 text-center text-slate-500">正在加载...</td></tr> : filteredTemplates.length === 0 ? <tr><td colSpan={6} className="py-10 text-center text-slate-500">未找到模板</td></tr> : filteredTemplates.map((template) => (
-                <tr key={template.id} className="border-b border-slate-100 hover:bg-slate-50/60">
-                  <td className="py-3 pr-3"><button type="button" className="text-left font-semibold text-zinc-900 hover:underline" onClick={() => router.push(`/admin/prompts/${template.id}/edit`)}>{template.name}</button></td>
-                  <td className="py-3 pr-3"><Badge className={PROMPT_TYPE_COLORS[template.prompt_type]}>{PROMPT_TYPE_LABELS[template.prompt_type]}</Badge></td>
-                  <td className="py-3 pr-3 text-slate-600">{formatCategoryLabel(template.category)}</td>
-                  <td className="py-3 pr-3"><Badge className={template.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}>{template.is_active ? "启用" : "停用"}</Badge></td>
-                  <td className="py-3 pr-3">{template.is_default ? <Badge className="bg-amber-100 text-amber-700">默认</Badge> : "-"}</td>
-                  <td className="py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" disabled={!canOperate || isOperating} onClick={() => setConfirmAction({ type: "toggle", template })}>{template.is_active ? "停用" : "启用"}</Button>
-                      <Button variant="outline" size="sm" disabled={!canOperate || template.is_default || isOperating} onClick={() => setConfirmAction({ type: "default", template })}>设为默认</Button>
-                      {isAdmin ? <Button variant="outline" size="sm" onClick={() => router.push(`/admin/prompts/${template.id}/edit`)}>编辑</Button> : null}
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-5">
+            <GlassCard className="p-5">
+              <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">运行时生效矩阵</h2>
+                  <p className="text-sm text-slate-500">显示各业务域当前默认模板与场景绑定数量；没有场景绑定时系统会回退到默认模板。</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => router.push("/admin/prompts/bindings")}>配置生效场景</Button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {MATRIX_GROUPS.map((group) => {
+                  const groupTemplates = templates.filter((template) => group.categories.includes(template.category));
+                  const promptTypes = Array.from(new Set(groupTemplates.map((template) => template.prompt_type)));
+                  return (
+                    <div key={group.key} className="rounded-xl border border-slate-200 bg-white/70 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="font-semibold text-slate-900">{group.title}</h3>
+                        <Badge className="bg-slate-100 text-slate-700">{groupTemplates.filter((item) => item.is_runtime_effective).length} 个生效</Badge>
+                      </div>
+                      {promptTypes.length === 0 ? (
+                        <p className="text-sm text-slate-500">暂无模板</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {promptTypes.map((type) => {
+                            const defaultTemplate = activeDefaults.get(type);
+                            const bindingCount = scenarioPrompts.filter((item) => item.is_active && item.prompt_type === type).length;
+                            return (
+                              <div key={type} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                                <div className="font-medium text-slate-800">{PROMPT_TYPE_LABELS[type]}</div>
+                                <div className="mt-1 text-slate-600">默认：{defaultTemplate ? templateTitle(defaultTemplate) : "未设置"}</div>
+                                <div className="mt-1 text-xs text-slate-500">场景绑定：{bindingCount} 条</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  );
+                })}
+              </div>
+            </GlassCard>
+
+            <GlassCard className="p-4">
+              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="relative md:col-span-2">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索中文模板名、用途或分类" className="pl-9" />
+                </div>
+                <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as PromptType | "all")} className="rounded-lg border px-3 py-2 text-sm">
+                  <option value="all">全部用途</option>
+                  {Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (<option key={type} value={type}>{label}</option>))}
+                </select>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />显示停用模板
+                </label>
+              </div>
+              <div className="overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-left text-slate-500">
+                      <th className="py-2 pr-3">模板</th>
+                      <th className="py-2 pr-3">用途</th>
+                      <th className="py-2 pr-3">分类</th>
+                      <th className="py-2 pr-3">生效状态</th>
+                      <th className="py-2">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-slate-500">正在加载...</td></tr>
+                    ) : filteredTemplates.length === 0 ? (
+                      <tr><td colSpan={5} className="py-10 text-center text-slate-500">没有匹配的模板</td></tr>
+                    ) : filteredTemplates.map((template) => (
+                      <tr key={template.id} className="border-b border-slate-100 hover:bg-slate-50/60">
+                        <td className="py-3 pr-3">
+                          <button type="button" className="text-left font-semibold text-zinc-900 hover:underline" onClick={() => router.push(`/admin/prompts/${template.id}/edit`)}>
+                            {templateTitle(template)}
+                          </button>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {template.is_system ? <Badge className="bg-slate-100 text-slate-700">系统只读</Badge> : <Badge className="bg-blue-100 text-blue-700">自定义</Badge>}
+                            {template.governance_issues?.length ? <Badge className="bg-red-100 text-red-700">需治理</Badge> : null}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3"><Badge className={PROMPT_TYPE_COLORS[template.prompt_type]}>{templateType(template)}</Badge></td>
+                        <td className="py-3 pr-3 text-slate-600">{templateCategory(template)}</td>
+                        <td className="py-3 pr-3">
+                          <div className="flex flex-wrap gap-1">
+                            <Badge className={template.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}>{template.is_active ? "启用" : "停用"}</Badge>
+                            {template.is_default ? <Badge className="bg-amber-100 text-amber-700">默认</Badge> : null}
+                            {template.binding_count ? <Badge className="bg-indigo-100 text-indigo-700">绑定 {template.binding_count}</Badge> : null}
+                            {template.is_runtime_effective ? <Badge className="bg-teal-100 text-teal-700">运行时生效</Badge> : null}
+                          </div>
+                        </td>
+                        <td className="py-3">
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" onClick={() => void handleShowImpact(template)}><Eye className="mr-1 h-3.5 w-3.5" />影响</Button>
+                            {template.is_system ? (
+                              <Button variant="outline" size="sm" disabled={!canOperate || isOperating} onClick={() => void handleClone(template)}><Copy className="mr-1 h-3.5 w-3.5" />复制</Button>
+                            ) : (
+                              <Button variant="outline" size="sm" onClick={() => router.push(`/admin/prompts/${template.id}/edit`)}>编辑</Button>
+                            )}
+                            <Button variant="outline" size="sm" disabled={!canOperate || template.is_default || template.is_system || isOperating} onClick={() => setConfirmAction({ type: "default", template })}>设为默认</Button>
+                            <Button variant="outline" size="sm" disabled={!canOperate || template.is_system || isOperating} onClick={() => setConfirmAction({ type: "toggle", template })}>{template.is_active ? "停用" : "启用"}</Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </GlassCard>
+          </div>
+
+          <div className="space-y-5">
+            <GlassCard className="p-5">
+              <div className="flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-slate-700" />
+                <h2 className="font-bold text-slate-900">治理操作</h2>
+              </div>
+              <p className="mt-2 text-sm text-slate-500">先预览修复项，再执行；执行会写入操作记录。</p>
+              <div className="mt-4 flex flex-col gap-2">
+                <Button variant="outline" disabled={!canOperate || isOperating} onClick={() => void handlePreviewRepair()}>检查并预览修复</Button>
+                <Button disabled={!canOperate || isOperating || !repairPreview || repairPreview.repaired === 0} onClick={() => setConfirmAction({ type: "executeRepair" })}>
+                  <ShieldCheck className="mr-2 h-4 w-4" />执行修复
+                </Button>
+              </div>
+              {repairPreview ? (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <div className="font-semibold">修复预览：{repairPreview.repaired} 项</div>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {repairPreview.items.slice(0, 5).map((item, index) => (
+                      <li key={`${String(item.template_id || index)}`}>
+                        {String(item.name || item.template_id || "模板")}：{Array.isArray(item.actions) ? item.actions.join(" / ") : "待修复"}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </GlassCard>
+
+            <GlassCard className="p-5">
+              <h2 className="font-bold text-slate-900">影响范围</h2>
+              {impact ? (
+                <div className="mt-3 space-y-3 text-sm">
+                  <div>
+                    <div className="font-semibold text-slate-900">{impact.display_name}</div>
+                    <div className="mt-1 text-slate-500">{impact.display_category} · {impact.display_type}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge className={impact.is_runtime_effective ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-700"}>{impact.is_runtime_effective ? "运行时生效" : "当前未生效"}</Badge>
+                    {impact.is_default ? <Badge className="bg-amber-100 text-amber-700">默认兜底</Badge> : null}
+                    {impact.binding_count ? <Badge className="bg-indigo-100 text-indigo-700">绑定 {impact.binding_count}</Badge> : null}
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-3">
+                    <div className="font-medium text-slate-700">运行时消费者</div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-600">
+                      {impact.runtime_consumers.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-3">
+                    <div className="font-medium text-slate-700">建议下一步</div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-600">
+                      {impact.recommended_next_steps.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">点击列表中的“影响”查看默认、绑定和运行时消费者。</p>
+              )}
+            </GlassCard>
+          </div>
         </div>
-      </GlassCard>
+
+        {governanceStatus && governanceStatus.issues.length > 0 ? (
+          <GlassCard className="border-red-200 bg-red-50 p-4">
+            <div className="font-bold text-red-800">治理问题</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {governanceStatus.issues.slice(0, 8).map((issue, index) => (
+                <Badge key={`${issue.template_id}-${index}`} className="border border-red-200 bg-white text-red-700">
+                  {issue.name || issue.template_id} · {issue.issue_codes.map(formatGovernanceIssue).join(" / ")}
+                </Badge>
+              ))}
+            </div>
+          </GlassCard>
+        ) : null}
+      </div>
     </AdminIndexShell>
   );
 }

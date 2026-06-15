@@ -1,432 +1,371 @@
 "use client";
 
-/**
- * Edit Prompt Template Page (B10)
- */
-
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Save, AlertCircle, Play } from "lucide-react";
+import { AlertCircle, ArrowLeft, Copy, Play, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GlassModal } from "@/components/ui/glass-modal";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api/client";
-import { PromptTemplate, PromptTemplateOptions, PromptType } from "@/lib/api/types";
-import { cn } from "@/lib/utils";
-
-const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
-  summary: "总结",
-  system: "系统",
-  system_prompt: "系统提示词",
-  extraction: "信息提取",
-  scoring: "评分",
-  realtime_scoring: "实时评分",
-  stage: "阶段",
-  fuzzy_detection: "模糊检测",
-  interruption: "打断检测",
-  tracking: "跟踪",
-  welcome: "欢迎词",
-  evaluation: "实时评价",
-  report: "综合报告",
-};
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
+import { api, getApiErrorMessage } from "@/lib/api/client";
+import type { PromptTemplate, PromptTemplateImpactResponse, PromptTemplateOptions, PromptType } from "@/lib/api/types";
+import { formatCategoryLabel, formatPromptType, formatTemplateName, PROMPT_TYPE_LABELS } from "@/components/admin/prompts/prompt-labels";
 
 const PROMPT_CATEGORY_OPTIONS = [
-    { value: "common", label: "通用" },
-    { value: "sales", label: "销售训练" },
-    { value: "presentation", label: "PPT 演练" },
+  { value: "common", label: "通用" },
+  { value: "sales", label: "销售训练" },
+  { value: "sales_bot", label: "销售实时对练" },
+  { value: "sales_trainer_ai_coach", label: "新人训练 AI 教练" },
+  { value: "presentation", label: "PPT 演练" },
+  { value: "system", label: "系统报告" },
 ] as const;
 
+function extractTemplateVariables(template: string): string[] {
+  const matches = template.match(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)[\s|}]/g);
+  if (!matches) return [];
+  return [...new Set(matches.map((match) => match.replace(/\{\{\s*|\s*[|}]/g, "").trim()))].filter(Boolean);
+}
+
 export default function EditPromptTemplatePage() {
-    const params = useParams();
-    const router = useRouter();
-    const rawTemplateId = params?.id;
-    const templateId = Array.isArray(rawTemplateId) ? rawTemplateId[0] : rawTemplateId;
-    const isValidTemplateId =
-        typeof templateId === "string"
-        && templateId.trim().length > 0
-        && templateId !== "undefined";
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [originalTemplate, setOriginalTemplate] = useState<PromptTemplate | null>(null);
+  const params = useParams();
+  const router = useRouter();
+  const toast = useToast();
+  const rawTemplateId = params?.id;
+  const templateId = Array.isArray(rawTemplateId) ? rawTemplateId[0] : rawTemplateId;
+  const isValidTemplateId = typeof templateId === "string" && templateId.trim().length > 0 && templateId !== "undefined";
 
-    // Form state
-    const [name, setName] = useState("");
-    const [promptType, setPromptType] = useState<PromptType>("summary");
-    const [category, setCategory] = useState("common");
-    const [template, setTemplate] = useState("");
-    const [isActive, setIsActive] = useState(true);
-    const [isDefault, setIsDefault] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [originalTemplate, setOriginalTemplate] = useState<PromptTemplate | null>(null);
+  const [impact, setImpact] = useState<PromptTemplateImpactResponse | null>(null);
+  const [promptOptions, setPromptOptions] = useState<PromptTemplateOptions | null>(null);
 
-    // Test render state
-    const [testVariables, setTestVariables] = useState<string>("{}");
-    const [testResult, setTestResult] = useState<string | null>(null);
-    const [testing, setTesting] = useState(false);
-    const [showTestModal, setShowTestModal] = useState(false);
-    const [promptOptions, setPromptOptions] = useState<PromptTemplateOptions | null>(null);
-    const normalizedCategory = category.trim().toLowerCase();
-    const salesAllowedPromptTypes = useMemo(
-        () => new Set((promptOptions?.sales_allowed_prompt_types || []) as PromptType[]),
-        [promptOptions],
-    );
+  const [name, setName] = useState("");
+  const [promptType, setPromptType] = useState<PromptType>("summary");
+  const [category, setCategory] = useState("common");
+  const [template, setTemplate] = useState("");
+  const [isActive, setIsActive] = useState(true);
 
-    const selectablePromptTypes = useMemo(() => {
-        const entries = Object.entries(PROMPT_TYPE_LABELS) as [PromptType, string][];
-        if (normalizedCategory !== "sales" || salesAllowedPromptTypes.size === 0) {
-            return entries;
-        }
-        return entries.filter(([type]) => salesAllowedPromptTypes.has(type));
-    }, [normalizedCategory, salesAllowedPromptTypes]);
+  const [testVariables, setTestVariables] = useState("{}");
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 
-    useEffect(() => {
-        void api.admin.getPromptTemplateOptions()
-            .then(setPromptOptions)
-            .catch(() => setPromptOptions(null));
-    }, []);
+  const isSystemTemplate = Boolean(originalTemplate?.is_system);
+  const canEditDirectly = Boolean(originalTemplate && !isSystemTemplate);
+  const normalizedCategory = category.trim().toLowerCase();
+  const salesAllowedPromptTypes = useMemo(
+    () => new Set((promptOptions?.sales_allowed_prompt_types || []) as PromptType[]),
+    [promptOptions],
+  );
+  const selectablePromptTypes = useMemo(() => {
+    const entries = Object.entries(PROMPT_TYPE_LABELS) as [PromptType, string][];
+    if (normalizedCategory !== "sales" || salesAllowedPromptTypes.size === 0) return entries;
+    return entries.filter(([type]) => salesAllowedPromptTypes.has(type));
+  }, [normalizedCategory, salesAllowedPromptTypes]);
+  const effectivePromptType = selectablePromptTypes.some(([type]) => type === promptType)
+    ? promptType
+    : (selectablePromptTypes[0]?.[0] ?? promptType);
+  const extractedVars = useMemo(() => extractTemplateVariables(template), [template]);
 
-    // Load template
-    const loadTemplate = useCallback(async () => {
-        if (!isValidTemplateId || !templateId) {
-            setError("模板ID无效，请返回列表后重试。");
-            setLoading(false);
-            return;
-        }
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await api.admin.getPromptTemplate(templateId);
-            setOriginalTemplate(data);
-            setName(data.name);
-            setPromptType(data.prompt_type);
-            setCategory(data.category);
-            setTemplate(data.template);
-            setIsActive(data.is_active);
-            setIsDefault(data.is_default);
+  useEffect(() => {
+    void api.admin.getPromptTemplateOptions().then(setPromptOptions).catch(() => setPromptOptions(null));
+  }, []);
 
-            // Generate sample variables
-            const sampleVars: Record<string, string> = {};
-            data.variables.forEach((v) => {
-                sampleVars[v] = `示例${v}`;
-            });
-            setTestVariables(JSON.stringify(sampleVars, null, 2));
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "加载失败");
-        } finally {
-            setLoading(false);
-        }
-    }, [isValidTemplateId, templateId]);
-
-    useEffect(() => {
-        loadTemplate();
-    }, [loadTemplate]);
-
-    const effectivePromptType = (
-        selectablePromptTypes.some(([type]) => type === promptType)
-            ? promptType
-            : (selectablePromptTypes[0]?.[0] ?? promptType)
-    );
-
-    // Extract variables from template
-    const extractVariables = (tpl: string): string[] => {
-        const matches = tpl.match(/\{\{\s*(\w+)\s*\}\}/g);
-        if (!matches) return [];
-        return [...new Set(matches.map((m) => m.replace(/\{\{\s*|\s*\}\}/g, "")))].filter(
-            (v) => v && !v.includes(".")
-        );
-    };
-
-    const extractedVars = extractVariables(template);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setSaving(true);
-        setError(null);
-
-        try {
-            if (!isValidTemplateId || !templateId) {
-                throw new Error("模板ID无效，无法保存");
-            }
-            await api.admin.updatePromptTemplate(templateId, {
-                name,
-                prompt_type: effectivePromptType,
-                category,
-                template,
-                variables: extractedVars,
-                is_active: isActive,
-                is_default: isDefault,
-            });
-            router.push("/admin/prompts");
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "保存失败");
-            setSaving(false);
-        }
-    };
-
-    const handleTestRender = async () => {
-        setTesting(true);
-        setTestResult(null);
-        try {
-            if (!isValidTemplateId || !templateId) {
-                throw new Error("模板ID无效，无法测试渲染");
-            }
-            const variables = JSON.parse(testVariables);
-            const result = await api.admin.renderPromptTemplate(templateId, variables);
-            setTestResult(result.rendered);
-        } catch (err) {
-            setTestResult(`错误: ${err instanceof Error ? err.message : "渲染失败"}`);
-        } finally {
-            setTesting(false);
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="container mx-auto px-4 py-12 max-w-4xl text-center">
-                <StatusIndicator status="loading"  />
-                <p className="mt-4 text-zinc-500">加载中...</p>
-            </div>
-        );
+  const loadTemplate = useCallback(async () => {
+    if (!isValidTemplateId || !templateId) {
+      setError("模板编号无效，请返回列表后重试。");
+      setLoading(false);
+      return;
     }
-
-    if (error && !originalTemplate) {
-        return (
-            <div className="container mx-auto px-4 py-12 max-w-4xl">
-                <div className="flex items-center gap-2 text-red-500 justify-center">
-                    <AlertCircle className="w-6 h-6" />
-                    {error}
-                </div>
-            </div>
-        );
+    setLoading(true);
+    setError(null);
+    try {
+      const [data, impactData] = await Promise.all([
+        api.admin.getPromptTemplate(templateId),
+        api.admin.getPromptTemplateImpact(templateId),
+      ]);
+      setOriginalTemplate(data);
+      setImpact(impactData);
+      setName(data.name);
+      setPromptType(data.prompt_type);
+      setCategory(data.category);
+      setTemplate(data.template);
+      setIsActive(data.is_active);
+      const sampleVars: Record<string, string> = {};
+      data.variables.forEach((variable) => { sampleVars[variable] = `示例_${variable}`; });
+      setTestVariables(JSON.stringify(sampleVars, null, 2));
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
+  }, [isValidTemplateId, templateId]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadTemplate(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadTemplate]);
+
+  const saveTemplate = async () => {
+    if (!isValidTemplateId || !templateId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      if (!canEditDirectly) throw new Error("系统模板不可直接保存，请先复制为自定义模板。");
+      await api.admin.updatePromptTemplate(templateId, {
+        name,
+        prompt_type: effectivePromptType,
+        category,
+        template,
+        variables: extractedVars,
+        is_active: isActive,
+      });
+      toast.success("模板已保存");
+      router.push("/admin/prompts");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+      setSaving(false);
+    }
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canEditDirectly) return;
+    setShowSaveConfirm(true);
+  };
+
+  const handleClone = async () => {
+    if (!isValidTemplateId || !templateId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const cloned = await api.admin.clonePromptTemplate(templateId, {
+        reason: "提示词详情页复制系统模板",
+      });
+      toast.success("已复制为自定义模板");
+      router.push(`/admin/prompts/${cloned.id}/edit`);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+      setSaving(false);
+    }
+  };
+
+  const handleTestRender = async () => {
+    if (!isValidTemplateId || !templateId) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const variables = JSON.parse(testVariables);
+      const result = await api.admin.renderPromptTemplate(templateId, variables);
+      setTestResult(result.rendered);
+    } catch (err) {
+      setTestResult(`错误：${getApiErrorMessage(err)}`);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (loading) {
     return (
-        <div className="container mx-auto px-4 py-6 max-w-4xl">
-            {/* Header */}
-            <div className="flex items-center gap-4 mb-6">
-                <Button variant="ghost" size="sm" onClick={() => router.push("/admin/prompts")}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    返回
-                </Button>
-                <h1 className="text-2xl font-semibold text-zinc-900">编辑提示词模板</h1>
-                {originalTemplate?.is_system && (
-                    <Badge className="bg-slate-100 text-slate-800">系统模板</Badge>
-                )}
-            </div>
-
-            {/* Error */}
-            {error && (
-                <div className="flex items-center gap-2 text-red-500 mb-4 p-3 bg-red-50 rounded-lg">
-                    <AlertCircle className="w-5 h-5" />
-                    {error}
-                </div>
-            )}
-
-            {/* Form */}
-            <GlassCard className="p-6">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Name */}
-                        <div>
-                            <label className="block text-sm font-medium text-zinc-700 mb-2">
-                                模板名称 <span className="text-red-500">*</span>
-                            </label>
-                            <Input value={name} onChange={(e) => setName(e.target.value)} required />
-                        </div>
-
-                        {/* Type */}
-                        <div>
-                            <label className="block text-sm font-medium text-zinc-700 mb-2">
-                                提示词类型 <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                                value={effectivePromptType}
-                                onChange={(e) => setPromptType(e.target.value as PromptType)}
-                                className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                                required
-                                disabled={originalTemplate?.is_system}
-                            >
-                                {selectablePromptTypes.map(([type, label]) => (
-                                    <option key={type} value={type}>
-                                        {label}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Category */}
-                        <div>
-                            <label className="block text-sm font-medium text-zinc-700 mb-2">分类</label>
-                            <input
-                                list="prompt-category-options"
-                                value={category}
-                                onChange={(e) => {
-                                    const nextCategory = e.target.value;
-                                    const nextNormalized = nextCategory.trim().toLowerCase();
-                                    if (
-                                        nextNormalized === "sales" &&
-                                        salesAllowedPromptTypes.size > 0 &&
-                                        !salesAllowedPromptTypes.has(promptType)
-                                    ) {
-                                        setPromptType([...salesAllowedPromptTypes][0]);
-                                    }
-                                    setCategory(nextCategory);
-                                }}
-                                className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                                placeholder="例如：common、sales、presentation，或输入自定义分类"
-                            />
-                            <datalist id="prompt-category-options">
-                                {PROMPT_CATEGORY_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                            </datalist>
-                            {normalizedCategory === "sales" && (
-                                <p className="mt-1 text-xs text-amber-600">
-                                    销售场景仅允许评估/报告相关模板类型。
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Status */}
-                        <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={isActive}
-                                    onChange={(e) => setIsActive(e.target.checked)}
-                                    className="rounded border-zinc-300"
-                                    disabled={originalTemplate?.is_system}
-                                />
-                                <span className="text-sm text-zinc-700">启用</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={isDefault}
-                                    onChange={(e) => setIsDefault(e.target.checked)}
-                                    className="rounded border-zinc-300"
-                                />
-                                <span className="text-sm text-zinc-700">设为默认</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    {/* Template */}
-                    <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="block text-sm font-medium text-zinc-700">
-                                模板内容 <span className="text-red-500">*</span>
-                            </label>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowTestModal(true)}
-                            >
-                                <Play className="w-4 h-4 mr-2" />
-                                测试渲染
-                            </Button>
-                        </div>
-                        <textarea
-                            value={template}
-                            onChange={(e) => setTemplate(e.target.value)}
-                            placeholder="输入 Jinja2 模板，使用 {{ variable }} 语法插入变量"
-                            className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900 min-h-[300px]"
-                            required
-                        />
-                        <p className="text-xs text-zinc-500 mt-1">
-                            支持 Jinja2 模板语法，使用 {"{{"} variable {"}}"} 插入变量
-                        </p>
-                    </div>
-
-                    {/* Variables Preview */}
-                    {extractedVars.length > 0 && (
-                        <div className="bg-blue-50 rounded-lg p-4">
-                            <h4 className="text-sm font-medium text-blue-900 mb-2">自动提取的变量</h4>
-                            <div className="flex flex-wrap gap-2">
-                                {extractedVars.map((v) => (
-                                    <span
-                                        key={v}
-                                        className={cn(
-                                            "px-2 py-1 rounded text-sm",
-                                            originalTemplate?.variables.includes(v)
-                                                ? "bg-blue-100 text-blue-800"
-                                                : "bg-green-100 text-green-800"
-                                        )}
-                                    >
-                                        {v}
-                                        {!originalTemplate?.variables.includes(v) && " (新)"}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3 pt-4 border-t">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => router.push("/admin/prompts")}
-                            disabled={saving}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            type="submit"
-                            className="bg-zinc-900 hover:bg-zinc-800"
-                            disabled={saving || !name || !template}
-                        >
-                            {saving ? (
-                                <>
-                                    <StatusIndicator status="loading"  className="mr-2" />
-                                    保存中...
-                                </>
-                            ) : (
-                                <>
-                                    <Save className="w-4 h-4 mr-2" />
-                                    保存
-                                </>
-                            )}
-                        </Button>
-                    </div>
-                </form>
-            </GlassCard>
-
-            {/* Test Render Modal */}
-            <GlassModal isOpen={showTestModal} onClose={() => setShowTestModal(false)} title="测试模板渲染" size="lg">
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-zinc-700 mb-2">变量 (JSON)</label>
-                        <textarea
-                            value={testVariables}
-                            onChange={(e) => setTestVariables(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900 min-h-[150px]"
-                            placeholder='{"variable": "value"}'
-                        />
-                    </div>
-                    <Button onClick={handleTestRender} disabled={testing} className="w-full">
-                        {testing ? (
-                            <>
-                                <StatusIndicator status="loading"  className="mr-2" />
-                                渲染中...
-                            </>
-                        ) : (
-                            <>
-                                <Play className="w-4 h-4 mr-2" />
-                                渲染
-                            </>
-                        )}
-                    </Button>
-                    {testResult !== null && (
-                        <div className="bg-zinc-900 text-zinc-100 rounded-lg p-4 font-mono text-sm overflow-auto max-h-96">
-                            <pre>{testResult}</pre>
-                        </div>
-                    )}
-                </div>
-            </GlassModal>
-        </div>
+      <div className="container mx-auto max-w-4xl px-4 py-12 text-center">
+        <StatusIndicator status="loading" />
+        <p className="mt-4 text-zinc-500">正在加载模板...</p>
+      </div>
     );
+  }
+
+  if (error && !originalTemplate) {
+    return (
+      <div className="container mx-auto max-w-4xl px-4 py-12">
+        <div className="flex items-center justify-center gap-2 text-red-500">
+          <AlertCircle className="h-6 w-6" />
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto max-w-5xl px-4 py-6">
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <Button variant="ghost" size="sm" onClick={() => router.push("/admin/prompts")}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          返回
+        </Button>
+        <h1 className="text-2xl font-semibold text-zinc-900">{isSystemTemplate ? "查看系统模板" : "编辑自定义模板"}</h1>
+        {originalTemplate?.is_system ? <Badge className="bg-slate-100 text-slate-800">系统只读</Badge> : <Badge className="bg-blue-100 text-blue-800">自定义模板</Badge>}
+        {isSystemTemplate ? (
+          <Button variant="outline" disabled={saving} onClick={() => void handleClone()}>
+            <Copy className="mr-2 h-4 w-4" />
+            复制为自定义模板
+          </Button>
+        ) : null}
+      </div>
+
+      {error ? (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-red-600">
+          <AlertCircle className="h-5 w-5" />
+          {error}
+        </div>
+      ) : null}
+
+      <GlassCard className="p-6">
+        {isSystemTemplate ? (
+          <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            系统模板只能查看，不能直接保存、停用或修改默认状态。需要调整时，请复制为自定义模板，再设置默认或配置生效场景。
+          </div>
+        ) : null}
+
+        {impact ? (
+          <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="rounded-xl bg-slate-50 p-3 text-sm">
+              <div className="text-slate-500">模板名称</div>
+              <div className="mt-1 font-semibold">{formatTemplateName(originalTemplate?.name || "", originalTemplate?.display_name)}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3 text-sm">
+              <div className="text-slate-500">分类用途</div>
+              <div className="mt-1 font-semibold">{impact.display_category} · {impact.display_type}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3 text-sm">
+              <div className="text-slate-500">生效状态</div>
+              <div className="mt-1 font-semibold">{impact.is_runtime_effective ? "运行时生效" : "未生效"}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3 text-sm">
+              <div className="text-slate-500">场景绑定</div>
+              <div className="mt-1 font-semibold">{impact.binding_count} 条</div>
+            </div>
+          </div>
+        ) : null}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-zinc-700">模板名称</label>
+              <Input value={name} onChange={(event) => setName(event.target.value)} required disabled={!canEditDirectly} />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-zinc-700">提示词用途</label>
+              <select
+                value={effectivePromptType}
+                onChange={(event) => setPromptType(event.target.value as PromptType)}
+                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:bg-slate-100"
+                required
+                disabled={!canEditDirectly}
+              >
+                {selectablePromptTypes.map(([type, label]) => <option key={type} value={type}>{formatPromptType(type, label)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-zinc-700">分类</label>
+              <input
+                list="prompt-category-options"
+                value={category}
+                onChange={(event) => {
+                  const nextCategory = event.target.value;
+                  const nextNormalized = nextCategory.trim().toLowerCase();
+                  if (nextNormalized === "sales" && salesAllowedPromptTypes.size > 0 && !salesAllowedPromptTypes.has(promptType)) {
+                    setPromptType([...salesAllowedPromptTypes][0]);
+                  }
+                  setCategory(nextCategory);
+                }}
+                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:bg-slate-100"
+                disabled={!canEditDirectly}
+                placeholder="选择或输入分类"
+              />
+              <datalist id="prompt-category-options">
+                {PROMPT_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </datalist>
+              <p className="mt-1 text-xs text-slate-500">{formatCategoryLabel(category)}</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} disabled={!canEditDirectly} />
+                <span className="text-sm text-zinc-700">启用</span>
+              </label>
+              <Badge className={originalTemplate?.is_default ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-700"}>
+                {originalTemplate?.is_default ? "默认模板" : "非默认"}
+              </Badge>
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="block text-sm font-medium text-zinc-700">模板内容</label>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowTestModal(true)}>
+                <Play className="mr-2 h-4 w-4" />
+                渲染预览
+              </Button>
+            </div>
+            <textarea
+              value={template}
+              onChange={(event) => setTemplate(event.target.value)}
+              placeholder="输入 Jinja2 模板，使用 {{ variable }} 语法插入变量"
+              className="min-h-[320px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:bg-slate-100"
+              required
+              disabled={!canEditDirectly}
+            />
+            <p className="mt-1 text-xs text-zinc-500">变量名、JSON 字段和 Jinja2 占位符保持英文，不要翻译。</p>
+          </div>
+
+          <div className="rounded-lg bg-blue-50 p-4">
+            <h4 className="mb-2 text-sm font-medium text-blue-900">变量校验</h4>
+            {extractedVars.length === 0 ? (
+              <p className="text-sm text-blue-700">当前模板未提取到变量。</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {extractedVars.map((variable) => <Badge key={variable} className="bg-blue-100 text-blue-800">{variable}</Badge>)}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 border-t pt-4">
+            <Button type="button" variant="outline" onClick={() => router.push("/admin/prompts")} disabled={saving}>取消</Button>
+            <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800" disabled={saving || !name || !template || !canEditDirectly}>
+              {saving ? <><StatusIndicator status="loading" className="mr-2" />保存中...</> : <><Save className="mr-2 h-4 w-4" />保存</>}
+            </Button>
+          </div>
+        </form>
+      </GlassCard>
+
+      <ConfirmDialog
+        open={showSaveConfirm}
+        onOpenChange={setShowSaveConfirm}
+        title="保存自定义模板"
+        description={impact?.is_runtime_effective ? "该模板当前已在运行时生效，保存会影响后续调用。请确认变量、正文和渲染预览已检查。" : "保存后模板仍需设为默认或配置生效场景才会生效。"}
+        confirmText="确认保存"
+        variant="warning"
+        onConfirm={() => void saveTemplate()}
+        isLoading={saving}
+      />
+
+      <GlassModal isOpen={showTestModal} onClose={() => setShowTestModal(false)} title="渲染预览" size="lg">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-zinc-700">变量 JSON</label>
+            <textarea
+              value={testVariables}
+              onChange={(event) => setTestVariables(event.target.value)}
+              className="min-h-[150px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              placeholder='{"variable": "value"}'
+            />
+          </div>
+          <Button onClick={() => void handleTestRender()} disabled={testing} className="w-full">
+            {testing ? <><StatusIndicator status="loading" className="mr-2" />渲染中...</> : <><Play className="mr-2 h-4 w-4" />渲染</>}
+          </Button>
+          {testResult !== null ? (
+            <div className="max-h-96 overflow-auto rounded-lg bg-zinc-900 p-4 font-mono text-sm text-zinc-100">
+              <pre>{testResult}</pre>
+            </div>
+          ) : null}
+        </div>
+      </GlassModal>
+    </div>
+  );
 }

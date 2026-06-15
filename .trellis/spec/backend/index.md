@@ -36,6 +36,7 @@ Before writing backend code, read the guides relevant to your change:
 | [Directory Structure](./directory-structure.md) | Module layout, routes, services, WebSocket handlers | Ready |
 | [Database Guidelines](./database-guidelines.md) | SQLAlchemy 2.0 async, Alembic, query patterns | Ready |
 | [Business Rule Configs](./business-rule-configs.md) | Governed runtime policy config, validation, fallback, audit | Ready |
+| [Prompt Template Governance](./prompt-template-governance.md) | Prompt defaults, scenario bindings, system-template lock, governance repair | Ready |
 | [Error Handling](./error-handling.md) | `Result[T]`, API responses, middleware fallbacks | Ready |
 | [Quality Guidelines](./quality-guidelines.md) | pytest, ruff, mypy, forbidden patterns | Ready |
 | [Logging Guidelines](./logging-guidelines.md) | structlog, trace_id, redaction | Ready |

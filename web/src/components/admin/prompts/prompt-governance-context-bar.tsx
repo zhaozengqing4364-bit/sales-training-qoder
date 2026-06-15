@@ -37,7 +37,11 @@ export function PromptGovernanceContextBar({ loadWarnings, governanceStatus, can
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <div>
                             <div className="font-semibold">提示词治理状态</div>
-                            <div className="mt-1">{governanceStatus ? `允许类型 ${governanceStatus.allowed_prompt_types.join(" / ")}；非法历史模板 ${governanceStatus.invalid_count} 个；变量规则：${governanceStatus.policy.variables_schema}` : "治理状态暂不可用"}</div>
+                            <div className="mt-1">
+                                {governanceStatus
+                                    ? `默认冲突 ${governanceStatus.default_conflict_count || 0} 个；非法历史模板 ${governanceStatus.invalid_count} 个；变量规则：字符串数组`
+                                    : "治理状态暂不可用"}
+                            </div>
                         </div>
                         {governanceStatus?.invalid_count ? (
                             <Button variant="outline" size="sm" disabled={!canOperate || isOperating} onClick={onRemediate}>禁用非法历史模板</Button>

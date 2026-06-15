@@ -12,13 +12,15 @@ Features:
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import String, and_, cast as sql_cast, select, update
+from sqlalchemy import String, and_, func, select, update
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.config_manager import get_config_manager
@@ -33,16 +35,24 @@ from prompt_templates.compiled_contract import (
 )
 from prompt_templates.loader import get_loader
 from prompt_templates.models import (
+    PROMPT_TEMPLATE_DISPLAY_NAMES,
     PromptRenderRequest,
     PromptRenderResponse,
     PromptTemplate,
+    PromptTemplateCloneRequest,
     PromptTemplateCreate,
     PromptTemplateGovernanceRollbackResponse,
+    PromptTemplateImpactBinding,
+    PromptTemplateImpactResponse,
     PromptTemplateQuarantineResult,
+    PromptTemplateRepairDefaultsResponse,
     PromptTemplateUpdate,
     PromptType,
     ScenarioPrompt,
     ScenarioPromptCreate,
+    prompt_category_display_label,
+    prompt_template_display_name,
+    prompt_type_display_label,
 )
 from prompt_templates.renderer import render_template
 
@@ -55,6 +65,32 @@ SALES_PROMPT_SCOPE_ALLOWED_TYPES = {
     "realtime_scoring",
 }
 PROMPT_GOVERNANCE_AUDIT_ACTION = "prompt_template.governance"
+
+PROMPT_TEMPLATE_RUNTIME_CONSUMERS: dict[str, list[str]] = {
+    "summary": ["销售训练 · 训练结束总结", "销售训练 · 历史报告"],
+    "system_prompt": ["销售训练 · AI 客户人格"],
+    "extraction": ["PPT 演练 · 页面要点提取"],
+    "scoring": ["销售训练 · 评分规则"],
+    "realtime_scoring": ["销售实时对练 · 实时评分"],
+    "stage": ["销售训练 · 阶段判断"],
+    "fuzzy_detection": ["销售训练 · 模糊表达检测"],
+    "interruption": ["PPT 演练 · 打断反馈"],
+    "tracking": ["PPT 演练 · 要点覆盖跟踪"],
+    "welcome": ["销售训练 · 开局欢迎话术"],
+    "evaluation": ["销售训练 · 实时评价"],
+    "report": ["销售训练 · 综合报告"],
+    "system": ["系统报告"],
+}
+
+
+class PromptTemplateServiceError(ValueError):
+    """Typed service error for prompt governance state violations."""
+
+    def __init__(self, code: str, message: str, *, status_code: int = 400):
+        super().__init__(f"{code} {message}")
+        self.code = code
+        self.message = message
+        self.status_code = status_code
 
 
 class PromptTemplateService:
@@ -162,9 +198,19 @@ class PromptTemplateService:
             if isinstance(parsed, dict):
                 return [str(key) for key in parsed.keys() if str(key).strip()]
             if isinstance(parsed, list):
-                return [str(item).strip() for item in parsed if str(item).strip()]
+                value = parsed
         if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
+            normalized: list[str] = []
+            for item in value:
+                if isinstance(item, str):
+                    candidate = item.strip()
+                elif isinstance(item, dict):
+                    candidate = str(item.get("name") or "").strip()
+                else:
+                    candidate = ""
+                if candidate and candidate not in normalized:
+                    normalized.append(candidate)
+            return normalized
         return []
 
     async def _queue_prompt_governance_audit(
@@ -272,6 +318,249 @@ class PromptTemplateService:
                 error=str(exc),
             )
             return None
+
+    async def _active_binding_count_map(
+        self,
+        template_ids: list[str],
+    ) -> dict[str, int]:
+        if not template_ids:
+            return {}
+        from common.db.models import ScenarioPrompt as ScenarioPromptDB
+
+        result = await self.db.execute(
+            select(ScenarioPromptDB.template_id, func.count(ScenarioPromptDB.id))
+            .where(
+                ScenarioPromptDB.template_id.in_(template_ids),
+                ScenarioPromptDB.is_active.is_(True),
+            )
+            .group_by(ScenarioPromptDB.template_id)
+        )
+        rows = result.all()
+        if inspect.isawaitable(rows):
+            rows = await rows
+        if not isinstance(rows, (list, tuple)):
+            return {}
+        return {str(template_id): int(count) for template_id, count in rows}
+
+    async def _active_binding_count(self, template_id: str) -> int:
+        return (await self._active_binding_count_map([template_id])).get(template_id, 0)
+
+    @staticmethod
+    def _runtime_consumers_for(
+        *,
+        prompt_type: str,
+        category: str,
+        is_default: bool,
+        binding_count: int,
+    ) -> list[str]:
+        consumers = list(PROMPT_TEMPLATE_RUNTIME_CONSUMERS.get(prompt_type, []))
+        if not consumers:
+            consumers.append(
+                f"{prompt_category_display_label(category)} · {prompt_type_display_label(prompt_type)}"
+            )
+        if is_default:
+            consumers.append("默认兜底模板")
+        if binding_count > 0:
+            consumers.append("场景绑定生效模板")
+        return list(dict.fromkeys(consumers))
+
+    @staticmethod
+    def _apply_operator_fields(
+        template: PromptTemplate,
+        *,
+        binding_count: int,
+    ) -> PromptTemplate:
+        template.display_name = prompt_template_display_name(template.name)
+        template.display_type = prompt_type_display_label(template.prompt_type)
+        template.display_category = prompt_category_display_label(template.category)
+        template.binding_count = binding_count
+        template.is_runtime_effective = bool(
+            template.is_active and (template.is_default or binding_count > 0)
+        )
+        template.can_edit_directly = not template.is_system
+        template.edit_block_reason = (
+            "系统模板不可直接编辑，请先复制为自定义模板。"
+            if template.is_system
+            else None
+        )
+        return template
+
+    async def _enrich_template_model(self, template: PromptTemplate) -> PromptTemplate:
+        binding_count = await self._active_binding_count(str(template.id))
+        return self._apply_operator_fields(template, binding_count=binding_count)
+
+    async def _enrich_templates_from_rows(self, rows: list[Any]) -> list[PromptTemplate]:
+        binding_counts = await self._active_binding_count_map(
+            [str(getattr(row, "id", "")) for row in rows]
+        )
+        normalized: list[PromptTemplate] = []
+        for row in rows:
+            converted = self._safe_model_validate(row)
+            if converted is None:
+                continue
+            normalized.append(
+                self._apply_operator_fields(
+                    converted,
+                    binding_count=binding_counts.get(str(converted.id), 0),
+                )
+            )
+        return normalized
+
+    async def _assert_template_can_deactivate(self, row: Any) -> None:
+        if bool(getattr(row, "is_default", False)):
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_IN_USE]",
+                "该模板正在作为默认模板生效。请先设置替代默认模板，再停用。",
+                status_code=409,
+            )
+        binding_count = await self._active_binding_count(str(getattr(row, "id", "")))
+        if binding_count > 0:
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_IN_USE]",
+                "该模板正在被场景绑定使用。请先替换或删除绑定，再停用。",
+                status_code=409,
+            )
+
+    def _assert_template_can_be_default(
+        self,
+        row: Any,
+        *,
+        prompt_type: str,
+    ) -> None:
+        row_prompt_type = str(getattr(row, "prompt_type", "") or "")
+        if row_prompt_type != prompt_type:
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_TYPE_MISMATCH]",
+                "模板用途与要设置的默认用途不一致。",
+                status_code=409,
+            )
+        if not bool(getattr(row, "is_active", False)):
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_INACTIVE]",
+                "停用模板不能设为默认模板。",
+                status_code=409,
+            )
+        issues = self._governance_issues_for_row(row)
+        if issues:
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_GOVERNANCE_BLOCKED]",
+                "模板存在治理问题，修复后才能设为默认。",
+                status_code=409,
+            )
+
+    async def _clear_defaults_for_prompt_type(
+        self,
+        *,
+        prompt_type: str,
+        keep_template_id: str | None,
+        now: datetime,
+    ) -> list[dict[str, Any]]:
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        before_result = await self.db.execute(
+            select(PromptTemplateDB).where(
+                PromptTemplateDB.prompt_type == prompt_type,
+                PromptTemplateDB.is_default.is_(True),
+            )
+        )
+        before_defaults = [self._template_snapshot(item) for item in before_result.scalars().all()]
+        conditions = [
+            PromptTemplateDB.prompt_type == prompt_type,
+            PromptTemplateDB.is_default.is_(True),
+        ]
+        if keep_template_id:
+            conditions.append(PromptTemplateDB.id != keep_template_id)
+        await self.db.execute(
+            update(PromptTemplateDB)
+            .where(*conditions)
+            .values(is_default=False, updated_at=now)
+        )
+        return before_defaults
+
+    async def _assert_no_duplicate_active_binding(
+        self,
+        *,
+        scenario_type: str,
+        scenario_id: str | None,
+        prompt_type: str,
+        exclude_assignment_id: str | None = None,
+    ) -> None:
+        from common.db.models import ScenarioPrompt as ScenarioPromptDB
+
+        conditions = [
+            ScenarioPromptDB.scenario_type == scenario_type,
+            ScenarioPromptDB.prompt_type == prompt_type,
+            ScenarioPromptDB.is_active.is_(True),
+        ]
+        if scenario_id:
+            conditions.append(ScenarioPromptDB.scenario_id == scenario_id)
+        else:
+            conditions.append(ScenarioPromptDB.scenario_id.is_(None))
+        if exclude_assignment_id:
+            conditions.append(ScenarioPromptDB.id != exclude_assignment_id)
+        result = await self.db.execute(select(ScenarioPromptDB.id).where(*conditions).limit(1))
+        if result.scalar_one_or_none() is not None:
+            raise PromptTemplateServiceError(
+                "[SCENARIO_PROMPT_DUPLICATE_ACTIVE]",
+                "同一业务域、场景和用途已经存在启用绑定，请先停用或替换原绑定。",
+                status_code=409,
+            )
+
+    async def _fetch_template_row_or_error(self, template_id: UUID | str) -> Any:
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        result = await self.db.execute(
+            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_NOT_FOUND]",
+                "模板不存在",
+                status_code=404,
+            )
+        return row
+
+    async def _validate_template_for_binding(
+        self,
+        *,
+        template_id: UUID,
+        prompt_type: str,
+    ) -> Any:
+        row = await self._fetch_template_row_or_error(template_id)
+        if str(getattr(row, "prompt_type", "") or "") != prompt_type:
+            raise PromptTemplateServiceError(
+                "[SCENARIO_PROMPT_TYPE_MISMATCH]",
+                "绑定用途与模板用途不一致，请选择同一用途的模板。",
+                status_code=409,
+            )
+        if not bool(getattr(row, "is_active", False)):
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_INACTIVE]",
+                "停用模板不能用于场景绑定。",
+                status_code=409,
+            )
+        issues = self._governance_issues_for_row(row)
+        if issues:
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_GOVERNANCE_BLOCKED]",
+                "模板存在治理问题，修复后才能绑定到场景。",
+                status_code=409,
+            )
+        return row
+
+    async def _scenario_prompt_model(self, row: Any) -> ScenarioPrompt:
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        model = ScenarioPrompt.model_validate(row)
+        result = await self.db.execute(
+            select(PromptTemplateDB.name).where(PromptTemplateDB.id == str(row.template_id))
+        )
+        template_name = result.scalar_one_or_none()
+        model.template_display_name = (
+            prompt_template_display_name(template_name) if template_name else None
+        )
+        return model
 
     @staticmethod
     def _template_snapshot(db_template: Any) -> dict[str, Any]:
@@ -392,6 +681,30 @@ class PromptTemplateService:
                 }
             )
 
+        default_groups: dict[str, list[Any]] = {}
+        for row in rows:
+            if bool(getattr(row, "is_default", False)):
+                default_groups.setdefault(
+                    str(getattr(row, "prompt_type", "") or ""), []
+                ).append(row)
+        default_conflicts = {
+            prompt_type: items
+            for prompt_type, items in default_groups.items()
+            if len(items) > 1
+        }
+        for prompt_type, items in default_conflicts.items():
+            flattened_issues.append(
+                {
+                    "template_id": "default-conflict",
+                    "name": prompt_type_display_label(prompt_type),
+                    "issue_codes": ["multiple_default_templates"],
+                    "messages": [
+                        f"{prompt_type_display_label(prompt_type)} 存在 {len(items)} 个默认模板"
+                    ],
+                    "recommended_action": "repair_default_conflicts",
+                }
+            )
+
         active_invalid_count = sum(
             1 for item in invalid_rows if item["is_active"] or item["is_default"]
         )
@@ -410,6 +723,7 @@ class PromptTemplateService:
             "checked_count": len(rows),
             "active_invalid_count": active_invalid_count,
             "invalid_active_count": active_invalid_count,
+            "default_conflict_count": len(default_conflicts),
             "issues": flattened_issues,
             "rollback_policy": policy["rollback"],
             "audit_log_action": policy["audit_action"],
@@ -497,6 +811,13 @@ class PromptTemplateService:
 
         template_id = str(uuid4())
         now = datetime.now(UTC)
+        before_defaults: list[dict[str, Any]] = []
+        if data.is_default:
+            before_defaults = await self._clear_defaults_for_prompt_type(
+                prompt_type=data.prompt_type.value,
+                keep_template_id=template_id,
+                now=now,
+            )
 
         db_template = PromptTemplateDB(
             id=template_id,
@@ -516,7 +837,7 @@ class PromptTemplateService:
         self._queue_audit_log(
             action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.create",
             actor=actor,
-            before=None,
+            before={"replaced_defaults": before_defaults} if before_defaults else None,
             after=self._template_snapshot(db_template),
             reason=reason,
         )
@@ -527,7 +848,7 @@ class PromptTemplateService:
         normalized = self._safe_model_validate(db_template)
         if normalized is None:
             raise ValueError("invalid prompt template data")
-        return normalized
+        return await self._enrich_template_model(normalized)
 
     async def get_template(self, template_id: UUID) -> PromptTemplate | None:
         """Get a template by ID.
@@ -541,7 +862,7 @@ class PromptTemplateService:
         # Try cache first
         cached = await self.loader.get_template(template_id, self.db)
         if cached:
-            return cached
+            return await self._enrich_template_model(cached)
 
         # Load from database
         from common.db.models import PromptTemplate as PromptTemplateDB
@@ -557,7 +878,7 @@ class PromptTemplateService:
             normalized = self._safe_model_validate(db_template)
             if normalized is None:
                 raise ValueError("invalid prompt template data")
-            return normalized
+            return await self._enrich_template_model(normalized)
         return None
 
     async def update_template(
@@ -586,14 +907,45 @@ class PromptTemplateService:
 
         if not db_template:
             return None
+        if bool(getattr(db_template, "is_system", False)):
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_SYSTEM_LOCKED]",
+                "系统模板不可直接编辑，请先复制为自定义模板。",
+                status_code=409,
+            )
 
         before = self._template_snapshot(db_template)
         # Update fields
         update_data = data.model_dump(exclude_unset=True)
+        if update_data.get("is_active") is False:
+            await self._assert_template_can_deactivate(db_template)
+        if "is_default" in update_data and update_data["is_default"] is False and bool(
+            getattr(db_template, "is_default", False)
+        ):
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_DEFAULT_REPLACEMENT_REQUIRED]",
+                "不能直接取消默认模板，请先设置替代默认模板。",
+                status_code=409,
+            )
+        wants_default = bool(update_data.get("is_default") is True)
+        if wants_default:
+            update_data.pop("is_default", None)
         for field, value in update_data.items():
             if field == "prompt_type" and value:
                 value = value.value if hasattr(value, "value") else value
             setattr(db_template, field, value)
+        if wants_default:
+            prompt_type_value = str(getattr(db_template, "prompt_type", "") or "")
+            self._assert_template_can_be_default(
+                db_template,
+                prompt_type=prompt_type_value,
+            )
+            await self._clear_defaults_for_prompt_type(
+                prompt_type=prompt_type_value,
+                keep_template_id=str(template_id),
+                now=datetime.now(UTC),
+            )
+            self._set_orm_field(db_template, "is_default", True)
 
         self._set_orm_field(db_template, "updated_at", datetime.now(UTC))
         self._queue_audit_log(
@@ -613,7 +965,7 @@ class PromptTemplateService:
         normalized = self._safe_model_validate(db_template)
         if normalized is None:
             raise ValueError("invalid prompt template data")
-        return normalized
+        return await self._enrich_template_model(normalized)
 
     async def delete_template(
         self,
@@ -639,6 +991,13 @@ class PromptTemplateService:
 
         if not db_template:
             return False
+        if bool(getattr(db_template, "is_system", False)):
+            raise PromptTemplateServiceError(
+                "[PROMPT_TEMPLATE_SYSTEM_LOCKED]",
+                "系统模板不可直接停用，请先复制为自定义模板并替换生效配置。",
+                status_code=409,
+            )
+        await self._assert_template_can_deactivate(db_template)
 
         before = self._template_snapshot(db_template)
         # Soft delete - just deactivate
@@ -690,17 +1049,17 @@ class PromptTemplateService:
         if is_active is not None:
             query = query.where(PromptTemplateDB.is_active == is_active)
 
-        query = query.offset(skip).limit(limit)
+        query = query.order_by(
+            PromptTemplateDB.category.asc(),
+            PromptTemplateDB.prompt_type.asc(),
+            PromptTemplateDB.is_default.desc(),
+            PromptTemplateDB.updated_at.desc(),
+        ).offset(skip).limit(limit)
 
         result = await self.db.execute(query)
         db_templates = result.scalars().all()
 
-        normalized: list[PromptTemplate] = []
-        for item in db_templates:
-            converted = self._safe_model_validate(item)
-            if converted is not None:
-                normalized.append(converted)
-        return normalized
+        return await self._enrich_templates_from_rows(list(db_templates))
 
     async def get_template_for_scenario(
         self,
@@ -750,12 +1109,12 @@ class PromptTemplateService:
                     )
                 )
             )
-            template = result.scalar_one_or_none()
+            template = result.scalars().first()
             if template:
                 normalized = self._safe_model_validate(template)
                 if normalized is None:
                     raise ValueError("invalid prompt template data")
-                return normalized
+                return await self._enrich_template_model(normalized)
 
         # Try scenario-type only
         if scenario_type:
@@ -772,12 +1131,12 @@ class PromptTemplateService:
                     )
                 )
             )
-            template = result.scalar_one_or_none()
+            template = result.scalars().first()
             if template:
                 normalized = self._safe_model_validate(template)
                 if normalized is None:
                     raise ValueError("invalid prompt template data")
-                return normalized
+                return await self._enrich_template_model(normalized)
 
         # Fall back to global default
         result = await self.db.execute(
@@ -789,12 +1148,12 @@ class PromptTemplateService:
                 )
             )
         )
-        template = result.scalar_one_or_none()
+        template = result.scalars().first()
         if template:
             normalized = self._safe_model_validate(template)
             if normalized is None:
                 raise ValueError("invalid prompt template data")
-            return normalized
+            return await self._enrich_template_model(normalized)
 
         return None
 
@@ -1081,6 +1440,306 @@ class PromptTemplateService:
             "audit_action": None if dry_run else "prompt_template.governance_migrate",
         }
 
+    async def repair_default_conflicts(
+        self,
+        *,
+        actor: Any | None = None,
+        reason: str = "PromptTemplate default governance repair",
+        dry_run: bool = True,
+    ) -> PromptTemplateRepairDefaultsResponse:
+        """Repair prompt governance data that can break runtime resolution."""
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        result = await self.db.execute(select(PromptTemplateDB))
+        rows = list(result.scalars().all())
+        items: list[dict[str, Any]] = []
+        now = datetime.now(UTC)
+
+        def row_sort_key(row: Any) -> tuple[Any, Any, str]:
+            def sortable_datetime(value: Any) -> float:
+                if not isinstance(value, datetime):
+                    return 0.0
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=UTC)
+                return value.timestamp()
+
+            return (
+                sortable_datetime(getattr(row, "updated_at", None)),
+                sortable_datetime(getattr(row, "created_at", None)),
+                str(getattr(row, "id", "") or ""),
+            )
+
+        for row in rows:
+            issues = self._governance_issues_for_row(row)
+            issue_codes = [str(issue.get("code", "")) for issue in issues]
+            before = self._template_snapshot(row)
+            after = dict(before)
+            actions: list[str] = []
+
+            if any(code.startswith("variables_") for code in issue_codes):
+                after["variables"] = self._normalize_legacy_variables(
+                    getattr(row, "variables", None)
+                )
+                actions.append("migrate_variables_to_list")
+
+            if "invalid_prompt_type" in issue_codes or "empty_template" in issue_codes:
+                after["is_active"] = False
+                after["is_default"] = False
+                actions.append("disable_invalid_runtime_template")
+
+            localized_name = PROMPT_TEMPLATE_DISPLAY_NAMES.get(
+                str(getattr(row, "name", "") or "")
+            )
+            if bool(getattr(row, "is_system", False)) and localized_name:
+                after["name"] = localized_name
+                actions.append("localize_system_template_name")
+
+            if actions:
+                item = {
+                    "template_id": str(getattr(row, "id", "")),
+                    "name": getattr(row, "name", None),
+                    "issues": issues,
+                    "actions": actions,
+                    "before": before,
+                    "after": after,
+                }
+                items.append(item)
+                if not dry_run:
+                    self._set_orm_field(row, "variables", after["variables"])
+                    self._set_orm_field(row, "is_active", after["is_active"])
+                    self._set_orm_field(row, "is_default", after["is_default"])
+                    self._set_orm_field(row, "name", after["name"])
+                    self._set_orm_field(row, "updated_at", now)
+                    await self._queue_prompt_governance_audit(
+                        action="prompt_template.governance.repair_defaults",
+                        actor=actor,
+                        template_id=str(getattr(row, "id", "")),
+                        reason=reason,
+                        before=before,
+                        after=after,
+                        issues=issues or actions,
+                    )
+
+        default_groups: dict[str, list[Any]] = {}
+        for row in rows:
+            if bool(getattr(row, "is_default", False)):
+                default_groups.setdefault(
+                    str(getattr(row, "prompt_type", "") or ""), []
+                ).append(row)
+
+        for prompt_type, group in default_groups.items():
+            if len(group) <= 1:
+                continue
+            keep = max(group, key=row_sort_key)
+            for row in group:
+                if str(getattr(row, "id", "")) == str(getattr(keep, "id", "")):
+                    continue
+                before = self._template_snapshot(row)
+                after = dict(before)
+                after["is_default"] = False
+                actions = ["clear_duplicate_default"]
+                item = {
+                    "template_id": str(getattr(row, "id", "")),
+                    "name": getattr(row, "name", None),
+                    "prompt_type": prompt_type,
+                    "keep_template_id": str(getattr(keep, "id", "")),
+                    "issues": [
+                        {
+                            "code": "multiple_default_templates",
+                            "severity": "blocking",
+                            "message": (
+                                f"{prompt_type_display_label(prompt_type)} 存在多个默认模板，"
+                                "保留最近更新的一条。"
+                            ),
+                        }
+                    ],
+                    "actions": actions,
+                    "before": before,
+                    "after": after,
+                }
+                items.append(item)
+                if not dry_run:
+                    self._set_orm_field(row, "is_default", False)
+                    self._set_orm_field(row, "updated_at", now)
+                    await self._queue_prompt_governance_audit(
+                        action="prompt_template.governance.repair_defaults",
+                        actor=actor,
+                        template_id=str(getattr(row, "id", "")),
+                        reason=reason,
+                        before=before,
+                        after=after,
+                        issues=item["issues"],
+                    )
+
+        if not dry_run and items:
+            await self.db.commit()
+            await self.loader.invalidate_cache()
+
+        return PromptTemplateRepairDefaultsResponse(
+            dry_run=dry_run,
+            checked=len(rows),
+            repaired=len(items),
+            items=items,
+            audit_action=None if dry_run else "prompt_template.governance.repair_defaults",
+        )
+
+    async def get_template_impact(
+        self,
+        template_id: UUID,
+    ) -> PromptTemplateImpactResponse | None:
+        """Return read-only runtime impact for one template."""
+        from common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import ScenarioPrompt as ScenarioPromptDB
+
+        result = await self.db.execute(
+            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+
+        binding_result = await self.db.execute(
+            select(ScenarioPromptDB).where(
+                ScenarioPromptDB.template_id == str(template_id)
+            )
+        )
+        binding_rows = list(binding_result.scalars().all())
+        active_bindings = [item for item in binding_rows if bool(item.is_active)]
+        binding_count = len(active_bindings)
+        prompt_type = str(getattr(row, "prompt_type", "") or "")
+        category = str(getattr(row, "category", "") or "")
+        issues = self._governance_issues_for_row(row)
+        is_default = bool(getattr(row, "is_default", False))
+        is_active = bool(getattr(row, "is_active", False))
+        is_system = bool(getattr(row, "is_system", False))
+
+        can_deactivate = is_active and not is_default and binding_count == 0
+        deactivate_block_reason = None
+        if is_default:
+            deactivate_block_reason = "该模板正在作为默认模板生效。"
+        elif binding_count > 0:
+            deactivate_block_reason = "该模板正在被场景绑定使用。"
+        elif not is_active:
+            deactivate_block_reason = "模板已经停用。"
+
+        can_set_default = is_active and not issues
+        set_default_block_reason = None
+        if not is_active:
+            set_default_block_reason = "停用模板不能设为默认模板。"
+        elif issues:
+            set_default_block_reason = "模板存在治理问题，修复后才能设为默认。"
+
+        recommended_next_steps: list[str] = []
+        if is_system:
+            recommended_next_steps.append("系统模板请先复制为自定义模板，再编辑正文。")
+        if issues:
+            recommended_next_steps.append("先执行治理修复，确保变量与用途可被运行时解析。")
+        if is_default or binding_count > 0:
+            recommended_next_steps.append("停用前先设置替代默认模板或替换场景绑定。")
+        if not is_default and binding_count == 0:
+            recommended_next_steps.append("如需生效，请设为默认或配置生效场景。")
+
+        return PromptTemplateImpactResponse(
+            template_id=str(template_id),
+            display_name=prompt_template_display_name(str(getattr(row, "name", ""))),
+            prompt_type=prompt_type,
+            display_type=prompt_type_display_label(prompt_type),
+            category=category,
+            display_category=prompt_category_display_label(category),
+            is_active=is_active,
+            is_default=is_default,
+            is_system=is_system,
+            is_runtime_effective=is_active and (is_default or binding_count > 0),
+            can_deactivate=can_deactivate,
+            deactivate_block_reason=deactivate_block_reason,
+            can_set_default=can_set_default,
+            set_default_block_reason=set_default_block_reason,
+            can_edit_directly=not is_system,
+            edit_block_reason=(
+                "系统模板不可直接编辑，请先复制为自定义模板。"
+                if is_system
+                else None
+            ),
+            binding_count=binding_count,
+            bindings=[
+                PromptTemplateImpactBinding(
+                    id=str(item.id),
+                    scenario_type=str(item.scenario_type),
+                    scenario_id=item.scenario_id,
+                    prompt_type=str(item.prompt_type),
+                    is_active=bool(item.is_active),
+                    display_scenario_type=(
+                        "销售训练"
+                        if item.scenario_type == "sales"
+                        else "PPT 演练"
+                        if item.scenario_type == "presentation"
+                        else str(item.scenario_type)
+                    ),
+                    display_prompt_type=prompt_type_display_label(str(item.prompt_type)),
+                )
+                for item in binding_rows
+            ],
+            runtime_consumers=self._runtime_consumers_for(
+                prompt_type=prompt_type,
+                category=category,
+                is_default=is_default,
+                binding_count=binding_count,
+            ),
+            recommended_next_steps=recommended_next_steps,
+        )
+
+    async def clone_template(
+        self,
+        template_id: UUID,
+        data: PromptTemplateCloneRequest,
+        *,
+        actor: Any | None = None,
+        reason: str = "clone_prompt_template",
+    ) -> PromptTemplate | None:
+        """Clone a template into an editable custom template."""
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        result = await self.db.execute(
+            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+        )
+        source = result.scalar_one_or_none()
+        if source is None:
+            return None
+
+        now = datetime.now(UTC)
+        clone_id = str(uuid4())
+        source_display_name = prompt_template_display_name(
+            str(getattr(source, "name", "") or "")
+        )
+        clone_name = (data.name or f"{source_display_name}（自定义副本）").strip()
+        db_template = PromptTemplateDB(
+            id=clone_id,
+            name=clone_name,
+            prompt_type=str(getattr(source, "prompt_type", "") or ""),
+            category=str(getattr(source, "category", "") or "common"),
+            template=str(getattr(source, "template", "") or ""),
+            variables=self._normalize_legacy_variables(getattr(source, "variables", None)),
+            is_active=True,
+            is_default=False,
+            is_system=False,
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.add(db_template)
+        self._queue_audit_log(
+            action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.clone",
+            actor=actor,
+            before=self._template_snapshot(source),
+            after=self._template_snapshot(db_template),
+            reason=data.reason or reason,
+        )
+        await self.db.commit()
+        await self.db.refresh(db_template)
+        normalized = self._safe_model_validate(db_template)
+        if normalized is None:
+            raise ValueError("invalid prompt template data")
+        return await self._enrich_template_model(normalized)
+
     async def rollback_last_governance_migration(
         self,
         *,
@@ -1191,6 +1850,16 @@ class PromptTemplateService:
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         assignment_id = str(uuid4())
+        await self._validate_template_for_binding(
+            template_id=data.template_id,
+            prompt_type=data.prompt_type,
+        )
+        if data.is_active:
+            await self._assert_no_duplicate_active_binding(
+                scenario_type=data.scenario_type,
+                scenario_id=data.scenario_id,
+                prompt_type=data.prompt_type,
+            )
 
         db_assignment = ScenarioPromptDB(
             id=assignment_id,
@@ -1220,7 +1889,7 @@ class PromptTemplateService:
         await self.db.commit()
         await self.db.refresh(db_assignment)
 
-        return ScenarioPrompt.model_validate(db_assignment)
+        return await self._scenario_prompt_model(db_assignment)
 
     async def set_default_template(
         self,
@@ -1239,38 +1908,19 @@ class PromptTemplateService:
         Returns:
             True if successful, False if template not found
         """
-        from common.db.models import PromptTemplate as PromptTemplateDB
-
         now = datetime.now(UTC)
-
-        # First, unset existing defaults for this prompt type.
-        before_result = await self.db.execute(
-            select(PromptTemplateDB).where(
-                PromptTemplateDB.prompt_type == prompt_type.value
-            )
+        try:
+            template = await self._fetch_template_row_or_error(template_id)
+        except PromptTemplateServiceError as exc:
+            if exc.code == "[PROMPT_TEMPLATE_NOT_FOUND]":
+                return False
+            raise
+        self._assert_template_can_be_default(template, prompt_type=prompt_type.value)
+        before_defaults = await self._clear_defaults_for_prompt_type(
+            prompt_type=prompt_type.value,
+            keep_template_id=str(template_id),
+            now=now,
         )
-        before_defaults = [
-            self._template_snapshot(item)
-            for item in before_result.scalars().all()
-            if bool(getattr(item, "is_default", False))
-        ]
-        await self.db.execute(
-            update(PromptTemplateDB)
-            .where(
-                PromptTemplateDB.prompt_type == prompt_type.value,
-                PromptTemplateDB.is_default.is_(True),
-            )
-            .values(is_default=False, updated_at=now)
-        )
-
-        # Set new default
-        result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
-        )
-        template = result.scalar_one_or_none()
-
-        if not template:
-            return False
 
         self._set_orm_field(template, "is_default", True)
         self._set_orm_field(template, "updated_at", now)
@@ -1330,7 +1980,7 @@ class PromptTemplateService:
         result = await self.db.execute(query)
         assignments = result.scalars().all()
 
-        return [ScenarioPrompt.model_validate(a) for a in assignments]
+        return [await self._scenario_prompt_model(a) for a in assignments]
 
     async def get_scenario_prompt(
         self,
@@ -1352,7 +2002,7 @@ class PromptTemplateService:
         assignment = result.scalar_one_or_none()
 
         if assignment:
-            return ScenarioPrompt.model_validate(assignment)
+            return await self._scenario_prompt_model(assignment)
         return None
 
     async def delete_scenario_prompt(
@@ -1438,8 +2088,19 @@ class PromptTemplateService:
             "is_active": bool(assignment.is_active),
         }
         if is_active is not None:
+            if is_active:
+                await self._assert_no_duplicate_active_binding(
+                    scenario_type=str(assignment.scenario_type),
+                    scenario_id=assignment.scenario_id,
+                    prompt_type=str(assignment.prompt_type),
+                    exclude_assignment_id=str(assignment.id),
+                )
             self._set_orm_field(assignment, "is_active", is_active)
         if template_id is not None:
+            await self._validate_template_for_binding(
+                template_id=template_id,
+                prompt_type=str(assignment.prompt_type),
+            )
             self._set_orm_field(assignment, "template_id", str(template_id))
         self._queue_audit_log(
             action=f"{PROMPT_GOVERNANCE_AUDIT_ACTION}.update_scenario",
@@ -1459,7 +2120,7 @@ class PromptTemplateService:
         await self.db.commit()
         await self.db.refresh(assignment)
 
-        return ScenarioPrompt.model_validate(assignment)
+        return await self._scenario_prompt_model(assignment)
 
     def _assert_scenario_prompt_scope(
         self,

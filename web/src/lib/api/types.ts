@@ -362,6 +362,17 @@ export interface LearningChapter {
     updated_at: string;
 }
 
+export interface LearningContentRevisionState {
+    active_revision_id: string | null;
+    active_revision_no: number | null;
+    working_revision_id: string | null;
+    working_revision_no: number | null;
+    has_unpublished_revision: boolean;
+    edit_target: "draft_record" | "working_revision" | "archived_locked";
+    publish_label: string;
+    save_result_copy: string;
+}
+
 export interface LearningContent {
     learning_content_id: string;
     title: string;
@@ -376,6 +387,7 @@ export interface LearningContent {
     created_at: string;
     updated_at: string;
     chapters: LearningChapter[];
+    revision_state: LearningContentRevisionState;
 }
 
 export interface LearningContentListResponse {
@@ -2804,6 +2816,13 @@ export interface PromptTemplate {
     updated_at: string;
     governance_status?: "valid" | "needs_review" | string;
     governance_issues?: string[];
+    display_name?: string;
+    display_type?: string;
+    display_category?: string;
+    binding_count?: number;
+    is_runtime_effective?: boolean;
+    can_edit_directly?: boolean;
+    edit_block_reason?: string | null;
 }
 
 export interface PromptTemplateCreate {
@@ -2861,6 +2880,7 @@ export interface PromptTemplateGovernanceStatus {
     checked_count: number;
     active_invalid_count: number;
     invalid_active_count: number;
+    default_conflict_count?: number;
     issues: Array<{
         template_id: string;
         name?: string | null;
@@ -2881,14 +2901,6 @@ export interface PromptTemplateGovernanceRemediationResponse {
         reason: string;
         trace_id?: string | null;
     };
-}
-
-export interface PromptTemplateGovernanceRollbackResponse {
-    template: PromptTemplate | Record<string, unknown>;
-    governance_status: "valid" | "needs_review" | string;
-    governance_issues: PromptTemplateGovernanceIssue[];
-    audit_action: string;
-    message?: string;
 }
 
 export interface PromptTemplateOptions {
@@ -2917,6 +2929,52 @@ export interface PromptTemplateGovernanceRollbackResponse {
     audit_log_action: string;
 }
 
+export interface PromptTemplateImpactBinding {
+    id: string;
+    scenario_type: string;
+    scenario_id?: string | null;
+    prompt_type: string;
+    is_active: boolean;
+    display_scenario_type: string;
+    display_prompt_type: string;
+}
+
+export interface PromptTemplateImpactResponse {
+    template_id: string;
+    display_name: string;
+    prompt_type: string;
+    display_type: string;
+    category: string;
+    display_category: string;
+    is_active: boolean;
+    is_default: boolean;
+    is_system: boolean;
+    is_runtime_effective: boolean;
+    can_deactivate: boolean;
+    deactivate_block_reason?: string | null;
+    can_set_default: boolean;
+    set_default_block_reason?: string | null;
+    can_edit_directly: boolean;
+    edit_block_reason?: string | null;
+    binding_count: number;
+    bindings: PromptTemplateImpactBinding[];
+    runtime_consumers: string[];
+    recommended_next_steps: string[];
+}
+
+export interface PromptTemplateRepairDefaultsResponse {
+    dry_run: boolean;
+    checked: number;
+    repaired: number;
+    items: Array<Record<string, unknown>>;
+    audit_action?: string | null;
+}
+
+export interface PromptTemplateCloneRequest {
+    name?: string;
+    reason?: string;
+}
+
 export interface ScenarioPrompt {
     id: string;
     scenario_type: string;
@@ -2924,6 +2982,9 @@ export interface ScenarioPrompt {
     prompt_type: string;
     template_id: string;
     template?: PromptTemplate;
+    template_display_name?: string | null;
+    display_prompt_type?: string | null;
+    display_scenario_type?: string | null;
     is_active: boolean;
     created_at: string;
 }
@@ -4811,6 +4872,7 @@ export interface NewcomerPathModuleConfig {
     readonly retry_action_label: string | null;
     readonly review_action_label: string | null;
     readonly guidance_templates: Readonly<Record<string, string>>;
+    readonly learning_units?: readonly BusinessEtiquetteTrainingUnitConfig[];
 }
 
 export interface NewcomerArticleProgressResponse {
@@ -4819,6 +4881,372 @@ export interface NewcomerArticleProgressResponse {
     completed_chapter_ids: string[];
     total_chapters: number;
     is_completed: boolean;
+}
+
+export interface BusinessEtiquetteTrainingUnitConfig {
+    unit_key: string;
+    title: string;
+    description?: string | null;
+    order_index: number;
+    enabled: boolean;
+    source_chapter_orders: number[];
+    capability_keys: string[];
+    unlock_after_unit_keys: string[];
+    require_reading: boolean;
+    require_quiz: boolean;
+    require_ai_coach: boolean;
+    ai_coach_required_capability_keys?: string[];
+    ai_coach_pass_mastery_level_key?: string;
+    ai_coach_ready_mastery_level_key?: string;
+    ai_coach_max_remediation_attempts?: number;
+    ai_coach_manual_review_after_max_attempts?: boolean;
+    ai_coach_block_next_until_passed?: boolean;
+    ai_coach_remediation_chapter_orders?: number[];
+    quiz_question_count: number;
+    quiz_pass_threshold?: number | null;
+    quiz_allow_retake: boolean;
+    quiz_max_attempts?: number | null;
+    quiz_question_type_weights: Record<string, number>;
+    allow_skip_reading: boolean;
+    block_next_until_complete: boolean;
+    empty_state_message?: string | null;
+}
+
+export type BusinessEtiquetteCapabilityStatus = "draft" | "published" | "archived";
+
+export interface BusinessEtiquetteMasteryLevelConfig {
+    level_key: string;
+    display_name: string;
+    min_score: number;
+    description?: string | null;
+}
+
+export type BusinessEtiquetteEvidenceType =
+    | "quiz_question"
+    | "ai_coach_card"
+    | "coach_feedback"
+    | "reading_progress"
+    | "manual_review";
+
+export interface BusinessEtiquetteEvidenceRuleConfig {
+    evidence_type: BusinessEtiquetteEvidenceType;
+    weight: number;
+    required: boolean;
+    description?: string | null;
+}
+
+export interface BusinessEtiquetteCapabilityConfig {
+    capability_key: string;
+    display_name: string;
+    description?: string | null;
+    mastery_levels: BusinessEtiquetteMasteryLevelConfig[];
+    default_threshold: number;
+    evidence_rules: BusinessEtiquetteEvidenceRuleConfig[];
+    owner_scope: "business_etiquette_training_pack";
+    status: BusinessEtiquetteCapabilityStatus;
+}
+
+export interface BusinessEtiquetteChapterCapabilityBinding {
+    chapter_order: number;
+    capability_keys: string[];
+}
+
+export interface BusinessEtiquetteLearningChapter {
+    chapter_id: string;
+    title: string;
+    order_index: number;
+    completed: boolean;
+}
+
+export interface BusinessEtiquetteLearningUnitProgress {
+    completed_chapter_ids: string[];
+    total_chapters: number;
+    completed_chapters: number;
+    is_completed: boolean;
+}
+
+export interface BusinessEtiquetteLearningUnit extends BusinessEtiquetteTrainingUnitConfig {
+    capabilities: BusinessEtiquetteCapabilityConfig[];
+    chapters: BusinessEtiquetteLearningChapter[];
+    progress: BusinessEtiquetteLearningUnitProgress;
+}
+
+export interface BusinessEtiquetteLearningUnitsResponse {
+    module_key: string;
+    learning_content_id: string;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    units: BusinessEtiquetteLearningUnit[];
+}
+
+export interface BusinessEtiquetteQuizQuestion {
+    question_id: string;
+    title: string;
+    stem: string;
+    question_type: BusinessEtiquetteQuestionDraftType;
+    points: number;
+    order_index: number;
+    options: BusinessEtiquetteQuestionDraftOption[];
+    capability_keys: string[];
+    chapter_orders: number[];
+}
+
+export interface BusinessEtiquetteUnitQuiz {
+    training_pack_key: string;
+    learning_unit_key: string;
+    learning_unit_title: string;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    training_pack_revision_id: string | null;
+    training_pack_revision_no: number | null;
+    question_count: number;
+    pass_threshold: number | null;
+    allow_retake: boolean;
+    max_attempts: number | null;
+    capabilities: BusinessEtiquetteCapabilityConfig[];
+    questions: BusinessEtiquetteQuizQuestion[];
+}
+
+export interface BusinessEtiquetteQuizAnswerSubmit {
+    question_id: string;
+    answer_payload: unknown;
+}
+
+export interface BusinessEtiquetteUnitQuizAttemptCreateRequest {
+    answers: BusinessEtiquetteQuizAnswerSubmit[];
+}
+
+export interface BusinessEtiquetteCapabilityScore {
+    capability_key: string;
+    display_name: string;
+    score: number | null;
+    max_score: number;
+    normalized_score: number | null;
+    threshold: number;
+    mastered: boolean | null;
+    mastery_level_key: string | null;
+    mastery_level_name: string | null;
+}
+
+export type BusinessEtiquetteAiCoachProgressStatus =
+    | "not_started"
+    | "in_progress"
+    | "not_mastered"
+    | "mastered"
+    | "ready"
+    | "manual_review";
+
+export interface BusinessEtiquetteAiCoachProgress {
+    session_id: string;
+    module_key: string;
+    learning_unit_key: string;
+    learning_unit_title: string;
+    status: BusinessEtiquetteAiCoachProgressStatus;
+    passed: boolean;
+    ready_for_field: boolean;
+    manual_review_required: boolean;
+    block_next: boolean;
+    answered_card_count: number;
+    scored_card_count: number;
+    remediation_attempt_count: number;
+    max_remediation_attempts: number;
+    pass_mastery_level_key: string;
+    ready_mastery_level_key: string;
+    weak_capability_keys: string[];
+    recommended_chapter_orders: number[];
+    recommended_training_card_types: AiCoachTrainingCardTypeV1[];
+    next_step_code:
+        | "start_training"
+        | "continue_remediation"
+        | "manual_review"
+        | "mastered"
+        | "ready";
+    next_step: string;
+    capability_scores: BusinessEtiquetteCapabilityScore[];
+}
+
+export interface BusinessEtiquetteQuizAnswerResult {
+    question_id: string;
+    question_type: BusinessEtiquetteQuestionDraftType;
+    answer_payload: unknown;
+    is_correct: boolean | null;
+    score: number | null;
+    max_score: number;
+    capability_keys: string[];
+    question_snapshot: Record<string, unknown>;
+}
+
+export interface BusinessEtiquetteUnitQuizAttempt {
+    attempt_id: string;
+    training_pack_key: string;
+    learning_unit_key: string;
+    learning_unit_title: string;
+    user_id: string;
+    user_name: string | null;
+    user_department: string | null;
+    path_revision_id: string | null;
+    path_revision_no: number | null;
+    training_pack_revision_id: string | null;
+    training_pack_revision_no: number | null;
+    status: "submitted" | "scored" | "failed";
+    total_score: number | null;
+    max_score: number | null;
+    passed: boolean | null;
+    capability_scores: BusinessEtiquetteCapabilityScore[];
+    weak_capability_keys: string[];
+    recommended_chapter_orders: number[];
+    answers: BusinessEtiquetteQuizAnswerResult[];
+    submitted_at: string;
+}
+
+export interface BusinessEtiquetteUnitQuizAttemptListResponse {
+    items: BusinessEtiquetteUnitQuizAttempt[];
+    total: number;
+}
+
+export type BusinessEtiquetteReleaseStrategy =
+    | "future_learners_only"
+    | "allow_voluntary_switch"
+    | "assign_retraining";
+
+export interface BusinessEtiquetteReleaseConfig {
+    default_strategy: BusinessEtiquetteReleaseStrategy;
+    allow_voluntary_switch: boolean;
+    allow_assigned_retraining: boolean;
+    max_assigned_retraining_users: number;
+    notification_template: string;
+    large_change_chapter_threshold: number;
+    management_entry: string;
+}
+
+export interface BusinessEtiquetteReleaseImpactSummary {
+    changed_chapter_count: number;
+    impacted_learning_unit_count: number;
+    impacted_question_count: number;
+    impacted_question_draft_count: number;
+    impacted_capability_count: number;
+    impacted_ai_coach_config_count: number;
+    active_learner_count: number;
+    recommended_retraining_user_count: number;
+    is_large_change: boolean;
+}
+
+export interface BusinessEtiquetteReleaseChapterChange {
+    chapter_order: number;
+    title: string;
+    change_type: "added" | "removed" | "changed";
+    previous_content_hash: string | null;
+    target_content_hash: string | null;
+}
+
+export interface BusinessEtiquetteReleaseLearningUnitImpact {
+    unit_key: string;
+    title: string;
+    source_chapter_orders: number[];
+    capability_keys: string[];
+    impacted_chapter_orders: number[];
+    impacted_capability_keys: string[];
+    require_quiz: boolean;
+    require_ai_coach: boolean;
+}
+
+export interface BusinessEtiquetteReleaseQuestionImpact {
+    question_id: string;
+    draft_id: string;
+    title: string;
+    question_type: BusinessEtiquetteQuestionDraftType;
+    chapter_order: number;
+    capability_keys: string[];
+}
+
+export interface BusinessEtiquetteReleaseQuestionDraftImpact {
+    draft_id: string;
+    title: string;
+    question_type: BusinessEtiquetteQuestionDraftType;
+    status: BusinessEtiquetteQuestionDraftStatus;
+    chapter_order: number;
+    capability_keys: string[];
+}
+
+export interface BusinessEtiquetteReleaseCapabilityImpact {
+    capability_key: string;
+    display_name: string;
+    change_type: "added" | "removed" | "changed";
+    previous_status: BusinessEtiquetteCapabilityStatus | null;
+    target_status: BusinessEtiquetteCapabilityStatus | null;
+}
+
+export interface BusinessEtiquetteReleaseAiCoachConfigImpact {
+    unit_key: string;
+    title: string;
+    prompt_template_id: string | null;
+    scoring_prompt_template_id: string | null;
+    allowed_training_card_types: AiCoachTrainingCardTypeV1[];
+    affected_reason: string;
+}
+
+export interface BusinessEtiquetteReleaseLearnerImpact {
+    user_id: string;
+    user_name: string | null;
+    department: string | null;
+    source_record_types: Array<"quiz_attempt" | "ai_coach_session">;
+    latest_path_revision_no: number | null;
+    latest_training_pack_revision_no: number | null;
+    has_active_ai_coach_session: boolean;
+}
+
+export interface BusinessEtiquetteReleaseImpactResponse {
+    training_pack_key: string;
+    active_revision_id: string | null;
+    active_revision_no: number | null;
+    target_revision_id: string;
+    target_revision_no: number;
+    target_revision_status: "working" | "published" | "archived";
+    strategy_options: BusinessEtiquetteReleaseStrategy[];
+    config: BusinessEtiquetteReleaseConfig;
+    summary: BusinessEtiquetteReleaseImpactSummary;
+    chapter_changes: BusinessEtiquetteReleaseChapterChange[];
+    impacted_learning_units: BusinessEtiquetteReleaseLearningUnitImpact[];
+    impacted_questions: BusinessEtiquetteReleaseQuestionImpact[];
+    impacted_question_drafts: BusinessEtiquetteReleaseQuestionDraftImpact[];
+    impacted_capabilities: BusinessEtiquetteReleaseCapabilityImpact[];
+    impacted_ai_coach_configs: BusinessEtiquetteReleaseAiCoachConfigImpact[];
+    active_learners: BusinessEtiquetteReleaseLearnerImpact[];
+    recommended_retraining_user_ids: string[];
+}
+
+export interface BusinessEtiquetteReleasePublishRequest {
+    training_pack_key?: string | null;
+    strategy: BusinessEtiquetteReleaseStrategy;
+    assigned_user_ids?: string[];
+    reason: string;
+}
+
+export interface BusinessEtiquetteReleasePublishResponse {
+    training_pack_key: string;
+    active_revision_id: string;
+    active_revision_no: number;
+    previous_revision_id: string | null;
+    strategy: BusinessEtiquetteReleaseStrategy;
+    impact_summary: BusinessEtiquetteReleaseImpactSummary;
+    created_session_ids: string[];
+}
+
+export interface BusinessEtiquetteRetrainingStartResponse {
+    session_id: string;
+}
+
+export interface BusinessEtiquetteRetrainingAssignmentRequest {
+    training_pack_key?: string | null;
+    user_ids: string[];
+    reason: string;
+}
+
+export interface BusinessEtiquetteRetrainingAssignmentResponse {
+    training_pack_key: string;
+    assigned_user_ids: string[];
+    created_session_ids: string[];
+    reason: string;
 }
 
 export interface NewcomerPathConfigPayload {
@@ -4914,6 +5342,40 @@ export interface NewcomerArticleBindingUpdateRequest {
     learning_content_id: string;
     path_key?: string;
     reason?: string;
+}
+
+export interface LearningContentBindingUnitImpact {
+    unit_key: string;
+    title: string;
+    source_chapter_orders: number[];
+    ai_coach_remediation_chapter_orders: number[];
+    capability_keys: string[];
+    require_quiz: boolean;
+    require_ai_coach: boolean;
+}
+
+export interface LearningContentPathBindingImpact {
+    source: "active_revision" | "working_revision";
+    path_key: string;
+    module_key: string;
+    module_title: string;
+    revision_id: string;
+    revision_no: number;
+    learner_effective: boolean;
+    learning_units: LearningContentBindingUnitImpact[];
+    impacted_chapter_orders: number[];
+}
+
+export interface LearningContentBindingImpactResponse {
+    learning_content_id: string;
+    active_bindings: LearningContentPathBindingImpact[];
+    working_bindings: LearningContentPathBindingImpact[];
+    has_active_binding: boolean;
+    has_working_binding: boolean;
+    is_bound_to_business_skills: boolean;
+    can_archive: boolean;
+    archive_block_reason: string | null;
+    management_entries: Record<string, string>;
 }
 
 export interface NewcomerExamPaperQuestion {
@@ -5230,6 +5692,188 @@ export interface SalesTrainerMaterialVersionUploadRequest {
     title: string;
     file: File;
     release_notes?: string | null;
+}
+
+export interface BusinessEtiquetteKnowledgePoint {
+    title: string;
+    order_index: number;
+    line_number: number;
+}
+
+export interface BusinessEtiquetteMicroChapter {
+    title: string;
+    order_index: number;
+    line_number: number;
+    knowledge_points: BusinessEtiquetteKnowledgePoint[];
+}
+
+export interface BusinessEtiquetteImportedChapter {
+    title: string;
+    order_index: number;
+    line_number: number;
+    content_hash: string;
+    micro_chapters: BusinessEtiquetteMicroChapter[];
+}
+
+export interface BusinessEtiquetteImportRequest {
+    file: File;
+    training_pack_key?: string;
+    allow_overwrite_draft?: boolean;
+    reason?: string | null;
+}
+
+export interface BusinessEtiquetteImportResponse {
+    training_pack_key: string;
+    learning_content_id: string;
+    learning_content_status: "draft";
+    working_revision_id: string;
+    working_revision_no: number;
+    active_revision_id: string | null;
+    active_revision_no: number | null;
+    has_unpublished_revision: boolean;
+    source_filename: string;
+    content_type: string | null;
+    file_size_bytes: number;
+    content_hash: string;
+    imported_at: string;
+    allow_overwrite_draft: boolean;
+    ai_suggestions_enabled: boolean;
+    book_title: string;
+    original_chapter_count: number;
+    micro_chapter_count: number;
+    knowledge_point_count: number;
+    chapters: BusinessEtiquetteImportedChapter[];
+}
+
+export interface BusinessEtiquetteCapabilitySnapshotSaveRequest {
+    training_pack_key?: string | null;
+    capabilities: BusinessEtiquetteCapabilityConfig[];
+    chapter_bindings: BusinessEtiquetteChapterCapabilityBinding[];
+    reason?: string | null;
+}
+
+export interface BusinessEtiquetteCapabilityActionRequest {
+    training_pack_key?: string | null;
+    reason?: string | null;
+}
+
+export interface BusinessEtiquetteCapabilitySnapshotResponse {
+    training_pack_key: string;
+    source: "working_revision" | "active_revision" | "default_seed";
+    working_revision_id: string | null;
+    working_revision_no: number | null;
+    active_revision_id: string | null;
+    active_revision_no: number | null;
+    has_unpublished_revision: boolean;
+    schema_version: number;
+    capabilities: BusinessEtiquetteCapabilityConfig[];
+    chapter_bindings: BusinessEtiquetteChapterCapabilityBinding[];
+    original_chapter_count: number | null;
+    needs_save: boolean;
+    management_entry: string;
+    permission: string;
+    effective_timing: string;
+}
+
+export type BusinessEtiquetteQuestionDraftType =
+    | "single_choice"
+    | "multiple_choice"
+    | "short_answer";
+
+export type BusinessEtiquetteQuestionDraftStatus =
+    | "pending_review"
+    | "approved"
+    | "rejected"
+    | "converted";
+
+export interface BusinessEtiquetteQuestionDraftOption {
+    value: string;
+    label: string;
+}
+
+export interface BusinessEtiquetteQuestionDraftGenerateRequest {
+    training_pack_key?: string | null;
+    chapter_order: number;
+    prompt_template_id: string;
+    question_types: BusinessEtiquetteQuestionDraftType[];
+    draft_count?: number;
+    capability_keys?: string[];
+    model_config?: Record<string, unknown>;
+    reason?: string | null;
+}
+
+export interface BusinessEtiquetteQuestionDraftUpdateRequest {
+    title?: string;
+    stem?: string;
+    question_type?: BusinessEtiquetteQuestionDraftType;
+    options?: BusinessEtiquetteQuestionDraftOption[];
+    correct_answer?: string | null;
+    correct_answers?: string[];
+    reference_answer?: string | null;
+    explanation?: string | null;
+    difficulty?: "easy" | "medium" | "hard";
+    capability_keys?: string[];
+    source_excerpt?: string | null;
+    review_notes?: string | null;
+}
+
+export interface BusinessEtiquetteQuestionDraftApproveRequest {
+    category_id: string;
+    review_notes?: string | null;
+}
+
+export interface BusinessEtiquetteQuestionDraftRejectRequest {
+    review_notes: string;
+}
+
+export interface BusinessEtiquetteQuestionDraft {
+    draft_id: string;
+    batch_id: string;
+    training_pack_key: string;
+    training_pack_revision_id: string | null;
+    training_pack_revision_no: number | null;
+    learning_content_id: string | null;
+    chapter_id: string | null;
+    chapter_order: number;
+    chapter_title?: string | null;
+    source_excerpt: string | null;
+    question_type: BusinessEtiquetteQuestionDraftType;
+    title: string;
+    stem: string;
+    options: BusinessEtiquetteQuestionDraftOption[];
+    correct_answer: string | null;
+    correct_answers: string[];
+    reference_answer: string | null;
+    explanation: string | null;
+    difficulty: "easy" | "medium" | "hard";
+    capability_keys: string[];
+    status: BusinessEtiquetteQuestionDraftStatus;
+    prompt_template_id: string;
+    prompt_template_name: string | null;
+    prompt_contract_hash: string;
+    prompt_contract_version: string;
+    prompt_rendered_hash: string;
+    model_config: Record<string, unknown>;
+    raw_generation: Record<string, unknown>;
+    review_notes: string | null;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+    question_id: string | null;
+    created_by: string | null;
+    updated_by: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface BusinessEtiquetteQuestionDraftGenerateResponse {
+    batch_id: string;
+    items: BusinessEtiquetteQuestionDraft[];
+    total: number;
+}
+
+export interface BusinessEtiquetteQuestionDraftListResponse {
+    items: BusinessEtiquetteQuestionDraft[];
+    total: number;
 }
 
 export interface SalesTrainerUnitBriefMaterial {
@@ -5814,6 +6458,11 @@ export type AiCoachInteractionTypeV1 =
     | "multiple_choice"
     | "short_answer";
 
+export type AiCoachTrainingCardTypeV1 =
+    | "scenario_judgment"
+    | "expression_rewrite"
+    | "role_response";
+
 export interface AiCoachInteractionOptionV1 {
     readonly option_id: string;
     readonly text: string;
@@ -5824,6 +6473,7 @@ export interface AiCoachInteractionPublicV1 {
     readonly interaction_id: string;
     readonly session_id: string;
     readonly turn_number: number;
+    readonly training_card_type?: AiCoachTrainingCardTypeV1;
     readonly interaction_type: AiCoachInteractionTypeV1;
     readonly stem: string;
     readonly options?: readonly AiCoachInteractionOptionV1[] | null;
@@ -5833,6 +6483,8 @@ export interface AiCoachInteractionPublicV1 {
         readonly min_length?: number;
         readonly max_length?: number;
     };
+    readonly capability_keys?: readonly string[];
+    readonly source_chapter_orders?: readonly number[];
 }
 
 export type AiCoachScoreFeedbackStateV1 = "pending" | "scored" | "failed";
@@ -5858,6 +6510,13 @@ export interface AiCoachScoreResultV1 {
     readonly mastery_threshold?: number | null;
     readonly mastered?: boolean | null;
     readonly feedback: string;
+    readonly structured_feedback?: {
+        readonly did_well: readonly string[];
+        readonly main_issue: string;
+        readonly why_inappropriate: string;
+        readonly suggested_response: string;
+        readonly next_step: string;
+    } | null;
     readonly missed_points: readonly string[];
     readonly next_turn_available: boolean;
     readonly finished: boolean;
@@ -5917,6 +6576,7 @@ export interface AiCoachAdminConfigLike {
     generation_timeout_seconds: number;
     coach_mode: string;
     allowed_interaction_types: string[];
+    allowed_training_card_types: string[];
     allowed_ui_event_types: string[];
     max_cards_per_message: number;
     proactive_coaching_enabled: boolean;
@@ -6047,6 +6707,7 @@ export interface AiCoachCoachStatePublicV1 {
     readonly last_action: AiCoachNextActionV1 | null;
     readonly can_auto_advance: boolean;
     readonly stopped_reason: string | null;
+    readonly business_etiquette_progress?: BusinessEtiquetteAiCoachProgress | null;
 }
 
 export interface AiCoachQuizCardPayloadPublicV1 {

@@ -216,6 +216,74 @@ export interface SalesTrainerPhase2Policy {
 
 Display pages may format missing values as `"--"`, but they must not substitute business defaults locally. Defaults belong to backend business-rule validators/resolvers and are surfaced through the API.
 
+### Scenario: Prompt Governance Admin Payloads
+
+#### 1. Scope / Trigger
+
+- Trigger: adding prompt-template governance fields, impact previews, clone flows, default repair, or scenario binding UI.
+- Scope: `web/src/lib/api/types.ts`, `web/src/lib/api/client.ts`, `/admin/prompts*`, and prompt binding components.
+
+#### 2. Signatures
+
+Frontend API facade methods:
+
+```ts
+api.getPromptTemplateImpact(templateId: string): Promise<PromptTemplateImpactResponse>;
+api.repairPromptTemplateDefaults(params?: { dry_run?: boolean }): Promise<PromptTemplateRepairDefaultsResponse>;
+api.clonePromptTemplate(templateId: string, payload: PromptTemplateCloneRequest): Promise<PromptTemplate>;
+```
+
+#### 3. Contracts
+
+- API DTOs stay snake_case and live in `lib/api/types.ts`; pages must not declare local prompt DTOs.
+- List and detail pages display `display_name`, `display_type`, and `display_category`; raw enum keys are advanced/debug context only.
+- System templates are rendered read-only. The primary action is `复制为自定义模板`, not inline edit.
+- Governance repair must be a two-step action: dry-run preview first, formal repair second.
+- Scenario binding UI filters candidate templates by `prompt_type`, previews current effective template and after-save template, and explains fallback to default after deleting a binding.
+
+#### 4. Validation & Error Matrix
+
+| Condition | Expected UI behavior |
+|---|---|
+| `can_edit_directly=false` | Hide save form and show copy action with `edit_block_reason` |
+| `can_deactivate=false` from impact | Disable stop action and show block reason |
+| Default conflict count > 0 | Show governance repair entry, not a silent warning only |
+| `repairDefaults(dry_run=true)` returns items | Show preview count and require explicit execute click |
+| Scenario binding type mismatch error | Show backend message; keep user in wizard with selected business domain/type |
+
+#### 5. Good/Base/Bad Cases
+
+- Good: operator sees Chinese template names, opens impact, understands whether a template is default/bound/runtime-effective, then clones before editing a system template.
+- Base: no scenario bindings exist; page shows “未配置场景绑定”，not an empty technical table.
+- Bad: page asks an operator to paste a `PromptTemplate` UUID or shows raw `fuzzy_detection` as the primary label.
+
+#### 6. Tests Required
+
+- Page test: prompt list renders Chinese display fields and governance stats.
+- Page test: repair flow calls dry-run before formal execution.
+- Detail test: system template route is read-only and clone action calls `clonePromptTemplate`.
+- Binding component test: selected prompt type filters templates and delete copy mentions fallback default.
+
+#### 7. Wrong vs Correct
+
+##### Wrong
+
+```tsx
+<td>{template.prompt_type}</td>
+<button onClick={() => api.updatePromptTemplate(template.id, { template })}>保存</button>
+```
+
+##### Correct
+
+```tsx
+<td>{template.display_type}</td>
+{template.can_edit_directly ? (
+  <Link href={`/admin/prompts/${template.id}/edit`}>编辑</Link>
+) : (
+  <button onClick={() => cloneTemplate(template.id)}>复制为自定义模板</button>
+)}
+```
+
 ---
 
 ## Anti-Patterns

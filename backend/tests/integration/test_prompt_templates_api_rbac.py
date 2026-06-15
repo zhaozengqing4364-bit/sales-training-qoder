@@ -432,3 +432,126 @@ class TestPromptTemplateGovernance:
         assert invalid.variables == {"score": "number"}
         assert invalid.is_active is False
         assert invalid.is_default is False
+
+    async def test_repair_defaults_dry_run_then_apply_repairs_variables(
+        self, async_client, auth_headers, db_session
+    ):
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        invalid = PromptTemplateDB(
+            id="123e4567-e89b-12d3-a456-426614174010",
+            name="legacy variables object",
+            prompt_type="realtime_scoring",
+            category="sales",
+            template="Score {{ score }}",
+            variables={"score": "number"},
+            is_active=True,
+            is_default=False,
+            is_system=False,
+        )
+        db_session.add(invalid)
+        await db_session.commit()
+
+        dry_run_response = await async_client.post(
+            "/api/v1/prompt-templates/governance/repair-defaults",
+            headers=auth_headers["admin"],
+            json={"reason": "preview repair", "dry_run": True},
+        )
+        assert dry_run_response.status_code == 200
+        dry_run_body = dry_run_response.json()
+        assert dry_run_body["dry_run"] is True
+        assert dry_run_body["repaired"] == 1
+        await db_session.refresh(invalid)
+        assert invalid.variables == {"score": "number"}
+
+        apply_response = await async_client.post(
+            "/api/v1/prompt-templates/governance/repair-defaults",
+            headers=auth_headers["admin"],
+            json={"reason": "apply repair", "dry_run": False},
+        )
+        assert apply_response.status_code == 200
+        await db_session.refresh(invalid)
+        assert invalid.variables == ["score"]
+
+    async def test_system_template_update_rejected_and_clone_succeeds(
+        self, async_client, auth_headers, db_session
+    ):
+        from common.db.models import PromptTemplate as PromptTemplateDB
+
+        system_template = PromptTemplateDB(
+            id="123e4567-e89b-12d3-a456-426614174011",
+            name="System Template",
+            prompt_type="summary",
+            category="sales",
+            template="Summary {{ transcript }}",
+            variables=["transcript"],
+            is_active=True,
+            is_default=False,
+            is_system=True,
+        )
+        db_session.add(system_template)
+        await db_session.commit()
+
+        update_response = await async_client.put(
+            f"/api/v1/prompt-templates/{system_template.id}",
+            headers=auth_headers["admin"],
+            json={"template": "Changed {{ transcript }}"},
+        )
+        assert update_response.status_code == 409
+        assert update_response.json()["error"] == "[PROMPT_TEMPLATE_SYSTEM_LOCKED]"
+
+        clone_response = await async_client.post(
+            f"/api/v1/prompt-templates/{system_template.id}/clone",
+            headers=auth_headers["admin"],
+            json={"name": "自定义总结模板", "reason": "customize system prompt"},
+        )
+        assert clone_response.status_code == 201
+        clone_body = clone_response.json()
+        assert clone_body["name"] == "自定义总结模板"
+        assert clone_body["is_system"] is False
+        assert clone_body["is_default"] is False
+
+    async def test_bound_template_cannot_be_deactivated_and_impact_lists_binding(
+        self, async_client, auth_headers
+    ):
+        template = await _create_template(async_client, auth_headers["admin"])
+        update_response = await async_client.put(
+            f"/api/v1/prompt-templates/{template['id']}",
+            headers=auth_headers["admin"],
+            json={
+                "prompt_type": "report",
+                "category": "sales",
+                "template": "Report {{ transcript }}",
+                "variables": ["transcript"],
+            },
+        )
+        assert update_response.status_code == 200
+
+        binding_response = await async_client.post(
+            "/api/v1/scenario-prompts",
+            headers=auth_headers["admin"],
+            json={
+                "scenario_type": "sales",
+                "prompt_type": "report",
+                "template_id": template["id"],
+                "is_active": True,
+            },
+        )
+        assert binding_response.status_code == 201
+
+        impact_response = await async_client.get(
+            f"/api/v1/prompt-templates/{template['id']}/impact",
+            headers=auth_headers["admin"],
+        )
+        assert impact_response.status_code == 200
+        impact_body = impact_response.json()
+        assert impact_body["binding_count"] == 1
+        assert impact_body["can_deactivate"] is False
+        assert impact_body["bindings"][0]["display_scenario_type"] == "销售训练"
+
+        delete_response = await async_client.delete(
+            f"/api/v1/prompt-templates/{template['id']}",
+            headers=auth_headers["admin"],
+        )
+        assert delete_response.status_code == 409
+        assert delete_response.json()["error"] == "[PROMPT_TEMPLATE_IN_USE]"

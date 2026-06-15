@@ -11,29 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import { PromptTemplateOptions, PromptType } from "@/lib/api/types";
-
-const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
-  summary: "总结",
-  system: "系统",
-  system_prompt: "系统提示词",
-  extraction: "信息提取",
-  scoring: "评分",
-  realtime_scoring: "实时评分",
-  stage: "阶段",
-  fuzzy_detection: "模糊检测",
-  interruption: "打断检测",
-  tracking: "跟踪",
-  welcome: "欢迎词",
-  evaluation: "实时评价",
-  report: "综合报告",
-};
+import { formatCategoryLabel, formatPromptType, PROMPT_TYPE_LABELS } from "@/components/admin/prompts/prompt-labels";
 
 const PROMPT_CATEGORY_OPTIONS = [
     { value: "common", label: "通用" },
     { value: "sales", label: "销售训练" },
+    { value: "sales_bot", label: "销售实时对练" },
+    { value: "sales_trainer_ai_coach", label: "新人训练 AI 教练" },
     { value: "presentation", label: "PPT 演练" },
+    { value: "system", label: "系统报告" },
 ] as const;
 
 export default function NewPromptTemplatePage() {
@@ -101,7 +89,7 @@ export default function NewPromptTemplatePage() {
             });
             router.push("/admin/prompts");
         } catch (err) {
-            setError(err instanceof Error ? err.message : "创建失败");
+            setError(getApiErrorMessage(err));
             setSaving(false);
         }
     };
@@ -159,7 +147,7 @@ export default function NewPromptTemplatePage() {
                             >
                                 {selectablePromptTypes.map(([type, label]) => (
                                     <option key={type} value={type}>
-                                        {label}
+                                        {formatPromptType(type, label)}
                                     </option>
                                 ))}
                             </select>
@@ -186,13 +174,14 @@ export default function NewPromptTemplatePage() {
                                     setCategory(nextCategory);
                                 }}
                                 className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                                placeholder="例如：common、sales、presentation，或输入自定义分类"
+                                placeholder="选择或输入分类"
                             />
                             <datalist id="prompt-category-options">
                                 {PROMPT_CATEGORY_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                 ))}
                             </datalist>
+                            <p className="mt-1 text-xs text-zinc-500">{formatCategoryLabel(category)}</p>
                             {normalizedCategory === "sales" && (
                                 <p className="mt-1 text-xs text-amber-600">
                                     销售场景仅允许评估/报告相关模板类型。

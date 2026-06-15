@@ -21,6 +21,20 @@ from prompt_templates.models import (
 from prompt_templates.service import PromptTemplateService
 
 
+def _query_result(
+    *,
+    scalar=None,
+    scalars: list | None = None,
+    rows: list | None = None,
+) -> MagicMock:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = scalar
+    result.scalars.return_value.first.return_value = scalar
+    result.scalars.return_value.all.return_value = scalars if scalars is not None else ([] if scalar is None else [scalar])
+    result.all.return_value = rows or []
+    return result
+
+
 class TestPromptTemplateService:
     """Test the PromptTemplateService class"""
 
@@ -78,8 +92,7 @@ class TestPromptTemplateService:
     async def test_get_template_found(self, service, mock_db, sample_template_db):
         """Test getting an existing template"""
         # Setup mock result
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_template_db
+        mock_result = _query_result(scalar=sample_template_db)
         mock_db.execute.return_value = mock_result
 
         template_id = sample_template_db.id
@@ -92,8 +105,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_get_template_not_found(self, service, mock_db):
         """Test getting a non-existent template"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
+        mock_result = _query_result(scalar=None)
         mock_db.execute.return_value = mock_result
 
         result = await service.get_template(uuid4())
@@ -103,8 +115,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_update_template_success(self, service, mock_db, sample_template_db):
         """Test updating an existing template"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_template_db
+        mock_result = _query_result(scalar=sample_template_db)
         mock_db.execute.return_value = mock_result
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
@@ -120,8 +131,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_update_template_not_found(self, service, mock_db):
         """Test updating a non-existent template"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
+        mock_result = _query_result(scalar=None)
         mock_db.execute.return_value = mock_result
 
         update_data = PromptTemplateUpdate(name="Updated Name")
@@ -132,8 +142,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_delete_template_success(self, service, mock_db, sample_template_db):
         """Test deleting (soft delete) a template"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_template_db
+        mock_result = _query_result(scalar=sample_template_db)
         mock_db.execute.return_value = mock_result
         mock_db.commit = AsyncMock()
 
@@ -146,8 +155,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_delete_template_not_found(self, service, mock_db):
         """Test deleting a non-existent template"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
+        mock_result = _query_result(scalar=None)
         mock_db.execute.return_value = mock_result
 
         result = await service.delete_template(uuid4())
@@ -157,8 +165,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_list_templates(self, service, mock_db, sample_template_db):
         """Test listing templates"""
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [sample_template_db]
+        mock_result = _query_result(scalars=[sample_template_db])
         mock_db.execute.return_value = mock_result
 
         results = await service.list_templates()
@@ -169,8 +176,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_list_templates_with_filter(self, service, mock_db, sample_template_db):
         """Test listing templates with type filter"""
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [sample_template_db]
+        mock_result = _query_result(scalars=[sample_template_db])
         mock_db.execute.return_value = mock_result
 
         results = await service.list_templates(prompt_type=PromptType.SUMMARY)
@@ -181,8 +187,7 @@ class TestPromptTemplateService:
     async def test_render_prompt(self, service, mock_db, sample_template_db):
         """Test rendering a prompt template"""
         # Setup for get_template
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_template_db
+        mock_result = _query_result(scalar=sample_template_db)
         mock_db.execute.return_value = mock_result
 
         request = PromptRenderRequest(
@@ -198,8 +203,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_render_prompt_not_found(self, service, mock_db):
         """Test rendering a non-existent template"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
+        mock_result = _query_result(scalar=None)
         mock_db.execute.return_value = mock_result
 
         request = PromptRenderRequest(
@@ -217,12 +221,28 @@ class TestPromptTemplateService:
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
-
         data = ScenarioPromptCreate(
             scenario_type="sales",
             prompt_type="report",
             template_id=uuid4(),
         )
+        template = MagicMock()
+        template.id = data.template_id
+        template.name = "Report Template"
+        template.prompt_type = "report"
+        template.category = "sales"
+        template.template = "Report {{ text }}"
+        template.variables = ["text"]
+        template.is_active = True
+        template.is_default = False
+        template.is_system = False
+        template.created_at = datetime.now(UTC)
+        template.updated_at = datetime.now(UTC)
+        mock_db.execute.side_effect = [
+            _query_result(scalar=template),
+            _query_result(scalar=None),
+            _query_result(scalar=template.name),
+        ]
 
         with patch("prompt_templates.service.uuid4", return_value=UUID("12345678-1234-1234-1234-123456789012")):
             result = await service.assign_template_to_scenario(data)
@@ -234,8 +254,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_set_default_template_success(self, service, mock_db, sample_template_db):
         """Test setting a template as default"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_template_db
+        mock_result = _query_result(scalar=sample_template_db)
         mock_db.execute.return_value = mock_result
         mock_db.commit = AsyncMock()
 
@@ -250,8 +269,7 @@ class TestPromptTemplateService:
     @pytest.mark.asyncio
     async def test_set_default_template_not_found(self, service, mock_db):
         """Test setting default for non-existent template"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
+        mock_result = _query_result(scalar=None)
         mock_db.execute.return_value = mock_result
 
         result = await service.set_default_template(uuid4(), PromptType.SUMMARY)
@@ -289,8 +307,7 @@ class TestGetTemplateForScenario:
     @pytest.mark.asyncio
     async def test_scenario_specific_match(self, service, mock_db, sample_template):
         """Test finding scenario-specific template"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_template
+        mock_result = _query_result(scalar=sample_template)
         mock_db.execute.return_value = mock_result
 
         result = await service.get_template_for_scenario(
@@ -307,8 +324,9 @@ class TestGetTemplateForScenario:
         """Test fallback to scenario-type default"""
         # First query returns None, second returns template
         mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # Specific
-            MagicMock(scalar_one_or_none=MagicMock(return_value=sample_template)),  # Type
+            _query_result(scalar=None),  # Specific
+            _query_result(scalar=sample_template),  # Type
+            _query_result(rows=[]),  # Binding count enrichment
         ]
         mock_db.execute.side_effect = mock_results
 
@@ -318,13 +336,12 @@ class TestGetTemplateForScenario:
         )
 
         assert result is not None
-        assert mock_db.execute.call_count == 2
+        assert mock_db.execute.call_count == 3
 
     @pytest.mark.asyncio
     async def test_fallback_to_global_default(self, service, mock_db, sample_template):
         """Test fallback to global default"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_template
+        mock_result = _query_result(scalar=sample_template)
         mock_db.execute.return_value = mock_result
 
         result = await service.get_template_for_scenario(
@@ -332,13 +349,12 @@ class TestGetTemplateForScenario:
         )
 
         assert result is not None
-        assert mock_db.execute.call_count == 1
+        assert mock_db.execute.call_count == 2
 
     @pytest.mark.asyncio
     async def test_no_match_found(self, service, mock_db):
         """Test when no template matches"""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
+        mock_result = _query_result(scalar=None)
         mock_db.execute.return_value = mock_result
 
         result = await service.get_template_for_scenario(

@@ -64,8 +64,11 @@ import {
     PromptTemplateGovernanceRemediationResponse,
     PromptTemplateGovernanceRollbackResponse,
     PromptTemplateGovernanceStatus,
+    PromptTemplateImpactResponse,
     PromptTemplateOptions,
     PromptTemplateQuarantineResult,
+    PromptTemplateRepairDefaultsResponse,
+    PromptTemplateCloneRequest,
     ScenarioPrompt,
     ScenarioPromptCreate,
     PromptRenderRequest,
@@ -4453,6 +4456,11 @@ export const api = {
             return apiFetch<PromptTemplate>(`/prompt-templates/${normalizedId}`);
         },
 
+        getPromptTemplateImpact: async (id: string) => {
+            const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
+            return apiFetch<PromptTemplateImpactResponse>(`/prompt-templates/${normalizedId}/impact`);
+        },
+
         getPromptTemplateGovernanceStatus: async () => {
             return apiFetch<PromptTemplateGovernanceStatus>("/prompt-templates/governance/status");
         },
@@ -4494,9 +4502,24 @@ export const api = {
             });
         },
 
+        repairPromptTemplateDefaults: async (data: { reason: string; dry_run?: boolean }) => {
+            return apiFetch<PromptTemplateRepairDefaultsResponse>("/prompt-templates/governance/repair-defaults", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
         rollbackPromptTemplateGovernance: async (id: string, data: { reason: string }) => {
             const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
             return apiFetch<PromptTemplateGovernanceRollbackResponse>(`/prompt-templates/governance/${normalizedId}/rollback`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        clonePromptTemplate: async (id: string, data: PromptTemplateCloneRequest) => {
+            const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
+            return apiFetch<PromptTemplate>(`/prompt-templates/${normalizedId}/clone`, {
                 method: "POST",
                 body: JSON.stringify(data),
             });

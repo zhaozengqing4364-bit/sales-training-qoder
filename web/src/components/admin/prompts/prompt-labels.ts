@@ -26,14 +26,45 @@ export function formatGovernanceIssue(issue: string): string {
         case "prompt_type_not_allowed":
         case "invalid_prompt_type": return "提示词类型不在允许列表";
         case "empty_template": return "模板内容为空";
+        case "multiple_default_templates": return "同一用途存在多个默认模板";
         default: return issue;
     }
 }
 
 export function formatCategoryLabel(category: string): string {
     switch (category) {
+        case "common": return "通用";
         case "sales": return "销售训练";
+        case "sales_bot": return "销售实时对练";
+        case "sales_trainer_ai_coach": return "新人训练 AI 教练";
         case "presentation": return "PPT 演练";
+        case "system": return "系统报告";
         default: return category;
     }
+}
+
+export function formatTemplateName(name: string, displayName?: string | null): string {
+    if (displayName) return displayName;
+    switch (name) {
+        case "Sales Conversation Summary": return "销售对话总结";
+        case "Default Sales Persona": return "默认销售客户人格";
+        case "PPT Point Extraction": return "PPT 要点提取";
+        case "Interruption Feedback - Vague": return "PPT 模糊表达打断反馈";
+        case "Interruption Detection Rules": return "PPT 打断判断规则";
+        case "Point Tracking Configuration": return "PPT 要点跟踪配置";
+        case "Fuzzy Detection - Uncertain": return "销售不确定表达检测";
+        case "Fuzzy Detection - Filler": return "销售填充词检测";
+        case "Fuzzy Detection - Vague Number": return "销售模糊数字检测";
+        case "Realtime Scoring Rules": return "销售实时评分规则";
+        case "Sales Stage Definition": return "销售阶段定义";
+        case "Welcome Message 1": return "销售欢迎话术 1";
+        case "Welcome Message 2": return "销售欢迎话术 2";
+        case "Welcome Message 3": return "销售欢迎话术 3";
+        default: return name;
+    }
+}
+
+export function formatPromptType(type: string, displayType?: string | null): string {
+    if (displayType) return displayType;
+    return PROMPT_TYPE_LABELS[type as PromptType] || type;
 }

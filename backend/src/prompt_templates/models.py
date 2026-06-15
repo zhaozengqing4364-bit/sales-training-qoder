@@ -44,6 +44,63 @@ class PromptType(str, Enum):
 
 ALLOWED_PROMPT_TYPE_VALUES = tuple(item.value for item in PromptType)
 
+PROMPT_TYPE_DISPLAY_LABELS: dict[str, str] = {
+    "summary": "销售对话总结",
+    "system": "系统指令",
+    "system_prompt": "系统提示词",
+    "extraction": "信息提取",
+    "scoring": "评分规则",
+    "realtime_scoring": "实时评分",
+    "stage": "阶段判断",
+    "fuzzy_detection": "模糊检测",
+    "interruption": "打断判断",
+    "tracking": "要点跟踪",
+    "welcome": "欢迎话术",
+    "evaluation": "实时评价",
+    "report": "综合报告",
+}
+
+PROMPT_CATEGORY_DISPLAY_LABELS: dict[str, str] = {
+    "common": "通用",
+    "presentation": "PPT 演练",
+    "sales": "销售训练",
+    "sales_bot": "销售实时对练",
+    "sales_trainer_ai_coach": "新人训练 AI 教练",
+    "system": "系统报告",
+}
+
+PROMPT_TEMPLATE_DISPLAY_NAMES: dict[str, str] = {
+    "Sales Conversation Summary": "销售对话总结",
+    "Default Sales Persona": "默认销售客户人格",
+    "PPT Point Extraction": "PPT 要点提取",
+    "Interruption Feedback - Vague": "PPT 模糊表达打断反馈",
+    "Interruption Detection Rules": "PPT 打断判断规则",
+    "Point Tracking Configuration": "PPT 要点跟踪配置",
+    "Fuzzy Detection - Uncertain": "销售不确定表达检测",
+    "Fuzzy Detection - Filler": "销售填充词检测",
+    "Fuzzy Detection - Vague Number": "销售模糊数字检测",
+    "Realtime Scoring Rules": "销售实时评分规则",
+    "Sales Stage Definition": "销售阶段定义",
+    "Welcome Message 1": "销售欢迎话术 1",
+    "Welcome Message 2": "销售欢迎话术 2",
+    "Welcome Message 3": "销售欢迎话术 3",
+}
+
+
+def prompt_type_display_label(value: str | PromptType) -> str:
+    raw = value.value if isinstance(value, PromptType) else str(value)
+    return PROMPT_TYPE_DISPLAY_LABELS.get(raw, raw)
+
+
+def prompt_category_display_label(value: str) -> str:
+    raw = str(value or "").strip()
+    return PROMPT_CATEGORY_DISPLAY_LABELS.get(raw, raw or "未分类")
+
+
+def prompt_template_display_name(value: str) -> str:
+    raw = str(value or "").strip()
+    return PROMPT_TEMPLATE_DISPLAY_NAMES.get(raw, raw)
+
 
 def _normalize_variable_list(value: Any, *, allow_json_string: bool) -> list[str]:
     """Normalize prompt variable metadata to a de-duplicated list[str].
@@ -127,6 +184,7 @@ class PromptTemplateGovernanceStatus(BaseModel):
     checked_count: int = 0
     active_invalid_count: int = 0
     invalid_active_count: int = 0
+    default_conflict_count: int = 0
     issues: list[dict[str, Any]] = Field(default_factory=list)
     rollback_policy: str = "restore from SystemLog before snapshot"
     audit_log_action: str = "prompt_template.governance.remediate_invalid"
@@ -306,11 +364,38 @@ class PromptTemplate(PromptTemplateBase):
         description="valid or needs_review for historical rows requiring governance action",
     )
     governance_issues: list[str] = Field(default_factory=list)
+    display_name: str = ""
+    display_type: str = ""
+    display_category: str = ""
+    binding_count: int = 0
+    is_runtime_effective: bool = False
+    can_edit_directly: bool = True
+    edit_block_reason: str | None = None
 
     @field_validator("variables", mode="before")
     @classmethod
     def validate_variables(cls, value: Any) -> list[str]:
         return _normalize_variable_list(value, allow_json_string=True)
+
+    @field_validator("display_name", "display_type", "display_category", mode="before")
+    @classmethod
+    def validate_optional_display_text(cls, value: Any) -> str:
+        return value if isinstance(value, str) else ""
+
+    @field_validator("edit_block_reason", mode="before")
+    @classmethod
+    def validate_optional_edit_block_reason(cls, value: Any) -> str | None:
+        return value if isinstance(value, str) else None
+
+    @field_validator("binding_count", mode="before")
+    @classmethod
+    def validate_binding_count(cls, value: Any) -> int:
+        return value if isinstance(value, int) else 0
+
+    @field_validator("is_runtime_effective", "can_edit_directly", mode="before")
+    @classmethod
+    def validate_optional_runtime_flags(cls, value: Any) -> bool:
+        return value if isinstance(value, bool) else False
 
     @field_validator("governance_status", mode="before")
     @classmethod
@@ -327,6 +412,23 @@ class PromptTemplate(PromptTemplateBase):
         if isinstance(value, list):
             return [str(item) for item in value if str(item).strip()]
         return []
+
+    @model_validator(mode="after")
+    def derive_operator_display_fields(self) -> PromptTemplate:
+        if not self.display_name:
+            self.display_name = prompt_template_display_name(self.name)
+        if not self.display_type:
+            self.display_type = prompt_type_display_label(self.prompt_type)
+        if not self.display_category:
+            self.display_category = prompt_category_display_label(self.category)
+        self.can_edit_directly = not self.is_system
+        if self.is_system and not self.edit_block_reason:
+            self.edit_block_reason = "系统模板不可直接编辑，请先复制为自定义模板。"
+        if not self.is_runtime_effective:
+            self.is_runtime_effective = bool(
+                self.is_active and (self.is_default or self.binding_count > 0)
+            )
+        return self
 
 
 class PromptTemplateGovernanceReport(BaseModel):
@@ -376,6 +478,77 @@ class ScenarioPrompt(ScenarioPromptBase):
 
     id: UUID = Field(..., description="Unique identifier")
     created_at: datetime = Field(..., description="Creation timestamp")
+    template_display_name: str | None = None
+    display_prompt_type: str | None = None
+    display_scenario_type: str | None = None
+
+    @model_validator(mode="after")
+    def derive_operator_display_fields(self) -> ScenarioPrompt:
+        if not self.display_prompt_type:
+            self.display_prompt_type = prompt_type_display_label(self.prompt_type)
+        if not self.display_scenario_type:
+            self.display_scenario_type = (
+                "销售训练" if self.scenario_type == "sales" else
+                "PPT 演练" if self.scenario_type == "presentation" else
+                self.scenario_type
+            )
+        return self
+
+
+class PromptTemplateImpactBinding(BaseModel):
+    """Runtime binding impact for one prompt template."""
+
+    id: str
+    scenario_type: str
+    scenario_id: str | None = None
+    prompt_type: str
+    is_active: bool
+    display_scenario_type: str
+    display_prompt_type: str
+
+
+class PromptTemplateImpactResponse(BaseModel):
+    """Read-only impact report for template operations."""
+
+    template_id: str
+    display_name: str
+    prompt_type: str
+    display_type: str
+    category: str
+    display_category: str
+    is_active: bool
+    is_default: bool
+    is_system: bool
+    is_runtime_effective: bool
+    can_deactivate: bool
+    deactivate_block_reason: str | None = None
+    can_set_default: bool
+    set_default_block_reason: str | None = None
+    can_edit_directly: bool
+    edit_block_reason: str | None = None
+    binding_count: int
+    bindings: list[PromptTemplateImpactBinding] = Field(default_factory=list)
+    runtime_consumers: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
+
+
+class PromptTemplateRepairDefaultsResponse(BaseModel):
+    """Governance repair result for default conflicts and historical variables."""
+
+    dry_run: bool
+    checked: int
+    repaired: int
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    audit_action: str | None = None
+
+
+class PromptTemplateCloneRequest(BaseModel):
+    """Request to clone a system or custom prompt template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class PromptTemplateResponse(BaseModel):

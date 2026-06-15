@@ -161,7 +161,7 @@ Snapshot for prioritizing refactors. **Compliance target** = follows five hard r
 
 | Module (sidebar label) | Route | Current pattern | Main gap | Target shape |
 |------------------------|-------|-----------------|----------|--------------|
-| **提示词管理** (Prompts) | `/admin/prompts` | List + `/new` + `/edit` | List still mixes governance, detail panel, scenario bindings | Slim list; bindings → `[id]/bindings` |
+| **提示词管理** (Prompts) | `/admin/prompts` | Governance console + `/new` + `/[id]/edit` + `/bindings` | List includes governance health and read-only impact preview by design; bindings already separate | Keep list as policy cockpit; do not reintroduce inline binding wizard |
 | **角色管理** (Personas) | `/admin/personas` | List modal + `[id]` large form | `[id]` aggregates too many config blocks | `[id]` overview + tabs/sub-routes |
 | **智能体管理** (Agents) | `/admin/agents` | List modal + `[id]` large form | Same as personas | `[id]` overview + tabs/sub-routes |
 | **知识库管理** (Knowledge) | `/admin/knowledge` | List modal + `[id]` god page | Documents, dictionary, diagnostics, strategy preview on one page | `[id]` hub + `documents` / `dictionary` / `diagnostics` |

@@ -25,6 +25,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.dialects import postgresql
@@ -1662,6 +1663,13 @@ class PromptTemplate(Base):
     __table_args__ = (
         Index("idx_prompt_templates_type", "prompt_type"),
         Index("idx_prompt_templates_active", "is_active"),
+        Index(
+            "uq_prompt_templates_default_per_type",
+            "prompt_type",
+            unique=True,
+            postgresql_where=text("is_default = true"),
+            sqlite_where=text("is_default = 1"),
+        ),
     )
 
 
@@ -1682,6 +1690,15 @@ class ScenarioPrompt(Base):
 
     __table_args__ = (
         Index("idx_scenario_prompts_type", "scenario_type", "prompt_type"),
+        Index(
+            "uq_scenario_prompts_active_scope",
+            "scenario_type",
+            func.coalesce(scenario_id, ""),
+            "prompt_type",
+            unique=True,
+            postgresql_where=text("is_active = true"),
+            sqlite_where=text("is_active = 1"),
+        ),
     )
 
 
