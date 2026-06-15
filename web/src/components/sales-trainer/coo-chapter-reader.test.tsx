@@ -106,6 +106,23 @@ describe("CooChapterReader", () => {
         expect(image.getAttribute("src")).toBe("https://example.com/etiquette.png");
     });
 
+    it("renders markdown tables without raw table syntax", () => {
+        render(
+            <CooChapterReader
+                {...baseProps}
+                chapter={{
+                    ...baseProps.chapter,
+                    content: "| 场景 | 做法 |\n|---|---|\n| 拜访前 | 确认时间 |",
+                }}
+            />,
+        );
+
+        expect(screen.getByRole("table")).toBeTruthy();
+        expect(screen.getByRole("columnheader", { name: "场景" })).toBeTruthy();
+        expect(screen.getByRole("cell", { name: "确认时间" })).toBeTruthy();
+        expect(screen.queryByText("|---|---|")).toBeNull();
+    });
+
     it("navigates back to return path and links quiz CTA", () => {
         render(<CooChapterReader {...baseProps} />);
         expect(screen.getByRole("link", { name: /开始本章测验/ }).getAttribute("href")).toBe(

@@ -126,7 +126,7 @@ export function CooChapterReader({
                     ) : null}
                 </div>
 
-                <div className="max-w-none">
+                <div className="max-w-none [&_img]:my-6 [&_img]:max-h-[32rem] [&_img]:w-full [&_img]:rounded-2xl [&_img]:border [&_img]:border-slate-200 [&_img]:object-cover [&_img]:shadow-sm">
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                         {chapter.content}
                     </ReactMarkdown>
