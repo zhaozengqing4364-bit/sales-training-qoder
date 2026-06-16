@@ -36,6 +36,7 @@ from prompt_templates.compiled_contract import (
 from prompt_templates.loader import get_loader
 from prompt_templates.models import (
     PROMPT_TEMPLATE_DISPLAY_NAMES,
+    PromptBusinessPurpose,
     PromptRenderRequest,
     PromptRenderResponse,
     PromptTemplate,
@@ -50,6 +51,7 @@ from prompt_templates.models import (
     PromptType,
     ScenarioPrompt,
     ScenarioPromptCreate,
+    prompt_business_purpose_display_label,
     prompt_category_display_label,
     prompt_template_display_name,
     prompt_type_display_label,
@@ -151,6 +153,7 @@ class PromptTemplateService:
             "id": str(getattr(row, "id", "")),
             "name": getattr(row, "name", None),
             "prompt_type": getattr(row, "prompt_type", None),
+            "business_purpose": getattr(row, "business_purpose", None),
             "category": getattr(row, "category", None),
             "template": getattr(row, "template", None),
             "variables": getattr(row, "variables", None),
@@ -319,6 +322,14 @@ class PromptTemplateService:
             )
             return None
 
+    @staticmethod
+    def _id_equals(column: Any, value: Any) -> Any:
+        return sql_cast(column, String) == str(value)
+
+    @staticmethod
+    def _id_in(column: Any, values: list[str]) -> Any:
+        return sql_cast(column, String).in_(values)
+
     async def _active_binding_count_map(
         self,
         template_ids: list[str],
@@ -330,7 +341,7 @@ class PromptTemplateService:
         result = await self.db.execute(
             select(ScenarioPromptDB.template_id, func.count(ScenarioPromptDB.id))
             .where(
-                ScenarioPromptDB.template_id.in_(template_ids),
+                self._id_in(ScenarioPromptDB.template_id, template_ids),
                 ScenarioPromptDB.is_active.is_(True),
             )
             .group_by(ScenarioPromptDB.template_id)
@@ -373,6 +384,9 @@ class PromptTemplateService:
         template.display_name = prompt_template_display_name(template.name)
         template.display_type = prompt_type_display_label(template.prompt_type)
         template.display_category = prompt_category_display_label(template.category)
+        template.display_business_purpose = prompt_business_purpose_display_label(
+            template.business_purpose
+        )
         template.binding_count = binding_count
         template.is_runtime_effective = bool(
             template.is_active and (template.is_default or binding_count > 0)
@@ -389,7 +403,9 @@ class PromptTemplateService:
         binding_count = await self._active_binding_count(str(template.id))
         return self._apply_operator_fields(template, binding_count=binding_count)
 
-    async def _enrich_templates_from_rows(self, rows: list[Any]) -> list[PromptTemplate]:
+    async def _enrich_templates_from_rows(
+        self, rows: list[Any]
+    ) -> list[PromptTemplate]:
         binding_counts = await self._active_binding_count_map(
             [str(getattr(row, "id", "")) for row in rows]
         )
@@ -463,7 +479,9 @@ class PromptTemplateService:
                 PromptTemplateDB.is_default.is_(True),
             )
         )
-        before_defaults = [self._template_snapshot(item) for item in before_result.scalars().all()]
+        before_defaults = [
+            self._template_snapshot(item) for item in before_result.scalars().all()
+        ]
         conditions = [
             PromptTemplateDB.prompt_type == prompt_type,
             PromptTemplateDB.is_default.is_(True),
@@ -498,7 +516,9 @@ class PromptTemplateService:
             conditions.append(ScenarioPromptDB.scenario_id.is_(None))
         if exclude_assignment_id:
             conditions.append(ScenarioPromptDB.id != exclude_assignment_id)
-        result = await self.db.execute(select(ScenarioPromptDB.id).where(*conditions).limit(1))
+        result = await self.db.execute(
+            select(ScenarioPromptDB.id).where(*conditions).limit(1)
+        )
         if result.scalar_one_or_none() is not None:
             raise PromptTemplateServiceError(
                 "[SCENARIO_PROMPT_DUPLICATE_ACTIVE]",
@@ -510,7 +530,9 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+            select(PromptTemplateDB).where(
+                self._id_equals(PromptTemplateDB.id, template_id)
+            )
         )
         row = result.scalar_one_or_none()
         if row is None:
@@ -554,7 +576,9 @@ class PromptTemplateService:
 
         model = ScenarioPrompt.model_validate(row)
         result = await self.db.execute(
-            select(PromptTemplateDB.name).where(PromptTemplateDB.id == str(row.template_id))
+            select(PromptTemplateDB.name).where(
+                self._id_equals(PromptTemplateDB.id, row.template_id)
+            )
         )
         template_name = result.scalar_one_or_none()
         model.template_display_name = (
@@ -569,6 +593,7 @@ class PromptTemplateService:
             "id": str(getattr(db_template, "id", "") or ""),
             "name": str(getattr(db_template, "name", "") or ""),
             "prompt_type": str(getattr(db_template, "prompt_type", "") or ""),
+            "business_purpose": getattr(db_template, "business_purpose", None),
             "category": str(getattr(db_template, "category", "") or ""),
             "variables": getattr(db_template, "variables", None),
             "is_active": bool(getattr(db_template, "is_active", False)),
@@ -823,6 +848,9 @@ class PromptTemplateService:
             id=template_id,
             name=data.name,
             prompt_type=data.prompt_type.value,
+            business_purpose=(
+                data.business_purpose.value if data.business_purpose else None
+            ),
             category=data.category,
             template=data.template,
             variables=data.variables,
@@ -901,7 +929,9 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+            select(PromptTemplateDB).where(
+                self._id_equals(PromptTemplateDB.id, template_id)
+            )
         )
         db_template = result.scalar_one_or_none()
 
@@ -919,8 +949,10 @@ class PromptTemplateService:
         update_data = data.model_dump(exclude_unset=True)
         if update_data.get("is_active") is False:
             await self._assert_template_can_deactivate(db_template)
-        if "is_default" in update_data and update_data["is_default"] is False and bool(
-            getattr(db_template, "is_default", False)
+        if (
+            "is_default" in update_data
+            and update_data["is_default"] is False
+            and bool(getattr(db_template, "is_default", False))
         ):
             raise PromptTemplateServiceError(
                 "[PROMPT_TEMPLATE_DEFAULT_REPLACEMENT_REQUIRED]",
@@ -933,6 +965,10 @@ class PromptTemplateService:
         for field, value in update_data.items():
             if field == "prompt_type" and value:
                 value = value.value if hasattr(value, "value") else value
+            if field == "business_purpose" and value:
+                value = (
+                    value.value if isinstance(value, PromptBusinessPurpose) else value
+                )
             setattr(db_template, field, value)
         if wants_default:
             prompt_type_value = str(getattr(db_template, "prompt_type", "") or "")
@@ -985,7 +1021,9 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+            select(PromptTemplateDB).where(
+                self._id_equals(PromptTemplateDB.id, template_id)
+            )
         )
         db_template = result.scalar_one_or_none()
 
@@ -1021,6 +1059,7 @@ class PromptTemplateService:
     async def list_templates(
         self,
         prompt_type: PromptType | None = None,
+        business_purpose: PromptBusinessPurpose | None = None,
         category: str | None = None,
         is_active: bool | None = None,
         skip: int = 0,
@@ -1044,17 +1083,25 @@ class PromptTemplateService:
 
         if prompt_type:
             query = query.where(PromptTemplateDB.prompt_type == prompt_type.value)
+        if business_purpose:
+            query = query.where(
+                PromptTemplateDB.business_purpose == business_purpose.value
+            )
         if category:
             query = query.where(PromptTemplateDB.category == category)
         if is_active is not None:
             query = query.where(PromptTemplateDB.is_active == is_active)
 
-        query = query.order_by(
-            PromptTemplateDB.category.asc(),
-            PromptTemplateDB.prompt_type.asc(),
-            PromptTemplateDB.is_default.desc(),
-            PromptTemplateDB.updated_at.desc(),
-        ).offset(skip).limit(limit)
+        query = (
+            query.order_by(
+                PromptTemplateDB.category.asc(),
+                PromptTemplateDB.prompt_type.asc(),
+                PromptTemplateDB.is_default.desc(),
+                PromptTemplateDB.updated_at.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
 
         result = await self.db.execute(query)
         db_templates = result.scalars().all()
@@ -1580,7 +1627,9 @@ class PromptTemplateService:
             checked=len(rows),
             repaired=len(items),
             items=items,
-            audit_action=None if dry_run else "prompt_template.governance.repair_defaults",
+            audit_action=None
+            if dry_run
+            else "prompt_template.governance.repair_defaults",
         )
 
     async def get_template_impact(
@@ -1592,7 +1641,9 @@ class PromptTemplateService:
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+            select(PromptTemplateDB).where(
+                self._id_equals(PromptTemplateDB.id, template_id)
+            )
         )
         row = result.scalar_one_or_none()
         if row is None:
@@ -1600,7 +1651,7 @@ class PromptTemplateService:
 
         binding_result = await self.db.execute(
             select(ScenarioPromptDB).where(
-                ScenarioPromptDB.template_id == str(template_id)
+                self._id_equals(ScenarioPromptDB.template_id, template_id)
             )
         )
         binding_rows = list(binding_result.scalars().all())
@@ -1608,6 +1659,7 @@ class PromptTemplateService:
         binding_count = len(active_bindings)
         prompt_type = str(getattr(row, "prompt_type", "") or "")
         category = str(getattr(row, "category", "") or "")
+        business_purpose = getattr(row, "business_purpose", None)
         issues = self._governance_issues_for_row(row)
         is_default = bool(getattr(row, "is_default", False))
         is_active = bool(getattr(row, "is_active", False))
@@ -1633,7 +1685,9 @@ class PromptTemplateService:
         if is_system:
             recommended_next_steps.append("系统模板请先复制为自定义模板，再编辑正文。")
         if issues:
-            recommended_next_steps.append("先执行治理修复，确保变量与用途可被运行时解析。")
+            recommended_next_steps.append(
+                "先执行治理修复，确保变量与用途可被运行时解析。"
+            )
         if is_default or binding_count > 0:
             recommended_next_steps.append("停用前先设置替代默认模板或替换场景绑定。")
         if not is_default and binding_count == 0:
@@ -1644,6 +1698,10 @@ class PromptTemplateService:
             display_name=prompt_template_display_name(str(getattr(row, "name", ""))),
             prompt_type=prompt_type,
             display_type=prompt_type_display_label(prompt_type),
+            business_purpose=str(business_purpose) if business_purpose else None,
+            display_business_purpose=prompt_business_purpose_display_label(
+                business_purpose
+            ),
             category=category,
             display_category=prompt_category_display_label(category),
             is_active=is_active,
@@ -1656,9 +1714,7 @@ class PromptTemplateService:
             set_default_block_reason=set_default_block_reason,
             can_edit_directly=not is_system,
             edit_block_reason=(
-                "系统模板不可直接编辑，请先复制为自定义模板。"
-                if is_system
-                else None
+                "系统模板不可直接编辑，请先复制为自定义模板。" if is_system else None
             ),
             binding_count=binding_count,
             bindings=[
@@ -1675,7 +1731,9 @@ class PromptTemplateService:
                         if item.scenario_type == "presentation"
                         else str(item.scenario_type)
                     ),
-                    display_prompt_type=prompt_type_display_label(str(item.prompt_type)),
+                    display_prompt_type=prompt_type_display_label(
+                        str(item.prompt_type)
+                    ),
                 )
                 for item in binding_rows
             ],
@@ -1700,7 +1758,9 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+            select(PromptTemplateDB).where(
+                self._id_equals(PromptTemplateDB.id, template_id)
+            )
         )
         source = result.scalar_one_or_none()
         if source is None:
@@ -1716,9 +1776,12 @@ class PromptTemplateService:
             id=clone_id,
             name=clone_name,
             prompt_type=str(getattr(source, "prompt_type", "") or ""),
+            business_purpose=getattr(source, "business_purpose", None),
             category=str(getattr(source, "category", "") or "common"),
             template=str(getattr(source, "template", "") or ""),
-            variables=self._normalize_legacy_variables(getattr(source, "variables", None)),
+            variables=self._normalize_legacy_variables(
+                getattr(source, "variables", None)
+            ),
             is_active=True,
             is_default=False,
             is_system=False,
@@ -1751,7 +1814,9 @@ class PromptTemplateService:
         from common.db.models import SystemLog
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
+            select(PromptTemplateDB).where(
+                self._id_equals(PromptTemplateDB.id, template_id)
+            )
         )
         row = result.scalar_one_or_none()
         if row is None:
@@ -1767,7 +1832,9 @@ class PromptTemplateService:
         for audit in audit_result.scalars().all():
             try:
                 details_raw = self._orm_field(audit, "details")
-                details = json.loads(details_raw if isinstance(details_raw, str) else "{}")
+                details = json.loads(
+                    details_raw if isinstance(details_raw, str) else "{}"
+                )
             except json.JSONDecodeError:
                 continue
             if str(details.get("template_id")) == str(template_id) and isinstance(
@@ -1997,7 +2064,9 @@ class PromptTemplateService:
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         result = await self.db.execute(
-            select(ScenarioPromptDB).where(ScenarioPromptDB.id == str(assignment_id))
+            select(ScenarioPromptDB).where(
+                self._id_equals(ScenarioPromptDB.id, assignment_id)
+            )
         )
         assignment = result.scalar_one_or_none()
 
@@ -2023,7 +2092,9 @@ class PromptTemplateService:
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         result = await self.db.execute(
-            select(ScenarioPromptDB).where(ScenarioPromptDB.id == str(assignment_id))
+            select(ScenarioPromptDB).where(
+                self._id_equals(ScenarioPromptDB.id, assignment_id)
+            )
         )
         assignment = result.scalar_one_or_none()
 
@@ -2072,7 +2143,9 @@ class PromptTemplateService:
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         result = await self.db.execute(
-            select(ScenarioPromptDB).where(ScenarioPromptDB.id == str(assignment_id))
+            select(ScenarioPromptDB).where(
+                self._id_equals(ScenarioPromptDB.id, assignment_id)
+            )
         )
         assignment = result.scalar_one_or_none()
 

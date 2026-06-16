@@ -14,6 +14,11 @@ from sales_trainer.services.ai_coach_chat_generation_parser import (
 from sales_trainer.services.ai_coach_chat_generation_prompt import (
     AiCoachChatPromptCompiler,
 )
+from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AiCoachGenerationDeltaHandler,
+    emit_streamed_response,
+    prompt_for_attempt,
+)
 
 
 class AiCoachChatGenerator:
@@ -28,6 +33,7 @@ class AiCoachChatGenerator:
         config: AiCoachConfig,
         user_message: str,
         history: list[SalesTrainerAiCoachChatMessage],
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> AiCoachChatResponseInternalV1:
         contract = await AiCoachChatPromptCompiler(self._db).compile(
             session=session,
@@ -37,9 +43,21 @@ class AiCoachChatGenerator:
         )
         session.prompt_contract_hash = contract.contract_hash
         max_attempts = config.retry_policy.max_retries + 1
+        if on_generation_delta is not None:
+            streamed = await emit_streamed_response(
+                llm=LLMService(),
+                parser=self._parser,
+                contract=contract,
+                config=config,
+                session_id=str(session.session_id),
+                max_attempts=max_attempts,
+                failure_message="AI 教练生成失败，请稍后重试。",
+                on_generation_delta=on_generation_delta,
+            )
+            return streamed.response
         last_error: AiCoachChatGenerationError | None = None
         for attempt in range(max_attempts):
-            prompt = self._prompt_for_attempt(contract.rendered_prompt, last_error)
+            prompt = prompt_for_attempt(contract.rendered_prompt, last_error)
             result = await LLMService().generate(
                 prompt=prompt,
                 session_id=session.session_id,
@@ -76,11 +94,4 @@ class AiCoachChatGenerator:
         base_prompt: str,
         last_error: AiCoachChatGenerationError | None,
     ) -> str:
-        if last_error is None:
-            return base_prompt
-        return (
-            f"{base_prompt}\n\n"
-            "上一轮输出未通过后端契约校验。请只重新输出一份合法 JSON，"
-            f"错误码：{last_error.code}。"
-            "不要解释错误，不要输出 Markdown。"
-        )
+        return prompt_for_attempt(base_prompt, last_error)

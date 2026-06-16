@@ -258,6 +258,45 @@ class TestPromptTemplateGovernance:
         assert response.status_code == 201
         assert response.json()["prompt_type"] == "realtime_scoring"
 
+    async def test_admin_can_filter_templates_by_business_purpose(
+        self, async_client, auth_headers
+    ):
+        for payload in (
+            {
+                "name": "商务礼仪题目草稿生成 v1",
+                "prompt_type": "scoring",
+                "business_purpose": "business_etiquette_question_generation",
+                "category": "business_etiquette",
+                "template": "请基于 {{ chapter_content }} 生成题目。",
+                "variables": ["chapter_content"],
+            },
+            {
+                "name": "新人训练路径商务技巧 AI 对话教练生成 v1",
+                "prompt_type": "stage",
+                "business_purpose": "ai_coach_conversation_generation",
+                "category": "sales_trainer_ai_coach",
+                "template": "请基于 {{ user_message }} 生成教练回复。",
+                "variables": ["user_message"],
+            },
+        ):
+            response = await async_client.post(
+                "/api/v1/prompt-templates",
+                headers=auth_headers["admin"],
+                json=payload,
+            )
+            assert response.status_code == 201
+
+        response = await async_client.get(
+            "/api/v1/prompt-templates"
+            "?business_purpose=business_etiquette_question_generation",
+            headers=auth_headers["admin"],
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [item["name"] for item in body] == ["商务礼仪题目草稿生成 v1"]
+        assert body[0]["display_business_purpose"] == "商务礼仪题目生成"
+
     async def test_admin_create_rejects_object_variables_with_400(self, async_client, auth_headers):
         response = await async_client.post(
             "/api/v1/prompt-templates",

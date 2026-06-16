@@ -11,6 +11,10 @@ from sales_trainer.article_api import (
     newcomer_admin_article_router,
     newcomer_article_router,
 )
+from sales_trainer.business_etiquette_api import (
+    business_etiquette_admin_router,
+    business_etiquette_router,
+)
 from sales_trainer.dashboard_recommendation import (
     register_sales_trainer_dashboard_recommendation_provider,
 )
@@ -83,9 +87,20 @@ def register_sales_trainer_routers(app: FastAPI) -> None:
         dependencies=[Depends(require_role(["admin", "user"]))],
     )
     app.include_router(
+        business_etiquette_router,
+        prefix="/api/v1",
+        tags=["newcomer-training-business-etiquette"],
+        dependencies=[Depends(require_role(["admin", "user"]))],
+    )
+    app.include_router(
         newcomer_admin_article_router,
         prefix="/api/v1",
         tags=["admin-newcomer-training-articles"],
+    )
+    app.include_router(
+        business_etiquette_admin_router,
+        prefix="/api/v1",
+        tags=["admin-newcomer-training-business-etiquette"],
     )
     app.include_router(
         newcomer_admin_paper_router,

@@ -2802,10 +2802,15 @@ export type PromptType =
     | "evaluation"
     | "report";
 
+export type PromptBusinessPurpose =
+    | "ai_coach_conversation_generation"
+    | "business_etiquette_question_generation";
+
 export interface PromptTemplate {
     id: string;
     name: string;
     prompt_type: PromptType;
+    business_purpose?: PromptBusinessPurpose | null;
     category: string;
     template: string;
     variables: string[];
@@ -2819,6 +2824,7 @@ export interface PromptTemplate {
     display_name?: string;
     display_type?: string;
     display_category?: string;
+    display_business_purpose?: string;
     binding_count?: number;
     is_runtime_effective?: boolean;
     can_edit_directly?: boolean;
@@ -2828,6 +2834,7 @@ export interface PromptTemplate {
 export interface PromptTemplateCreate {
     name: string;
     prompt_type: PromptType;
+    business_purpose?: PromptBusinessPurpose | null;
     category?: string;
     template: string;
     variables?: string[];
@@ -2838,6 +2845,7 @@ export interface PromptTemplateCreate {
 export interface PromptTemplateUpdate {
     name?: string;
     prompt_type?: PromptType;
+    business_purpose?: PromptBusinessPurpose | null;
     category?: string;
     template?: string;
     variables?: string[];
@@ -2905,6 +2913,7 @@ export interface PromptTemplateGovernanceRemediationResponse {
 
 export interface PromptTemplateOptions {
     allowed_prompt_types: Array<{ value: string; label: string }>;
+    allowed_business_purposes?: Array<{ value: PromptBusinessPurpose; label: string }>;
     sales_allowed_prompt_types: string[];
     variables_schema: string;
     invalid_active_count: number;
@@ -2944,6 +2953,8 @@ export interface PromptTemplateImpactResponse {
     display_name: string;
     prompt_type: string;
     display_type: string;
+    business_purpose?: PromptBusinessPurpose | string | null;
+    display_business_purpose: string;
     category: string;
     display_category: string;
     is_active: boolean;
@@ -5074,6 +5085,11 @@ export interface BusinessEtiquetteQuizAnswerResult {
     max_score: number;
     capability_keys: string[];
     question_snapshot: Record<string, unknown>;
+    analysis: string | null;
+    scoring_source: string | null;
+    scoring_provider: string | null;
+    scoring_model: string | null;
+    scoring_latency_ms: number | null;
 }
 
 export interface BusinessEtiquetteUnitQuizAttempt {
@@ -6833,6 +6849,15 @@ export type AiCoachChatStreamEvent =
           readonly session_id?: string | null;
       }
     | {
+          readonly type: "ui_event_delta";
+          readonly phase: AiCoachChatStreamPhase;
+          readonly session_id?: string | null;
+          readonly delta_id: string;
+          readonly event_type: "quiz_card";
+          readonly status: "streaming";
+          readonly payload: AiCoachQuizCardDraftPayloadPublicV1;
+      }
+    | {
           readonly type: "session_snapshot";
           readonly phase: AiCoachChatStreamPhase;
           readonly session: AiCoachChatSessionPublicV1;
@@ -6844,6 +6869,26 @@ export type AiCoachChatStreamEvent =
           readonly message: string;
           readonly recoverable: boolean;
       };
+
+export interface AiCoachQuizCardDraftPayloadPublicV1 {
+    readonly interaction: AiCoachQuizCardDraftInteractionPublicV1;
+    readonly explanation?: string | null;
+}
+
+export interface AiCoachQuizCardDraftInteractionPublicV1 {
+    readonly schema_version: "ai_coach_interaction_public_draft_v1";
+    readonly interaction_id: string;
+    readonly session_id: string;
+    readonly turn_number?: number | null;
+    readonly training_card_type?: AiCoachTrainingCardTypeV1 | null;
+    readonly interaction_type?: "single_choice" | "multiple_choice" | "short_answer" | null;
+    readonly stem?: string | null;
+    readonly options?: readonly AiCoachInteractionOptionV1[] | null;
+    readonly answer_constraints: Record<string, number>;
+    readonly capability_keys: readonly string[];
+    readonly source_chapter_orders: readonly number[];
+    readonly is_complete: boolean;
+}
 
 export interface ExaminerAgentErrorDetails {
     gate_results?: ExaminerAgentGateResult[];

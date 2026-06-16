@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -48,6 +49,19 @@ class ShortAnswerScoreOutcome:
     feedback: str
     reason: str | None
     raw_response: dict[str, Any] | None
+    scoring_source: str = "ai_llm"
+    scoring_provider: str | None = None
+    scoring_model: str | None = None
+    scoring_latency_ms: int | None = None
+    model_config_id: str | None = None
+
+
+@dataclass(frozen=True)
+class _ResolvedLLMService:
+    service: LLMService
+    provider: str | None
+    model_name: str | None
+    model_config_id: str | None
 
 
 class ShortAnswerScoringService:
@@ -75,6 +89,7 @@ class ShortAnswerScoringService:
                     feedback="未作答，无法评分。",
                     reason="empty_answer",
                     raw_response={"score": 0, "reason": "empty_answer"},
+                    scoring_source="local_empty_answer",
                 )
             )
 
@@ -83,18 +98,19 @@ class ShortAnswerScoringService:
         if ai_config.get("enabled") is False:
             return Result.fail("[SHORT_ANSWER_AI_SCORING_DISABLED]")
 
-        service = self._resolve_llm_service(ai_config)
+        resolved = self._resolve_llm_service(ai_config)
         prompt = _render_prompt(question, answer=answer, ai_config=ai_config)
+        started_at = time.perf_counter()
         try:
-            result = await service.generate(
+            result = await resolved.service.generate(
                 prompt=prompt,
                 session_id=f"sales_trainer_short_answer:{question.question_id}",
                 system_message=str(
-                    ai_config.get("system_prompt")
-                    or DEFAULT_SHORT_ANSWER_SYSTEM_PROMPT
+                    ai_config.get("system_prompt") or DEFAULT_SHORT_ANSWER_SYSTEM_PROMPT
                 ),
                 allow_fallback_response=False,
             )
+            latency_ms = int((time.perf_counter() - started_at) * 1000)
         except (
             RetryError,
             ConnectionError,
@@ -105,6 +121,8 @@ class ShortAnswerScoringService:
             logger.warning(
                 "sales_trainer_short_answer_scoring_provider_error",
                 question_id=str(question.question_id),
+                provider=resolved.provider,
+                model_name=resolved.model_name,
                 error_type=type(exc).__name__,
             )
             return Result.fail("[SHORT_ANSWER_AI_SCORING_FAILED]")
@@ -112,6 +130,8 @@ class ShortAnswerScoringService:
             logger.warning(
                 "sales_trainer_short_answer_scoring_failed",
                 question_id=str(question.question_id),
+                provider=resolved.provider,
+                model_name=resolved.model_name,
                 fallback=result.fallback,
             )
             return Result.fail(result.fallback or "[SHORT_ANSWER_AI_SCORING_FAILED]")
@@ -121,6 +141,8 @@ class ShortAnswerScoringService:
             logger.warning(
                 "sales_trainer_short_answer_scoring_invalid_json",
                 question_id=str(question.question_id),
+                provider=resolved.provider,
+                model_name=resolved.model_name,
             )
             return Result.fail("[SHORT_ANSWER_AI_SCORING_RESPONSE_INVALID]")
 
@@ -135,16 +157,37 @@ class ShortAnswerScoringService:
                 feedback=str(parsed["feedback"]),
                 reason=parsed.get("reason"),
                 raw_response=parsed,
+                scoring_source="ai_llm",
+                scoring_provider=resolved.provider,
+                scoring_model=resolved.model_name,
+                scoring_latency_ms=latency_ms,
+                model_config_id=resolved.model_config_id,
             )
         )
 
-    def _resolve_llm_service(self, ai_config: dict[str, Any]) -> LLMService:
+    def _resolve_llm_service(self, ai_config: dict[str, Any]) -> _ResolvedLLMService:
         if self._llm_service is not None:
-            return self._llm_service
+            return _ResolvedLLMService(
+                service=self._llm_service,
+                provider=_runtime_string_attr(self._llm_service, "provider"),
+                model_name=_runtime_string_attr(self._llm_service, "model_name"),
+                model_config_id=_optional_str(ai_config.get("model_config_id")),
+            )
         model_config = _model_config_from_ai_config(ai_config)
         if model_config is not None:
-            return self._llm_service_factory(model_config)
-        return self._llm_service_factory()
+            return _ResolvedLLMService(
+                service=self._llm_service_factory(model_config),
+                provider=str(model_config.provider),
+                model_name=str(model_config.model_name),
+                model_config_id=_optional_str(ai_config.get("model_config_id")),
+            )
+        service = self._llm_service_factory()
+        return _ResolvedLLMService(
+            service=service,
+            provider=_runtime_string_attr(service, "provider"),
+            model_name=_runtime_string_attr(service, "model_name"),
+            model_config_id=_optional_str(ai_config.get("model_config_id")),
+        )
 
 
 def _model_config_from_ai_config(ai_config: dict[str, Any]) -> ModelConfig | None:
@@ -190,6 +233,24 @@ def _render_prompt(
         criteria=json.dumps(criteria, ensure_ascii=False),
         answer=answer,
     )
+
+
+def _runtime_string_attr(service: object, attr: str) -> str | None:
+    value = getattr(service, attr, None)
+    if value is None:
+        return None
+    try:
+        resolved = value() if callable(value) else value
+    except Exception:  # pragma: no cover - defensive for custom clients
+        return None
+    return _optional_str(resolved)
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _parse_score_payload(raw_text: str) -> dict[str, Any] | None:

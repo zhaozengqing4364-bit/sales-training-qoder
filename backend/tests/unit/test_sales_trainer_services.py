@@ -123,6 +123,21 @@ class FailingShortAnswerLLMService:
         raise RuntimeError("invalid token")
 
 
+class FakeShortAnswerLLMService:
+    provider = "deepseek"
+    model_name = "deepseek-chat"
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def generate(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        return Result.ok(
+            '{"score": 0, "feedback": "AI 判断该答案没有提供具体做法。", '
+            '"reason": "answer_has_no_action"}'
+        )
+
+
 class FakeAsrService:
     provider_name = "fake-asr"
 
@@ -356,7 +371,9 @@ async def test_should_retry_scoring_failed_submission_when_transcript_exists(
         error_message="[DEUCATE_TIMEOUT]",
         latency_ms=30000,
     )
-    test_db.add_all([admin, learner, prompt, unit, submission, transcript, failed_score])
+    test_db.add_all(
+        [admin, learner, prompt, unit, submission, transcript, failed_score]
+    )
     await test_db.commit()
 
     scoring = RetryScoringService()
@@ -412,7 +429,9 @@ async def test_should_generate_cos_upload_url_when_configured(
 
     assert result["storage_backend"] == "cos"
     assert result["storage_key"].startswith("cos://sales-trainer/audio/")
-    assert result["upload_url"].startswith("https://cos.example.com/sales-trainer/audio/")
+    assert result["upload_url"].startswith(
+        "https://cos.example.com/sales-trainer/audio/"
+    )
 
 
 @pytest.mark.asyncio
@@ -606,12 +625,50 @@ async def test_should_score_short_answer_with_ai_and_store_feedback_snapshot(
     answer = serialized["answers"][0]
     assert answer["question_title"] == "客户价值理解"
     assert answer["reference_answer"] == question.reference_answer
-    assert answer["explanation"] == "优秀答案应同时说明客户场景、数据流动治理价值和下一步行动。"
+    assert (
+        answer["explanation"]
+        == "优秀答案应同时说明客户场景、数据流动治理价值和下一步行动。"
+    )
     assert answer["normalized_score"] == 80
     assert answer["score"] == 8
     assert answer["is_correct"] is True
     assert answer["scoring_feedback"] == "回答覆盖核心价值，但可以补充客户场景。"
     assert answer["scoring_reason"] == "命中数据流动治理和客户价值。"
+
+
+@pytest.mark.asyncio
+async def test_should_call_llm_for_non_empty_low_quality_short_answer() -> None:
+    question = QuestionItem(
+        question_id="short-answer-low-quality-q1",
+        category_id="short-answer-low-quality-category",
+        title="客户拜访要点",
+        stem="请说明商务拜访时需要注意的两个要点。",
+        reference_answer="提前确认客户背景与目标，准时到达并保持尊重、清晰表达。",
+        scoring_criteria={
+            "question_type": "short_answer",
+            "ai_scoring": {"enabled": True, "pass_threshold": 70},
+        },
+        scoring_dimensions=["respect_boundaries"],
+        status="published",
+        usage_scope="sales_trainer",
+    )
+    fake_llm = FakeShortAnswerLLMService()
+    service = ShortAnswerScoringService(llm_service=fake_llm)
+
+    result = await service.score(question, answer_text="哈哈")
+
+    assert result.is_success
+    assert result.value is not None
+    assert len(fake_llm.calls) == 1
+    assert "哈哈" in str(fake_llm.calls[0]["prompt"])
+    assert result.value.score == 0
+    assert result.value.passed is False
+    assert result.value.reason == "answer_has_no_action"
+    assert result.value.feedback == "AI 判断该答案没有提供具体做法。"
+    assert result.value.scoring_source == "ai_llm"
+    assert result.value.scoring_provider == "deepseek"
+    assert result.value.scoring_model == "deepseek-chat"
+    assert isinstance(result.value.scoring_latency_ms, int)
 
 
 @pytest.mark.asyncio
@@ -686,7 +743,10 @@ async def test_should_submit_short_answer_attempt_when_ai_scoring_provider_fails
     serialized = await quiz_service.serialize_attempt(attempt)
     answer = serialized["answers"][0]
     assert answer["question_title"] == "客户价值理解"
-    assert answer["answer_payload"] == "石犀能围绕数据流动治理帮助客户形成可审计的管理闭环。"
+    assert (
+        answer["answer_payload"]
+        == "石犀能围绕数据流动治理帮助客户形成可审计的管理闭环。"
+    )
     assert answer["score"] is None
     assert answer["normalized_score"] is None
     assert answer["scoring_feedback"] is None
@@ -761,11 +821,19 @@ async def test_should_project_sales_trainer_path_with_unlock_progress(
     await test_db.flush()
     await UnitService(test_db)._replace_questions(
         first_unit.unit_id,
-        [UnitQuestionBinding(question_id=question.question_id, order_index=1, points=10)],
+        [
+            UnitQuestionBinding(
+                question_id=question.question_id, order_index=1, points=10
+            )
+        ],
     )
     await UnitService(test_db)._replace_questions(
         second_unit.unit_id,
-        [UnitQuestionBinding(question_id=question.question_id, order_index=1, points=10)],
+        [
+            UnitQuestionBinding(
+                question_id=question.question_id, order_index=1, points=10
+            )
+        ],
     )
     await test_db.commit()
 
@@ -1339,6 +1407,12 @@ async def test_should_require_latest_material_confirmation_for_ppt_submission(
 
     assert submission.status == "scored"
     assert submission.confirmed_material_version_id == version.version_id
-    assert submission.material_snapshot["items"][0]["current_version"]["version_label"] == "v2026.06"
+    assert (
+        submission.material_snapshot["items"][0]["current_version"]["version_label"]
+        == "v2026.06"
+    )
     assert submission.task_brief_snapshot["title"] == "PPT 演练"
-    assert submission.score_scheme_snapshot["learner_rubric"]["criteria"][0]["label"] == "结构"
+    assert (
+        submission.score_scheme_snapshot["learner_rubric"]["criteria"][0]["label"]
+        == "结构"
+    )

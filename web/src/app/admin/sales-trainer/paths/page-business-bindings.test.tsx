@@ -147,6 +147,16 @@ function contentItem(learningContentId: string, title: string): LearningContentL
         version: 1,
         created_at: "2026-06-01T00:00:00Z",
         updated_at: "2026-06-01T00:00:00Z",
+        revision_state: {
+            active_revision_id: "content-revision-1",
+            active_revision_no: 1,
+            working_revision_id: null,
+            working_revision_no: null,
+            has_unpublished_revision: false,
+            edit_target: "working_revision",
+            publish_label: "当前无待发布修订",
+            save_result_copy: "已保存为待发布修订，发布修订后才会影响学员端。",
+        },
         chapters: [{
             chapter_id: `${learningContentId}-chapter-1`,
             learning_content_id: learningContentId,

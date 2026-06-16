@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminLearningContentsPage from "./page";
-import type { LearningContent } from "@/lib/api/types";
+import type { LearningContent, LearningContentRevisionState } from "@/lib/api/types";
 
 const pushMock = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock }) }));
@@ -59,6 +59,20 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
+function makeRevisionState(overrides: Partial<LearningContentRevisionState> = {}): LearningContentRevisionState {
+    return {
+        active_revision_id: null,
+        active_revision_no: null,
+        working_revision_id: null,
+        working_revision_no: null,
+        has_unpublished_revision: false,
+        edit_target: "draft_record",
+        publish_label: "发布",
+        save_result_copy: "已保存草稿。",
+        ...overrides,
+    };
+}
+
 function makeLearningContent(overrides: Partial<LearningContent> = {}): LearningContent {
     return {
         learning_content_id: "content-1",
@@ -74,6 +88,7 @@ function makeLearningContent(overrides: Partial<LearningContent> = {}): Learning
         created_at: "2026-05-15T00:00:00Z",
         updated_at: "2026-05-15T00:00:00Z",
         chapters: [],
+        revision_state: makeRevisionState(),
         ...overrides,
     };
 }

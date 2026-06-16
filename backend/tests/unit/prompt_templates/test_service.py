@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from prompt_templates.models import (
@@ -30,7 +32,9 @@ def _query_result(
     result = MagicMock()
     result.scalar_one_or_none.return_value = scalar
     result.scalars.return_value.first.return_value = scalar
-    result.scalars.return_value.all.return_value = scalars if scalars is not None else ([] if scalar is None else [scalar])
+    result.scalars.return_value.all.return_value = (
+        scalars if scalars is not None else ([] if scalar is None else [scalar])
+    )
     result.all.return_value = rows or []
     return result
 
@@ -56,6 +60,7 @@ class TestPromptTemplateService:
         template.id = uuid4()
         template.name = "Test Template"
         template.prompt_type = "summary"
+        template.business_purpose = None
         template.category = "test"
         template.template = "Hello {{ name }}"
         template.variables = ["name"]
@@ -80,7 +85,10 @@ class TestPromptTemplateService:
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("prompt_templates.service.uuid4", return_value=UUID("12345678-1234-1234-1234-123456789012")):
+        with patch(
+            "prompt_templates.service.uuid4",
+            return_value=UUID("12345678-1234-1234-1234-123456789012"),
+        ):
             result = await service.create_template(data)
 
         assert result.name == "New Template"
@@ -174,7 +182,9 @@ class TestPromptTemplateService:
         assert results[0].name == "Test Template"
 
     @pytest.mark.asyncio
-    async def test_list_templates_with_filter(self, service, mock_db, sample_template_db):
+    async def test_list_templates_with_filter(
+        self, service, mock_db, sample_template_db
+    ):
         """Test listing templates with type filter"""
         mock_result = _query_result(scalars=[sample_template_db])
         mock_db.execute.return_value = mock_result
@@ -182,6 +192,19 @@ class TestPromptTemplateService:
         results = await service.list_templates(prompt_type=PromptType.SUMMARY)
 
         assert len(results) == 1
+
+    def test_id_in_casts_uuid_backed_columns_to_string(self, service):
+        """PostgreSQL prompt tables may be UUID-backed while legacy ORM fields are strings."""
+        from common.db.models import ScenarioPrompt as ScenarioPromptDB
+
+        template_id = str(uuid4())
+        statement = select(ScenarioPromptDB.template_id).where(
+            service._id_in(ScenarioPromptDB.template_id, [template_id])
+        )
+
+        compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+        assert "CAST(scenario_prompts.template_id AS VARCHAR)" in compiled
 
     @pytest.mark.asyncio
     async def test_render_prompt(self, service, mock_db, sample_template_db):
@@ -230,6 +253,7 @@ class TestPromptTemplateService:
         template.id = data.template_id
         template.name = "Report Template"
         template.prompt_type = "report"
+        template.business_purpose = None
         template.category = "sales"
         template.template = "Report {{ text }}"
         template.variables = ["text"]
@@ -244,7 +268,10 @@ class TestPromptTemplateService:
             _query_result(scalar=template.name),
         ]
 
-        with patch("prompt_templates.service.uuid4", return_value=UUID("12345678-1234-1234-1234-123456789012")):
+        with patch(
+            "prompt_templates.service.uuid4",
+            return_value=UUID("12345678-1234-1234-1234-123456789012"),
+        ):
             result = await service.assign_template_to_scenario(data)
 
         assert result.scenario_type == "sales"
@@ -252,15 +279,16 @@ class TestPromptTemplateService:
         mock_db.add.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_set_default_template_success(self, service, mock_db, sample_template_db):
+    async def test_set_default_template_success(
+        self, service, mock_db, sample_template_db
+    ):
         """Test setting a template as default"""
         mock_result = _query_result(scalar=sample_template_db)
         mock_db.execute.return_value = mock_result
         mock_db.commit = AsyncMock()
 
         result = await service.set_default_template(
-            sample_template_db.id,
-            PromptType.SUMMARY
+            sample_template_db.id, PromptType.SUMMARY
         )
 
         assert result is True
@@ -294,6 +322,7 @@ class TestGetTemplateForScenario:
         template.id = uuid4()
         template.name = "Scenario Template"
         template.prompt_type = "summary"
+        template.business_purpose = None
         template.category = "test"
         template.template = "Hello {{ name }}"
         template.variables = ["name"]

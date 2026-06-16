@@ -232,6 +232,96 @@ describe("client domain factories", () => {
         );
     });
 
+    it("starts business-etiquette retraining sessions through the learner facade", async () => {
+        const request = vi.fn().mockResolvedValue({ session_id: "session-retrain-1" });
+        const stream = vi.fn();
+        const newcomerTraining = createNewcomerTrainingDomain({ request, stream });
+
+        const result = await newcomerTraining.startBusinessEtiquetteRetrainingSession({
+            reason: "学员自愿切换新版重练",
+        });
+
+        expect(request).toHaveBeenCalledWith(
+            "/newcomer-training/business-etiquette/retraining-sessions",
+            {
+                method: "POST",
+                body: JSON.stringify({ reason: "学员自愿切换新版重练" }),
+            },
+        );
+        expect(result.session_id).toBe("session-retrain-1");
+    });
+
+    it("loads learner business-etiquette quiz attempts through the unit-scoped endpoint", async () => {
+        const request = vi.fn().mockResolvedValue({ items: [], total: 0 });
+        const stream = vi.fn();
+        const newcomerTraining = createNewcomerTrainingDomain({ request, stream });
+
+        await newcomerTraining.listMyBusinessEtiquetteUnitQuizAttempts(
+            "trust_foundation",
+            { limit: 10, offset: 20 },
+        );
+
+        expect(request).toHaveBeenCalledWith(
+            "/newcomer-training/business-etiquette/learning-units/trust_foundation/quiz-attempts?limit=10&offset=20",
+        );
+    });
+
+    it("previews, publishes, and assigns business-etiquette releases through admin facade", async () => {
+        const request = vi.fn()
+            .mockResolvedValueOnce({ summary: { changed_chapters: 2 } })
+            .mockResolvedValueOnce({ active_revision_no: 3 })
+            .mockResolvedValueOnce({ created_session_ids: ["session-1"] });
+        const adminSalesTrainer = createAdminSalesTrainerDomain({
+            request,
+            upload: vi.fn(),
+            resolveApiBaseUrl: () => "http://localhost:3444/api/v1",
+        });
+
+        await adminSalesTrainer.getBusinessEtiquetteReleaseImpact({
+            training_pack_key: "business_etiquette_v1",
+            target_revision_id: "revision-2",
+        });
+        await adminSalesTrainer.publishBusinessEtiquetteRelease({
+            training_pack_key: "business_etiquette_v1",
+            strategy: "allow_voluntary_switch",
+            assigned_user_ids: [],
+            reason: "月度更新",
+        });
+        await adminSalesTrainer.assignBusinessEtiquetteRetraining({
+            user_ids: ["user-1"],
+            reason: "指定新人重练",
+        });
+
+        expect(request).toHaveBeenNthCalledWith(
+            1,
+            "/admin/newcomer-training/business-etiquette/release-impact?training_pack_key=business_etiquette_v1&target_revision_id=revision-2",
+        );
+        expect(request).toHaveBeenNthCalledWith(
+            2,
+            "/admin/newcomer-training/business-etiquette/release",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    training_pack_key: "business_etiquette_v1",
+                    strategy: "allow_voluntary_switch",
+                    assigned_user_ids: [],
+                    reason: "月度更新",
+                }),
+            },
+        );
+        expect(request).toHaveBeenNthCalledWith(
+            3,
+            "/admin/newcomer-training/business-etiquette/retraining-assignments",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    user_ids: ["user-1"],
+                    reason: "指定新人重练",
+                }),
+            },
+        );
+    });
+
     it("reads admin AI coach responses from the shared unwrapped data seam", async () => {
         const aiCoach = {
             enabled: true,
@@ -241,6 +331,7 @@ describe("client domain factories", () => {
             generation_timeout_seconds: 30,
             coach_mode: "mixed_drill",
             allowed_interaction_types: ["single_choice", "multiple_choice"],
+            allowed_training_card_types: ["scenario_judgment"],
             allowed_ui_event_types: [
                 "quiz_card",
                 "explanation_card",

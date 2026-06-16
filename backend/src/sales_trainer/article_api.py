@@ -16,6 +16,7 @@ from curriculum_practice.services.learning_progress_service import (
 )
 from sales_trainer.permissions import can_manage_sales_trainer
 from sales_trainer.schemas import (
+    LearningContentBindingImpactResponse,
     NewcomerArticleBinding,
     NewcomerArticleBindingUpdate,
     NewcomerArticleProgressRequest,
@@ -25,6 +26,10 @@ from sales_trainer.schemas import (
 from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
     ArticleBindingServiceError,
+)
+from sales_trainer.services.learning_content_binding_impact_service import (
+    LearningContentBindingImpactService,
+    LearningContentBindingImpactServiceError,
 )
 
 newcomer_article_router = APIRouter(
@@ -227,3 +232,27 @@ async def bind_newcomer_module_article(
             message=exc.message,
         )
     return success_response(binding.model_dump(), trace_id=trace_id)
+
+
+@newcomer_admin_article_router.get(
+    "/learning-contents/{content_id}/binding-impact",
+    response_model=None,
+)
+async def get_learning_content_binding_impact(
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any] | JSONResponse:
+    if error := _require_manager(current_user):
+        return error
+    try:
+        impact = await LearningContentBindingImpactService(db).get_impact(content_id)
+    except LearningContentBindingImpactServiceError as exc:
+        return _api_error(
+            exc.code,
+            status_code=exc.status_code,
+            message=exc.message,
+        )
+    return success_response(
+        LearningContentBindingImpactResponse.model_validate(impact).model_dump()
+    )

@@ -30,6 +30,13 @@ QuestionType = Literal["single_choice", "multiple_choice", "true_false", "short_
 SalesTrainerQuestionType = Literal[
     "single_choice", "multiple_choice", "true_false", "short_answer"
 ]
+BusinessEtiquetteQuestionDraftType = Literal[
+    "single_choice", "multiple_choice", "short_answer"
+]
+BusinessEtiquetteQuestionDraftStatus = Literal[
+    "pending_review", "approved", "rejected", "converted"
+]
+BusinessEtiquetteCapabilityStatus = Literal["draft", "published", "archived"]
 
 
 class SalesTrainerPathConfig(BaseModel):
@@ -388,6 +395,11 @@ AiCoachRemediationStrategyV1 = Literal[
     "ask_user_choice",
     "simplify_then_retry",
 ]
+AiCoachTrainingCardTypeV1 = Literal[
+    "scenario_judgment",
+    "expression_rewrite",
+    "role_response",
+]
 
 
 def _default_ai_coach_next_actions() -> list[AiCoachNextActionV1]:
@@ -399,6 +411,12 @@ def _default_ai_coach_next_actions() -> list[AiCoachNextActionV1]:
         "summarize",
         "ask_user_choice",
         "end_session",
+    ]
+
+
+def _default_ai_coach_training_card_types() -> list[AiCoachTrainingCardTypeV1]:
+    return [
+        "scenario_judgment",
     ]
 
 
@@ -429,6 +447,11 @@ class AiCoachConfig(BaseModel):
             "single_choice",
             "multiple_choice",
         ]
+    )
+    allowed_training_card_types: list[AiCoachTrainingCardTypeV1] = Field(
+        default_factory=_default_ai_coach_training_card_types,
+        min_length=1,
+        max_length=3,
     )
     chat_enabled: bool = True
     allowed_ui_event_types: list[
@@ -556,14 +579,22 @@ class AiCoachConfig(BaseModel):
             raise ValueError("max_turns must be greater than or equal to min_turns")
         if not self.allowed_interaction_types:
             raise ValueError("allowed_interaction_types must not be empty")
+        if not self.allowed_training_card_types:
+            raise ValueError("allowed_training_card_types must not be empty")
+        short_answer_card_types = {"expression_rewrite", "role_response"}
+        if (
+            set(self.allowed_training_card_types) & short_answer_card_types
+            and "short_answer" not in self.allowed_interaction_types
+        ):
+            raise ValueError(
+                "expression_rewrite and role_response require short_answer "
+                "in allowed_interaction_types"
+            )
         if not self.allowed_ui_event_types:
             raise ValueError("allowed_ui_event_types must not be empty")
         if not self.allowed_next_actions:
             raise ValueError("allowed_next_actions must not be empty")
-        if (
-            self.incorrect_streak_to_pause
-            < self.incorrect_streak_to_remediate
-        ):
+        if self.incorrect_streak_to_pause < self.incorrect_streak_to_remediate:
             raise ValueError(
                 "incorrect_streak_to_pause must be greater than or equal to "
                 "incorrect_streak_to_remediate"
@@ -672,6 +703,16 @@ class AiCoachFeedbackGuidanceV1(BaseModel):
     incorrect: str = Field(..., min_length=1, max_length=2000)
 
 
+class AiCoachStructuredFeedbackV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    did_well: list[str] = Field(default_factory=list, max_length=5)
+    main_issue: str = Field(..., min_length=1, max_length=1000)
+    why_inappropriate: str = Field(..., min_length=1, max_length=1500)
+    suggested_response: str = Field(..., min_length=1, max_length=2000)
+    next_step: str = Field(..., min_length=1, max_length=1000)
+
+
 class AiCoachSourceEvidenceV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -694,12 +735,15 @@ class AiCoachInteractionInternalV1(BaseModel):
     schema_version: Literal["ai_coach_interaction_v1"] = (
         AI_COACH_INTERACTION_SCHEMA_VERSION
     )
+    training_card_type: AiCoachTrainingCardTypeV1 = "scenario_judgment"
     interaction_type: Literal["single_choice", "multiple_choice", "short_answer"]
     stem: str = Field(..., min_length=5, max_length=2000)
     options: list[AiCoachInteractionOptionV1] | None = None
     answer_key: AiCoachAnswerKeyV1
     scoring_rubric: AiCoachScoringRubricV1
     feedback_guidance: AiCoachFeedbackGuidanceV1
+    capability_keys: list[str] = Field(default_factory=list, max_length=10)
+    source_chapter_orders: list[int] = Field(default_factory=list, max_length=20)
     source_evidence: list[AiCoachSourceEvidenceV1] | None = None
 
     @model_validator(mode="after")
@@ -739,6 +783,12 @@ class AiCoachInteractionInternalV1(BaseModel):
                     "or at least one scoring_rubric point"
                 )
 
+        if self.training_card_type in {"expression_rewrite", "role_response"}:
+            if interaction_type != "short_answer":
+                raise ValueError(
+                    "expression_rewrite and role_response cards must use short_answer"
+                )
+
         if answer_key.option_ids:
             valid_ids = {o.option_id for o in (options or [])}
             unknown = [oid for oid in answer_key.option_ids if oid not in valid_ids]
@@ -749,9 +799,11 @@ class AiCoachInteractionInternalV1(BaseModel):
 
         total_points = sum(p.score for p in scoring_rubric.points)
         if total_points - scoring_rubric.max_score > 0.01:
-            raise ValueError(
-                "scoring_rubric point scores must not exceed max_score"
-            )
+            raise ValueError("scoring_rubric point scores must not exceed max_score")
+        if any(not key.strip() or len(key) > 80 for key in self.capability_keys):
+            raise ValueError("capability_keys must contain non-empty strings <= 80")
+        if any(order < 1 for order in self.source_chapter_orders):
+            raise ValueError("source_chapter_orders values must be >= 1")
         return self
 
 
@@ -771,10 +823,13 @@ class AiCoachInteractionPublicV1(BaseModel):
     interaction_id: str = Field(..., min_length=1, max_length=64)
     session_id: str = Field(..., min_length=1, max_length=36)
     turn_number: int = Field(..., ge=1)
+    training_card_type: AiCoachTrainingCardTypeV1 = "scenario_judgment"
     interaction_type: Literal["single_choice", "multiple_choice", "short_answer"]
     stem: str = Field(..., min_length=5, max_length=2000)
     options: list[AiCoachPublicInteractionOptionV1] | None = None
     answer_constraints: dict[str, int] = Field(default_factory=dict)
+    capability_keys: list[str] = Field(default_factory=list, max_length=10)
+    source_chapter_orders: list[int] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def validate_constraints(self) -> AiCoachInteractionPublicV1:
@@ -788,14 +843,10 @@ class AiCoachInteractionPublicV1(BaseModel):
         }
         bad_keys = sorted(set(self.answer_constraints) - allowed_keys)
         if bad_keys:
-            raise ValueError(
-                f"answer_constraints has unsupported keys: {bad_keys}"
-            )
+            raise ValueError(f"answer_constraints has unsupported keys: {bad_keys}")
         for key, value in self.answer_constraints.items():
             if not isinstance(value, int) or value < 0:
-                raise ValueError(
-                    f"answer_constraints.{key} must be a non-negative int"
-                )
+                raise ValueError(f"answer_constraints.{key} must be a non-negative int")
         min_selected = self.answer_constraints.get("min_selected")
         max_selected = self.answer_constraints.get("max_selected")
         if (
@@ -803,9 +854,7 @@ class AiCoachInteractionPublicV1(BaseModel):
             and max_selected is not None
             and max_selected < min_selected
         ):
-            raise ValueError(
-                "answer_constraints.max_selected must be >= min_selected"
-            )
+            raise ValueError("answer_constraints.max_selected must be >= min_selected")
         return self
 
 
@@ -846,6 +895,7 @@ class AiCoachScoreResultV1(BaseModel):
     mastery_threshold: float | None = Field(None, ge=0, le=100)
     mastered: bool | None = None
     feedback: str = Field(..., min_length=1, max_length=4000)
+    structured_feedback: AiCoachStructuredFeedbackV1 | None = None
     missed_points: list[str] = Field(default_factory=list)
     next_turn_available: bool = True
     finished: bool = False
@@ -892,17 +942,20 @@ class AiCoachSessionCreate(BaseModel):
     # interaction's ``interaction_type`` to a member of the module's
     # ``allowed_interaction_types`` and (for ``mixed_drill``) rotates
     # across them per turn. ``None`` means ``mixed_drill`` by default.
-    coach_mode: Literal[
-        "single_choice_drill",
-        "multiple_choice_drill",
-        "short_answer_drill",
-        "mixed_drill",
-    ] | None = None
+    coach_mode: (
+        Literal[
+            "single_choice_drill",
+            "multiple_choice_drill",
+            "short_answer_drill",
+            "mixed_drill",
+        ]
+        | None
+    ) = None
     # Optional explicit type override. ``coach_mode`` is the canonical
     # selector; this is a power-user escape hatch (e.g. admin tools).
-    interaction_type: Literal[
-        "single_choice", "multiple_choice", "short_answer"
-    ] | None = None
+    interaction_type: (
+        Literal["single_choice", "multiple_choice", "short_answer"] | None
+    ) = None
 
 
 class AiCoachTurnSubmit(BaseModel):
@@ -983,6 +1036,111 @@ class AiCoachResultResponse(BaseModel):
     turns: list[AiCoachTurnResponse] = Field(default_factory=list)
 
 
+class BusinessEtiquetteTrainingUnitConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    unit_key: str = Field(..., min_length=1, max_length=80)
+    title: str = Field(..., min_length=1, max_length=120)
+    description: str | None = Field(None, max_length=1000)
+    order_index: int = Field(1, ge=1)
+    enabled: bool = True
+    source_chapter_orders: list[int] = Field(default_factory=list)
+    capability_keys: list[str] = Field(default_factory=list)
+    unlock_after_unit_keys: list[str] = Field(default_factory=list)
+    require_reading: bool = True
+    require_quiz: bool = True
+    require_ai_coach: bool = True
+    ai_coach_required_capability_keys: list[str] = Field(default_factory=list)
+    ai_coach_pass_mastery_level_key: str = Field(
+        "basic_mastery",
+        min_length=1,
+        max_length=80,
+    )
+    ai_coach_ready_mastery_level_key: str = Field(
+        "field_ready",
+        min_length=1,
+        max_length=80,
+    )
+    ai_coach_max_remediation_attempts: int = Field(3, ge=1, le=20)
+    ai_coach_manual_review_after_max_attempts: bool = True
+    ai_coach_block_next_until_passed: bool = True
+    ai_coach_remediation_chapter_orders: list[int] = Field(default_factory=list)
+    quiz_question_count: int = Field(5, ge=1, le=50)
+    quiz_pass_threshold: float | None = Field(None, ge=0, le=100)
+    quiz_allow_retake: bool = True
+    quiz_max_attempts: int | None = Field(None, ge=1, le=100)
+    quiz_question_type_weights: dict[str, float] = Field(default_factory=dict)
+    allow_skip_reading: bool = False
+    block_next_until_complete: bool = True
+    empty_state_message: str | None = Field(None, max_length=300)
+
+    @model_validator(mode="after")
+    def validate_training_unit(self) -> BusinessEtiquetteTrainingUnitConfig:
+        if len(self.source_chapter_orders) > 20:
+            raise ValueError("source_chapter_orders must contain <= 20 items")
+        if any(order < 1 for order in self.source_chapter_orders):
+            raise ValueError("source_chapter_orders values must be >= 1")
+        if len(set(self.source_chapter_orders)) != len(self.source_chapter_orders):
+            raise ValueError("source_chapter_orders cannot contain duplicates")
+        if len(self.capability_keys) > 20 or len(self.unlock_after_unit_keys) > 20:
+            raise ValueError("learning unit list fields must contain <= 20 items")
+        if len(self.ai_coach_required_capability_keys) > 20:
+            raise ValueError(
+                "ai_coach_required_capability_keys must contain <= 20 items"
+            )
+        if len(set(self.capability_keys)) != len(self.capability_keys):
+            raise ValueError("capability_keys cannot contain duplicates")
+        if len(set(self.unlock_after_unit_keys)) != len(self.unlock_after_unit_keys):
+            raise ValueError("unlock_after_unit_keys cannot contain duplicates")
+        if len(set(self.ai_coach_required_capability_keys)) != len(
+            self.ai_coach_required_capability_keys
+        ):
+            raise ValueError("ai_coach_required_capability_keys cannot contain duplicates")
+        for value in (
+            *self.capability_keys,
+            *self.unlock_after_unit_keys,
+            *self.ai_coach_required_capability_keys,
+        ):
+            if not isinstance(value, str) or not value.strip() or len(value) > 80:
+                raise ValueError(
+                    "learning unit keys must be non-empty strings <= 80 chars"
+                )
+        if (self.require_quiz or self.require_ai_coach) and not self.capability_keys:
+            raise ValueError(
+                "capability_keys are required when quiz or ai coach is required"
+            )
+        unknown_ai_coach_keys = sorted(
+            set(self.ai_coach_required_capability_keys) - set(self.capability_keys)
+        )
+        if unknown_ai_coach_keys:
+            raise ValueError(
+                "ai_coach_required_capability_keys must be a subset of capability_keys"
+            )
+        if len(self.ai_coach_remediation_chapter_orders) > 20:
+            raise ValueError(
+                "ai_coach_remediation_chapter_orders must contain <= 20 items"
+            )
+        if any(order < 1 for order in self.ai_coach_remediation_chapter_orders):
+            raise ValueError(
+                "ai_coach_remediation_chapter_orders values must be >= 1"
+            )
+        if len(set(self.ai_coach_remediation_chapter_orders)) != len(
+            self.ai_coach_remediation_chapter_orders
+        ):
+            raise ValueError(
+                "ai_coach_remediation_chapter_orders cannot contain duplicates"
+            )
+        allowed_question_types = {"single_choice", "multiple_choice", "short_answer"}
+        invalid_question_types = sorted(
+            set(self.quiz_question_type_weights) - allowed_question_types
+        )
+        if invalid_question_types:
+            raise ValueError("quiz_question_type_weights contains unsupported keys")
+        if any(value < 0 for value in self.quiz_question_type_weights.values()):
+            raise ValueError("quiz_question_type_weights values must be >= 0")
+        return self
+
+
 class NewcomerPathModuleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1011,6 +1169,18 @@ class NewcomerPathModuleConfig(BaseModel):
     review_action_label: str | None = Field(None, max_length=40)
     guidance_templates: dict[str, str] = Field(default_factory=dict)
     ai_coach: AiCoachConfig | None = None
+    learning_units: list[BusinessEtiquetteTrainingUnitConfig] = Field(
+        default_factory=list
+    )
+
+    @model_validator(mode="after")
+    def validate_learning_units(self) -> NewcomerPathModuleConfig:
+        if len(self.learning_units) > 30:
+            raise ValueError("learning_units must contain <= 30 items")
+        unit_keys = [unit.unit_key for unit in self.learning_units]
+        if len(set(unit_keys)) != len(unit_keys):
+            raise ValueError("learning_units cannot contain duplicate unit_key values")
+        return self
 
 
 class NewcomerPathConfigPayload(BaseModel):
@@ -1272,6 +1442,46 @@ class NewcomerArticleBindingUpdate(BaseModel):
     reason: str | None = Field(None, max_length=500)
 
 
+class LearningContentBindingUnitImpact(BaseModel):
+    unit_key: str
+    title: str
+    source_chapter_orders: list[int] = Field(default_factory=list)
+    ai_coach_remediation_chapter_orders: list[int] = Field(default_factory=list)
+    capability_keys: list[str] = Field(default_factory=list)
+    require_quiz: bool
+    require_ai_coach: bool
+
+
+class LearningContentPathBindingImpact(BaseModel):
+    source: Literal["active_revision", "working_revision"]
+    path_key: str
+    module_key: str
+    module_title: str
+    revision_id: str
+    revision_no: int
+    learner_effective: bool
+    learning_units: list[LearningContentBindingUnitImpact] = Field(
+        default_factory=list
+    )
+    impacted_chapter_orders: list[int] = Field(default_factory=list)
+
+
+class LearningContentBindingImpactResponse(BaseModel):
+    learning_content_id: str
+    active_bindings: list[LearningContentPathBindingImpact] = Field(
+        default_factory=list
+    )
+    working_bindings: list[LearningContentPathBindingImpact] = Field(
+        default_factory=list
+    )
+    has_active_binding: bool
+    has_working_binding: bool
+    is_bound_to_business_skills: bool
+    can_archive: bool
+    archive_block_reason: str | None = None
+    management_entries: dict[str, str] = Field(default_factory=dict)
+
+
 class NewcomerArticleChapterResponse(BaseModel):
     chapter_id: str
     title: str
@@ -1302,6 +1512,709 @@ class NewcomerArticleProgressResponse(BaseModel):
     completed_chapter_ids: list[str] = Field(default_factory=list)
     total_chapters: int
     is_completed: bool
+
+
+class BusinessEtiquetteLearningChapterResponse(BaseModel):
+    chapter_id: str
+    title: str
+    order_index: int
+    completed: bool
+
+
+class BusinessEtiquetteLearningUnitProgressResponse(BaseModel):
+    completed_chapter_ids: list[str] = Field(default_factory=list)
+    total_chapters: int
+    completed_chapters: int
+    is_completed: bool
+
+
+class BusinessEtiquetteMasteryLevelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level_key: str = Field(..., min_length=1, max_length=80)
+    display_name: str = Field(..., min_length=1, max_length=80)
+    min_score: float = Field(..., ge=0, le=100)
+    description: str | None = Field(None, max_length=500)
+
+
+class BusinessEtiquetteEvidenceRuleConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_type: Literal[
+        "quiz_question",
+        "ai_coach_card",
+        "coach_feedback",
+        "reading_progress",
+        "manual_review",
+    ]
+    weight: float = Field(1.0, ge=0, le=10)
+    required: bool = False
+    description: str | None = Field(None, max_length=500)
+
+
+class BusinessEtiquetteCapabilityConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capability_key: str = Field(..., min_length=1, max_length=80)
+    display_name: str = Field(..., min_length=1, max_length=120)
+    description: str | None = Field(None, max_length=1000)
+    mastery_levels: list[BusinessEtiquetteMasteryLevelConfig] = Field(
+        default_factory=list
+    )
+    default_threshold: float = Field(..., ge=0, le=100)
+    evidence_rules: list[BusinessEtiquetteEvidenceRuleConfig] = Field(
+        default_factory=list
+    )
+    owner_scope: Literal["business_etiquette_training_pack"] = (
+        "business_etiquette_training_pack"
+    )
+    status: Literal["draft", "published", "archived"] = "draft"
+
+    @model_validator(mode="after")
+    def validate_capability(self) -> BusinessEtiquetteCapabilityConfig:
+        if not self.mastery_levels:
+            raise ValueError("mastery_levels must contain at least one item")
+        ordered_scores = [level.min_score for level in self.mastery_levels]
+        if ordered_scores != sorted(ordered_scores):
+            raise ValueError("mastery_levels must be ordered by min_score")
+        if len({level.level_key for level in self.mastery_levels}) != len(
+            self.mastery_levels
+        ):
+            raise ValueError("mastery_levels cannot contain duplicate level_key values")
+        if not self.evidence_rules:
+            raise ValueError("evidence_rules must contain at least one item")
+        return self
+
+
+class BusinessEtiquetteChapterCapabilityBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chapter_order: int = Field(..., ge=1, le=100)
+    capability_keys: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_binding(self) -> BusinessEtiquetteChapterCapabilityBinding:
+        if len(self.capability_keys) > 20:
+            raise ValueError("capability_keys must contain <= 20 items")
+        if len(set(self.capability_keys)) != len(self.capability_keys):
+            raise ValueError("capability_keys cannot contain duplicates")
+        for value in self.capability_keys:
+            if not value.strip() or len(value) > 80:
+                raise ValueError("capability_keys must be non-empty strings <= 80 chars")
+        return self
+
+
+class BusinessEtiquetteLearningUnitResponse(BaseModel):
+    unit_key: str
+    title: str
+    description: str | None = None
+    order_index: int
+    enabled: bool
+    source_chapter_orders: list[int] = Field(default_factory=list)
+    capability_keys: list[str] = Field(default_factory=list)
+    unlock_after_unit_keys: list[str] = Field(default_factory=list)
+    require_reading: bool
+    require_quiz: bool
+    require_ai_coach: bool
+    allow_skip_reading: bool
+    block_next_until_complete: bool
+    empty_state_message: str | None = None
+    capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(default_factory=list)
+    chapters: list[BusinessEtiquetteLearningChapterResponse] = Field(
+        default_factory=list
+    )
+    progress: BusinessEtiquetteLearningUnitProgressResponse
+
+
+class BusinessEtiquetteLearningUnitsResponse(BaseModel):
+    module_key: str
+    learning_content_id: str
+    path_revision_id: str | None = None
+    path_revision_no: int | None = None
+    units: list[BusinessEtiquetteLearningUnitResponse] = Field(default_factory=list)
+
+
+class BusinessEtiquetteKnowledgePointResponse(BaseModel):
+    title: str
+    order_index: int
+    line_number: int
+
+
+class BusinessEtiquetteMicroChapterResponse(BaseModel):
+    title: str
+    order_index: int
+    line_number: int
+    knowledge_points: list[BusinessEtiquetteKnowledgePointResponse] = Field(
+        default_factory=list
+    )
+
+
+class BusinessEtiquetteImportedChapterResponse(BaseModel):
+    title: str
+    order_index: int
+    line_number: int
+    content_hash: str
+    micro_chapters: list[BusinessEtiquetteMicroChapterResponse] = Field(
+        default_factory=list
+    )
+
+
+class BusinessEtiquetteImportResponse(BaseModel):
+    training_pack_key: str
+    learning_content_id: str
+    learning_content_status: Literal["draft"]
+    working_revision_id: str
+    working_revision_no: int
+    active_revision_id: str | None = None
+    active_revision_no: int | None = None
+    has_unpublished_revision: bool
+    source_filename: str
+    content_type: str | None = None
+    file_size_bytes: int
+    content_hash: str
+    imported_at: str
+    allow_overwrite_draft: bool
+    ai_suggestions_enabled: bool
+    book_title: str
+    original_chapter_count: int
+    micro_chapter_count: int
+    knowledge_point_count: int
+    chapters: list[BusinessEtiquetteImportedChapterResponse] = Field(
+        default_factory=list
+    )
+
+
+class BusinessEtiquetteCapabilitySnapshotSaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    training_pack_key: str | None = Field(None, min_length=1, max_length=80)
+    capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(
+        default_factory=list
+    )
+    chapter_bindings: list[BusinessEtiquetteChapterCapabilityBinding] = Field(
+        default_factory=list
+    )
+    reason: str | None = Field(None, max_length=500)
+
+
+class BusinessEtiquetteCapabilityActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    training_pack_key: str | None = Field(None, min_length=1, max_length=80)
+    reason: str | None = Field(None, max_length=500)
+
+
+class BusinessEtiquetteCapabilitySnapshotResponse(BaseModel):
+    training_pack_key: str
+    source: Literal["working_revision", "active_revision", "default_seed"]
+    working_revision_id: str | None = None
+    working_revision_no: int | None = None
+    active_revision_id: str | None = None
+    active_revision_no: int | None = None
+    has_unpublished_revision: bool
+    schema_version: int
+    capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(
+        default_factory=list
+    )
+    chapter_bindings: list[BusinessEtiquetteChapterCapabilityBinding] = Field(
+        default_factory=list
+    )
+    original_chapter_count: int | None = None
+    needs_save: bool = False
+    management_entry: str = "/admin/sales-trainer/articles/capabilities"
+    permission: str = "sales_trainer.manage_modules"
+    effective_timing: str = "training_pack_revision_publish_time"
+
+
+class BusinessEtiquetteQuestionDraftOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: str = Field(..., min_length=1, max_length=20)
+    label: str = Field(..., min_length=1, max_length=500)
+
+
+class BusinessEtiquetteQuestionDraftGenerateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    training_pack_key: str | None = Field(None, min_length=1, max_length=80)
+    chapter_order: int = Field(..., ge=1, le=100)
+    prompt_template_id: str = Field(..., min_length=1, max_length=36)
+    question_types: list[BusinessEtiquetteQuestionDraftType] = Field(
+        default_factory=lambda: [
+            "single_choice",
+            "multiple_choice",
+            "short_answer",
+        ]
+    )
+    draft_count: int = Field(3, ge=1, le=10)
+    capability_keys: list[str] = Field(default_factory=list)
+    llm_model_config: dict[str, Any] = Field(
+        default_factory=dict,
+        alias="model_config",
+    )
+    reason: str | None = Field(None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_generation_request(
+        self,
+    ) -> BusinessEtiquetteQuestionDraftGenerateRequest:
+        if not self.question_types:
+            raise ValueError("question_types must contain at least one item")
+        if len(set(self.question_types)) != len(self.question_types):
+            raise ValueError("question_types cannot contain duplicates")
+        _validate_business_etiquette_capability_key_list(self.capability_keys)
+        return self
+
+
+class BusinessEtiquetteQuestionDraftUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    stem: str | None = Field(None, min_length=1)
+    question_type: BusinessEtiquetteQuestionDraftType | None = None
+    options: list[BusinessEtiquetteQuestionDraftOption] | None = None
+    correct_answer: str | None = Field(None, min_length=1, max_length=20)
+    correct_answers: list[str] | None = None
+    reference_answer: str | None = Field(None, min_length=1, max_length=8000)
+    explanation: str | None = Field(None, max_length=4000)
+    difficulty: Literal["easy", "medium", "hard"] | None = None
+    capability_keys: list[str] | None = None
+    source_excerpt: str | None = Field(None, max_length=4000)
+    review_notes: str | None = Field(None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_update_request(
+        self,
+    ) -> BusinessEtiquetteQuestionDraftUpdateRequest:
+        if self.capability_keys is not None:
+            _validate_business_etiquette_capability_key_list(self.capability_keys)
+        if self.correct_answers is not None:
+            _validate_business_etiquette_answer_values(self.correct_answers)
+        return self
+
+
+class BusinessEtiquetteQuestionDraftApproveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str = Field(..., min_length=1, max_length=36)
+    review_notes: str | None = Field(None, max_length=2000)
+
+
+class BusinessEtiquetteQuestionDraftRejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    review_notes: str = Field(..., min_length=1, max_length=2000)
+
+
+class BusinessEtiquetteQuestionDraftResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    draft_id: str
+    batch_id: str
+    training_pack_key: str
+    training_pack_revision_id: str | None = None
+    training_pack_revision_no: int | None = None
+    learning_content_id: str | None = None
+    chapter_id: str | None = None
+    chapter_order: int
+    chapter_title: str | None = None
+    source_excerpt: str | None = None
+    question_type: BusinessEtiquetteQuestionDraftType
+    title: str
+    stem: str
+    options: list[BusinessEtiquetteQuestionDraftOption] = Field(default_factory=list)
+    correct_answer: str | None = None
+    correct_answers: list[str] = Field(default_factory=list)
+    reference_answer: str | None = None
+    explanation: str | None = None
+    difficulty: Literal["easy", "medium", "hard"]
+    capability_keys: list[str] = Field(default_factory=list)
+    status: BusinessEtiquetteQuestionDraftStatus
+    prompt_template_id: str
+    prompt_template_name: str | None = None
+    prompt_contract_hash: str
+    prompt_contract_version: str
+    prompt_rendered_hash: str
+    llm_model_config: dict[str, Any] = Field(
+        default_factory=dict,
+        alias="model_config",
+    )
+    raw_generation: dict[str, Any] = Field(default_factory=dict)
+    review_notes: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: object | None = None
+    question_id: str | None = None
+    created_by: str | None = None
+    updated_by: str | None = None
+    created_at: object
+    updated_at: object
+
+
+class BusinessEtiquetteQuestionDraftGenerateResponse(BaseModel):
+    batch_id: str
+    items: list[BusinessEtiquetteQuestionDraftResponse] = Field(default_factory=list)
+    total: int
+
+
+class BusinessEtiquetteQuestionDraftListResponse(BaseModel):
+    items: list[BusinessEtiquetteQuestionDraftResponse] = Field(default_factory=list)
+    total: int
+
+
+class BusinessEtiquetteQuizQuestionResponse(BaseModel):
+    question_id: str
+    title: str
+    stem: str
+    question_type: BusinessEtiquetteQuestionDraftType
+    points: int = Field(..., gt=0, le=100)
+    order_index: int = Field(..., ge=1)
+    options: list[BusinessEtiquetteQuestionDraftOption] = Field(default_factory=list)
+    capability_keys: list[str] = Field(default_factory=list)
+    chapter_orders: list[int] = Field(default_factory=list)
+
+
+class BusinessEtiquetteUnitQuizResponse(BaseModel):
+    training_pack_key: str
+    learning_unit_key: str
+    learning_unit_title: str
+    path_revision_id: str | None = None
+    path_revision_no: int | None = None
+    training_pack_revision_id: str | None = None
+    training_pack_revision_no: int | None = None
+    question_count: int
+    pass_threshold: float | None = None
+    allow_retake: bool
+    max_attempts: int | None = None
+    capabilities: list[BusinessEtiquetteCapabilityConfig] = Field(default_factory=list)
+    questions: list[BusinessEtiquetteQuizQuestionResponse] = Field(
+        default_factory=list
+    )
+
+
+class BusinessEtiquetteQuizAnswerSubmit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question_id: str = Field(..., min_length=1, max_length=36)
+    answer_payload: Any
+
+
+class BusinessEtiquetteUnitQuizAttemptCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answers: list[BusinessEtiquetteQuizAnswerSubmit] = Field(default_factory=list)
+
+
+class BusinessEtiquetteCapabilityScoreResponse(BaseModel):
+    capability_key: str
+    display_name: str
+    score: float | None = None
+    max_score: float
+    normalized_score: float | None = None
+    threshold: float
+    mastered: bool | None = None
+    mastery_level_key: str | None = None
+    mastery_level_name: str | None = None
+
+
+BusinessEtiquetteAiCoachProgressStatus = Literal[
+    "not_started",
+    "in_progress",
+    "not_mastered",
+    "mastered",
+    "ready",
+    "manual_review",
+]
+BusinessEtiquetteReleaseStrategy = Literal[
+    "future_learners_only",
+    "allow_voluntary_switch",
+    "assign_retraining",
+]
+
+
+class BusinessEtiquetteAiCoachProgressResponse(BaseModel):
+    session_id: str
+    module_key: str
+    learning_unit_key: str
+    learning_unit_title: str
+    status: BusinessEtiquetteAiCoachProgressStatus
+    passed: bool
+    ready_for_field: bool
+    manual_review_required: bool
+    block_next: bool
+    answered_card_count: int = Field(..., ge=0)
+    scored_card_count: int = Field(..., ge=0)
+    remediation_attempt_count: int = Field(..., ge=0)
+    max_remediation_attempts: int = Field(..., ge=1)
+    pass_mastery_level_key: str
+    ready_mastery_level_key: str
+    weak_capability_keys: list[str] = Field(default_factory=list)
+    recommended_chapter_orders: list[int] = Field(default_factory=list)
+    recommended_training_card_types: list[AiCoachTrainingCardTypeV1] = Field(
+        default_factory=list
+    )
+    next_step_code: Literal[
+        "start_training",
+        "continue_remediation",
+        "manual_review",
+        "mastered",
+        "ready",
+    ]
+    next_step: str
+    capability_scores: list[BusinessEtiquetteCapabilityScoreResponse] = Field(
+        default_factory=list
+    )
+
+
+class BusinessEtiquetteQuizAnswerResultResponse(BaseModel):
+    question_id: str
+    question_type: BusinessEtiquetteQuestionDraftType
+    answer_payload: Any
+    is_correct: bool | None = None
+    score: float | None = None
+    max_score: float
+    capability_keys: list[str] = Field(default_factory=list)
+    question_snapshot: dict[str, Any] = Field(default_factory=dict)
+    analysis: str | None = None
+    scoring_source: str | None = None
+    scoring_provider: str | None = None
+    scoring_model: str | None = None
+    scoring_latency_ms: int | None = None
+
+
+class BusinessEtiquetteUnitQuizAttemptResponse(BaseModel):
+    attempt_id: str
+    training_pack_key: str
+    learning_unit_key: str
+    learning_unit_title: str
+    user_id: str
+    user_name: str | None = None
+    user_department: str | None = None
+    path_revision_id: str | None = None
+    path_revision_no: int | None = None
+    training_pack_revision_id: str | None = None
+    training_pack_revision_no: int | None = None
+    status: Literal["submitted", "scored", "failed"]
+    total_score: float | None = None
+    max_score: float | None = None
+    passed: bool | None = None
+    capability_scores: list[BusinessEtiquetteCapabilityScoreResponse] = Field(
+        default_factory=list
+    )
+    weak_capability_keys: list[str] = Field(default_factory=list)
+    recommended_chapter_orders: list[int] = Field(default_factory=list)
+    answers: list[BusinessEtiquetteQuizAnswerResultResponse] = Field(
+        default_factory=list
+    )
+    submitted_at: object
+
+
+class BusinessEtiquetteUnitQuizAttemptListResponse(BaseModel):
+    items: list[BusinessEtiquetteUnitQuizAttemptResponse] = Field(default_factory=list)
+    total: int
+
+
+class BusinessEtiquetteReleaseConfigResponse(BaseModel):
+    default_strategy: BusinessEtiquetteReleaseStrategy
+    allow_voluntary_switch: bool
+    allow_assigned_retraining: bool
+    max_assigned_retraining_users: int = Field(..., ge=1)
+    notification_template: str
+    large_change_chapter_threshold: int = Field(..., ge=1)
+    management_entry: str
+
+
+class BusinessEtiquetteReleaseImpactSummaryResponse(BaseModel):
+    changed_chapter_count: int = Field(..., ge=0)
+    impacted_learning_unit_count: int = Field(..., ge=0)
+    impacted_question_count: int = Field(..., ge=0)
+    impacted_question_draft_count: int = Field(..., ge=0)
+    impacted_capability_count: int = Field(..., ge=0)
+    impacted_ai_coach_config_count: int = Field(..., ge=0)
+    active_learner_count: int = Field(..., ge=0)
+    recommended_retraining_user_count: int = Field(..., ge=0)
+    is_large_change: bool
+
+
+class BusinessEtiquetteReleaseChapterChangeResponse(BaseModel):
+    chapter_order: int = Field(..., ge=1)
+    title: str
+    change_type: Literal["added", "removed", "changed"]
+    previous_content_hash: str | None = None
+    target_content_hash: str | None = None
+
+
+class BusinessEtiquetteReleaseLearningUnitImpactResponse(BaseModel):
+    unit_key: str
+    title: str
+    source_chapter_orders: list[int] = Field(default_factory=list)
+    capability_keys: list[str] = Field(default_factory=list)
+    impacted_chapter_orders: list[int] = Field(default_factory=list)
+    impacted_capability_keys: list[str] = Field(default_factory=list)
+    require_quiz: bool
+    require_ai_coach: bool
+
+
+class BusinessEtiquetteReleaseQuestionImpactResponse(BaseModel):
+    question_id: str
+    draft_id: str
+    title: str
+    question_type: BusinessEtiquetteQuestionDraftType
+    chapter_order: int = Field(..., ge=1)
+    capability_keys: list[str] = Field(default_factory=list)
+
+
+class BusinessEtiquetteReleaseQuestionDraftImpactResponse(BaseModel):
+    draft_id: str
+    title: str
+    question_type: BusinessEtiquetteQuestionDraftType
+    status: BusinessEtiquetteQuestionDraftStatus
+    chapter_order: int = Field(..., ge=1)
+    capability_keys: list[str] = Field(default_factory=list)
+
+
+class BusinessEtiquetteReleaseCapabilityImpactResponse(BaseModel):
+    capability_key: str
+    display_name: str
+    change_type: Literal["added", "removed", "changed"]
+    previous_status: BusinessEtiquetteCapabilityStatus | None = None
+    target_status: BusinessEtiquetteCapabilityStatus | None = None
+
+
+class BusinessEtiquetteReleaseAiCoachConfigImpactResponse(BaseModel):
+    unit_key: str
+    title: str
+    prompt_template_id: str | None = None
+    scoring_prompt_template_id: str | None = None
+    allowed_training_card_types: list[AiCoachTrainingCardTypeV1] = Field(
+        default_factory=list
+    )
+    affected_reason: str
+
+
+class BusinessEtiquetteReleaseLearnerImpactResponse(BaseModel):
+    user_id: str
+    user_name: str | None = None
+    department: str | None = None
+    source_record_types: list[Literal["quiz_attempt", "ai_coach_session"]] = Field(
+        default_factory=list
+    )
+    latest_path_revision_no: int | None = None
+    latest_training_pack_revision_no: int | None = None
+    has_active_ai_coach_session: bool
+
+
+class BusinessEtiquetteReleaseImpactResponse(BaseModel):
+    training_pack_key: str
+    active_revision_id: str | None = None
+    active_revision_no: int | None = None
+    target_revision_id: str
+    target_revision_no: int
+    target_revision_status: Literal["working", "published", "archived"]
+    strategy_options: list[BusinessEtiquetteReleaseStrategy] = Field(
+        default_factory=list
+    )
+    config: BusinessEtiquetteReleaseConfigResponse
+    summary: BusinessEtiquetteReleaseImpactSummaryResponse
+    chapter_changes: list[BusinessEtiquetteReleaseChapterChangeResponse] = Field(
+        default_factory=list
+    )
+    impacted_learning_units: list[
+        BusinessEtiquetteReleaseLearningUnitImpactResponse
+    ] = Field(default_factory=list)
+    impacted_questions: list[BusinessEtiquetteReleaseQuestionImpactResponse] = Field(
+        default_factory=list
+    )
+    impacted_question_drafts: list[
+        BusinessEtiquetteReleaseQuestionDraftImpactResponse
+    ] = Field(default_factory=list)
+    impacted_capabilities: list[
+        BusinessEtiquetteReleaseCapabilityImpactResponse
+    ] = Field(default_factory=list)
+    impacted_ai_coach_configs: list[
+        BusinessEtiquetteReleaseAiCoachConfigImpactResponse
+    ] = Field(default_factory=list)
+    active_learners: list[BusinessEtiquetteReleaseLearnerImpactResponse] = Field(
+        default_factory=list
+    )
+    recommended_retraining_user_ids: list[str] = Field(default_factory=list)
+
+
+class BusinessEtiquetteReleasePublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    training_pack_key: str | None = Field(None, min_length=1, max_length=80)
+    strategy: BusinessEtiquetteReleaseStrategy = "future_learners_only"
+    assigned_user_ids: list[str] = Field(default_factory=list, max_length=100)
+    reason: str = Field(..., min_length=1, max_length=500)
+
+    @field_validator("assigned_user_ids")
+    @classmethod
+    def validate_assigned_user_ids(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values if value.strip()]
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("assigned_user_ids cannot contain duplicates")
+        return stripped
+
+
+class BusinessEtiquetteReleasePublishResponse(BaseModel):
+    training_pack_key: str
+    active_revision_id: str
+    active_revision_no: int
+    previous_revision_id: str | None = None
+    strategy: BusinessEtiquetteReleaseStrategy
+    impact_summary: BusinessEtiquetteReleaseImpactSummaryResponse
+    created_session_ids: list[str] = Field(default_factory=list)
+
+
+class BusinessEtiquetteRetrainingStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(None, max_length=500)
+
+
+class BusinessEtiquetteRetrainingAssignmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    training_pack_key: str | None = Field(None, min_length=1, max_length=80)
+    user_ids: list[str] = Field(..., min_length=1, max_length=100)
+    reason: str = Field(..., min_length=1, max_length=500)
+
+    @field_validator("user_ids")
+    @classmethod
+    def validate_user_ids(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values if value.strip()]
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("user_ids cannot contain duplicates")
+        if not stripped:
+            raise ValueError("user_ids must contain at least one id")
+        return stripped
+
+
+class BusinessEtiquetteRetrainingAssignmentResponse(BaseModel):
+    training_pack_key: str
+    assigned_user_ids: list[str]
+    created_session_ids: list[str]
+    reason: str
+
+
+def _validate_business_etiquette_capability_key_list(values: list[str]) -> None:
+    if len(values) > 20:
+        raise ValueError("capability_keys must contain <= 20 items")
+    if len(set(values)) != len(values):
+        raise ValueError("capability_keys cannot contain duplicates")
+    for value in values:
+        if not isinstance(value, str) or not value.strip() or len(value) > 80:
+            raise ValueError("capability_keys must be non-empty strings <= 80 chars")
+
+
+def _validate_business_etiquette_answer_values(values: list[str]) -> None:
+    if len(values) > 20:
+        raise ValueError("correct_answers must contain <= 20 items")
+    if len(set(values)) != len(values):
+        raise ValueError("correct_answers cannot contain duplicates")
+    for value in values:
+        if not isinstance(value, str) or not value.strip() or len(value) > 20:
+            raise ValueError("correct_answers items must be strings <= 20 chars")
 
 
 class AudioUploadUrlRequest(BaseModel):

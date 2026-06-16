@@ -10,7 +10,10 @@ from sales_trainer.schemas import (
     AiCoachInteractionInternalV1,
     AiCoachInteractionPublicV1,
     AiCoachNextActionV1,
+    AiCoachPublicInteractionOptionV1,
     AiCoachScoreResultV1,
+    AiCoachTrainingCardTypeV1,
+    BusinessEtiquetteAiCoachProgressResponse,
 )
 
 AI_COACH_CHAT_RESPONSE_SCHEMA_VERSION: Literal["ai_coach_chat_response_v1"] = (
@@ -49,6 +52,7 @@ AiCoachChatSessionPhaseV1: TypeAlias = Literal[
 ]
 AiCoachChatStreamEventTypeV1: TypeAlias = Literal[
     "status",
+    "ui_event_delta",
     "session_snapshot",
     "error",
 ]
@@ -132,6 +136,7 @@ class AiCoachCoachStatePublicV1(BaseModel):
     last_action: AiCoachNextActionV1 | None = None
     can_auto_advance: bool
     stopped_reason: str | None = Field(None, max_length=200)
+    business_etiquette_progress: BusinessEtiquetteAiCoachProgressResponse | None = None
 
 
 AiCoachUiEventInternalPayloadV1: TypeAlias = (
@@ -259,6 +264,37 @@ class AiCoachChatSessionPublicV1(BaseModel):
     coach_state: AiCoachCoachStatePublicV1 | None = None
 
 
+class AiCoachQuizCardDraftInteractionPublicV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["ai_coach_interaction_public_draft_v1"] = (
+        "ai_coach_interaction_public_draft_v1"
+    )
+    interaction_id: str = Field(..., min_length=1, max_length=64)
+    session_id: str = Field(..., min_length=1, max_length=36)
+    turn_number: int | None = Field(None, ge=1)
+    training_card_type: AiCoachTrainingCardTypeV1 | None = None
+    interaction_type: (
+        Literal["single_choice", "multiple_choice", "short_answer"] | None
+    ) = None
+    stem: str | None = Field(None, max_length=2000)
+    options: list[AiCoachPublicInteractionOptionV1] | None = Field(
+        default=None,
+        max_length=8,
+    )
+    answer_constraints: dict[str, int] = Field(default_factory=dict)
+    capability_keys: list[str] = Field(default_factory=list, max_length=10)
+    source_chapter_orders: list[int] = Field(default_factory=list, max_length=20)
+    is_complete: bool = False
+
+
+class AiCoachQuizCardDraftPayloadPublicV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    interaction: AiCoachQuizCardDraftInteractionPublicV1
+    explanation: str | None = Field(None, max_length=2000)
+
+
 class AiCoachChatStreamStatusEventV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -266,6 +302,18 @@ class AiCoachChatStreamStatusEventV1(BaseModel):
     phase: AiCoachChatStreamPhaseV1
     message: str = Field(..., min_length=1, max_length=300)
     session_id: str | None = Field(None, max_length=36)
+
+
+class AiCoachChatStreamUiEventDeltaEventV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["ui_event_delta"] = "ui_event_delta"
+    phase: AiCoachChatStreamPhaseV1
+    session_id: str | None = Field(None, max_length=36)
+    delta_id: str = Field(..., min_length=1, max_length=80)
+    event_type: Literal["quiz_card"] = "quiz_card"
+    status: Literal["streaming"] = "streaming"
+    payload: AiCoachQuizCardDraftPayloadPublicV1
 
 
 class AiCoachChatStreamSessionSnapshotEventV1(BaseModel):
@@ -288,6 +336,7 @@ class AiCoachChatStreamErrorEventV1(BaseModel):
 
 AiCoachChatStreamEventV1: TypeAlias = (
     AiCoachChatStreamStatusEventV1
+    | AiCoachChatStreamUiEventDeltaEventV1
     | AiCoachChatStreamSessionSnapshotEventV1
     | AiCoachChatStreamErrorEventV1
 )

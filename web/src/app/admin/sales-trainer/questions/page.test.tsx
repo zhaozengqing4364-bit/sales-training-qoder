@@ -128,10 +128,12 @@ describe("SalesTrainerQuestionsPage", () => {
             });
         });
 
-        expect(await screen.findByText("题库治理面板")).toBeTruthy();
-        expect(screen.getByText("新人训练路径专用题库，底层复用通用题库数据，管理员只维护本训练路径会用到的题目。")).toBeTruthy();
+        expect(await screen.findByText("正式题目概览")).toBeTruthy();
+        expect(screen.getByText("AI 草稿审核后会进入这里；只有发布后的题目才会被学员端小测抽取。")).toBeTruthy();
         expect(screen.queryByText(/sales_trainer/)).toBeNull();
-        expect(screen.getAllByText("题目清单").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("正式题目库").length).toBeGreaterThan(0);
+        expect(screen.getByText("正式题目清单")).toBeTruthy();
+        expect(screen.getByText("小测按已发布状态和能力点抽题；分类只用于运营管理和筛选。")).toBeTruthy();
         expect(screen.getByText("筛选题目")).toBeTruthy();
         expect(screen.getByText("报价沟通原则")).toBeTruthy();
         expect(screen.getAllByText("商务礼仪").length).toBeGreaterThan(0);
@@ -143,6 +145,12 @@ describe("SalesTrainerQuestionsPage", () => {
         expect(screen.queryByText("published")).toBeNull();
         expect(screen.getByRole("button", { name: "编辑" })).toBeTruthy();
         expect(screen.queryByRole("button", { name: /复制草稿/ })).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "AI 出题审核" }));
+        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/questions/drafts");
+
+        fireEvent.click(screen.getByRole("button", { name: "小测预览" }));
+        expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/questions/quiz-preview");
 
         fireEvent.click(screen.getByRole("button", { name: "新建题目" }));
         expect(pushMock).toHaveBeenCalledWith("/admin/sales-trainer/questions/new");

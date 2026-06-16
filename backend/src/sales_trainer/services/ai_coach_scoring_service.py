@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ValidationError
 from common.ai.llm_service import LLMService
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from sales_trainer.schemas import AiCoachStructuredFeedbackV1
 
 logger = get_logger(__name__)
 
@@ -18,6 +19,7 @@ class AiCoachScoreOutputV1(BaseModel):
     score: float = Field(..., ge=0, le=100)
     max_score: float = Field(100, ge=0, le=100)
     feedback: str = Field(..., min_length=1)
+    structured_feedback: AiCoachStructuredFeedbackV1 | None = None
     missed_points: list[str] = Field(default_factory=list)
     next_question: str | None = Field(None)
     passed: bool = False
@@ -125,6 +127,11 @@ class AiCoachScoringService:
                 "score": output.score,
                 "max_score": output.max_score,
                 "feedback": output.feedback,
+                "structured_feedback": (
+                    output.structured_feedback.model_dump(mode="json")
+                    if output.structured_feedback
+                    else None
+                ),
                 "missed_points": output.missed_points,
                 "next_question": output.next_question,
                 "passed": output.passed,
@@ -167,6 +174,7 @@ class AiCoachScoringService:
             "并决定下一道问题。评分标准：0-100 分，80 分以上视为掌握。"
             "输出必须是 JSON 格式，包含以下字段："
             "score(数字), max_score(数字, 默认100), feedback(字符串), "
+            "structured_feedback(对象或null，包含 did_well、main_issue、why_inappropriate、suggested_response、next_step), "
             "missed_points(字符串数组), next_question(字符串或null), passed(布尔值), reasoning(字符串或null)。"
         )
         return str(config.get("system_prompt") or default_system)

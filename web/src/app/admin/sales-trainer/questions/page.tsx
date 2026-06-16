@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Eye, Plus, Sparkles } from "lucide-react";
 
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { SalesTrainerAdminModuleNav } from "@/components/admin/sales-trainer/module-nav";
@@ -22,7 +22,7 @@ type ConfirmState =
 export default function SalesTrainerQuestionsPage() {
     const pathname = usePathname();
     const router = useRouter();
-    const toast = useToast();
+    const { error: showToastError, success: showToastSuccess } = useToast();
     const [questions, setQuestions] = useState<SalesTrainerQuestion[]>([]);
     const [categories, setCategories] = useState<SalesTrainerQuestionCategory[]>([]);
     const [categoryId, setCategoryId] = useState("");
@@ -52,30 +52,58 @@ export default function SalesTrainerQuestionsPage() {
         ));
     }, [categories, categoryId, questions]);
 
+    const fetchQuestionData = useCallback(async () => {
+        const [questionResult, categoryResult] = await Promise.all([
+            api.admin.salesTrainer.listQuestions({
+                category_id: categoryId || undefined,
+                status: status || undefined,
+                difficulty: difficulty || undefined,
+                tag: tag || undefined,
+            }),
+            api.admin.salesTrainer.listQuestionCategories(),
+        ]);
+
+        return {
+            categories: categoryResult.items,
+            questions: questionResult.items,
+        };
+    }, [categoryId, difficulty, status, tag]);
+
+    useEffect(() => {
+        let isCurrent = true;
+
+        void fetchQuestionData()
+            .then((result) => {
+                if (!isCurrent) return;
+                setQuestions(result.questions);
+                setCategories(result.categories);
+            })
+            .catch((loadError) => {
+                if (!isCurrent) return;
+                showToastError(getApiErrorMessage(loadError));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsLoading(false);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [fetchQuestionData, showToastError]);
+
     const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [questionResult, categoryResult] = await Promise.all([
-                api.admin.salesTrainer.listQuestions({
-                    category_id: categoryId || undefined,
-                    status: status || undefined,
-                    difficulty: difficulty || undefined,
-                    tag: tag || undefined,
-                }),
-                api.admin.salesTrainer.listQuestionCategories(),
-            ]);
-            setQuestions(questionResult.items);
-            setCategories(categoryResult.items);
+            const result = await fetchQuestionData();
+            setQuestions(result.questions);
+            setCategories(result.categories);
         } catch (loadError) {
-            toast.error(getApiErrorMessage(loadError));
+            showToastError(getApiErrorMessage(loadError));
         } finally {
             setIsLoading(false);
         }
-    }, [categoryId, difficulty, status, tag, toast]);
-
-    useEffect(() => {
-        void loadData();
-    }, [loadData]);
+    }, [fetchQuestionData, showToastError]);
 
     async function handleConfirm() {
         if (!confirmState) return;
@@ -83,15 +111,15 @@ export default function SalesTrainerQuestionsPage() {
         try {
             if (confirmState.type === "publish") {
                 await api.admin.salesTrainer.publishQuestion(confirmState.question.question_id);
-                toast.success("题目已发布并对后续组卷生效");
+                showToastSuccess("题目已发布并对后续组卷生效");
             } else {
                 await api.admin.salesTrainer.archiveQuestion(confirmState.question.question_id);
-                toast.success("题目已归档");
+                showToastSuccess("题目已归档");
             }
             setConfirmState(null);
             await loadData();
         } catch (operateError) {
-            toast.error(getApiErrorMessage(operateError));
+            showToastError(getApiErrorMessage(operateError));
         } finally {
             setIsOperating(false);
         }
@@ -103,10 +131,18 @@ export default function SalesTrainerQuestionsPage() {
             header={(
                 <div className="space-y-4">
                     <AdminPageHeader
-                        title="题库管理"
-                        description="新人训练路径专用题库，底层复用通用题库数据，管理员只维护本训练路径会用到的题目。"
+                        title="正式题目库"
+                        description="AI 草稿审核后会进入这里；只有发布后的题目才会被学员端小测抽取。"
                         primaryAction={(
                             <div className="flex flex-wrap gap-2">
+                                <Button variant="outline" onClick={() => router.push("/admin/sales-trainer/questions/drafts")}>
+                                    <Sparkles className="mr-2 h-4 w-4" />
+                                    AI 出题审核
+                                </Button>
+                                <Button variant="outline" onClick={() => router.push("/admin/sales-trainer/questions/quiz-preview")}>
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    小测预览
+                                </Button>
                                 <Button onClick={() => router.push("/admin/sales-trainer/questions/new")}>
                                     <Plus className="mr-2 h-4 w-4" />
                                     新建题目

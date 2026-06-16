@@ -14,6 +14,9 @@ from sales_trainer.schemas import (
 )
 from sales_trainer.services.ai_coach_chat_errors import AiCoachChatGenerationError
 from sales_trainer.services.ai_coach_chat_generation import AiCoachChatGenerator
+from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AiCoachGenerationDeltaHandler,
+)
 from sales_trainer.services.article_binding_service import (
     ArticleBindingService,
     ArticleBindingServiceError,
@@ -107,6 +110,7 @@ class AiCoachChatRuntime:
         config: AiCoachConfig,
         user_message: str,
         history: list[SalesTrainerAiCoachChatMessage],
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> AiCoachChatResponseInternalV1:
         try:
             return await AiCoachChatGenerator(self._db).generate(
@@ -114,6 +118,7 @@ class AiCoachChatRuntime:
                 config=config,
                 user_message=user_message,
                 history=history,
+                on_generation_delta=on_generation_delta,
             )
         except AiCoachChatGenerationError as exc:
             raise AiCoachChatRuntimeError(

@@ -17,6 +17,8 @@ from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatStreamEventV1,
     AiCoachChatStreamSessionSnapshotEventV1,
     AiCoachChatStreamStatusEventV1,
+    AiCoachChatStreamUiEventDeltaEventV1,
+    AiCoachQuizCardDraftPayloadPublicV1,
 )
 from sales_trainer.services.ai_coach_chat_errors import (
     AI_COACH_STREAM_TIMEOUT_CODE,
@@ -121,14 +123,26 @@ class AiCoachChatStreamService:
             "正在生成本轮训练计划和第一张题卡。",
             session_id=session.session_id,
         )
-        session = await asyncio.wait_for(
-            self._service.start_session_auto_advance(
-                session_id=session.session_id,
-                user_id=user_id,
-                actor=actor,
-            ),
-            timeout=float(config.generation_timeout_seconds),
+        queue, on_delta = self._delta_queue(
+            session_id=session.session_id,
+            phase="generating_first_card",
         )
+        task = asyncio.create_task(
+            asyncio.wait_for(
+                self._service.start_session_auto_advance(
+                    session_id=session.session_id,
+                    user_id=user_id,
+                    actor=actor,
+                    on_generation_delta=on_delta,
+                ),
+                timeout=float(config.generation_timeout_seconds),
+            )
+        )
+        while not task.done() or not queue.empty():
+            delta = await self._poll_delta(task, queue)
+            if delta is not None:
+                yield delta
+        session = await task
         yield self._snapshot(session, phase="completed")
 
     async def _stream_send_message(
@@ -154,15 +168,27 @@ class AiCoachChatStreamService:
             "正在生成教练回复和下一步训练内容。",
             session_id=session_id,
         )
-        session = await asyncio.wait_for(
-            self._service.send_message(
-                session_id=session_id,
-                user_id=user_id,
-                payload=payload,
-                actor=actor,
-            ),
-            timeout=float(config.generation_timeout_seconds),
+        queue, on_delta = self._delta_queue(
+            session_id=session_id,
+            phase="generating_next_card",
         )
+        task = asyncio.create_task(
+            asyncio.wait_for(
+                self._service.send_message(
+                    session_id=session_id,
+                    user_id=user_id,
+                    payload=payload,
+                    actor=actor,
+                    on_generation_delta=on_delta,
+                ),
+                timeout=float(config.generation_timeout_seconds),
+            )
+        )
+        while not task.done() or not queue.empty():
+            delta = await self._poll_delta(task, queue)
+            if delta is not None:
+                yield delta
+        session = await task
         yield self._snapshot(session, phase="completed")
 
     async def _stream_submit_answer(
@@ -192,6 +218,21 @@ class AiCoachChatStreamService:
             actor=actor,
         )
         yield self._snapshot(await self._service.public_session(session_id, user_id), phase="answer_scored")
+        should_generate_next = bool(getattr(config, "proactive_coaching_enabled", False)) and bool(
+            getattr(config, "auto_advance_enabled", False)
+        )
+        if not should_generate_next:
+            await self._service.advance_after_scored_event(
+                session_id=session_id,
+                event_id=event_id,
+                user_id=user_id,
+                event_payload=event_payload,
+                score_result=score_result,
+                answer_payload=payload.answer_payload,
+                actor=actor,
+            )
+            yield self._snapshot(await self._service.public_session(session_id, user_id), phase="completed")
+            return
         yield self._status(
             "deciding_next_action",
             "正在判断下一步训练动作。",
@@ -203,19 +244,31 @@ class AiCoachChatStreamService:
             session_id=session_id,
         )
         fallback_actor = self._actor_snapshot(actor)
+        queue, on_delta = self._delta_queue(
+            session_id=session_id,
+            phase="generating_next_card",
+        )
         try:
-            await asyncio.wait_for(
-                self._service.advance_after_scored_event(
-                    session_id=session_id,
-                    event_id=event_id,
-                    user_id=user_id,
-                    event_payload=event_payload,
-                    score_result=score_result,
-                    answer_payload=payload.answer_payload,
-                    actor=actor,
-                ),
-                timeout=float(config.generation_timeout_seconds),
+            task = asyncio.create_task(
+                asyncio.wait_for(
+                    self._service.advance_after_scored_event(
+                        session_id=session_id,
+                        event_id=event_id,
+                        user_id=user_id,
+                        event_payload=event_payload,
+                        score_result=score_result,
+                        answer_payload=payload.answer_payload,
+                        actor=actor,
+                        on_generation_delta=on_delta,
+                    ),
+                    timeout=float(config.generation_timeout_seconds),
+                )
             )
+            while not task.done() or not queue.empty():
+                delta = await self._poll_delta(task, queue)
+                if delta is not None:
+                    yield delta
+            await task
         except TimeoutError:
             await self._service.rollback_cancelled_generation()
             await self._service.record_advance_timeout_after_scored_event(
@@ -267,6 +320,38 @@ class AiCoachChatStreamService:
             phase=phase,
             session=session,
         )
+
+    @staticmethod
+    def _delta_queue(
+        *,
+        session_id: str,
+        phase,
+    ):
+        queue: asyncio.Queue[AiCoachChatStreamUiEventDeltaEventV1] = asyncio.Queue()
+
+        async def on_delta(draft: AiCoachQuizCardDraftPayloadPublicV1) -> None:
+            await queue.put(
+                AiCoachChatStreamUiEventDeltaEventV1(
+                    phase=phase,
+                    session_id=session_id,
+                    delta_id=f"{session_id}:quiz_card",
+                    payload=draft,
+                )
+            )
+
+        return queue, on_delta
+
+    @staticmethod
+    async def _poll_delta(
+        task: asyncio.Task,
+        queue: asyncio.Queue[AiCoachChatStreamUiEventDeltaEventV1],
+    ) -> AiCoachChatStreamUiEventDeltaEventV1 | None:
+        if task.done() and queue.empty():
+            return None
+        try:
+            return await asyncio.wait_for(queue.get(), timeout=0.05)
+        except TimeoutError:
+            return None
 
     @staticmethod
     def _error(

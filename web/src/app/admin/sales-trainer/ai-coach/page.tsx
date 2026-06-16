@@ -12,6 +12,7 @@ import type { AiCoachAdminConfigLike } from "@/lib/api/types";
 
 type CoachMode = "single_choice_drill" | "multiple_choice_drill" | "short_answer_drill" | "mixed_drill";
 type InteractionType = "single_choice" | "multiple_choice" | "short_answer";
+type TrainingCardType = "scenario_judgment" | "expression_rewrite" | "role_response";
 type UiEventType = "quiz_card" | "explanation_card" | "summary_card" | "followup_prompt";
 type SessionStartBehavior = "welcome_only" | "plan_then_wait" | "plan_and_first_card";
 type RemediationStrategy = "explain_then_retry" | "ask_user_choice" | "simplify_then_retry";
@@ -36,6 +37,12 @@ const INTERACTION_TYPE_OPTIONS: ReadonlyArray<{ value: InteractionType; label: s
     { value: "single_choice", label: "单选题" },
     { value: "multiple_choice", label: "多选题" },
     { value: "short_answer", label: "简答题" },
+];
+
+const TRAINING_CARD_TYPE_OPTIONS: ReadonlyArray<{ value: TrainingCardType; label: string }> = [
+    { value: "scenario_judgment", label: "场景判断卡" },
+    { value: "expression_rewrite", label: "改写卡" },
+    { value: "role_response", label: "角色回应卡" },
 ];
 
 const UI_EVENT_TYPE_OPTIONS: ReadonlyArray<{ value: UiEventType; label: string }> = [
@@ -81,6 +88,10 @@ function isInteractionType(value: string): value is InteractionType {
     return INTERACTION_TYPE_OPTIONS.some((option) => option.value === value);
 }
 
+function isTrainingCardType(value: string): value is TrainingCardType {
+    return TRAINING_CARD_TYPE_OPTIONS.some((option) => option.value === value);
+}
+
 function isUiEventType(value: string): value is UiEventType {
     return UI_EVENT_TYPE_OPTIONS.some((option) => option.value === value);
 }
@@ -109,6 +120,7 @@ interface AiCoachAdminConfig {
     generation_timeout_seconds: number;
     coach_mode: CoachMode;
     allowed_interaction_types: InteractionType[];
+    allowed_training_card_types: TrainingCardType[];
     allowed_ui_event_types: UiEventType[];
     max_cards_per_message: number;
     proactive_coaching_enabled: boolean;
@@ -152,6 +164,7 @@ const DEFAULT_CONFIG: AiCoachAdminConfig = {
     generation_timeout_seconds: 30,
     coach_mode: "mixed_drill",
     allowed_interaction_types: ["single_choice", "multiple_choice"],
+    allowed_training_card_types: ["scenario_judgment"],
     allowed_ui_event_types: ["quiz_card", "explanation_card", "summary_card", "followup_prompt"],
     max_cards_per_message: 3,
     proactive_coaching_enabled: false,
@@ -225,6 +238,22 @@ function validate(config: AiCoachAdminConfig): string | null {
         if (!isInteractionType(value)) {
             return `allowed_interaction_types 含非法值: ${String(value)}`;
         }
+    }
+    if (!Array.isArray(config.allowed_training_card_types) || config.allowed_training_card_types.length === 0) {
+        return "allowed_training_card_types 必须非空";
+    }
+    for (const value of config.allowed_training_card_types) {
+        if (!isTrainingCardType(value)) {
+            return `allowed_training_card_types 含非法值: ${String(value)}`;
+        }
+    }
+    if (
+        config.allowed_training_card_types.some((value) => (
+            value === "expression_rewrite" || value === "role_response"
+        ))
+        && !config.allowed_interaction_types.includes("short_answer")
+    ) {
+        return "启用改写卡或角色回应卡时必须同时启用 short_answer";
     }
     if (!Array.isArray(config.allowed_ui_event_types) || config.allowed_ui_event_types.length === 0) {
         return "allowed_ui_event_types 必须非空";
@@ -369,6 +398,10 @@ function normalize(raw: unknown): AiCoachAdminConfig {
         ? record.allowed_interaction_types.filter((value): value is string => typeof value === "string")
         : DEFAULT_CONFIG.allowed_interaction_types;
     const allowedInteractionTypes = allowedRaw.filter(isInteractionType);
+    const allowedTrainingCardRaw = Array.isArray(record.allowed_training_card_types)
+        ? record.allowed_training_card_types.filter((value): value is string => typeof value === "string")
+        : DEFAULT_CONFIG.allowed_training_card_types;
+    const allowedTrainingCardTypes = allowedTrainingCardRaw.filter(isTrainingCardType);
     const allowedUiRaw = Array.isArray(record.allowed_ui_event_types)
         ? record.allowed_ui_event_types.filter((value): value is string => typeof value === "string")
         : DEFAULT_CONFIG.allowed_ui_event_types;
@@ -418,6 +451,9 @@ function normalize(raw: unknown): AiCoachAdminConfig {
         allowed_interaction_types: allowedInteractionTypes.length > 0
             ? allowedInteractionTypes
             : DEFAULT_CONFIG.allowed_interaction_types,
+        allowed_training_card_types: allowedTrainingCardTypes.length > 0
+            ? allowedTrainingCardTypes
+            : DEFAULT_CONFIG.allowed_training_card_types,
         allowed_ui_event_types: allowedUiEventTypes.length > 0
             ? allowedUiEventTypes
             : DEFAULT_CONFIG.allowed_ui_event_types,
@@ -572,6 +608,19 @@ export default function AdminAiCoachConfigPage() {
             return {
                 ...current,
                 allowed_interaction_types: next.length > 0 ? next : current.allowed_interaction_types,
+            };
+        });
+    }
+
+    function toggleTrainingCardType(value: TrainingCardType) {
+        setConfig((current) => {
+            const exists = current.allowed_training_card_types.includes(value);
+            const next = exists
+                ? current.allowed_training_card_types.filter((entry) => entry !== value)
+                : [...current.allowed_training_card_types, value];
+            return {
+                ...current,
+                allowed_training_card_types: next.length > 0 ? next : current.allowed_training_card_types,
             };
         });
     }
@@ -784,6 +833,34 @@ export default function AdminAiCoachConfigPage() {
                                                 className="h-3.5 w-3.5"
                                                 checked={checked}
                                                 onChange={() => toggleInteractionType(option.value)}
+                                            />
+                                            {option.label}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </fieldset>
+
+                        <fieldset className="rounded-2xl border border-amber-100 bg-amber-50/50 p-3 md:col-span-2">
+                            <legend className="px-1 text-sm font-semibold text-slate-900">allowed_training_card_types</legend>
+                            <p className="text-xs text-slate-500">控制商务礼仪 AI 教练可生成的 ABD 训练卡类型。</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {TRAINING_CARD_TYPE_OPTIONS.map((option) => {
+                                    const checked = config.allowed_training_card_types.includes(option.value);
+                                    return (
+                                        <label
+                                            key={option.value}
+                                            className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${
+                                                checked
+                                                    ? "border-amber-700 bg-amber-700 text-white"
+                                                    : "border-amber-100 bg-white text-slate-700"
+                                            }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="h-3.5 w-3.5"
+                                                checked={checked}
+                                                onChange={() => toggleTrainingCardType(option.value)}
                                             />
                                             {option.label}
                                         </label>

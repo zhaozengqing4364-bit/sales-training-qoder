@@ -1,8 +1,10 @@
 import type {
+    BusinessEtiquetteTrainingUnitConfig,
     NewcomerPathConfigPayload,
     NewcomerPathModuleConfig,
 } from "@/lib/api/types";
 
+import { defaultBusinessEtiquetteLearningUnits } from "./business-etiquette-units";
 import { MODULE_DEFINITIONS } from "./config-center-definitions";
 import type { NewcomerConfigModuleKey } from "./config-center-types";
 
@@ -16,6 +18,7 @@ export interface PathAudioBindingValue {
 
 export interface PathBusinessBindingValue {
     readonly examPaperId: string;
+    readonly learningUnits: readonly BusinessEtiquetteTrainingUnitConfig[];
     readonly learningContentId: string;
 }
 
@@ -88,6 +91,9 @@ export function businessBindingValueForModule(
     const pathModule = path.modules.find((item) => item.module_key === "business_skills") ?? null;
     return {
         examPaperId: pathModule?.exam_paper_id ?? "",
+        learningUnits: pathModule?.learning_units?.length
+            ? [...pathModule.learning_units]
+            : defaultBusinessEtiquetteLearningUnits(),
         learningContentId: pathModule?.learning_content_id ?? "",
     };
 }
@@ -100,6 +106,7 @@ export function updatePathBusinessBinding(
         ...pathModule,
         exam_paper_id: nullable(value.examPaperId),
         learning_content_id: nullable(value.learningContentId),
+        learning_units: [...value.learningUnits],
     });
     if (path.modules.some((pathModule) => pathModule.module_key === "business_skills")) {
         return {
@@ -135,6 +142,7 @@ function defaultAudioModule(moduleKey: AudioEditableModuleKey): NewcomerPathModu
         retry_action_label: null,
         review_action_label: null,
         guidance_templates: {},
+        learning_units: defaultBusinessEtiquetteLearningUnits(),
     };
 }
 

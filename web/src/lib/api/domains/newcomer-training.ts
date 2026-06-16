@@ -11,6 +11,14 @@ import type {
     AiCoachSessionPublicV1,
     AiCoachTurnFeedbackV1,
     AiCoachTurnSubmitRequest,
+    BusinessEtiquetteAiCoachProgress,
+    BusinessEtiquetteLearningUnitsResponse,
+    BusinessEtiquetteRetrainingStartResponse,
+    BusinessEtiquetteUnitQuiz,
+    BusinessEtiquetteUnitQuizAttempt,
+    BusinessEtiquetteUnitQuizAttemptCreateRequest,
+    BusinessEtiquetteUnitQuizAttemptListResponse,
+    LearningContentBindingImpactResponse,
     NewcomerArticle,
     NewcomerArticleBinding,
     NewcomerArticleBindingUpdateRequest,
@@ -81,6 +89,69 @@ export function createNewcomerTrainingDomain({
         getModuleArticleProgress: async (moduleKey: string) => {
             return request<NewcomerArticleProgressResponse>(
                 `/newcomer-training/modules/${encodeURIComponent(moduleKey)}/article-progress`,
+            );
+        },
+
+        getBusinessEtiquetteLearningUnits: async () => {
+            return request<BusinessEtiquetteLearningUnitsResponse>(
+                "/newcomer-training/business-etiquette/learning-units",
+            );
+        },
+
+        getBusinessEtiquetteUnitQuiz: async (unitKey: string) => {
+            return request<BusinessEtiquetteUnitQuiz>(
+                `/newcomer-training/business-etiquette/learning-units/${encodeURIComponent(unitKey)}/quiz`,
+            );
+        },
+
+        submitBusinessEtiquetteUnitQuizAttempt: async (
+            unitKey: string,
+            payload: BusinessEtiquetteUnitQuizAttemptCreateRequest,
+        ) => {
+            return request<BusinessEtiquetteUnitQuizAttempt>(
+                `/newcomer-training/business-etiquette/learning-units/${encodeURIComponent(unitKey)}/quiz-attempts`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listMyBusinessEtiquetteUnitQuizAttempts: async (
+            unitKey: string,
+            params?: { limit?: number; offset?: number },
+        ) => {
+            const query = buildQueryString({
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<BusinessEtiquetteUnitQuizAttemptListResponse>(
+                `/newcomer-training/business-etiquette/learning-units/${encodeURIComponent(unitKey)}/quiz-attempts${query}`,
+            );
+        },
+
+        getBusinessEtiquetteAiCoachProgress: async (
+            sessionId: string,
+            params?: { unit_key?: string | null },
+        ) => {
+            const query = buildQueryString({
+                session_id: sessionId,
+                unit_key: params?.unit_key ?? undefined,
+            });
+            return request<BusinessEtiquetteAiCoachProgress>(
+                `/newcomer-training/business-etiquette/ai-coach/progress${query}`,
+            );
+        },
+
+        startBusinessEtiquetteRetrainingSession: async (payload?: {
+            reason?: string | null;
+        }) => {
+            return request<BusinessEtiquetteRetrainingStartResponse>(
+                "/newcomer-training/business-etiquette/retraining-sessions",
+                {
+                    method: "POST",
+                    body: JSON.stringify({ reason: payload?.reason ?? null }),
+                },
             );
         },
 
@@ -425,6 +496,12 @@ export function createAdminNewcomerTrainingDomain({
                     method: "PUT",
                     body: JSON.stringify(payload),
                 },
+            );
+        },
+
+        getLearningContentBindingImpact: async (contentId: string) => {
+            return request<LearningContentBindingImpactResponse>(
+                `/admin/newcomer-training/learning-contents/${encodeURIComponent(contentId)}/binding-impact`,
             );
         },
 

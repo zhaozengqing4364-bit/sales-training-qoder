@@ -43,8 +43,10 @@ export function QuestionCardList({
         <GlassCard className="overflow-hidden p-0">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
                 <div>
-                    <h2 className="text-lg font-bold text-slate-900">题目清单</h2>
-                    <p className="mt-1 text-xs text-slate-500">按题目粒度维护，组卷请前往考卷管理。</p>
+                    <h2 className="text-lg font-bold text-slate-900">正式题目清单</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                        小测按已发布状态和能力点抽题；分类只用于运营管理和筛选。
+                    </p>
                 </div>
                 <Badge className="bg-slate-100 text-slate-700">
                     {isLoading ? "加载中" : `${questions.length} 题`}

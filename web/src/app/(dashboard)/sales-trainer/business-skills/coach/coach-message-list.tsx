@@ -31,7 +31,9 @@ export function CoachMessageList({
     isAdvancing,
     activityLabel,
     activeEventId,
+    hiddenEventIds,
     error,
+    className,
     onFollowupPrompt,
     onDraftChange,
     onSubmitEvent,
@@ -45,7 +47,9 @@ export function CoachMessageList({
     readonly isAdvancing: boolean;
     readonly activityLabel: string | null;
     readonly activeEventId: string | null;
+    readonly hiddenEventIds?: ReadonlySet<string>;
     readonly error: string | null;
+    readonly className?: string;
     readonly onFollowupPrompt: (prompt: string) => void;
     readonly onDraftChange: (eventId: string, payload: AiCoachAnswerPayloadV1) => void;
     readonly onSubmitEvent: (event: AiCoachUiEventPublicV1) => void;
@@ -86,7 +90,7 @@ export function CoachMessageList({
             ref={logRef}
             role="log"
             aria-label="商务技巧 AI 教练对话"
-            className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 md:px-8"
+            className={className ?? "min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 md:px-8"}
         >
             {messages.map((message) => (
                 <ChatMessage
@@ -94,6 +98,7 @@ export function CoachMessageList({
                     message={message}
                     events={eventsByMessage.get(message.message_id) ?? []}
                     activeEventId={activeEventId}
+                    hiddenEventIds={hiddenEventIds ?? EMPTY_EVENT_ID_SET}
                     drafts={drafts}
                     submittingEventIds={submittingEventIds}
                     onFollowupPrompt={onFollowupPrompt}
@@ -142,6 +147,7 @@ function ChatMessage({
     message,
     events,
     activeEventId,
+    hiddenEventIds,
     drafts,
     submittingEventIds,
     onFollowupPrompt,
@@ -151,6 +157,7 @@ function ChatMessage({
     readonly message: AiCoachChatMessagePublicV1 | PendingMessage;
     readonly events: readonly AiCoachUiEventPublicV1[];
     readonly activeEventId: string | null;
+    readonly hiddenEventIds: ReadonlySet<string>;
     readonly drafts: DraftByEventId;
     readonly submittingEventIds: ReadonlySet<string>;
     readonly onFollowupPrompt: (prompt: string) => void;
@@ -174,13 +181,14 @@ function ChatMessage({
                 {!isUser ? (
                     <div className="space-y-3">
                         {events.map((event) =>
-                            shouldRenderEvent(event, activeEventId) ? (
+                            shouldRenderEvent(event, activeEventId, hiddenEventIds) ? (
                                 <GenerativeCard
                                     key={event.event_id}
                                     event={event}
                                     draft={drafts[event.event_id] ?? null}
                                     isActive={event.event_id === activeEventId}
                                     isSubmitting={submittingEventIds.has(event.event_id)}
+                                    presentation="compact"
                                     onFollowupPrompt={onFollowupPrompt}
                                     onDraftChange={(payload) =>
                                         onDraftChange(event.event_id, payload)
@@ -200,7 +208,11 @@ function ChatMessage({
 function shouldRenderEvent(
     event: AiCoachUiEventPublicV1,
     activeEventId: string | null,
+    hiddenEventIds: ReadonlySet<string>,
 ): boolean {
+    if (hiddenEventIds.has(event.event_id)) {
+        return false;
+    }
     if (event.type !== "quiz_card") {
         return true;
     }
@@ -209,6 +221,8 @@ function shouldRenderEvent(
     }
     return activeEventId !== null && event.event_id === activeEventId;
 }
+
+const EMPTY_EVENT_ID_SET = new Set<string>();
 
 function Avatar({ role }: { readonly role: "assistant" | "user" }) {
     const className =

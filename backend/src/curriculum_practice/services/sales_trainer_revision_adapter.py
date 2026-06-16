@@ -18,6 +18,7 @@ from sales_trainer.services.operation_log_service import (
 
 class SalesTrainerAssetRevision(Protocol):
     revision_id: str
+    revision_no: int
     source_revision_id: str | None
     previous_revision_id: str | None
     change_class: AssetChangeClass

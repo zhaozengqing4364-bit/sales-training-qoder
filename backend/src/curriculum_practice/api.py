@@ -75,12 +75,12 @@ from curriculum_practice.services.examiner_agents import (
 )
 from curriculum_practice.services.examiner_report_service import ExaminerReportService
 from curriculum_practice.services.learner_profiles import LearnerProfileService
-from curriculum_practice.services.learning_contents import (
-    SERVER_ERROR as LEARNING_CONTENT_SERVICE_FAILED,
-)
 from curriculum_practice.services.learning_content_serializers import (
     serialize_chapter,
     serialize_learning_content,
+)
+from curriculum_practice.services.learning_contents import (
+    SERVER_ERROR as LEARNING_CONTENT_SERVICE_FAILED,
 )
 from curriculum_practice.services.learning_contents import LearningContentService
 from curriculum_practice.services.learning_path import LearningPathService
@@ -524,6 +524,15 @@ def _learning_content_result_error(
             "[LEARNING_CONTENT_NOT_EDITABLE]",
             status_code=409,
             message="Archived LearningContent records cannot be changed.",
+        )
+    if error_code == "[LEARNING_CONTENT_BOUND_TO_NEWCOMER_PATH]":
+        return _api_error(
+            "[LEARNING_CONTENT_BOUND_TO_NEWCOMER_PATH]",
+            status_code=409,
+            message=(
+                "该学习内容正在被新人训练路径引用。请先替换绑定并发布路径配置，"
+                "再归档学习内容。"
+            ),
         )
     if error_code == "[LEARNING_CHAPTER_REORDER_INVALID]":
         return _api_error(

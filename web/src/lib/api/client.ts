@@ -4429,9 +4429,15 @@ export const api = {
         },
 
         // Prompt Templates (B10)
-        getPromptTemplates: async (params?: { prompt_type?: string; category?: string; is_active?: boolean }) => {
+        getPromptTemplates: async (params?: {
+            prompt_type?: string;
+            business_purpose?: string;
+            category?: string;
+            is_active?: boolean;
+        }) => {
             const queryParams = new URLSearchParams();
             if (params?.prompt_type) queryParams.append("prompt_type", params.prompt_type);
+            if (params?.business_purpose) queryParams.append("business_purpose", params.business_purpose);
             if (params?.category) queryParams.append("category", params.category);
             if (params?.is_active !== undefined) queryParams.append("is_active", String(params.is_active));
             const query = queryParams.toString() ? `?${queryParams.toString()}` : "";

@@ -5,6 +5,7 @@ import {
     BookOpen,
     Bot,
     ClipboardList,
+    Eye,
     FileText,
     Headphones,
     LayoutDashboard,
@@ -15,8 +16,10 @@ import {
     ScrollText,
     Settings,
     SlidersHorizontal,
+    Sparkles,
     Tags,
     Target,
+    UploadCloud,
     type LucideIcon,
 } from "lucide-react";
 
@@ -43,10 +46,12 @@ const CONTEXT_NAV_GROUPS: readonly ContextNavGroup[] = [
     },
     {
         root: "/admin/sales-trainer/questions",
-        label: "题库管理",
+        label: "题目生产",
         items: [
-            { href: "/admin/sales-trainer/questions", label: "题目清单", icon: BookOpen },
-            { href: "/admin/sales-trainer/questions/categories", label: "分类管理", icon: Tags },
+            { href: "/admin/sales-trainer/questions", label: "正式题目库", icon: BookOpen },
+            { href: "/admin/sales-trainer/questions/drafts", label: "AI 出题审核", icon: Sparkles },
+            { href: "/admin/sales-trainer/questions/categories", label: "题目分类", icon: Tags },
+            { href: "/admin/sales-trainer/questions/quiz-preview", label: "小测预览", icon: Eye },
         ],
     },
     {
@@ -68,7 +73,19 @@ const CONTEXT_NAV_GROUPS: readonly ContextNavGroup[] = [
     {
         root: "/admin/sales-trainer/articles",
         label: "商务技巧文章",
-        items: [{ href: "/admin/sales-trainer/articles", label: "文章绑定", icon: FileText }],
+        items: [
+            { href: "/admin/sales-trainer/articles", label: "文章绑定", icon: FileText },
+            {
+                href: "/admin/sales-trainer/articles/import",
+                label: "资料导入",
+                icon: UploadCloud,
+            },
+            {
+                href: "/admin/sales-trainer/articles/capabilities",
+                label: "能力点",
+                icon: Target,
+            },
+        ],
     },
     {
         root: "/admin/sales-trainer/papers",

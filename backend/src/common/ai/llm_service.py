@@ -11,11 +11,13 @@ References:
 """
 
 import os
+from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from openai import OpenAIError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from common.ai.config_manager import get_config_manager
@@ -376,6 +378,132 @@ class LLMService:
             else:
                 logger.info("Compiled prompt contract diagnostic", **log_kwargs)
 
+    @staticmethod
+    def _build_messages(
+        prompt: str,
+        system_message: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> list[SystemMessage | HumanMessage | AIMessage]:
+        messages: list[SystemMessage | HumanMessage | AIMessage] = []
+
+        if system_message:
+            messages.append(SystemMessage(content=system_message))
+
+        if context and "history" in context:
+            for msg in context["history"]:
+                if msg["role"] == "user":
+                    messages.append(HumanMessage(content=msg["content"]))
+                elif msg["role"] == "assistant":
+                    messages.append(AIMessage(content=msg["content"]))
+
+        messages.append(HumanMessage(content=prompt))
+        return messages
+
+    @staticmethod
+    def _content_to_text(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            pieces: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    pieces.append(item)
+                elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                    pieces.append(str(item["text"]))
+            return "".join(pieces)
+        return ""
+
+    async def stream_generate(
+        self,
+        prompt: str,
+        session_id: str,
+        system_message: str | None = None,
+        context: dict[str, Any] | None = None,
+        *,
+        allow_fallback_response: bool = True,
+    ) -> AsyncIterator[str]:
+        """Stream LLM response text chunks for callers with their own contracts."""
+        if self._is_performance_test_mode():
+            yield self._get_fallback_response(prompt, context)
+            return
+
+        if not self.is_configured:
+            logger.error(
+                "LLM service not configured for streaming",
+                provider=self.provider,
+                model_name=self.model_name,
+                base_url_policy=(
+                    f"required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                    if self._runtime_policy.get("base_url_required")
+                    else f"not_required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                ),
+            )
+            if allow_fallback_response:
+                yield self._get_fallback_response(prompt, context)
+                return
+            raise RuntimeError("[LLM_NOT_CONFIGURED]")
+
+        try:
+            messages = self._build_messages(prompt, system_message, context)
+            cost_handler = CostTrackingHandler(session_id)
+            async for chunk in self._llm.astream(
+                messages,
+                config={"callbacks": [cost_handler]},
+            ):
+                text = self._content_to_text(getattr(chunk, "content", ""))
+                if text:
+                    yield text
+            cost = (cost_handler.total_tokens / 1000) * self.cost_per_1k_tokens
+            self.session_costs[session_id] = (
+                self.session_costs.get(session_id, 0) + cost
+            )
+            self._record_runtime_event(
+                session_id,
+                build_runtime_event(
+                    event_id="llm_cost_tracking_coarse_session_total",
+                    category="cost",
+                    severity="info",
+                    status="tracked",
+                    source="llm.stream_generate",
+                    summary="Streaming LLM token usage and coarse session cost were recorded.",
+                    details={
+                        "provider": self.provider,
+                        "model_name": self.model_name,
+                    },
+                    metrics={
+                        "prompt_tokens": cost_handler.prompt_tokens,
+                        "completion_tokens": cost_handler.completion_tokens,
+                        "total_tokens": cost_handler.total_tokens,
+                        "request_cost": round(cost, 6),
+                        "session_cost": round(self.session_costs[session_id], 6),
+                    },
+                ),
+            )
+        except (
+            ConnectionError,
+            TimeoutError,
+            RuntimeError,
+            ValueError,
+            OSError,
+            OpenAIError,
+        ) as e:
+            logger.error(
+                "LLM streaming generation error",
+                provider=self.provider,
+                model_name=self.model_name,
+                error_type=type(e).__name__,
+                error=str(e),
+                base_url_policy=(
+                    f"required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                    if self._runtime_policy.get("base_url_required")
+                    else f"not_required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                ),
+            )
+            if allow_fallback_response:
+                yield self._get_fallback_response(prompt, context)
+                return
+            raise RuntimeError("[LLM_STREAMING_GENERATION_FAILED]") from e
+
     @retry(
         stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=10)
     )
@@ -435,22 +563,7 @@ class LLMService:
             return Result.fail("[LLM_NOT_CONFIGURED]")
 
         try:
-            messages = []
-
-            # Add system message if provided
-            if system_message:
-                messages.append(SystemMessage(content=system_message))
-
-            # Add context if provided
-            if context and "history" in context:
-                for msg in context["history"]:
-                    if msg["role"] == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
-                    elif msg["role"] == "assistant":
-                        messages.append(AIMessage(content=msg["content"]))
-
-            # Add current prompt
-            messages.append(HumanMessage(content=prompt))
+            messages = self._build_messages(prompt, system_message, context)
 
             # Generate with cost tracking
             cost_handler = CostTrackingHandler(session_id)
@@ -518,7 +631,14 @@ class LLMService:
 
             return Result.ok(response_text)
 
-        except (ConnectionError, TimeoutError, RuntimeError, ValueError, OSError) as e:
+        except (
+            ConnectionError,
+            TimeoutError,
+            RuntimeError,
+            ValueError,
+            OSError,
+            OpenAIError,
+        ) as e:
             logger.error(
                 "LLM generation error",
                 provider=self.provider,

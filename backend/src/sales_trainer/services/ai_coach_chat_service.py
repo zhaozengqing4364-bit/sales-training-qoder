@@ -24,6 +24,9 @@ from sales_trainer.services.ai_coach_chat_errors import (
     service_error_from_exception,
 )
 from sales_trainer.services.ai_coach_chat_event_writer import AiCoachChatEventWriter
+from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AiCoachGenerationDeltaHandler,
+)
 from sales_trainer.services.ai_coach_chat_projection import (
     AiCoachChatProjection,
 )
@@ -41,6 +44,13 @@ from sales_trainer.services.ai_coach_chat_session_creator import (
 from sales_trainer.services.ai_coach_chat_store import (
     AiCoachChatStore,
     AiCoachChatStoreError,
+)
+from sales_trainer.services.business_etiquette_ai_coach_progress_service import (
+    BusinessEtiquetteAiCoachProgressService,
+    BusinessEtiquetteAiCoachProgressServiceError,
+)
+from sales_trainer.services.business_etiquette_learning_service import (
+    BUSINESS_SKILLS_MODULE_KEY,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_service import SalesTrainerPathConfigService
@@ -158,6 +168,7 @@ class AiCoachChatService:
         session_id: str,
         user_id: str,
         actor: User | None = None,
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> AiCoachChatSessionPublicV1:
         session = await self._require_owned_session(session_id, user_id)
         try:
@@ -165,6 +176,7 @@ class AiCoachChatService:
                 session=session,
                 config=self._runtime.config_from_session(session),
                 actor=actor,
+                on_generation_delta=on_generation_delta,
             )
         except AiCoachChatGenerationError as exc:
             raise service_error_from_exception(exc) from exc
@@ -187,6 +199,7 @@ class AiCoachChatService:
         user_id: str,
         payload: AiCoachChatMessageCreate,
         actor: User | None = None,
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> AiCoachChatSessionPublicV1:
         session = await self._require_owned_session(session_id, user_id)
         if session.status != "in_progress":
@@ -220,6 +233,7 @@ class AiCoachChatService:
                     command=payload.command,
                     event_id=payload.event_id,
                     actor=actor,
+                    on_generation_delta=on_generation_delta,
                 )
             except AiCoachChatGenerationError as exc:
                 raise service_error_from_exception(exc) from exc
@@ -232,6 +246,7 @@ class AiCoachChatService:
                 config=config,
                 user_message=message,
                 history=history,
+                on_generation_delta=on_generation_delta,
             )
         except AiCoachChatRuntimeError as exc:
             raise service_error_from_exception(exc) from exc
@@ -337,6 +352,19 @@ class AiCoachChatService:
             metadata={"session_id": session_id, "score": score_result.score},
         )
         await self._db.flush()
+        if str(session.module_key) == BUSINESS_SKILLS_MODULE_KEY:
+            try:
+                await BusinessEtiquetteAiCoachProgressService(
+                    self._db,
+                    store=self._store,
+                    logs=self._logs,
+                ).update_session_progress_snapshot(session, actor=actor)
+            except BusinessEtiquetteAiCoachProgressServiceError as exc:
+                raise AiCoachChatServiceError(
+                    exc.code,
+                    exc.message,
+                    exc.status_code,
+                ) from exc
         await self._db.commit()
         return event_payload, score_result
 
@@ -350,6 +378,7 @@ class AiCoachChatService:
         score_result,
         answer_payload: AiCoachAnswerPayloadV1,
         actor: User | None = None,
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> None:
         session = await self._require_owned_session(session_id, user_id)
         try:
@@ -361,6 +390,7 @@ class AiCoachChatService:
                 score_result=score_result,
                 answer_payload=answer_payload,
                 actor=actor,
+                on_generation_delta=on_generation_delta,
             )
         except AiCoachChatGenerationError as exc:
             raise service_error_from_exception(exc) from exc

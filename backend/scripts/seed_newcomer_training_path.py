@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import sys
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Literal, TypeVar
 
-from sqlalchemy import Select, String, cast, delete, select, text
+from sqlalchemy import Select, String, cast, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -26,6 +28,7 @@ from curriculum_practice.models import (
     QuestionCategory,
     QuestionItem,
 )
+from prompt_templates.models import PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
 from sales_trainer.models import (
     SalesTrainerExamPaper,
     SalesTrainerUnit,
@@ -39,6 +42,20 @@ from sales_trainer.schemas import (
 )
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
+)
+from sales_trainer.services.business_etiquette_capability_service import (
+    CAPABILITY_SNAPSHOT_KEY,
+    default_business_etiquette_capability_snapshot,
+)
+from sales_trainer.services.business_etiquette_import_service import (
+    BUSINESS_ETIQUETTE_RESOURCE_TYPE,
+    DEFAULT_BUSINESS_ETIQUETTE_CONTENT_TITLE,
+    DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+    ParsedBusinessEtiquetteDocument,
+    parse_business_etiquette_markdown,
+)
+from sales_trainer.services.business_etiquette_learning_unit_defaults import (
+    default_business_etiquette_learning_units_payload,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
@@ -63,10 +80,17 @@ MODULE_KEYS = ["ppt_explain", "business_skills", "pyramid_speech", "realtime_pla
 BUSINESS_SKILLS_MODULE_KEY = "business_skills"
 BUSINESS_SKILLS_PAPER_KEY = "newcomer_business_skills_paper_v1"
 LEARNING_CONTENT_SOURCE = "seed_newcomer_training_path"
-LEARNING_CONTENT_TITLE = "见客户前商务礼仪"
-LEARNING_CONTENT_SUMMARY = "阅读文章后完成商务技巧考卷。"
+LEARNING_CONTENT_TITLE = DEFAULT_BUSINESS_ETIQUETTE_CONTENT_TITLE
+LEARNING_CONTENT_SUMMARY = "按 7 个小单元完成阅读、小测和 AI 教练训练。"
+BUSINESS_ETIQUETTE_SOURCE_FILE = (
+    Path(__file__).resolve().parents[2]
+    / "docs"
+    / "lujingshuji"
+    / "商务礼仪-新人的第一本职业素养手册-完整版.md"
+)
 AI_COACH_PROMPT_NAME = "新人训练路径商务技巧 AI 对话教练生成 v1"
 AI_COACH_PROMPT_CATEGORY = "sales_trainer_ai_coach"
+AI_COACH_PROMPT_PURPOSE = PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
 AI_COACH_GENERATION_PROMPT_TEMPLATE = """你正在为新人训练路径的商务技巧模块生成 Chatbot 式商务技巧 AI 教练回复。
 
 模块：{{ module_key }}
@@ -287,11 +311,11 @@ async def _upsert_ai_coach_prompt_template(
                 text(
                     """
                     INSERT INTO prompt_templates (
-                        id, name, prompt_type, category, template, variables,
+                        id, name, prompt_type, business_purpose, category, template, variables,
                         is_active, is_default, is_system
                     )
                     VALUES (
-                        CAST(:id AS uuid), :name, :prompt_type, :category,
+                        CAST(:id AS uuid), :name, :prompt_type, :business_purpose, :category,
                         :template, CAST(:variables AS jsonb),
                         true, false, true
                     )
@@ -301,6 +325,7 @@ async def _upsert_ai_coach_prompt_template(
                     "id": _uuid(),
                     "name": AI_COACH_PROMPT_NAME,
                     "prompt_type": "stage",
+                    "business_purpose": AI_COACH_PROMPT_PURPOSE,
                     "category": AI_COACH_PROMPT_CATEGORY,
                     "template": AI_COACH_GENERATION_PROMPT_TEMPLATE,
                     "variables": json.dumps(variables, ensure_ascii=False),
@@ -314,6 +339,7 @@ async def _upsert_ai_coach_prompt_template(
                 id=_uuid(),
                 name=AI_COACH_PROMPT_NAME,
                 prompt_type="stage",
+                business_purpose=AI_COACH_PROMPT_PURPOSE,
                 category=AI_COACH_PROMPT_CATEGORY,
                 template=AI_COACH_GENERATION_PROMPT_TEMPLATE,
                 variables=variables,
@@ -332,6 +358,7 @@ async def _upsert_ai_coach_prompt_template(
                     UPDATE prompt_templates
                     SET
                         prompt_type = :prompt_type,
+                        business_purpose = :business_purpose,
                         template = :template,
                         variables = CAST(:variables AS jsonb),
                         is_active = true,
@@ -343,6 +370,7 @@ async def _upsert_ai_coach_prompt_template(
                 {
                     "name": AI_COACH_PROMPT_NAME,
                     "prompt_type": "stage",
+                    "business_purpose": AI_COACH_PROMPT_PURPOSE,
                     "category": AI_COACH_PROMPT_CATEGORY,
                     "template": AI_COACH_GENERATION_PROMPT_TEMPLATE,
                     "variables": json.dumps(variables, ensure_ascii=False),
@@ -350,6 +378,7 @@ async def _upsert_ai_coach_prompt_template(
             )
         else:
             template.prompt_type = "stage"
+            template.business_purpose = AI_COACH_PROMPT_PURPOSE
             template.template = AI_COACH_GENERATION_PROMPT_TEMPLATE
             template.variables = variables
             template.is_active = True
@@ -388,8 +417,8 @@ def _ai_coach_seed_config(prompt_template_id: str) -> dict[str, Any]:
         "generation_timeout_seconds": 30,
         "proactive_coaching_enabled": True,
         "session_start_behavior": "plan_and_first_card",
-        "auto_advance_enabled": True,
-        "max_auto_steps_per_session": 5,
+        "auto_advance_enabled": False,
+        "max_auto_steps_per_session": 1,
         "correct_streak_to_increase_difficulty": 2,
         "incorrect_streak_to_remediate": 1,
         "incorrect_streak_to_pause": 2,
@@ -503,6 +532,166 @@ async def _upsert_chapter(
     return chapter
 
 
+def _load_business_etiquette_seed_document() -> ParsedBusinessEtiquetteDocument:
+    if not BUSINESS_ETIQUETTE_SOURCE_FILE.exists():
+        raise VerifyError(
+            f"missing business etiquette source file {BUSINESS_ETIQUETTE_SOURCE_FILE}"
+        )
+    return parse_business_etiquette_markdown(
+        BUSINESS_ETIQUETTE_SOURCE_FILE.read_text(encoding="utf-8"),
+        expected_original_chapter_count=8,
+    )
+
+
+async def _upsert_business_etiquette_seed_chapters(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner_id: str,
+    content_id: str,
+    parsed: ParsedBusinessEtiquetteDocument,
+) -> None:
+    for chapter in parsed.original_chapters:
+        await _upsert_chapter(
+            db,
+            summary,
+            owner_id=owner_id,
+            content_id=content_id,
+            title=chapter.title,
+            content=chapter.markdown,
+            order_index=chapter.order_index,
+        )
+
+
+def _business_etiquette_training_pack_payload(
+    *,
+    parsed: ParsedBusinessEtiquetteDocument,
+    content: LearningContent,
+    actor: User,
+) -> dict[str, Any]:
+    source_bytes = BUSINESS_ETIQUETTE_SOURCE_FILE.read_bytes()
+    imported_at = _now().isoformat()
+    return {
+        "schema_version": 1,
+        "training_pack_key": DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+        "learning_content_id": str(content.learning_content_id),
+        "learning_content_status": str(content.status),
+        "book_title": parsed.title,
+        "front_matter_markdown": parsed.front_matter_markdown,
+        "source_filename": BUSINESS_ETIQUETTE_SOURCE_FILE.name,
+        "content_type": "text/markdown",
+        "file_size_bytes": len(source_bytes),
+        "content_hash": hashlib.sha256(source_bytes).hexdigest(),
+        "imported_by": str(actor.user_id),
+        "imported_at": imported_at,
+        "ai_suggestions_enabled": False,
+        "original_chapters": [
+            {
+                "title": chapter.title,
+                "order_index": chapter.order_index,
+                "line_number": chapter.line_number,
+                "content_hash": hashlib.sha256(
+                    chapter.markdown.encode("utf-8")
+                ).hexdigest(),
+                "micro_chapters": [
+                    {
+                        "title": micro.title,
+                        "order_index": micro.order_index,
+                        "line_number": micro.line_number,
+                        "knowledge_points": [
+                            {
+                                "title": point.title,
+                                "order_index": point.order_index,
+                                "line_number": point.line_number,
+                            }
+                            for point in micro.knowledge_points
+                        ],
+                    }
+                    for micro in chapter.micro_chapters
+                ],
+            }
+            for chapter in parsed.original_chapters
+        ],
+        "original_chapter_count": len(parsed.original_chapters),
+        "micro_chapter_count": parsed.micro_chapter_count,
+        "knowledge_point_count": parsed.knowledge_point_count,
+        CAPABILITY_SNAPSHOT_KEY: default_business_etiquette_capability_snapshot(),
+    }
+
+
+def _training_pack_needs_seed_publish(
+    active_payload: dict[str, Any] | None,
+    *,
+    content_id: str,
+    expected_original_chapter_count: int,
+) -> bool:
+    if not active_payload:
+        return True
+    if active_payload.get("learning_content_id") != content_id:
+        return True
+    if active_payload.get("original_chapter_count") != expected_original_chapter_count:
+        return True
+    snapshot = active_payload.get(CAPABILITY_SNAPSHOT_KEY)
+    if not isinstance(snapshot, dict):
+        return True
+    if not isinstance(snapshot.get("capabilities"), list):
+        return True
+    if not isinstance(snapshot.get("chapter_bindings"), list):
+        return True
+    return False
+
+
+async def _publish_business_etiquette_training_pack_if_needed(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    actor: User,
+    content: LearningContent,
+    parsed: ParsedBusinessEtiquetteDocument,
+) -> None:
+    revisions = SalesTrainerAssetRevisionService(db)
+    active = await revisions.active_revision(
+        resource_type=BUSINESS_ETIQUETTE_RESOURCE_TYPE,
+        logical_id=DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+    )
+    if not _training_pack_needs_seed_publish(
+        active.payload_json if active is not None else None,
+        content_id=str(content.learning_content_id),
+        expected_original_chapter_count=len(parsed.original_chapters),
+    ):
+        return
+
+    reason = "同步商务礼仪训练包 seed 发布快照"
+    result = await revisions.create_published_revision(
+        resource_type=BUSINESS_ETIQUETTE_RESOURCE_TYPE,
+        logical_id=DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+        payload=_business_etiquette_training_pack_payload(
+            parsed=parsed,
+            content=content,
+            actor=actor,
+        ),
+        actor=actor,
+        change_class="semantic",
+        reason=reason,
+    )
+    await OperationLogService(db).record(
+        actor=actor,
+        action="business_etiquette_training_pack.seed_publish",
+        target_type=BUSINESS_ETIQUETTE_RESOURCE_TYPE,
+        target_id=DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+        metadata={
+            "training_pack_key": DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+            "active_revision_id": str(result.revision.revision_id),
+            "active_revision_no": result.revision.revision_no,
+            "previous_revision_id": result.previous_revision_id,
+            "learning_content_id": str(content.learning_content_id),
+            "original_chapter_count": len(parsed.original_chapters),
+            "reason": reason,
+        },
+    )
+    summary.updated += 1
+
+
 async def _upsert_question_category(
     db: AsyncSession,
     summary: SeedSummary,
@@ -545,6 +734,8 @@ async def _upsert_question(
     reference_answer: str,
     scoring_criteria: dict[str, Any],
     scoring_dimensions: list[str],
+    capability_keys: list[str] | None = None,
+    chapter_orders: list[int] | None = None,
 ) -> QuestionItem:
     question = await _first(
         db,
@@ -570,8 +761,20 @@ async def _upsert_question(
     question.stem = stem
     question.reference_answer = reference_answer
     question.scoring_criteria = scoring_criteria
-    question.scoring_dimensions = scoring_dimensions
-    question.tags = ["新人训练路径", BUSINESS_SKILLS_MODULE_KEY, title]
+    capability_keys = capability_keys or []
+    chapter_orders = chapter_orders or []
+    question.scoring_dimensions = list(dict.fromkeys([
+        *scoring_dimensions,
+        *capability_keys,
+    ]))
+    question.tags = list(dict.fromkeys([
+        "新人训练路径",
+        BUSINESS_SKILLS_MODULE_KEY,
+        "business_etiquette",
+        title,
+        *[f"capability:{key}" for key in capability_keys],
+        *[f"chapter:{order}" for order in chapter_orders],
+    ]))
     question.difficulty = "medium"
     question.status = "published"
     question.safety_flagged = False
@@ -697,9 +900,12 @@ async def _backfill_path_payload_from_units(
     )
 
 
-def _path_payload_with_seed_ai_coach(
+def _path_payload_with_business_etiquette_defaults(
     payload: NewcomerPathConfigPayload,
     ai_coach_config: dict[str, Any],
+    *,
+    learning_content_id: str | None = None,
+    exam_paper_id: str | None = None,
 ) -> NewcomerPathConfigPayload | None:
     modules: list[NewcomerPathModuleConfig] = []
     module_found = False
@@ -707,6 +913,14 @@ def _path_payload_with_seed_ai_coach(
         data = module.model_dump(mode="json")
         if module.module_key == BUSINESS_SKILLS_MODULE_KEY:
             data["ai_coach"] = ai_coach_config
+            if learning_content_id is not None:
+                data["learning_content_id"] = learning_content_id
+            if exam_paper_id is not None:
+                data["exam_paper_id"] = exam_paper_id
+            if not module.learning_units:
+                data["learning_units"] = (
+                    default_business_etiquette_learning_units_payload()
+                )
             module_found = True
         modules.append(NewcomerPathModuleConfig.model_validate(data))
     if not module_found:
@@ -725,12 +939,53 @@ def _payload_json(payload: NewcomerPathConfigPayload) -> dict[str, Any]:
     return payload.model_dump(mode="json")
 
 
+async def _learning_content_has_min_chapters(
+    db: AsyncSession,
+    learning_content_id: str | None,
+    *,
+    min_chapter_count: int,
+) -> bool:
+    if not learning_content_id:
+        return False
+    content = await _first(
+        db,
+        select(LearningContent).where(
+            LearningContent.learning_content_id == learning_content_id
+        ),
+    )
+    if content is None or content.status != "published":
+        return False
+    chapter_count = await db.scalar(
+        select(func.count())
+        .select_from(LearningChapter)
+        .where(LearningChapter.learning_content_id == learning_content_id)
+    )
+    return int(chapter_count or 0) >= min_chapter_count
+
+
+def _business_module_from_payload(
+    payload: NewcomerPathConfigPayload | None,
+) -> NewcomerPathModuleConfig | None:
+    if payload is None:
+        return None
+    return next(
+        (
+            module
+            for module in payload.modules
+            if module.module_key == BUSINESS_SKILLS_MODULE_KEY
+        ),
+        None,
+    )
+
+
 async def _publish_seed_path_revision(
     db: AsyncSession,
     summary: SeedSummary,
     *,
     actor: User,
     ai_coach_config: dict[str, Any],
+    learning_content_id: str,
+    exam_paper_id: str,
 ) -> None:
     revisions = SalesTrainerAssetRevisionService(db)
     active = await revisions.active_revision(
@@ -745,13 +1000,38 @@ async def _publish_seed_path_revision(
         except SalesTrainerPathConfigError:
             active_payload = None
 
+    business_module = _business_module_from_payload(active_payload)
+    should_rebind_learning_content = not await _learning_content_has_min_chapters(
+        db,
+        business_module.learning_content_id if business_module is not None else None,
+        min_chapter_count=8,
+    )
+    should_bind_exam_paper = (
+        business_module is None or not business_module.exam_paper_id
+    )
     next_payload = (
-        _path_payload_with_seed_ai_coach(active_payload, ai_coach_config)
+        _path_payload_with_business_etiquette_defaults(
+            active_payload,
+            ai_coach_config,
+            learning_content_id=(
+                learning_content_id if should_rebind_learning_content else None
+            ),
+            exam_paper_id=(exam_paper_id if should_bind_exam_paper else None),
+        )
         if active_payload is not None
         else None
     )
     if next_payload is None:
-        next_payload = await _backfill_path_payload_from_units(db)
+        backfilled_payload = await _backfill_path_payload_from_units(db)
+        next_payload = (
+            _path_payload_with_business_etiquette_defaults(
+                backfilled_payload,
+                ai_coach_config,
+                learning_content_id=learning_content_id,
+                exam_paper_id=exam_paper_id,
+            )
+            or backfilled_payload
+        )
 
     if active_payload is not None and _payload_json(active_payload) == _payload_json(
         next_payload
@@ -811,9 +1091,9 @@ async def _verify_ai_coach_seed_config(
         raise VerifyError(f"{context} AI coach proactive_coaching_enabled mismatch")
     if ai_coach.get("session_start_behavior") != "plan_and_first_card":
         raise VerifyError(f"{context} AI coach session_start_behavior mismatch")
-    if ai_coach.get("auto_advance_enabled") is not True:
+    if ai_coach.get("auto_advance_enabled") is not False:
         raise VerifyError(f"{context} AI coach auto_advance_enabled mismatch")
-    if ai_coach.get("max_auto_steps_per_session") != 5:
+    if ai_coach.get("max_auto_steps_per_session") != 1:
         raise VerifyError(f"{context} AI coach max_auto_steps_per_session mismatch")
     if "continue_drill" not in (ai_coach.get("allowed_next_actions") or []):
         raise VerifyError(f"{context} AI coach allowed_next_actions mismatch")
@@ -837,6 +1117,8 @@ async def _verify_ai_coach_seed_config(
         raise VerifyError(f"{context} AI coach prompt template missing")
     if prompt.category != AI_COACH_PROMPT_CATEGORY or prompt.prompt_type != "stage":
         raise VerifyError(f"{context} AI coach prompt template metadata mismatch")
+    if prompt.business_purpose != AI_COACH_PROMPT_PURPOSE:
+        raise VerifyError(f"{context} AI coach prompt template business_purpose mismatch")
 
 
 async def _verify_active_path_ai_coach_config(db: AsyncSession) -> None:
@@ -869,6 +1151,82 @@ async def _verify_active_path_ai_coach_config(db: AsyncSession) -> None:
     )
 
 
+async def _verify_active_path_business_etiquette_learning_units(
+    db: AsyncSession,
+) -> None:
+    active = await SalesTrainerAssetRevisionService(db).active_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+    )
+    if active is None:
+        raise VerifyError("newcomer path active revision missing")
+    try:
+        payload = payload_from_revision(active)
+    except SalesTrainerPathConfigError as exc:
+        raise VerifyError("newcomer path active revision invalid") from exc
+    business_module = next(
+        (
+            module
+            for module in payload.modules
+            if module.module_key == BUSINESS_SKILLS_MODULE_KEY
+        ),
+        None,
+    )
+    if business_module is None:
+        raise VerifyError("active path business_skills module missing")
+    if not business_module.learning_units:
+        raise VerifyError("active path business_skills learning_units missing")
+
+
+async def _verify_active_path_business_etiquette_article(
+    db: AsyncSession,
+) -> None:
+    active = await SalesTrainerAssetRevisionService(db).active_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+    )
+    if active is None:
+        raise VerifyError("newcomer path active revision missing")
+    try:
+        payload = payload_from_revision(active)
+    except SalesTrainerPathConfigError as exc:
+        raise VerifyError("newcomer path active revision invalid") from exc
+    business_module = _business_module_from_payload(payload)
+    if business_module is None:
+        raise VerifyError("active path business_skills module missing")
+    if not await _learning_content_has_min_chapters(
+        db,
+        business_module.learning_content_id,
+        min_chapter_count=8,
+    ):
+        raise VerifyError("active path business_skills article chapters missing")
+
+
+async def _verify_active_business_etiquette_training_pack(
+    db: AsyncSession,
+) -> None:
+    active = await SalesTrainerAssetRevisionService(db).active_revision(
+        resource_type=BUSINESS_ETIQUETTE_RESOURCE_TYPE,
+        logical_id=DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+    )
+    if active is None:
+        raise VerifyError("business etiquette training pack active revision missing")
+    payload = active.payload_json or {}
+    if payload.get("learning_content_status") != "published":
+        raise VerifyError("business etiquette training pack content not published")
+    if payload.get("original_chapter_count") != 8:
+        raise VerifyError("business etiquette training pack chapter count mismatch")
+    snapshot = payload.get(CAPABILITY_SNAPSHOT_KEY)
+    if not isinstance(snapshot, dict):
+        raise VerifyError("business etiquette training pack capability snapshot missing")
+    if len(snapshot.get("capabilities") or []) != 8:
+        raise VerifyError("business etiquette training pack capability count mismatch")
+    if len(snapshot.get("chapter_bindings") or []) != 8:
+        raise VerifyError(
+            "business etiquette training pack chapter binding count mismatch"
+        )
+
+
 async def seed(db: AsyncSession) -> SeedSummary:
     summary = SeedSummary()
     owner = await _upsert_user(
@@ -887,25 +1245,23 @@ async def seed(db: AsyncSession) -> SeedSummary:
     )
     await db.flush()
 
+    parsed_document = _load_business_etiquette_seed_document()
     content = await _upsert_learning_content(db, summary, owner_id=str(owner.user_id))
     await db.flush()
-    await _upsert_chapter(
+    await _upsert_business_etiquette_seed_chapters(
         db,
         summary,
         owner_id=str(owner.user_id),
         content_id=str(content.learning_content_id),
-        title="拜访前准备",
-        content="拜访客户前先确认背景、目标与礼仪要求。",
-        order_index=1,
+        parsed=parsed_document,
     )
-    await _upsert_chapter(
+    await db.flush()
+    await _publish_business_etiquette_training_pack_if_needed(
         db,
         summary,
-        owner_id=str(owner.user_id),
-        content_id=str(content.learning_content_id),
-        title="商务礼仪",
-        content="保持得体表达、明确边界、避免夸大承诺。",
-        order_index=2,
+        actor=owner,
+        content=content,
+        parsed=parsed_document,
     )
 
     category = await _upsert_question_category(db, summary, owner_id=str(owner.user_id))
@@ -930,6 +1286,8 @@ async def seed(db: AsyncSession) -> SeedSummary:
             "correct_answer": "B",
         },
         scoring_dimensions=["business_skills", "prep"],
+        capability_keys=["respect_boundaries"],
+        chapter_orders=[1],
     )
     q2 = await _upsert_question(
         db,
@@ -950,6 +1308,8 @@ async def seed(db: AsyncSession) -> SeedSummary:
             "correct_answers": ["A", "C", "D"],
         },
         scoring_dimensions=["business_skills", "etiquette"],
+        capability_keys=["respect_boundaries", "professional_image"],
+        chapter_orders=[1, 2],
     )
     q3 = await _upsert_question(
         db,
@@ -958,12 +1318,18 @@ async def seed(db: AsyncSession) -> SeedSummary:
         category_id=str(category.category_id),
         title="礼仪判断题",
         stem="见客户时可以随意打断对方以抢占话语权。",
-        reference_answer="错误。",
+        reference_answer="错误，商务沟通中应尊重对方表达，不随意打断。",
         scoring_criteria={
-            "question_type": "true_false",
-            "correct_bool": False,
+            "question_type": "single_choice",
+            "options": [
+                {"value": "A", "label": "正确，可以通过打断展现主动性"},
+                {"value": "B", "label": "错误，应先尊重对方表达"},
+            ],
+            "correct_answer": "B",
         },
         scoring_dimensions=["business_skills", "etiquette"],
+        capability_keys=["respect_boundaries"],
+        chapter_orders=[1],
     )
     q4 = await _upsert_question(
         db,
@@ -981,6 +1347,8 @@ async def seed(db: AsyncSession) -> SeedSummary:
             },
         },
         scoring_dimensions=["business_skills", "short_answer"],
+        capability_keys=["professional_image"],
+        chapter_orders=[2],
     )
     await db.flush()
 
@@ -1123,6 +1491,8 @@ async def seed(db: AsyncSession) -> SeedSummary:
         summary,
         actor=owner,
         ai_coach_config=ai_coach_config,
+        learning_content_id=str(content.learning_content_id),
+        exam_paper_id=str(paper.paper_id),
     )
     await db.commit()
     await db.refresh(content)
@@ -1153,8 +1523,8 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
             .order_by(LearningChapter.order_index.asc())
         )
     ).scalars().all()
-    if len(chapters) != 2:
-        raise VerifyError(f"expected 2 learning chapters, got {len(chapters)}")
+    if len(chapters) != 8:
+        raise VerifyError(f"expected 8 learning chapters, got {len(chapters)}")
 
     paper = await _first(
         db,
@@ -1217,6 +1587,9 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
         context="business_skills",
     )
     await _verify_active_path_ai_coach_config(db)
+    await _verify_active_path_business_etiquette_learning_units(db)
+    await _verify_active_path_business_etiquette_article(db)
+    await _verify_active_business_etiquette_training_pack(db)
 
     if (
         (

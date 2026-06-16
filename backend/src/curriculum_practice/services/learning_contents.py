@@ -34,6 +34,10 @@ class LearningContentService(LearningChapterServiceMixin):
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
+    @property
+    def db(self) -> AsyncSession:
+        return self._db
+
     async def list_contents(
         self, *, status: str | None = None
     ) -> Result[list[LearningContent]]:
@@ -116,6 +120,19 @@ class LearningContentService(LearningChapterServiceMixin):
     async def archive_content(
         self, content: LearningContent, *, actor_id: str | None
     ) -> Result[LearningContent]:
+        from sales_trainer.services.learning_content_binding_impact_service import (
+            LearningContentBindingImpactService,
+            LearningContentBindingImpactServiceError,
+        )
+
+        try:
+            impact = await LearningContentBindingImpactService(self._db).get_impact(
+                str(content.learning_content_id)
+            )
+        except LearningContentBindingImpactServiceError:
+            return Result.fail(SERVER_ERROR)
+        if not impact.can_archive:
+            return Result.fail("[LEARNING_CONTENT_BOUND_TO_NEWCOMER_PATH]")
         content.status = "archived"
         content.updated_by = actor_id
         try:
@@ -209,4 +226,3 @@ class LearningContentService(LearningChapterServiceMixin):
         if actor is None:
             return Result.fail("[LEARNING_CONTENT_ACTOR_REQUIRED]")
         return Result.ok(actor)
-

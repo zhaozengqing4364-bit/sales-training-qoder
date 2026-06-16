@@ -224,6 +224,7 @@ describe("AdminPromptsPage governance UI", () => {
                 id: "123e4567-e89b-12d3-a456-426614174005",
                 name: "新人训练路径商务技巧 AI 对话教练生成 v1",
                 prompt_type: "stage",
+                business_purpose: "ai_coach_conversation_generation",
                 category: "sales_trainer_ai_coach",
                 template: "为商务技巧 AI 教练生成对话与互动卡片。",
                 variables: ["module_key"],
@@ -237,9 +238,10 @@ describe("AdminPromptsPage governance UI", () => {
             },
             {
                 id: "123e4567-e89b-12d3-a456-426614174006",
-                name: "新人训练路径商务技巧 AI 教练题目生成 v1",
-                prompt_type: "stage",
-                category: "sales_trainer_ai_coach",
+                name: "商务礼仪题目草稿生成 v1",
+                prompt_type: "scoring",
+                business_purpose: "business_etiquette_question_generation",
+                category: "business_etiquette",
                 template: "为商务礼仪章节生成题目草稿。",
                 variables: ["chapter_content"],
                 is_active: true,
@@ -293,8 +295,10 @@ describe("AdminPromptsPage governance UI", () => {
         expect(screen.getByText("AI 教练对话系统提示词")).toBeTruthy();
         expect(screen.getByText("商务礼仪题目生成提示词")).toBeTruthy();
         expect(screen.getAllByText("新人训练路径商务技巧 AI 对话教练生成 v1").length).toBeGreaterThan(0);
-        expect(screen.getAllByText("新人训练路径商务技巧 AI 教练题目生成 v1").length).toBeGreaterThan(0);
-        expect(screen.getByText("分类：新人训练 AI 教练")).toBeTruthy();
+        expect(screen.getAllByText("商务礼仪题目草稿生成 v1").length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/业务用途：AI 教练对话生成/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/业务用途：商务礼仪题目生成/).length).toBeGreaterThan(0);
+        expect(screen.getByText("分类：AI 教练 / 商务礼仪")).toBeTruthy();
     });
 
     it("keeps loaded prompt data visible when the governance status request fails", async () => {

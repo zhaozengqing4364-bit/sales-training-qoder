@@ -26,6 +26,7 @@ AI_COACH_FIELDS_REQUIRING_MANAGE_PROMPTS: frozenset[str] = frozenset(
         "max_turns",
         "mastery_threshold",
         "allowed_interaction_types",
+        "allowed_training_card_types",
         "chat_enabled",
         "allowed_ui_event_types",
         "max_cards_per_message",

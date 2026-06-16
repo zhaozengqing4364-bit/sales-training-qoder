@@ -25,6 +25,7 @@ from sales_trainer.models import SalesTrainerAiCoachSession
 from sales_trainer.schemas import (
     AiCoachAnswerPayloadV1,
     AiCoachConfig,
+    AiCoachInteractionInternalV1,
     AiCoachScoreResultV1,
 )
 from sales_trainer.services import (
@@ -48,6 +49,15 @@ from sales_trainer.services.ai_coach_chat_coach_state import (
 )
 from sales_trainer.services.ai_coach_chat_errors import AiCoachChatGenerationError
 from sales_trainer.services.ai_coach_chat_generation import AiCoachChatGenerator
+from sales_trainer.services.ai_coach_chat_generation_parser import (
+    AiCoachChatResponseParser,
+)
+from sales_trainer.services.ai_coach_chat_generation_prompt import (
+    AiCoachChatPromptCompiler,
+)
+from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AiCoachQuizCardDraftExtractor,
+)
 from sales_trainer.services.ai_coach_chat_next_action import AiCoachNextActionDecider
 from sales_trainer.services.ai_coach_chat_next_action_generation import (
     AiCoachChatNextActionGenerator,
@@ -92,9 +102,14 @@ class _FakeDb:
         return None
 
 
-def _choice_interaction(stem: str, correct_option: str = "A") -> dict[str, object]:
+def _choice_interaction(
+    stem: str,
+    correct_option: str = "A",
+    training_card_type: str = "scenario_judgment",
+) -> dict[str, object]:
     return {
         "schema_version": "ai_coach_interaction_v1",
+        "training_card_type": training_card_type,
         "interaction_type": "single_choice",
         "stem": stem,
         "options": [
@@ -184,6 +199,9 @@ def _score_result(score: float) -> dict[str, object]:
 def test_ai_coach_proactive_config_defaults_are_safe() -> None:
     config = AiCoachConfig()
 
+    assert config.allowed_training_card_types == [
+        "scenario_judgment",
+    ]
     assert config.proactive_coaching_enabled is False
     assert config.session_start_behavior == "welcome_only"
     assert config.auto_advance_enabled is False
@@ -205,9 +223,125 @@ def test_ai_coach_proactive_config_defaults_are_safe() -> None:
     assert config.generation_failure_recovery_prompts == ["重试下一题", "换主题", "总结一下"]
 
 
+def test_streaming_quiz_card_draft_exposes_only_public_fields() -> None:
+    model_json = json.dumps(_chat_response(card_count=1), ensure_ascii=False)
+
+    draft = AiCoachQuizCardDraftExtractor(
+        session_id="session-1",
+    ).extract_changed(model_json)
+
+    assert draft is not None
+    interaction = draft.interaction
+    assert interaction.interaction_id == "stream-session-1"
+    assert interaction.training_card_type == "scenario_judgment"
+    assert interaction.interaction_type == "single_choice"
+    assert interaction.stem == "第 1 张：客户拜访前应该先做什么？"
+    assert interaction.options is not None
+    assert [option.option_id for option in interaction.options] == ["A", "B"]
+    assert [option.text for option in interaction.options] == [
+        "先确认到访时间、人数和接待安排",
+        "直接发送公司宣传册",
+    ]
+    serialized = draft.model_dump_json()
+    assert "answer_key" not in serialized
+    assert "scoring_rubric" not in serialized
+    assert "source_evidence" not in serialized
+
+
+def test_streaming_quiz_card_draft_exposes_partial_stem_before_json_closes() -> None:
+    partial_model_json = (
+        '{"quiz_card":{"training_card_type":"scenario_judgment",'
+        '"interaction":{"interaction_type":"single_choice",'
+        '"stem":"在商务场合第一次见客户时，称呼对方'
+    )
+
+    draft = AiCoachQuizCardDraftExtractor(
+        session_id="session-1",
+    ).extract_changed(partial_model_json)
+
+    assert draft is not None
+    interaction = draft.interaction
+    assert interaction.training_card_type == "scenario_judgment"
+    assert interaction.interaction_type == "single_choice"
+    assert interaction.stem == "在商务场合第一次见客户时，称呼对方"
+    assert interaction.options is None
+    assert interaction.answer_constraints == {"min_selected": 1, "max_selected": 1}
+
+
 def test_ai_coach_config_rejects_empty_generation_failure_recovery_prompt() -> None:
     with pytest.raises(ValidationError):
         AiCoachConfig(generation_failure_recovery_prompts=["重试下一题", " "])
+
+
+def test_ai_coach_interaction_rejects_rewrite_card_without_short_answer() -> None:
+    with pytest.raises(ValidationError):
+        AiCoachInteractionInternalV1.model_validate(
+            _choice_interaction(
+                "请把这句不专业表达改写得更合适。",
+                training_card_type="expression_rewrite",
+            )
+        )
+
+
+def test_chat_response_rejects_training_card_type_outside_config() -> None:
+    payload = _chat_response(card_count=1)
+    config = AiCoachConfig(
+        allowed_interaction_types=["single_choice", "short_answer"],
+        allowed_training_card_types=["expression_rewrite"],
+        scoring_prompt_template_id="22222222-2222-2222-2222-222222222222",
+    )
+
+    with pytest.raises(AiCoachChatGenerationError) as exc_info:
+        AiCoachChatResponseParser().parse_model_response(
+            json.dumps(payload),
+            config,
+        )
+
+    assert exc_info.value.code == "[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]"
+
+
+def test_prompt_variables_include_business_etiquette_training_card_context() -> None:
+    config = AiCoachConfig(
+        allowed_interaction_types=["single_choice", "short_answer"],
+        allowed_training_card_types=["scenario_judgment", "expression_rewrite"],
+        scoring_prompt_template_id="22222222-2222-2222-2222-222222222222",
+    )
+    session = SimpleNamespace(
+        module_key="business_skills",
+        article_snapshot={"title": "商务礼仪", "summary": "摘要", "chapters": []},
+        path_config_snapshot={
+            "learning_units": [{
+                "unit_key": "trust_foundation",
+                "title": "职业信任底座",
+                "source_chapter_orders": [1, 2],
+                "capability_keys": ["respect_boundaries"],
+                "require_ai_coach": True,
+            }],
+        },
+    )
+
+    variables = AiCoachChatPromptCompiler(_FakeDb())._generation_variables(
+        session,  # type: ignore[arg-type]
+        config,
+        user_message="开始练习",
+        history=[],
+    )
+
+    assert variables["business_etiquette_capability_keys"] == [
+        "respect_boundaries"
+    ]
+    assert variables["business_etiquette_learning_units"] == [{
+        "unit_key": "trust_foundation",
+        "title": "职业信任底座",
+        "source_chapter_orders": [1, 2],
+        "capability_keys": ["respect_boundaries"],
+        "require_ai_coach": True,
+    }]
+    assert variables["allowed_training_card_types"] == [
+        "scenario_judgment",
+        "expression_rewrite",
+    ]
+    assert variables["feedback_schema"]["suggested_response"] == "可以怎么说"
 
 
 def test_chat_request_models_accept_resume_strategy_and_commands() -> None:
@@ -1228,7 +1362,7 @@ def test_send_message_adds_recovery_prompt_when_model_returns_no_events() -> Non
     )
 
 
-def test_stream_submit_answer_emits_scored_snapshot_before_next_generation() -> None:
+def test_stream_submit_answer_manual_pace_skips_next_generation_statuses() -> None:
     config = AiCoachConfig(
         enabled=True,
         chat_enabled=True,
@@ -1301,19 +1435,103 @@ def test_stream_submit_answer_emits_scored_snapshot_before_next_generation() -> 
     events = asyncio.run(collect_events())
 
     phases = [event["phase"] for event in events]
-    assert phases[:4] == [
+    assert phases == [
+        "scoring_answer",
+        "answer_scored",
+        "completed",
+    ]
+    assert calls == ["score", "advance"]
+
+
+def test_stream_submit_answer_auto_advance_emits_next_generation_statuses() -> None:
+    config = AiCoachConfig(
+        enabled=True,
+        chat_enabled=True,
+        streaming_enabled=True,
+        proactive_coaching_enabled=True,
+        auto_advance_enabled=True,
+        prompt_template_id="11111111-1111-1111-1111-111111111111",
+    )
+    scored_session = AiCoachChatSessionPublicV1.model_validate(
+        {
+            "session_id": "session-1",
+            "module_key": "business_skills",
+            "status": "in_progress",
+            "created_at": "2026-06-12T00:00:00Z",
+            "updated_at": "2026-06-12T00:00:01Z",
+            "messages": [],
+            "ui_events": [],
+            "coach_state": None,
+        }
+    )
+    completed_session = scored_session.model_copy(
+        update={"updated_at": datetime(2026, 6, 12, 0, 0, 2, tzinfo=UTC)}
+    )
+    public_sessions = [scored_session, completed_session]
+    calls: list[str] = []
+
+    class FakeRuntime:
+        def config_from_session(self, _session: object) -> AiCoachConfig:
+            return config
+
+    class FakeService:
+        _runtime = FakeRuntime()
+
+        async def _require_owned_session(self, session_id: str, user_id: str) -> object:
+            assert session_id == "session-1"
+            assert user_id == "user-1"
+            return SimpleNamespace(config_snapshot=config.model_dump(mode="json"))
+
+        async def score_and_persist_event_answer(self, **_kwargs: object) -> tuple[dict[str, object], AiCoachScoreResultV1]:
+            calls.append("score")
+            return {}, AiCoachScoreResultV1(score=100, max_score=100, feedback="ok")
+
+        async def public_session(
+            self,
+            _session_id: str,
+            _user_id: str,
+        ) -> AiCoachChatSessionPublicV1:
+            return public_sessions.pop(0)
+
+        async def advance_after_scored_event(self, **_kwargs: object) -> None:
+            calls.append("advance")
+
+    async def collect_events() -> list[dict[str, object]]:
+        service = AiCoachChatStreamService(  # type: ignore[arg-type]
+            _FakeDb(),
+            service=FakeService(),
+        )
+        chunks = []
+        async for chunk in service.stream_submit_answer(
+            session_id="session-1",
+            event_id="event-1",
+            payload=SimpleNamespace(
+                answer_payload=AiCoachAnswerPayloadV1.model_validate(
+                    {"variant": "choice", "option_ids": ["A"]}
+                )
+            ),
+            actor=SimpleNamespace(user_id="user-1"),  # type: ignore[arg-type]
+        ):
+            chunks.append(json.loads(chunk.split("data: ", 1)[1]))
+        return chunks
+
+    events = asyncio.run(collect_events())
+
+    assert [event["phase"] for event in events] == [
         "scoring_answer",
         "answer_scored",
         "deciding_next_action",
         "generating_next_card",
+        "completed",
     ]
-    assert phases[-1] == "completed"
     assert calls == ["score", "advance"]
 
 
 def test_stream_submit_answer_timeout_records_recoverable_fallback_snapshot() -> None:
     config = SimpleNamespace(
         streaming_enabled=True,
+        proactive_coaching_enabled=True,
+        auto_advance_enabled=True,
         generation_timeout_seconds=0.01,
     )
     scored_session = AiCoachChatSessionPublicV1.model_validate(
@@ -1612,30 +1830,52 @@ def test_auto_advance_after_answer_appends_next_quiz_card(
         async def record(self, **_kwargs: object) -> None:
             return None
 
+    progress_calls: list[str] = []
+
+    class FakeProgressService:
+        def __init__(self, _db: object, *, store: object, logs: object) -> None:
+            assert store is store_instance
+            assert logs is logs_instance
+
+        async def update_session_progress_snapshot(
+            self,
+            _session: SalesTrainerAiCoachSession,
+            *,
+            actor: object | None,
+        ) -> object:
+            assert actor is None
+            progress_calls.append("updated")
+            return None
+
     monkeypatch.setattr(
         chat_auto_advance_module,
         "AiCoachChatNextActionGenerator",
         FakeGenerator,
     )
-    store = FakeStore()
-    logs = FakeLogs()
+    monkeypatch.setattr(
+        chat_service_module,
+        "BusinessEtiquetteAiCoachProgressService",
+        FakeProgressService,
+    )
+    store_instance = FakeStore()
+    logs_instance = FakeLogs()
     from sales_trainer.services.ai_coach_chat_auto_advance import AiCoachChatAutoAdvance
     from sales_trainer.services.ai_coach_chat_event_writer import AiCoachChatEventWriter
     from sales_trainer.services.ai_coach_chat_projection import AiCoachChatProjection
 
     projection = AiCoachChatProjection()
-    event_writer = AiCoachChatEventWriter(fake_db, projection, store)  # type: ignore[arg-type]
+    event_writer = AiCoachChatEventWriter(fake_db, projection, store_instance)  # type: ignore[arg-type]
     auto_advance = AiCoachChatAutoAdvance(
         fake_db,  # type: ignore[arg-type]
-        store,  # type: ignore[arg-type]
+        store_instance,  # type: ignore[arg-type]
         event_writer,
-        logs,  # type: ignore[arg-type]
+        logs_instance,  # type: ignore[arg-type]
     )
     service = AiCoachChatService(  # type: ignore[arg-type]
         fake_db,
-        store=store,
+        store=store_instance,
         scoring=FakeScorer(),
-        logs=logs,
+        logs=logs_instance,
         events=event_writer,
         auto_advance=auto_advance,
     )
@@ -1660,6 +1900,7 @@ def test_auto_advance_after_answer_appends_next_quiz_card(
     assert event.status == "scored"
     assert session.coach_state["last_action"] == "continue_drill"
     assert session.coach_state["answered_card_count"] == 1
+    assert progress_calls == ["updated"]
     assert fake_db.commit_count >= 2
 
 

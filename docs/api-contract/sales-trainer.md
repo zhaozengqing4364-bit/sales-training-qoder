@@ -175,12 +175,13 @@ interface NewcomerTrainingPathModuleConfig {
 - `generation_timeout_seconds=30`，范围 `5..120`
 - `coach_mode="mixed_drill"`
 - `allowed_interaction_types=["single_choice","multiple_choice"]`
+- `allowed_training_card_types=["scenario_judgment"]`；可选 `"scenario_judgment" | "expression_rewrite" | "role_response"`。安全默认只开启场景判断卡；启用改写卡或角色回应卡时必须同时启用 `"short_answer"` 并绑定 `scoring_prompt_template_id`。
 - `allowed_ui_event_types=["quiz_card","explanation_card","summary_card","followup_prompt"]`
 - `max_cards_per_message=3`
 - `proactive_coaching_enabled=false`；demo/local seed 为 `true`
 - `session_start_behavior="welcome_only"`；可选 `"welcome_only" | "plan_then_wait" | "plan_and_first_card"`，demo/local seed 为 `"plan_and_first_card"`
-- `auto_advance_enabled=false`；demo/local seed 为 `true`
-- `max_auto_steps_per_session=5`，范围 `1..10`
+- `auto_advance_enabled=false`；demo/local seed 也为 `false`，答题后默认停在反馈与下一步选择，不自动生成下一题
+- `max_auto_steps_per_session=5`，范围 `1..10`；demo/local seed 为 `1`，仅在管理员显式开启自动推进时生效
 - `correct_streak_to_increase_difficulty=2`，范围 `1..10`
 - `incorrect_streak_to_remediate=1`，范围 `1..10`
 - `incorrect_streak_to_pause=2`，范围 `1..10` 且必须 `>= incorrect_streak_to_remediate`
@@ -199,9 +200,18 @@ interface NewcomerTrainingPathModuleConfig {
 - `prompt_contract_hash`、`scoring_contract_hash` 是运行时审计字段。admin 配置请求中的值会被忽略，模块配置中保持为 `null`；真实 hash 在会话生成/评分时由后端根据已渲染 prompt contract 计算并记录。
 - `retry_policy={"max_retries":1,"retry_backoff":1.0}`；默认只允许 1 次重试，避免多轮 LLM 不合约时让学员等待过久。管理员可按模型稳定性调高，但仍受 `generation_timeout_seconds` 总预算约束。
 
+Learner 工作台 UI 配置：
+
+- 商务礼仪 AI 教练页面必须是“训练卡优先”的工作台，不是通用聊天页。当前 active `quiz_card` 是主视觉；历史消息只作为“对话证据”辅助展示。
+- `web/src/app/(dashboard)/sales-trainer/business-skills/coach/coach-workbench-config.ts` 是 Slice 7 的前端集中配置来源，包含页面文案、按钮文案、训练状态标签、是否展示自由追问、是否允许跳过当前卡片。
+- 默认 `showFreeFollowup=true`，自由追问只调用 chat message stream，不提交训练卡答案，也不得绕过 `active_event_id` 对应的训练卡状态机。
+- 默认 `allowSkipActiveCard=false`，存在 active pending `quiz_card` 时“继续下一题”命令禁用；如未来放开，必须迁移为后端 `modules[].ai_coach` 配置并纳入 `sales_trainer.manage_modules` 权限、配置发布和操作日志。
+- 页面文案/按钮文案当前由前端集中配置治理；若需要运营后台调整，必须新增 `modules[].ai_coach.workbench_copy` 或等价配置对象，并定义字段校验、默认值、回滚和审计。
+
 简答题配置：
 
 - 当 `allowed_interaction_types` 包含 `"short_answer"` 时，`scoring_prompt_template_id` 必填。
+- 当 `allowed_training_card_types` 包含 `"expression_rewrite"` 或 `"role_response"` 时，`allowed_interaction_types` 必须包含 `"short_answer"`，且 `scoring_prompt_template_id` 必填。
 - 单选/多选训练不要求 scoring prompt。
 - `prompt_template_id` 用于生成互动卡片；`scoring_prompt_template_id` 只用于简答评分，两者独立治理。
 - `prompt_template_id` 和 `scoring_prompt_template_id` 必须是 `PromptTemplate` UUID；非法格式保存或运行时解析返回 `[AI_COACH_PROMPT_CONFIG_INVALID]`。
@@ -210,7 +220,7 @@ interface NewcomerTrainingPathModuleConfig {
 
 - 查看/普通模块配置需要 `sales_trainer.manage_modules` 对应角色。
 - 修改普通开关、进入后行为或自动推进步数需要 `sales_trainer.manage_modules` 对应角色。
-- 修改 `coach_mode`、`allowed_interaction_types`、`chat_enabled`、`streaming_enabled`、`entry_resume_policy`、`generation_timeout_seconds`、`allowed_ui_event_types`、`max_cards_per_message`、`chat_welcome_message`、`empty_response_recovery_message`、`empty_response_recovery_prompts`、`generation_failure_recovery_message`、`generation_failure_recovery_prompts`、`min_turns`、`max_turns`、`mastery_threshold`、连续答对/答错阈值、补救策略、总结策略、`allowed_next_actions`、prompt 绑定、模型、重试策略或失败策略等高风险字段，需要 `sales_trainer.manage_prompts` 对应角色。
+- 修改 `coach_mode`、`allowed_interaction_types`、`allowed_training_card_types`、`chat_enabled`、`streaming_enabled`、`entry_resume_policy`、`generation_timeout_seconds`、`allowed_ui_event_types`、`max_cards_per_message`、`chat_welcome_message`、`empty_response_recovery_message`、`empty_response_recovery_prompts`、`generation_failure_recovery_message`、`generation_failure_recovery_prompts`、`min_turns`、`max_turns`、`mastery_threshold`、连续答对/答错阈值、补救策略、总结策略、`allowed_next_actions`、prompt 绑定、模型、重试策略或失败策略等高风险字段，需要 `sales_trainer.manage_prompts` 对应角色。
 - 通用 `/admin/newcomer-training/path-config` 保存也必须执行同一字段级 RBAC；权限 diff 失败时返回 `[AI_COACH_CONFIG_RBAC_CHECK_FAILED]`，不得 fail-open 保存。
 - learner 创建 AI Coach session 时，客户端传入的 `coach_mode` / `interaction_type` 必须落在模块 `allowed_interaction_types` 允许范围内；否则返回 `[AI_COACH_INTERACTION_TYPE_NOT_ALLOWED]`。
 
@@ -249,6 +259,33 @@ Learner AI 教练会话路由：
 Chatbot runtime 输出契约：
 
 ```ts
+type AiCoachTrainingCardTypeV1 =
+  | "scenario_judgment"   // 场景判断卡：判断做法是否合适
+  | "expression_rewrite"  // 改写卡：改写不专业表达，必须 short_answer
+  | "role_response";      // 角色回应卡：写出对客户/领导/同事的回应，必须 short_answer
+
+type AiCoachInteractionPublicV1 = {
+  schema_version: "ai_coach_interaction_public_v1";
+  interaction_id: string;
+  session_id: string;
+  turn_number: number;
+  training_card_type: AiCoachTrainingCardTypeV1;
+  interaction_type: "single_choice" | "multiple_choice" | "short_answer";
+  stem: string;
+  options?: Array<{ option_id: string; text: string }> | null;
+  answer_constraints: Record<string, number>;
+  capability_keys: string[];
+  source_chapter_orders: number[];
+};
+
+type AiCoachStructuredFeedbackV1 = {
+  did_well: string[];
+  main_issue: string;
+  why_inappropriate: string;
+  suggested_response: string;
+  next_step: string;
+};
+
 type AiCoachChatResponseInternalV1 = {
   schema_version: "ai_coach_chat_response_v1";
   assistant_text: string;
@@ -272,11 +309,17 @@ Learner public projection:
 - `messages[]` 只包含 `message_id`、`role`、`content`、`order_index`、`created_at`。
 - `ui_events[]` 只包含 `event_id`、`message_id`、`type`、`status`、public `payload`、`answer_payload`、`score_result`、`order_index`、`created_at`。
 - `score_result` 的 `score/max_score` 是后端状态机使用的内部掌握度数值；学员选择题界面不得裸展示为 `100 / 100` 考试分。后端必须同时返回 `mastery_threshold` 与 `mastered`（旧历史数据可缺失），前端以“答对/未掌握/达到掌握标准”解释结果。
-- `coach_state` 只包含 `session_phase`、`active_event_id`、`auto_step_count`、`answered_card_count`、`correct_streak`、`incorrect_streak`、`current_focus`、`difficulty`、`last_action`、`can_auto_advance`、`stopped_reason`，不返回内部分数累计、prompt 或配置快照。
+- `coach_state` 只包含 `session_phase`、`active_event_id`、`auto_step_count`、`answered_card_count`、`correct_streak`、`incorrect_streak`、`current_focus`、`difficulty`、`last_action`、`can_auto_advance`、`stopped_reason`，以及商务礼仪模块可选的 `business_etiquette_progress`。不得返回内部分数累计、prompt、answer key、scoring rubric 或配置快照。
 - `session_phase` 由后端 projection 派生，取值为 `"starting" | "answering" | "reviewing" | "choosing" | "summarizing" | "completed"`。
 - `active_event_id` 只指向当前可操作的 pending `quiz_card`；没有待答题卡时为 `null`。前端可用第一张 pending `quiz_card` 做兼容兜底，但不得把多张 pending 题卡同时作为主流程展示。
 - `quiz_card.payload.interaction` 使用 `AiCoachInteractionPublicV1`，不得暴露 `answer_key`、`scoring_rubric`、`source_evidence`、Prompt ID、revision、hash 或内部 snapshot。
+- `quiz_card.payload.interaction.training_card_type` 必须落在 `allowed_training_card_types` 白名单内；不允许值返回 `[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]`。
+- `expression_rewrite` 和 `role_response` 只能使用 `short_answer`，否则运行时 schema 校验失败并返回 `[AI_COACH_INTERACTION_INVALID:*]`。
+- Prompt 编译变量必须包含 `allowed_training_card_types`、`training_card_contract`、`feedback_schema`、当前模块 `learning_units` 与能力点 key。业务服务只传上下文给 PromptTemplateService，不直接拼接裸 prompt 或绕过 contract hash。
+- `score_result.structured_feedback` 可按 `AiCoachStructuredFeedbackV1` 返回结构化反馈；若旧历史数据缺失，前端可退回展示 `feedback` 字符串。新 prompt 的评分反馈必须覆盖“你做对了什么、主要问题、为什么不合适、可以怎么说、下一步”五段。
 - `summary_card.payload` 除 `title`、`items` 外，可包含 `score_percent`、`mastered`、`strengths`、`weaknesses`、`next_steps`。
+- 商务礼仪工作台前端必须调用 `GET /api/v1/newcomer-training/business-etiquette/learning-units` 读取小单元和能力点配置，并用 active/最近训练卡的 `capability_keys` 与 `source_chapter_orders` 匹配当前小单元。匹配不到时只显示“商务礼仪综合训练”兜底，不在前端生成能力点或伪造单元配置。
+- 工作台反馈区优先展示最近已评分训练卡的 `score_result.structured_feedback`；结束面板优先展示 `summary_card.payload.mastered / weaknesses / next_steps`，没有 summary 时退回最近评分卡的掌握状态和下一步建议。
 - 后端只接受 `allowed_ui_event_types` 中的事件类型；未知类型返回 `[AI_COACH_UI_EVENT_TYPE_NOT_ALLOWED]` 或 `[AI_COACH_INTERACTION_INVALID:*]`。
 - 单轮 `quiz_card` 数量超过 `max_cards_per_message` 时返回 `[AI_COACH_INTERACTION_INVALID]`。
 - `next_coach_action` 生成结果还必须满足动作级 UI 约束；不匹配时返回或记录 `[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]`：
@@ -294,11 +337,17 @@ Learner public projection:
 SSE 流式响应契约：
 
 - 以上三个 `*/stream` 端点返回 `Content-Type: text/event-stream`。
-- 每个 frame 的 `event` 与 JSON `data.type` 一致，取值为 `"status" | "session_snapshot" | "error"`。
+- 每个 frame 的 `event` 与 JSON `data.type` 一致，取值为 `"status" | "ui_event_delta" | "session_snapshot" | "error"`。
 - `status` frame：
   - `phase: "resolving_session" | "creating_session" | "session_ready" | "saving_user_message" | "scoring_answer" | "answer_scored" | "deciding_next_action" | "generating_first_card" | "generating_next_card" | "completed" | "failed"`
   - `message: string`
   - `session_id?: string | null`
+- `ui_event_delta` frame：
+  - 用于 AI 教练生成中可渲染预览，只能出现在 `phase="generating_first_card"` 或 `phase="generating_next_card"`。
+  - `event_type="quiz_card"`，`status="streaming"`，`delta_id` 在同一次生成内稳定。
+  - `payload.interaction` 使用 `ai_coach_interaction_public_draft_v1`，只允许公开渲染字段：`training_card_type`、`interaction_type`、`stem`、`options.option_id`、`options.text`、`answer_constraints`、`capability_keys`、`source_chapter_orders`、`is_complete=false`。
+  - `ui_event_delta` 不代表已持久化事件，前端必须禁用作答、提交、评分；只有最终 `session_snapshot.ui_events[].event_id` 才能作为提交答案的目标。
+  - `ui_event_delta` 严禁携带 `answer_key`、`scoring_rubric`、`source_evidence`、raw prompt、raw model output 或任意可执行组件树。
 - `session_snapshot` frame：
   - `phase` 使用同一 phase 集合。
   - `session` 等同普通 JSON 接口返回的 `AiCoachChatSessionPublicV1`。
@@ -307,7 +356,7 @@ SSE 流式响应契约：
   - `error_code: string`
   - `message: string`
   - `recoverable: boolean`
-- 答题流必须先提交并持久化评分，再发送 `phase="answer_scored"` 的 `session_snapshot`，然后才进入 `deciding_next_action` / `generating_next_card`。这样前端可以先渲染已提交、掌握判定和反馈，不等待 LLM 下一题生成完成。
+- 答题流必须先提交并持久化评分，再发送 `phase="answer_scored"` 的 `session_snapshot`。当 `proactive_coaching_enabled && auto_advance_enabled` 同时为 `true` 时，才允许进入 `deciding_next_action` / `generating_next_card`；默认手动节奏下应直接返回 `phase="completed"`，由学员点击“继续下一题 / 讲解一下 / 换个场景 / 总结本轮”后再触发下一次生成。
 - 当 LLM 自由文本回复没有返回任何白名单 `ui_events` 时，后端必须追加配置化 `followup_prompt`，`prompts` 来自 `empty_response_recovery_prompts`；若 `assistant_text` 为空，则使用 `empty_response_recovery_message`。不得让页面停在只有“开始一道题目”但没有题卡或动作的状态。
 - 答题已评分后，如果下一步动作生成超过 `generation_timeout_seconds`，后端必须回滚被取消的生成事务并通过 AI Coach 服务层记录失败 action。随后返回 `phase="completed"` 的 `session_snapshot`，其中包含来自 `generation_failure_recovery_message` / `generation_failure_recovery_prompts` 的可恢复 followup；不得只返回红色 error frame 让学员卡在当前局。
 - 当 `streaming_enabled=false` 时，SSE 端点返回 `error` frame，`error_code="[AI_COACH_STREAMING_DISABLED]"`；普通 JSON 端点保持兼容。
@@ -1152,6 +1201,7 @@ interface UnitRollbackRequest {
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `PUT` | `/api/v1/admin/newcomer-training/modules/{module_key}/article-binding` | 绑定/重绑模块文章，保存为新人训练路径待发布修订 |
+| `GET` | `/api/v1/admin/newcomer-training/learning-contents/{content_id}/binding-impact` | 查询学习内容被 active/working 新人训练路径引用的影响范围 |
 
 Request:
 
@@ -1181,7 +1231,64 @@ interface NewcomerArticleBinding {
 
 绑定接口不得直接修改 `SalesTrainerUnit.config.path.learning_content_id`。它必须基于当前路径配置生成 working revision；管理员随后在“新人训练路径配置中心”发布，发布后只影响后续学员。历史学习、考试、录音与评分记录继续引用当时快照。
 
-Response `data`: `{ module_key: string; learning_content_id: string }`。
+绑定影响 Response `data`:
+
+```typescript
+interface LearningContentBindingUnitImpact {
+  unit_key: string;
+  title: string;
+  source_chapter_orders: number[];
+  ai_coach_remediation_chapter_orders: number[];
+  capability_keys: string[];
+  require_quiz: boolean;
+  require_ai_coach: boolean;
+}
+
+interface LearningContentPathBindingImpact {
+  source: "active_revision" | "working_revision";
+  path_key: string;
+  module_key: string;
+  module_title: string;
+  revision_id: string;
+  revision_no: number;
+  learner_effective: boolean;
+  learning_units: LearningContentBindingUnitImpact[];
+  impacted_chapter_orders: number[];
+}
+
+interface LearningContentBindingImpactResponse {
+  learning_content_id: string;
+  active_bindings: LearningContentPathBindingImpact[];
+  working_bindings: LearningContentPathBindingImpact[];
+  has_active_binding: boolean;
+  has_working_binding: boolean;
+  is_bound_to_business_skills: boolean;
+  can_archive: boolean;
+  archive_block_reason: string | null;
+  management_entries: Record<"article_binding" | "path_config" | "question_drafts", string>;
+}
+```
+
+`LearningContent` 详情响应必须包含 `revision_state`，用于前端区分“草稿记录”“待发布修订”和“已归档锁定”。已发布内容保存元数据或章节时写入 working revision，不直接改 active revision；只有再次调用发布接口后 learner 才读取新内容。`published + has_unpublished_revision=true` 时前端必须显示“发布修订”并允许提交；`published + has_unpublished_revision=false` 时显示“当前无待发布修订”并禁用。
+
+```typescript
+interface LearningContentRevisionState {
+  active_revision_id: string | null;
+  active_revision_no: number | null;
+  working_revision_id: string | null;
+  working_revision_no: number | null;
+  has_unpublished_revision: boolean;
+  edit_target: "draft_record" | "working_revision" | "archived_locked";
+  publish_label: "发布" | "发布修订" | "当前无待发布修订" | "已归档";
+  save_result_copy: string;
+}
+```
+
+归档保护:
+
+- `POST /api/v1/curriculum/learning-contents/{content_id}/archive` 在文章被 active 或 working 新人训练路径引用时必须返回 409 `[LEARNING_CONTENT_BOUND_TO_NEWCOMER_PATH]`，不得只依赖前端禁用按钮。
+- 运营必须先到文章绑定或路径配置替换引用，并发布路径配置，才允许归档。
+- 章节排序和删除仍按现有 `source_chapter_orders` 序号绑定工作；本轮不迁移到稳定 `chapter_id`。前端在排序/删除前必须基于 binding impact 提示受影响小单元、章节序号和 AI 教练补救章节。
 
 权限、校验与审计:
 
@@ -1189,6 +1296,726 @@ Response `data`: `{ module_key: string; learning_content_id: string }`。
 - `learning_content_id` 必须指向已发布 `LearningContent`；缺失、草稿、归档或不存在均不写入绑定。
 - `module_key` + `path_key` 必须定位到已发布且 enabled 的 `"article_exam"` 模块配置；缺失返回 `[NEWCOMER_MODULE_CONFIG_MISSING]`。
 - 成功后写入 `SalesTrainerOperationLog`：`action="newcomer_module.article_binding_changed"`、`target_type="newcomer_training_module"`、`target_id=module_key`，metadata 记录新旧 `learning_content_id` 与 `path_key`。
+
+### 商务礼仪训练包资料导入
+
+商务礼仪训练包 v1 使用专用资料导入入口。它只生成 `LearningContent(draft)`、8 个 `LearningChapter` 和 `sales_trainer_asset_revisions(status="working")`，不得直接发布 learner 可见文章，也不得覆盖已发布训练包 revision。管理员仍需在章节编辑、文章绑定和路径配置中心完成后续审核/发布。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/v1/admin/newcomer-training/business-etiquette/imports` | 上传 Markdown 并生成商务礼仪训练包资料草稿版本 |
+
+Request: `multipart/form-data`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `file` | `UploadFile` | 是 | Markdown 文件。格式、大小由后端导入配置校验。 |
+| `training_pack_key` | `string` | 否 | 默认 `business_etiquette_v1`。 |
+| `allow_overwrite_draft` | `boolean` | 否 | 默认由导入配置决定；为 `false` 且已有 working revision 时返回 `[BUSINESS_ETIQUETTE_DRAFT_EXISTS]`。 |
+| `reason` | `string` | 否 | 写入 revision reason 和操作日志。 |
+
+Response `data`:
+
+```typescript
+interface BusinessEtiquetteImportResponse {
+  training_pack_key: string;
+  learning_content_id: string;
+  learning_content_status: "draft";
+  working_revision_id: string;
+  working_revision_no: number;
+  active_revision_id: string | null;
+  active_revision_no: number | null;
+  has_unpublished_revision: true;
+  source_filename: string;
+  content_type: string | null;
+  file_size_bytes: number;
+  content_hash: string;
+  imported_at: string;
+  allow_overwrite_draft: boolean;
+  ai_suggestions_enabled: false;
+  book_title: string;
+  original_chapter_count: number;
+  micro_chapter_count: number;
+  knowledge_point_count: number;
+  chapters: Array<{
+    title: string;
+    order_index: number;
+    line_number: number;
+    content_hash: string;
+    micro_chapters: Array<{
+      title: string;
+      order_index: number;
+      line_number: number;
+      knowledge_points: Array<{
+        title: string;
+        order_index: number;
+        line_number: number;
+      }>;
+    }>;
+  }>;
+}
+```
+
+权限、校验与审计:
+
+- 权限复用新人训练路径内容管理能力：`admin`、`super_admin`、`content_admin`、`newcomer_content_admin`。
+- 后端导入配置必须集中定义：默认训练包 key、支持格式、最大文件大小、是否允许覆盖草稿、期望原始章节数。
+- 系统必须先完整解析 Markdown 标题树，再写入数据库；解析失败不得生成半成品 `LearningContent`、`LearningChapter` 或 asset revision。
+- 原文全书 H1 后的 8 个 H1 保存为原始章节；H2 保存为微章节；H3 保存为知识点/出题依据；章节正文进入 `LearningChapter.content`。
+- 缺少导入 prompt 或解析配置时，导入只能做结构解析，不做 AI 建议，`ai_suggestions_enabled=false`。
+- 成功后写入 `SalesTrainerOperationLog`：`action="business_etiquette_training_pack.markdown_imported"`、`target_type="business_etiquette_training_pack"`、`target_id=training_pack_key`，metadata 记录 `learning_content_id`、working/active revision、来源文件、内容 hash、章节统计、是否覆盖草稿和 `trace_id`。
+
+### 商务礼仪能力点快照
+
+商务礼仪能力点第一版归属于 `business_etiquette_training_pack` 训练包版本快照，不建立独立全局能力点目录。能力点名称、描述、达标线、掌握等级、证据规则和章节绑定都保存到训练包 `sales_trainer_asset_revisions.payload.capability_snapshot`；训练包发布后冻结该快照，后续题目、小测、AI 教练、训练记录和卡点视图只能引用已发布快照。
+
+默认种子包含 8 个主能力点：`respect_boundaries`、`professional_image`、`meeting_social_actions`、`business_communication`、`reception_visit_execution`、`meeting_negotiation_order`、`dining_social_boundary`、`repair_reflection_internalization`。默认种子只由后端返回给管理页初始化，learner 页面不得自行生成能力点。
+
+```typescript
+type BusinessEtiquetteCapabilityStatus = "draft" | "published" | "archived";
+
+interface BusinessEtiquetteMasteryLevelConfig {
+  level_key: string;
+  display_name: string;
+  min_score: number; // 0..100
+  description?: string | null;
+}
+
+interface BusinessEtiquetteEvidenceRuleConfig {
+  evidence_type:
+    | "quiz_question"
+    | "ai_coach_card"
+    | "coach_feedback"
+    | "reading_progress"
+    | "manual_review";
+  weight: number; // 0..10
+  required: boolean;
+  description?: string | null;
+}
+
+interface BusinessEtiquetteCapabilityConfig {
+  capability_key: string;
+  display_name: string;
+  description?: string | null;
+  mastery_levels: BusinessEtiquetteMasteryLevelConfig[];
+  default_threshold: number; // 0..100
+  evidence_rules: BusinessEtiquetteEvidenceRuleConfig[];
+  owner_scope: "business_etiquette_training_pack";
+  status: BusinessEtiquetteCapabilityStatus;
+}
+
+interface BusinessEtiquetteChapterCapabilityBinding {
+  chapter_order: number; // 原始章节 order_index
+  capability_keys: string[];
+}
+
+interface BusinessEtiquetteCapabilitySnapshotResponse {
+  training_pack_key: string;
+  source: "working_revision" | "active_revision" | "default_seed";
+  working_revision_id: string | null;
+  working_revision_no: number | null;
+  active_revision_id: string | null;
+  active_revision_no: number | null;
+  has_unpublished_revision: boolean;
+  schema_version: number;
+  capabilities: BusinessEtiquetteCapabilityConfig[];
+  chapter_bindings: BusinessEtiquetteChapterCapabilityBinding[];
+  original_chapter_count: number | null;
+  needs_save: boolean;
+  management_entry: "/admin/sales-trainer/articles/capabilities";
+  permission: "sales_trainer.manage_modules";
+  effective_timing: "training_pack_revision_publish_time";
+}
+```
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/v1/admin/newcomer-training/business-etiquette/capabilities` | 读取当前 working/active 训练包能力点快照；缺失时返回后端默认种子并标记 `needs_save=true` |
+| `PUT` | `/api/v1/admin/newcomer-training/business-etiquette/capabilities` | 保存能力点、掌握等级、证据规则和章节绑定，生成新的 working revision |
+| `POST` | `/api/v1/admin/newcomer-training/business-etiquette/capabilities/{capability_key}/publish` | 将单个能力点状态标记为 `published`，生成新的 working revision |
+| `POST` | `/api/v1/admin/newcomer-training/business-etiquette/capabilities/{capability_key}/archive` | 将单个能力点状态标记为 `archived`，生成新的 working revision |
+
+`PUT` request:
+
+```typescript
+interface BusinessEtiquetteCapabilitySnapshotSaveRequest {
+  training_pack_key?: string | null; // 默认 business_etiquette_v1
+  capabilities: BusinessEtiquetteCapabilityConfig[];
+  chapter_bindings: BusinessEtiquetteChapterCapabilityBinding[];
+  reason?: string | null;
+}
+```
+
+`publish/archive` request:
+
+```typescript
+interface BusinessEtiquetteCapabilityActionRequest {
+  training_pack_key?: string | null;
+  reason?: string | null;
+}
+```
+
+权限、校验与审计:
+
+- 权限复用新人训练路径内容管理能力：`admin`、`super_admin`、`content_admin`、`newcomer_content_admin`；普通学员保存、发布或归档返回 `[ROLE_REQUIRED]`。
+- 保存能力点前必须已有训练包 working 或 active revision；缺失返回 `[BUSINESS_ETIQUETTE_TRAINING_PACK_REVISION_MISSING]`，不得创建脱离资料版本的全局能力点。
+- `capability_key` 在快照内唯一；`owner_scope` 只能是 `"business_etiquette_training_pack"`。
+- `mastery_levels` 必须非空、`level_key` 唯一，并按 `min_score` 升序；`default_threshold` 与 `min_score` 范围均为 `0..100`。
+- `evidence_rules` 必须非空，`weight` 范围 `0..10`，`evidence_type` 必须在白名单内。
+- 章节绑定只能引用未归档且存在的能力点；引用不存在原文章节返回 `[BUSINESS_ETIQUETTE_CAPABILITY_BINDING_INVALID]`。
+- 保存成功写入 `business_etiquette_training_pack.capabilities_saved`；发布/归档分别写入 `business_etiquette_training_pack.capability_published` / `business_etiquette_training_pack.capability_archived`。
+- 已发布训练包 revision 不允许被原地修改；任何能力点调整都生成新的 working revision，后续训练包发布时冻结新版能力点快照。
+
+### 商务礼仪 AI 出题草稿箱
+
+商务礼仪 AI 出题只允许生成 `sales_trainer_business_etiquette_question_drafts(status="pending_review")`。AI 不得直接创建、发布或绑定学员可见题目；管理员审批后，后端调用销售训练题库服务创建正式 `QuestionItem(status="draft")`，后续仍需题库发布/组卷流程控制学员可见性。
+
+出题运行时必须通过 `PromptTemplateService.get_template()` 和 `PromptTemplateService.compile_runtime_prompt_contract()` 编译 Prompt 合同。草稿必须记录 `prompt_template_id`、`prompt_contract_hash`、`prompt_contract_version`、`prompt_rendered_hash`、`model_config`、`raw_generation`、来源章节、来源片段、能力点建议、生成批次和审核记录。不得在 service 内绕过 PromptTemplateService 拼接裸 prompt。
+
+```typescript
+type BusinessEtiquetteQuestionDraftType =
+  | "single_choice"
+  | "multiple_choice"
+  | "short_answer";
+
+type BusinessEtiquetteQuestionDraftStatus =
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "converted";
+
+interface BusinessEtiquetteQuestionDraftOption {
+  value: string;
+  label: string;
+}
+
+interface BusinessEtiquetteQuestionDraftGenerateRequest {
+  training_pack_key?: string | null; // 默认 business_etiquette_v1
+  chapter_order: number; // 原始章节 order_index
+  prompt_template_id: string;
+  question_types: BusinessEtiquetteQuestionDraftType[];
+  draft_count?: number; // 1..10，默认 3
+  capability_keys?: string[]; // 缺省读取章节能力点绑定
+  model_config?: {
+    model_config_id?: string; // 可选，指向 /admin/model-configs 下 active LLM 配置
+    extra_config?: Record<string, unknown>; // 可选，本批次高级覆盖参数
+    [key: string]: unknown;
+  };
+  reason?: string | null;
+}
+
+interface BusinessEtiquetteQuestionDraft {
+  draft_id: string;
+  batch_id: string;
+  training_pack_key: string;
+  training_pack_revision_id: string | null;
+  training_pack_revision_no: number | null;
+  learning_content_id: string | null;
+  chapter_id: string | null;
+  chapter_order: number;
+  chapter_title?: string | null;
+  source_excerpt: string | null;
+  question_type: BusinessEtiquetteQuestionDraftType;
+  title: string;
+  stem: string;
+  options: BusinessEtiquetteQuestionDraftOption[];
+  correct_answer: string | null;
+  correct_answers: string[];
+  reference_answer: string | null;
+  explanation: string | null;
+  difficulty: "easy" | "medium" | "hard";
+  capability_keys: string[];
+  status: BusinessEtiquetteQuestionDraftStatus;
+  prompt_template_id: string;
+  prompt_template_name: string | null;
+  prompt_contract_hash: string;
+  prompt_contract_version: string;
+  prompt_rendered_hash: string;
+  model_config: Record<string, unknown>;
+  raw_generation: Record<string, unknown>;
+  review_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  question_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/v1/admin/newcomer-training/business-etiquette/question-drafts/generate` | 基于章节、能力点和 Prompt 模板生成题目草稿批次 |
+| `GET` | `/api/v1/admin/newcomer-training/business-etiquette/question-drafts` | 按章节、题型、能力点、状态、批次筛选草稿箱 |
+| `PUT` | `/api/v1/admin/newcomer-training/business-etiquette/question-drafts/{draft_id}` | 编辑待审核草稿 |
+| `POST` | `/api/v1/admin/newcomer-training/business-etiquette/question-drafts/{draft_id}/approve` | 审批通过并创建正式题库 draft 题目 |
+| `POST` | `/api/v1/admin/newcomer-training/business-etiquette/question-drafts/{draft_id}/reject` | 拒绝待审核草稿 |
+| `GET` | `/api/v1/admin/newcomer-training/business-etiquette/learning-units/{unit_key}/quiz-preview` | 管理员按学员端真实组卷规则预览当前小单元会抽到的已发布题目，不写入作答记录 |
+
+审批 request:
+
+```typescript
+interface BusinessEtiquetteQuestionDraftApproveRequest {
+  category_id: string; // 必须是 sales_trainer scope 的题库分类
+  review_notes?: string | null;
+}
+
+interface BusinessEtiquetteQuestionDraftRejectRequest {
+  review_notes: string;
+}
+```
+
+权限、校验与审计:
+
+- 权限复用新人训练路径内容管理能力：`admin`、`super_admin`、`content_admin`、`newcomer_content_admin`；普通学员生成、编辑、审批或拒绝返回 `[ROLE_REQUIRED]`。
+- 生成前必须存在训练包 working 或 active revision；缺失返回 `[BUSINESS_ETIQUETTE_TRAINING_PACK_REVISION_MISSING]`。
+- 生成前必须已保存能力点快照；`needs_save=true` 时返回 `[BUSINESS_ETIQUETTE_CAPABILITY_SNAPSHOT_MISSING]`。
+- `question_types` 只能包含单选、多选、简答；`draft_count` 范围 `1..10`；能力点必须存在且未归档。
+- Prompt 模板不存在、停用、ID 非法、用途不匹配、schema 不匹配或编译失败，分别返回 `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_NOT_FOUND]`、`[BUSINESS_ETIQUETTE_QUESTION_PROMPT_INACTIVE]`、`[BUSINESS_ETIQUETTE_QUESTION_PROMPT_INVALID]`、`[BUSINESS_ETIQUETTE_QUESTION_PROMPT_PURPOSE_MISMATCH]`、`[BUSINESS_ETIQUETTE_QUESTION_PROMPT_SCHEMA_MISMATCH]` 或 `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_COMPILE_FAILED:*]`。
+- `business_purpose="business_etiquette_question_generation"` 的模板仍必须满足题目草稿生成 contract；如果模板正文或变量明显属于 `ai_coach_interaction_v1` 互动卡片 contract，后端必须拒绝，不能进入 LLM 调用。
+- 管理端学习内容详情页必须以下拉方式选择 Prompt 模板；模板配置入口为 `/admin/prompts`。可选模板必须优先按 `business_purpose="business_etiquette_question_generation"` 精确筛选；旧数据缺少 `business_purpose` 时，仅允许来自 `category="business_etiquette"`、`category="sales_trainer_ai_coach"` 或历史 `category="sales_trainer"` 且明显为题目生成用途的启用模板作为兼容回退。不得回退展示所有启用模板，不得把销售总结、欢迎词、PPT 提取或 `business_purpose="ai_coach_conversation_generation"` 的 AI 对话教练系统提示词混入题目生成下拉，不得要求运营手填 `PromptTemplate` UUID。
+- 管理端学习内容详情页必须以下拉方式选择 LLM 模型配置；模型配置入口为 `/admin/settings` 的「模型配置」标签。`model_config.model_config_id` 只能指向 active LLM 配置；不存在、停用或非 LLM 分别返回 `[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_NOT_FOUND]`、`[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_INACTIVE]`、`[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_INVALID]`。
+- AI 输出必须是 JSON，顶层包含 `drafts` 或 `questions` 数组；任一题结构非法时整批失败，返回 `[BUSINESS_ETIQUETTE_QUESTION_GENERATION_INVALID_SCHEMA]`，不得写入部分草稿。
+- 单选/多选必须有选项且正确答案命中选项；简答必须有 `reference_answer`。
+- 只有 `pending_review` 草稿可编辑、审批或拒绝；其他状态返回 `[BUSINESS_ETIQUETTE_QUESTION_DRAFT_NOT_EDITABLE]`。
+- 审批创建的正式题状态为 `draft`，标签包含 `business_etiquette`、`chapter:{order}`、`draft:{draft_id}`、`batch:{batch_id}` 和 `capability:{key}`；不自动发布。
+- 管理端小测预览必须复用学员端选题规则：仅返回 `status="published"`、`usage_scope="sales_trainer"`、未安全拦截且能力点命中当前小单元的题目；预览不得创建 `BusinessEtiquetteUnitQuizAttempt`，不得检查或消耗当前管理员的学员作答次数。
+- 学习内容详情页的 AI 出题入口只能调用本节商务礼仪草稿接口。不得从该页面调用 `/curriculum/test-bank/generation/preview` 或 `/confirm`，不得直接写入通用题库、发布题目、组卷或发布路径配置。
+- 操作日志 action：`business_etiquette_question_drafts.generated`、`business_etiquette_question_draft.updated`、`business_etiquette_question_draft.approved`、`business_etiquette_question_draft.rejected`。
+
+### 商务礼仪训练小单元
+
+商务礼仪训练小单元归属于新人训练路径 `business_skills` 模块配置，字段为 `NewcomerPathModuleConfig.learning_units`。它是后台可配置业务规则，不得由学员页面硬生成。缺失时 learner endpoint 返回 `[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]`。
+
+```typescript
+interface BusinessEtiquetteTrainingUnitConfig {
+  unit_key: string;
+  title: string;
+  description?: string | null;
+  order_index: number;
+  enabled: boolean;
+  source_chapter_orders: number[]; // 指向原始章节 order_index
+  capability_keys: string[];
+  unlock_after_unit_keys: string[];
+  require_reading: boolean;
+  require_quiz: boolean;
+  require_ai_coach: boolean;
+  ai_coach_required_capability_keys: string[]; // 默认等于 capability_keys
+  ai_coach_pass_mastery_level_key: string; // 默认 "basic_mastery"
+  ai_coach_ready_mastery_level_key: string; // 默认 "field_ready"
+  ai_coach_max_remediation_attempts: number; // 1..20，默认 3
+  ai_coach_manual_review_after_max_attempts: boolean; // 默认 true
+  ai_coach_block_next_until_passed: boolean; // 默认 true
+  ai_coach_remediation_chapter_orders: number[]; // 默认等于 source_chapter_orders
+  quiz_question_count: number; // 1..50，默认 5
+  quiz_pass_threshold?: number | null; // 0..100；为空时按能力点阈值判断
+  quiz_allow_retake: boolean; // 默认 true
+  quiz_max_attempts?: number | null; // 1..100；为空不限次数
+  quiz_question_type_weights: Partial<Record<
+    "single_choice" | "multiple_choice" | "short_answer",
+    number
+  >>; // 值 >= 0；为空时按题库更新时间取题
+  allow_skip_reading: boolean;
+  block_next_until_complete: boolean;
+  empty_state_message?: string | null;
+}
+```
+
+当 `require_quiz=true` 或 `require_ai_coach=true` 时，`capability_keys` 必须非空。小单元只保存能力点 key；展示名、阈值、掌握等级和证据规则由训练包能力点快照提供。题量、通过线、是否允许重测、最大次数、题型权重、AI 教练达标等级、可上场等级、补救次数、人工复盘和阻断策略均归属于路径配置中心，不得写死在 learner 页面、测验 service 或 AI 教练组件中。
+
+默认业务配置为 7 个小单元，但默认值只能作为后台初始化/编辑默认，不是 learner 页兜底真源：
+
+1. 职业信任底座：第 1-2 原始章节。
+2. 初次见面社交：第 3 原始章节。
+3. 商务沟通专业感：第 4 原始章节。
+4. 接待与拜访执行：第 5 原始章节。
+5. 会议洽谈秩序：第 6 原始章节。
+6. 餐饮应酬边界：第 7 原始章节。
+7. 综合内化与补救：第 8 原始章节。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/v1/newcomer-training/business-etiquette/learning-units` | 读取当前发布路径下的商务礼仪小单元、对应原文章节和本人阅读进度 |
+
+Response `data`:
+
+```typescript
+interface BusinessEtiquetteLearningUnitsResponse {
+  module_key: "business_skills";
+  learning_content_id: string;
+  path_revision_id: string | null;
+  path_revision_no: number | null;
+  units: Array<BusinessEtiquetteTrainingUnitConfig & {
+    capabilities: BusinessEtiquetteCapabilityConfig[]; // 仅来自已发布训练包能力点快照
+    chapters: Array<{
+      chapter_id: string;
+      title: string;
+      order_index: number;
+      completed: boolean;
+    }>;
+    progress: {
+      completed_chapter_ids: string[];
+      total_chapters: number;
+      completed_chapters: number;
+      is_completed: boolean;
+    };
+  }>;
+}
+```
+
+校验与失败语义:
+
+- `business_skills` 模块必须存在、启用且为 `"article_exam"`，否则返回 `[BUSINESS_ETIQUETTE_MODULE_CONFIG_MISSING]` 或 `[BUSINESS_ETIQUETTE_MODULE_DISABLED]`。
+- 模块必须绑定已发布 `LearningContent`；复用文章绑定错误码 `[LEARNING_CONTENT_NOT_PUBLISHED]`、`[LEARNING_CONTENT_NOT_FOUND]`、`[LEARNING_CONTENT_CHAPTERS_MISSING]`。
+- enabled 小单元必须至少绑定一个有效原文章节；配置引用不存在的章节时返回 `[BUSINESS_ETIQUETTE_UNIT_CHAPTERS_MISSING]`。
+- `ai_coach_required_capability_keys` 为空时使用 `capability_keys`；非空时必须是 `capability_keys` 子集。`ai_coach_pass_mastery_level_key` / `ai_coach_ready_mastery_level_key` 必须命中能力点快照中的 `mastery_levels[].level_key`，且可上场等级分值不得低于达标等级。
+- 阅读进度仍由现有 `LearningProgressService` 和 `/modules/{module_key}/article-progress` 写入；本接口只聚合当前小单元视图。
+
+### 商务礼仪小单元测验
+
+商务礼仪小测由 `BusinessEtiquetteTrainingUnitConfig` 驱动组卷，只允许使用已发布、`usage_scope="sales_trainer"`、未安全拦截且命中小单元能力点的题目。测验提交后冻结路径 revision、训练包能力点快照、题目快照、答案快照和能力点得分，后续配置变更不回写历史尝试。
+
+```typescript
+interface BusinessEtiquetteQuizQuestion {
+  question_id: string;
+  title: string;
+  stem: string;
+  question_type: "single_choice" | "multiple_choice" | "short_answer";
+  points: number;
+  order_index: number;
+  options: Array<{ value: string; label: string }>;
+  capability_keys: string[];
+  chapter_orders: number[];
+}
+
+interface BusinessEtiquetteUnitQuiz {
+  training_pack_key: string;
+  learning_unit_key: string;
+  learning_unit_title: string;
+  path_revision_id: string | null;
+  path_revision_no: number | null;
+  training_pack_revision_id: string;
+  training_pack_revision_no: number;
+  question_count: number;
+  pass_threshold: number | null;
+  allow_retake: boolean;
+  max_attempts: number | null;
+  capabilities: BusinessEtiquetteCapabilityConfig[];
+  questions: BusinessEtiquetteQuizQuestion[];
+}
+
+interface BusinessEtiquetteUnitQuizAttemptCreateRequest {
+  answers: Array<{
+    question_id: string;
+    answer_payload: unknown;
+  }>;
+}
+
+interface BusinessEtiquetteCapabilityScore {
+  capability_key: string;
+  display_name: string;
+  score: number | null;
+  max_score: number;
+  normalized_score: number | null;
+  threshold: number;
+  mastered: boolean | null;
+  mastery_level_key: string | null;
+  mastery_level_name: string | null;
+}
+
+interface BusinessEtiquetteUnitQuizAttempt {
+  attempt_id: string;
+  training_pack_key: string;
+  learning_unit_key: string;
+  learning_unit_title: string;
+  user_id: string;
+  user_name?: string | null;
+  user_department?: string | null;
+  path_revision_id: string | null;
+  path_revision_no: number | null;
+  training_pack_revision_id: string;
+  training_pack_revision_no: number;
+  status: "submitted" | "scored" | "failed";
+  total_score: number | null;
+  max_score: number | null;
+  passed: boolean | null;
+  capability_scores: BusinessEtiquetteCapabilityScore[];
+  weak_capability_keys: string[];
+  recommended_chapter_orders: number[];
+  answers: Array<{
+    question_id: string;
+    question_type: "single_choice" | "multiple_choice" | "short_answer";
+    answer_payload: unknown;
+    is_correct: boolean | null;
+    score: number | null;
+    max_score: number;
+    capability_keys: string[];
+    question_snapshot: Record<string, unknown>;
+    analysis: string | null; // 提交时固化的逐题解析；简答题优先来自 AI 评分反馈，客观题来自题目解析
+    scoring_source:
+      | "rule_answer_key"
+      | "ai_llm"
+      | "ai_llm_pending"
+      | "ai_llm_failed"
+      | "local_empty_answer"
+      | string
+      | null;
+    scoring_provider: string | null; // AI 评分供应商；规则判分为空
+    scoring_model: string | null; // AI 评分模型；规则判分为空
+    scoring_latency_ms: number | null; // AI 评分耗时；规则判分为空
+  }>;
+  submitted_at: string;
+}
+```
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/v1/newcomer-training/business-etiquette/learning-units/{unit_key}/quiz` | 读取当前小单元测验题目；会校验重测次数 |
+| `POST` | `/api/v1/newcomer-training/business-etiquette/learning-units/{unit_key}/quiz-attempts` | 提交当前小单元测验答案并生成能力点得分 |
+| `GET` | `/api/v1/newcomer-training/business-etiquette/learning-units/{unit_key}/quiz-attempts?limit=20&offset=0` | 学员查看本人当前小单元的历史小测记录，返回每次提交冻结的答案、得分、能力点诊断和逐题解析 |
+| `GET` | `/api/v1/admin/newcomer-training/business-etiquette/quiz-attempts` | 管理端按用户、小单元分页查看测验尝试 |
+
+校验与失败语义:
+
+- `require_quiz=false` 返回 `[BUSINESS_ETIQUETTE_UNIT_QUIZ_DISABLED]`；小单元、模块或训练包未发布时返回对应 Terminal 错误，不允许前端盲目重试。
+- 组卷只引用训练包 active revision 中未归档能力点；小单元绑定不存在或已归档能力点返回 `[BUSINESS_ETIQUETTE_UNIT_CAPABILITY_INVALID]`。
+- 题库没有可用题时返回 `[BUSINESS_ETIQUETTE_UNIT_QUIZ_QUESTIONS_MISSING]`；不会降级为无能力点题目。
+- `quiz_allow_retake=false` 且已有尝试返回 `[BUSINESS_ETIQUETTE_UNIT_QUIZ_RETAKE_NOT_ALLOWED]`；达到 `quiz_max_attempts` 返回 `[BUSINESS_ETIQUETTE_UNIT_QUIZ_ATTEMPT_LIMIT_REACHED]`。
+- 提交答案包含非当前测验题目返回 `[BUSINESS_ETIQUETTE_QUIZ_QUESTION_NOT_IN_UNIT]`。
+- 单选/多选由题库 `QuestionBankAdapter` 自动判分；`answers[].scoring_source="rule_answer_key"`，前端应展示为“题目解析 / 规则判分”，不得冒充 AI 实时解析。
+- 简答题走 `ShortAnswerScoringService`；除空答案 `local_empty_answer` 外，非空答案必须调用 LLM，由模型根据 prompt 中的硬性规则判断玩笑、寒暄、过短、重复或无关答案是否为 0 分。
+- 简答题 AI 评分成功时使用 AI 评分反馈作为 `answers[].analysis`，并固化 `answers[].scoring_source="ai_llm"`、`scoring_provider`、`scoring_model`、`scoring_latency_ms`，用于学员端展示和后续审计。
+- 简答题 AI 评分失败或无法立即评分时 `status="submitted"`、`passed=null`、`answers[].scoring_source="ai_llm_failed"`，保留后续人工或异步评分空间。
+- 管理端查询权限复用新人训练路径内容管理能力；普通学员访问 admin endpoint 返回 `[ROLE_REQUIRED]`。
+- 提交成功写入 `business_etiquette_unit_quiz.submitted` 操作日志，metadata 记录 `learning_unit_key`、`training_pack_key`、题量、薄弱能力点和是否通过。
+
+### 商务礼仪 AI 教练达标与补救流
+
+商务礼仪 AI 教练达标流只读取已持久化的白名单 `quiz_card` 事件、`score_result` 和训练局冻结的 `path_config_snapshot.learning_units`。它不得从前端状态、自由追问文本或当前后台草稿配置推断达标结果。每次训练卡提交评分后，后端更新 `coach_state.business_etiquette_progress`、`SalesTrainerAiCoachSession.mastery_state` 和操作日志；流式答题端点的 `answer_scored` snapshot 必须已经包含最新 progress。
+
+```typescript
+type BusinessEtiquetteAiCoachProgressStatus =
+  | "not_started"
+  | "in_progress"
+  | "not_mastered"
+  | "mastered"
+  | "ready"
+  | "manual_review";
+
+interface BusinessEtiquetteAiCoachProgress {
+  session_id: string;
+  module_key: "business_skills";
+  learning_unit_key: string;
+  learning_unit_title: string;
+  status: BusinessEtiquetteAiCoachProgressStatus;
+  passed: boolean;
+  ready_for_field: boolean;
+  manual_review_required: boolean;
+  block_next: boolean;
+  answered_card_count: number;
+  scored_card_count: number;
+  remediation_attempt_count: number;
+  max_remediation_attempts: number;
+  pass_mastery_level_key: string;
+  ready_mastery_level_key: string;
+  weak_capability_keys: string[];
+  recommended_chapter_orders: number[];
+  recommended_training_card_types: AiCoachTrainingCardTypeV1[];
+  next_step_code:
+    | "start_training"
+    | "continue_remediation"
+    | "manual_review"
+    | "mastered"
+    | "ready";
+  next_step: string;
+  capability_scores: BusinessEtiquetteCapabilityScore[];
+}
+```
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/v1/newcomer-training/business-etiquette/ai-coach/progress?session_id={session_id}&unit_key={unit_key?}` | 读取本人商务礼仪 AI 教练训练局的当前小单元达标、补救、阻断和人工复盘状态 |
+
+规则:
+
+- `unit_key` 未传时，后端按最新 `quiz_card.public_interaction.capability_keys/source_chapter_orders` 匹配小单元；匹配不到时使用当前 session 快照中的第一个 enabled 小单元。
+- 达标能力点取 `ai_coach_required_capability_keys`，为空时取 `capability_keys`。每个能力点按训练卡 `score_result.score/max_score` 聚合为 0..100，再映射能力点快照中的 `mastery_levels`。
+- `passed=true` 要求所有达标能力点达到 `ai_coach_pass_mastery_level_key`；`ready_for_field=true` 要求所有达标能力点达到 `ai_coach_ready_mastery_level_key`。
+- 未达标训练卡次数达到 `ai_coach_max_remediation_attempts` 且 `ai_coach_manual_review_after_max_attempts=true` 时，`status="manual_review"` 且 `manual_review_required=true`。
+- `block_next` 由 `ai_coach_block_next_until_passed && !passed` 计算；前端不得自行降低阻断要求。
+- `recommended_chapter_orders` 优先使用 `ai_coach_remediation_chapter_orders`，为空时回落到小单元 `source_chapter_orders`。
+- `recommended_training_card_types` 来自 session 冻结的 `config_snapshot.allowed_training_card_types`，缺失时安全默认 `["scenario_judgment"]`。
+- `next_step` 默认由后端安全兜底文案返回；如需运营调整，应使用 `modules[].guidance_templates.ai_coach_*` 或后续等价后台配置，不得散落在页面组件。
+
+失败语义:
+
+- 非本人 session 返回 `[ACCESS_DENIED]`；session 不存在返回 `[AI_COACH_SESSION_NOT_FOUND]`。
+- session 不属于 `business_skills` 返回 `[BUSINESS_ETIQUETTE_AI_COACH_SESSION_INVALID]`。
+- session 冻结路径配置非法、没有小单元或等级 key 不存在返回 `[BUSINESS_ETIQUETTE_AI_COACH_CONFIG_INVALID]` / `[BUSINESS_ETIQUETTE_AI_COACH_UNIT_NOT_FOUND]`。
+- 能力点快照缺失返回 `[BUSINESS_ETIQUETTE_AI_COACH_CAPABILITY_CONFIG_MISSING]`。
+- 训练卡公开互动快照或评分结果损坏返回 `[BUSINESS_ETIQUETTE_AI_COACH_EVENT_INVALID]` / `[BUSINESS_ETIQUETTE_AI_COACH_SCORE_INVALID]`。
+
+### 商务礼仪训练包发布与重练治理
+
+商务礼仪训练包发布是高影响内容治理动作，不等同于把 working revision 标记为 published。发布前必须先生成影响分析，覆盖原文章节、路径小单元、正式题、AI 出题草稿、能力点快照、AI 教练配置和旧学员记录。已存在的阅读进度、测验尝试、AI 教练训练局和评分记录不得被新版本覆盖；重练只能创建新的训练局或后续记录。
+
+```typescript
+type BusinessEtiquetteReleaseStrategy =
+  | "future_learners_only"
+  | "allow_voluntary_switch"
+  | "assign_retraining";
+
+interface BusinessEtiquetteReleaseImpactResponse {
+  training_pack_key: string;
+  active_revision_id?: string | null;
+  active_revision_no?: number | null;
+  target_revision_id: string;
+  target_revision_no: number;
+  target_revision_status: "working" | "published" | "archived";
+  strategy_options: BusinessEtiquetteReleaseStrategy[];
+  config: {
+    default_strategy: BusinessEtiquetteReleaseStrategy;
+    allow_voluntary_switch: boolean;
+    allow_assigned_retraining: boolean;
+    max_assigned_retraining_users: number;
+    notification_template: string;
+    large_change_chapter_threshold: number;
+    management_entry: string;
+  };
+  summary: {
+    changed_chapter_count: number;
+    impacted_learning_unit_count: number;
+    impacted_question_count: number;
+    impacted_question_draft_count: number;
+    impacted_capability_count: number;
+    impacted_ai_coach_config_count: number;
+    active_learner_count: number;
+    recommended_retraining_user_count: number;
+    is_large_change: boolean;
+  };
+  chapter_changes: Array<{
+    chapter_order: number;
+    title: string;
+    change_type: "added" | "changed" | "removed";
+    previous_content_hash?: string | null;
+    target_content_hash?: string | null;
+  }>;
+  impacted_learning_units: Array<{
+    unit_key: string;
+    title: string;
+    source_chapter_orders: number[];
+    capability_keys: string[];
+    impacted_chapter_orders: number[];
+    impacted_capability_keys: string[];
+    require_quiz: boolean;
+    require_ai_coach: boolean;
+  }>;
+  impacted_questions: Array<{
+    question_id: string;
+    draft_id: string;
+    title: string;
+    question_type: BusinessEtiquetteQuestionDraftType;
+    chapter_order: number;
+    capability_keys: string[];
+  }>;
+  impacted_question_drafts: Array<{
+    draft_id: string;
+    title: string;
+    question_type: BusinessEtiquetteQuestionDraftType;
+    status: BusinessEtiquetteQuestionDraftStatus;
+    chapter_order: number;
+    capability_keys: string[];
+  }>;
+  impacted_capabilities: Array<{
+    capability_key: string;
+    display_name: string;
+    change_type: "added" | "changed" | "removed";
+    previous_status?: "draft" | "published" | "archived" | null;
+    target_status?: "draft" | "published" | "archived" | null;
+  }>;
+  impacted_ai_coach_configs: Array<{
+    unit_key: string;
+    title: string;
+    prompt_template_id?: string | null;
+    scoring_prompt_template_id?: string | null;
+    allowed_training_card_types: AiCoachTrainingCardTypeV1[];
+    affected_reason: string;
+  }>;
+  active_learners: Array<{
+    user_id: string;
+    user_name?: string | null;
+    department?: string | null;
+    source_record_types: Array<"quiz_attempt" | "ai_coach_session">;
+    latest_path_revision_no?: number | null;
+    latest_training_pack_revision_no?: number | null;
+    has_active_ai_coach_session: boolean;
+  }>;
+  recommended_retraining_user_ids: string[];
+}
+```
+
+| 方法 | 路径 | 说明 | 权限 |
+|---|---|---|---|
+| `GET` | `/api/v1/admin/newcomer-training/business-etiquette/release-impact?training_pack_key={key}&target_revision_id={revision_id?}` | 预览 working/指定训练包修订的发布影响分析 | `sales_trainer.manage_modules` |
+| `POST` | `/api/v1/admin/newcomer-training/business-etiquette/release` | 发布 working 训练包 revision，并按策略记录影响范围 | `sales_trainer.manage_modules` |
+| `POST` | `/api/v1/admin/newcomer-training/business-etiquette/retraining-assignments` | 管理员为指定学员创建新版重练训练局 | `sales_trainer.manage_modules` |
+| `POST` | `/api/v1/newcomer-training/business-etiquette/retraining-sessions` | 学员自愿切换新版并创建新的 AI 教练训练局 | learner 本人 |
+
+发布请求:
+
+```typescript
+interface BusinessEtiquetteReleasePublishRequest {
+  training_pack_key?: string | null;
+  strategy: BusinessEtiquetteReleaseStrategy;
+  assigned_user_ids?: string[];
+  reason?: string | null;
+}
+
+interface BusinessEtiquetteReleasePublishResponse {
+  training_pack_key: string;
+  active_revision_id: string;
+  active_revision_no: number;
+  previous_revision_id?: string | null;
+  strategy: BusinessEtiquetteReleaseStrategy;
+  impact_summary: BusinessEtiquetteReleaseImpactSummaryResponse;
+  created_session_ids: string[];
+}
+```
+
+重练请求:
+
+```typescript
+interface BusinessEtiquetteRetrainingStartRequest {
+  reason?: string | null;
+}
+
+interface BusinessEtiquetteRetrainingAssignmentRequest {
+  user_ids: string[];
+  reason?: string | null;
+}
+
+interface BusinessEtiquetteRetrainingAssignmentResponse {
+  created_session_ids: string[];
+  skipped_user_ids: string[];
+}
+```
+
+规则:
+
+- 默认发布策略为 `future_learners_only`：仅移动 active pointer，旧学员继续按旧记录和旧 snapshot 查看，不自动创建新训练局。
+- `allow_voluntary_switch` 允许 learner 端显示“重练新版”入口；点击后调用 learner 重练端点并创建 `resume_strategy="new"` 的 AI 教练训练局。
+- `assign_retraining` 只允许管理员显式传入 `assigned_user_ids`；人数不得超过 `max_assigned_retraining_users`。系统为每个指定用户创建新的训练局，不修改旧训练局。
+- `summary.is_large_change` 由影响分析按 `large_change_chapter_threshold` 判断；`recommended_retraining_user_ids` 只给出候选旧学员，不自动改变发布策略。
+- 影响分析读取 working revision；没有 working revision 时可回落 active revision 用于诊断，但发布必须有 working revision。
+- 发布成功写入 `business_etiquette_training_pack.released` 操作日志，metadata 记录 `training_pack_key`、`active_revision_id`、`strategy`、`impact_summary`、`created_session_ids` 和 `trace_id`。
+- 学员自愿重练写入 `business_etiquette_training_pack.voluntary_retraining_started`；管理员指定重练写入 `business_etiquette_training_pack.retraining_assigned`。
+- 通知模板、策略默认值、指定重练人数上限和大变更阈值必须来自 `BusinessEtiquetteReleaseSettings` 或后续后台配置，不得散落在页面组件中。
+
+失败语义:
+
+- 无 working revision 发布返回 `[BUSINESS_ETIQUETTE_TRAINING_PACK_REVISION_MISSING]`。
+- 非法发布策略或策略被配置禁用返回 `[BUSINESS_ETIQUETTE_RELEASE_STRATEGY_INVALID]`。
+- 指定重练缺少用户或超过人数上限返回 `[BUSINESS_ETIQUETTE_RETRAINING_ASSIGNMENT_INVALID]`。
+- learner 自愿重练在配置禁用时返回 `[BUSINESS_ETIQUETTE_RELEASE_STRATEGY_INVALID]`。
 
 ### 考卷管理
 
@@ -1622,6 +2449,42 @@ interface OperationLogListResponse {
 |---|---:|---|
 | `[ROLE_REQUIRED]` | 403 | 当前角色缺少对应 admin 能力，例如内容管理员访问日志、培训负责人重试任务或学员访问后台 |
 | `[ACCESS_DENIED]` | 403 | learner 访问他人做题、音频或文件 |
+| `[BUSINESS_ETIQUETTE_IMPORT_CONFIG_INVALID]` | 500 | 商务礼仪导入配置缺失或非法，例如默认 key、格式白名单、文件大小上限或期望章节数 |
+| `[BUSINESS_ETIQUETTE_IMPORT_FILE_INVALID]` | 400 | 商务礼仪导入文件名为空或无法识别 |
+| `[BUSINESS_ETIQUETTE_IMPORT_FORMAT_UNSUPPORTED]` | 415 | 商务礼仪导入文件扩展名或 content type 不在允许列表 |
+| `[BUSINESS_ETIQUETTE_IMPORT_FILE_EMPTY]` | 400 | 商务礼仪导入文件为空 |
+| `[BUSINESS_ETIQUETTE_IMPORT_FILE_TOO_LARGE]` | 413 | 商务礼仪导入文件超过后台配置大小 |
+| `[BUSINESS_ETIQUETTE_IMPORT_ENCODING_INVALID]` | 415 | 商务礼仪 Markdown 不是 UTF-8 编码 |
+| `[BUSINESS_ETIQUETTE_IMPORT_STRUCTURE_INVALID]` | 422 | 商务礼仪 Markdown 标题树不符合全书 + 8 个原始章节 + H2 微章节结构 |
+| `[BUSINESS_ETIQUETTE_DRAFT_EXISTS]` | 409 | 商务礼仪训练包已有 working revision 且当前请求不允许覆盖草稿 |
+| `[BUSINESS_ETIQUETTE_TRAINING_PACK_REVISION_MISSING]` | 409 | 保存能力点快照前未找到商务礼仪训练包 working 或 active revision |
+| `[BUSINESS_ETIQUETTE_CAPABILITY_CONFIG_INVALID]` | 400/409/422 | 能力点 key、掌握等级、达标线、证据规则或快照结构非法 |
+| `[BUSINESS_ETIQUETTE_CAPABILITY_BINDING_INVALID]` | 422 | 章节能力点绑定为空、重复、引用不存在章节或引用不存在/已归档能力点 |
+| `[BUSINESS_ETIQUETTE_CAPABILITY_NOT_FOUND]` | 404 | 发布或归档的能力点 key 不存在 |
+| `[BUSINESS_ETIQUETTE_MODULE_CONFIG_MISSING]` | 404 | 商务礼仪 `business_skills` 模块配置不存在或不是文章考试模块 |
+| `[BUSINESS_ETIQUETTE_MODULE_DISABLED]` | 409 | 商务礼仪模块已停用 |
+| `[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]` | 409 | 商务礼仪模块缺少后台配置的小单元 |
+| `[BUSINESS_ETIQUETTE_UNIT_CHAPTERS_MISSING]` | 409 | 商务礼仪 enabled 小单元没有绑定有效原文章节 |
+| `[BUSINESS_ETIQUETTE_PROGRESS_UNAVAILABLE]` | 500 | 商务礼仪小单元阅读进度读取失败 |
+| `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_INVALID]` | 400 | 商务礼仪题目生成 Prompt 模板 ID 非法 |
+| `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_NOT_FOUND]` | 404 | 商务礼仪题目生成 Prompt 模板不存在 |
+| `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_INACTIVE]` | 409 | 商务礼仪题目生成 Prompt 模板已停用 |
+| `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_PURPOSE_MISMATCH]` | 409 | 商务礼仪题目生成 Prompt 模板用途不匹配 |
+| `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_COMPILE_FAILED:*]` | 502 | 商务礼仪题目生成 Prompt 编译失败 |
+| `[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_INVALID]` | 400 | 商务礼仪题目生成模型配置 ID 非法，或选择了非 LLM 配置 |
+| `[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_NOT_FOUND]` | 404 | 商务礼仪题目生成模型配置不存在 |
+| `[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_INACTIVE]` | 409 | 商务礼仪题目生成模型配置已停用 |
+| `[BUSINESS_ETIQUETTE_QUESTION_GENERATION_INVALID_JSON]` | 502 | AI 题目生成结果不是合法 JSON |
+| `[BUSINESS_ETIQUETTE_QUESTION_GENERATION_INVALID_SCHEMA]` | 502 | AI 题目生成结果结构非法，未写入部分草稿 |
+| `[BUSINESS_ETIQUETTE_QUESTION_GENERATION_FAILED]` | 502 | AI 题目生成调用失败 |
+| `[BUSINESS_ETIQUETTE_AI_COACH_SESSION_INVALID]` | 409 | AI 教练训练局不属于商务礼仪模块 |
+| `[BUSINESS_ETIQUETTE_AI_COACH_CONFIG_INVALID]` | 409 | AI 教练达标配置非法，例如冻结路径快照损坏、等级 key 不存在或可上场等级低于达标等级 |
+| `[BUSINESS_ETIQUETTE_AI_COACH_UNIT_NOT_FOUND]` | 404/409 | AI 教练 progress 指定小单元不存在，或 session 快照缺少小单元 |
+| `[BUSINESS_ETIQUETTE_AI_COACH_CAPABILITY_CONFIG_MISSING]` | 409 | AI 教练达标能力点在训练包能力快照中不存在 |
+| `[BUSINESS_ETIQUETTE_AI_COACH_EVENT_INVALID]` | 409 | AI 教练训练卡公开互动快照缺失或非法，无法作为达标证据 |
+| `[BUSINESS_ETIQUETTE_AI_COACH_SCORE_INVALID]` | 409 | AI 教练训练卡评分结果缺失或非法，无法作为达标证据 |
+| `[BUSINESS_ETIQUETTE_RELEASE_STRATEGY_INVALID]` | 400/409 | 商务礼仪训练包发布策略非法、被配置禁用，或 learner 自愿重练未开启 |
+| `[BUSINESS_ETIQUETTE_RETRAINING_ASSIGNMENT_INVALID]` | 400/422 | 指定重练用户为空、超过人数上限或请求结构非法 |
 | `[REGRADING_TARGET_NOT_FOUND]` | 404 | 历史重评目标记录不存在 |
 | `[REGRADING_TARGET_REVISION_NOT_FOUND]` | 404 | 未找到可用于重评的已发布修订 |
 | `[REGRADING_TARGET_REVISION_INVALID]` | 409 | 重评目标修订不是新人训练路径考卷修订 |
@@ -1666,6 +2529,7 @@ interface OperationLogListResponse {
 | `[AI_COACH_PROMPT_REVISION_NOT_FOUND]` | 404 | AI 教练 Prompt 模板或指定修订不可用 |
 | `[AI_COACH_PROMPT_REVISION_AUDIT_MISSING]` | 409 | AI 教练指定 Prompt revision 缺少可审计历史，运行时拒绝回退 |
 | `[AI_COACH_PROMPT_REVISION_FALLBACK]` | 409 | AI 教练未按已发布 Prompt revision 渲染，运行时拒绝使用 head fallback |
+| `[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]` | 502 | AI 教练生成了未在 `allowed_training_card_types` 白名单内的 ABD 训练卡 |
 | `[AUDIO_PASS_THRESHOLD_INVALID]` | 400 | 通过线不在 `0-100` 范围 |
 | `[DEUCATE_CONFIG_INVALID]` | 500 | Deucate 模型参数配置非法 |
 | `[DEUCATE_CONFIG_MISSING]` | 500 | Deucate 配置缺失 |
@@ -1700,6 +2564,7 @@ interface OperationLogListResponse {
 | `[NEWCOMER_REALTIME_PLACEHOLDER_ONLY]` | 409 | 模块 4 仍为占位，不允许创建实时对练会话 |
 | `[PAPER_NOT_PUBLISHED]` | 404/409 | 绑定考卷不存在、未发布或已归档 |
 | `[LEARNING_CONTENT_NOT_PUBLISHED]` | 404/409 | 绑定学习内容不存在、未发布或已归档 |
+| `[LEARNING_CONTENT_BOUND_TO_NEWCOMER_PATH]` | 409 | 学习内容被 active 或 working 新人训练路径引用，归档被服务端硬阻止 |
 | `[MATERIAL_FILE_NOT_FOUND]` | 404 | 材料文件不存在 |
 | `[MATERIAL_FILE_ACCESS_DENIED]` | 403 | 本地材料文件不在允许存储目录内 |
 | `[MATERIAL_FILE_URL_EXPIRES_CONFIG_INVALID]` | 500 | 材料文件访问链接有效期配置非法 |
@@ -1729,6 +2594,10 @@ interface OperationLogListResponse {
 | `SALES_TRAINER_ASR_MODEL` | `fun-asr` | DashScope 文件识别 | 环境配置/系统配置 | `language_hints` 仅在 `paraformer-v2` 时传入 |
 | `SALES_TRAINER_MANAGER_ROLES` | `support,training_lead,training_manager` | 培训负责人记录查看能力兼容配置 | 环境配置/系统配置 | 逗号分隔角色列表；缺失使用默认培训负责人角色；只授予团队记录读取能力，不授予内容管理、日志、配置健康或任务重试能力 |
 | `sales_trainer.phase2.closed_loop_policy` | `sales_trainer_phase2_closed_loop_policy_v1`、`enabled=true`、`low_score_threshold=70`、`repeat_practice_threshold=2`、`dashboard_record_limit=500`、默认主管动作与补救动作 | 阶段 2 训练记录投影、能力画像、补救动作、管理者看板和 settings 策略摘要 | `/admin/business-rules/sales-trainer-phase2`，复用 `BusinessRuleConfig` 发布/回滚/禁用/审计 | 阈值范围 `0..100`、`1..20`、`1..5000`；action code/record_type 必须覆盖且不重复；文案/模板非空；缺失、非法或 disabled 使用 bundled default，并返回 `phase2_policy.fallback_applied=true` |
+| `modules[].ai_coach.allowed_training_card_types` | `["scenario_judgment"]` | 新人训练路径 active/working revision 的 `business_skills.ai_coach` | `/admin/sales-trainer/ai-coach` | 至少 1 项，只允许 `scenario_judgment`、`expression_rewrite`、`role_response`；改写/角色回应必须同时启用 `short_answer` 并绑定评分 prompt；非法保存返回 Pydantic 校验错误，运行时输出不命中返回 `[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]` |
+| `BUSINESS_SKILLS_COACH_WORKBENCH_COPY` | 页面标题、训练卡工作台、教练反馈、结束面板、按钮和空状态文案 | `web/src/app/(dashboard)/sales-trainer/business-skills/coach/coach-workbench-config.ts` | 当前为前端集中配置；未来运营可调时迁移到 `/admin/sales-trainer/ai-coach` | 必须非空、语义与训练工作台一致；缺失会在构建/类型检查阶段暴露；当前不支持后台热更新 |
+| `BUSINESS_SKILLS_COACH_WORKBENCH_RULES.showFreeFollowup` | `true` | 同上 | 当前为前端集中配置；未来迁移到 `modules[].ai_coach` | `true` 时自由追问只走 chat message stream；`false` 时隐藏输入框；不得替代训练卡提交 |
+| `BUSINESS_SKILLS_COACH_WORKBENCH_RULES.allowSkipActiveCard` | `false` | 同上 | 当前为前端集中配置；未来迁移到 `modules[].ai_coach`，由 `sales_trainer.manage_modules` 管理 | `false` 时 active pending 训练卡存在则禁用“继续下一题”；如配置为 `true` 必须确认不会破坏达标状态机 |
 | `DEUCATE_BASE_URL` | 无 | Deucate 评分服务 | 环境配置/模型配置 | 缺失返回 `[DEUCATE_CONFIG_MISSING]` |
 | `DEUCATE_API_KEY` | 无 | Deucate 评分服务 | 环境配置/模型配置 | 缺失返回 `[DEUCATE_CONFIG_MISSING]` |
 | `DEUCATE_MODEL` | `deucate` | Deucate 评分服务 | 环境配置/模型配置 | 缺失使用默认值 |
@@ -1750,11 +2619,32 @@ interface OperationLogListResponse {
 | `newcomer_path.modules[].exam_paper_id` | 无 | 商务技巧考卷入口 | admin 新人训练路径考卷管理 | 必须指向已发布考卷；缺失或草稿返回 `[PAPER_NOT_PUBLISHED]` |
 | `newcomer_path.modules[].duration_options` | `10/20/30` 分钟可由 seed 初始化 | 电梯演讲模块入口 | admin 新人训练路径配置 | 每项必须有正数时长和已发布音频单元；非法返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` |
 | `newcomer_path.modules[].audit_events` | `newcomer_module.<module_key>.*` | 操作日志服务 | 系统初始化/后台配置 | 事件名必填；发布、归档、绑定变更必须写 operation log |
+| `business_etiquette_import.settings` | `business_etiquette_v1`、Markdown 格式、2MB、8 个原始章节、允许覆盖草稿 | 商务礼仪资料导入 API | 后端导入配置 / 资料导入页 | 文件格式、大小、章节数必须校验；解析失败不落库 |
+| `business_etiquette_training_pack.capability_snapshot.capabilities[]` | 后端 8 个主能力点 seed | 商务礼仪能力点、学员小单元展示、后续题目/AI 教练/卡点引用 | `/admin/sales-trainer/articles/capabilities` | key 唯一；阈值 0..100；等级/证据规则非空；缺失时管理端返回 `default_seed` 且 `needs_save=true`，learner 不在前端生成 |
+| `business_etiquette_training_pack.capability_snapshot.chapter_bindings[]` | 第 1-8 章分别绑定默认主能力点 | 学员小单元能力点展示、后续题源和补救建议 | `/admin/sales-trainer/articles/capabilities` | 章节必须存在；能力点必须存在且未归档；非法返回 `[BUSINESS_ETIQUETTE_CAPABILITY_BINDING_INVALID]` |
+| `business_etiquette_release.settings.default_strategy` | `future_learners_only` | 商务礼仪训练包发布 API 和导入发布页 | 后端 `BusinessEtiquetteReleaseSettings`；后续可迁移后台配置 | 必须是 `future_learners_only`、`allow_voluntary_switch`、`assign_retraining` 之一；非法返回 `[BUSINESS_ETIQUETTE_RELEASE_STRATEGY_INVALID]` |
+| `business_etiquette_release.settings.allow_voluntary_switch` | `true` | learner 自愿重练入口和重练 session 创建 | 后端发布配置 / 后续后台配置 | false 时 learner 重练端点返回 `[BUSINESS_ETIQUETTE_RELEASE_STRATEGY_INVALID]`，前端不展示自愿重练入口 |
+| `business_etiquette_release.settings.allow_assigned_retraining` | `true` | 管理员指定人群重练 | 后端发布配置 / 后续后台配置 | false 时发布策略 `assign_retraining` 和指定重练端点返回 `[BUSINESS_ETIQUETTE_RELEASE_STRATEGY_INVALID]` |
+| `business_etiquette_release.settings.max_assigned_retraining_users` | `100` | 管理员指定人群重练批量上限 | 后端发布配置 / 后续后台配置 | 范围 `1..1000`；超过上限返回 `[BUSINESS_ETIQUETTE_RETRAINING_ASSIGNMENT_INVALID]` |
+| `business_etiquette_release.settings.notification_template` | `商务礼仪训练包已更新，你可以选择重练新版。` | 发布影响分析、后续通知或 learner 重练提示 | 后端发布配置 / 后续后台配置 | 非空字符串；缺失使用安全默认值，不影响发布主流程 |
+| `business_etiquette_release.settings.large_change_chapter_threshold` | `2` | 发布影响分析建议策略 | 后端发布配置 / 后续后台配置 | 正整数；非法时使用默认值并在影响分析配置中返回兜底值 |
+| `newcomer_path.modules[].learning_units[]` | 7 个商务礼仪小单元 seed | 商务礼仪 learner 首页、小单元详情、阅读进度 | admin 新人训练路径配置 | 标题、顺序、章节、能力点、开放/跳过/阻断规则均可配置；缺失返回 `[BUSINESS_ETIQUETTE_LEARNING_UNITS_MISSING]` |
+| `newcomer_path.modules[].learning_units[].ai_coach_required_capability_keys` | `capability_keys` | 商务礼仪 AI 教练 progress service、训练局冻结快照 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 为空时使用 `capability_keys`；非空必须是 `capability_keys` 子集；缺失用 Pydantic 默认补齐 |
+| `newcomer_path.modules[].learning_units[].ai_coach_pass_mastery_level_key` | `basic_mastery` | 商务礼仪 AI 教练达标判断 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 必须命中能力点 `mastery_levels[].level_key`；非法返回 `[BUSINESS_ETIQUETTE_AI_COACH_CONFIG_INVALID]` |
+| `newcomer_path.modules[].learning_units[].ai_coach_ready_mastery_level_key` | `field_ready` | 商务礼仪 AI 教练可上场判断 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 必须命中能力点等级，且 min_score 不低于达标等级 |
+| `newcomer_path.modules[].learning_units[].ai_coach_max_remediation_attempts` | `3` | 商务礼仪 AI 教练人工复盘阈值 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 范围 `1..20`；达到且未达标时进入 `manual_review` |
+| `newcomer_path.modules[].learning_units[].ai_coach_manual_review_after_max_attempts` | `true` | 商务礼仪 AI 教练人工复盘状态 | `/admin/sales-trainer/paths` 商务技巧绑定区 | false 时不自动进入人工复盘，但仍返回弱项和补救建议 |
+| `newcomer_path.modules[].learning_units[].ai_coach_block_next_until_passed` | `true` | 商务礼仪 AI 教练后续小单元阻断 | `/admin/sales-trainer/paths` 商务技巧绑定区 | `block_next = 配置值 && !passed`；前端不得自行降低阻断要求 |
+| `newcomer_path.modules[].learning_units[].ai_coach_remediation_chapter_orders` | `source_chapter_orders` | 商务礼仪 AI 教练补救章节建议 | `/admin/sales-trainer/paths` 商务技巧绑定区 | 为空时回落到小单元章节；必须为正整数且不重复 |
 
 ## 更新记录
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-06-15 | 新增 AI 教练 `ui_event_delta` 流式渲染契约 | 生成题卡时 SSE 可先返回公开题干/选项草稿；草稿不可提交且不得携带答案、评分规则或原始模型输出 |
+| 2026-06-14 | 新增商务礼仪训练包发布与重练治理契约 | 发布前影响分析覆盖章节、小单元、题目、草稿、能力点、AI 教练配置和旧学员；支持未来学员、自愿切换和指定重练三种策略 |
+| 2026-06-14 | 新增商务礼仪 AI 教练达标与补救流契约 | AI 教练训练卡写入能力点进度，按小单元配置判断达标、可上场、阻断和人工复盘 |
+| 2026-06-14 | 新增商务礼仪训练包导入、小单元和能力点快照契约 | 明确能力点属于训练包版本快照，不建立全局目录；learner 小单元返回能力点摘要 |
 | 2026-06-12 | 补充阶段 2 训练闭环契约 | 统一训练记录有效分投影、评分解释、能力画像、管理者看板和策略配置诊断 |
 | 2026-06-03 | 细化新人训练路径 RBAC 与生命周期审计契约 | 区分超级管理员、内容管理员、培训负责人、运维人员、学员；关键日志要求记录 previous/next/status 变更 |
 | 2026-05-28 | 补充培训负责人团队范围契约 | `support` 作为培训负责人兼容别名；跨用户记录按同部门过滤 |

@@ -94,7 +94,7 @@ export default function NewcomerPaperNewPage() {
         <AdminFormShell
             backHref="/admin/sales-trainer/papers"
             title="新建商务技巧考卷"
-            description="从新人训练路径题库选择题目组卷；内部考卷编号由系统自动生成。"
+            description="从新人训练路径正式题目库选择题目组卷；内部考卷编号由系统自动生成。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
         >
             <form className="space-y-6" onSubmit={(event) => void createPaper(event)}>

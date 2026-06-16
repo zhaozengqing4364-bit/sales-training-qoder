@@ -7,10 +7,12 @@ import { Copy, Eye, Plus, RefreshCw, Search, ShieldCheck, Wrench } from "lucide-
 import { AdminIndexShell, AdminPageHeader } from "@/components/admin/admin-layout-shells";
 import { PromptGovernanceContextBar } from "@/components/admin/prompts/prompt-governance-context-bar";
 import {
+  formatBusinessPurpose,
   formatCategoryLabel,
   formatGovernanceIssue,
   formatPromptType,
   formatTemplateName,
+  PROMPT_BUSINESS_PURPOSE,
   PROMPT_TYPE_COLORS,
   PROMPT_TYPE_LABELS,
 } from "@/components/admin/prompts/prompt-labels";
@@ -60,7 +62,7 @@ const BUSINESS_ETIQUETTE_PROMPT_CATEGORY = "business_etiquette";
 const QUESTION_TEMPLATE_KEYWORDS = ["题目生成", "题目草稿", "试题生成", "question"] as const;
 const QUESTION_TEMPLATE_EXCLUDE_KEYWORDS = ["对话教练", "互动卡片", "chatbot"] as const;
 const AI_COACH_CONVERSATION_KEYWORDS = ["对话教练", "互动卡片", "chatbot", "教练回复"] as const;
-const QUESTION_PROMPT_TEMPLATE_NAME = "新人训练路径商务技巧 AI 教练题目生成 v1";
+const QUESTION_PROMPT_TEMPLATE_NAME = "商务礼仪题目草稿生成 v1";
 const AI_COACH_SYSTEM_PROMPT_TEMPLATE_NAME = "新人训练路径商务技巧 AI 对话教练生成 v1";
 
 const CATEGORY_FILTER_OPTIONS = [
@@ -87,6 +89,7 @@ const AI_COACH_PROMPT_SLOTS = [
     title: "AI 教练对话系统提示词",
     description: "控制新人训练路径商务技巧 AI 教练如何生成对话、卡片和下一步动作。",
     createName: AI_COACH_SYSTEM_PROMPT_TEMPLATE_NAME,
+    businessPurpose: PROMPT_BUSINESS_PURPOSE.AI_COACH_CONVERSATION,
     listKeyword: "对话教练",
     managementCopy: "绑定入口：新人训练路径 → AI 教练配置",
     managementHref: "/admin/sales-trainer/ai-coach",
@@ -97,6 +100,7 @@ const AI_COACH_PROMPT_SLOTS = [
     title: "商务礼仪题目生成提示词",
     description: "控制学习内容详情页如何按章节生成单选、多选、简答题草稿。",
     createName: QUESTION_PROMPT_TEMPLATE_NAME,
+    businessPurpose: PROMPT_BUSINESS_PURPOSE.BUSINESS_ETIQUETTE_QUESTION,
     listKeyword: "题目生成",
     managementCopy: "使用入口：学习内容详情页 → 商务礼仪 AI 出题",
     managementHref: "/admin/learning-contents",
@@ -112,6 +116,8 @@ function normalizedTemplateText(template: PromptTemplate): string {
     template.display_category,
     template.prompt_type,
     template.display_type,
+    template.business_purpose,
+    template.display_business_purpose,
     template.template,
   ].filter(Boolean).join(" ").toLowerCase();
 }
@@ -121,6 +127,9 @@ function textHasAny(text: string, keywords: readonly string[]): boolean {
 }
 
 function isBusinessEtiquetteQuestionTemplate(template: PromptTemplate): boolean {
+  if (template.business_purpose) {
+    return template.business_purpose === PROMPT_BUSINESS_PURPOSE.BUSINESS_ETIQUETTE_QUESTION;
+  }
   const text = normalizedTemplateText(template);
   return (
     [AI_COACH_PROMPT_CATEGORY, BUSINESS_ETIQUETTE_PROMPT_CATEGORY, "sales_trainer"].includes(template.category)
@@ -130,6 +139,9 @@ function isBusinessEtiquetteQuestionTemplate(template: PromptTemplate): boolean 
 }
 
 function isAiCoachConversationTemplate(template: PromptTemplate): boolean {
+  if (template.business_purpose) {
+    return template.business_purpose === PROMPT_BUSINESS_PURPOSE.AI_COACH_CONVERSATION;
+  }
   const text = normalizedTemplateText(template);
   return (
     template.category === AI_COACH_PROMPT_CATEGORY
@@ -138,8 +150,21 @@ function isAiCoachConversationTemplate(template: PromptTemplate): boolean {
   );
 }
 
-function promptTemplateCreateHref(name: string): string {
-  return `/admin/prompts/new?category=${AI_COACH_PROMPT_CATEGORY}&prompt_type=stage&name=${encodeURIComponent(name)}`;
+function promptTemplateCreateHref(name: string, businessPurpose: string): string {
+  const category = (
+    businessPurpose === PROMPT_BUSINESS_PURPOSE.BUSINESS_ETIQUETTE_QUESTION
+      ? BUSINESS_ETIQUETTE_PROMPT_CATEGORY
+      : AI_COACH_PROMPT_CATEGORY
+  );
+  const promptType = (
+    businessPurpose === PROMPT_BUSINESS_PURPOSE.BUSINESS_ETIQUETTE_QUESTION
+      ? "scoring"
+      : "stage"
+  );
+  return (
+    `/admin/prompts/new?category=${category}`
+    + `&prompt_type=${promptType}&business_purpose=${businessPurpose}&name=${encodeURIComponent(name)}`
+  );
 }
 
 export default function AdminPromptsPage() {
@@ -202,6 +227,8 @@ export default function AdminPromptsPage() {
       template.name,
       templateType(template),
       templateCategory(template),
+      formatBusinessPurpose(template.business_purpose, template.display_business_purpose),
+      template.business_purpose || "",
     ].join(" ").toLowerCase();
     const matchesSearch = haystack.includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "all" || template.prompt_type === typeFilter;
@@ -406,10 +433,10 @@ export default function AdminPromptsPage() {
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">新人训练 AI 教练提示词</h2>
                   <p className="text-sm text-slate-500">
-                    这里集中显示商务礼仪 AI 教练对话与题目生成模板；分类为「新人训练 AI 教练」，不会再藏在全部模板列表里。
+                    这里集中显示商务礼仪 AI 教练对话与题目生成模板；对话模板归入「新人训练 AI 教练」，题目草稿模板归入「商务礼仪」。
                   </p>
                 </div>
-                <Badge className="bg-indigo-100 text-indigo-700">分类：新人训练 AI 教练</Badge>
+                <Badge className="bg-indigo-100 text-indigo-700">分类：AI 教练 / 商务礼仪</Badge>
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {aiCoachSlots.map((slot) => {
@@ -437,6 +464,9 @@ export default function AdminPromptsPage() {
                               {templateTitle(primaryTemplate)}
                             </button>
                             <div className="mt-2 flex flex-wrap gap-1">
+                              <Badge className="bg-indigo-100 text-indigo-700">
+                                业务用途：{formatBusinessPurpose(primaryTemplate.business_purpose, primaryTemplate.display_business_purpose)}
+                              </Badge>
                               {primaryTemplate.is_system ? <Badge className="bg-slate-100 text-slate-700">系统只读</Badge> : <Badge className="bg-blue-100 text-blue-700">自定义</Badge>}
                               {primaryTemplate.is_runtime_effective ? <Badge className="bg-teal-100 text-teal-700">运行时生效</Badge> : null}
                               {primaryTemplate.is_default ? <Badge className="bg-amber-100 text-amber-700">默认</Badge> : null}
@@ -452,7 +482,7 @@ export default function AdminPromptsPage() {
                             查看/编辑
                           </Button>
                         ) : null}
-                        <Button variant="outline" size="sm" onClick={() => router.push(promptTemplateCreateHref(slot.createName))}>
+                        <Button variant="outline" size="sm" onClick={() => router.push(promptTemplateCreateHref(slot.createName, slot.businessPurpose))}>
                           新建模板
                         </Button>
                         <Button
@@ -580,6 +610,11 @@ export default function AdminPromptsPage() {
                           </button>
                           <div className="mt-1 flex flex-wrap gap-1">
                             {template.is_system ? <Badge className="bg-slate-100 text-slate-700">系统只读</Badge> : <Badge className="bg-blue-100 text-blue-700">自定义</Badge>}
+                            {template.business_purpose ? (
+                              <Badge className="bg-indigo-100 text-indigo-700">
+                                {formatBusinessPurpose(template.business_purpose, template.display_business_purpose)}
+                              </Badge>
+                            ) : null}
                             {template.governance_issues?.length ? <Badge className="bg-red-100 text-red-700">需治理</Badge> : null}
                           </div>
                         </td>
@@ -646,7 +681,9 @@ export default function AdminPromptsPage() {
                 <div className="mt-3 space-y-3 text-sm">
                   <div>
                     <div className="font-semibold text-slate-900">{impact.display_name}</div>
-                    <div className="mt-1 text-slate-500">{impact.display_category} · {impact.display_type}</div>
+                    <div className="mt-1 text-slate-500">
+                      {impact.display_category} · {impact.display_type} · {impact.display_business_purpose}
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     <Badge className={impact.is_runtime_effective ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-700"}>{impact.is_runtime_effective ? "运行时生效" : "当前未生效"}</Badge>

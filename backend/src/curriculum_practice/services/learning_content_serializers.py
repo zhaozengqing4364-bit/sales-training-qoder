@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from common.error_handling.result import Result
 from curriculum_practice.models import LearningChapter, LearningContent
 from curriculum_practice.schemas import (
     LearningChapterResponse,
     LearningContentResponse,
+)
+from curriculum_practice.services.learning_content_revision_state import (
+    learning_content_revision_state,
 )
 
 SERVER_ERROR = "[LEARNING_CONTENT_SERVICE_FAILED]"
@@ -18,6 +23,9 @@ class LearningChapterReader(Protocol):
         content_id: str,
     ) -> Result[list[LearningChapter]]: ...
 
+    @property
+    def db(self) -> AsyncSession: ...
+
 
 async def serialize_learning_content(
     service: LearningChapterReader,
@@ -26,6 +34,10 @@ async def serialize_learning_content(
     chapters_result = await service.list_chapters(content.learning_content_id)
     if not chapters_result.is_success:
         return Result.fail(chapters_result.fallback or SERVER_ERROR)
+    revision_state = await learning_content_revision_state(
+        service.db,
+        content,
+    )
     response = LearningContentResponse.model_validate(
         {
             "learning_content_id": content.learning_content_id,
@@ -43,6 +55,7 @@ async def serialize_learning_content(
             "chapters": [
                 serialize_chapter(chapter) for chapter in (chapters_result.value or [])
             ],
+            "revision_state": revision_state,
         }
     )
     return Result.ok(response)

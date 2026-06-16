@@ -80,6 +80,13 @@ class AiCoachChatPromptCompiler:
     ) -> dict[str, Any]:
         article = session.article_snapshot or {}
         chapters = article.get("chapters") if isinstance(article, dict) else []
+        raw_path_config = getattr(session, "path_config_snapshot", None)
+        path_config = (
+            raw_path_config
+            if isinstance(raw_path_config, dict)
+            else {}
+        )
+        learning_units = self.business_etiquette_learning_units(path_config)
         return {
             "module_key": session.module_key,
             "user_message": user_message,
@@ -90,11 +97,20 @@ class AiCoachChatPromptCompiler:
             "article_title": article.get("title") if isinstance(article, dict) else "",
             "article_summary": article.get("summary") if isinstance(article, dict) else "",
             "chapter_titles": self.chapter_titles(chapters),
+            "business_etiquette_learning_units": learning_units,
+            "business_etiquette_capability_keys": self.capability_keys(
+                learning_units
+            ),
             "allowed_interaction_types": list(config.allowed_interaction_types),
+            "allowed_training_card_types": list(
+                self.compatible_training_card_types(config)
+            ),
             "allowed_ui_event_types": list(
                 AiCoachChatResponseParser.allowed_ui_event_types(config)
             ),
             "max_cards_per_message": int(config.max_cards_per_message),
+            "training_card_contract": self.training_card_contract(config),
+            "feedback_schema": self.feedback_schema(),
             "turn_number": len(history) + 1,
             "previous_turns": [],
             "coach_mode": config.coach_mode,
@@ -114,11 +130,17 @@ class AiCoachChatPromptCompiler:
     @staticmethod
     def system_message(config: AiCoachConfig) -> str:
         allowed_ui = ", ".join(AiCoachChatResponseParser.allowed_ui_event_types(config))
+        allowed_cards = ", ".join(
+            AiCoachChatPromptCompiler.compatible_training_card_types(config)
+        )
         return (
             "你是商务技巧 AI 教练。只能输出 JSON，不要输出 Markdown。"
             f"schema_version 必须是 {AI_COACH_CHAT_RESPONSE_SCHEMA_VERSION}。"
             f"ui_events 只能使用这些 type: {allowed_ui}。"
+            f"quiz_card.payload.interaction.training_card_type 只能使用这些值: {allowed_cards}。"
             "quiz_card.payload.interaction 必须满足 ai_coach_interaction_v1，"
+            "场景判断卡用于判断做法是否合适；改写卡和角色回应卡必须使用 short_answer。"
+            "反馈必须覆盖：做对了什么、主要问题、为什么不合适、可以怎么说、下一步。"
             "所有字段类型必须严格匹配示例；source_evidence 必须是数组或 null。"
             "不得输出 HTML、JSX、CSS、脚本或任意组件树。"
         )
@@ -132,6 +154,81 @@ class AiCoachChatPromptCompiler:
             if isinstance(chapter, dict) and isinstance(chapter.get("title"), str):
                 titles.append(str(chapter["title"]))
         return titles
+
+    @staticmethod
+    def business_etiquette_learning_units(
+        path_config: dict[str, object],
+    ) -> list[dict[str, object]]:
+        raw_units = path_config.get("learning_units")
+        if not isinstance(raw_units, list):
+            return []
+        units: list[dict[str, object]] = []
+        for item in raw_units:
+            if not isinstance(item, dict):
+                continue
+            units.append(
+                {
+                    "unit_key": item.get("unit_key"),
+                    "title": item.get("title"),
+                    "source_chapter_orders": item.get("source_chapter_orders") or [],
+                    "capability_keys": item.get("capability_keys") or [],
+                    "require_ai_coach": item.get("require_ai_coach"),
+                }
+            )
+        return units
+
+    @staticmethod
+    def capability_keys(learning_units: list[dict[str, object]]) -> list[str]:
+        keys: list[str] = []
+        for unit in learning_units:
+            raw_keys = unit.get("capability_keys")
+            if not isinstance(raw_keys, list):
+                continue
+            for key in raw_keys:
+                if isinstance(key, str) and key and key not in keys:
+                    keys.append(key)
+        return keys
+
+    @staticmethod
+    def compatible_training_card_types(config: AiCoachConfig) -> tuple[str, ...]:
+        allowed = set(config.allowed_training_card_types)
+        result: list[str] = []
+        if "scenario_judgment" in allowed:
+            result.append("scenario_judgment")
+        if "short_answer" in config.allowed_interaction_types:
+            for card_type in ("expression_rewrite", "role_response"):
+                if card_type in allowed:
+                    result.append(card_type)
+        return tuple(result or ["scenario_judgment"])
+
+    @staticmethod
+    def training_card_contract(config: AiCoachConfig) -> dict[str, object]:
+        return {
+            "allowed_training_card_types": list(
+                AiCoachChatPromptCompiler.compatible_training_card_types(config)
+            ),
+            "card_type_rules": {
+                "scenario_judgment": (
+                    "给出拜访、接待、会议或餐饮场景，让学员判断做法是否合适。"
+                ),
+                "expression_rewrite": (
+                    "给出不专业表达，让学员改写为合适商务表达；必须使用 short_answer。"
+                ),
+                "role_response": (
+                    "给出客户、领导或同事一句话，让学员写回应方式；必须使用 short_answer。"
+                ),
+            },
+        }
+
+    @staticmethod
+    def feedback_schema() -> dict[str, str]:
+        return {
+            "did_well": "你做对了什么",
+            "main_issue": "主要问题是什么",
+            "why_inappropriate": "为什么在真实商务场景里不合适",
+            "suggested_response": "可以怎么说",
+            "next_step": "再试一版或进入下一张卡",
+        }
 
     @staticmethod
     def _resolver_error(

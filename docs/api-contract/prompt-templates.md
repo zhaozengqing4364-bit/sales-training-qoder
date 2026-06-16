@@ -52,6 +52,7 @@ interface PromptTemplate {
   id: string;
   name: string;
   prompt_type: string;
+  business_purpose?: string | null;
   category: string;
   template: string;
   variables: string[];
@@ -63,6 +64,7 @@ interface PromptTemplate {
 
   display_name: string;
   display_type: string;
+  display_business_purpose: string;
   display_category: string;
   binding_count: number;
   is_runtime_effective: boolean;
@@ -79,6 +81,7 @@ interface PromptTemplate {
 |---|---|
 | `display_name` | 中文模板名；历史英文系统模板必须通过迁移或治理修复变成中文展示。 |
 | `display_type` / `display_category` | 中文用途和分类，用于运营列表展示；不得在普通列表暴露 raw enum。 |
+| `business_purpose` / `display_business_purpose` | 业务级用途，用于运行时和运营入口精确选择；当前支持 `ai_coach_conversation_generation`（AI 教练对话生成）和 `business_etiquette_question_generation`（商务礼仪题目生成）。`category` 只用于分组，不得再用模板名称关键词作为主判断。 |
 | `binding_count` | 活跃 `scenario_prompts` 绑定数量。 |
 | `is_runtime_effective` | `is_active && (is_default || binding_count > 0)`；表示后续 legacy 评估/报告或 helper 是否可能使用。 |
 | `can_edit_directly` | 系统模板固定为 `false`。 |
@@ -89,6 +92,7 @@ interface PromptTemplate {
 - 说明: 列出提示词模板
 - Query:
   - `prompt_type` (optional)
+  - `business_purpose` (optional): 当前支持 `ai_coach_conversation_generation`、`business_etiquette_question_generation`；运行时选择入口应优先用它精确筛选，而不是靠分类或模板名称关键词。
   - `category` (optional)
   - `is_active` (optional)
   - `skip` (default `0`)
@@ -149,6 +153,8 @@ interface PromptTemplateImpactResponse {
   display_name: string;
   prompt_type: string;
   display_type: string;
+  business_purpose?: string | null;
+  display_business_purpose: string;
   category: string;
   display_category: string;
   is_active: boolean;

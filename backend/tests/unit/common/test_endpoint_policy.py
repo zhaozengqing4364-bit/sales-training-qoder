@@ -50,6 +50,22 @@ def test_validate_provider_base_url_normalizes_allowed_public_endpoint(monkeypat
     assert endpoint.timeout_seconds == 10.0
 
 
+def test_validate_provider_base_url_allows_mimo_openai_compatible_endpoint(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", _public_getaddrinfo)
+
+    endpoint = validate_provider_base_url(
+        ModelProvider.OPENAI,
+        "https://api.xiaomimimo.com/v1/",
+        resolve_dns=True,
+    )
+
+    assert endpoint.base_url == "https://api.xiaomimimo.com/v1"
+    assert endpoint.host == "api.xiaomimimo.com"
+    assert endpoint.child_url("chat/completions") == (
+        "https://api.xiaomimimo.com/v1/chat/completions"
+    )
+
+
 def test_validate_provider_base_url_rejects_private_dns_resolution(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", _private_getaddrinfo)
 

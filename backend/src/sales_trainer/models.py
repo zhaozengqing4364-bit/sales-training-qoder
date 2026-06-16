@@ -228,6 +228,152 @@ class SalesTrainerAssetActiveRevision(Base):
     )
 
 
+class SalesTrainerBusinessEtiquetteQuestionDraft(Base):
+    __tablename__ = "sales_trainer_business_etiquette_question_drafts"
+
+    draft_id = Column(String(36), primary_key=True, default=_uuid)
+    batch_id = Column(String(36), nullable=False, index=True)
+    training_pack_key = Column(String(80), nullable=False, index=True)
+    training_pack_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id"),
+        nullable=True,
+        index=True,
+    )
+    training_pack_revision_no = Column(Integer, nullable=True)
+    learning_content_id = Column(
+        String(36),
+        ForeignKey("learning_contents.learning_content_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    chapter_id = Column(
+        String(36),
+        ForeignKey("learning_chapters.chapter_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    chapter_order = Column(Integer, nullable=False)
+    source_excerpt = Column(Text, nullable=True)
+    question_type = Column(String(30), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    stem = Column(Text, nullable=False)
+    options = Column(JSON, nullable=False, default=list)
+    correct_answer = Column(String(50), nullable=True)
+    correct_answers = Column(JSON, nullable=False, default=list)
+    reference_answer = Column(Text, nullable=True)
+    explanation = Column(Text, nullable=True)
+    difficulty = Column(String(20), nullable=False, default="medium", index=True)
+    capability_keys = Column(JSON, nullable=False, default=list)
+    status = Column(String(30), nullable=False, default="pending_review", index=True)
+    prompt_template_id = Column(String(36), nullable=False, index=True)
+    prompt_template_name = Column(String(255), nullable=True)
+    prompt_contract_hash = Column(String(64), nullable=False, index=True)
+    prompt_contract_version = Column(String(80), nullable=False)
+    prompt_rendered_hash = Column(String(64), nullable=False)
+    model_config = Column(JSON, nullable=False, default=dict)
+    raw_generation = Column(JSON, nullable=False, default=dict)
+    review_notes = Column(Text, nullable=True)
+    reviewed_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    question_id = Column(
+        String(36),
+        ForeignKey("question_items.question_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "question_type IN ('single_choice', 'multiple_choice', 'short_answer')",
+            name="ck_business_etiquette_question_draft_type",
+        ),
+        CheckConstraint(
+            "difficulty IN ('easy', 'medium', 'hard')",
+            name="ck_business_etiquette_question_draft_difficulty",
+        ),
+        CheckConstraint(
+            "status IN ('pending_review', 'approved', 'rejected', 'converted')",
+            name="ck_business_etiquette_question_draft_status",
+        ),
+        CheckConstraint(
+            "chapter_order >= 1",
+            name="ck_business_etiquette_question_draft_chapter_order",
+        ),
+        Index(
+            "idx_business_etiquette_question_drafts_filter",
+            "training_pack_key",
+            "status",
+            "question_type",
+            "created_at",
+        ),
+    )
+
+
+class SalesTrainerBusinessEtiquetteQuizAttempt(Base):
+    __tablename__ = "sales_trainer_business_etiquette_quiz_attempts"
+
+    attempt_id = Column(String(36), primary_key=True, default=_uuid)
+    training_pack_key = Column(String(80), nullable=False, index=True)
+    learning_unit_key = Column(String(80), nullable=False, index=True)
+    learning_unit_title = Column(String(120), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    path_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id"),
+        nullable=True,
+        index=True,
+    )
+    path_revision_no = Column(Integer, nullable=True)
+    training_pack_revision_id = Column(
+        String(36),
+        ForeignKey("sales_trainer_asset_revisions.revision_id"),
+        nullable=True,
+        index=True,
+    )
+    training_pack_revision_no = Column(Integer, nullable=True)
+    capability_snapshot = Column(JSON, nullable=False, default=dict)
+    question_snapshots = Column(JSON, nullable=False, default=list)
+    answers_snapshot = Column(JSON, nullable=False, default=list)
+    capability_scores = Column(JSON, nullable=False, default=list)
+    weak_capability_keys = Column(JSON, nullable=False, default=list)
+    recommended_chapter_orders = Column(JSON, nullable=False, default=list)
+    total_score = Column(Numeric(5, 2), nullable=True)
+    max_score = Column(Numeric(5, 2), nullable=True)
+    passed = Column(Boolean, nullable=True)
+    status = Column(String(20), nullable=False, default="submitted", index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    submitted_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('submitted', 'scored', 'failed')",
+            name="ck_business_etiquette_quiz_attempt_status",
+        ),
+        Index(
+            "idx_business_etiquette_quiz_attempt_user_unit",
+            "user_id",
+            "learning_unit_key",
+            "submitted_at",
+        ),
+    )
+
+
 class SalesTrainerQuizAttempt(Base):
     __tablename__ = "sales_trainer_quiz_attempts"
 

@@ -94,13 +94,32 @@ export function businessSkillsExamHref(unitId: string | null): string {
 }
 
 export function businessSkillsArticleErrorMessage(error: unknown): string {
+    if (error instanceof ApiRequestError && error.errorCode.includes("LEARNING_UNITS_MISSING")) {
+        return "商务礼仪小单元配置缺失。请管理员到 新人训练路径配置中心 → 商务技巧 → 商务礼仪 7 个训练小单元 补齐配置。";
+    }
+    if (error instanceof ApiRequestError && error.errorCode.includes("TRAINING_PACK_NOT_PUBLISHED")) {
+        return "商务礼仪训练包尚未发布。请管理员发布商务礼仪训练包和能力点快照后，再回到新人训练路径配置中心确认小单元绑定。";
+    }
+    if (error instanceof ApiRequestError && error.errorCode.includes("QUIZ_QUESTIONS_MISSING")) {
+        return "当前小单元还没有已发布且命中能力点的商务礼仪题目。请管理员到题目草稿箱审核题目，并发布到正式题库后再开放小测。";
+    }
+    if (error instanceof ApiRequestError && (
+        error.errorCode.includes("CAPABILITY_SNAPSHOT_MISSING")
+        || error.errorCode.includes("CAPABILITY_CONFIG_INVALID")
+        || error.errorCode.includes("UNIT_CAPABILITY_INVALID")
+    )) {
+        return "商务礼仪能力点快照或小单元能力点绑定不可用。请管理员检查训练包能力点快照、章节绑定和新人训练路径小单元配置。";
+    }
     if (error instanceof ApiRequestError && error.errorCode.includes("CHAPTERS_MISSING")) {
         return "商务技巧文章还没有学习章节。请管理员到 新人训练路径配置中心 → 商务技巧 → 学习文章 添加第一节、第二节等学习章节。";
     }
     if (error instanceof ApiRequestError && (error.status === 404 || error.errorCode.includes("BINDING"))) {
         return "当前模块未绑定已发布文章。请管理员到 新人训练路径配置中心 → 商务技巧 → 学习文章 完成绑定。";
     }
-    if (error instanceof ApiRequestError && error.errorCode.includes("NOT_PUBLISHED")) {
+    if (error instanceof ApiRequestError && (
+        error.errorCode.includes("LEARNING_CONTENT_NOT_PUBLISHED")
+        || error.errorCode.includes("ARTICLE_NOT_PUBLISHED")
+    )) {
         return "当前绑定文章尚未发布。请管理员发布文章后，在新人训练路径配置中心重新确认绑定。";
     }
     return getApiErrorMessage(error);

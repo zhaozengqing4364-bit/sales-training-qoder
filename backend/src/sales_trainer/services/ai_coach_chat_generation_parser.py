@@ -45,6 +45,7 @@ class AiCoachChatResponseParser:
     ) -> None:
         allowed_ui = set(self.allowed_ui_event_types(config))
         allowed_interactions = set(config.allowed_interaction_types)
+        allowed_training_cards = set(config.allowed_training_card_types)
         max_cards = int(config.max_cards_per_message)
         quiz_count = 0
         for event in response.ui_events:
@@ -68,6 +69,12 @@ class AiCoachChatResponseParser:
                 raise AiCoachChatGenerationError(
                     "[AI_COACH_INTERACTION_TYPE_NOT_ALLOWED]",
                     "AI 教练生成了未授权的互动题型。",
+                    502,
+                )
+            if payload.interaction.training_card_type not in allowed_training_cards:
+                raise AiCoachChatGenerationError(
+                    "[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]",
+                    "AI 教练生成了未授权的训练卡类型。",
                     502,
                 )
         if quiz_count > max_cards:

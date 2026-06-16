@@ -1,4 +1,4 @@
-import type { PromptType } from "@/lib/api/types";
+import type { PromptBusinessPurpose, PromptType } from "@/lib/api/types";
 
 export const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   summary: "总结", system: "系统", system_prompt: "系统提示词", extraction: "信息提取",
@@ -12,6 +12,37 @@ export const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
   stage: "bg-orange-100 text-orange-700", fuzzy_detection: "bg-rose-100 text-rose-700", interruption: "bg-pink-100 text-pink-700",
   tracking: "bg-cyan-100 text-cyan-700", welcome: "bg-indigo-100 text-indigo-700", evaluation: "bg-teal-100 text-teal-700", report: "bg-zinc-200 text-zinc-700",
 };
+
+export const PROMPT_BUSINESS_PURPOSE = {
+    AI_COACH_CONVERSATION: "ai_coach_conversation_generation",
+    BUSINESS_ETIQUETTE_QUESTION: "business_etiquette_question_generation",
+} as const satisfies Record<string, PromptBusinessPurpose>;
+
+export const PROMPT_BUSINESS_PURPOSE_LABELS: Record<PromptBusinessPurpose, string> = {
+    ai_coach_conversation_generation: "AI 教练对话生成",
+    business_etiquette_question_generation: "商务礼仪题目生成",
+};
+
+export const PROMPT_BUSINESS_PURPOSE_OPTIONS: Array<{
+    value: PromptBusinessPurpose;
+    label: string;
+}> = Object.entries(PROMPT_BUSINESS_PURPOSE_LABELS).map(([value, label]) => ({
+    value: value as PromptBusinessPurpose,
+    label,
+}));
+
+export function isPromptBusinessPurpose(value: string | null | undefined): value is PromptBusinessPurpose {
+    return Boolean(value && value in PROMPT_BUSINESS_PURPOSE_LABELS);
+}
+
+export function formatBusinessPurpose(
+    purpose?: string | null,
+    displayBusinessPurpose?: string | null,
+): string {
+    if (displayBusinessPurpose) return displayBusinessPurpose;
+    if (!purpose) return "未指定业务用途";
+    return PROMPT_BUSINESS_PURPOSE_LABELS[purpose as PromptBusinessPurpose] || purpose;
+}
 
 export function formatGovernanceIssue(issue: string): string {
     switch (issue) {
@@ -61,6 +92,7 @@ export function formatTemplateName(name: string, displayName?: string | null): s
         case "Welcome Message 1": return "销售欢迎话术 1";
         case "Welcome Message 2": return "销售欢迎话术 2";
         case "Welcome Message 3": return "销售欢迎话术 3";
+        case "新人训练路径商务技巧 AI 教练题目生成 v1": return "商务礼仪题目草稿生成 v1";
         default: return name;
     }
 }

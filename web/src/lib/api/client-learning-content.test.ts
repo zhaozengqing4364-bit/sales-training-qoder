@@ -1,9 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "./client";
-import type { LearningChapter, LearningContent } from "./types";
+import type { LearningChapter, LearningContent, LearningContentRevisionState } from "./types";
 
 const fetchMock = vi.fn();
+
+function makeRevisionState(overrides: Partial<LearningContentRevisionState> = {}): LearningContentRevisionState {
+    return {
+        active_revision_id: null,
+        active_revision_no: null,
+        working_revision_id: null,
+        working_revision_no: null,
+        has_unpublished_revision: false,
+        edit_target: "draft_record",
+        publish_label: "发布",
+        save_result_copy: "已保存草稿。",
+        ...overrides,
+    };
+}
 
 function makeLearningContent(overrides: Partial<LearningContent> = {}): LearningContent {
     return {
@@ -20,6 +34,7 @@ function makeLearningContent(overrides: Partial<LearningContent> = {}): Learning
         created_at: "2026-05-15T00:00:00Z",
         updated_at: "2026-05-15T00:00:00Z",
         chapters: [],
+        revision_state: makeRevisionState(),
         ...overrides,
     };
 }

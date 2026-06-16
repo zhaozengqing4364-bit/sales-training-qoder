@@ -32,6 +32,7 @@ from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from prompt_templates.models import (
+    PromptBusinessPurpose,
     PromptRenderRequest,
     PromptRenderResponse,
     PromptTemplate,
@@ -45,6 +46,7 @@ from prompt_templates.models import (
     PromptType,
     ScenarioPrompt,
     ScenarioPromptCreate,
+    prompt_business_purpose_display_label,
     prompt_type_display_label,
 )
 from prompt_templates.service import (
@@ -165,6 +167,10 @@ def _parse_template_id_or_error(
 @router.get("", response_model=list[PromptTemplate])
 async def list_prompt_templates(
     prompt_type: PromptType | None = Query(None, description="Filter by prompt type"),
+    business_purpose: PromptBusinessPurpose | None = Query(
+        None,
+        description="Filter by business purpose",
+    ),
     category: str | None = Query(None, description="Filter by category"),
     is_active: bool | None = Query(None, description="Filter by active status"),
     skip: int = Query(0, ge=0, description="Skip N items"),
@@ -180,6 +186,7 @@ async def list_prompt_templates(
     try:
         return await service.list_templates(
             prompt_type=prompt_type,
+            business_purpose=business_purpose,
             category=category,
             is_active=is_active,
             skip=skip,
@@ -293,6 +300,13 @@ async def get_prompt_template_options(
             "allowed_prompt_types": [
                 {"value": prompt_type.value, "label": prompt_type_display_label(prompt_type)}
                 for prompt_type in PromptType
+            ],
+            "allowed_business_purposes": [
+                {
+                    "value": business_purpose.value,
+                    "label": prompt_business_purpose_display_label(business_purpose),
+                }
+                for business_purpose in PromptBusinessPurpose
             ],
             "sales_allowed_prompt_types": sorted(SALES_PROMPT_SCOPE_ALLOWED_TYPES),
             "variables_schema": "list[str]",

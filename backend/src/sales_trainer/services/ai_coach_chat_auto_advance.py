@@ -31,6 +31,9 @@ from sales_trainer.services.ai_coach_chat_errors import (
 )
 from sales_trainer.services.ai_coach_chat_event_writer import AiCoachChatEventWriter
 from sales_trainer.services.ai_coach_chat_generation import AiCoachChatGenerator
+from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AiCoachGenerationDeltaHandler,
+)
 from sales_trainer.services.ai_coach_chat_next_action import AiCoachNextActionDecider
 from sales_trainer.services.ai_coach_chat_next_action_generation import (
     AiCoachChatNextActionGenerator,
@@ -60,6 +63,7 @@ class AiCoachChatAutoAdvance:
         session: SalesTrainerAiCoachSession,
         config: AiCoachConfig,
         actor: User | None,
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> None:
         state = coach_state_from_snapshot(session.coach_state)
         state = state.model_copy(
@@ -92,6 +96,7 @@ class AiCoachChatAutoAdvance:
                             "并生成 1 张热身 quiz_card。"
                         ),
                         history=await self._store.messages(session.session_id),
+                        on_generation_delta=on_generation_delta,
                     )
                     AiCoachChatNextActionGenerator._validate_response_for_action(
                         response,
@@ -145,6 +150,7 @@ class AiCoachChatAutoAdvance:
         score_result: AiCoachScoreResultV1,
         answer_payload: AiCoachAnswerPayloadV1,
         actor: User | None,
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> None:
         state_before = coach_state_from_snapshot(session.coach_state)
         scored_state = update_state_after_score(
@@ -190,6 +196,7 @@ class AiCoachChatAutoAdvance:
                 answer_payload=answer_payload,
                 answered_event_payload=event_payload,
                 history=await self._store.messages(session.session_id),
+                on_generation_delta=on_generation_delta,
             )
         except AiCoachChatGenerationError as exc:
             failed_state = scored_state.model_copy(
@@ -245,6 +252,7 @@ class AiCoachChatAutoAdvance:
         command: AiCoachChatCommandV1,
         event_id: str | None,
         actor: User | None,
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> None:
         state_before = coach_state_from_snapshot(session.coach_state)
         action = self._action_for_command(config, command)
@@ -274,6 +282,7 @@ class AiCoachChatAutoAdvance:
                 config=config,
                 user_message=self._command_instruction(action),
                 history=await self._store.messages(session.session_id),
+                on_generation_delta=on_generation_delta,
             )
             AiCoachChatNextActionGenerator._validate_response_for_action(
                 response,

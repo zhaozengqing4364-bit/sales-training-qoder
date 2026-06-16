@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LearningContent } from "@/lib/api/types";
+import type { LearningContent, LearningContentRevisionState } from "@/lib/api/types";
 
 import NewcomerArticleBindingPage from "./page";
 
@@ -61,6 +61,20 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
+function makeRevisionState(overrides: Partial<LearningContentRevisionState> = {}): LearningContentRevisionState {
+    return {
+        active_revision_id: "revision-1",
+        active_revision_no: 1,
+        working_revision_id: null,
+        working_revision_no: null,
+        has_unpublished_revision: false,
+        edit_target: "working_revision",
+        publish_label: "当前无待发布修订",
+        save_result_copy: "已保存为待发布修订，发布修订后才会影响学员端。",
+        ...overrides,
+    };
+}
+
 function makeLearningContent(overrides: Partial<LearningContent> = {}): LearningContent {
     return {
         learning_content_id: "article-1",
@@ -75,6 +89,7 @@ function makeLearningContent(overrides: Partial<LearningContent> = {}): Learning
         published_at: "2026-06-02T00:00:00Z",
         created_at: "2026-06-02T00:00:00Z",
         updated_at: "2026-06-02T00:00:00Z",
+        revision_state: makeRevisionState(),
         chapters: [{
             chapter_id: "chapter-1",
             learning_content_id: "article-1",

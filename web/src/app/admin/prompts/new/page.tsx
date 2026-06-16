@@ -5,40 +5,113 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Save, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { PromptTemplateOptions, PromptType } from "@/lib/api/types";
-import { formatCategoryLabel, formatPromptType, PROMPT_TYPE_LABELS } from "@/components/admin/prompts/prompt-labels";
+import type { PromptBusinessPurpose, PromptTemplateOptions, PromptType } from "@/lib/api/types";
+import {
+    formatBusinessPurpose,
+    formatCategoryLabel,
+    formatPromptType,
+    isPromptBusinessPurpose,
+    PROMPT_BUSINESS_PURPOSE,
+    PROMPT_BUSINESS_PURPOSE_OPTIONS,
+    PROMPT_TYPE_LABELS,
+} from "@/components/admin/prompts/prompt-labels";
 
 const PROMPT_CATEGORY_OPTIONS = [
     { value: "common", label: "通用" },
     { value: "sales", label: "销售训练" },
     { value: "sales_bot", label: "销售实时对练" },
+    { value: "business_etiquette", label: "商务礼仪" },
     { value: "sales_trainer_ai_coach", label: "新人训练 AI 教练" },
     { value: "presentation", label: "PPT 演练" },
     { value: "system", label: "系统报告" },
 ] as const;
 
+const BUSINESS_ETIQUETTE_QUESTION_TEMPLATE_PRESET = `你是商务礼仪新人训练题目草稿生成器。请严格基于章节原文生成题目，不要编造教材外知识。
+
+训练包：{{ training_pack_key }}
+训练包版本：{{ training_pack_revision_no }}
+文章标题：{{ book_title }}
+当前章节：第 {{ chapter_order }} 章 {{ chapter_title }}
+章节 ID：{{ chapter_id }}
+
+【章节原文】
+{{ chapter_content }}
+
+【能力点】
+{{ capabilities_json }}
+
+【能力点 key】
+{{ capability_keys_json }}
+
+【本次要求】
+- 生成数量：{{ draft_count }}
+- 允许题型：{{ question_types_json }}
+- 语言：{{ language }}
+- 审核规则：{{ review_policy }}
+- 操作原因：{{ reason }}
+
+【输出要求】
+只输出合法 JSON，不要输出 Markdown，不要输出解释性正文。JSON 必须满足以下 schema：
+{{ output_schema }}
+
+每道题必须：
+1. 明确引用章节原文或 source_excerpt。
+2. 单选题必须有 options 和 correct_answer。
+3. 多选题必须有 options 和 correct_answers。
+4. 简答题必须有 reference_answer。
+5. capability_keys 只能使用上方能力点 key。`;
+
+function presetTemplateForBusinessPurpose(
+    purpose: string | null,
+): string {
+    if (purpose === PROMPT_BUSINESS_PURPOSE.BUSINESS_ETIQUETTE_QUESTION) {
+        return BUSINESS_ETIQUETTE_QUESTION_TEMPLATE_PRESET;
+    }
+    return "";
+}
+
 export default function NewPromptTemplatePage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const requestedPromptType = searchParams.get("prompt_type");
+    const requestedBusinessPurpose = searchParams.get("business_purpose");
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Form state
-    const [name, setName] = useState("");
-    const [promptType, setPromptType] = useState<PromptType>("summary");
-    const [category, setCategory] = useState("common");
-    const [template, setTemplate] = useState("");
+    const [name, setName] = useState(() => searchParams.get("name") || "");
+    const [promptType, setPromptType] = useState<PromptType>(() => (
+        requestedPromptType && requestedPromptType in PROMPT_TYPE_LABELS
+            ? requestedPromptType as PromptType
+            : "summary"
+    ));
+    const [businessPurpose, setBusinessPurpose] = useState<PromptBusinessPurpose | "">(() => (
+        isPromptBusinessPurpose(requestedBusinessPurpose) ? requestedBusinessPurpose : ""
+    ));
+    const [category, setCategory] = useState(() => searchParams.get("category") || "common");
+    const [template, setTemplate] = useState(() => (
+        presetTemplateForBusinessPurpose(requestedBusinessPurpose)
+    ));
     const [isDefault, setIsDefault] = useState(false);
     const [promptOptions, setPromptOptions] = useState<PromptTemplateOptions | null>(null);
     const normalizedCategory = category.trim().toLowerCase();
     const salesAllowedPromptTypes = useMemo(
         () => new Set((promptOptions?.sales_allowed_prompt_types || []) as PromptType[]),
+        [promptOptions],
+    );
+    const businessPurposeOptions = useMemo(
+        () => (
+            promptOptions?.allowed_business_purposes?.length
+                ? promptOptions.allowed_business_purposes
+                : PROMPT_BUSINESS_PURPOSE_OPTIONS
+        ),
         [promptOptions],
     );
 
@@ -82,6 +155,7 @@ export default function NewPromptTemplatePage() {
             await api.admin.createPromptTemplate({
                 name,
                 prompt_type: effectivePromptType,
+                business_purpose: businessPurpose || null,
                 category,
                 template,
                 variables: extractedVars,
@@ -187,6 +261,27 @@ export default function NewPromptTemplatePage() {
                                     销售场景仅允许评估/报告相关模板类型。
                                 </p>
                             )}
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-zinc-700 mb-2">
+                                业务用途
+                            </label>
+                            <select
+                                value={businessPurpose}
+                                onChange={(e) => setBusinessPurpose(e.target.value as PromptBusinessPurpose | "")}
+                                className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                            >
+                                <option value="">不指定业务用途</option>
+                                {businessPurposeOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="mt-1 text-xs text-zinc-500">
+                                {formatBusinessPurpose(businessPurpose || null)}
+                            </p>
                         </div>
 
                         {/* Is Default */}

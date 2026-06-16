@@ -9,6 +9,10 @@ import type {
 } from "@/lib/api/types";
 
 import {
+    BUSINESS_SKILLS_COACH_CARD_TYPE_LABELS,
+    BUSINESS_SKILLS_COACH_WORKBENCH_COPY,
+} from "./coach-workbench-config";
+import {
     draftForChoice,
     draftForText,
     eventScoreState,
@@ -22,6 +26,7 @@ export function GenerativeCard({
     draft,
     isActive,
     isSubmitting,
+    presentation = "compact",
     onFollowupPrompt,
     onDraftChange,
     onSubmit,
@@ -30,6 +35,7 @@ export function GenerativeCard({
     readonly draft: AiCoachAnswerPayloadV1 | null;
     readonly isActive: boolean;
     readonly isSubmitting: boolean;
+    readonly presentation?: "compact" | "primary";
     readonly onFollowupPrompt: (prompt: string) => void;
     readonly onDraftChange: (payload: AiCoachAnswerPayloadV1) => void;
     readonly onSubmit: () => void;
@@ -42,13 +48,14 @@ export function GenerativeCard({
                     draft={draft}
                     isActive={isActive}
                     isSubmitting={isSubmitting}
+                    presentation={presentation}
                     onDraftChange={onDraftChange}
                     onSubmit={onSubmit}
                 />
             );
         case "explanation_card":
             return (
-                <section className="rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+                <section className={cardShellClass(presentation)}>
                     <CardBadge>解析</CardBadge>
                     {event.payload.title ? (
                         <h2 className="mt-3 text-base font-semibold text-slate-950">
@@ -62,7 +69,7 @@ export function GenerativeCard({
             );
         case "summary_card":
             return (
-                <section className="rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+                <section className={cardShellClass(presentation)}>
                     <CardBadge>复盘</CardBadge>
                     {event.payload.title ? (
                         <h2 className="mt-3 text-base font-semibold text-slate-950">
@@ -81,7 +88,7 @@ export function GenerativeCard({
             );
         case "followup_prompt":
             return (
-                <section className="rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+                <section className={cardShellClass(presentation)}>
                     <CardBadge>追问</CardBadge>
                     <div className="mt-3 flex flex-wrap gap-2">
                         {event.payload.prompts.map((prompt) => (
@@ -112,6 +119,7 @@ function QuizCard({
     draft,
     isActive,
     isSubmitting,
+    presentation,
     onDraftChange,
     onSubmit,
 }: {
@@ -119,6 +127,7 @@ function QuizCard({
     readonly draft: AiCoachAnswerPayloadV1 | null;
     readonly isActive: boolean;
     readonly isSubmitting: boolean;
+    readonly presentation: "compact" | "primary";
     readonly onDraftChange: (payload: AiCoachAnswerPayloadV1) => void;
     readonly onSubmit: () => void;
 }) {
@@ -131,19 +140,42 @@ function QuizCard({
     const scored = event.status === "scored" && event.score_result !== null;
     const canSubmit = isActive && isAnswerPayloadSubmittable(interaction, draft);
     const state = eventScoreState(event);
+    const trainingCardType = interaction.training_card_type ?? "scenario_judgment";
+    const cardTypeLabel = BUSINESS_SKILLS_COACH_CARD_TYPE_LABELS[trainingCardType];
     return (
-        <section className="rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+        <section className={cardShellClass(presentation)}>
             <div className="flex items-start justify-between gap-4">
-                <CardBadge>{shortAnswer ? "简答" : multiple ? "多选" : "单选"}</CardBadge>
+                <div className="flex flex-wrap gap-2">
+                    <CardBadge>{cardTypeLabel}</CardBadge>
+                    <CardBadge tone="neutral">
+                        {shortAnswer ? "简答" : multiple ? "多选" : "单选"}
+                    </CardBadge>
+                </div>
                 {scored ? (
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                        已提交
+                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.submittedLabel}
                     </span>
                 ) : null}
             </div>
-            <h2 className="mt-4 text-base font-semibold leading-relaxed text-slate-950">
+            <h2 className={`mt-4 font-semibold leading-relaxed text-slate-950 ${
+                presentation === "primary" ? "text-xl" : "text-base"
+            }`}>
                 {interaction.stem}
             </h2>
+            {interaction.capability_keys?.length || interaction.source_chapter_orders?.length ? (
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                    {interaction.capability_keys?.map((key) => (
+                        <span key={key} className="rounded-full bg-slate-100 px-2.5 py-1">
+                            {key}
+                        </span>
+                    ))}
+                    {interaction.source_chapter_orders?.map((order) => (
+                        <span key={order} className="rounded-full bg-slate-100 px-2.5 py-1">
+                            第 {order} 章
+                        </span>
+                    ))}
+                </div>
+            ) : null}
             {shortAnswer ? (
                 <textarea
                     value={textAnswer(value)}
@@ -204,7 +236,7 @@ function QuizCard({
                         ) : (
                             <Send className="mr-2 h-4 w-4" />
                         )}
-                        提交
+                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.submitCardButton}
                     </Button>
                 </div>
             ) : null}
@@ -259,6 +291,9 @@ function ScoreFeedback({
                 ) : null}
             </div>
             <p className="mt-2 leading-relaxed">{result.feedback}</p>
+            {result.structured_feedback ? (
+                <StructuredFeedbackDetails result={result.structured_feedback} />
+            ) : null}
             {result.missed_points.length > 0 ? (
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                     {result.missed_points.map((point) => (
@@ -266,6 +301,62 @@ function ScoreFeedback({
                     ))}
                 </ul>
             ) : null}
+        </div>
+    );
+}
+
+function StructuredFeedbackDetails({
+    result,
+}: {
+    readonly result: NonNullable<
+        Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }>["score_result"]
+    >["structured_feedback"];
+}) {
+    if (!result) {
+        return null;
+    }
+    return (
+        <div className="mt-3 grid gap-2">
+            {result.did_well.length > 0 ? (
+                <FeedbackBlock
+                    label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.didWellLabel}
+                    body={result.did_well.join("；")}
+                />
+            ) : null}
+            <FeedbackBlock
+                label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.mainIssueLabel}
+                body={result.main_issue}
+            />
+            <FeedbackBlock
+                label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.whyInappropriateLabel}
+                body={result.why_inappropriate}
+            />
+            <FeedbackBlock
+                label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.suggestedResponseLabel}
+                body={result.suggested_response}
+            />
+            <FeedbackBlock
+                label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.nextStepLabel}
+                body={result.next_step}
+            />
+        </div>
+    );
+}
+
+function FeedbackBlock({
+    label,
+    body,
+}: {
+    readonly label: string;
+    readonly body: string;
+}) {
+    if (!body) {
+        return null;
+    }
+    return (
+        <div className="rounded-lg bg-white px-3 py-2">
+            <p className="text-[11px] font-semibold text-slate-400">{label}</p>
+            <p className="mt-1 leading-relaxed text-slate-700">{body}</p>
         </div>
     );
 }
@@ -338,9 +429,25 @@ function optionStateClass(
     return "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/60";
 }
 
-function CardBadge({ children }: { readonly children: string }) {
+function cardShellClass(presentation: "compact" | "primary"): string {
+    if (presentation === "primary") {
+        return "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6";
+    }
+    return "rounded-2xl border border-violet-100 bg-white p-5 shadow-sm";
+}
+
+function CardBadge({
+    children,
+    tone = "brand",
+}: {
+    readonly children: string;
+    readonly tone?: "brand" | "neutral";
+}) {
+    const className = tone === "brand"
+        ? "bg-violet-100 text-violet-700"
+        : "bg-slate-100 text-slate-600";
     return (
-        <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${className}`}>
             {children}
         </span>
     );

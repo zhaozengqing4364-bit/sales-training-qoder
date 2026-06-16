@@ -44,6 +44,25 @@ class PromptType(str, Enum):
 
 ALLOWED_PROMPT_TYPE_VALUES = tuple(item.value for item in PromptType)
 
+PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION = "ai_coach_conversation_generation"
+PROMPT_BUSINESS_PURPOSE_BUSINESS_ETIQUETTE_QUESTION = (
+    "business_etiquette_question_generation"
+)
+
+
+class PromptBusinessPurpose(str, Enum):
+    """Business-level prompt purpose used by operator/runtime selection."""
+
+    AI_COACH_CONVERSATION_GENERATION = PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
+    BUSINESS_ETIQUETTE_QUESTION_GENERATION = (
+        PROMPT_BUSINESS_PURPOSE_BUSINESS_ETIQUETTE_QUESTION
+    )
+
+
+ALLOWED_PROMPT_BUSINESS_PURPOSE_VALUES = tuple(
+    item.value for item in PromptBusinessPurpose
+)
+
 PROMPT_TYPE_DISPLAY_LABELS: dict[str, str] = {
     "summary": "销售对话总结",
     "system": "系统指令",
@@ -60,11 +79,17 @@ PROMPT_TYPE_DISPLAY_LABELS: dict[str, str] = {
     "report": "综合报告",
 }
 
+PROMPT_BUSINESS_PURPOSE_DISPLAY_LABELS: dict[str, str] = {
+    PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION: "AI 教练对话生成",
+    PROMPT_BUSINESS_PURPOSE_BUSINESS_ETIQUETTE_QUESTION: "商务礼仪题目生成",
+}
+
 PROMPT_CATEGORY_DISPLAY_LABELS: dict[str, str] = {
     "common": "通用",
     "presentation": "PPT 演练",
     "sales": "销售训练",
     "sales_bot": "销售实时对练",
+    "business_etiquette": "商务礼仪",
     "sales_trainer_ai_coach": "新人训练 AI 教练",
     "system": "系统报告",
 }
@@ -84,6 +109,7 @@ PROMPT_TEMPLATE_DISPLAY_NAMES: dict[str, str] = {
     "Welcome Message 1": "销售欢迎话术 1",
     "Welcome Message 2": "销售欢迎话术 2",
     "Welcome Message 3": "销售欢迎话术 3",
+    "新人训练路径商务技巧 AI 教练题目生成 v1": "商务礼仪题目草稿生成 v1",
 }
 
 
@@ -95,6 +121,16 @@ def prompt_type_display_label(value: str | PromptType) -> str:
 def prompt_category_display_label(value: str) -> str:
     raw = str(value or "").strip()
     return PROMPT_CATEGORY_DISPLAY_LABELS.get(raw, raw or "未分类")
+
+
+def prompt_business_purpose_display_label(
+    value: str | PromptBusinessPurpose | None,
+) -> str:
+    if value is None:
+        return "未指定业务用途"
+    raw = value.value if isinstance(value, PromptBusinessPurpose) else str(value)
+    raw = raw.strip()
+    return PROMPT_BUSINESS_PURPOSE_DISPLAY_LABELS.get(raw, raw or "未指定业务用途")
 
 
 def prompt_template_display_name(value: str) -> str:
@@ -217,6 +253,13 @@ class PromptTemplateBase(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255, description="Template name")
     prompt_type: PromptType = Field(..., description="Type of prompt")
+    business_purpose: PromptBusinessPurpose | None = Field(
+        default=None,
+        description=(
+            "Business-level purpose for runtime/operator selection; category remains "
+            "the grouping taxonomy."
+        ),
+    )
     category: str = Field(
         default="common",
         min_length=1,
@@ -241,6 +284,24 @@ class PromptTemplateBase(BaseModel):
     @classmethod
     def validate_variables_metadata(cls, value: Any) -> list[str]:
         return _normalize_variable_list(value, allow_json_string=False)
+
+    @field_validator("business_purpose", mode="before")
+    @classmethod
+    def normalize_business_purpose(
+        cls,
+        value: Any,
+    ) -> PromptBusinessPurpose | None:
+        if value is None:
+            return None
+        if isinstance(value, PromptBusinessPurpose):
+            return value
+        raw = str(value).strip()
+        if not raw:
+            return None
+        try:
+            return PromptBusinessPurpose(raw)
+        except ValueError as exc:
+            raise ValueError("business_purpose must be an allowed value") from exc
 
 
 class PromptTemplateCreate(PromptTemplateBase):
@@ -318,6 +379,7 @@ class PromptTemplateUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     prompt_type: PromptType | None = None
+    business_purpose: PromptBusinessPurpose | None = None
     category: str | None = Field(default=None, min_length=1, max_length=100)
     template: str | None = None
     variables: list[str] | None = None
@@ -337,6 +399,24 @@ class PromptTemplateUpdate(BaseModel):
         if value is None:
             return None
         return _normalize_variable_list(value, allow_json_string=False)
+
+    @field_validator("business_purpose", mode="before")
+    @classmethod
+    def normalize_business_purpose(
+        cls,
+        value: Any,
+    ) -> PromptBusinessPurpose | None:
+        if value is None:
+            return None
+        if isinstance(value, PromptBusinessPurpose):
+            return value
+        raw = str(value).strip()
+        if not raw:
+            return None
+        try:
+            return PromptBusinessPurpose(raw)
+        except ValueError as exc:
+            raise ValueError("business_purpose must be an allowed value") from exc
 
     @model_validator(mode="after")
     def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
@@ -367,6 +447,7 @@ class PromptTemplate(PromptTemplateBase):
     display_name: str = ""
     display_type: str = ""
     display_category: str = ""
+    display_business_purpose: str = ""
     binding_count: int = 0
     is_runtime_effective: bool = False
     can_edit_directly: bool = True
@@ -377,7 +458,13 @@ class PromptTemplate(PromptTemplateBase):
     def validate_variables(cls, value: Any) -> list[str]:
         return _normalize_variable_list(value, allow_json_string=True)
 
-    @field_validator("display_name", "display_type", "display_category", mode="before")
+    @field_validator(
+        "display_name",
+        "display_type",
+        "display_category",
+        "display_business_purpose",
+        mode="before",
+    )
     @classmethod
     def validate_optional_display_text(cls, value: Any) -> str:
         return value if isinstance(value, str) else ""
@@ -421,6 +508,10 @@ class PromptTemplate(PromptTemplateBase):
             self.display_type = prompt_type_display_label(self.prompt_type)
         if not self.display_category:
             self.display_category = prompt_category_display_label(self.category)
+        if not self.display_business_purpose:
+            self.display_business_purpose = prompt_business_purpose_display_label(
+                self.business_purpose
+            )
         self.can_edit_directly = not self.is_system
         if self.is_system and not self.edit_block_reason:
             self.edit_block_reason = "系统模板不可直接编辑，请先复制为自定义模板。"
@@ -514,6 +605,8 @@ class PromptTemplateImpactResponse(BaseModel):
     display_name: str
     prompt_type: str
     display_type: str
+    business_purpose: str | None = None
+    display_business_purpose: str
     category: str
     display_category: str
     is_active: bool
@@ -559,6 +652,7 @@ class PromptTemplateResponse(BaseModel):
     id: UUID
     name: str
     prompt_type: PromptType
+    business_purpose: PromptBusinessPurpose | None = None
     category: str
     template: str
     variables: list[str]

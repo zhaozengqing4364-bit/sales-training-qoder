@@ -12,8 +12,15 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { PromptTemplate, PromptTemplateImpactResponse, PromptTemplateOptions, PromptType } from "@/lib/api/types";
-import { formatCategoryLabel, formatPromptType, formatTemplateName, PROMPT_TYPE_LABELS } from "@/components/admin/prompts/prompt-labels";
+import type { PromptBusinessPurpose, PromptTemplate, PromptTemplateImpactResponse, PromptTemplateOptions, PromptType } from "@/lib/api/types";
+import {
+  formatBusinessPurpose,
+  formatCategoryLabel,
+  formatPromptType,
+  formatTemplateName,
+  PROMPT_BUSINESS_PURPOSE_OPTIONS,
+  PROMPT_TYPE_LABELS,
+} from "@/components/admin/prompts/prompt-labels";
 
 const PROMPT_CATEGORY_OPTIONS = [
   { value: "common", label: "通用" },
@@ -48,6 +55,7 @@ export default function EditPromptTemplatePage() {
 
   const [name, setName] = useState("");
   const [promptType, setPromptType] = useState<PromptType>("summary");
+  const [businessPurpose, setBusinessPurpose] = useState<PromptBusinessPurpose | "">("");
   const [category, setCategory] = useState("common");
   const [template, setTemplate] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -63,6 +71,14 @@ export default function EditPromptTemplatePage() {
   const normalizedCategory = category.trim().toLowerCase();
   const salesAllowedPromptTypes = useMemo(
     () => new Set((promptOptions?.sales_allowed_prompt_types || []) as PromptType[]),
+    [promptOptions],
+  );
+  const businessPurposeOptions = useMemo(
+    () => (
+      promptOptions?.allowed_business_purposes?.length
+        ? promptOptions.allowed_business_purposes
+        : PROMPT_BUSINESS_PURPOSE_OPTIONS
+    ),
     [promptOptions],
   );
   const selectablePromptTypes = useMemo(() => {
@@ -96,6 +112,7 @@ export default function EditPromptTemplatePage() {
       setImpact(impactData);
       setName(data.name);
       setPromptType(data.prompt_type);
+      setBusinessPurpose(data.business_purpose || "");
       setCategory(data.category);
       setTemplate(data.template);
       setIsActive(data.is_active);
@@ -123,6 +140,7 @@ export default function EditPromptTemplatePage() {
       await api.admin.updatePromptTemplate(templateId, {
         name,
         prompt_type: effectivePromptType,
+        business_purpose: businessPurpose || null,
         category,
         template,
         variables: extractedVars,
@@ -232,7 +250,9 @@ export default function EditPromptTemplatePage() {
             </div>
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <div className="text-slate-500">分类用途</div>
-              <div className="mt-1 font-semibold">{impact.display_category} · {impact.display_type}</div>
+              <div className="mt-1 font-semibold">
+                {impact.display_category} · {impact.display_type} · {impact.display_business_purpose}
+              </div>
             </div>
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <div className="text-slate-500">生效状态</div>
@@ -284,6 +304,23 @@ export default function EditPromptTemplatePage() {
                 {PROMPT_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </datalist>
               <p className="mt-1 text-xs text-slate-500">{formatCategoryLabel(category)}</p>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-zinc-700">业务用途</label>
+              <select
+                value={businessPurpose}
+                onChange={(event) => setBusinessPurpose(event.target.value as PromptBusinessPurpose | "")}
+                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:bg-slate-100"
+                disabled={!canEditDirectly}
+              >
+                <option value="">不指定业务用途</option>
+                {businessPurposeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                {formatBusinessPurpose(businessPurpose || null)}
+              </p>
             </div>
             <div className="flex items-center gap-4">
               <label className="flex cursor-pointer items-center gap-2">

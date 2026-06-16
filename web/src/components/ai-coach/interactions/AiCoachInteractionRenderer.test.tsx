@@ -21,6 +21,7 @@ import {
     FeedbackCard,
     MasteryResultCard,
 } from "./index";
+import { AiCoachInteractionRenderer } from "./AiCoachInteractionRenderer";
 
 describe("SingleChoiceInteractionCard", () => {
     afterEach(() => cleanup());
@@ -92,6 +93,35 @@ describe("ShortAnswerInteractionCard", () => {
             />,
         );
         expect(screen.getAllByText("请简述商务跟进的关键点")[0]).toBeTruthy();
+    });
+});
+
+describe("AiCoachInteractionRenderer", () => {
+    afterEach(() => cleanup());
+
+    it("renders typed training card helper without accepting custom components", () => {
+        render(
+            <AiCoachInteractionRenderer
+                interaction={{
+                    schema_version: "ai_coach_interaction_public_v1",
+                    interaction_id: "interaction-1",
+                    session_id: "session-1",
+                    turn_number: 1,
+                    training_card_type: "expression_rewrite",
+                    interaction_type: "short_answer",
+                    stem: "请把“不好意思我来晚了”改成更合适的商务表达。",
+                    options: null,
+                    answer_constraints: { min_length: 1, max_length: 8000 },
+                    capability_keys: ["respect_boundaries"],
+                    source_chapter_orders: [1],
+                }}
+                value={null}
+                onChange={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText(/改写卡/)).toBeTruthy();
+        expect(screen.getAllByText(/更合适的商务表达/).length).toBeGreaterThan(0);
     });
 });
 

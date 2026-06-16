@@ -4,7 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from sales_trainer.schemas import AiCoachNextActionV1, AiCoachScoreResultV1
+from sales_trainer.schemas import (
+    AiCoachNextActionV1,
+    AiCoachScoreResultV1,
+    BusinessEtiquetteAiCoachProgressResponse,
+)
 
 AiCoachDifficultyV1 = Literal["warmup", "normal", "challenge"]
 
@@ -23,6 +27,7 @@ class AiCoachCoachStateV1(BaseModel):
     stopped_reason: str | None = Field(None, max_length=200)
     score_total: float = Field(0, ge=0)
     score_count: int = Field(0, ge=0)
+    business_etiquette_progress: BusinessEtiquetteAiCoachProgressResponse | None = None
 
     @property
     def average_score(self) -> float:

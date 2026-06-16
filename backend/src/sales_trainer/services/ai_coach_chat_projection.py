@@ -157,6 +157,7 @@ class AiCoachChatProjection:
             last_action=state.last_action,
             can_auto_advance=state.can_auto_advance,
             stopped_reason=state.stopped_reason,
+            business_etiquette_progress=state.business_etiquette_progress,
         )
 
     @staticmethod
@@ -256,8 +257,11 @@ class AiCoachChatProjection:
             interaction_id=event_id,
             session_id=str(session.session_id),
             turn_number=card_number,
+            training_card_type=internal.training_card_type,
             interaction_type=internal.interaction_type,
             stem=internal.stem,
             options=options,
             answer_constraints=constraints,
+            capability_keys=list(internal.capability_keys),
+            source_chapter_orders=list(internal.source_chapter_orders),
         )

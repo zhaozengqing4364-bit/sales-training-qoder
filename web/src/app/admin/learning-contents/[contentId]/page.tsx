@@ -3,25 +3,34 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import React from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
+    AlertTriangle,
     ArrowLeft,
     BookOpen,
     ChevronUp,
     ChevronDown,
     Edit3,
+    ExternalLink,
     Plus,
     RefreshCcw,
     Trash2,
 } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import type { LearningChapter, LearningContent, QuestionCategory } from "@/lib/api/types";
+import type {
+    LearningChapter,
+    LearningContent,
+    LearningContentBindingImpactResponse,
+    LearningContentBindingUnitImpact,
+} from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { debug } from "@/lib/debug";
-import { QuestionGenerationPanel } from "./question-generation-panel";
+import { markdownComponents } from "@/components/sales-trainer/coo-markdown-components";
+import { BusinessEtiquetteQuestionDraftPanel } from "./question-generation-panel";
 
 const STATUS_LABELS: Record<string, string> = {
     draft: "草稿",
@@ -70,10 +79,33 @@ interface EditingChapter {
     content: string;
 }
 
+function summarizeChapterContent(content: string): string {
+    const text = content.replace(/\s+/g, " ").trim();
+    if (!text) return "暂无正文";
+    return text.length > 96 ? `${text.slice(0, 96)}...` : text;
+}
+
+function revisionLabel(id: string | null | undefined, no: number | null | undefined): string {
+    if (!id || !no) return "暂无";
+    return `v${no} · ${id.slice(0, 8)}`;
+}
+
+function bindingStatusLabel(impact: LearningContentBindingImpactResponse | null): string {
+    if (!impact) return "检查中";
+    if (impact.has_active_binding && impact.has_working_binding) {
+        return "学员端生效 + 待发布路径修订";
+    }
+    if (impact.has_active_binding) return "学员端正在使用";
+    if (impact.has_working_binding) return "待发布路径修订引用";
+    return "未绑定新人训练路径";
+}
+
 export default function AdminLearningContentDetailPage() {
     const { contentId } = useParams<{ contentId: string }>();
 
     const [content, setContent] = useState<LearningContent | null>(null);
+    const [bindingImpact, setBindingImpact] = useState<LearningContentBindingImpactResponse | null>(null);
+    const [bindingImpactError, setBindingImpactError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -92,12 +124,15 @@ export default function AdminLearningContentDetailPage() {
     const [chapterError, setChapterError] = useState<string | null>(null);
 
     const [editingChapter, setEditingChapter] = useState<EditingChapter | null>(null);
+    const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
 
     const [actionLoading, setActionLoading] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [actionNotice, setActionNotice] = useState<string | null>(null);
     const [publishGateErrors, setPublishGateErrors] = useState<GateResult[] | null>(null);
     const [confirmAction, setConfirmAction] = useState<
-        | { type: "delete-chapter"; chapter: LearningChapter }
+        | { type: "delete-chapter"; chapter: LearningChapter; affectedOrders: number[] }
+        | { type: "reorder-chapter"; chapterIds: string[]; affectedOrders: number[]; direction: "up" | "down" }
         | { type: "publish" }
         | { type: "archive" }
         | null
@@ -106,19 +141,16 @@ export default function AdminLearningContentDetailPage() {
     const [editDiscardConfirm, setEditDiscardConfirm] = useState<
         | { type: "cancel" }
         | { type: "switch"; chapter: LearningChapter }
+        | { type: "select"; chapter: LearningChapter }
         | null
     >(null);
-
-    const [categories, setCategories] = useState<QuestionCategory[]>([]);
 
     const loadContent = useCallback(async () => {
         setIsLoading(true);
         setError(null);
+        setBindingImpactError(null);
         try {
-            const [data, catsResult] = await Promise.all([
-                api.learningContents.get(contentId),
-                api.testBank.listCategories(),
-            ]);
+            const data = await api.learningContents.get(contentId);
             setContent(data);
             setTitle(data.title);
             setSummary(data.summary ?? "");
@@ -127,23 +159,32 @@ export default function AdminLearningContentDetailPage() {
             setSafetyFlagged(data.safety_flagged);
             setActionError(null);
             setPublishGateErrors(null);
-            setCategories(catsResult.items);
+            try {
+                const impact = await api.admin.newcomerTraining.getLearningContentBindingImpact(contentId);
+                setBindingImpact(impact);
+            } catch (impactError) {
+                debug.error("Failed to load learning content binding impact:", impactError);
+                setBindingImpact(null);
+                setBindingImpactError(getApiErrorMessage(impactError));
+            }
         } catch (err) {
             debug.error("Failed to load learning content:", err);
             setError(getApiErrorMessage(err));
             setContent(null);
+            setBindingImpact(null);
         } finally {
             setIsLoading(false);
         }
     }, [contentId]);
 
     useEffect(() => {
-        void loadContent();
+        void Promise.resolve().then(loadContent);
     }, [loadContent]);
 
     const handleSaveMetadata = async () => {
         setMetaSaving(true);
         setMetaError(null);
+        setActionNotice(null);
         try {
             await api.learningContents.update(contentId, {
                 title: title.trim(),
@@ -152,6 +193,7 @@ export default function AdminLearningContentDetailPage() {
                 source: source.trim() || null,
                 safety_flagged: safetyFlagged,
             });
+            setActionNotice(content?.revision_state.save_result_copy ?? "已保存。");
             await loadContent();
         } catch (err) {
             setMetaError(getApiErrorMessage(err));
@@ -166,13 +208,16 @@ export default function AdminLearningContentDetailPage() {
         }
         setChapterAdding(true);
         setChapterError(null);
+        setActionNotice(null);
         try {
-            await api.learningContents.addChapter(contentId, {
+            const chapter = await api.learningContents.addChapter(contentId, {
                 title: newChapterTitle.trim(),
                 content: newChapterContent.trim(),
             });
+            setSelectedChapterId(chapter.chapter_id);
             setNewChapterTitle("");
             setNewChapterContent("");
+            setActionNotice(content?.revision_state.save_result_copy ?? "章节已保存。");
             await loadContent();
         } catch (err) {
             setChapterError(getApiErrorMessage(err));
@@ -199,6 +244,7 @@ export default function AdminLearningContentDetailPage() {
             setEditDiscardConfirm({ type: "switch", chapter });
             return;
         }
+        setSelectedChapterId(chapter.chapter_id);
         setEditingChapter({
             chapter_id: chapter.chapter_id,
             title: chapter.title,
@@ -210,12 +256,14 @@ export default function AdminLearningContentDetailPage() {
         if (!editingChapter) return;
         setChapterAdding(true);
         setChapterError(null);
+        setActionNotice(null);
         try {
             await api.learningContents.updateChapter(contentId, editingChapter.chapter_id, {
                 title: editingChapter.title.trim(),
                 content: editingChapter.content.trim(),
             });
             setEditingChapter(null);
+            setActionNotice(content?.revision_state.save_result_copy ?? "章节已保存。");
             await loadContent();
         } catch (err) {
             setChapterError(getApiErrorMessage(err));
@@ -232,11 +280,24 @@ export default function AdminLearningContentDetailPage() {
         setEditingChapter(null);
     };
 
+    const handleSelectChapter = (chapter: LearningChapter) => {
+        if (editingChapter && hasEditingChanges && editingChapter.chapter_id !== chapter.chapter_id) {
+            setEditDiscardConfirm({ type: "select", chapter });
+            return;
+        }
+        if (editingChapter && editingChapter.chapter_id !== chapter.chapter_id) {
+            setEditingChapter(null);
+        }
+        setSelectedChapterId(chapter.chapter_id);
+    };
+
     const handleDeleteChapter = async (chapterId: string) => {
         setChapterAdding(true);
         setChapterError(null);
+        setActionNotice(null);
         try {
             await api.learningContents.deleteChapter(contentId, chapterId);
+            setActionNotice(content?.revision_state.save_result_copy ?? "章节已删除。");
             await loadContent();
         } catch (err) {
             setChapterError(getApiErrorMessage(err));
@@ -245,42 +306,66 @@ export default function AdminLearningContentDetailPage() {
         }
     };
 
-    const handleMoveUp = async (index: number) => {
-        if (!content || index <= 0) return;
-        const chapters = [...content.chapters];
-        const newOrder = chapters.map((c) => c.chapter_id);
-        const temp = newOrder[index];
-        newOrder[index] = newOrder[index - 1];
-        newOrder[index - 1] = temp;
+    const handleDeleteChapterRequest = (chapter: LearningChapter) => {
+        const affectedOrders = SORTED_CHAPTERS
+            .filter((item) => item.order_index >= chapter.order_index)
+            .map((item) => item.order_index);
+        setConfirmAction({ type: "delete-chapter", chapter, affectedOrders });
+    };
+
+    const reorderChapters = async (chapterIds: string[]) => {
+        if (!content) return;
+        setChapterError(null);
+        setActionNotice(null);
         try {
-            await api.learningContents.reorderChapters(contentId, newOrder);
+            await api.learningContents.reorderChapters(contentId, chapterIds);
+            setActionNotice(content.revision_state.save_result_copy);
             await loadContent();
         } catch (err) {
             setChapterError(getApiErrorMessage(err));
         }
     };
 
-    const handleMoveDown = async (index: number) => {
-        if (!content || index >= content.chapters.length - 1) return;
-        const chapters = [...content.chapters];
-        const newOrder = chapters.map((c) => c.chapter_id);
+    const requestReorder = (index: number, direction: "up" | "down") => {
+        if (!content) return;
+        const targetIndex = direction === "up" ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= SORTED_CHAPTERS.length) return;
+        const newOrder = SORTED_CHAPTERS.map((c) => c.chapter_id);
         const temp = newOrder[index];
-        newOrder[index] = newOrder[index + 1];
-        newOrder[index + 1] = temp;
-        try {
-            await api.learningContents.reorderChapters(contentId, newOrder);
-            await loadContent();
-        } catch (err) {
-            setChapterError(getApiErrorMessage(err));
+        newOrder[index] = newOrder[targetIndex];
+        newOrder[targetIndex] = temp;
+        const affectedOrders = [
+            SORTED_CHAPTERS[index]?.order_index,
+            SORTED_CHAPTERS[targetIndex]?.order_index,
+        ].filter((order): order is number => typeof order === "number");
+        if (impactUnitsForOrders(affectedOrders).length > 0) {
+            setConfirmAction({
+                type: "reorder-chapter",
+                chapterIds: newOrder,
+                affectedOrders,
+                direction,
+            });
+            return;
         }
+        void reorderChapters(newOrder);
+    };
+
+    const handleMoveUp = (index: number) => {
+        requestReorder(index, "up");
+    };
+
+    const handleMoveDown = (index: number) => {
+        requestReorder(index, "down");
     };
 
     const handlePublish = async () => {
         setActionLoading(true);
         setActionError(null);
+        setActionNotice(null);
         setPublishGateErrors(null);
         try {
             await api.learningContents.publish(contentId);
+            setActionNotice(content?.status === "published" ? "待发布修订已发布，学员端将读取最新内容。" : "学习内容已发布。");
             await loadContent();
         } catch (err) {
             const gates = extractGateResults(err);
@@ -297,9 +382,11 @@ export default function AdminLearningContentDetailPage() {
     const handleArchive = async () => {
         setActionLoading(true);
         setActionError(null);
+        setActionNotice(null);
         setPublishGateErrors(null);
         try {
             await api.learningContents.archive(contentId);
+            setActionNotice("学习内容已归档。");
             await loadContent();
         } catch (err) {
             setActionError(getApiErrorMessage(err));
@@ -314,6 +401,10 @@ export default function AdminLearningContentDetailPage() {
         if (!action) return;
         if (action.type === "delete-chapter") {
             void handleDeleteChapter(action.chapter.chapter_id);
+            return;
+        }
+        if (action.type === "reorder-chapter") {
+            void reorderChapters(action.chapterIds);
             return;
         }
         if (action.type === "publish") {
@@ -331,7 +422,13 @@ export default function AdminLearningContentDetailPage() {
             setEditingChapter(null);
             return;
         }
+        if (action.type === "select") {
+            setEditingChapter(null);
+            setSelectedChapterId(action.chapter.chapter_id);
+            return;
+        }
         // switch to another chapter after discarding
+        setSelectedChapterId(action.chapter.chapter_id);
         setEditingChapter({
             chapter_id: action.chapter.chapter_id,
             title: action.chapter.title,
@@ -339,20 +436,73 @@ export default function AdminLearningContentDetailPage() {
         });
     };
 
-    const confirmTitle = confirmAction?.type === "delete-chapter"
-        ? "删除学习章节"
-        : confirmAction?.type === "archive"
-          ? "归档学习内容"
-          : "发布学习内容";
-    const confirmDescription = confirmAction?.type === "delete-chapter"
-        ? `确定要删除「${confirmAction.chapter.title}」吗？删除后该章节无法恢复。`
-        : confirmAction?.type === "archive"
-          ? `确定要归档「${content?.title ?? "当前学习内容"}」吗？归档后学员将不能继续访问该内容。`
-          : `确定要发布「${content?.title ?? "当前学习内容"}」吗？发布前会再次执行章节与安全门禁检查。`;
-
     const SORTED_CHAPTERS = content?.chapters
         ? [...content.chapters].sort((a, b) => a.order_index - b.order_index)
         : [];
+    const selectedChapter = SORTED_CHAPTERS.find((chapter) => chapter.chapter_id === selectedChapterId)
+        ?? SORTED_CHAPTERS[0]
+        ?? null;
+    const selectedChapterIndex = selectedChapter
+        ? SORTED_CHAPTERS.findIndex((chapter) => chapter.chapter_id === selectedChapter.chapter_id)
+        : -1;
+    const revisionState = content?.revision_state ?? null;
+    const canPublish = Boolean(
+        content
+        && (
+            content.status === "draft"
+            || (content.status === "published" && revisionState?.has_unpublished_revision)
+        ),
+    );
+    const canArchive = Boolean(
+        content
+        && content.status !== "archived"
+        && bindingImpact
+        && bindingImpact.can_archive,
+    );
+    const allBindingUnits = [
+        ...(bindingImpact?.active_bindings ?? []),
+        ...(bindingImpact?.working_bindings ?? []),
+    ].flatMap((binding) => binding.learning_units);
+    const impactUnitsForOrders = (orders: number[]) => {
+        const orderSet = new Set(orders);
+        const seen = new Set<string>();
+        const units: LearningContentBindingUnitImpact[] = [];
+        for (const unit of allBindingUnits) {
+            const references = [
+                ...unit.source_chapter_orders,
+                ...unit.ai_coach_remediation_chapter_orders,
+            ];
+            if (!references.some((order) => orderSet.has(order)) || seen.has(unit.unit_key)) {
+                continue;
+            }
+            seen.add(unit.unit_key);
+            units.push(unit);
+        }
+        return units;
+    };
+    const confirmImpactUnits = confirmAction && "affectedOrders" in confirmAction
+        ? impactUnitsForOrders(confirmAction.affectedOrders)
+        : [];
+    const impactDescription = confirmImpactUnits.length
+        ? `会影响小单元：${confirmImpactUnits.map((unit) => `${unit.title}（章节 ${unit.source_chapter_orders.join("、") || "--"}）`).join("；")}。`
+        : "";
+    const confirmTitle = confirmAction?.type === "delete-chapter"
+        ? "删除学习章节"
+        : confirmAction?.type === "reorder-chapter"
+          ? "调整章节顺序"
+          : confirmAction?.type === "archive"
+            ? "归档学习内容"
+            : "发布学习内容";
+    const confirmDescription = confirmAction?.type === "delete-chapter"
+        ? `确定要删除「${confirmAction.chapter.title}」吗？删除后该章节无法恢复。${impactDescription ? ` ${impactDescription} 当前绑定按章节序号工作，请确认已同步调整路径配置。` : ""}`
+        : confirmAction?.type === "reorder-chapter"
+          ? `确定要${confirmAction.direction === "up" ? "上移" : "下移"}当前章节吗？${impactDescription ? ` ${impactDescription} 当前绑定按章节序号工作，请确认已同步调整路径配置。` : ""}`
+          : confirmAction?.type === "archive"
+            ? bindingImpact?.archive_block_reason
+                ?? `确定要归档「${content?.title ?? "当前学习内容"}」吗？归档后学员将不能继续访问该内容。`
+            : content?.status === "published"
+              ? `确定要发布「${content?.title ?? "当前学习内容"}」的待发布修订吗？发布后学员端会读取最新文章内容。`
+              : `确定要发布「${content?.title ?? "当前学习内容"}」吗？发布前会再次执行章节与安全门禁检查。`;
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -363,7 +513,15 @@ export default function AdminLearningContentDetailPage() {
                 }}
                 title={confirmTitle}
                 description={confirmDescription}
-                confirmText={confirmAction?.type === "delete-chapter" ? "确认删除" : confirmAction?.type === "archive" ? "确认归档" : "确认发布"}
+                confirmText={
+                    confirmAction?.type === "delete-chapter"
+                        ? "确认删除"
+                        : confirmAction?.type === "archive"
+                          ? "确认归档"
+                          : confirmAction?.type === "reorder-chapter"
+                            ? "确认调整"
+                            : "确认发布"
+                }
                 variant={confirmAction?.type === "delete-chapter" ? "danger" : "warning"}
                 onConfirm={handleConfirmAction}
                 isLoading={chapterAdding || actionLoading}
@@ -433,9 +591,74 @@ export default function AdminLearningContentDetailPage() {
                         </div>
                     </div>
 
+                    <GlassCard className="p-5">
+                        <div className="grid gap-4 lg:grid-cols-4">
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                                <p className="text-xs font-semibold text-slate-400">当前发布版本</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">
+                                    {revisionLabel(revisionState?.active_revision_id, revisionState?.active_revision_no)}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                                <p className="text-xs font-semibold text-slate-400">待发布修订</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">
+                                    {revisionState?.has_unpublished_revision
+                                        ? revisionLabel(revisionState.working_revision_id, revisionState.working_revision_no)
+                                        : "无待发布修订"}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                                <p className="text-xs font-semibold text-slate-400">学员端绑定</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">
+                                    {bindingStatusLabel(bindingImpact)}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                                <p className="text-xs font-semibold text-slate-400">当前编辑写入</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">
+                                    {revisionState?.edit_target === "working_revision"
+                                        ? "待发布修订"
+                                        : revisionState?.edit_target === "archived_locked"
+                                          ? "已锁定"
+                                          : "草稿记录"}
+                                </p>
+                            </div>
+                        </div>
+                        {actionNotice ? (
+                            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                                {actionNotice}
+                            </div>
+                        ) : null}
+                        {bindingImpactError ? (
+                            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                绑定影响读取失败：{bindingImpactError}
+                            </div>
+                        ) : null}
+                        {!bindingImpact?.can_archive && bindingImpact?.archive_block_reason ? (
+                            <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <p>{bindingImpact.archive_block_reason}</p>
+                            </div>
+                        ) : null}
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            <Link href="/admin/sales-trainer/articles" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                                商务技巧文章绑定
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </Link>
+                            <Link href="/admin/sales-trainer/paths" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                                路径配置
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </Link>
+                            <Link href="/admin/sales-trainer/questions/drafts" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                                题目草稿箱
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </Link>
+                        </div>
+                    </GlassCard>
+
                     <div className="grid gap-6 lg:grid-cols-3">
-                        <div className="lg:col-span-2 space-y-6">
-                            <GlassCard className="p-6">
+                        <div className="lg:col-span-2 flex flex-col gap-6">
+                            <GlassCard className="order-2 p-6">
                                 <h2 className="mb-4 text-lg font-bold text-slate-900">元数据</h2>
                                 {metaError ? (
                                     <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -531,10 +754,22 @@ export default function AdminLearningContentDetailPage() {
                                 </div>
                             </GlassCard>
 
-                            <GlassCard className="p-6">
-                                <h2 className="mb-4 text-lg font-bold text-slate-900">
-                                    章节管理 ({SORTED_CHAPTERS.length})
-                                </h2>
+                            <GlassCard className="order-1 p-6">
+                                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-bold text-slate-900">
+                                            章节与出题 ({SORTED_CHAPTERS.length})
+                                        </h2>
+                                        <p className="mt-1 text-sm text-slate-500">
+                                            左侧选择章节、调整顺序；右侧查看正文并生成本章考题草稿。
+                                        </p>
+                                    </div>
+                                    {selectedChapter ? (
+                                        <span className="text-xs font-medium text-slate-400">
+                                            当前：第 {selectedChapterIndex + 1} 章
+                                        </span>
+                                    ) : null}
+                                </div>
                                 {chapterError ? (
                                     <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                                         {chapterError}
@@ -542,140 +777,202 @@ export default function AdminLearningContentDetailPage() {
                                 ) : null}
 
                                 {SORTED_CHAPTERS.length === 0 ? (
-                                    <div className="py-4 text-center text-sm text-slate-500">暂无章节</div>
+                                    <div className="mb-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-500">
+                                        暂无章节。先添加章节，发布门禁和 AI 出题才有内容来源。
+                                    </div>
                                 ) : (
-                                    <div className="mb-4 overflow-x-auto">
-                                        <table className="w-full text-left text-sm">
-                                            <thead className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-400">
-                                                <tr>
-                                                    <th className="px-3 py-2 w-12">#</th>
-                                                    <th className="px-3 py-2">标题</th>
-                                                    <th className="px-3 py-2">内容</th>
-                                                    <th className="px-3 py-2 w-32">操作</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {SORTED_CHAPTERS.map((chapter, index) => (
-                                                    <React.Fragment key={chapter.chapter_id}>
-                                                    <tr
-                                                        className="transition-colors hover:bg-slate-50/50"
+                                    <div className="mb-5 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                                        <div className="space-y-3" aria-label="章节目录">
+                                            {SORTED_CHAPTERS.map((chapter, index) => {
+                                                const isSelected = selectedChapter?.chapter_id === chapter.chapter_id;
+                                                const isEditing = editingChapter?.chapter_id === chapter.chapter_id;
+                                                return (
+                                                    <div
+                                                        key={chapter.chapter_id}
+                                                        className={`rounded-2xl border p-4 transition-colors ${
+                                                            isSelected
+                                                                ? "border-slate-300 bg-white shadow-sm"
+                                                                : "border-slate-100 bg-slate-50/60 hover:border-slate-200 hover:bg-white"
+                                                        }`}
                                                     >
-                                                        <td className="px-3 py-3 text-slate-400">
-                                                            {index + 1}
-                                                        </td>
-                                                        <td className="px-3 py-3">
-                                                            {editingChapter?.chapter_id === chapter.chapter_id ? (
-                                                                <input
-                                                                    type="text"
-                                                                    value={editingChapter.title}
-                                                                    onChange={(e) =>
-                                                                        setEditingChapter({
-                                                                            ...editingChapter,
-                                                                            title: e.target.value,
-                                                                        })
-                                                                    }
-                                                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                                                />
-                                                            ) : (
-                                                                <span className="font-medium text-slate-900">
-                                                                    {chapter.title}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSelectChapter(chapter)}
+                                                            className="block w-full text-left"
+                                                            aria-pressed={isSelected}
+                                                        >
+                                                            <div className="flex items-start gap-3">
+                                                                <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
+                                                                    isSelected
+                                                                        ? "bg-slate-900 text-white"
+                                                                        : "bg-white text-slate-500"
+                                                                }`}
+                                                                >
+                                                                    {index + 1}
                                                                 </span>
-                                                            )}
-                                                        </td>
-                                                        <td className="max-w-xs truncate px-3 py-3 text-slate-500">
-                                                            {editingChapter?.chapter_id === chapter.chapter_id ? (
-                                                                <textarea
-                                                                    value={editingChapter.content}
-                                                                    onChange={(e) =>
-                                                                        setEditingChapter({
-                                                                            ...editingChapter,
-                                                                            content: e.target.value,
-                                                                        })
-                                                                    }
-                                                                    rows={2}
-                                                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                                                />
-                                                            ) : (
-                                                                chapter.content.length > 60
-                                                                    ? chapter.content.slice(0, 60) + "..."
-                                                                    : chapter.content
-                                                            )}
-                                                        </td>
-                                                        <td className="px-3 py-3">
-                                                            <div className="flex items-center gap-1">
-                                                                {editingChapter?.chapter_id === chapter.chapter_id ? (
-                                                                    <>
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="primary"
-                                                                            onClick={() => void handleSaveEditChapter()}
-                                                                        >
-                                                                            保存
-                                                                        </Button>
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={handleCancelEdit}
-                                                                        >
-                                                                            取消
-                                                                        </Button>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleMoveUp(index)}
-                                                                            disabled={index === 0}
-                                                                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30"
-                                                                            title="上移"
-                                                                        >
-                                                                            <ChevronUp className="h-4 w-4" />
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleMoveDown(index)}
-                                                                            disabled={index === SORTED_CHAPTERS.length - 1}
-                                                                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30"
-                                                                            title="下移"
-                                                                        >
-                                                                            <ChevronDown className="h-4 w-4" />
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleEditChapter(chapter)}
-                                                                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600"
-                                                                            title="编辑"
-                                                                        >
-                                                                            <Edit3 className="h-3.5 w-3.5" />
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => setConfirmAction({ type: "delete-chapter", chapter })}
-                                                                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                                                                            title="删除"
-                                                                        >
-                                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                                        </button>
-                                                                    </>
-                                                                )}
+                                                                <div className="min-w-0 flex-1">
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <h3 className="line-clamp-2 text-sm font-semibold text-slate-900">
+                                                                            {chapter.title}
+                                                                        </h3>
+                                                                        {isEditing ? (
+                                                                            <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                                                                编辑中
+                                                                            </span>
+                                                                        ) : null}
+                                                                    </div>
+                                                                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                                                                        {summarizeChapterContent(chapter.content)}
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                        </td>
-                                                    </tr>
-                                                    {!editingChapter || editingChapter.chapter_id !== chapter.chapter_id ? (
-                                                        <tr>
-                                                            <td colSpan={4} className="px-3 py-2">
-                                                                <QuestionGenerationPanel
-                                                                    learningContentId={content.learning_content_id}
-                                                                    chapterId={chapter.chapter_id}
-                                                                    categories={categories}
-                                                                />
-                                                            </td>
-                                                        </tr>
-                                                    ) : null}
-                                                    </React.Fragment>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                        </button>
+                                                        <div className="mt-3 flex flex-wrap items-center gap-1 pl-11">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleMoveUp(index)}
+                                                                disabled={index === 0}
+                                                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                                                                title="上移"
+                                                            >
+                                                                <ChevronUp className="h-4 w-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleMoveDown(index)}
+                                                                disabled={index === SORTED_CHAPTERS.length - 1}
+                                                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                                                                title="下移"
+                                                            >
+                                                                <ChevronDown className="h-4 w-4" />
+                                                            </button>
+                                                            {isEditing ? null : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleEditChapter(chapter)}
+                                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-700"
+                                                                    title="编辑"
+                                                                >
+                                                                    <Edit3 className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteChapterRequest(chapter)}
+                                                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-700"
+                                                                title="删除"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <div className="rounded-2xl border border-slate-100 bg-white/80 p-4 shadow-sm">
+                                            {selectedChapter ? (
+                                                editingChapter?.chapter_id === selectedChapter.chapter_id ? (
+                                                    <div className="space-y-4">
+                                                        <div>
+                                                            <p className="text-xs font-semibold text-slate-400">
+                                                                编辑当前章节
+                                                            </p>
+                                                            <h3 className="mt-1 text-base font-bold text-slate-900">
+                                                                第 {selectedChapterIndex + 1} 章
+                                                            </h3>
+                                                        </div>
+                                                        <div>
+                                                            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">
+                                                                章节标题
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={editingChapter.title}
+                                                                onChange={(e) =>
+                                                                    setEditingChapter({
+                                                                        ...editingChapter,
+                                                                        title: e.target.value,
+                                                                    })
+                                                                }
+                                                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">
+                                                                章节正文
+                                                            </label>
+                                                            <textarea
+                                                                value={editingChapter.content}
+                                                                onChange={(e) =>
+                                                                    setEditingChapter({
+                                                                        ...editingChapter,
+                                                                        content: e.target.value,
+                                                                    })
+                                                                }
+                                                                rows={10}
+                                                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm leading-6 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                                                            />
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="primary"
+                                                                onClick={() => void handleSaveEditChapter()}
+                                                                disabled={chapterAdding}
+                                                                isLoading={chapterAdding}
+                                                            >
+                                                                保存
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={handleCancelEdit}
+                                                                disabled={chapterAdding}
+                                                            >
+                                                                取消
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-4">
+                                                        <div>
+                                                            <p className="text-xs font-semibold text-slate-400">
+                                                                当前章节 · 第 {selectedChapterIndex + 1} 章
+                                                            </p>
+                                                            <h3 className="mt-1 text-base font-bold text-slate-900">
+                                                                {selectedChapter.title}
+                                                            </h3>
+                                                        </div>
+                                                        <div className="max-h-[520px] overflow-auto rounded-xl border border-slate-100 bg-slate-50/70 p-5">
+                                                            {selectedChapter.content ? (
+                                                                <ReactMarkdown
+                                                                    remarkPlugins={[remarkGfm]}
+                                                                    components={markdownComponents}
+                                                                >
+                                                                    {selectedChapter.content}
+                                                                </ReactMarkdown>
+                                                            ) : (
+                                                                <p className="text-sm text-slate-500">暂无正文</p>
+                                                            )}
+                                                        </div>
+                                                        <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                                                            <div className="mb-3">
+                                                                <h3 className="text-sm font-bold text-slate-900">
+                                                                    商务礼仪 AI 出题
+                                                                </h3>
+                                                                <p className="mt-1 text-xs leading-5 text-slate-500">
+                                                                    只生成商务礼仪待审核草稿，不会直接入库、发布或绑定给学员。
+                                                                </p>
+                                                            </div>
+                                                            <BusinessEtiquetteQuestionDraftPanel
+                                                                chapterOrder={selectedChapter.order_index}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )
+                                            ) : null}
+                                        </div>
                                     </div>
                                 )}
 
@@ -737,22 +1034,27 @@ export default function AdminLearningContentDetailPage() {
                                 <div className="space-y-3">
                                     <Button
                                         onClick={() => setConfirmAction({ type: "publish" })}
-                                        disabled={actionLoading || content.status === "published"}
+                                        disabled={actionLoading || !canPublish}
                                         isLoading={actionLoading}
                                         className="w-full rounded-full"
                                         variant="primary"
                                     >
-                                        发布
+                                        {revisionState?.publish_label ?? "发布"}
                                     </Button>
                                     <Button
                                         onClick={() => setConfirmAction({ type: "archive" })}
-                                        disabled={actionLoading || content.status === "archived"}
+                                        disabled={actionLoading || !canArchive}
                                         isLoading={actionLoading}
                                         className="w-full rounded-full"
                                         variant="outline"
                                     >
                                         归档
                                     </Button>
+                                    {!canArchive && content.status !== "archived" ? (
+                                        <p className="text-xs leading-5 text-amber-700">
+                                            {bindingImpact?.archive_block_reason ?? "正在检查新人训练路径绑定，归档暂不可用。"}
+                                        </p>
+                                    ) : null}
                                 </div>
                             </GlassCard>
 

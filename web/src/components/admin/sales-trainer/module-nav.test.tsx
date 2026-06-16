@@ -21,11 +21,17 @@ describe("SalesTrainerAdminModuleNav", () => {
     it("shows question-bank options on question pages", () => {
         render(<SalesTrainerAdminModuleNav currentPath="/admin/sales-trainer/questions/categories" />);
 
-        expect(screen.getByRole("link", { name: "题目清单" }).getAttribute("href")).toBe(
+        expect(screen.getByRole("link", { name: "正式题目库" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/questions",
         );
-        expect(screen.getByRole("link", { name: "分类管理" }).getAttribute("href")).toBe(
+        expect(screen.getByRole("link", { name: "AI 出题审核" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/questions/drafts",
+        );
+        expect(screen.getByRole("link", { name: "题目分类" }).getAttribute("href")).toBe(
             "/admin/sales-trainer/questions/categories",
+        );
+        expect(screen.getByRole("link", { name: "小测预览" }).getAttribute("href")).toBe(
+            "/admin/sales-trainer/questions/quiz-preview",
         );
         expect(screen.queryByRole("link", { name: "新建题目" })).toBeNull();
         expect(screen.queryByRole("link", { name: "模块" })).toBeNull();

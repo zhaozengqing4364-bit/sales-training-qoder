@@ -4,12 +4,12 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from curriculum_practice.models import QuestionItem
 from sales_trainer.models import SalesTrainerUnitQuestion
 from sales_trainer.schemas import UnitQuestionBinding
 from sales_trainer.services.asset_revision_service import (
     SalesTrainerAssetRevisionService,
 )
-from sales_trainer.services.curriculum_practice_adapter import QuestionItem
 from sales_trainer.services.question_bank import (
     QUESTION_RESOURCE_TYPE,
     question_lifecycle_snapshot,

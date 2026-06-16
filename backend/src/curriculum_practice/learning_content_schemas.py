@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from curriculum_practice.schema_types import LearningContentStatus
@@ -59,6 +61,17 @@ class LearningChapterResponse(BaseModel):
     updated_at: object
 
 
+class LearningContentRevisionState(BaseModel):
+    active_revision_id: str | None = None
+    active_revision_no: int | None = None
+    working_revision_id: str | None = None
+    working_revision_no: int | None = None
+    has_unpublished_revision: bool = False
+    edit_target: Literal["draft_record", "working_revision", "archived_locked"]
+    publish_label: str
+    save_result_copy: str
+
+
 class LearningContentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,6 +88,7 @@ class LearningContentResponse(BaseModel):
     created_at: object
     updated_at: object
     chapters: list[LearningChapterResponse] = Field(default_factory=list)
+    revision_state: LearningContentRevisionState
 
 
 class LearningContentListResponse(BaseModel):

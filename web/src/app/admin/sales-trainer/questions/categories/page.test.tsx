@@ -66,8 +66,9 @@ describe("SalesTrainerQuestionCategoriesPage", () => {
             expect(listQuestionCategoriesMock).toHaveBeenCalled();
         });
 
-        expect(screen.getByText("题库分类")).toBeTruthy();
-        expect(screen.getByText("分类只影响新人训练路径题库，不影响平台通用题库。")).toBeTruthy();
+        expect(screen.getByRole("heading", { name: "题目分类" })).toBeTruthy();
+        expect(screen.getByText("分类只是正式题目的管理维度；学员小测按已发布题目和能力点抽题，不按分类抽题。")).toBeTruthy();
+        expect(screen.getByText("分类用于运营筛选、审核入库和后续维护，不是学员端的组卷规则。要检查小测会抽到哪些题，请使用“小测预览”。")).toBeTruthy();
         expect(screen.getByText("新人训练路径")).toBeTruthy();
         expect(screen.queryByText("sales_trainer")).toBeNull();
     });

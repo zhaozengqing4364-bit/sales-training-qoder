@@ -56,6 +56,21 @@ def test_provider_base_url_allows_known_public_provider(monkeypatch):
     assert endpoint.child_url("chat/completions") == "https://api.openai.com/v1/chat/completions"
 
 
+def test_provider_base_url_allows_mimo_openai_compatible_provider(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: _addrinfo("93.184.216.34"))
+
+    endpoint = validate_provider_base_url(
+        ModelProvider.OPENAI,
+        "https://api.xiaomimimo.com/v1/",
+        resolve_dns=True,
+    )
+
+    assert endpoint.base_url == "https://api.xiaomimimo.com/v1"
+    assert endpoint.child_url("chat/completions") == (
+        "https://api.xiaomimimo.com/v1/chat/completions"
+    )
+
+
 def test_redirect_location_reuses_provider_policy():
     with pytest.raises(EndpointPolicyError):
         validate_redirect_location(

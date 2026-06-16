@@ -3,12 +3,16 @@ import type {
     AiCoachChatSessionPublicV1,
     AiCoachInteractionPublicV1,
     AiCoachUiEventPublicV1,
+    BusinessEtiquetteLearningUnit,
 } from "@/lib/api/types";
 
 export const MODULE_KEY = "business_skills";
 export type CoachCommand = "continue" | "explain" | "switch_scenario" | "summarize" | "end" | "retry";
 
 export type DraftByEventId = Readonly<Record<string, AiCoachAnswerPayloadV1 | null>>;
+
+export type QuizCardEvent = Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }>;
+export type SummaryCardEvent = Extract<AiCoachUiEventPublicV1, { type: "summary_card" }>;
 
 export function activeEventIdForSession(
     session: AiCoachChatSessionPublicV1 | null,
@@ -22,7 +26,7 @@ export function activeEventIdForSession(
 
 export function firstPendingQuizEvent(
     session: AiCoachChatSessionPublicV1 | null,
-): Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }> | null {
+): QuizCardEvent | null {
     return (
         session?.ui_events.find(
             (event): event is Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }> =>
@@ -36,7 +40,7 @@ export function firstPendingQuizEvent(
 
 export function activeQuizEventForSession(
     session: AiCoachChatSessionPublicV1 | null,
-): Extract<AiCoachUiEventPublicV1, { type: "quiz_card" }> | null {
+): QuizCardEvent | null {
     const activeEventId = activeEventIdForSession(session);
     if (!activeEventId) {
         return null;
@@ -51,6 +55,72 @@ export function activeQuizEventForSession(
                 && event.score_result === null,
         ) ?? null
     );
+}
+
+export function quizEventsForSession(
+    session: AiCoachChatSessionPublicV1 | null,
+): readonly QuizCardEvent[] {
+    return (session?.ui_events ?? []).filter(
+        (event): event is QuizCardEvent => event.type === "quiz_card",
+    );
+}
+
+export function latestScoredQuizEventForSession(
+    session: AiCoachChatSessionPublicV1 | null,
+): QuizCardEvent | null {
+    return (
+        [...quizEventsForSession(session)]
+            .reverse()
+            .find((event) => event.status === "scored" && event.score_result !== null) ?? null
+    );
+}
+
+export function latestSummaryEventForSession(
+    session: AiCoachChatSessionPublicV1 | null,
+): SummaryCardEvent | null {
+    return (
+        [...(session?.ui_events ?? [])]
+            .reverse()
+            .find((event): event is SummaryCardEvent => event.type === "summary_card") ?? null
+    );
+}
+
+export function trainingReferenceEventForSession(
+    session: AiCoachChatSessionPublicV1 | null,
+): QuizCardEvent | null {
+    return (
+        activeQuizEventForSession(session)
+        ?? latestScoredQuizEventForSession(session)
+        ?? [...quizEventsForSession(session)].reverse()[0]
+        ?? null
+    );
+}
+
+export function resolveCurrentLearningUnit(
+    units: readonly BusinessEtiquetteLearningUnit[],
+    event: QuizCardEvent | null,
+): BusinessEtiquetteLearningUnit | null {
+    if (!event) {
+        return units.find((unit) => unit.enabled) ?? units[0] ?? null;
+    }
+    const eventCapabilityKeys = new Set(event.payload.interaction.capability_keys ?? []);
+    const eventChapterOrders = new Set(event.payload.interaction.source_chapter_orders ?? []);
+    let bestUnit: BusinessEtiquetteLearningUnit | null = null;
+    let bestScore = 0;
+    for (const unit of units) {
+        const chapterMatches = unit.source_chapter_orders.filter((order) =>
+            eventChapterOrders.has(order),
+        ).length;
+        const capabilityMatches = unit.capability_keys.filter((key) =>
+            eventCapabilityKeys.has(key),
+        ).length;
+        const score = chapterMatches * 3 + capabilityMatches * 2 + (unit.enabled ? 1 : 0);
+        if (score > bestScore) {
+            bestScore = score;
+            bestUnit = unit;
+        }
+    }
+    return bestUnit;
 }
 
 function readConstraint(

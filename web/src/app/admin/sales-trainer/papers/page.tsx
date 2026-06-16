@@ -122,7 +122,7 @@ export default function NewcomerPapersPage() {
             header={(
                 <AdminPageHeader
                     title="商务技巧考卷管理"
-                    description="按考卷管理题目组合、分值和发布状态；题目内容来自题库管理。"
+                    description="按考卷管理题目组合、分值和发布状态；题目内容来自正式题目库。"
                     primaryAction={(
                         <Button asChild>
                             <Link href="/admin/sales-trainer/papers/new">

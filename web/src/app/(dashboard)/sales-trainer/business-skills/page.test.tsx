@@ -10,6 +10,7 @@ const {
     completeChapterMock,
     getArticleMock,
     getBusinessUnitsMock,
+    listQuizAttemptsMock,
     getUnitQuizMock,
     listPathsMock,
     listUnitsMock,
@@ -19,6 +20,7 @@ const {
     completeChapterMock: vi.fn(),
     getArticleMock: vi.fn(),
     getBusinessUnitsMock: vi.fn(),
+    listQuizAttemptsMock: vi.fn(),
     getUnitQuizMock: vi.fn(),
     listPathsMock: vi.fn(),
     listUnitsMock: vi.fn(),
@@ -57,6 +59,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.newcomerTraining,
                 completeModuleArticleChapter: completeChapterMock,
                 getBusinessEtiquetteLearningUnits: getBusinessUnitsMock,
+                listMyBusinessEtiquetteUnitQuizAttempts: listQuizAttemptsMock,
                 getBusinessEtiquetteUnitQuiz: getUnitQuizMock,
                 getModuleArticle: getArticleMock,
                 submitBusinessEtiquetteUnitQuizAttempt: submitUnitQuizAttemptMock,
@@ -292,7 +295,25 @@ function quizAttemptResponse() {
         }],
         weak_capability_keys: [],
         recommended_chapter_orders: [1],
-        answers: [],
+        answers: [{
+            question_id: "question-1",
+            question_type: "single_choice",
+            answer_payload: "A",
+            is_correct: true,
+            score: 10,
+            max_score: 10,
+            capability_keys: ["capability_1"],
+            question_snapshot: {
+                stem: "商务拜访即将迟到时，最合适的做法是什么？",
+                reference_answer: "A",
+                explanation: "提前说明并表达歉意，能给客户预期并保留信任。",
+            },
+            analysis: "提前说明并表达歉意，能给客户预期并保留信任。",
+            scoring_source: "rule_answer_key",
+            scoring_provider: null,
+            scoring_model: null,
+            scoring_latency_ms: null,
+        }],
         submitted_at: "2026-06-14T10:00:00Z",
     };
 }
@@ -300,6 +321,10 @@ function quizAttemptResponse() {
 describe("BusinessSkillsPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        Object.defineProperty(Element.prototype, "scrollIntoView", {
+            configurable: true,
+            value: vi.fn(),
+        });
         useSearchParamsMock.mockReturnValue(new URLSearchParams("unitId=business-unit"));
         listUnitsMock.mockResolvedValue({
             items: [{
@@ -316,6 +341,7 @@ describe("BusinessSkillsPage", () => {
         listPathsMock.mockResolvedValue(pathResponse());
         getBusinessUnitsMock.mockResolvedValue(learningUnitsResponse());
         getUnitQuizMock.mockResolvedValue(unitQuizResponse());
+        listQuizAttemptsMock.mockResolvedValue({ items: [], total: 0 });
         submitUnitQuizAttemptMock.mockResolvedValue(quizAttemptResponse());
         completeChapterMock.mockImplementation(async (_moduleKey, chapterId) => {
             const completed = chapterId === "chapter-2"
@@ -446,6 +472,12 @@ describe("BusinessSkillsPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
         expect(await screen.findByText("小单元测验")).toBeTruthy();
         expect(screen.getByText("商务拜访即将迟到时，最合适的做法是什么？")).toBeTruthy();
+        await waitFor(() => {
+            expect(listQuizAttemptsMock).toHaveBeenCalledWith(
+                "trust_foundation",
+                { limit: 20, offset: 0 },
+            );
+        });
 
         fireEvent.click(screen.getByLabelText("A. 提前说明并表达歉意"));
         fireEvent.click(screen.getByRole("button", { name: "提交小测" }));
@@ -461,8 +493,128 @@ describe("BusinessSkillsPage", () => {
                 },
             );
         });
-        expect(await screen.findByText("小测已达标")).toBeTruthy();
+        expect(await screen.findByText("本节诊断")).toBeTruthy();
+        expect(screen.getByText("可进入下一小单元")).toBeTruthy();
         expect(screen.getByText("100 分 · 基本掌握")).toBeTruthy();
+        expect(screen.getByText("当前查看：第 1 次（最新提交）")).toBeTruthy();
+        expect(screen.getByText(/第 1 次 · 已达标/)).toBeTruthy();
+        expect(screen.queryByText("商务拜访即将迟到时，最合适的做法是什么？")).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: /答题回看/ }));
+        expect(screen.getByText("商务拜访即将迟到时，最合适的做法是什么？")).toBeTruthy();
+        expect(screen.getByText("参考答案：A")).toBeTruthy();
+        expect(screen.getByText("规则判分 · 题库标准答案")).toBeTruthy();
+        expect(screen.getByText(/题目解析：/)).toBeTruthy();
+        expect(screen.getByText(/提前说明并表达歉意，能给客户预期并保留信任。/)).toBeTruthy();
+    });
+
+    it("shows AI scoring provenance for short-answer quiz review", async () => {
+        getBusinessUnitsMock.mockResolvedValueOnce(learningUnitsResponse(["chapter-1"]));
+        submitUnitQuizAttemptMock.mockResolvedValueOnce({
+            ...quizAttemptResponse(),
+            total_score: 3,
+            passed: false,
+            answers: [{
+                ...quizAttemptResponse().answers[0],
+                question_type: "short_answer",
+                answer_payload: "哈哈",
+                is_correct: false,
+                score: 3,
+                question_snapshot: {
+                    stem: "请简述商务拜访时需要注意的两个要点。",
+                    reference_answer: "保持尊重并清晰表达。",
+                    explanation: null,
+                },
+                analysis: "AI 判断该答案没有提供商务拜访的具体做法。",
+                scoring_source: "ai_llm",
+                scoring_provider: "deepseek",
+                scoring_model: "deepseek-chat",
+                scoring_latency_ms: 1280,
+            }],
+        });
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
+        expect(await screen.findByText("商务拜访即将迟到时，最合适的做法是什么？")).toBeTruthy();
+        fireEvent.click(screen.getByLabelText("A. 提前说明并表达歉意"));
+        fireEvent.click(screen.getByRole("button", { name: "提交小测" }));
+
+        expect(await screen.findByText("本节诊断")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: /答题回看/ }));
+        expect(screen.getByText("AI 评测 · deepseek-chat · 耗时 1.3 秒")).toBeTruthy();
+        expect(screen.getByText(/AI 解析：/)).toBeTruthy();
+        expect(screen.getByText(/AI 判断该答案没有提供商务拜访的具体做法/)).toBeTruthy();
+    });
+
+    it("clearly marks historical quiz attempts when reviewing an older result", async () => {
+        getBusinessUnitsMock.mockResolvedValueOnce(learningUnitsResponse(["chapter-1"]));
+        listQuizAttemptsMock.mockResolvedValueOnce({
+            items: [
+                {
+                    ...quizAttemptResponse(),
+                    attempt_id: "attempt-latest",
+                    total_score: 0,
+                    passed: false,
+                    submitted_at: "2026-06-14T11:00:00Z",
+                },
+                {
+                    ...quizAttemptResponse(),
+                    attempt_id: "attempt-older",
+                    submitted_at: "2026-06-14T10:00:00Z",
+                },
+            ],
+            total: 2,
+        });
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
+        expect(await screen.findByText(/第 1 次 · 已达标/)).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: /第 1 次 · 已达标/ }));
+
+        expect(screen.getByText("当前查看：第 1 次（历史记录）")).toBeTruthy();
+        expect(screen.getByText(/你正在查看历史小测记录，不是最新一次提交/)).toBeTruthy();
+    });
+
+    it("keeps pending quiz scoring from being shown as failed", async () => {
+        getBusinessUnitsMock.mockResolvedValueOnce(learningUnitsResponse(["chapter-1"]));
+        submitUnitQuizAttemptMock.mockResolvedValueOnce({
+            ...quizAttemptResponse(),
+            status: "submitted",
+            total_score: null,
+            passed: null,
+            capability_scores: [{
+                capability_key: "capability_1",
+                display_name: "能力点 1",
+                score: null,
+                max_score: 10,
+                normalized_score: null,
+                threshold: 70,
+                mastered: null,
+                mastery_level_key: null,
+                mastery_level_name: null,
+            }],
+            answers: [{
+                ...quizAttemptResponse().answers[0],
+                is_correct: null,
+                score: null,
+            }],
+        });
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
+        expect(await screen.findByText("商务拜访即将迟到时，最合适的做法是什么？")).toBeTruthy();
+        fireEvent.click(screen.getByLabelText("A. 提前说明并表达歉意"));
+        fireEvent.click(screen.getByRole("button", { name: "提交小测" }));
+
+        expect(await screen.findByText("等待评分结果")).toBeTruthy();
+        expect(screen.getByText("简答题或 AI 评分还在处理，先保留本次答题记录，不把它误判为未达标。")).toBeTruthy();
+        expect(screen.queryByText("小测未达标")).toBeNull();
     });
 
     it("keeps answers and shows a local error when unit quiz submission fails", async () => {
@@ -489,6 +641,24 @@ describe("BusinessSkillsPage", () => {
         expect(answer.checked).toBe(true);
         expect(screen.queryByText("小测已达标")).toBeNull();
         expect(screen.queryByText("商务礼仪训练内容暂不可用")).toBeNull();
+    });
+
+    it("shows the training-pack remediation message when unit quiz is blocked by release state", async () => {
+        getBusinessUnitsMock.mockResolvedValueOnce(learningUnitsResponse(["chapter-1"]));
+        getUnitQuizMock.mockRejectedValueOnce(new ApiRequestError({
+            status: 409,
+            errorCode: "[BUSINESS_ETIQUETTE_TRAINING_PACK_NOT_PUBLISHED]",
+            message: "training pack not published",
+        }));
+
+        render(<BusinessSkillsPage />);
+
+        expect(await screen.findByText("见客户前商务礼仪")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "开始小测" }));
+
+        expect(await screen.findByText("小测暂不可用")).toBeTruthy();
+        expect(screen.getByText(/商务礼仪训练包尚未发布/)).toBeTruthy();
+        expect(screen.queryByText(/当前绑定文章尚未发布/)).toBeNull();
     });
 
     it("shows an actionable remediation message when the article binding is missing", async () => {

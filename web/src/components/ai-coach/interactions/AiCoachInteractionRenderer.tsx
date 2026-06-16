@@ -87,6 +87,18 @@ function getTextValue(payload: AiCoachAnswerPayloadV1 | null): string {
     return payload.text ?? "";
 }
 
+function trainingCardHelper(interaction: AiCoachInteractionPublicV1): string {
+    switch (interaction.training_card_type ?? "scenario_judgment") {
+        case "expression_rewrite":
+            return "改写卡：把不专业表达改成更合适的商务表达。";
+        case "role_response":
+            return "角色回应卡：根据对方话术写出你的回应。";
+        case "scenario_judgment":
+        default:
+            return "场景判断卡：判断当前做法是否符合商务礼仪。";
+    }
+}
+
 export function AiCoachInteractionRenderer({
     interaction,
     value,
@@ -95,6 +107,7 @@ export function AiCoachInteractionRenderer({
     helperText = null,
     footer = null,
 }: AiCoachInteractionRendererProps) {
+    const resolvedHelperText = helperText ?? trainingCardHelper(interaction);
     switch (interaction.interaction_type) {
         case "single_choice": {
             const options = toSingleOptions(interaction.options);
@@ -105,7 +118,7 @@ export function AiCoachInteractionRenderer({
                     options={options}
                     value={current}
                     disabled={disabled}
-                    helperText={helperText}
+                    helperText={resolvedHelperText}
                     footer={footer}
                     onChange={(optionId) =>
                         onChange({
@@ -133,7 +146,7 @@ export function AiCoachInteractionRenderer({
                         "max_selected",
                     )}
                     disabled={disabled}
-                    helperText={helperText}
+                    helperText={resolvedHelperText}
                     footer={footer}
                     onChange={(optionIds) =>
                         onChange({
@@ -159,7 +172,7 @@ export function AiCoachInteractionRenderer({
                         "max_length",
                     )}
                     disabled={disabled}
-                    helperText={helperText}
+                    helperText={resolvedHelperText}
                     footer={footer}
                     onChange={(text) =>
                         onChange({

@@ -77,6 +77,20 @@ describe("server auth boundary", () => {
         expect(redirectMock).toHaveBeenCalledWith("/login");
     });
 
+    it("redirects to login instead of throwing a framework error when auth API is unreachable", async () => {
+        headersMock.mockResolvedValue(
+            new Headers({
+                cookie: "session=stale-cookie",
+            }),
+        );
+        vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+        const { requireServerSession } = await import("./server-auth");
+
+        await expect(requireServerSession()).rejects.toThrow("redirect:/login");
+        expect(redirectMock).toHaveBeenCalledWith("/login");
+    });
+
     it("redirects non-admin users away from admin routes", async () => {
         headersMock.mockResolvedValue(
             new Headers({

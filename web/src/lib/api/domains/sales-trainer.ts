@@ -1,4 +1,24 @@
 import type {
+    BusinessEtiquetteCapabilityActionRequest,
+    BusinessEtiquetteCapabilitySnapshotResponse,
+    BusinessEtiquetteCapabilitySnapshotSaveRequest,
+    BusinessEtiquetteImportRequest,
+    BusinessEtiquetteImportResponse,
+    BusinessEtiquetteQuestionDraft,
+    BusinessEtiquetteQuestionDraftApproveRequest,
+    BusinessEtiquetteQuestionDraftGenerateRequest,
+    BusinessEtiquetteQuestionDraftGenerateResponse,
+    BusinessEtiquetteQuestionDraftListResponse,
+    BusinessEtiquetteQuestionDraftRejectRequest,
+    BusinessEtiquetteQuestionDraftStatus,
+    BusinessEtiquetteQuestionDraftType,
+    BusinessEtiquetteQuestionDraftUpdateRequest,
+    BusinessEtiquetteReleaseImpactResponse,
+    BusinessEtiquetteReleasePublishRequest,
+    BusinessEtiquetteReleasePublishResponse,
+    BusinessEtiquetteRetrainingAssignmentRequest,
+    BusinessEtiquetteRetrainingAssignmentResponse,
+    BusinessEtiquetteUnitQuiz,
     SalesTrainerAdminCapabilities,
     SalesTrainerAudioScorePrompt,
     SalesTrainerAudioScorePromptCreateRequest,
@@ -359,6 +379,194 @@ export function createAdminSalesTrainerDomain({
                 `/admin/sales-trainer/materials/${encodeURIComponent(materialId)}/versions/upload`,
                 formData,
                 signal,
+            );
+        },
+
+        importBusinessEtiquetteMarkdown: async (
+            payload: BusinessEtiquetteImportRequest,
+            signal?: AbortSignal,
+        ) => {
+            const formData = new FormData();
+            if (payload.training_pack_key?.trim()) {
+                formData.append("training_pack_key", payload.training_pack_key.trim());
+            }
+            if (payload.allow_overwrite_draft !== undefined) {
+                formData.append("allow_overwrite_draft", String(payload.allow_overwrite_draft));
+            }
+            if (payload.reason?.trim()) {
+                formData.append("reason", payload.reason.trim());
+            }
+            formData.append("file", payload.file);
+            return upload<BusinessEtiquetteImportResponse>(
+                "/admin/newcomer-training/business-etiquette/imports",
+                formData,
+                signal,
+            );
+        },
+
+        getBusinessEtiquetteReleaseImpact: async (params?: {
+            training_pack_key?: string;
+            target_revision_id?: string;
+        }) => {
+            const query = buildQueryString({
+                training_pack_key: params?.training_pack_key,
+                target_revision_id: params?.target_revision_id,
+            });
+            return request<BusinessEtiquetteReleaseImpactResponse>(
+                `/admin/newcomer-training/business-etiquette/release-impact${query}`,
+            );
+        },
+
+        publishBusinessEtiquetteRelease: async (
+            payload: BusinessEtiquetteReleasePublishRequest,
+        ) => {
+            return request<BusinessEtiquetteReleasePublishResponse>(
+                "/admin/newcomer-training/business-etiquette/release",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        assignBusinessEtiquetteRetraining: async (
+            payload: BusinessEtiquetteRetrainingAssignmentRequest,
+        ) => {
+            return request<BusinessEtiquetteRetrainingAssignmentResponse>(
+                "/admin/newcomer-training/business-etiquette/retraining-assignments",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        getBusinessEtiquetteCapabilities: async (params?: { training_pack_key?: string }) => {
+            const query = buildQueryString({
+                training_pack_key: params?.training_pack_key,
+            });
+            return request<BusinessEtiquetteCapabilitySnapshotResponse>(
+                `/admin/newcomer-training/business-etiquette/capabilities${query}`,
+            );
+        },
+
+        saveBusinessEtiquetteCapabilities: async (
+            payload: BusinessEtiquetteCapabilitySnapshotSaveRequest,
+        ) => {
+            return request<BusinessEtiquetteCapabilitySnapshotResponse>(
+                "/admin/newcomer-training/business-etiquette/capabilities",
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        publishBusinessEtiquetteCapability: async (
+            capabilityKey: string,
+            payload: BusinessEtiquetteCapabilityActionRequest = {},
+        ) => {
+            return request<BusinessEtiquetteCapabilitySnapshotResponse>(
+                `/admin/newcomer-training/business-etiquette/capabilities/${encodeURIComponent(capabilityKey)}/publish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        archiveBusinessEtiquetteCapability: async (
+            capabilityKey: string,
+            payload: BusinessEtiquetteCapabilityActionRequest = {},
+        ) => {
+            return request<BusinessEtiquetteCapabilitySnapshotResponse>(
+                `/admin/newcomer-training/business-etiquette/capabilities/${encodeURIComponent(capabilityKey)}/archive`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        generateBusinessEtiquetteQuestionDrafts: async (
+            payload: BusinessEtiquetteQuestionDraftGenerateRequest,
+        ) => {
+            return request<BusinessEtiquetteQuestionDraftGenerateResponse>(
+                "/admin/newcomer-training/business-etiquette/question-drafts/generate",
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        listBusinessEtiquetteQuestionDrafts: async (params?: {
+            training_pack_key?: string;
+            chapter_order?: number;
+            question_type?: BusinessEtiquetteQuestionDraftType;
+            status?: BusinessEtiquetteQuestionDraftStatus;
+            capability_key?: string;
+            batch_id?: string;
+            limit?: number;
+            offset?: number;
+        }) => {
+            const query = buildQueryString({
+                training_pack_key: params?.training_pack_key,
+                chapter_order: params?.chapter_order,
+                question_type: params?.question_type,
+                status: params?.status,
+                capability_key: params?.capability_key,
+                batch_id: params?.batch_id,
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            return request<BusinessEtiquetteQuestionDraftListResponse>(
+                `/admin/newcomer-training/business-etiquette/question-drafts${query}`,
+            );
+        },
+
+        updateBusinessEtiquetteQuestionDraft: async (
+            draftId: string,
+            payload: BusinessEtiquetteQuestionDraftUpdateRequest,
+        ) => {
+            return request<BusinessEtiquetteQuestionDraft>(
+                `/admin/newcomer-training/business-etiquette/question-drafts/${encodeURIComponent(draftId)}`,
+                {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        approveBusinessEtiquetteQuestionDraft: async (
+            draftId: string,
+            payload: BusinessEtiquetteQuestionDraftApproveRequest,
+        ) => {
+            return request<BusinessEtiquetteQuestionDraft>(
+                `/admin/newcomer-training/business-etiquette/question-drafts/${encodeURIComponent(draftId)}/approve`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        rejectBusinessEtiquetteQuestionDraft: async (
+            draftId: string,
+            payload: BusinessEtiquetteQuestionDraftRejectRequest,
+        ) => {
+            return request<BusinessEtiquetteQuestionDraft>(
+                `/admin/newcomer-training/business-etiquette/question-drafts/${encodeURIComponent(draftId)}/reject`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+
+        getBusinessEtiquetteUnitQuizPreview: async (unitKey: string) => {
+            return request<BusinessEtiquetteUnitQuiz>(
+                `/admin/newcomer-training/business-etiquette/learning-units/${encodeURIComponent(unitKey)}/quiz-preview`,
             );
         },
 

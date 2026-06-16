@@ -22,7 +22,7 @@ export function PaperQuestionPicker({
                 <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">正在加载题目...</div>
             ) : questions.length === 0 ? (
                 <div className="rounded-2xl bg-amber-50 px-4 py-8 text-center text-sm text-amber-700">
-                    暂无可组卷题目，请先到题库管理发布题目。
+                    暂无可组卷题目，请先到正式题目库发布题目。
                 </div>
             ) : (
                 <div className="grid gap-3">

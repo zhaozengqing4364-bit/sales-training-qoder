@@ -1647,6 +1647,7 @@ class PromptTemplate(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
     prompt_type = Column(String(50), nullable=False)
+    business_purpose = Column(String(100), nullable=True)
     category = Column(String(100), nullable=False, default="common")
     template = Column(Text, nullable=False)
     variables = Column(JSON, nullable=True, default=list)
@@ -1662,6 +1663,7 @@ class PromptTemplate(Base):
 
     __table_args__ = (
         Index("idx_prompt_templates_type", "prompt_type"),
+        Index("idx_prompt_templates_business_purpose", "business_purpose"),
         Index("idx_prompt_templates_active", "is_active"),
         Index(
             "uq_prompt_templates_default_per_type",

@@ -308,6 +308,57 @@ describe("api.admin.newcomerTraining facade", () => {
         );
     });
 
+    it("loads learning content binding impact through the admin newcomer facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    learning_content_id: "article-1",
+                    active_bindings: [{
+                        source: "active_revision",
+                        path_key: "newcomer_training_path_v1",
+                        module_key: "business_skills",
+                        module_title: "商务技巧",
+                        revision_id: "path-revision-1",
+                        revision_no: 1,
+                        learner_effective: true,
+                        learning_units: [{
+                            unit_key: "trust-base",
+                            title: "职业信任底座",
+                            source_chapter_orders: [0],
+                            ai_coach_remediation_chapter_orders: [1],
+                            capability_keys: ["first_impression"],
+                            require_quiz: true,
+                            require_ai_coach: true,
+                        }],
+                        impacted_chapter_orders: [0, 1],
+                    }],
+                    working_bindings: [],
+                    has_active_binding: true,
+                    has_working_binding: false,
+                    is_bound_to_business_skills: true,
+                    can_archive: false,
+                    archive_block_reason: "该文章正在被已发布或待发布新人训练路径引用。",
+                    management_entries: {
+                        article_binding: "/admin/sales-trainer/articles",
+                        path_config: "/admin/sales-trainer/paths",
+                        question_drafts: "/admin/sales-trainer/questions/drafts",
+                    },
+                },
+            }),
+        });
+
+        const result = await api.admin.newcomerTraining.getLearningContentBindingImpact("article-1");
+
+        expect(result.can_archive).toBe(false);
+        expect(result.active_bindings[0]?.learning_units[0]?.title).toBe("职业信任底座");
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/admin/newcomer-training/learning-contents/article-1/binding-impact"),
+            expect.any(Object),
+        );
+    });
+
     it("manages newcomer path config revisions through the admin newcomer facade", async () => {
         fetchMock.mockResolvedValue({
             ok: true,

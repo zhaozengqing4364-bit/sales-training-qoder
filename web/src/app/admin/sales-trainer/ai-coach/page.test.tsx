@@ -77,7 +77,12 @@ const aiCoachConfig = {
     entry_resume_policy: "latest_active_or_new",
     generation_timeout_seconds: 30,
     coach_mode: "mixed_drill",
-    allowed_interaction_types: ["single_choice", "multiple_choice"],
+    allowed_interaction_types: ["single_choice", "multiple_choice", "short_answer"],
+    allowed_training_card_types: [
+        "scenario_judgment",
+        "expression_rewrite",
+        "role_response",
+    ],
     allowed_ui_event_types: [
         "quiz_card",
         "explanation_card",
@@ -114,7 +119,7 @@ const aiCoachConfig = {
     prompt_template_id: null,
     prompt_revision_id: null,
     prompt_contract_hash: null,
-    scoring_prompt_template_id: null,
+    scoring_prompt_template_id: "22222222-2222-2222-2222-222222222222",
     scoring_prompt_revision_id: null,
     scoring_contract_hash: null,
     output_schema_version: "ai_coach_interaction_v1",
@@ -147,6 +152,10 @@ describe("AdminAiCoachConfigPage", () => {
 
         expect(await screen.findByRole("heading", { name: "AI 教练配置" })).toBeTruthy();
         expect(screen.getByText("主动教练闭环")).toBeTruthy();
+        expect(screen.getByText("allowed_training_card_types")).toBeTruthy();
+        expect((screen.getByLabelText(/场景判断卡/) as HTMLInputElement).checked).toBe(
+            true,
+        );
         expect((screen.getByLabelText(/启用主动教练/) as HTMLInputElement).checked).toBe(
             true,
         );
@@ -206,6 +215,11 @@ describe("AdminAiCoachConfigPage", () => {
                     session_start_behavior: "plan_and_first_card",
                     auto_advance_enabled: true,
                     streaming_enabled: true,
+                    allowed_training_card_types: [
+                        "scenario_judgment",
+                        "expression_rewrite",
+                        "role_response",
+                    ],
                     entry_resume_policy: "latest_active_or_new",
                     generation_timeout_seconds: 30,
                     max_auto_steps_per_session: 5,

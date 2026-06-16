@@ -8,14 +8,21 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PromptTemplate, User
-from curriculum_practice.models import LearningContent, QuestionCategory, QuestionItem
+from curriculum_practice.models import (
+    LearningChapter,
+    LearningContent,
+    QuestionCategory,
+    QuestionItem,
+)
 from sales_trainer.models import (
     SalesTrainerExamPaper,
     SalesTrainerUnit,
     SalesTrainerUnitQuestion,
 )
 from sales_trainer.schemas import NewcomerPathConfigPayload, NewcomerPathModuleConfig
-from sales_trainer.services.asset_revision_service import SalesTrainerAssetRevisionService
+from sales_trainer.services.asset_revision_service import (
+    SalesTrainerAssetRevisionService,
+)
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
     NEWCOMER_PATH_RESOURCE_TYPE,
@@ -90,6 +97,34 @@ async def test_seed_newcomer_training_path_is_idempotent(
         .where(LearningContent.source == "seed_newcomer_training_path")
     )
     assert content_count == 1
+    content = (
+        await test_db.execute(
+            select(LearningContent).where(
+                LearningContent.source == "seed_newcomer_training_path"
+            )
+        )
+    ).scalars().one()
+    chapter_count = await test_db.scalar(
+        select(func.count())
+        .select_from(LearningChapter)
+        .where(LearningChapter.learning_content_id == content.learning_content_id)
+    )
+    assert chapter_count == 8
+    active_training_pack = await SalesTrainerAssetRevisionService(
+        test_db
+    ).active_revision(
+        resource_type=seed_module.BUSINESS_ETIQUETTE_RESOURCE_TYPE,
+        logical_id=seed_module.DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
+    )
+    assert active_training_pack is not None
+    training_pack_payload = active_training_pack.payload_json
+    assert training_pack_payload["learning_content_id"] == str(
+        content.learning_content_id
+    )
+    assert training_pack_payload["learning_content_status"] == "published"
+    assert training_pack_payload["original_chapter_count"] == 8
+    assert len(training_pack_payload["capability_snapshot"]["capabilities"]) == 8
+    assert len(training_pack_payload["capability_snapshot"]["chapter_bindings"]) == 8
 
     question_count = await test_db.scalar(
         select(func.count())
@@ -97,6 +132,15 @@ async def test_seed_newcomer_training_path_is_idempotent(
         .where(QuestionItem.usage_scope == "sales_trainer")
     )
     assert question_count == 4
+    seeded_questions = (
+        await test_db.execute(
+            select(QuestionItem).where(QuestionItem.usage_scope == "sales_trainer")
+        )
+    ).scalars().all()
+    assert any(
+        "respect_boundaries" in list(question.scoring_dimensions or [])
+        for question in seeded_questions
+    )
 
     prompt_count = await test_db.scalar(
         select(func.count())
@@ -104,6 +148,12 @@ async def test_seed_newcomer_training_path_is_idempotent(
         .where(PromptTemplate.category == seed_module.AI_COACH_PROMPT_CATEGORY)
     )
     assert prompt_count == 1
+    path_service = SalesTrainerPathConfigService(test_db)
+    current_path = await path_service.get_config()
+    business_module = _business_module(current_path["path"])
+    assert len(business_module.learning_units) == 7
+    assert business_module.learning_units[0].unit_key == "trust_foundation"
+    assert business_module.learning_units[-1].source_chapter_orders == [8]
 
 
 @pytest.mark.asyncio
@@ -131,13 +181,15 @@ async def test_seed_newcomer_training_path_flushes_business_unit_before_paper(
     assert ai_coach["allowed_interaction_types"] == ["single_choice", "multiple_choice"]
     assert ai_coach["proactive_coaching_enabled"] is True
     assert ai_coach["session_start_behavior"] == "plan_and_first_card"
-    assert ai_coach["auto_advance_enabled"] is True
+    assert ai_coach["auto_advance_enabled"] is False
+    assert ai_coach["max_auto_steps_per_session"] == 1
     assert "continue_drill" in ai_coach["allowed_next_actions"]
     assert ai_coach["prompt_template_id"]
     prompt = await test_db.get(PromptTemplate, ai_coach["prompt_template_id"])
     assert prompt is not None
     assert prompt.category == seed_module.AI_COACH_PROMPT_CATEGORY
     assert prompt.prompt_type == "stage"
+    assert prompt.business_purpose == seed_module.AI_COACH_PROMPT_PURPOSE
 
 
 @pytest.mark.asyncio
@@ -178,6 +230,108 @@ async def test_seed_newcomer_training_path_syncs_active_ai_coach_prompt(
     after_business = _business_module(after["path"])
     assert after_business.ai_coach is not None
     assert after_business.ai_coach.prompt_template_id
+    assert after["active_revision_no"] > stale_revision.revision.revision_no
+
+
+@pytest.mark.asyncio
+async def test_seed_newcomer_training_path_backfills_business_learning_units(
+    test_db: AsyncSession,
+) -> None:
+    seed_module = _load_seed_module()
+
+    await seed_module.seed(test_db)
+    path_service = SalesTrainerPathConfigService(test_db)
+    current = await path_service.get_config()
+    missing_units_payload = _path_payload_without_business_learning_units(
+        current["path"]
+    )
+    owner = (
+        await test_db.execute(
+            select(User).where(User.email == seed_module.OWNER_EMAIL)
+        )
+    ).scalars().one()
+    stale_revision = await SalesTrainerAssetRevisionService(
+        test_db
+    ).create_published_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        payload=missing_units_payload.model_dump(mode="json"),
+        actor=owner,
+        change_class="semantic",
+        reason="test missing business etiquette learning units",
+    )
+    await test_db.commit()
+
+    before = await path_service.get_config()
+    before_business = _business_module(before["path"])
+    assert before_business.learning_units == []
+
+    await seed_module.seed(test_db)
+
+    after = await path_service.get_config()
+    after_business = _business_module(after["path"])
+    assert len(after_business.learning_units) == 7
+    assert after_business.learning_units[0].unit_key == "trust_foundation"
+    assert after_business.learning_units[-1].unit_key == "integration_repair"
+    assert after["active_revision_no"] > stale_revision.revision.revision_no
+
+
+@pytest.mark.asyncio
+async def test_seed_newcomer_training_path_rebinds_article_without_chapters(
+    test_db: AsyncSession,
+) -> None:
+    seed_module = _load_seed_module()
+
+    await seed_module.seed(test_db)
+    path_service = SalesTrainerPathConfigService(test_db)
+    current = await path_service.get_config()
+    empty_content = LearningContent(
+        learning_content_id="business-etiquette-empty-content",
+        title="空商务礼仪文章",
+        summary="已发布但没有章节。",
+        owner="test",
+        source="test.empty_business_etiquette",
+        status="published",
+    )
+    test_db.add(empty_content)
+    await test_db.flush()
+    broken_payload = _path_payload_with_business_article(
+        current["path"],
+        learning_content_id=empty_content.learning_content_id,
+    )
+    owner = (
+        await test_db.execute(
+            select(User).where(User.email == seed_module.OWNER_EMAIL)
+        )
+    ).scalars().one()
+    stale_revision = await SalesTrainerAssetRevisionService(
+        test_db
+    ).create_published_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+        payload=broken_payload.model_dump(mode="json"),
+        actor=owner,
+        change_class="binding",
+        reason="test empty business etiquette article binding",
+    )
+    await test_db.commit()
+
+    before = await path_service.get_config()
+    before_business = _business_module(before["path"])
+    assert before_business.learning_content_id == empty_content.learning_content_id
+
+    await seed_module.seed(test_db)
+
+    seed_content = (
+        await test_db.execute(
+            select(LearningContent).where(
+                LearningContent.source == "seed_newcomer_training_path"
+            )
+        )
+    ).scalars().one()
+    after = await path_service.get_config()
+    after_business = _business_module(after["path"])
+    assert after_business.learning_content_id == seed_content.learning_content_id
     assert after["active_revision_no"] > stale_revision.revision.revision_no
 
 
@@ -264,6 +418,48 @@ def _path_payload_with_stale_ai_coach_prompt(
             ai_coach["enabled"] = True
             ai_coach["prompt_template_id"] = None
             data["ai_coach"] = ai_coach
+        modules.append(NewcomerPathModuleConfig.model_validate(data))
+    return NewcomerPathConfigPayload(
+        path_key=payload.path_key,
+        title=payload.title,
+        goal_title=payload.goal_title,
+        description=payload.description,
+        enabled=payload.enabled,
+        modules=modules,
+    )
+
+
+def _path_payload_without_business_learning_units(
+    raw_path: dict[str, object],
+) -> NewcomerPathConfigPayload:
+    payload = NewcomerPathConfigPayload.model_validate(raw_path)
+    modules: list[NewcomerPathModuleConfig] = []
+    for module in payload.modules:
+        data = module.model_dump(mode="json")
+        if module.module_key == "business_skills":
+            data["learning_units"] = []
+        modules.append(NewcomerPathModuleConfig.model_validate(data))
+    return NewcomerPathConfigPayload(
+        path_key=payload.path_key,
+        title=payload.title,
+        goal_title=payload.goal_title,
+        description=payload.description,
+        enabled=payload.enabled,
+        modules=modules,
+    )
+
+
+def _path_payload_with_business_article(
+    raw_path: dict[str, object],
+    *,
+    learning_content_id: str,
+) -> NewcomerPathConfigPayload:
+    payload = NewcomerPathConfigPayload.model_validate(raw_path)
+    modules: list[NewcomerPathModuleConfig] = []
+    for module in payload.modules:
+        data = module.model_dump(mode="json")
+        if module.module_key == "business_skills":
+            data["learning_content_id"] = learning_content_id
         modules.append(NewcomerPathModuleConfig.model_validate(data))
     return NewcomerPathConfigPayload(
         path_key=payload.path_key,

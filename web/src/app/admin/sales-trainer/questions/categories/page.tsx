@@ -14,27 +14,49 @@ import type { SalesTrainerQuestionCategory } from "@/lib/api/types";
 
 export default function SalesTrainerQuestionCategoriesPage() {
     const pathname = usePathname();
-    const toast = useToast();
+    const { error: showToastError, success: showToastSuccess } = useToast();
     const [categories, setCategories] = useState<SalesTrainerQuestionCategory[]>([]);
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const fetchCategories = useCallback(async () => {
+        return (await api.admin.salesTrainer.listQuestionCategories()).items;
+    }, []);
+
+    useEffect(() => {
+        let isCurrent = true;
+
+        void fetchCategories()
+            .then((nextCategories) => {
+                if (!isCurrent) return;
+                setCategories(nextCategories);
+            })
+            .catch((loadError) => {
+                if (!isCurrent) return;
+                showToastError(getApiErrorMessage(loadError));
+            })
+            .finally(() => {
+                if (!isCurrent) return;
+                setIsLoading(false);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [fetchCategories, showToastError]);
+
     const loadCategories = useCallback(async () => {
         setIsLoading(true);
         try {
-            setCategories((await api.admin.salesTrainer.listQuestionCategories()).items);
+            setCategories(await fetchCategories());
         } catch (loadError) {
-            toast.error(getApiErrorMessage(loadError));
+            showToastError(getApiErrorMessage(loadError));
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
-
-    useEffect(() => {
-        void loadCategories();
-    }, [loadCategories]);
+    }, [fetchCategories, showToastError]);
 
     async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -47,10 +69,10 @@ export default function SalesTrainerQuestionCategoriesPage() {
             });
             setName("");
             setDescription("");
-            toast.success("分类已创建");
+            showToastSuccess("分类已创建");
             await loadCategories();
         } catch (submitError) {
-            toast.error(getApiErrorMessage(submitError));
+            showToastError(getApiErrorMessage(submitError));
         } finally {
             setIsSubmitting(false);
         }
@@ -59,12 +81,15 @@ export default function SalesTrainerQuestionCategoriesPage() {
     return (
         <AdminFormShell
             backHref="/admin/sales-trainer/questions"
-            title="题库分类"
-            description="分类只影响新人训练路径题库，不影响平台通用题库。"
+            title="题目分类"
+            description="分类只是正式题目的管理维度；学员小测按已发布题目和能力点抽题，不按分类抽题。"
             actions={<SalesTrainerAdminModuleNav currentPath={pathname} />}
         >
             <GlassCard className="space-y-4 p-6">
                 <h2 className="text-lg font-bold text-slate-900">新建分类</h2>
+                <p className="text-sm leading-6 text-slate-500">
+                    分类用于运营筛选、审核入库和后续维护，不是学员端的组卷规则。要检查小测会抽到哪些题，请使用“小测预览”。
+                </p>
                 <form className="grid gap-3 md:grid-cols-[1fr_2fr_auto]" onSubmit={(event) => void handleCreate(event)}>
                     <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="分类名称" disabled={isSubmitting} />
                     <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="分类说明" disabled={isSubmitting} />

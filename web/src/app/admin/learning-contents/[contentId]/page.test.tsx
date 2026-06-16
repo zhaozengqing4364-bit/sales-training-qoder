@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LearningChapter, LearningContent } from "@/lib/api/types";
+import type {
+    LearningChapter,
+    LearningContent,
+    LearningContentBindingImpactResponse,
+    LearningContentRevisionState,
+} from "@/lib/api/types";
 
 const {
     getMock,
@@ -12,7 +17,7 @@ const {
     reorderChaptersMock,
     publishMock,
     archiveMock,
-    listCategoriesMock,
+    bindingImpactMock,
 } = vi.hoisted(() => ({
     getMock: vi.fn(),
     updateMock: vi.fn(),
@@ -22,7 +27,7 @@ const {
     reorderChaptersMock: vi.fn(),
     publishMock: vi.fn(),
     archiveMock: vi.fn(),
-    listCategoriesMock: vi.fn(),
+    bindingImpactMock: vi.fn(),
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -78,8 +83,12 @@ vi.mock("@/lib/api/client", async () => {
                 publish: publishMock,
                 archive: archiveMock,
             },
-            testBank: {
-                listCategories: listCategoriesMock,
+            admin: {
+                ...actual.api.admin,
+                newcomerTraining: {
+                    ...actual.api.admin.newcomerTraining,
+                    getLearningContentBindingImpact: bindingImpactMock,
+                },
             },
         },
     };
@@ -105,6 +114,20 @@ function makeChapter(overrides: Partial<LearningChapter> = {}): LearningChapter 
     };
 }
 
+function makeRevisionState(overrides: Partial<LearningContentRevisionState> = {}): LearningContentRevisionState {
+    return {
+        active_revision_id: null,
+        active_revision_no: null,
+        working_revision_id: null,
+        working_revision_no: null,
+        has_unpublished_revision: false,
+        edit_target: "draft_record",
+        publish_label: "发布",
+        save_result_copy: "已保存草稿。",
+        ...overrides,
+    };
+}
+
 function makeContent(overrides: Partial<LearningContent> = {}): LearningContent {
     return {
         learning_content_id: MOCK_CONTENT_ID,
@@ -123,15 +146,41 @@ function makeContent(overrides: Partial<LearningContent> = {}): LearningContent 
             makeChapter(),
             makeChapter({ chapter_id: "chapter-2", title: "第二章", content: "第二章内容", order_index: 1 }),
         ],
+        revision_state: makeRevisionState(),
         ...overrides,
     };
+}
+
+function makeBindingImpact(
+    overrides: Partial<LearningContentBindingImpactResponse> = {},
+): LearningContentBindingImpactResponse {
+    return {
+        learning_content_id: MOCK_CONTENT_ID,
+        active_bindings: [],
+        working_bindings: [],
+        has_active_binding: false,
+        has_working_binding: false,
+        is_bound_to_business_skills: false,
+        can_archive: true,
+        archive_block_reason: null,
+        management_entries: {
+            article_binding: "/admin/sales-trainer/articles",
+            path_config: "/admin/sales-trainer/paths",
+            question_drafts: "/admin/sales-trainer/questions/drafts",
+        },
+        ...overrides,
+    };
+}
+
+function expectTextVisible(text: string | RegExp) {
+    expect(screen.getAllByText(text).length).toBeGreaterThan(0);
 }
 
 describe("AdminLearningContentDetailPage", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         getMock.mockResolvedValue(makeContent());
-        listCategoriesMock.mockResolvedValue({ items: [], total: 0 });
+        bindingImpactMock.mockResolvedValue(makeBindingImpact());
     });
 
     it("renders loading state initially", async () => {
@@ -169,8 +218,41 @@ describe("AdminLearningContentDetailPage", () => {
             expect((screen.getByLabelText("来源") as HTMLSelectElement).value).toBe("manual");
         });
 
-        expect(screen.getByText(/草稿/)).toBeTruthy();
+        expect(screen.getAllByText("草稿").length).toBeGreaterThan(0);
         expect(screen.getByText(/v1/)).toBeTruthy();
+    });
+
+    it("shows revision and binding governance status above the editor", async () => {
+        getMock.mockResolvedValue(
+            makeContent({
+                status: "published",
+                revision_state: makeRevisionState({
+                    active_revision_id: "active-revision-1",
+                    active_revision_no: 1,
+                    working_revision_id: "working-revision-2",
+                    working_revision_no: 2,
+                    has_unpublished_revision: true,
+                    edit_target: "working_revision",
+                    publish_label: "发布修订",
+                    save_result_copy: "已保存为待发布修订，发布修订后才会影响学员端。",
+                }),
+            }),
+        );
+        bindingImpactMock.mockResolvedValue(
+            makeBindingImpact({
+                has_active_binding: true,
+                is_bound_to_business_skills: true,
+            }),
+        );
+
+        render(<AdminLearningContentDetailPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/v1 · active-/)).toBeTruthy();
+            expect(screen.getByText(/v2 · working/)).toBeTruthy();
+            expect(screen.getByText("学员端正在使用")).toBeTruthy();
+            expect(screen.getAllByText("待发布修订").length).toBeGreaterThan(0);
+        });
     });
 
     it("renders chapters list", async () => {
@@ -185,9 +267,71 @@ describe("AdminLearningContentDetailPage", () => {
         render(<AdminLearningContentDetailPage />);
 
         await waitFor(() => {
-            expect(screen.getByText("第一章")).toBeTruthy();
-            expect(screen.getByText("第二章")).toBeTruthy();
+            expectTextVisible("第一章");
+            expectTextVisible("第二章");
         });
+    });
+
+    it("renders one business etiquette draft workspace for the selected chapter", async () => {
+        getMock.mockResolvedValue(
+            makeContent({
+                chapters: [
+                    makeChapter({ chapter_id: "c1", title: "第一章", order_index: 0 }),
+                    makeChapter({ chapter_id: "c2", title: "第二章", order_index: 1 }),
+                ],
+            }),
+        );
+
+        render(<AdminLearningContentDetailPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByRole("button", { name: /生成商务礼仪题目草稿/ })).toHaveLength(1);
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /第二章/ }));
+
+        expect(screen.getAllByRole("button", { name: /生成商务礼仪题目草稿/ })).toHaveLength(1);
+        expectTextVisible(/当前章节 · 第 2 章/);
+    });
+
+    it("renders markdown preview for chapter content", async () => {
+        getMock.mockResolvedValue(
+            makeContent({
+                chapters: [
+                    makeChapter({
+                        chapter_id: "c1",
+                        title: "Markdown 章",
+                        content: "## Markdown 标题\n\n- 第一条\n- 第二条",
+                        order_index: 0,
+                    }),
+                ],
+            }),
+        );
+
+        render(<AdminLearningContentDetailPage />);
+
+        await waitFor(() => {
+            expect(screen.getByRole("heading", { name: "Markdown 标题" })).toBeTruthy();
+            expect(screen.getByText("第一条")).toBeTruthy();
+        });
+    });
+
+    it("disables archive when the content is bound to an active or working newcomer path", async () => {
+        const blockReason = "该文章正在被已发布或待发布新人训练路径引用，请先去文章绑定/路径配置替换并发布路径配置后再归档。";
+        getMock.mockResolvedValue(makeContent({ status: "published" }));
+        bindingImpactMock.mockResolvedValue(
+            makeBindingImpact({
+                has_active_binding: true,
+                can_archive: false,
+                archive_block_reason: blockReason,
+            }),
+        );
+
+        render(<AdminLearningContentDetailPage />);
+
+        const archiveButton = await screen.findByRole("button", { name: "归档" });
+        expect((archiveButton as HTMLButtonElement).disabled).toBe(true);
+        expect(screen.getAllByText(blockReason).length).toBeGreaterThan(0);
     });
 
     it("shows empty state when no chapters", async () => {
@@ -283,7 +427,7 @@ describe("AdminLearningContentDetailPage", () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText("新章节")).toBeTruthy();
+            expectTextVisible("新章节");
         });
     });
 
@@ -294,7 +438,7 @@ describe("AdminLearningContentDetailPage", () => {
         render(<AdminLearningContentDetailPage />);
 
         await waitFor(() => {
-            expect(screen.getByText("第一章")).toBeTruthy();
+            expectTextVisible("第一章");
         });
 
         // Enter edit mode
@@ -309,7 +453,7 @@ describe("AdminLearningContentDetailPage", () => {
 
         await waitFor(() => {
             // Should be back to view mode
-            expect(screen.getByText("第一章")).toBeTruthy();
+            expectTextVisible("第一章");
         });
     });
 
@@ -321,7 +465,7 @@ describe("AdminLearningContentDetailPage", () => {
         render(<AdminLearningContentDetailPage />);
 
         await waitFor(() => {
-            expect(screen.getByText("第一章")).toBeTruthy();
+            expectTextVisible("第一章");
         });
 
         // Start editing chapter 1
@@ -358,7 +502,7 @@ describe("AdminLearningContentDetailPage", () => {
         render(<AdminLearningContentDetailPage />);
 
         await waitFor(() => {
-            expect(screen.getByText("第一章")).toBeTruthy();
+            expectTextVisible("第一章");
         });
 
         // Enter edit mode
@@ -394,7 +538,7 @@ describe("AdminLearningContentDetailPage", () => {
         render(<AdminLearningContentDetailPage />);
 
         await waitFor(() => {
-            expect(screen.getByText("第一章")).toBeTruthy();
+            expectTextVisible("第一章");
         });
 
         fireEvent.click(screen.getAllByTitle("删除")[0]);
@@ -420,8 +564,8 @@ describe("AdminLearningContentDetailPage", () => {
         render(<AdminLearningContentDetailPage />);
 
         await waitFor(() => {
-            expect(screen.getByText("第一章")).toBeTruthy();
-            expect(screen.getByText("第二章")).toBeTruthy();
+            expectTextVisible("第一章");
+            expectTextVisible("第二章");
         });
 
         fireEvent.click(screen.getAllByTitle("上移")[1]);
@@ -441,10 +585,64 @@ describe("AdminLearningContentDetailPage", () => {
         render(<AdminLearningContentDetailPage />);
 
         await waitFor(() => {
-            expect(screen.getByText("第一章")).toBeTruthy();
+            expectTextVisible("第一章");
         });
 
         fireEvent.click(screen.getAllByTitle("下移")[0]);
+
+        await waitFor(() => {
+            expect(reorderChaptersMock).toHaveBeenCalledWith(MOCK_CONTENT_ID, ["c2", "c1"]);
+        });
+    });
+
+    it("requires impact confirmation before reordering bound chapters", async () => {
+        const c1 = makeChapter({ chapter_id: "c1", title: "第一章", order_index: 0 });
+        const c2 = makeChapter({ chapter_id: "c2", title: "第二章", order_index: 1 });
+        getMock
+            .mockResolvedValueOnce(makeContent({ chapters: [c1, c2] }))
+            .mockResolvedValueOnce(makeContent({ chapters: [c2, c1] }));
+        bindingImpactMock.mockResolvedValue(
+            makeBindingImpact({
+                has_active_binding: true,
+                active_bindings: [
+                    {
+                        source: "active_revision",
+                        path_key: "default_newcomer_path",
+                        module_key: "business_skills",
+                        module_title: "商务技巧",
+                        revision_id: "path-revision-1",
+                        revision_no: 1,
+                        learner_effective: true,
+                        impacted_chapter_orders: [0],
+                        learning_units: [
+                            {
+                                unit_key: "trust-base",
+                                title: "职业信任底座",
+                                source_chapter_orders: [0],
+                                ai_coach_remediation_chapter_orders: [1],
+                                capability_keys: ["first_impression"],
+                                require_quiz: true,
+                                require_ai_coach: true,
+                            },
+                        ],
+                    },
+                ],
+            }),
+        );
+
+        render(<AdminLearningContentDetailPage />);
+
+        await waitFor(() => {
+            expectTextVisible("第一章");
+            expectTextVisible("第二章");
+        });
+
+        fireEvent.click(screen.getAllByTitle("下移")[0]);
+        expect(reorderChaptersMock).not.toHaveBeenCalled();
+        expect(screen.getByText(/职业信任底座/)).toBeTruthy();
+        expect(screen.getByText(/当前绑定按章节序号工作/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "确认调整" }));
 
         await waitFor(() => {
             expect(reorderChaptersMock).toHaveBeenCalledWith(MOCK_CONTENT_ID, ["c2", "c1"]);
@@ -518,7 +716,49 @@ describe("AdminLearningContentDetailPage", () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/已发布/)).toBeTruthy();
+            expectTextVisible(/已发布/);
+        });
+    });
+
+    it("allows publishing an unpublished working revision for published content", async () => {
+        const publishedWithWorkingRevision = makeContent({
+            status: "published",
+            revision_state: makeRevisionState({
+                active_revision_id: "active-revision-1",
+                active_revision_no: 1,
+                working_revision_id: "working-revision-2",
+                working_revision_no: 2,
+                has_unpublished_revision: true,
+                edit_target: "working_revision",
+                publish_label: "发布修订",
+                save_result_copy: "已保存为待发布修订，发布修订后才会影响学员端。",
+            }),
+        });
+        getMock.mockResolvedValueOnce(publishedWithWorkingRevision).mockResolvedValueOnce(
+            makeContent({
+                status: "published",
+                revision_state: makeRevisionState({
+                    active_revision_id: "working-revision-2",
+                    active_revision_no: 2,
+                    has_unpublished_revision: false,
+                    edit_target: "working_revision",
+                    publish_label: "当前无待发布修订",
+                    save_result_copy: "已保存为待发布修订，发布修订后才会影响学员端。",
+                }),
+            }),
+        );
+        publishMock.mockResolvedValue(publishedWithWorkingRevision);
+
+        render(<AdminLearningContentDetailPage />);
+
+        const publishRevisionButton = await screen.findByRole("button", { name: "发布修订" });
+        expect((publishRevisionButton as HTMLButtonElement).disabled).toBe(false);
+
+        fireEvent.click(publishRevisionButton);
+        fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
+
+        await waitFor(() => {
+            expect(publishMock).toHaveBeenCalledWith(MOCK_CONTENT_ID);
         });
     });
 
@@ -543,7 +783,7 @@ describe("AdminLearningContentDetailPage", () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/已归档/)).toBeTruthy();
+            expectTextVisible(/已归档/);
         });
     });
 });

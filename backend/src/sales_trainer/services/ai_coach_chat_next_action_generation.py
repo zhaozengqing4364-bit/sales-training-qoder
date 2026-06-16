@@ -22,6 +22,11 @@ from sales_trainer.services.ai_coach_chat_generation import AiCoachChatGenerator
 from sales_trainer.services.ai_coach_chat_generation_parser import (
     AiCoachChatResponseParser,
 )
+from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AiCoachGenerationDeltaHandler,
+    emit_streamed_response,
+    prompt_for_attempt,
+)
 from sales_trainer.services.ai_coach_chat_next_action import AiCoachNextActionDecision
 from sales_trainer.services.ai_coach_session_service import AiCoachSessionService
 from sales_trainer.services.prompt_template_revision_resolver import (
@@ -48,6 +53,7 @@ class AiCoachChatNextActionGenerator:
         answer_payload: AiCoachAnswerPayloadV1,
         answered_event_payload: dict[str, Any],
         history: list[SalesTrainerAiCoachChatMessage],
+        on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> AiCoachChatResponseInternalV1:
         contract = await self._compile_contract(
             session=session,
@@ -60,12 +66,25 @@ class AiCoachChatNextActionGenerator:
             history=history,
         )
         max_attempts = config.retry_policy.max_retries + 1
+        if on_generation_delta is not None:
+            streamed = await emit_streamed_response(
+                llm=LLMService(),
+                parser=self._parser,
+                contract=contract,
+                config=config,
+                session_id=str(session.session_id),
+                max_attempts=max_attempts,
+                failure_message="AI 教练生成下一步失败，请稍后重试。",
+                on_generation_delta=on_generation_delta,
+                validate_response=lambda response: self._validate_response_for_action(
+                    response,
+                    decision.action,
+                ),
+            )
+            return streamed.response
         last_error: AiCoachChatGenerationError | None = None
         for attempt in range(max_attempts):
-            prompt = AiCoachChatGenerator._prompt_for_attempt(
-                contract.rendered_prompt,
-                last_error,
-            )
+            prompt = prompt_for_attempt(contract.rendered_prompt, last_error)
             result = await LLMService().generate(
                 prompt=prompt,
                 session_id=session.session_id,

@@ -22,6 +22,10 @@ function unwrapApiPayload(payload: unknown): unknown {
     return payload;
 }
 
+function isFetchNetworkFailure(error: unknown): boolean {
+    return error instanceof TypeError && error.message === "fetch failed";
+}
+
 export async function getServerSessionUser(): Promise<CurrentUser | null> {
     const requestHeaders = await headers();
     const cookieHeader = requestHeaders.get("cookie");
@@ -35,16 +39,25 @@ export async function getServerSessionUser(): Promise<CurrentUser | null> {
         return null;
     }
 
-    const response = await fetch(`${SERVER_API_BASE_URL}/users/me`, {
-        method: "GET",
-        cache: "no-store",
-        credentials: "include",
-        headers: {
-            cookie: cookieHeader,
-            Accept: "application/json",
-            ...traceHeaders,
-        },
-    });
+    let response: Response;
+
+    try {
+        response = await fetch(`${SERVER_API_BASE_URL}/users/me`, {
+            method: "GET",
+            cache: "no-store",
+            credentials: "include",
+            headers: {
+                cookie: cookieHeader,
+                Accept: "application/json",
+                ...traceHeaders,
+            },
+        });
+    } catch (error) {
+        if (isFetchNetworkFailure(error)) {
+            return null;
+        }
+        throw error;
+    }
 
     if (response.status === 401 || response.status === 403) {
         return null;

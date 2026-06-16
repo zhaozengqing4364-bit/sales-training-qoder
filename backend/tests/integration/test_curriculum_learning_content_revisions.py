@@ -117,6 +117,19 @@ async def test_should_update_published_learning_content_as_future_revision(
         logical_id=content_id,
         status="working",
     )
+    update_revision_state = update_response.json()["data"]["revision_state"]
+    assert update_revision_state["active_revision_id"] == str(initial_revision.revision_id)
+    assert update_revision_state["active_revision_no"] == initial_revision.revision_no
+    assert update_revision_state["working_revision_id"] == str(
+        working_revision.revision_id
+    )
+    assert update_revision_state["working_revision_no"] == working_revision.revision_no
+    assert update_revision_state["has_unpublished_revision"] is True
+    assert update_revision_state["edit_target"] == "working_revision"
+    assert update_revision_state["publish_label"] == "发布修订"
+    assert update_revision_state["save_result_copy"] == (
+        "已保存为待发布修订，发布修订后才会影响学员端。"
+    )
     assert working_revision.source_revision_id == initial_revision.revision_id
     assert working_revision.change_class == "semantic"
     assert working_revision.payload_json["summary"] == "新说明，只给后续学习使用"
@@ -125,6 +138,12 @@ async def test_should_update_published_learning_content_as_future_revision(
         headers=admin_headers,
     )
     assert read_before_publish.json()["data"]["summary"] == "旧说明"
+    assert (
+        read_before_publish.json()["data"]["revision_state"][
+            "has_unpublished_revision"
+        ]
+        is True
+    )
 
     republish_response = await async_client.post(
         f"/api/v1/curriculum/learning-contents/{content_id}/publish",
@@ -133,6 +152,14 @@ async def test_should_update_published_learning_content_as_future_revision(
 
     assert republish_response.status_code == 200, republish_response.json()
     assert republish_response.json()["data"]["summary"] == "新说明，只给后续学习使用"
+    republished_revision_state = republish_response.json()["data"]["revision_state"]
+    assert republished_revision_state["active_revision_id"] == str(
+        working_revision.revision_id
+    )
+    assert republished_revision_state["active_revision_no"] == working_revision.revision_no
+    assert republished_revision_state["working_revision_id"] is None
+    assert republished_revision_state["has_unpublished_revision"] is False
+    assert republished_revision_state["publish_label"] == "当前无待发布修订"
     active_revision = await _active_revision(db_session, logical_id=content_id)
     assert active_revision.active_revision_id == working_revision.revision_id
 

@@ -49,12 +49,12 @@ export function QuestionGovernanceSidebar({
                         <BookOpen className="h-5 w-5" aria-hidden />
                     </div>
                     <div>
-                        <h2 className="text-base font-bold text-slate-900">题库治理面板</h2>
-                        <p className="text-xs text-slate-500">只维护新人训练路径专用范围</p>
+                        <h2 className="text-base font-bold text-slate-900">正式题目概览</h2>
+                        <p className="text-xs text-slate-500">发布后才会进入学员小测候选池</p>
                     </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                    <MetricTile label="题目" value={questionCount} tone="slate" />
+                    <MetricTile label="正式题目" value={questionCount} tone="slate" />
                     <MetricTile label="已发布" value={publishedCount} tone="emerald" />
                     <MetricTile label="AI评分" value={aiScoredCount} tone="blue" />
                 </div>

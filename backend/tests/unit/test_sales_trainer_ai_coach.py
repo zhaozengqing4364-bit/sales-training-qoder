@@ -130,6 +130,25 @@ def test_ai_coach_output_v1_accepts_minimal_payload() -> None:
     assert result.passed is False
 
 
+def test_ai_coach_output_v1_accepts_structured_feedback_payload() -> None:
+    payload = {
+        "score": 80,
+        "feedback": "整体方向正确。",
+        "structured_feedback": {
+            "did_well": ["能主动道歉"],
+            "main_issue": "没有说明补救动作。",
+            "why_inappropriate": "客户会担心你的时间管理和可靠性。",
+            "suggested_response": "非常抱歉，我预计晚到 10 分钟，已重新确认资料并到场后优先补齐。",
+            "next_step": "再试一版，把预计到达时间和补救动作说清楚。",
+        },
+    }
+
+    result = AiCoachScoreOutputV1.model_validate(payload)
+
+    assert result.structured_feedback is not None
+    assert result.structured_feedback.main_issue == "没有说明补救动作。"
+
+
 def test_ai_coach_output_v1_rejects_invalid_score() -> None:
     with pytest.raises(ValidationError):
         AiCoachScoreOutputV1.model_validate({"score": 150, "feedback": "x"})
@@ -170,6 +189,11 @@ def test_ai_coach_config_allows_short_answer_when_scoring_prompt_is_bound() -> N
 
     assert "short_answer" in config.allowed_interaction_types
     assert config.scoring_prompt_template_id == "22222222-2222-2222-2222-222222222222"
+
+
+def test_ai_coach_config_rejects_short_answer_card_without_short_answer_type() -> None:
+    with pytest.raises(ValidationError):
+        AiCoachConfig(allowed_training_card_types=["expression_rewrite"])
 
 
 def test_ai_coach_config_rejects_non_uuid_prompt_template_ids() -> None:
