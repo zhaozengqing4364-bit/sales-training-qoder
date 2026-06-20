@@ -40,6 +40,13 @@ interface VerificationRecord {
 }
 ```
 
+### Release Truth
+
+- `scripts/critical-quality-gate.sh` 是发布阻塞的可执行权威。
+- `.sisyphus/evidence/task-9-quality-gate.txt` 是 shell gate 的主证据；`.omo/evidence/project-governance-refactor/quality-gate/` 可保存镜像或索引。
+- `coverage` 记录是 release verification ledger 的报告项；70% 阈值可用于提示和复盘，但不能单独给出 Go/No-Go。
+- 自动 Go/No-Go 只能由关键 gate 的完成状态、失败状态和 shell gate evidence 共同支撑；不得由 coverage ledger 产生第二套发布真相。
+
 ## 2) 接口
 
 - `POST /candidates`：创建候选发布（可携带自定义 checks）
@@ -75,4 +82,3 @@ interface VerificationRecord {
   "trace_id": "..."
 }
 ```
-

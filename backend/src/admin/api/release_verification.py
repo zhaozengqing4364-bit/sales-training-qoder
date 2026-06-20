@@ -374,9 +374,10 @@ async def run_automated_verification(
     4. Performance benchmarks
 
     Quality Gates:
-    - Code coverage >= 70%
+    - Code coverage is recorded as a release ledger item
     - Contract tests 100% pass rate
     - Performance: P95 latency < 300ms
+    - scripts/critical-quality-gate.sh evidence is the release-blocking authority
 
     Returns:
         Verification results with pass/fail status per check
@@ -468,7 +469,7 @@ async def make_automated_decision(
 
     Automatically determines if a release candidate should proceed:
     - GO: All quality gates pass, no blocking failures
-    - NO_GO: Critical gates fail (contract tests, coverage below threshold)
+    - NO_GO: Critical gates fail (contract tests, unit/integration, security)
     - CONDITIONAL: Non-critical gates fail but release may proceed with warning
 
     Note: All verification checks must be complete before making decision

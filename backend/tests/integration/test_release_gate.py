@@ -319,8 +319,9 @@ class TestQualityGateThresholds:
     """Test quality gate threshold enforcement"""
 
     @pytest.mark.asyncio
-    async def test_coverage_threshold_blocks_release(self, mock_db_session, runner):
-        """Test that coverage below 70% blocks release"""
+    async def test_coverage_threshold_is_report_item_when_shell_gate_is_authority(
+        self, mock_db_session, runner
+    ):
         # Create release candidate
         await release_verification_service.create_release_candidate(
             db=mock_db_session,
@@ -350,10 +351,10 @@ class TestQualityGateThresholds:
         assert gate_result.is_success
         gate_status = gate_result.value
 
-        # Verify coverage gate failed
         assert gate_status["gates"]["coverage"]["status"] == "fail"
-        assert gate_status["can_release"] is False
-        assert any("coverage below" in r.lower() for r in gate_status["recommendations"])
+        assert gate_status["gates"]["coverage"]["critical"] is False
+        assert gate_status["can_release"] is True
+        assert any("coverage" in r.lower() for r in gate_status["warnings"])
 
     @pytest.mark.asyncio
     async def test_contract_test_100_required(self, mock_db_session, runner):

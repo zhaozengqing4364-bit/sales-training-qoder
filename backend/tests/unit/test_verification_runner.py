@@ -230,7 +230,7 @@ class TestGenerateSummary:
     def test_is_blocking_check_identifies_blocking(self, runner):
         """Test blocking check identification"""
         assert runner._is_blocking_check("Unit Tests") is True
-        assert runner._is_blocking_check("Code Coverage") is True
+        assert runner._is_blocking_check("Code Coverage") is False
         assert runner._is_blocking_check("API Contract Tests (NFR19)") is True
         assert runner._is_blocking_check("Documentation Update") is False
 

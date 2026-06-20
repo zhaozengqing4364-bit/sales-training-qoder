@@ -1,0 +1,41 @@
+Task 22 Release Verification Bridge
+Date: 2026-06-20
+
+Scope
+- backend/src/common/analytics/verification_runner.py
+- backend/src/common/analytics/release_verification_service.py
+- backend/src/admin/api/release_verification.py
+- docs/api-contract/release-verification.md
+- backend/tests/unit/test_verification_runner.py
+- backend/tests/integration/test_release_gate.py
+
+Change summary
+- `scripts/critical-quality-gate.sh` is recorded as the executable release-blocking authority.
+- Coverage remains in release verification records as a ledger/report item.
+- Coverage below the ledger threshold produces a warning, not an independent No-Go.
+- Coverage check details now reference `.sisyphus/evidence/task-9-quality-gate.txt` and the `.omo` mirror path.
+- Contract/API docs now state that coverage is not a separate release truth.
+
+Verification evidence
+
+Command:
+cd backend && venv/bin/python -m pytest tests/unit/test_verification_runner.py tests/integration/test_release_gate.py tests/contract/test_release_verification_contract.py --no-cov -q
+Exit: 0
+Result:
+45 passed, 3 warnings
+
+Command:
+cd backend && venv/bin/python -m ruff check src/common/analytics/verification_runner.py src/common/analytics/release_verification_service.py src/admin/api/release_verification.py tests/unit/test_verification_runner.py tests/integration/test_release_gate.py tests/contract/test_release_verification_contract.py
+Exit: 0
+Result:
+All checks passed!
+
+Contract assertions covered
+- `VerificationRunner._is_blocking_check("Code Coverage")` is false.
+- Coverage below 70% marks the coverage gate as failed, but `critical` is false.
+- Coverage warning does not make `can_release` false when critical gates pass.
+- Contract tests still prove failed contract gates produce No-Go behavior.
+
+Residual constraints
+- This task does not run `scripts/critical-quality-gate.sh`; it bridges release verification records to that executable truth.
+- Full shell gate execution remains part of the final release candidate gate.

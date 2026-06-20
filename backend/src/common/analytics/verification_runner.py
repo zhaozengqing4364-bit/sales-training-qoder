@@ -25,7 +25,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ClassVar, TypeAlias, cast
+from typing import Any, ClassVar, Final, TypeAlias, cast
 
 from common.analytics.release_verification_service import (
     CheckType,
@@ -48,6 +48,12 @@ QUALITY_GATE_THRESHOLDS = {
     "api_p95_latency_ms": 100.0,  # API response < 100ms (NFR4)
     "api_p99_latency_ms": 200.0,  # API response < 200ms (NFR4)
 }
+
+QUALITY_GATE_AUTHORITY: Final = "scripts/critical-quality-gate.sh"
+QUALITY_GATE_EVIDENCE_PATH: Final = ".sisyphus/evidence/task-9-quality-gate.txt"
+QUALITY_GATE_EVIDENCE_MIRROR_PATH: Final = (
+    ".omo/evidence/project-governance-refactor/quality-gate/task-9-quality-gate.txt"
+)
 
 
 @dataclass
@@ -414,6 +420,10 @@ class VerificationRunner:
                 "covered_lines": coverage_report.covered_lines,
                 "total_lines": coverage_report.total_lines,
                 "by_module": coverage_report.by_module,
+                "release_blocking": False,
+                "quality_gate_authority": QUALITY_GATE_AUTHORITY,
+                "quality_gate_evidence_path": QUALITY_GATE_EVIDENCE_PATH,
+                "quality_gate_evidence_mirror_path": QUALITY_GATE_EVIDENCE_MIRROR_PATH,
             }
 
             error_message = None
@@ -971,8 +981,6 @@ class VerificationRunner:
             "contract",
             "Integration Tests",  # Core functionality
             "integration_tests",
-            "Code Coverage",  # Below threshold blocks
-            "coverage",
             "Health Checks",  # Pre-deployment requirement
             "health",
             "Security Checks",  # Security vulnerability blocks

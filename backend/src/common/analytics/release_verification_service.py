@@ -196,7 +196,11 @@ class ReleaseVerificationService:
         VerificationCheckInput(
             check_type="coverage",
             check_name="Code Coverage",
-            check_description="Verify code coverage meets threshold (>=70%)",
+            check_description=(
+                "Record coverage for the release ledger; shell quality gate evidence is "
+                "the release-blocking authority."
+            ),
+            gate_level="warning",
         ),
         VerificationCheckInput(
             check_type="integration_tests",
@@ -799,9 +803,12 @@ class ReleaseVerificationService:
                     "name": "Code Coverage",
                     "threshold": 70.0,
                     "unit": "%",
-                    "critical": True,
+                    "critical": False,
                     "status": "pending",
                     "current_value": None,
+                    "authority": "scripts/critical-quality-gate.sh",
+                    "evidence_path": ".sisyphus/evidence/task-9-quality-gate.txt",
+                    "mirror_path": ".omo/evidence/project-governance-refactor/quality-gate/task-9-quality-gate.txt",
                 },
                 "unit_tests": {
                     "name": "Unit Tests",
@@ -872,8 +879,9 @@ class ReleaseVerificationService:
                             "Contract tests failed - NFR19 requires 100% pass rate"
                         )
                     elif gate_key == "coverage":
-                        blocking_failures.append(
-                            f"Code coverage below {quality_gates[gate_key]['threshold']}% threshold"
+                        warnings.append(
+                            "Coverage is below the ledger threshold; release blocking "
+                            "is decided by critical-quality-gate.sh evidence"
                         )
                     elif gate_key in ["unit_tests", "integration_tests"]:
                         blocking_failures.append(
@@ -888,7 +896,10 @@ class ReleaseVerificationService:
                     quality_gates[gate_key]["status"] = "pending"
 
             # Determine overall gate status
-            any_pending = any(g["status"] == "pending" for g in quality_gates.values())
+            any_pending = any(
+                g["status"] == "pending" and g.get("critical", False)
+                for g in quality_gates.values()
+            )
             any_blocking_fail = any(
                 g["status"] == "fail" and g.get("critical", False)
                 for g in quality_gates.values()
@@ -924,7 +935,7 @@ class ReleaseVerificationService:
                     "gates": quality_gates,
                     "blocking_failures": blocking_failures,
                     "warnings": warnings,
-                    "can_release": overall_status == "pass",
+                    "can_release": overall_status in {"pass", "warning"},
                     "recommendations": recommendations,
                 }
             )
@@ -993,19 +1004,22 @@ class ReleaseVerificationService:
             )
 
             # Determine decision based on gate status
-            if gate_status.get("can_release"):
+            if blocking_failure_list:
+                decision = "no_go"
+                reason = "Blocking failures: " + "; ".join(blocking_failure_list)
+            elif warning_list:
+                decision = "conditional"
+                reason = "Non-critical warnings: " + "; ".join(warning_list)
+            elif gate_status.get("can_release"):
                 decision = "go"
                 reason = "All quality gates passed: " + ", ".join(
                     f"{g['name']}={g['status']}"
                     for g in gate_values
                     if isinstance(g, dict)
                 )
-            elif blocking_failure_list:
-                decision = "no_go"
-                reason = "Blocking failures: " + "; ".join(blocking_failure_list)
             else:
                 decision = "conditional"
-                reason = "Non-critical warnings: " + "; ".join(warning_list)
+                reason = "Quality gate status requires manual review"
 
             # Update summary with decision
             _set_orm_field(summary, "go_no_go_decision", decision)
