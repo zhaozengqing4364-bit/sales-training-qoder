@@ -4481,14 +4481,23 @@ export type NewcomerTrainingModuleType =
     | "article_exam"
     | "audio_scoring_group"
     | "realtime_placeholder";
-export type NewcomerTrainingCompletionRule =
+export type NewcomerTrainingCanonicalCompletionRule =
     | "audio_scored"
     | "paper_passed"
     | "all_audio_options_scored"
-    | "placeholder_disabled"
-    | "passed"
-    | "scored"
-    | "submitted";
+    | "placeholder_disabled";
+export type NewcomerPathCompletionRule = "passed" | "scored" | "submitted";
+export type NewcomerTrainingCompletionRule =
+    | NewcomerTrainingCanonicalCompletionRule
+    | NewcomerPathCompletionRule;
+export const NEWCOMER_COMPLETION_RULE_COMPATIBILITY = {
+    audio_scored: "scored",
+    paper_passed: "passed",
+    all_audio_options_scored: "scored",
+    placeholder_disabled: "submitted",
+} as const satisfies Readonly<
+    Record<NewcomerTrainingCanonicalCompletionRule, NewcomerPathCompletionRule>
+>;
 export type SalesTrainerAudioSubmissionStatus =
     | "uploaded"
     | "transcribing"
@@ -4862,8 +4871,6 @@ export type NewcomerPathModuleType =
     | "article_exam"
     | "audio_scoring_group"
     | "realtime_placeholder";
-
-export type NewcomerPathCompletionRule = "passed" | "scored" | "submitted";
 
 export interface NewcomerPathModuleConfig {
     readonly module_key: string;

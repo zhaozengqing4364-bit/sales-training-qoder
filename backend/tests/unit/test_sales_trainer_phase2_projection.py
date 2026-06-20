@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, get_args
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.business_rules.defaults import (
@@ -21,6 +22,11 @@ from sales_trainer.models import (
     SalesTrainerUnit,
 )
 from sales_trainer.regrade_models import SalesTrainerRegradeRun
+from sales_trainer.schemas import (
+    NEWCOMER_COMPLETION_RULE_COMPATIBILITY,
+    NewcomerPathCompletionRule,
+    SalesTrainerPathConfig,
+)
 from sales_trainer.services.phase2_dashboard_service import (
     SalesTrainerPhase2DashboardService,
 )
@@ -70,6 +76,26 @@ def _user(role: str = "admin") -> User:
         department="销售一部",
         role=role,
     )
+
+
+def test_newcomer_completion_rule_contract_pins_legacy_wire_values() -> None:
+    allowed_rules = set(get_args(NewcomerPathCompletionRule))
+
+    assert allowed_rules == {"passed", "scored", "submitted"}
+    assert dict(NEWCOMER_COMPLETION_RULE_COMPATIBILITY) == {
+        "audio_scored": "scored",
+        "paper_passed": "passed",
+        "all_audio_options_scored": "scored",
+        "placeholder_disabled": "submitted",
+    }
+
+    for completion_rule in allowed_rules:
+        config = SalesTrainerPathConfig(completion_rule=completion_rule)
+        assert config.completion_rule == completion_rule
+
+    for canonical_rule in NEWCOMER_COMPLETION_RULE_COMPATIBILITY:
+        with pytest.raises(ValidationError):
+            SalesTrainerPathConfig(completion_rule=canonical_rule)
 
 
 @pytest.mark.asyncio

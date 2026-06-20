@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "./client";
+import {
+    NEWCOMER_COMPLETION_RULE_COMPATIBILITY,
+    type NewcomerPathCompletionRule,
+    type NewcomerTrainingCanonicalCompletionRule,
+    type NewcomerTrainingCompletionRule,
+} from "./types";
 
 const fetchMock = vi.fn();
 
@@ -12,6 +18,28 @@ describe("api.salesTrainer facade", () => {
 
     afterEach(() => {
         vi.unstubAllGlobals();
+    });
+
+    it("pins newcomer completion rule compatibility between canonical and wire values", () => {
+        const legacyRules = ["passed", "scored", "submitted"] as const satisfies readonly NewcomerPathCompletionRule[];
+        const canonicalRules = [
+            "audio_scored",
+            "paper_passed",
+            "all_audio_options_scored",
+            "placeholder_disabled",
+        ] as const satisfies readonly NewcomerTrainingCanonicalCompletionRule[];
+        const allRules = [
+            ...legacyRules,
+            ...canonicalRules,
+        ] satisfies readonly NewcomerTrainingCompletionRule[];
+
+        expect(allRules).toContain("paper_passed");
+        expect(NEWCOMER_COMPLETION_RULE_COMPATIBILITY).toEqual({
+            audio_scored: "scored",
+            paper_passed: "passed",
+            all_audio_options_scored: "scored",
+            placeholder_disabled: "submitted",
+        });
     });
 
     it("loads learner sales-trainer units through the central facade", async () => {

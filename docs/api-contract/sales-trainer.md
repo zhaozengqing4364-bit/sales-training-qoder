@@ -92,6 +92,17 @@ type NewcomerCompletionRule =
   | "all_audio_options_scored"
   | "placeholder_disabled";
 
+// v1 wire compatibility: backend and persisted path config still use the
+// legacy three-value rule. The canonical names above are governance semantics,
+// not additional request values until a versioned API migration is introduced.
+type NewcomerPathCompletionRule = "passed" | "scored" | "submitted";
+const NEWCOMER_COMPLETION_RULE_COMPATIBILITY = {
+  audio_scored: "scored",
+  paper_passed: "passed",
+  all_audio_options_scored: "scored",
+  placeholder_disabled: "submitted",
+} satisfies Record<NewcomerCompletionRule, NewcomerPathCompletionRule>;
+
 interface NewcomerTrainingPathConfig {
   path_key: "newcomer_training_path_v1";
   display_name: "新人训练路径";
@@ -112,7 +123,7 @@ interface NewcomerTrainingPathModuleConfig {
   order_index: number;
   enabled: boolean;
   disabled_reason?: string | null;
-  completion_rule: NewcomerCompletionRule;
+  completion_rule: NewcomerPathCompletionRule;
   target_unit_id?: string | null;
   target_unit_ids?: string[];
   learning_content_id?: string | null;
@@ -148,7 +159,9 @@ interface NewcomerTrainingPathModuleConfig {
 | `ppt_explanation` | `PPT 讲解录音` | `"audio_scoring"` | `true` | `passed` | `target_unit_id`、已发布材料、已发布评分提示词 | admin 新人训练路径模块/材料/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.ppt_explanation.*` |
 | `business_skills` | `商务技巧` | `"article_exam"` | `true` | `passed` | `learning_content_id`、`exam_paper_id` | admin 新人训练路径文章绑定/考卷管理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_module.business_skills.*` |
 | `elevator_pitch` | `电梯演讲` | `"audio_scoring_group"` | `false` | `scored` | 默认不开放；后台启用前需补齐材料、`duration_options[].target_unit_id` 和已发布评分提示词 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
-| `realtime_roleplay_placeholder` | `实时对练` | `"realtime_placeholder"` | `false` | `placeholder_disabled` | `target_unit_id` 指向已发布占位展示单元；只允许 `disabled_reason`，不得绑定 runtime | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
+| `realtime_roleplay_placeholder` | `实时对练` | `"realtime_placeholder"` | `false` | `submitted` | `target_unit_id` 指向已发布占位展示单元；只允许 `disabled_reason`，不得绑定 runtime | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
+
+兼容说明：上表的 `completion_rule` 是 v1 API 入参与持久化值；canonical 治理语义通过 `NEWCOMER_COMPLETION_RULE_COMPATIBILITY` 映射：`audio_scored -> scored`、`paper_passed -> passed`、`all_audio_options_scored -> scored`、`placeholder_disabled -> submitted`。未知 `completion_rule` 或直接把 canonical 值提交给 v1 path config API 时，后端仍按非法配置拒绝。
 
 ### 校验与兜底
 

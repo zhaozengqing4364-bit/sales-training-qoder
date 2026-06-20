@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from collections.abc import Mapping
+from typing import Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -16,6 +17,21 @@ SalesTrainerPathModuleType = Literal[
     "audio_scoring_group",
     "realtime_placeholder",
 ]
+NewcomerPathCompletionRule = Literal["passed", "scored", "submitted"]
+NewcomerCanonicalCompletionRule = Literal[
+    "audio_scored",
+    "paper_passed",
+    "all_audio_options_scored",
+    "placeholder_disabled",
+]
+NEWCOMER_COMPLETION_RULE_COMPATIBILITY: Final[
+    Mapping[NewcomerCanonicalCompletionRule, NewcomerPathCompletionRule]
+] = {
+    "audio_scored": "scored",
+    "paper_passed": "passed",
+    "all_audio_options_scored": "scored",
+    "placeholder_disabled": "submitted",
+}
 QuizAttemptStatus = Literal["submitted", "scored", "failed"]
 AudioSubmissionStatus = Literal[
     "uploaded",
@@ -59,7 +75,7 @@ class SalesTrainerPathConfig(BaseModel):
     scoring_prompt_id: str | None = Field(None, min_length=1, max_length=36)
     disabled_reason: str | None = Field(None, max_length=300)
     unlock_after_unit_ids: list[str] = Field(default_factory=list)
-    completion_rule: Literal["passed", "scored", "submitted"] = "passed"
+    completion_rule: NewcomerPathCompletionRule = "passed"
     primary_action_label: str | None = Field(None, max_length=40)
     retry_action_label: str | None = Field(None, max_length=40)
     review_action_label: str | None = Field(None, max_length=40)
@@ -294,7 +310,7 @@ class SalesTrainerPathLevelResponse(BaseModel):
     locked: bool
     lock_reason: str | None = None
     status: Literal["locked", "available", "in_progress", "completed"]
-    completion_rule: Literal["passed", "scored", "submitted"]
+    completion_rule: NewcomerPathCompletionRule
     primary_action_label: str
     retry_action_label: str
     review_action_label: str
@@ -1173,7 +1189,7 @@ class NewcomerPathModuleConfig(BaseModel):
     scoring_prompt_id: str | None = Field(None, min_length=1, max_length=36)
     disabled_reason: str | None = Field(None, max_length=300)
     unlock_after_unit_ids: list[str] = Field(default_factory=list)
-    completion_rule: Literal["passed", "scored", "submitted"] = "passed"
+    completion_rule: NewcomerPathCompletionRule = "passed"
     primary_action_label: str | None = Field(None, max_length=40)
     retry_action_label: str | None = Field(None, max_length=40)
     review_action_label: str | None = Field(None, max_length=40)
