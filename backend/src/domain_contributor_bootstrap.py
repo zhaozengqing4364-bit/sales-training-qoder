@@ -33,6 +33,9 @@ from presentation_coach.services.support_runtime_contributor import (
 from sales_bot.services.practice_session_contributor import (
     register_sales_bot_practice_session_contributor,
 )
+from sales_bot.services.runtime_repair_contributor import (
+    register_sales_bot_runtime_repair_contributor,
+)
 from sales_bot.services.support_runtime_contributor import (
     register_sales_bot_support_runtime_contributor,
 )
@@ -50,6 +53,7 @@ DOMAIN_CONTRIBUTOR_REGISTRATIONS: tuple[DomainContributorRegistration, ...] = (
     ("agent_knowledge_contributor", register_agent_knowledge_contributor),
     ("agent_practice_session_contributor", register_agent_practice_session_contributor),
     ("sales_bot_support_runtime_contributor", register_sales_bot_support_runtime_contributor),
+    ("sales_bot_runtime_repair_contributor", register_sales_bot_runtime_repair_contributor),
     (
         "presentation_coach_support_runtime_contributor",
         register_presentation_coach_support_runtime_contributor,

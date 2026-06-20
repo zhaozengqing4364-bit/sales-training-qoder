@@ -40,7 +40,6 @@ COMMON_REVERSE_DEPENDENCY_ALLOWLIST = {
     "common/db/schemas.py": {"training_runtime"},
     "common/db/session_lifecycle.py": {"evaluation"},
     "common/db/voice_policy_snapshot.py": {"agent"},
-    "common/services/session_runtime_repair_service.py": {"sales_bot"},
     "common/training_tasks/service.py": {"curriculum_practice"},
 }
 

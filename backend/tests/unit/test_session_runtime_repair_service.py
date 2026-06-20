@@ -7,9 +7,11 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, Scenario, User
+from common.services import session_runtime_repair_service
 from common.services.session_runtime_repair_service import (
     SessionRuntimeRepairService,
 )
+from sales_bot.services import runtime_repair_contributor
 
 
 class _FakeRuntimePolicyService:
@@ -86,7 +88,7 @@ async def test_runtime_repair_dry_run_reports_missing_voice_snapshot_without_mut
     fake_policy = _FakeRuntimePolicyService()
     result = await SessionRuntimeRepairService(
         test_db,
-        runtime_policy_service=fake_policy,  # type: ignore[arg-type]
+        runtime_policy_service=fake_policy,
     ).run(session_ids=[session.session_id])
 
     assert result.dry_run is True
@@ -119,7 +121,7 @@ async def test_runtime_repair_apply_rebuilds_missing_voice_snapshot_explicitly(
     fake_policy = _FakeRuntimePolicyService()
     result = await SessionRuntimeRepairService(
         test_db,
-        runtime_policy_service=fake_policy,  # type: ignore[arg-type]
+        runtime_policy_service=fake_policy,
     ).run(apply=True, session_ids=[session.session_id])
 
     assert result.dry_run is False
@@ -134,6 +136,65 @@ async def test_runtime_repair_apply_rebuilds_missing_voice_snapshot_explicitly(
             "runtime_profile_override": "profile-1",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_runtime_repair_uses_registered_voice_policy_resolver_factory(
+    test_db: AsyncSession,
+    monkeypatch,
+) -> None:
+    user, scenario = await _seed_user_and_scenario(test_db)
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=user.user_id,
+        scenario_id=scenario.scenario_id,
+        status="paused",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        voice_runtime_profile_id="profile-1",
+        voice_policy_snapshot=None,
+    )
+    test_db.add(session)
+    await test_db.commit()
+
+    fake_policy = _FakeRuntimePolicyService()
+    monkeypatch.setattr(
+        session_runtime_repair_service,
+        "_voice_runtime_policy_resolver_factory",
+        lambda db: fake_policy,
+    )
+
+    result = await SessionRuntimeRepairService(test_db).run(
+        apply=True,
+        session_ids=[session.session_id],
+    )
+
+    assert result.repaired_sessions == 1
+    assert session.voice_policy_snapshot is not None
+    assert fake_policy.calls == [
+        {
+            "agent_id": "agent-1",
+            "persona_id": "persona-1",
+            "voice_mode_override": "stepfun_realtime",
+            "runtime_profile_override": "profile-1",
+        }
+    ]
+
+
+def test_sales_bot_runtime_repair_contributor_registers_voice_policy_factory(
+    monkeypatch,
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        runtime_repair_contributor,
+        "register_voice_runtime_policy_resolver_factory",
+        lambda factory: captured.append(factory),
+    )
+
+    runtime_repair_contributor.register_sales_bot_runtime_repair_contributor()
+
+    assert len(captured) == 1
+    assert callable(captured[0])
 
 
 @pytest.mark.asyncio

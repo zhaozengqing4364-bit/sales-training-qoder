@@ -25,10 +25,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import configure_logging, get_logger
 from common.services.session_runtime_repair_service import SessionRuntimeRepairService
+from sales_bot.services.runtime_repair_contributor import (
+    register_sales_bot_runtime_repair_contributor,
+)
 
 load_dotenv()
 configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = get_logger(__name__)
+register_sales_bot_runtime_repair_contributor()
 
 
 async def _run(args: argparse.Namespace) -> int:

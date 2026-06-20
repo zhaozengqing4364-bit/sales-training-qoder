@@ -6,19 +6,47 @@ module is an operator-invoked repair path with dry-run as the default.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from common.db.models import PracticeSession
-from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 
 RUNNABLE_SESSION_STATUSES = {"preparing", "in_progress", "paused", "scoring"}
 VOICE_POLICY_SCENARIO_TYPES = {"sales", "presentation"}
+
+
+class VoiceRuntimePolicyResolver(Protocol):
+    async def resolve_effective_policy(
+        self,
+        *,
+        agent_id: str | None = None,
+        persona_id: str | None = None,
+        voice_mode_override: str | None = None,
+        runtime_profile_override: str | None = None,
+    ) -> dict[str, Any]: ...
+
+
+VoiceRuntimePolicyResolverFactory = Callable[[AsyncSession], VoiceRuntimePolicyResolver]
+_voice_runtime_policy_resolver_factory: VoiceRuntimePolicyResolverFactory | None = None
+
+
+def register_voice_runtime_policy_resolver_factory(
+    factory: VoiceRuntimePolicyResolverFactory,
+) -> None:
+    global _voice_runtime_policy_resolver_factory
+    _voice_runtime_policy_resolver_factory = factory
+
+
+def _build_voice_runtime_policy_resolver(db: AsyncSession) -> VoiceRuntimePolicyResolver:
+    if _voice_runtime_policy_resolver_factory is None:
+        raise RuntimeError("voice runtime policy resolver is not registered")
+    return _voice_runtime_policy_resolver_factory(db)
 
 
 def _optional_text(value: Any) -> str | None:
@@ -74,12 +102,10 @@ class SessionRuntimeRepairService:
         self,
         db: AsyncSession,
         *,
-        runtime_policy_service: VoiceRuntimePolicyService | None = None,
+        runtime_policy_service: VoiceRuntimePolicyResolver | None = None,
     ) -> None:
         self.db = db
-        self.runtime_policy_service = (
-            runtime_policy_service or VoiceRuntimePolicyService(db)
-        )
+        self.runtime_policy_service = runtime_policy_service
 
     async def run(
         self,
@@ -257,7 +283,10 @@ class SessionRuntimeRepairService:
         return True
 
     async def _rebuild_voice_policy_snapshot(self, session: PracticeSession) -> None:
-        policy = await self.runtime_policy_service.resolve_effective_policy(
+        runtime_policy_service = self.runtime_policy_service
+        if runtime_policy_service is None:
+            runtime_policy_service = _build_voice_runtime_policy_resolver(self.db)
+        policy = await runtime_policy_service.resolve_effective_policy(
             agent_id=str(session.agent_id),
             persona_id=str(session.persona_id),
             voice_mode_override=_optional_text(session.voice_mode),

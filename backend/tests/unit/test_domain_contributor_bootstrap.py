@@ -15,6 +15,7 @@ def test_should_keep_domain_contributor_registration_order_pinned() -> None:
         "agent_knowledge_contributor",
         "agent_practice_session_contributor",
         "sales_bot_support_runtime_contributor",
+        "sales_bot_runtime_repair_contributor",
         "presentation_coach_support_runtime_contributor",
         "curriculum_practice_support_runtime_contributors",
         "curriculum_practice_runtime_gate_contributors",
