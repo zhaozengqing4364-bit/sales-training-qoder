@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
+import { Input } from "@/components/ui/input";
 import { PathConfigMetricCard } from "@/components/admin/sales-trainer/path-config-metric-card";
 import { PathConfigModuleCard } from "@/components/admin/sales-trainer/path-config-module-card";
 import { PathConfigRevisionHistory } from "@/components/admin/sales-trainer/path-config-revision-history";
@@ -31,7 +32,9 @@ interface PathConfigCenterProps {
     readonly focusedModuleKey?: string | null;
     readonly isRefreshing: boolean;
     readonly isMutating?: boolean;
+    readonly changeReason?: string;
     readonly onRefresh: () => void;
+    readonly onChangeReason?: (reason: string) => void;
     readonly onSaveCurrentRevision?: () => void;
     readonly onPublishWorkingRevision?: () => void;
     readonly onRollbackRevision?: (revisionId: string, reason: string) => void;
@@ -43,13 +46,16 @@ export function PathConfigCenter({
     focusedModuleKey = null,
     isRefreshing,
     isMutating = false,
+    changeReason = "",
     onRefresh,
+    onChangeReason,
     onSaveCurrentRevision,
     onPublishWorkingRevision,
     onRollbackRevision,
     renderModuleEditor,
 }: PathConfigCenterProps) {
     const focusedModule = model.modules.find((module) => module.moduleKey === focusedModuleKey) ?? null;
+    const hasChangeReason = changeReason.trim().length > 0;
 
     return (
         <div className="space-y-6">
@@ -85,33 +91,55 @@ export function PathConfigCenter({
                             <span className="rounded-full bg-slate-100 px-3 py-1">历史版本 {model.governance.revisionCount}</span>
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            variant="primary"
-                            className="rounded-full"
-                            onClick={onSaveCurrentRevision}
-                            disabled={isMutating || !onSaveCurrentRevision}
-                        >
-                            保存当前配置为新修订
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="rounded-full"
-                            onClick={onPublishWorkingRevision}
-                            disabled={isMutating || !model.governance.hasUnpublishedRevision || !onPublishWorkingRevision}
-                        >
-                            发布并生效
-                        </Button>
-                        <Button asChild variant="outline" className="rounded-full">
-                            <Link href="/admin/sales-trainer/operation-logs">
-                                <History className="mr-2 h-4 w-4" />
-                                查看操作日志
-                            </Link>
-                        </Button>
-                        <Button variant="outline" className="rounded-full" onClick={onRefresh} disabled={isRefreshing}>
-                            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                            刷新诊断
-                        </Button>
+                    <div className="flex w-full flex-col gap-3 lg:max-w-sm">
+                        <div>
+                            <label
+                                className="text-xs font-bold uppercase text-slate-400"
+                                htmlFor="path-config-change-reason"
+                            >
+                                本次变更说明
+                            </label>
+                            <Input
+                                id="path-config-change-reason"
+                                value={changeReason}
+                                placeholder="例如：更新商务技巧考卷绑定"
+                                disabled={isMutating || !onChangeReason}
+                                onChange={(event) => onChangeReason?.(event.target.value)}
+                            />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                variant="primary"
+                                className="rounded-full"
+                                onClick={onSaveCurrentRevision}
+                                disabled={isMutating || !hasChangeReason || !onSaveCurrentRevision}
+                            >
+                                保存当前配置为新修订
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="rounded-full"
+                                onClick={onPublishWorkingRevision}
+                                disabled={
+                                    isMutating
+                                    || !hasChangeReason
+                                    || !model.governance.hasUnpublishedRevision
+                                    || !onPublishWorkingRevision
+                                }
+                            >
+                                发布并生效
+                            </Button>
+                            <Button asChild variant="outline" className="rounded-full">
+                                <Link href="/admin/sales-trainer/operation-logs">
+                                    <History className="mr-2 h-4 w-4" />
+                                    查看操作日志
+                                </Link>
+                            </Button>
+                            <Button variant="outline" className="rounded-full" onClick={onRefresh} disabled={isRefreshing}>
+                                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                                刷新诊断
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </GlassCard>

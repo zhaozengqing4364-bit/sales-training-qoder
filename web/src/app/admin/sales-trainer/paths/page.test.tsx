@@ -159,6 +159,7 @@ describe("SalesTrainerPathsPage", () => {
         expect(screen.getByRole("link", { name: "查看配置健康" }).getAttribute("href")).toBe("/admin/sales-trainer/settings");
         expect(screen.getByRole("link", { name: "查看配置健康" }).querySelector("button")).toBeNull();
         expect(screen.getByText(/编辑会保存为新的待发布修订/)).toBeTruthy();
+        expect(screen.getByLabelText("本次变更说明")).toBeTruthy();
         expect(screen.queryByText(/复制为新草稿/)).toBeNull();
         expect(screen.getAllByText("需补齐后发布").length).toBeGreaterThan(0);
         expect(screen.getAllByText("待配置").length).toBeGreaterThan(0);
@@ -192,15 +193,27 @@ describe("SalesTrainerPathsPage", () => {
     it("saves the current path config as a future-only working revision", async () => {
         render(<SalesTrainerPathsPage />);
 
+        fireEvent.change(await screen.findByLabelText("本次变更说明"), {
+            target: { value: "更新商务技巧考卷绑定" },
+        });
         fireEvent.click(await screen.findByRole("button", { name: "保存当前配置为新修订" }));
 
         await waitFor(() => {
             expect(savePathConfigMock).toHaveBeenCalledWith({
                 ...defaultPathConfigResponse().path,
-                reason: "管理员从配置中心保存路径配置修订",
+                reason: "更新商务技巧考卷绑定",
             });
         });
         expect(await screen.findByText("已保存为待发布修订，发布后只影响后续学员。")).toBeTruthy();
+    });
+
+    it("requires a change reason before saving or publishing", async () => {
+        getPathConfigMock.mockResolvedValue(pathConfigWithWorkingRevision());
+
+        render(<SalesTrainerPathsPage />);
+
+        expect(await screen.findByRole("button", { name: "保存当前配置为新修订" })).toHaveProperty("disabled", true);
+        expect(screen.getByRole("button", { name: "发布并生效" })).toHaveProperty("disabled", true);
     });
 
     it("publishes a working revision without requiring administrators to swap bindings", async () => {
@@ -208,11 +221,14 @@ describe("SalesTrainerPathsPage", () => {
 
         render(<SalesTrainerPathsPage />);
 
+        fireEvent.change(await screen.findByLabelText("本次变更说明"), {
+            target: { value: "发布试运行后的路径配置" },
+        });
         fireEvent.click(await screen.findByRole("button", { name: "发布并生效" }));
 
         await waitFor(() => {
             expect(publishPathConfigMock).toHaveBeenCalledWith({
-                reason: "管理员从配置中心发布路径配置修订",
+                reason: "发布试运行后的路径配置",
             });
         });
         expect(await screen.findByText("路径配置已发布生效；历史学员记录不会被改写。")).toBeTruthy();

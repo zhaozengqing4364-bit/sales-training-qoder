@@ -119,12 +119,16 @@ describe("SalesTrainerPathsPage audio bindings", () => {
         fireEvent.change(screen.getByLabelText("录音评分标准（PPT 讲解录音）"), {
             target: { value: "prompt-ppt" },
         });
+        fireEvent.change(screen.getByLabelText("本次变更说明"), {
+            target: { value: "更新 PPT 讲解材料和评分标准" },
+        });
         fireEvent.click(screen.getByRole("button", { name: "保存当前配置为新修订" }));
 
         await waitFor(() => {
             expect(savePathConfigMock).toHaveBeenCalled();
         });
         const request = savePathConfigMock.mock.calls[0]?.[0];
+        expect(request?.reason).toBe("更新 PPT 讲解材料和评分标准");
         expect(request?.modules).toContainEqual(expect.objectContaining({
             module_key: "ppt_explanation",
             material_id: "material-ppt",

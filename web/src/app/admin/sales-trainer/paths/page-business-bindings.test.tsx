@@ -111,12 +111,16 @@ describe("SalesTrainerPathsPage business skill bindings", () => {
         fireEvent.change(screen.getByLabelText("考试考卷（商务技巧新修订）"), {
             target: { value: "paper-2" },
         });
+        fireEvent.change(screen.getByLabelText("本次变更说明"), {
+            target: { value: "更新商务技巧学习文章和考卷" },
+        });
         fireEvent.click(screen.getByRole("button", { name: "保存当前配置为新修订" }));
 
         await waitFor(() => {
             expect(savePathConfigMock).toHaveBeenCalled();
         });
         const request = savePathConfigMock.mock.calls[0]?.[0];
+        expect(request?.reason).toBe("更新商务技巧学习文章和考卷");
         expect(request?.modules).toContainEqual(expect.objectContaining({
             module_key: "business_skills",
             learning_content_id: "content-2",
