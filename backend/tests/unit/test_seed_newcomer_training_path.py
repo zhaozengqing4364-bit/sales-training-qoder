@@ -545,6 +545,42 @@ async def test_verify_newcomer_training_path_reports_missing_baseline(
         await seed_module.verify(test_db)
 
 
+def test_newcomer_seed_cli_defaults_to_verify_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_module = _load_seed_module()
+    calls: list[bool] = []
+
+    async def fake_run(*, verify_only: bool) -> tuple[int, None, None]:
+        calls.append(verify_only)
+        return 0, None, None
+
+    monkeypatch.setattr(seed_module, "run", fake_run)
+
+    exit_code = seed_module.main([])
+
+    assert exit_code == 0
+    assert calls == [True]
+
+
+def test_newcomer_seed_cli_requires_apply_to_mutate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_module = _load_seed_module()
+    calls: list[bool] = []
+
+    async def fake_run(*, verify_only: bool) -> tuple[int, None, None]:
+        calls.append(verify_only)
+        return 0, None, None
+
+    monkeypatch.setattr(seed_module, "run", fake_run)
+
+    exit_code = seed_module.main(["--apply"])
+
+    assert exit_code == 0
+    assert calls == [False]
+
+
 def _path_payload_with_stale_ai_coach_prompt(
     raw_path: dict[str, object],
 ) -> NewcomerPathConfigPayload:

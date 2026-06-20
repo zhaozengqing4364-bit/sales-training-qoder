@@ -2405,13 +2405,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Seed or verify newcomer_training_path_v1 baseline modules."
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--verify-only",
         action="store_true",
-        help="Only verify baseline records without mutating data.",
+        help="Only verify baseline records without mutating data. This is the default.",
+    )
+    mode.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply seed changes. Omit to run the non-writing verification path.",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
-    exit_code, summary, error = asyncio.run(run(verify_only=bool(args.verify_only)))
+    exit_code, summary, error = asyncio.run(run(verify_only=not bool(args.apply)))
     if error:
         print(error, file=sys.stderr)
         return exit_code
