@@ -17,19 +17,15 @@ import {
     PanelLeftOpen,
     ArrowLeft,
     BarChart3,
-    ClipboardList,
     MessageSquareText,
     Sparkles,
     Presentation,
     Database,
     ChevronDown,
     Target,
-    Milestone,
     BriefcaseBusiness,
     BookOpen,
     UserRoundCog,
-    Library,
-    ListChecks,
     Mic,
     type LucideIcon,
 } from "lucide-react";
@@ -56,10 +52,11 @@ import { api } from "@/lib/api/client";
 import { authHandler } from "@/lib/auth-handler";
 import { isPlatformAdminRole } from "@/lib/auth/current-user";
 import type { CurrentUser } from "@/lib/auth/current-user";
-import type {
-    SalesTrainerAdminCapabilities,
-    SalesTrainerAdminCapabilityKey,
-} from "@/lib/api/types";
+import type { SalesTrainerAdminCapabilities } from "@/lib/api/types";
+import {
+    SALES_TRAINER_ADMIN_NAV_ITEMS,
+    salesTrainerAdminItemsForCapabilities,
+} from "@/lib/sales-trainer/routes";
 
 interface UserInfo {
     id: string;
@@ -108,52 +105,10 @@ interface AdminNavSection {
     label: string;
     icon: LucideIcon;
     href?: string;
-    items: AdminNavItem[];
+    items: readonly AdminNavItem[];
 }
 
-const SALES_TRAINER_ITEMS = {
-    workbench: { label: "工作台", icon: LayoutDashboard, href: "/admin/sales-trainer" },
-    units: { label: "模块单元", icon: Target, href: "/admin/sales-trainer/units" },
-    paths: { label: "路径配置", icon: Milestone, href: "/admin/sales-trainer/paths" },
-    aiCoach: { label: "AI 教练配置", icon: Bot, href: "/admin/sales-trainer/ai-coach" },
-    questions: { label: "题库管理", icon: FileText, href: "/admin/sales-trainer/questions" },
-    scoreStandards: { label: "录音评分标准", icon: Mic, href: "/admin/sales-trainer/score-standards" },
-    articles: { label: "商务技巧文章", icon: BookOpen, href: "/admin/sales-trainer/articles" },
-    papers: { label: "考卷管理", icon: ClipboardList, href: "/admin/sales-trainer/papers" },
-    materials: { label: "材料库", icon: Library, href: "/admin/sales-trainer/materials" },
-    trainingRecords: { label: "训练记录", icon: ListChecks, href: "/admin/sales-trainer/training-records" },
-    audioSubmissions: { label: "学员录音", icon: Activity, href: "/admin/sales-trainer/audio-submissions" },
-    scoreResults: { label: "评分结果", icon: BarChart3, href: "/admin/sales-trainer/score-results" },
-    settings: { label: "配置", icon: Settings, href: "/admin/sales-trainer/settings" },
-    operationLogs: { label: "操作记录", icon: ScrollText, href: "/admin/sales-trainer/operation-logs" },
-} as const satisfies Record<string, AdminNavItem>;
-
-const SALES_TRAINER_CONTENT_ITEMS: AdminNavItem[] = [
-    SALES_TRAINER_ITEMS.workbench,
-    SALES_TRAINER_ITEMS.units,
-    SALES_TRAINER_ITEMS.paths,
-    SALES_TRAINER_ITEMS.aiCoach,
-    SALES_TRAINER_ITEMS.questions,
-    SALES_TRAINER_ITEMS.scoreStandards,
-    SALES_TRAINER_ITEMS.articles,
-    SALES_TRAINER_ITEMS.papers,
-    SALES_TRAINER_ITEMS.materials,
-];
-
-const SALES_TRAINER_RECORD_ITEMS: AdminNavItem[] = [
-    SALES_TRAINER_ITEMS.trainingRecords,
-    SALES_TRAINER_ITEMS.audioSubmissions,
-    SALES_TRAINER_ITEMS.scoreResults,
-];
-
-const SALES_TRAINER_ALL_ITEMS: AdminNavItem[] = [
-    ...SALES_TRAINER_CONTENT_ITEMS,
-    ...SALES_TRAINER_RECORD_ITEMS,
-    SALES_TRAINER_ITEMS.settings,
-    SALES_TRAINER_ITEMS.operationLogs,
-];
-
-function salesTrainerSection(items: AdminNavItem[]): AdminNavSection {
+function salesTrainerSection(items: readonly AdminNavItem[]): AdminNavSection {
     return {
         key: "sales-trainer",
         label: "新人训练路径",
@@ -174,7 +129,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         key: "sales-trainer",
         label: "新人训练路径",
         icon: Mic,
-        items: SALES_TRAINER_ALL_ITEMS,
+        items: SALES_TRAINER_ADMIN_NAV_ITEMS,
     },
     {
         key: "curriculum",
@@ -259,47 +214,6 @@ const EXACT_ACTIVE_HREFS: ReadonlySet<string> = new Set([
     "/admin/sales-trainer",
 ] as const);
 
-const SALES_TRAINER_CAPABILITY_NAV: ReadonlyArray<{
-    capability: SalesTrainerAdminCapabilityKey;
-    items: AdminNavItem[];
-}> = [
-    {
-        capability: "manage_content",
-        items: [
-            SALES_TRAINER_ITEMS.workbench,
-            SALES_TRAINER_ITEMS.aiCoach,
-            SALES_TRAINER_ITEMS.scoreStandards,
-            SALES_TRAINER_ITEMS.articles,
-            SALES_TRAINER_ITEMS.papers,
-            SALES_TRAINER_ITEMS.materials,
-        ],
-    },
-    {
-        capability: "manage_modules",
-        items: [SALES_TRAINER_ITEMS.units, SALES_TRAINER_ITEMS.paths],
-    },
-    {
-        capability: "manage_prompts",
-        items: [SALES_TRAINER_ITEMS.aiCoach],
-    },
-    {
-        capability: "manage_questions",
-        items: [SALES_TRAINER_ITEMS.questions],
-    },
-    {
-        capability: "view_records",
-        items: SALES_TRAINER_RECORD_ITEMS,
-    },
-    {
-        capability: "view_settings",
-        items: [SALES_TRAINER_ITEMS.settings],
-    },
-    {
-        capability: "view_logs",
-        items: [SALES_TRAINER_ITEMS.operationLogs],
-    },
-];
-
 function isPathActive(pathname: string, href: string): boolean {
     if (EXACT_ACTIVE_HREFS.has(href)) {
         return pathname === href;
@@ -319,32 +233,6 @@ function resolveActiveSectionKey(pathname: string, sections: AdminNavSection[]):
     return null;
 }
 
-function salesTrainerItemsForCapabilities(
-    capabilities: SalesTrainerAdminCapabilities | null | undefined,
-): AdminNavItem[] {
-    if (!capabilities) {
-        return [];
-    }
-    if (capabilities.capabilities.admin_full_access) {
-        return SALES_TRAINER_ALL_ITEMS;
-    }
-    const items: AdminNavItem[] = [];
-    const seen = new Set<string>();
-    for (const entry of SALES_TRAINER_CAPABILITY_NAV) {
-        if (!capabilities.capabilities[entry.capability]) {
-            continue;
-        }
-        for (const item of entry.items) {
-            if (seen.has(item.href)) {
-                continue;
-            }
-            seen.add(item.href);
-            items.push(item);
-        }
-    }
-    return items;
-}
-
 function visibleAdminNavSections(
     currentUser: UserInfo | null,
     salesTrainerCapabilities: SalesTrainerAdminCapabilities | null | undefined,
@@ -355,7 +243,7 @@ function visibleAdminNavSections(
     if (salesTrainerCapabilities?.capabilities.admin_full_access) {
         return ADMIN_NAV_SECTIONS;
     }
-    const salesTrainerItems = salesTrainerItemsForCapabilities(salesTrainerCapabilities);
+    const salesTrainerItems = salesTrainerAdminItemsForCapabilities(salesTrainerCapabilities);
     return salesTrainerItems.length > 0 ? [salesTrainerSection(salesTrainerItems)] : [];
 }
 

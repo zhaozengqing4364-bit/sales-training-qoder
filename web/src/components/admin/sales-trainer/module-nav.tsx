@@ -1,161 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import {
-    BookOpen,
-    Bot,
-    ClipboardList,
-    Eye,
-    FileText,
-    Headphones,
-    LayoutDashboard,
-    Library,
-    ListChecks,
-    Mic,
-    Route,
-    ScrollText,
-    Settings,
-    SlidersHorizontal,
-    Sparkles,
-    Tags,
-    Target,
-    UploadCloud,
-    type LucideIcon,
-} from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { getSalesTrainerAdminContextNavGroup } from "@/lib/sales-trainer/routes";
 
-interface ContextNavItem {
-    readonly href: string;
-    readonly icon: LucideIcon;
-    readonly label: string;
-}
-
-interface ContextNavGroup {
-    readonly items: readonly ContextNavItem[];
-    readonly label: string;
-    readonly root: string;
-    readonly roots?: readonly string[];
-}
-
-const CONTEXT_NAV_GROUPS: readonly ContextNavGroup[] = [
-    {
-        root: "/admin/sales-trainer/units",
-        label: "模块单元",
-        items: [{ href: "/admin/sales-trainer/units", label: "模块单元", icon: Target }],
-    },
-    {
-        root: "/admin/sales-trainer/questions",
-        label: "题目生产",
-        items: [
-            { href: "/admin/sales-trainer/questions", label: "正式题目库", icon: BookOpen },
-            { href: "/admin/sales-trainer/questions/drafts", label: "AI 出题审核", icon: Sparkles },
-            { href: "/admin/sales-trainer/questions/categories", label: "题目分类", icon: Tags },
-            { href: "/admin/sales-trainer/questions/quiz-preview", label: "小测预览", icon: Eye },
-        ],
-    },
-    {
-        root: "/admin/sales-trainer/score-standards",
-        label: "录音评分标准",
-        items: [
-            { href: "/admin/sales-trainer/score-standards", label: "标准列表", icon: SlidersHorizontal },
-        ],
-    },
-    {
-        root: "/admin/sales-trainer/paths",
-        label: "路径配置",
-        roots: ["/admin/sales-trainer/paths", "/admin/sales-trainer/ai-coach"],
-        items: [
-            { href: "/admin/sales-trainer/paths", label: "路径配置", icon: Route },
-            { href: "/admin/sales-trainer/ai-coach", label: "AI 教练配置", icon: Bot },
-        ],
-    },
-    {
-        root: "/admin/sales-trainer/articles",
-        label: "商务技巧文章",
-        items: [
-            { href: "/admin/sales-trainer/articles", label: "文章绑定", icon: FileText },
-            {
-                href: "/admin/sales-trainer/articles/import",
-                label: "资料导入",
-                icon: UploadCloud,
-            },
-            {
-                href: "/admin/sales-trainer/articles/capabilities",
-                label: "能力点",
-                icon: Target,
-            },
-        ],
-    },
-    {
-        root: "/admin/sales-trainer/papers",
-        label: "考卷管理",
-        items: [{ href: "/admin/sales-trainer/papers", label: "考卷管理", icon: ClipboardList }],
-    },
-    {
-        root: "/admin/sales-trainer/materials",
-        label: "材料库",
-        items: [{ href: "/admin/sales-trainer/materials", label: "材料库", icon: Library }],
-    },
-    {
-        root: "/admin/sales-trainer/training-records",
-        label: "训练记录",
-        items: [{ href: "/admin/sales-trainer/training-records", label: "训练记录", icon: ListChecks }],
-    },
-    {
-        root: "/admin/sales-trainer/audio-submissions",
-        label: "学员录音",
-        items: [{ href: "/admin/sales-trainer/audio-submissions", label: "录音列表", icon: Mic }],
-    },
-    {
-        root: "/admin/sales-trainer/score-results",
-        label: "评分结果",
-        items: [{ href: "/admin/sales-trainer/score-results", label: "评分结果", icon: Headphones }],
-    },
-    {
-        root: "/admin/sales-trainer/settings",
-        label: "配置",
-        items: [{ href: "/admin/sales-trainer/settings", label: "配置健康", icon: Settings }],
-    },
-    {
-        root: "/admin/sales-trainer/operation-logs",
-        label: "操作日志",
-        items: [{ href: "/admin/sales-trainer/operation-logs", label: "操作日志", icon: ScrollText }],
-    },
-    {
-        root: "/admin/sales-trainer",
-        label: "工作台",
-        items: [{ href: "/admin/sales-trainer", label: "工作台", icon: LayoutDashboard }],
-    },
-];
-
-export const SALES_TRAINER_ADMIN_WORKBENCH_LINKS: readonly ContextNavItem[] =
-    CONTEXT_NAV_GROUPS
-        .filter((group) => group.root !== "/admin/sales-trainer")
-        .map((group) => group.items[0]);
+export { SALES_TRAINER_ADMIN_WORKBENCH_LINKS } from "@/lib/sales-trainer/routes";
 
 interface SalesTrainerAdminModuleNavProps {
     currentPath: string;
 }
 
-function isPathInGroup(currentPath: string, root: string): boolean {
-    if (root === "/admin/sales-trainer") {
-        return currentPath === root;
-    }
-    return currentPath === root || currentPath.startsWith(`${root}/`);
-}
-
-function getContextNavGroup(currentPath: string): ContextNavGroup {
-    return CONTEXT_NAV_GROUPS.find((group) =>
-        (group.roots ?? [group.root]).some((root) => isPathInGroup(currentPath, root)),
-    )
-        ?? CONTEXT_NAV_GROUPS[CONTEXT_NAV_GROUPS.length - 1];
-}
-
 export function SalesTrainerAdminModuleNav({
     currentPath,
 }: SalesTrainerAdminModuleNavProps) {
-    const group = getContextNavGroup(currentPath);
+    const group = getSalesTrainerAdminContextNavGroup(currentPath);
 
     if (group.items.length < 2) {
         return null;
