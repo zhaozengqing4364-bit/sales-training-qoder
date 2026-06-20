@@ -6,8 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from common.db.models import PracticeSession
-
-from .models import TrainingRuntimeDescriptor
+from common.runtime_descriptor import TrainingRuntimeDescriptor
 
 
 def _filter_retry_focus_fields(

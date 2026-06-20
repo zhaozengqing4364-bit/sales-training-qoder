@@ -1,0 +1,15 @@
+Task 16: Runtime descriptor neutral types
+
+Scope
+- Moved TrainingRuntimeSubject and TrainingRuntimeDescriptor ownership to common.runtime_descriptor.
+- Kept training_runtime.models as a compatibility re-export for old imports.
+- Updated common.db.schemas to import descriptor contracts from common instead of training_runtime.
+- Updated training_runtime service/plugin internals to use the neutral descriptor contract.
+- Removed the common/db/schemas.py -> training_runtime dependency allowlist entry.
+- Added an import compatibility contract test proving old training_runtime.models imports resolve to the neutral classes.
+
+Validation
+- cd backend && venv/bin/python -m pytest tests/unit/test_runtime_dependency_contract.py tests/unit/test_training_runtime_plugins.py --no-cov -q
+  - Result: 18 passed, 1 ChromaDB asyncio deprecation warning.
+- cd backend && venv/bin/python -m ruff check src/common/runtime_descriptor.py src/common/db/schemas.py src/training_runtime/models.py src/training_runtime/service.py src/training_runtime/plugins.py tests/unit/test_runtime_dependency_contract.py tests/unit/test_training_runtime_plugins.py
+  - Result: All checks passed.

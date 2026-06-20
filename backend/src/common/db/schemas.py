@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from training_runtime.models import TrainingRuntimeDescriptor, TrainingRuntimeSubject
+from common.runtime_descriptor import TrainingRuntimeDescriptor, TrainingRuntimeSubject
 
 
 class ScenarioType(StrEnum):

@@ -6,7 +6,7 @@ import importlib.util
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from .models import TrainingRuntimeDescriptor
+from common.runtime_descriptor import TrainingRuntimeDescriptor
 
 PluginAction = str
 LEGACY_SALES_HANDLER_MODULES = (

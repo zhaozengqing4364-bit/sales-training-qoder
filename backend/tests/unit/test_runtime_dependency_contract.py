@@ -37,7 +37,6 @@ COMMON_REVERSE_DEPENDENCY_ALLOWLIST = {
     "common/api/practice.py": {"agent", "evaluation", "prompt_templates"},
     "common/api/training.py": {"agent"},
     "common/conversation/replay.py": {"agent", "curriculum_practice"},
-    "common/db/schemas.py": {"training_runtime"},
     "common/db/session_lifecycle.py": {"evaluation"},
     "common/db/voice_policy_snapshot.py": {"agent"},
     "common/training_tasks/service.py": {"curriculum_practice"},
@@ -137,6 +136,20 @@ def test_should_keep_common_reverse_domain_dependencies_pinned() -> None:
             unexpected[rel_path] = unexpected_domains
 
     assert unexpected == {}
+
+
+def test_should_keep_training_runtime_descriptor_imports_compatible() -> None:
+    from common.runtime_descriptor import (
+        TrainingRuntimeDescriptor as NeutralDescriptor,
+    )
+    from common.runtime_descriptor import TrainingRuntimeSubject as NeutralSubject
+    from training_runtime.models import (
+        TrainingRuntimeDescriptor as LegacyDescriptor,
+    )
+    from training_runtime.models import TrainingRuntimeSubject as LegacySubject
+
+    assert LegacyDescriptor is NeutralDescriptor
+    assert LegacySubject is NeutralSubject
 
 
 def test_should_keep_sales_trainer_out_of_realtime_runtime_modules() -> None:
