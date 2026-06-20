@@ -35,6 +35,7 @@ class AiCoachChatScorer:
         event: SalesTrainerAiCoachUiEvent,
         *,
         answer_payload: AiCoachAnswerPayloadV1 | dict[str, object],
+        runtime_metadata_out: dict[str, object] | None = None,
     ) -> AiCoachScoreResultV1:
         if event.status != "pending" or event.answer_payload:
             raise AiCoachChatScoringError(
@@ -79,6 +80,8 @@ class AiCoachChatScorer:
                 scoring_contract_hash=_string_or_none(
                     config.get("scoring_contract_hash")
                 ),
+                scoring_model=_string_or_none(config.get("scoring_model")),
+                runtime_metadata_out=runtime_metadata_out,
             )
             if result.is_success and result.value is not None:
                 return result.value

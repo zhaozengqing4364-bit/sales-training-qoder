@@ -335,14 +335,24 @@ class AiCoachChatService:
     ) -> tuple[dict[str, object], AiCoachScoreResultV1]:
         session = await self._require_owned_session(session_id, user_id)
         event = await self._event(session_id, event_id)
-        score_result = await self.score_quiz_event(event, answer_payload=answer_payload)
+        scoring_runtime_metadata: dict[str, object] = {}
+        score_result = await self.score_quiz_event(
+            event,
+            answer_payload=answer_payload,
+            runtime_metadata_out=scoring_runtime_metadata,
+        )
         score_result = self._with_mastery_context(
             score_result,
             threshold=self._runtime.config_from_session(session).mastery_threshold,
         )
         event_payload = dict(event.payload_json or {})
         event.answer_payload = answer_payload.model_dump(mode="json")
-        event.score_result = score_result.model_dump(mode="json")
+        score_result_payload = score_result.model_dump(mode="json")
+        if scoring_runtime_metadata:
+            score_result_payload["runtime_audit"] = {
+                "scoring": dict(scoring_runtime_metadata)
+            }
+        event.score_result = score_result_payload
         event.status = "scored"
         await self._logs.record(
             actor=actor,
@@ -421,6 +431,7 @@ class AiCoachChatService:
         event: SalesTrainerAiCoachUiEvent,
         *,
         answer_payload: AiCoachAnswerPayloadV1 | dict[str, object],
+        runtime_metadata_out: dict[str, object] | None = None,
     ):
         if event.status != "pending" or event.answer_payload:
             raise AiCoachChatServiceError(
@@ -438,6 +449,7 @@ class AiCoachChatService:
             return await self._scoring.score_quiz_event(
                 event,
                 answer_payload=answer_payload,
+                runtime_metadata_out=runtime_metadata_out,
             )
         except AiCoachChatScoringError as exc:
             raise service_error_from_exception(exc) from exc

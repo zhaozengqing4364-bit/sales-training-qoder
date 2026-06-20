@@ -552,6 +552,9 @@ def test_generate_interaction_rejects_mixed_drill_type_mismatch(
 def test_score_short_answer_accepts_resolver_ok_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    captured_compile_kwargs: dict[str, object] = {}
+    captured_llm_configs: list[object] = []
+
     class FakeResolver:
         def __init__(self, db: object) -> None:
             self._db = db
@@ -571,9 +574,21 @@ def test_score_short_answer_accepts_resolver_ok_status(
             self._db = db
 
         def compile_runtime_prompt_contract(self, **kwargs):  # noqa: ANN003
+            captured_compile_kwargs.update(kwargs)
             return Result.ok(_compiled_contract())
 
     class FakeLLMService:
+        def __init__(self, config: object | None = None) -> None:
+            captured_llm_configs.append(config)
+
+        @property
+        def provider(self) -> str:
+            return "openai"
+
+        @property
+        def model_name(self) -> str:
+            return "coach-score-model"
+
         async def generate(self, **kwargs):  # noqa: ANN003
             return Result.ok(
                 json.dumps(
@@ -584,6 +599,18 @@ def test_score_short_answer_accepts_resolver_ok_status(
                     }
                 )
             )
+
+    model_config = SimpleNamespace(
+        id="model-config-1",
+        provider="openai",
+        base_url="https://llm.example/v1",
+        model_name="coach-score-model",
+        extra_config={"temperature": 0.1},
+    )
+
+    def fake_resolve_model(model_name: str | None) -> object | None:
+        assert model_name == "coach-score-model"
+        return model_config
 
     monkeypatch.setattr(
         "sales_trainer.services.ai_coach_session_service.PromptTemplateRevisionResolver",
@@ -597,7 +624,12 @@ def test_score_short_answer_accepts_resolver_ok_status(
         "sales_trainer.services.ai_coach_session_service.LLMService",
         FakeLLMService,
     )
+    monkeypatch.setattr(
+        "sales_trainer.services.ai_coach_session_service.resolve_ai_coach_llm_model_config",
+        fake_resolve_model,
+    )
     service = AiCoachSessionService(_FakeDb())  # type: ignore[arg-type]
+    runtime_metadata: dict[str, object] = {}
 
     result = asyncio.run(
         service.score_short_answer(
@@ -616,6 +648,8 @@ def test_score_short_answer_accepts_resolver_ok_status(
             ),
             session_id="session-1",
             scoring_prompt_template_id="22222222-2222-2222-2222-222222222222",
+            scoring_model="coach-score-model",
+            runtime_metadata_out=runtime_metadata,
         )
     )
 
@@ -623,6 +657,22 @@ def test_score_short_answer_accepts_resolver_ok_status(
     assert result.value is not None
     assert result.value.score == 86
     assert result.value.feedback == "回答完整。"
+    assert captured_llm_configs == [model_config]
+    assert captured_compile_kwargs["model_config"] == {
+        "provider": "openai",
+        "base_url": "https://llm.example/v1",
+        "model_name": "coach-score-model",
+        "extra_config": {"temperature": 0.1},
+    }
+    assert runtime_metadata == {
+        "prompt_template_id": "11111111-1111-1111-1111-111111111111",
+        "prompt_revision_id": "head",
+        "contract_hash": "hash-1",
+        "requested_model": "coach-score-model",
+        "model_config_id": "model-config-1",
+        "model_provider": "openai",
+        "model_name": "coach-score-model",
+    }
 
 
 def test_create_session_v1_rejects_disallowed_coach_mode(

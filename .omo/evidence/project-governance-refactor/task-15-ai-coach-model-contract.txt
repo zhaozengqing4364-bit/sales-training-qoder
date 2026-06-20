@@ -1,0 +1,15 @@
+Task 15: AI Coach runtime prompt/model gaps
+
+Scope
+- generation_model now resolves to an active LLM ModelConfig for both legacy interaction generation and chat-first generation.
+- scoring_model now resolves to an active LLM ModelConfig for short-answer scoring.
+- Prompt contract compilation receives the effective model config payload, so prompt contract hashes include model identity.
+- Short-answer scoring persistence records runtime_audit.scoring with prompt template id, prompt revision id, compiled contract hash, requested model, resolved model config id, provider, and model name.
+- Missing configured model names fail closed with [AI_COACH_MODEL_CONFIG_NOT_FOUND] instead of silently falling back to the default LLM.
+- Admin-authored prompt_contract_hash/scoring_contract_hash remain blocked by AiCoachConfig coercion; this task did not relax that boundary.
+
+Validation
+- cd backend && venv/bin/python -m pytest tests/unit/test_sales_trainer_ai_coach.py tests/unit/test_sales_trainer_ai_coach_chat.py tests/unit/prompt_templates/test_compiled_prompt_contract.py --no-cov -q
+  - Result: 83 passed, 1 ChromaDB asyncio deprecation warning.
+- cd backend && venv/bin/python -m ruff check src/sales_trainer/services/ai_coach_model_config.py src/sales_trainer/services/ai_coach_chat_generation_prompt.py src/sales_trainer/services/ai_coach_chat_generation.py src/sales_trainer/services/ai_coach_session_service.py src/sales_trainer/services/ai_coach_chat_scoring.py src/sales_trainer/services/ai_coach_chat_service.py tests/unit/test_sales_trainer_ai_coach.py tests/unit/test_sales_trainer_ai_coach_chat.py
+  - Result: All checks passed.

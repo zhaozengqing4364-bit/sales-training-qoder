@@ -728,6 +728,9 @@ def test_public_quiz_card_projection_drops_internal_answer_key() -> None:
 def test_generate_chat_response_retries_when_model_output_breaks_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    captured_compile_kwargs: dict[str, object] = {}
+    captured_llm_configs: list[object] = []
+
     class FakeResolver:
         def __init__(self, _db: object) -> None:
             return None
@@ -746,7 +749,8 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
         def __init__(self, _db: object) -> None:
             return None
 
-        def compile_runtime_prompt_contract(self, **_kwargs: object) -> Result:
+        def compile_runtime_prompt_contract(self, **kwargs: object) -> Result:
+            captured_compile_kwargs.update(kwargs)
             return Result.ok(_compiled_chat_contract())
 
     class FakeLLMService:
@@ -754,12 +758,27 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
         response_formats: list[object] = []
         outputs = ["not json", json.dumps(_chat_response(card_count=1))]
 
+        def __init__(self, config: object | None = None) -> None:
+            captured_llm_configs.append(config)
+
         async def generate(self, **kwargs: object) -> Result:
             prompt = kwargs.get("prompt")
             assert isinstance(prompt, str)
             self.prompts.append(prompt)
             self.response_formats.append(kwargs.get("response_format"))
             return Result.ok(self.outputs.pop(0))
+
+    model_config = SimpleNamespace(
+        id="model-config-1",
+        provider="openai",
+        base_url="https://llm.example/v1",
+        model_name="coach-generation-model",
+        extra_config={"temperature": 0.2},
+    )
+
+    def fake_resolve_model(model_name: str | None) -> object | None:
+        assert model_name == "coach-generation-model"
+        return model_config
 
     monkeypatch.setattr(
         chat_generation_prompt_module,
@@ -772,9 +791,20 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
         FakePromptTemplateService,
     )
     monkeypatch.setattr(chat_generation_module, "LLMService", FakeLLMService)
+    monkeypatch.setattr(
+        chat_generation_prompt_module,
+        "resolve_ai_coach_llm_model_config",
+        fake_resolve_model,
+    )
+    monkeypatch.setattr(
+        chat_generation_module,
+        "resolve_ai_coach_llm_model_config",
+        fake_resolve_model,
+    )
     config = AiCoachConfig(
         enabled=True,
         prompt_template_id="11111111-1111-1111-1111-111111111111",
+        generation_model="coach-generation-model",
         retry_policy={"max_retries": 1, "retry_backoff": 1.0},
     )
     session = SimpleNamespace(
@@ -798,6 +828,13 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
     assert parsed.assistant_text == "可以，我们先做一组商务礼仪情境卡。"
     assert len(parsed.ui_events) == 1
     assert session.prompt_contract_hash == "hash-chat-1"
+    assert captured_llm_configs == [model_config, model_config]
+    assert captured_compile_kwargs["model_config"] == {
+        "provider": "openai",
+        "base_url": "https://llm.example/v1",
+        "model_name": "coach-generation-model",
+        "extra_config": {"temperature": 0.2},
+    }
     assert len(FakeLLMService.prompts) == 2
     assert FakeLLMService.response_formats == [
         AI_COACH_JSON_RESPONSE_FORMAT,
@@ -1044,6 +1081,127 @@ def test_score_text_quiz_event_calls_ai_short_answer_scoring(
     assert captured["scoring_prompt_template_id"] == "22222222-2222-2222-2222-222222222222"
     assert captured["scoring_prompt_revision_id"] == "rev-1"
     assert captured["scoring_contract_hash"] == "hash-score-1"
+    assert "runtime_metadata_out" in captured
+
+
+def test_score_and_persist_event_answer_stores_scoring_runtime_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(UTC)
+    session = SimpleNamespace(
+        session_id="session-1",
+        user_id="user-1",
+        module_key="other_module",
+        config_snapshot={"mastery_threshold": 80},
+    )
+    event = SimpleNamespace(
+        event_id="event-1",
+        session_id="session-1",
+        event_type="quiz_card",
+        status="pending",
+        payload_json={
+            "interaction_snapshot": _short_answer_interaction(),
+            "public_interaction": {},
+        },
+        answer_payload=None,
+        score_result=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+    class FakeRuntime:
+        def config_from_session(self, _session: object) -> AiCoachConfig:
+            return AiCoachConfig(
+                mastery_threshold=80,
+                allowed_interaction_types=["single_choice", "short_answer"],
+                scoring_prompt_template_id="22222222-2222-2222-2222-222222222222",
+            )
+
+    class FakeLogs:
+        async def record(self, **_kwargs: object) -> None:
+            return None
+
+    async def fake_require_owned_session(
+        self: AiCoachChatService,
+        session_id: str,
+        user_id: str,
+    ) -> object:
+        assert session_id == "session-1"
+        assert user_id == "user-1"
+        return session
+
+    async def fake_event(
+        self: AiCoachChatService,
+        session_id: str,
+        event_id: str,
+    ) -> object:
+        assert session_id == "session-1"
+        assert event_id == "event-1"
+        return event
+
+    async def fake_score_quiz_event(
+        self: AiCoachChatService,
+        _event: object,
+        *,
+        answer_payload: AiCoachAnswerPayloadV1 | dict[str, object],
+        runtime_metadata_out: dict[str, object] | None = None,
+    ) -> AiCoachScoreResultV1:
+        assert answer_payload
+        assert runtime_metadata_out is not None
+        runtime_metadata_out.update(
+            {
+                "prompt_template_id": "22222222-2222-2222-2222-222222222222",
+                "prompt_revision_id": "rev-1",
+                "contract_hash": "hash-score-1",
+                "requested_model": "coach-score-model",
+                "model_config_id": "model-config-1",
+                "model_provider": "openai",
+                "model_name": "coach-score-model",
+            }
+        )
+        return AiCoachScoreResultV1(
+            score=90,
+            max_score=100,
+            feedback="回答清楚。",
+            missed_points=[],
+        )
+
+    monkeypatch.setattr(
+        AiCoachChatService,
+        "_require_owned_session",
+        fake_require_owned_session,
+    )
+    monkeypatch.setattr(AiCoachChatService, "_event", fake_event)
+    monkeypatch.setattr(AiCoachChatService, "score_quiz_event", fake_score_quiz_event)
+
+    service = AiCoachChatService(
+        _FakeDb(),  # type: ignore[arg-type]
+        logs=FakeLogs(),  # type: ignore[arg-type]
+        runtime=FakeRuntime(),  # type: ignore[arg-type]
+    )
+
+    asyncio.run(
+        service.score_and_persist_event_answer(
+            session_id="session-1",
+            event_id="event-1",
+            user_id="user-1",
+            answer_payload=AiCoachAnswerPayloadV1(
+                variant="text",
+                text="我会先确认来访目的和人数，再安排接待。",
+            ),
+        )
+    )
+
+    assert event.status == "scored"
+    assert event.score_result["runtime_audit"]["scoring"] == {
+        "prompt_template_id": "22222222-2222-2222-2222-222222222222",
+        "prompt_revision_id": "rev-1",
+        "contract_hash": "hash-score-1",
+        "requested_model": "coach-score-model",
+        "model_config_id": "model-config-1",
+        "model_provider": "openai",
+        "model_name": "coach-score-model",
+    }
 
 
 def test_projection_exposes_active_event_and_answering_phase() -> None:
@@ -2129,7 +2287,13 @@ def test_auto_advance_after_answer_appends_next_quiz_card(
             return 2
 
     class FakeScorer:
-        async def score_quiz_event(self, _event: object, *, answer_payload: object):
+        async def score_quiz_event(
+            self,
+            _event: object,
+            *,
+            answer_payload: object,
+            runtime_metadata_out: object | None = None,
+        ):
             assert answer_payload is not None
             from sales_trainer.schemas import AiCoachScoreResultV1
 

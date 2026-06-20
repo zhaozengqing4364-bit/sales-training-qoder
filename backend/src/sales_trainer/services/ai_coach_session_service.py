@@ -35,6 +35,12 @@ from sales_trainer.schemas import (
     AiCoachTurnPublicV1,
     NewcomerArticleBinding,
 )
+from sales_trainer.services.ai_coach_model_config import (
+    AiCoachModelConfigError,
+    model_config_contract_payload,
+    model_config_id,
+    resolve_ai_coach_llm_model_config,
+)
 from sales_trainer.services.ai_coach_scoring_service import AiCoachScoringService
 from sales_trainer.services.article_binding_service import ArticleBindingService
 from sales_trainer.services.operation_log_service import OperationLogService
@@ -795,6 +801,13 @@ class AiCoachSessionService:
             )
         template = resolution.snapshot.template
 
+        try:
+            model_config = resolve_ai_coach_llm_model_config(
+                ai_coach_config.generation_model
+            )
+        except AiCoachModelConfigError as exc:
+            raise AiCoachSessionServiceError(exc.code, exc.message, 409) from exc
+
         # 2. Compile the runtime contract using the resolved template.
         prompt_service = PromptTemplateService(self._db)
         variables = await self._build_generation_variables(
@@ -805,7 +818,7 @@ class AiCoachSessionService:
             variables=variables,
             runtime_consumer="ai_coach.generate_interaction",
             system_message=self._build_generation_system_message(ai_coach_config),
-            model_config=None,
+            model_config=model_config_contract_payload(model_config),
         )
         if not compile_result.is_success or compile_result.value is None:
             raise AiCoachSessionServiceError(
@@ -819,7 +832,7 @@ class AiCoachSessionService:
 
         # 4. LLM call. We use the shared LLMService so cost / metrics /
         # tracing stay consistent with the rest of the sales_trainer stack.
-        llm_service = LLMService()
+        llm_service = LLMService(config=model_config) if model_config is not None else LLMService()
         llm_result = await llm_service.generate(
             prompt=contract.rendered_prompt,
             session_id=session.session_id,
@@ -939,6 +952,7 @@ class AiCoachSessionService:
         self._validate_answer_payload(internal, answer_payload)
 
         # Score using the dedicated strategy.
+        scoring_runtime_metadata: dict[str, object] = {}
         if answer_payload.variant == "choice":
             score_result = self.score_choice(
                 answer_payload=answer_payload,
@@ -963,6 +977,8 @@ class AiCoachSessionService:
                 scoring_prompt_template_id=scoring_prompt_template_id,
                 scoring_prompt_revision_id=scoring_prompt_revision_id,
                 scoring_contract_hash=scoring_contract_hash,
+                scoring_model=config_snapshot.get("scoring_model"),
+                runtime_metadata_out=scoring_runtime_metadata,
             )
             if not short_answer_result.is_success:
                 failure_code = short_answer_result.fallback or "[AI_COACH_SCORING_FAILED]"
@@ -998,8 +1014,13 @@ class AiCoachSessionService:
         latest_turn.ai_feedback = score_result.feedback
         latest_turn.missed_points = list(score_result.missed_points)
         latest_turn.answer_payload = answer_payload.model_dump(mode="json")
-        latest_turn.score_result = score_result.model_dump(mode="json")
-        latest_turn.validated_output = score_result.model_dump(mode="json")
+        score_result_payload = score_result.model_dump(mode="json")
+        if answer_payload.variant == "text" and scoring_runtime_metadata:
+            score_result_payload["runtime_audit"] = {
+                "scoring": dict(scoring_runtime_metadata)
+            }
+        latest_turn.score_result = score_result_payload
+        latest_turn.validated_output = score_result_payload
         await self._db.flush()
 
         # Decide whether to continue or finish.
@@ -1282,6 +1303,8 @@ class AiCoachSessionService:
         scoring_prompt_template_id: str | None = None,
         scoring_prompt_revision_id: str | None = None,
         scoring_contract_hash: str | None = None,
+        scoring_model: str | None = None,
+        runtime_metadata_out: dict[str, object] | None = None,
     ) -> Result[AiCoachScoreResultV1]:
         """LLM-based short-answer scoring using a separate prompt revision.
 
@@ -1333,6 +1356,10 @@ class AiCoachSessionService:
             )
 
         template = resolution.snapshot.template
+        try:
+            model_config = resolve_ai_coach_llm_model_config(scoring_model)
+        except AiCoachModelConfigError as exc:
+            return Result.fail(exc.code)
 
         compile_result = PromptTemplateService(self._db).compile_runtime_prompt_contract(
             template=template,
@@ -1343,6 +1370,7 @@ class AiCoachSessionService:
             ),
             runtime_consumer="ai_coach.score_short_answer",
             system_message=self._build_short_answer_system_message(),
+            model_config=model_config_contract_payload(model_config),
         )
         if not compile_result.is_success or compile_result.value is None:
             return Result.fail("[AI_COACH_SCORING_PROMPT_RENDER_FAILED]")
@@ -1354,7 +1382,19 @@ class AiCoachSessionService:
         ):
             return Result.fail("[AI_COACH_SCORING_PROMPT_CONTRACT_MISMATCH]")
 
-        llm_service = LLMService()
+        llm_service = LLMService(config=model_config) if model_config is not None else LLMService()
+        if runtime_metadata_out is not None:
+            runtime_metadata_out.update(
+                {
+                    "prompt_template_id": str(contract.template_id),
+                    "prompt_revision_id": resolution.snapshot.prompt_revision_id,
+                    "contract_hash": contract.contract_hash,
+                    "requested_model": scoring_model,
+                    "model_config_id": model_config_id(model_config),
+                    "model_provider": llm_service.provider,
+                    "model_name": llm_service.model_name,
+                }
+            )
         llm_result = await llm_service.generate(
             prompt=contract.rendered_prompt,
             session_id=session_id,

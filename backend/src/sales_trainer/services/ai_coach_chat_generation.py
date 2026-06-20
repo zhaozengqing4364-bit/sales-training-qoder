@@ -20,6 +20,10 @@ from sales_trainer.services.ai_coach_chat_generation_streaming import (
     emit_streamed_response,
     prompt_for_attempt,
 )
+from sales_trainer.services.ai_coach_model_config import (
+    AiCoachModelConfigError,
+    resolve_ai_coach_llm_model_config,
+)
 
 
 class AiCoachChatGenerator:
@@ -36,17 +40,24 @@ class AiCoachChatGenerator:
         history: list[SalesTrainerAiCoachChatMessage],
         on_generation_delta: AiCoachGenerationDeltaHandler | None = None,
     ) -> AiCoachChatResponseInternalV1:
+        try:
+            model_config = resolve_ai_coach_llm_model_config(config.generation_model)
+        except AiCoachModelConfigError as exc:
+            raise AiCoachChatGenerationError(exc.code, exc.message, 409) from exc
         contract = await AiCoachChatPromptCompiler(self._db).compile(
             session=session,
             config=config,
             user_message=user_message,
             history=history,
+            model_config=model_config,
         )
         session.prompt_contract_hash = contract.contract_hash
         max_attempts = config.retry_policy.max_retries + 1
         if on_generation_delta is not None:
             streamed = await emit_streamed_response(
-                llm=LLMService(),
+                llm=LLMService(config=model_config)
+                if model_config is not None
+                else LLMService(),
                 parser=self._parser,
                 contract=contract,
                 config=config,
@@ -59,7 +70,12 @@ class AiCoachChatGenerator:
         last_error: AiCoachChatGenerationError | None = None
         for attempt in range(max_attempts):
             prompt = prompt_for_attempt(contract.rendered_prompt, last_error)
-            result = await LLMService().generate(
+            llm_service = (
+                LLMService(config=model_config)
+                if model_config is not None
+                else LLMService()
+            )
+            result = await llm_service.generate(
                 prompt=prompt,
                 session_id=session.session_id,
                 system_message=contract.system_message,

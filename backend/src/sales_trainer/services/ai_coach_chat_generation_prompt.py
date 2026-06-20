@@ -14,6 +14,11 @@ from sales_trainer.services.ai_coach_chat_errors import AiCoachChatGenerationErr
 from sales_trainer.services.ai_coach_chat_generation_parser import (
     AiCoachChatResponseParser,
 )
+from sales_trainer.services.ai_coach_model_config import (
+    AiCoachModelConfigError,
+    model_config_contract_payload,
+    resolve_ai_coach_llm_model_config,
+)
 from sales_trainer.services.ai_coach_session_service import AiCoachSessionService
 from sales_trainer.services.prompt_template_revision_resolver import (
     RESULT_AUDIT_HISTORY_UNAVAILABLE,
@@ -21,6 +26,8 @@ from sales_trainer.services.prompt_template_revision_resolver import (
     PromptTemplateRevisionResolver,
     PromptTemplateRevisionResolverError,
 )
+
+_MODEL_CONFIG_UNSET = object()
 
 
 class AiCoachChatPromptCompiler:
@@ -34,6 +41,7 @@ class AiCoachChatPromptCompiler:
         config: AiCoachConfig,
         user_message: str,
         history: list[SalesTrainerAiCoachChatMessage],
+        model_config: object | None = _MODEL_CONFIG_UNSET,
     ) -> CompiledPromptContract:
         resolver = PromptTemplateRevisionResolver(self._db)
         try:
@@ -54,14 +62,17 @@ class AiCoachChatPromptCompiler:
                 "AI 教练 Prompt revision 不可用。",
                 409,
             )
-        compile_result = PromptTemplateService(
-            self._db
-        ).compile_runtime_prompt_contract(
+        if model_config is _MODEL_CONFIG_UNSET:
+            try:
+                model_config = resolve_ai_coach_llm_model_config(config.generation_model)
+            except AiCoachModelConfigError as exc:
+                raise AiCoachChatGenerationError(exc.code, exc.message, 409) from exc
+        compile_result = PromptTemplateService(self._db).compile_runtime_prompt_contract(
             template=resolution.snapshot.template,
             variables=self._generation_variables(session, config, user_message, history),
             runtime_consumer="ai_coach.chat.generate",
             system_message=self.system_message(config),
-            model_config=None,
+            model_config=model_config_contract_payload(model_config),
         )
         if not compile_result.is_success or compile_result.value is None:
             raise AiCoachChatGenerationError(
