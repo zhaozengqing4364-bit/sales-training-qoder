@@ -65,3 +65,26 @@ def test_should_keep_unit_payload_unchanged_when_ai_coach_config_is_absent() -> 
     safe_payload = learner_safe_unit_payload(payload)
 
     assert safe_payload is payload
+
+
+def test_should_strip_internal_fields_even_without_ai_coach_config() -> None:
+    payload = {
+        "unit_id": "unit-ppt",
+        "raw_model_output": {"text": "internal"},
+        "config": {
+            "path": {
+                "module_key": "ppt_delivery",
+                "learning_content_id": "content-1",
+            },
+            "answer_key": {"correct": "A"},
+            "nested": {"scoring_rubric": {"max_score": 100}},
+        },
+    }
+
+    safe_payload = learner_safe_unit_payload(payload)
+
+    assert safe_payload["unit_id"] == "unit-ppt"
+    assert "raw_model_output" not in safe_payload
+    assert "answer_key" not in safe_payload["config"]
+    assert safe_payload["config"]["nested"] == {}
+    assert payload["raw_model_output"] == {"text": "internal"}

@@ -4,8 +4,8 @@ from typing import Any
 
 from sales_trainer.models import SalesTrainerUnit
 from sales_trainer.schemas import SalesTrainerPathConfig
-from sales_trainer.services.path_projection_payloads import build_path_payload
 from sales_trainer.services.path_progress_service import UnitProgress
+from sales_trainer.services.path_projection_payloads import build_path_payload
 
 
 def _unit(

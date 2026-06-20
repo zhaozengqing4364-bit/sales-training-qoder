@@ -37,44 +37,15 @@ from sales_trainer.services.ai_coach_session_service import (
     AiCoachSessionService,
     AiCoachSessionServiceError,
 )
+from sales_trainer.services.learner_public_projection import (
+    assert_learner_public_payload,
+)
 
 router = APIRouter(
     prefix="/newcomer-training/ai-coach",
     tags=["newcomer-training-ai-coach"],
 )
 
-# Internal-only field names that must NEVER appear in the learner-facing
-# response payload. Centralised here so the public serializer is the single
-# place that can guarantee the contract.
-# NOTE: `stem` and `feedback_guidance` are intentionally NOT in this list.
-# `public_interaction.stem` IS a learner-facing field (it carries the
-# question text the learner needs to read), and the deny-list scan is
-# structured below to skip any `public_interaction` subtree, so it never
-# even reaches inside that branch.
-_LEARNER_FACING_DENY_LIST: frozenset[str] = frozenset(
-    {
-        "raw_model_output",
-        "validated_output",
-        "interaction_snapshot",
-        "public_interaction_raw",
-        "prompt_template_id",
-        "prompt_revision_id",
-        "prompt_contract_hash",
-        "trace_id",
-        "article_snapshot",
-        "path_config_snapshot",
-        "config_snapshot",
-        "source_evidence",
-        "answer_key",
-        "scoring_rubric",
-        "next_question",  # internal-only field on the turn row
-    }
-)
-
-# Public-facing subtrees that the deny-list tripwire must NOT recurse into.
-# `public_interaction` is already validated by Pydantic with extra="forbid"
-# and its allow-list is the canonical contract, so re-scanning it here
-# only risks false positives.
 _LEARNER_FACING_PUBLIC_SUBTREES: frozenset[str] = frozenset({"public_interaction"})
 
 # Error codes the learner-facing API may emit. Kept here so the route layer
@@ -149,39 +120,13 @@ def _success_json(
 
 
 def _assert_no_internal_leak(payload: dict[str, Any]) -> None:
-    """Assert the public payload contains no internal-only field names.
-
-    Acts as a tripwire: any future field added to the SQLAlchemy model that
-    happens to share a name with a deny-list entry will fail loudly in tests
-    instead of silently leaking into the learner API.
-
-    Public-facing subtrees (e.g. ``public_interaction``) are skipped:
-    their shape is pinned by a Pydantic ``extra="forbid"`` model and the
-    allow-list inside ``serialize_session_public``, so re-scanning them here
-    would only trigger false positives (e.g. the public ``stem`` field).
-    """
-    leaked: list[str] = []
-    stack: list[Any] = [payload]
-    while stack:
-        node = stack.pop()
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key in _LEARNER_FACING_DENY_LIST:
-                    leaked.append(str(key))
-                # Skip descending into public subtrees — their contract is
-                # owned by the Pydantic allow-list in the serializer.
-                if key in _LEARNER_FACING_PUBLIC_SUBTREES:
-                    continue
-                if isinstance(value, (dict, list)):
-                    stack.append(value)
-        elif isinstance(node, list):
-            for item in node:
-                if isinstance(item, (dict, list)):
-                    stack.append(item)
-    if leaked:
-        raise RuntimeError(
-            f"ai_coach_api leaked internal fields: {sorted(set(leaked))}"
+    try:
+        assert_learner_public_payload(
+            payload,
+            public_subtrees=_LEARNER_FACING_PUBLIC_SUBTREES,
         )
+    except RuntimeError as exc:
+        raise RuntimeError(f"ai_coach_api {exc}") from exc
 
 
 def _serialize_session_public(

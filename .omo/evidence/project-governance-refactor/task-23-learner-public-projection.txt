@@ -1,0 +1,47 @@
+Task 23 Learner Public Projection Consolidation
+Date: 2026-06-20
+
+Scope
+- backend/src/sales_trainer/services/learner_public_projection.py
+- backend/src/sales_trainer/services/unit_public_payloads.py
+- backend/src/sales_trainer/services/path_projection_payloads.py
+- backend/src/sales_trainer/ai_coach_api.py
+- backend/tests/unit/test_sales_trainer_unit_public_payloads.py
+- backend/tests/unit/test_sales_trainer_path_projection_ai_coach.py
+- backend/tests/unit/test_sales_trainer_phase2_projection.py
+
+Change summary
+- Added one shared learner-public projection module for sensitive field detection and stripping.
+- Reused the shared projection from unit payloads, path level payloads, and AI Coach public payload assertions.
+- Kept `public_interaction` as the explicit public subtree exception for AI Coach payloads.
+- Added coverage for stripping internal fields even when `path.ai_coach` is absent.
+
+Red test evidence
+
+Command:
+cd backend && venv/bin/python -m pytest tests/unit/test_sales_trainer_unit_public_payloads.py --no-cov -q
+Exit before implementation: 1
+Relevant failure:
+- `raw_model_output` remained in learner_safe_unit_payload output when `path.ai_coach` was absent.
+
+Green test evidence
+
+Command:
+cd backend && venv/bin/python -m pytest tests/unit/test_sales_trainer_unit_public_payloads.py tests/unit/test_sales_trainer_path_projection_ai_coach.py tests/unit/test_sales_trainer_phase2_projection.py --no-cov -q
+Exit: 0
+Result:
+13 passed, 1 warning
+
+Command:
+cd backend && venv/bin/python -m ruff check src/sales_trainer/services/learner_public_projection.py src/sales_trainer/services/unit_public_payloads.py src/sales_trainer/services/path_projection_payloads.py src/sales_trainer/ai_coach_api.py tests/unit/test_sales_trainer_unit_public_payloads.py tests/unit/test_sales_trainer_path_projection_ai_coach.py tests/unit/test_sales_trainer_phase2_projection.py
+Exit: 0
+Result:
+All checks passed!
+
+Sensitive field policy
+- Denied by default: prompt ids, prompt revisions, contract hashes, answer keys, rubrics, raw/validated model output, internal snapshots, source evidence, trace ids.
+- Public exception: AI Coach `public_interaction` subtree remains governed by its Pydantic public DTO.
+
+Residual constraints
+- This task does not change manager/admin payloads.
+- Existing dirty changes in `backend/src/sales_trainer/services/path_config_service.py` were not touched.

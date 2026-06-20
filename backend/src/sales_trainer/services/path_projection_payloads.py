@@ -6,6 +6,9 @@ from pydantic import ValidationError
 
 from sales_trainer.models import SalesTrainerUnit
 from sales_trainer.schemas import AiCoachConfig, SalesTrainerPathConfig
+from sales_trainer.services.learner_public_projection import (
+    strip_learner_internal_fields,
+)
 from sales_trainer.services.path_guidance import (
     DEFAULT_GUIDANCE_TEMPLATES,
     build_goal_context,
@@ -132,7 +135,7 @@ def _serialize_level(
 def _public_level(level: dict[str, Any]) -> dict[str, Any]:
     payload = dict(level)
     payload.pop("guidance_templates", None)
-    return payload
+    return strip_learner_internal_fields(payload)
 
 
 def _is_completed(progress: UnitProgress | None, rule: str) -> bool:
