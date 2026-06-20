@@ -61,7 +61,7 @@ import type {
     SalesTrainerUnitCreateRequest,
     SalesTrainerUnitListResponse,
     SalesTrainerUnitUpdateRequest,
-} from "../types";
+} from "../types/newcomer-training";
 import type { ApiRequest, ApiStream, ApiUpload } from "./shared";
 import { buildQueryString } from "./shared";
 

@@ -44,7 +44,7 @@ import type {
     SalesTrainerUnitCreateRequest,
     SalesTrainerUnitListResponse,
     SalesTrainerUnitUpdateRequest,
-} from "../types";
+} from "../types/sales-trainer";
 import type { ApiRequest, ApiUpload } from "./shared";
 import { buildQueryString } from "./shared";
 import { createAdminNewcomerTrainingDomain } from "./newcomer-training";
