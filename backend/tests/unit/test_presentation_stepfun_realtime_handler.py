@@ -12,7 +12,13 @@ from common.error_handling.result import Result
 from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
     PresentationStepFunRealtimeHandler,
 )
-from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
+from sales_bot.websocket.stepfun_realtime_handler import (
+    StepFunRealtimeHandler,
+    StepFunRealtimeSharedHandler,
+)
+from sales_bot.websocket.stepfun_realtime_sales_stage import (
+    StepFunRealtimeSalesStageMixin,
+)
 
 
 @pytest.fixture
@@ -45,6 +51,14 @@ def test_presentation_stepfun_handler_forwards_collaborator_factories():
     assert handler.session_scenario_type == "presentation"
 
 
+def test_presentation_stepfun_handler_does_not_inherit_sales_stage_mixin():
+    assert isinstance(StepFunRealtimeHandler(), StepFunRealtimeSalesStageMixin)
+    assert not isinstance(
+        PresentationStepFunRealtimeHandler(),
+        StepFunRealtimeSalesStageMixin,
+    )
+
+
 @pytest.mark.asyncio
 async def test_handle_client_text_routes_page_change(handler):
     handler._handle_page_change = AsyncMock()
@@ -62,7 +76,7 @@ async def test_handle_client_text_control_start_emits_page_context(handler):
     handler.session_status = "in_progress"
 
     with patch.object(
-        StepFunRealtimeHandler,
+        StepFunRealtimeSharedHandler,
         "_handle_client_text",
         new=AsyncMock(),
     ) as super_handle:

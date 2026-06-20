@@ -235,12 +235,11 @@ from sales_bot.websocket.stepfun_runtime_types import (
 )
 
 
-class StepFunRealtimeHandler(
+class StepFunRealtimeSharedHandler(
     StepFunRealtimeConnectionMixin,
     StepFunRealtimePolicyMixin,
     StepFunRealtimeUpstreamMixin,
     StepFunRealtimeFeedbackMixin,
-    StepFunRealtimeSalesStageMixin,
     StepFunRealtimeStateBase,
 ):
     """
@@ -1152,6 +1151,13 @@ class StepFunRealtimeHandler(
             effective_policy=self._effective_policy,
             session_factory=self._db_session_factory,
         )
+
+
+class StepFunRealtimeHandler(
+    StepFunRealtimeSalesStageMixin,
+    StepFunRealtimeSharedHandler,
+):
+    pass
 
 
 def create_stepfun_realtime_handler() -> StepFunRealtimeHandler:

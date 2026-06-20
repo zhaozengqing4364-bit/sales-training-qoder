@@ -38,13 +38,13 @@ from presentation_coach.websocket.components import PresentationEventEmitter
 from prompt_templates.service import PromptTemplateService
 from sales_bot.websocket.stepfun_realtime_handler import (
     TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS,
-    StepFunRealtimeHandler,
+    StepFunRealtimeSharedHandler,
 )
 
 logger = get_logger(__name__)
 
 
-class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
+class PresentationStepFunRealtimeHandler(StepFunRealtimeSharedHandler):
     """StepFun realtime handler adapted for presentation scenario."""
 
     def __init__(
