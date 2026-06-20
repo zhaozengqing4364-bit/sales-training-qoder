@@ -88,6 +88,21 @@ Playwright 报告会输出到：
 - `.sisyphus/evidence/task-9-playwright-report/`
 - `.sisyphus/evidence/task-9-playwright-report.html`
 
+## Project governance checkpoint 证据流
+
+```bash
+bash scripts/project-governance-checkpoint.sh dry-checkpoint \
+  .omo/evidence/project-governance-refactor/task-4-dry-checkpoint.txt
+```
+
+该脚本只负责保存治理重构每轮的轻量 checkpoint 输出，以及在 full gate 已运行后镜像 `.sisyphus/evidence/task-9-quality-gate.txt`：
+
+```bash
+bash scripts/project-governance-checkpoint.sh mirror-quality-gate
+```
+
+完整发布门禁仍然只有 `bash scripts/critical-quality-gate.sh`。配套证据命名和镜像规则见 `docs/architecture/project-governance-checkpoints.md`。
+
 ## 一键停止开发环境
 
 ```bash
