@@ -1,0 +1,29 @@
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:1:# ADR 2026-06-20: 后端运行时边界与 contributor bootstrap 所有权
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:5:Accepted. 本 ADR 记录 `project-governance-refactor` Wave 1 对后端运行时组合根、domain contributor、common port 和 Roleplay Contract 共享边界的决策。
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:13:- `curriculum_practice/` 承载课程化内容、examiner runtime、Roleplay Contract、Situation Pack 和 runtime snapshot。
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:22:这些问题不会立刻改变用户路径，但会让后续 runtime、repair、release gate 和 Roleplay Contract 重构更难验证。
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:62:### 5. Roleplay Contract 属于共享契约，当前实现仍由 curriculum_practice 承载
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:64:当前 Roleplay Contract compiler/hash/freeze 实现仍在 `curriculum_practice/`。从边界所有权看，Roleplay Contract 是 runtime、snapshot、evaluation、Situation Pack 共同消费的共享契约 primitive，不应长期被视作 curriculum-only 内部实现。
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:82:### 方案 D：独立 contributor bootstrap + common port
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:90:不在本 ADR 中抽取 Roleplay Contract 代码，因为 Task 17 会单独处理共享 primitive 的物理迁移。当前只记录所有权原则，避免把尚未完成的迁移写成既成事实。
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:126:3. 如果 standalone script 失败，只回滚 `backend/scripts/repair_runtime_snapshots.py` 的 contributor 注册入口，并保留 common port。
+docs/adr/2026-06-20-backend-runtime-boundary-ownership.md:127:4. Roleplay Contract 的未来抽取如果失败，应回退共享 helper 的物理移动，保持现有 compiler/hash/freeze 行为不变。
+docs/adr/2026-05-26-roleplay-contract-governance.md:1:# ADR 2026-05-26: Roleplay Contract 情景包治理与运行时权威
+docs/adr/2026-05-26-roleplay-contract-governance.md:21:1. 新增 `Roleplay Contract` 作为客户对练运行时角色权威。`Persona`、`RoleProfile`、`CaseItem`、`PracticeTemplate`、`ScoringRuleset` 和 Situation Pack 都只是编译输入。
+docs/adr/2026-05-26-roleplay-contract-governance.md:27:7. 内置默认包只能作为安全兜底和迁移保护。缺失或非法配置可回退到内置默认以避免系统不可恢复；但新模板发布仍由 Roleplay Contract gate 阻断语义冲突。生产长期权威应逐步迁移到已发布配置/资产版本。
+docs/adr/2026-05-26-roleplay-contract-governance.md:29:9. `VoiceInstructionCompiler` 继续作为 prompt 编译承载；Roleplay Contract 只提供结构化合同和 visible payload，不新增并列 prompt compiler。
+docs/adr/2026-05-26-roleplay-contract-governance.md:55:- Situation Pack 运行时消费必须经过 frozen Roleplay Contract，不读 latest entity/config。
+docs/adr/2026-05-26-roleplay-contract-governance.md:65:- PracticeTemplate 是否要求 Roleplay Contract。
+docs/adr/2026-05-27-config-asset-b2-hitl-governance.md:17:Wave 5 同时交付 Import/Export（#102–#105）与 B1 runtime authority 切换（#96）。这些操作均可能改变生产中的 Roleplay Contract 语义，但当前缺少统一的「何时必须人工审批」契约。ADR [2026-05-26-roleplay-contract-governance.md](./2026-05-26-roleplay-contract-governance.md) 锁定了运行时权威与 ConfigBundle 治理接入，但未定义 Config Asset Center 各操作的人类审批边界。
+docs/adr/2026-05-27-config-asset-b2-hitl-governance.md:187:- 切换窗口内保持双写或影子 hash 对账；**运行时仍只消费 frozen Roleplay Contract**（ADR 2026-05-26 §8）。
+docs/adr/2026-05-27-config-asset-b2-hitl-governance.md:274:- **全部 publish AFK** — 拒绝；关系史与 forbidden patterns 变更直接影响 Roleplay Contract 语义。
+docs/adr/2026-05-27-config-asset-b2-hitl-governance.md:295:- [ADR 2026-05-26: Roleplay Contract 治理](./2026-05-26-roleplay-contract-governance.md)
+68:## 备选方案
+92:## 影响
+94:### 代码影响
+102:### 权限与状态影响
+108:### 测试影响
+116:### 运维影响
+120:## 回滚
+122:如该决策导致启动或 repair 路径问题，可以按以下顺序回滚：
+126:3. 如果 standalone script 失败，只回滚 `backend/scripts/repair_runtime_snapshots.py` 的 contributor 注册入口，并保留 common port。
