@@ -13,6 +13,10 @@ from common.services.practice_session_service import (
     PracticeServiceError,
     PracticeSessionCreateService,
 )
+from common.training_tasks.ports import (
+    TrainingTaskPracticeTemplate,
+    resolve_registered_training_task_practice_template,
+)
 from common.training_tasks.schemas import (
     TrainingTaskBatchAssignAssignedItem,
     TrainingTaskBatchAssignReasonItem,
@@ -23,7 +27,6 @@ from common.training_tasks.schemas import (
     TrainingTaskStartSessionRequest,
     TrainingTaskUpdate,
 )
-from curriculum_practice.models import PracticeTemplate
 
 MANAGER_ROLES = {"admin", "support"}
 
@@ -102,7 +105,7 @@ async def batch_assign_training_tasks(
     except ValueError:
         return _batch_failed(payload.user_ids, "[PRACTICE_TEMPLATE_INVALID]")
 
-    template = await db.get(PracticeTemplate, template_id)
+    template = await resolve_registered_training_task_practice_template(db, template_id)
     if template is None:
         return _batch_failed(payload.user_ids, "[PRACTICE_TEMPLATE_NOT_FOUND]")
     if template.status != "published":
@@ -205,7 +208,7 @@ def _batch_failed(
 
 
 def _validate_curriculum_plan_id(
-    template: PracticeTemplate,
+    template: TrainingTaskPracticeTemplate,
     curriculum_plan_id: str,
 ) -> str | None:
     curriculum_plan = template.curriculum_plan
@@ -279,7 +282,7 @@ async def _validated_practice_template_id(
         template_id = str(UUID(str(practice_template_id)))
     except ValueError as exc:
         raise ValueError("[PRACTICE_TEMPLATE_INVALID]") from exc
-    template = await db.get(PracticeTemplate, template_id)
+    template = await resolve_registered_training_task_practice_template(db, template_id)
     if template is None:
         raise LookupError("[PRACTICE_TEMPLATE_NOT_FOUND]")
     if template.status != "published":

@@ -10,6 +10,10 @@ from common.services.practice_session_ports import (
     register_practice_session_snapshot_applier,
     register_practice_template_runtime_identity_resolver,
 )
+from common.training_tasks.ports import (
+    TrainingTaskPracticeTemplate,
+    register_training_task_practice_template_resolver,
+)
 from curriculum_practice.models import PracticeTemplate
 from curriculum_practice.services.session_snapshots import (
     CurriculumSessionSnapshotError,
@@ -99,10 +103,29 @@ async def apply_curriculum_practice_session_snapshot(
         ) from exc
 
 
+async def resolve_curriculum_training_task_practice_template(
+    db: AsyncSession,
+    template_id: str,
+) -> TrainingTaskPracticeTemplate | None:
+    template = await db.get(PracticeTemplate, template_id)
+    if template is None:
+        return None
+    return TrainingTaskPracticeTemplate(
+        template_id=str(template.template_id),
+        status=str(template.status),
+        curriculum_plan=template.curriculum_plan
+        if isinstance(template.curriculum_plan, dict)
+        else None,
+    )
+
+
 def register_curriculum_practice_session_contributor() -> None:
     register_practice_template_runtime_identity_resolver(
         resolve_curriculum_practice_template_runtime_identity,
     )
     register_practice_session_snapshot_applier(
         apply_curriculum_practice_session_snapshot,
+    )
+    register_training_task_practice_template_resolver(
+        resolve_curriculum_training_task_practice_template,
     )

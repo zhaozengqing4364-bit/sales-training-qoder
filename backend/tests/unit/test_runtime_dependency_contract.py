@@ -39,7 +39,6 @@ COMMON_REVERSE_DEPENDENCY_ALLOWLIST = {
     "common/conversation/replay.py": {"agent", "curriculum_practice"},
     "common/db/session_lifecycle.py": {"evaluation"},
     "common/db/voice_policy_snapshot.py": {"agent"},
-    "common/training_tasks/service.py": {"curriculum_practice"},
 }
 
 

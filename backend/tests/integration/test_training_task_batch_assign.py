@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
 from common.db.models import TrainingTask, User
+from common.training_tasks.ports import (
+    resolve_registered_training_task_practice_template,
+)
 from curriculum_practice.models import PracticeTemplate
 
 
@@ -110,6 +113,23 @@ async def test_batch_assign_creates_training_task_for_same_department_user(
     assert task.assignee_id == str(assignee.user_id)
     assert task.practice_template_id == str(template.template_id)
     assert task.curriculum_plan_id == str(template.template_id)
+
+
+@pytest.mark.asyncio
+async def test_training_task_template_lookup_port_resolves_curriculum_template(
+    test_db: AsyncSession,
+) -> None:
+    template = await _template(test_db)
+
+    resolved = await resolve_registered_training_task_practice_template(
+        test_db,
+        str(template.template_id),
+    )
+
+    assert resolved is not None
+    assert resolved.template_id == str(template.template_id)
+    assert resolved.status == "published"
+    assert resolved.curriculum_plan == template.curriculum_plan
 
 
 @pytest.mark.asyncio
