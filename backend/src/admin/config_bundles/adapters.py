@@ -330,8 +330,17 @@ def _roleplay_situation_pack_overview(snapshot: dict[str, Any]) -> dict[str, Any
 
 
 def list_config_bundle_adapters() -> list[ConfigBundleAdapter]:
+    from admin.config_bundles.inventory_adapters import (
+        PromptTemplatesConfigBundleAdapter,
+        SalesTrainerAiCoachConfigBundleAdapter,
+        SalesTrainerPathConfigBundleAdapter,
+    )
+
     return [
         BusinessRuleSalesCombinationConfigBundleAdapter(),
         ScoringRulesetBundleAdapter(),
         RoleplaySituationPacksConfigBundleAdapter(),
+        SalesTrainerPathConfigBundleAdapter(),
+        SalesTrainerAiCoachConfigBundleAdapter(),
+        PromptTemplatesConfigBundleAdapter(),
     ]
