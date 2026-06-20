@@ -13,6 +13,19 @@ from common.business_rules.defaults import (
     ROLEPLAY_SITUATION_PACKS_KEY,
 )
 from common.business_rules.service import BusinessRuleConfigService
+from common.roleplay_contracts import (
+    LEGACY_ROLEPLAY_STATUS,
+    ROLEPLAY_COMPLIANCE_METRICS_KEY,
+    ROLEPLAY_CONTRACT_COMPILER_VERSION,
+    ROLEPLAY_CONTRACT_SCHEMA_VERSION,
+    ROLEPLAY_DISCLOSURE_STATE_KEY,
+    ROLEPLAY_STAGE_AUTHORITY,
+    check_roleplay_output,
+    roleplay_contract_hash,
+)
+from common.roleplay_contracts import (
+    roleplay_audit_hash as _audit_hash,
+)
 from curriculum_practice.models import CaseItem, PracticeTemplate
 from curriculum_practice.schemas import (
     GateResult,
@@ -36,10 +49,6 @@ from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
 )
 
-ROLEPLAY_CONTRACT_SCHEMA_VERSION = "roleplay_contract_v1"
-ROLEPLAY_CONTRACT_COMPILER_VERSION = "roleplay_contract_compiler_v1"
-ROLEPLAY_STAGE_AUTHORITY = "SalesStageCapability"
-LEGACY_ROLEPLAY_STATUS = "legacy_unstructured_roleplay"
 GENERAL_PRACTICE_SITUATION = "general_practice"
 
 ROLEPLAY_ALLOWED_VISIBLE_KEYS = {
@@ -57,16 +66,6 @@ ROLEPLAY_ALLOWED_VISIBLE_KEYS = {
     "renewal_risk",
     "compensation_boundary",
 }
-
-BLOCKING_VIOLATION_ACTIONS = {
-    "cancel_or_regenerate_once",
-    "regenerate_once",
-    "cancel_stream",
-    "hard_fail",
-}
-
-ROLEPLAY_DISCLOSURE_STATE_KEY = "roleplay_disclosure_state"
-ROLEPLAY_COMPLIANCE_METRICS_KEY = "roleplay_compliance"
 
 
 @dataclass(frozen=True, slots=True)
@@ -547,109 +546,6 @@ class RoleplayContractCompiler:
             compiled_at=compiled_at,
             legacy_status=LEGACY_ROLEPLAY_STATUS,
         )
-
-
-def check_roleplay_output(
-    *,
-    contract: dict[str, Any],
-    text: str,
-    runtime_state: dict[str, Any] | None = None,
-    current_visible_keys: list[str] | None = None,
-    current_sales_stage: str | None = None,
-) -> dict[str, Any]:
-    normalized = str(text or "").strip()
-    if not normalized:
-        return _compliance_decision(allowed=True)
-    if (
-        not isinstance(contract, dict)
-        or contract.get("schema_version") != ROLEPLAY_CONTRACT_SCHEMA_VERSION
-    ):
-        return _compliance_decision(
-            allowed=True,
-            severity="warning",
-            violation_code="ROLEPLAY_CONTRACT_MISSING",
-            action="mark_for_report",
-            audit_payload={"reason": "missing_or_invalid_contract"},
-        )
-    if contract.get("legacy_status") == LEGACY_ROLEPLAY_STATUS:
-        return _compliance_decision(
-            allowed=True,
-            severity="warning",
-            violation_code="ROLEPLAY_CONTRACT_LEGACY",
-            action="mark_for_report",
-            audit_payload={"contract_hash": _audit_hash(contract)},
-        )
-
-    runtime_state = runtime_state if isinstance(runtime_state, dict) else {}
-    relationship_context = _as_dict(contract.get("relationship_context"))
-    visible_keys = set(
-        current_visible_keys or _as_string_list(runtime_state.get("visible_keys"))
-    )
-    if not visible_keys:
-        scope = _as_dict(contract.get("visible_information_scope"))
-        visible_keys = set(_as_string_list(scope.get("initial_visible_keys")))
-    hidden_keys = set(
-        _as_string_list(
-            _as_dict(contract.get("visible_information_scope")).get(
-                "hidden_by_default_keys"
-            )
-        )
-    )
-
-    for pattern in _as_string_list(contract.get("forbidden_claim_patterns")):
-        if pattern and pattern in normalized:
-            violation_code = (
-                "ROLEPLAY_HISTORY_CONTRADICTION"
-                if relationship_context.get("has_prior_meeting") is False
-                else "ROLEPLAY_FORBIDDEN_CLAIM"
-            )
-            return _blocking_decision(
-                contract,
-                violation_code=violation_code,
-                matched_pattern=pattern,
-                policy_key="relationship_history_contradiction",
-            )
-
-    hidden_patterns = _as_string_list(
-        _as_dict(contract.get("disclosure_policy")).get("never_disclose_keys")
-    )
-    for hidden_key in hidden_keys:
-        if hidden_key not in visible_keys and hidden_key and hidden_key in normalized:
-            return _blocking_decision(
-                contract,
-                violation_code="ROLEPLAY_HIDDEN_INFORMATION_LEAK",
-                matched_pattern=hidden_key,
-                policy_key="hidden_information_leak",
-            )
-    for hidden_pattern in hidden_patterns:
-        if hidden_pattern and hidden_pattern in normalized:
-            return _blocking_decision(
-                contract,
-                violation_code="ROLEPLAY_HIDDEN_INFORMATION_LEAK",
-                matched_pattern=hidden_pattern,
-                policy_key="hidden_information_leak",
-            )
-
-    sales_stage = current_sales_stage or str(
-        runtime_state.get("current_sales_stage") or ""
-    )
-    forbidden_stages = set(
-        _as_string_list(
-            _as_dict(contract.get("sales_stage_policy")).get("forbidden_stage_codes")
-        )
-    )
-    if sales_stage and sales_stage in forbidden_stages:
-        return _blocking_decision(
-            contract,
-            violation_code="ROLEPLAY_FORBIDDEN_STAGE",
-            matched_pattern=sales_stage,
-            policy_key="forbidden_topic",
-        )
-
-    return _compliance_decision(
-        allowed=True,
-        audit_payload={"contract_hash": _audit_hash(contract)},
-    )
 
 
 def initial_roleplay_disclosure_state(
@@ -1321,7 +1217,7 @@ def _build_contract(
     }
     if legacy_status:
         contract["legacy_status"] = legacy_status
-    contract_hash = stable_hash(contract)
+    contract_hash = roleplay_contract_hash(contract)
     contract["contract_id"] = contract_hash
     contract["audit"]["contract_hash"] = contract_hash
     return contract
@@ -1768,74 +1664,12 @@ def _source_ref(asset_type: str, data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _compliance_decision(
-    *,
-    allowed: bool,
-    severity: str = "none",
-    violation_code: str | None = None,
-    matched_pattern: str | None = None,
-    action: str = "allow",
-    audit_payload: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return {
-        "allowed": allowed,
-        "severity": severity,
-        "violation_code": violation_code,
-        "matched_pattern": matched_pattern,
-        "action": action,
-        "audit_payload": audit_payload or {},
-    }
-
-
-def _blocking_decision(
-    contract: dict[str, Any],
-    *,
-    violation_code: str,
-    matched_pattern: str,
-    policy_key: str,
-) -> dict[str, Any]:
-    policy = _as_dict(contract.get("runtime_violation_policy"))
-    configured_action = str(policy.get(policy_key) or "mark_for_report")
-    action = "mark_for_report"
-    severity = "warning"
-    allowed = True
-    if configured_action in BLOCKING_VIOLATION_ACTIONS:
-        action = (
-            "regenerate_once" if "regenerate" in configured_action else "cancel_stream"
-        )
-        severity = "blocking"
-        allowed = False
-    elif configured_action == "mark_and_continue":
-        action = "mark_for_report"
-        severity = "warning"
-    return _compliance_decision(
-        allowed=allowed,
-        severity=severity,
-        violation_code=violation_code,
-        matched_pattern=matched_pattern,
-        action=action,
-        audit_payload={
-            "contract_hash": _audit_hash(contract),
-            "policy_key": policy_key,
-            "configured_action": configured_action,
-        },
-    )
-
-
 def _situation_code(contract: dict[str, Any]) -> str | None:
     situation = contract.get("situation")
     if not isinstance(situation, dict):
         return None
     code = situation.get("code")
     return str(code) if code else None
-
-
-def _audit_hash(contract: dict[str, Any]) -> str | None:
-    audit = contract.get("audit")
-    if isinstance(audit, dict) and audit.get("contract_hash"):
-        return str(audit["contract_hash"])
-    contract_id = contract.get("contract_id")
-    return str(contract_id) if contract_id else None
 
 
 def _persona_prompt(persona: dict[str, Any]) -> str:

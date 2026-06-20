@@ -1,0 +1,14 @@
+Task 17: Roleplay contract shared ownership
+
+Scope
+- Added common.roleplay_contracts as the neutral owner for roleplay contract constants, contract hash, audit hash, and deterministic output compliance checks.
+- Kept RoleplayContractCompiler and curriculum-specific summary/disclosure/report helpers in curriculum_practice.services.roleplay_contracts.
+- Kept old curriculum check_roleplay_output import compatible by re-exporting the neutral function.
+- Updated sales roleplay compliance and deterministic evaluation to consume the neutral checker directly.
+- Switched RoleplayContractCompiler contract_id/audit hash generation to the neutral roleplay_contract_hash helper without changing fields or hash semantics.
+
+Validation
+- cd backend && venv/bin/python -m pytest tests/unit/test_roleplay_contracts.py tests/unit/test_voice_runtime_policy_service.py tests/unit/test_roleplay_compliance_checker.py tests/evaluation/test_roleplay_contract_eval.py --no-cov -q
+  - Result: 47 passed, 1 ChromaDB asyncio deprecation warning.
+- cd backend && venv/bin/python -m ruff check src/common/roleplay_contracts.py src/curriculum_practice/services/roleplay_contracts.py src/sales_bot/services/roleplay_compliance_checker.py src/evaluation/services/roleplay_contract_eval.py tests/unit/test_roleplay_contracts.py tests/unit/test_voice_runtime_policy_service.py
+  - Result: All checks passed.

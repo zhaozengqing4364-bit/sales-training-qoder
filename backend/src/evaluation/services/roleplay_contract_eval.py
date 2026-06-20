@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from common.business_rules.defaults import DEFAULT_ROLEPLAY_EVAL_RELEASE_GATE
+from common.roleplay_contracts import check_roleplay_output
 from curriculum_practice.services.roleplay_contracts import (
     RoleplayContractCompiler,
-    check_roleplay_output,
 )
 
 

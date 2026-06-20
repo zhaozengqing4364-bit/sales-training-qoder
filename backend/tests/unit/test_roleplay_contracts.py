@@ -7,6 +7,12 @@ from common.business_rules.defaults import (
     ROLEPLAY_SITUATION_PACKS_KEY,
 )
 from common.business_rules.service import BusinessRuleConfigService
+from common.roleplay_contracts import (
+    check_roleplay_output as neutral_check_roleplay_output,
+)
+from common.roleplay_contracts import (
+    roleplay_contract_hash,
+)
 from curriculum_practice.schemas import PracticeTemplatePublishCandidate
 from curriculum_practice.services.roleplay.situation_pack_repository import (
     SituationPackRepository,
@@ -19,6 +25,9 @@ from curriculum_practice.services.roleplay_contracts import (
     roleplay_compliance_summary_from_session,
     roleplay_compliance_timeline_from_session,
     visible_case_payload,
+)
+from curriculum_practice.services.roleplay_contracts import (
+    check_roleplay_output as legacy_check_roleplay_output,
 )
 
 
@@ -71,6 +80,15 @@ def _references() -> dict[tuple[str, str], object]:
             "definition_json": {"roleplay_contract_version": "v1"},
         },
     }
+
+
+def test_should_keep_roleplay_contract_checker_imports_compatible() -> None:
+    payload = {"compiled_by": "actor-a", "stable": {"value": 1}}
+
+    assert legacy_check_roleplay_output is neutral_check_roleplay_output
+    assert roleplay_contract_hash(payload) == roleplay_contract_hash(
+        {"compiled_by": "actor-b", "stable": {"value": 1}}
+    )
 
 
 def _reader(overrides: dict[tuple[str, str], object] | None = None):
