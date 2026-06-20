@@ -197,21 +197,41 @@ def test_should_keep_support_runtime_domains_behind_contributors() -> None:
 
 
 def test_should_keep_cross_domain_adapters_from_exporting_foreign_orm_models() -> None:
-    adapter_exports = {
+    controlled_cross_domain_adapters = {
         "sales_trainer/services/curriculum_practice_adapter.py": {
-            "LearningChapter",
-            "LearningContent",
-            "QuestionCategory",
-            "QuestionItem",
+            "allowed_exports": {
+                "LearningChapterSummary",
+                "LearningContentSummary",
+                "QuestionCategoryCreate",
+                "QuestionCategoryUpdate",
+                "QuestionItemCreate",
+                "QuestionItemUpdate",
+                "get_learning_content",
+                "list_learning_chapters",
+            },
+            "forbidden_exports": {
+                "LearningChapter",
+                "LearningContent",
+                "QuestionCategory",
+                "QuestionItem",
+            },
         },
         "curriculum_practice/services/sales_trainer_revision_adapter.py": {
-            "SalesTrainerAssetRevision",
+            "allowed_exports": {
+                "AssetChangeClass",
+                "OperationLogService",
+                "SalesTrainerAssetRevisionService",
+            },
+            "forbidden_exports": {
+                "SalesTrainerAssetRevision",
+            },
         },
     }
 
-    for relative_path, forbidden_exports in adapter_exports.items():
+    for relative_path, policy in controlled_cross_domain_adapters.items():
         module_path = BACKEND_SRC / relative_path
         namespace: dict[str, object] = {}
         exec(module_path.read_text(encoding="utf-8"), namespace)
         exported = set(namespace.get("__all__", []))
-        assert exported.isdisjoint(forbidden_exports), relative_path
+        assert exported <= policy["allowed_exports"], relative_path
+        assert exported.isdisjoint(policy["forbidden_exports"]), relative_path
