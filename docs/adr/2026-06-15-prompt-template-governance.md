@@ -16,6 +16,8 @@
 4. 所有模板响应返回中文展示字段、绑定数量、运行时生效状态、可编辑/可停用原因。
 5. 治理修复入口必须支持 `dry_run=true`，正式执行写审计。
 6. 模板正文、变量、JSON/Jinja 合同保持运行时兼容；中文化只改变运营展示和已知系统模板说明文本，不改变内部枚举。
+7. 平台模板 CRUD、默认模板、场景绑定和治理修复只允许平台 `admin` / `super_admin`，权限判断集中在 `prompt_templates.permissions.can_manage_prompt_templates`。销售训练 `content_admin` / `newcomer_content_admin` 只能管理销售训练内容，不能直接改平台 PromptTemplate。
+8. 销售训练对 PromptTemplate 的使用只通过业务绑定和运行时编译进入：`modules[].ai_coach.prompt_template_id`、`scoring_prompt_template_id`、模型、阈值、重试和失败策略等高风险字段由 `sales_trainer.manage_prompts` 控制，字段集合集中在 `sales_trainer.ai_coach_policy.AI_COACH_FIELDS_REQUIRING_MANAGE_PROMPTS`。
 
 ## 备选方案
 
@@ -34,6 +36,7 @@
 - 前端 `/admin/prompts` 改为提示词治理台：健康状态、生效矩阵、模板列表、影响预览和治理操作。
 - 场景绑定改为独立 `/admin/prompts/bindings` 向导，避免在列表页混入绑定编辑。
 - 运行时仍使用 `PromptTemplateService.compile_runtime_prompt_contract(...)`；不改变 live StepFun voice instruction authority。
+- 销售训练后台只持有 PromptTemplate 绑定权，不持有平台模板正文编辑权；如果绑定、发布或回滚涉及 AI Coach 高风险字段，必须同时满足 `sales_trainer.manage_prompts`。
 
 ## 回滚
 

@@ -49,15 +49,12 @@ from prompt_templates.models import (
     prompt_business_purpose_display_label,
     prompt_type_display_label,
 )
+from prompt_templates.permissions import can_manage_prompt_templates
 from prompt_templates.service import (
     SALES_PROMPT_SCOPE_ALLOWED_TYPES,
     PromptTemplateService,
     PromptTemplateServiceError,
 )
-
-
-def _is_admin(user: User) -> bool:
-    return str(getattr(user, "role", "")).lower() == "admin"
 
 
 def _prompt_error_response(
@@ -92,7 +89,7 @@ def _prompt_error_response(
 
 
 def _require_prompt_admin_or_error(current_user: User) -> JSONResponse | None:
-    if _is_admin(current_user):
+    if can_manage_prompt_templates(current_user):
         return None
     return _prompt_error_response(
         status_code=403,

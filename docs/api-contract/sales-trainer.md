@@ -232,6 +232,7 @@ Learner 工作台 UI 配置：
 
 权限：
 
+- 平台 PromptTemplate CRUD、默认模板、场景绑定和治理修复属于 `/admin/prompts` 平台治理面，只允许平台 `admin` / `super_admin`。销售训练 `content_admin` / `newcomer_content_admin` 不能直接修改平台模板正文，只能在销售训练配置中绑定已治理的模板。
 - 查看/普通模块配置需要 `sales_trainer.manage_modules` 对应角色。
 - 修改普通开关、进入后行为或自动推进步数需要 `sales_trainer.manage_modules` 对应角色。
 - 修改 `coach_mode`、`allowed_interaction_types`、`allowed_training_card_types`、`chat_enabled`、`streaming_enabled`、`entry_resume_policy`、`generation_timeout_seconds`、`allowed_ui_event_types`、`max_cards_per_message`、`chat_welcome_message`、`empty_response_recovery_message`、`empty_response_recovery_prompts`、`generation_failure_recovery_message`、`generation_failure_recovery_prompts`、`min_turns`、`max_turns`、`mastery_threshold`、连续答对/答错阈值、补救策略、总结策略、`allowed_next_actions`、prompt 绑定、模型、重试策略或失败策略等高风险字段，需要 `sales_trainer.manage_prompts` 对应角色。
@@ -252,8 +253,8 @@ Learner 工作台 UI 配置：
 |---|---|---|---|
 | `GET` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config` | 读取模块 AI 教练配置 | `sales_trainer.manage_modules` |
 | `PUT` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config` | 保存 AI 教练配置到路径待发布修订 | 普通字段 `sales_trainer.manage_modules`；高风险字段和 Prompt 绑定 `sales_trainer.manage_prompts` |
-| `POST` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config/publish` | 发布包含 AI 教练配置的路径修订 | `sales_trainer.manage_modules` |
-| `POST` | `/api/v1/admin/newcomer-training/path-config/rollback` | 回滚路径修订，包含 AI 教练配置回滚 | `sales_trainer.manage_modules` |
+| `POST` | `/api/v1/admin/newcomer-training/modules/{module_key}/ai-coach/config/publish` | 发布包含 AI 教练配置的路径修订 | `sales_trainer.manage_modules`；若待发布修订涉及高风险字段还需 `sales_trainer.manage_prompts` |
+| `POST` | `/api/v1/admin/newcomer-training/path-config/rollback` | 回滚路径修订，包含 AI 教练配置回滚 | `sales_trainer.manage_modules`；若回滚涉及高风险字段还需 `sales_trainer.manage_prompts` |
 
 Learner AI 教练会话路由：
 

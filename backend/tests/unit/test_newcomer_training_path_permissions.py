@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from common.db.models import User
 from sales_trainer import api as sales_trainer_api
+from sales_trainer.ai_coach_policy import (
+    AI_COACH_FIELDS_REQUIRING_MANAGE_PROMPTS,
+    requires_manage_prompts,
+)
 from sales_trainer.permissions import (
     can_manage_sales_trainer,
+    can_manage_sales_trainer_prompts,
     can_retry_sales_trainer_jobs,
     can_view_sales_trainer_logs,
     can_view_sales_trainer_records,
@@ -46,6 +51,7 @@ def test_should_allow_content_admin_to_manage_content_but_not_records() -> None:
     user = _user("content_admin")
 
     assert can_manage_sales_trainer(user)
+    assert not can_manage_sales_trainer_prompts(user)
     assert not can_view_sales_trainer_records(user)
     assert not can_retry_sales_trainer_jobs(user)
 
@@ -91,12 +97,16 @@ def test_should_use_granular_route_guards_for_admin_surfaces() -> None:
 
 
 def test_admin_capability_projection_uses_permission_authority() -> None:
+    admin = sales_trainer_admin_capability_projection(_user("admin"))
     content_admin = sales_trainer_admin_capability_projection(_user("content_admin"))
     training_lead = sales_trainer_admin_capability_projection(_user("support"))
     ops = sales_trainer_admin_capability_projection(_user("operations"))
 
+    assert admin["capabilities"]["manage_prompts"] is True
+
     assert content_admin["role_label"] == "内容管理员"
     assert content_admin["capabilities"]["manage_content"] is True
+    assert content_admin["capabilities"]["manage_prompts"] is False
     assert content_admin["capabilities"]["view_records"] is False
 
     assert training_lead["role_label"] == "培训负责人"
@@ -107,3 +117,32 @@ def test_admin_capability_projection_uses_permission_authority() -> None:
     assert ops["capabilities"]["retry_jobs"] is True
     assert ops["capabilities"]["view_logs"] is True
     assert ops["capabilities"]["manage_content"] is False
+    assert ops["capabilities"]["manage_prompts"] is False
+
+
+def test_should_limit_prompt_governance_to_platform_admin_roles() -> None:
+    assert can_manage_sales_trainer_prompts(_user("admin"))
+    assert can_manage_sales_trainer_prompts(_user("super_admin"))
+    assert not can_manage_sales_trainer_prompts(_user("content_admin"))
+    assert not can_manage_sales_trainer_prompts(_user("support"))
+    assert not can_manage_sales_trainer_prompts(_user("operations"))
+
+
+def test_ai_coach_high_risk_fields_require_manage_prompts() -> None:
+    expected_fields = {
+        "prompt_template_id",
+        "prompt_revision_id",
+        "scoring_prompt_template_id",
+        "scoring_prompt_revision_id",
+        "min_turns",
+        "max_turns",
+        "mastery_threshold",
+        "generation_model",
+        "scoring_model",
+        "retry_policy",
+        "failure_behavior",
+    }
+
+    assert expected_fields <= AI_COACH_FIELDS_REQUIRING_MANAGE_PROMPTS
+    assert all(requires_manage_prompts(field) for field in expected_fields)
+    assert not requires_manage_prompts("output_schema_version")

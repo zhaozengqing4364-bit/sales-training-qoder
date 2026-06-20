@@ -45,17 +45,36 @@ async def users(db_session):
         email="prompt-admin@example.com",
         role="admin",
     )
+    super_admin = User(
+        wechat_user_id="prompt-super-admin",
+        name="Prompt Super Admin",
+        email="prompt-super-admin@example.com",
+        role="super_admin",
+    )
+    content_admin = User(
+        wechat_user_id="prompt-content-admin",
+        name="Prompt Content Admin",
+        email="prompt-content-admin@example.com",
+        role="content_admin",
+    )
     support = User(
         wechat_user_id="prompt-support",
         name="Prompt Support",
         email="prompt-support@example.com",
         role="support",
     )
-    db_session.add_all([admin, support])
+    db_session.add_all([admin, super_admin, content_admin, support])
     await db_session.commit()
     await db_session.refresh(admin)
+    await db_session.refresh(super_admin)
+    await db_session.refresh(content_admin)
     await db_session.refresh(support)
-    return {"admin": admin, "support": support}
+    return {
+        "admin": admin,
+        "super_admin": super_admin,
+        "content_admin": content_admin,
+        "support": support,
+    }
 
 
 @pytest_asyncio.fixture
@@ -83,6 +102,10 @@ def _auth_header_for_user_id(user_id: str) -> dict[str, str]:
 async def auth_headers(users):
     return {
         "admin": _auth_header_for_user_id(users["admin"].user_id),
+        "super_admin": _auth_header_for_user_id(users["super_admin"].user_id),
+        "content_admin": _auth_header_for_user_id(
+            users["content_admin"].user_id
+        ),
         "support": _auth_header_for_user_id(users["support"].user_id),
     }
 
@@ -108,6 +131,46 @@ async def _create_template(
 
 
 class TestPromptTemplateRBAC:
+    async def test_super_admin_can_manage_platform_templates(
+        self, async_client, auth_headers
+    ):
+        response = await async_client.post(
+            "/api/v1/prompt-templates",
+            headers=auth_headers["super_admin"],
+            json={
+                "name": "超级管理员提示词",
+                "prompt_type": "interruption",
+                "category": "presentation",
+                "template": "test {{value}}",
+                "variables": ["value"],
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["name"] == "超级管理员提示词"
+
+    async def test_sales_trainer_content_admin_cannot_manage_platform_templates(
+        self, async_client, auth_headers
+    ):
+        response = await async_client.post(
+            "/api/v1/prompt-templates",
+            headers=auth_headers["content_admin"],
+            json={
+                "name": "内容管理员越权模板",
+                "prompt_type": "interruption",
+                "category": "presentation",
+                "template": "test {{value}}",
+                "variables": ["value"],
+            },
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        assert body["message"] == "仅管理员可访问提示词治理接口。"
+        assert body.get("trace_id")
+
     async def test_support_cannot_list_templates(self, async_client, auth_headers):
         response = await async_client.get(
             "/api/v1/prompt-templates",

@@ -1,0 +1,16 @@
+Task 14 Prompt Permission Boundary evidence
+
+Scope:
+- Centralized platform PromptTemplate governance permission in prompt_templates.permissions.can_manage_prompt_templates.
+- Kept Sales Trainer prompt binding/high-risk AI Coach field authority in sales_trainer.permissions.can_manage_sales_trainer_prompts and sales_trainer.ai_coach_policy.
+- Updated PromptTemplate RBAC integration tests for super_admin allow and content_admin deny.
+- Updated Sales Trainer permission unit tests for manage_prompts and high-risk AI Coach fields.
+- Updated ADR/API contract for platform template CRUD vs Sales Trainer prompt binding boundary.
+
+Verification:
+- cd backend && venv/bin/python -m pytest tests/unit/test_newcomer_training_path_permissions.py tests/integration/test_prompt_templates_api_rbac.py --no-cov -q
+- cd backend && venv/bin/python -m ruff check src/prompt_templates/permissions.py src/prompt_templates/api/routes.py tests/unit/test_newcomer_training_path_permissions.py tests/integration/test_prompt_templates_api_rbac.py
+
+Result:
+- 31 passed, 1 warning (ChromaDB asyncio deprecation).
+- Ruff: All checks passed.
