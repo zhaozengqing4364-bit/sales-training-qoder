@@ -16,6 +16,7 @@ def test_alembic_upgrade_head_has_single_unique_head() -> None:
 
     script = ScriptDirectory.from_config(config)
     revisions = [revision.revision for revision in script.walk_revisions()]
+    heads = script.get_heads()
 
     assert len(revisions) == len(set(revisions))
-    assert script.get_heads() == ["20260609_1300_080_ai_proactive"]
+    assert len(heads) == 1, f"Expected exactly one Alembic head, got {heads!r}"
