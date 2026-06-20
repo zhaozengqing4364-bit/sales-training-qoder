@@ -187,6 +187,30 @@ describe("api.admin.newcomerTraining facade", () => {
         expect(result.impact_scope).toBe("future_learners_only");
     });
 
+    it("previews business etiquette releases through the admin newcomer facade", async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                success: true,
+                data: {
+                    summary: { changed_chapters: 2 },
+                },
+            }),
+        });
+
+        await api.admin.newcomerTraining.getBusinessEtiquetteReleaseImpact({
+            training_pack_key: "business_etiquette_v1",
+            target_revision_id: "revision-2",
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "/admin/newcomer-training/business-etiquette/release-impact?training_pack_key=business_etiquette_v1&target_revision_id=revision-2",
+            ),
+            expect.any(Object),
+        );
+    });
+
     it("creates and publishes papers through the admin newcomer facade", async () => {
         fetchMock.mockResolvedValue({
             ok: true,

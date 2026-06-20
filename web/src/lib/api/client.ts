@@ -2052,6 +2052,7 @@ const adminSalesTrainerDomain = createAdminSalesTrainerDomain({
 });
 const adminNewcomerTrainingDomain = createAdminNewcomerTrainingDomain({
     request: apiFetch,
+    upload: apiUpload,
 });
 
 export const api = {

@@ -1,0 +1,12 @@
+$ npx vitest run src/lib/api/sales-trainer.test.ts src/lib/api/newcomer-training.test.ts src/lib/api/client-domains.test.ts
+
+ RUN  v4.1.4 /Users/zhaozengqing/github/销售训练qoder/web
+
+
+ Test Files  3 passed (3)
+      Tests  41 passed (41)
+   Start at  23:36:46
+   Duration  950ms (transform 94ms, setup 0ms, import 137ms, tests 45ms, environment 564ms)
+
+$ npx eslint src/lib/api/domains/sales-trainer.ts src/lib/api/domains/newcomer-training.ts src/lib/api/sales-trainer.test.ts src/lib/api/newcomer-training.test.ts src/lib/api/client-domains.test.ts
+$ npx tsc --noEmit

@@ -266,28 +266,27 @@ describe("client domain factories", () => {
         );
     });
 
-    it("previews, publishes, and assigns business-etiquette releases through admin facade", async () => {
+    it("previews, publishes, and assigns business-etiquette releases through admin newcomer facade", async () => {
         const request = vi.fn()
             .mockResolvedValueOnce({ summary: { changed_chapters: 2 } })
             .mockResolvedValueOnce({ active_revision_no: 3 })
             .mockResolvedValueOnce({ created_session_ids: ["session-1"] });
-        const adminSalesTrainer = createAdminSalesTrainerDomain({
+        const adminNewcomerTraining = createAdminNewcomerTrainingDomain({
             request,
             upload: vi.fn(),
-            resolveApiBaseUrl: () => "http://localhost:3444/api/v1",
         });
 
-        await adminSalesTrainer.getBusinessEtiquetteReleaseImpact({
+        await adminNewcomerTraining.getBusinessEtiquetteReleaseImpact({
             training_pack_key: "business_etiquette_v1",
             target_revision_id: "revision-2",
         });
-        await adminSalesTrainer.publishBusinessEtiquetteRelease({
+        await adminNewcomerTraining.publishBusinessEtiquetteRelease({
             training_pack_key: "business_etiquette_v1",
             strategy: "allow_voluntary_switch",
             assigned_user_ids: [],
             reason: "月度更新",
         });
-        await adminSalesTrainer.assignBusinessEtiquetteRetraining({
+        await adminNewcomerTraining.assignBusinessEtiquetteRetraining({
             user_ids: ["user-1"],
             reason: "指定新人重练",
         });
@@ -319,6 +318,23 @@ describe("client domain factories", () => {
                     reason: "指定新人重练",
                 }),
             },
+        );
+    });
+
+    it("keeps business-etiquette admin methods on sales-trainer as a compatibility facade", async () => {
+        const request = vi.fn().mockResolvedValue({ summary: { changed_chapters: 1 } });
+        const adminSalesTrainer = createAdminSalesTrainerDomain({
+            request,
+            upload: vi.fn(),
+            resolveApiBaseUrl: () => "http://localhost:3444/api/v1",
+        });
+
+        await adminSalesTrainer.getBusinessEtiquetteReleaseImpact({
+            training_pack_key: "business_etiquette_v1",
+        });
+
+        expect(request).toHaveBeenCalledWith(
+            "/admin/newcomer-training/business-etiquette/release-impact?training_pack_key=business_etiquette_v1",
         );
     });
 
@@ -390,6 +406,7 @@ describe("client domain factories", () => {
             });
         const adminNewcomerTraining = createAdminNewcomerTrainingDomain({
             request,
+            upload: vi.fn(),
         });
 
         await expect(adminNewcomerTraining.getAiCoachConfig("business_skills"))
