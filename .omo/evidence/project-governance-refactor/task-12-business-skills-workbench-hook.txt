@@ -1,0 +1,12 @@
+$ npx vitest run src/app/(dashboard)/sales-trainer/business-skills/page.test.tsx src/app/(dashboard)/sales-trainer/business-skills/coach/page.test.tsx
+
+ RUN  v4.1.4 /Users/zhaozengqing/github/销售训练qoder/web
+
+
+ Test Files  2 passed (2)
+      Tests  28 passed (28)
+   Start at  23:47:04
+   Duration  2.67s (transform 199ms, setup 0ms, import 599ms, tests 1.36s, environment 559ms)
+
+$ npx eslint src/app/(dashboard)/sales-trainer/business-skills/page.tsx src/app/(dashboard)/sales-trainer/business-skills/use-business-skills-workbench.ts src/app/(dashboard)/sales-trainer/business-skills/page.test.tsx src/app/(dashboard)/sales-trainer/business-skills/coach/page.test.tsx
+$ npx tsc --noEmit
