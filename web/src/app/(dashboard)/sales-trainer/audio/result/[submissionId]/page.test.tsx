@@ -249,6 +249,51 @@ describe("SalesTrainerAudioResultPage", () => {
         expect(screen.getByText("补充产品价值")).toBeTruthy();
     });
 
+    it("renders PPT dimension scores from the frozen scoring snapshot", async () => {
+        getAudioSubmissionMock.mockResolvedValue({
+            ...scoredSubmission,
+            score_scheme_snapshot: {
+                name: "PPT 讲解评分",
+                version: 2,
+                learner_rubric: {
+                    criteria: [
+                        {
+                            key: "ppt_structure",
+                            label: "PPT 结构完整度",
+                            description: "覆盖背景、方案核心、下一步。",
+                            weight: 25,
+                        },
+                        {
+                            key: "customer_value",
+                            label: "客户价值表达",
+                            weight: 20,
+                        },
+                    ],
+                },
+            },
+            score_result: {
+                ...scoredSubmission.score_result,
+                dimension_scores: {
+                    ppt_structure: {
+                        score: 22,
+                        max_score: 25,
+                        comment: "结构完整，但下一步动作可以更具体。",
+                    },
+                    customer_value: 16,
+                },
+            },
+        });
+
+        render(<SalesTrainerAudioResultPage />);
+
+        expect(await screen.findByText("分项评分")).toBeTruthy();
+        expect(screen.getByText("PPT 结构完整度")).toBeTruthy();
+        expect(screen.getByText("22 / 25")).toBeTruthy();
+        expect(screen.getByText("结构完整，但下一步动作可以更具体。")).toBeTruthy();
+        expect(screen.getByText("客户价值表达")).toBeTruthy();
+        expect(screen.getByText("16 / 20")).toBeTruthy();
+    });
+
     it("renders object-shaped improvement suggestions without crashing", async () => {
         getAudioSubmissionMock.mockResolvedValue({
             ...scoredSubmission,

@@ -1,0 +1,146 @@
+- generic [ref=e1]:
+  - generic [ref=e49]:
+    - complementary [ref=e50]:
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - img [ref=e54]
+          - generic [ref=e57]:
+            - generic [ref=e58]: AI 销售教练
+            - generic [ref=e59]: 平台
+        - navigation "主导航" [ref=e60]:
+          - generic [ref=e61]: 菜单
+          - menubar [ref=e62]:
+            - menuitem "首页" [ref=e63] [cursor=pointer]:
+              - img [ref=e65]
+              - generic [ref=e68]: 首页
+            - menuitem "训练模式" [ref=e69] [cursor=pointer]:
+              - img [ref=e70]
+              - generic [ref=e75]: 训练模式
+            - menuitem "新人训练路径" [ref=e76] [cursor=pointer]:
+              - img [ref=e77]
+              - generic [ref=e80]: 新人训练路径
+            - menuitem "排行榜" [ref=e81] [cursor=pointer]:
+              - img [ref=e82]
+              - generic [ref=e83]: 排行榜
+            - menuitem "历史记录" [ref=e84] [cursor=pointer]:
+              - img [ref=e85]
+              - generic [ref=e89]: 历史记录
+          - generic [ref=e92]: 系统
+          - menubar [ref=e93]:
+            - menuitem "运行状态" [ref=e94] [cursor=pointer]:
+              - img [ref=e95]
+              - generic [ref=e97]: 运行状态
+            - menuitem "管理后台" [ref=e98] [cursor=pointer]:
+              - img [ref=e99]
+              - generic [ref=e102]: 管理后台
+        - generic [ref=e103]:
+          - button "帮助与反馈" [ref=e105]:
+            - img [ref=e106]
+            - generic [ref=e108]: 帮助与反馈
+          - generic [ref=e109] [cursor=pointer]:
+            - img [ref=e111]
+            - generic [ref=e114]:
+              - generic [ref=e115]: 管理员
+              - generic [ref=e116]: 未设置部门
+            - img [ref=e118]
+          - button "折叠侧边栏" [ref=e121]:
+            - img [ref=e122]
+            - generic [ref=e125]: 折叠侧边栏
+    - main [ref=e126]:
+      - generic [ref=e634]:
+        - generic [ref=e635]:
+          - link "返回新人训练路径" [ref=e636] [cursor=pointer]:
+            - /url: /sales-trainer
+            - img [ref=e637]
+            - text: 返回新人训练路径
+          - generic [ref=e639]:
+            - heading "第1关：PPT讲解录音" [level=1] [ref=e640]
+            - paragraph [ref=e641]: 上传主胶片讲解录音，系统转写后按 PPT 讲解指标进行 AI 评分。
+        - generic [ref=e642]:
+          - heading "任务简报" [level=2] [ref=e644]
+          - paragraph [ref=e645]: 你正在向有明确需求的技术或业务负责人讲解石犀主胶片。请在 5 分钟内讲清背景、方案核心、四步能力、差异化和下一步推进。
+          - list [ref=e646]:
+            - listitem [ref=e647]: 先下载并阅读本关训练材料，按主胶片逻辑准备讲解。
+            - listitem [ref=e648]: 录音中覆盖背景痛点、资产-用户-流动管控主线、四步能力和差异化。
+            - listitem [ref=e649]: 上传录音后，系统会先转写成文字，再由 AI 按评分标准判断。
+          - paragraph [ref=e650]: 请上传你自己的 PPT 讲解录音；不是上传 PPT 文件。建议控制在 5 分钟内，系统会以最新一次上传作为本关结果。
+        - generic [ref=e651]:
+          - heading "评分标准" [level=2] [ref=e653]
+          - paragraph [ref=e654]: 本关需达到 70 分通过，可多次上传，以最新一次为准
+          - generic [ref=e655]:
+            - generic [ref=e656]:
+              - generic [ref=e657]:
+                - paragraph [ref=e658]: PPT 结构完整度
+                - generic [ref=e659]: 25%
+              - paragraph [ref=e660]: 覆盖背景、方案核心、四步能力、差异化、部署与下一步。
+            - generic [ref=e661]:
+              - generic [ref=e662]:
+                - paragraph [ref=e663]: 业务信息准确性
+                - generic [ref=e664]: 25%
+              - paragraph [ref=e665]: 准确表达数据流动治理、AI 分类分级、API 风险、组件化防护和溯源审计。
+            - generic [ref=e666]:
+              - generic [ref=e667]:
+                - paragraph [ref=e668]: 客户价值表达
+                - generic [ref=e669]: 20%
+              - paragraph [ref=e670]: 能把功能翻译成合规、风险发现、零侵入、低成本扩展和可追溯等客户价值。
+            - generic [ref=e671]:
+              - generic [ref=e672]:
+                - paragraph [ref=e673]: 表达逻辑与流畅度
+                - generic [ref=e674]: 15%
+              - paragraph [ref=e675]: 顺序清晰、衔接自然，没有明显跳页、卡顿或堆术语。
+            - generic [ref=e676]:
+              - generic [ref=e677]:
+                - paragraph [ref=e678]: 案例与证据使用
+                - generic [ref=e679]: 10%
+              - paragraph [ref=e680]: 自然引用深圳航空、北京卫健委、汕头大学等案例证明价值。
+            - generic [ref=e681]:
+              - generic [ref=e682]:
+                - paragraph [ref=e683]: 下一步推进
+                - generic [ref=e684]: 5%
+              - paragraph [ref=e685]: 提出演示、旁路扫描、风险评估报告或试点等清晰动作。
+          - generic [ref=e686]:
+            - paragraph [ref=e687]: 常见扣分点
+            - list [ref=e688]:
+              - listitem [ref=e689]: 只讲公司介绍，没有进入客户痛点和方案价值。
+              - listitem [ref=e690]: 遗漏 AI 分类分级、风险监测、一键防护或溯源审计。
+              - listitem [ref=e691]: 夸大能力或编造案例、指标、政策。
+              - listitem [ref=e692]: 没有提出下一步行动。
+              - listitem [ref=e693]: 只介绍公司，没有进入客户痛点和方案价值。
+              - listitem [ref=e694]: 只罗列功能，没有讲清资产-用户-流动管控主线。
+              - listitem [ref=e695]: 没有提出演示、扫描、风险评估或试点等下一步。
+        - generic [ref=e696]:
+          - generic [ref=e698]:
+            - heading "训练材料" [level=2] [ref=e699]
+            - paragraph [ref=e700]: 请使用当前版本完成录音；提交时会冻结你确认的材料版本。
+          - generic [ref=e702]:
+            - generic [ref=e703]:
+              - generic [ref=e704]:
+                - paragraph [ref=e705]: PPT 讲解任务与评分标准
+                - paragraph [ref=e706]: v2026.06 · 第 1 关 PPT 讲解任务与评分标准
+                - paragraph [ref=e707]: 请先阅读本材料中的讲解结构和评分指标，再上传 PPT 讲解录音。
+              - generic [ref=e708]:
+                - button "查看材料" [ref=e709]:
+                  - img [ref=e710]
+                  - text: 查看材料
+                - link "下载材料" [ref=e713] [cursor=pointer]:
+                  - /url: http://localhost:3444/api/v1/sales-trainer/materials/versions/c23c2465-9a30-4881-9ff9-f6362399d14e/file
+                  - button "下载材料" [ref=e714]:
+                    - img [ref=e715]
+                    - text: 下载材料
+            - generic [ref=e718]:
+              - checkbox "我已下载并确认使用 v2026.06 版本进行本次录音。" [checked] [ref=e719]
+              - generic [ref=e720]: 我已下载并确认使用 v2026.06 版本进行本次录音。
+        - generic [ref=e721]:
+          - generic [ref=e723]:
+            - heading "选择音频文件" [level=2] [ref=e724]
+            - paragraph [ref=e725]: 不做固定时长限制。若格式或大小不符合后端配置，页面会直接展示后端错误。
+          - button "选择音频文件" [active] [ref=e726]
+          - generic [ref=e728]:
+            - paragraph [ref=e729]: 已选择：newcomer-speech.wav（audio/wav）
+            - generic [ref=e730]: 您的浏览器不支持音频预览。
+          - button "上传并开始评分" [ref=e731]:
+            - img [ref=e732]
+            - text: 上传并开始评分
+  - button "Open Next.js Dev Tools" [ref=e44] [cursor=pointer]:
+    - img [ref=e45]
+  - alert [ref=e48]

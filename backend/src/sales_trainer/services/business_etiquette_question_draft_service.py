@@ -93,6 +93,7 @@ QUESTION_DRAFT_SYSTEM_MESSAGE = (
     "你是商务礼仪新人训练题目生成器。必须只输出符合约定 JSON schema 的题目草稿，"
     "不得输出解释性正文。"
 )
+QUESTION_DRAFT_JSON_RESPONSE_FORMAT = {"type": "json_object"}
 QUESTION_DRAFT_OUTPUT_SCHEMA = {
     "drafts": [
         {
@@ -669,6 +670,7 @@ class BusinessEtiquetteQuestionDraftService:
             prompt=contract.rendered_prompt,
             session_id=batch_id,
             system_message=contract.system_message,
+            response_format=QUESTION_DRAFT_JSON_RESPONSE_FORMAT,
             allow_fallback_response=False,
         )
         if hasattr(result, "is_success"):

@@ -89,8 +89,17 @@ def _serialize_level(
         if unit.unit_type == "quiz"
         else audio_progress.get(unit_id)
     )
+    disabled = path_config.enabled is False
     completed = _is_completed(progress, path_config.completion_rule)
-    status = "completed" if completed else "in_progress" if progress else "available"
+    status = (
+        "locked"
+        if disabled
+        else "completed"
+        if completed
+        else "in_progress"
+        if progress
+        else "available"
+    )
     return {
         "unit_id": unit_id,
         "name": unit.name,
@@ -101,8 +110,8 @@ def _serialize_level(
         "order_index": path_config.order_index,
         "level_title": path_config.level_title or unit.name,
         "level_description": path_config.level_description or unit.description,
-        "locked": False,
-        "lock_reason": None,
+        "locked": disabled,
+        "lock_reason": path_config.disabled_reason if disabled else None,
         "status": status,
         "completion_rule": path_config.completion_rule,
         "primary_action_label": path_config.primary_action_label

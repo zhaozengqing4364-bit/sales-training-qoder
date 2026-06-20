@@ -35,7 +35,7 @@ web/src/
 │   ├── use-*.ts                # shared hooks
 │   └── websocket/              # WS transport, handlers, audio playback
 ├── lib/
-│   ├── api/                    # client.ts, types.ts, domain builders
+│   ├── api/                    # client.ts facade, types.ts, client-domains.ts, domains/*
 │   ├── query/                  # QueryClient factory, auth query keys
 │   ├── auth/, observability/
 │   └── utils.ts                # cn()
@@ -64,8 +64,18 @@ Example: `app/(user)/practice/[sessionId]/page.tsx` + `use-practice-session-life
 ### New API access
 
 - Types in `lib/api/types.ts`.
-- Domain methods in `lib/api/client-domains.ts` (or sibling).
+- Public transport, auth, trace, stream parsing, error mapping, and the exported `api` facade stay in `lib/api/client.ts`.
+- `lib/api/client-domains.ts` is the aggregation seam: it exports domain factories and still contains legacy/low-growth domain builders.
+- New or high-growth domains should live in `lib/api/domains/<domain>.ts`, receive typed dependencies from `lib/api/domains/shared.ts`, then be wired through `client-domains.ts` and instantiated in `client.ts`.
 - Consume via `api` facade from `lib/api/client.ts` — not raw `fetch` in pages.
+
+Reference files:
+
+- `lib/api/domains/shared.ts` — `ApiRequest`, `ApiStream`, `ApiUpload`, query/value helpers.
+- `lib/api/domains/newcomer-training.ts` — extracted domain with HTTP and SSE stream methods.
+- `lib/api/client-domains.ts` — exports extracted factories and hosts remaining domain builders.
+- `lib/api/client.ts` — creates domain instances and exposes the public `api` object.
+- `lib/api/client-domains.test.ts` — includes the boundary test that forbids UI imports from `client-domains` or `domains/*`.
 
 ### WebSocket client logic
 
@@ -93,7 +103,7 @@ Example: `app/(user)/practice/[sessionId]/page.tsx` + `use-practice-session-life
 |---------|-----------|
 | Route group + shell | `(dashboard)/layout.tsx`, `components/layout/dashboard-shell.tsx` |
 | Practice co-location | `app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts` |
-| API facade | `lib/api/client.ts`, `lib/api/client-domains.ts` |
+| API facade + domain seam | `lib/api/client.ts`, `lib/api/client-domains.ts`, `lib/api/domains/*` |
 | WS modular hook | `hooks/use-practice-websocket.ts`, `hooks/websocket/` |
 
 ---
@@ -101,7 +111,7 @@ Example: `app/(user)/practice/[sessionId]/page.tsx` + `use-practice-session-life
 ## Anti-Patterns
 
 - Adding `route.ts` under `app/` (forbidden — `web/src/app/AGENTS.md`).
-- Importing `client-domains.ts` directly from pages — use `api` from `client.ts`.
+- Importing `client-domains.ts` or `lib/api/domains/*` directly from pages/hooks/components — use `api` from `client.ts`.
 - Heavy data fetching in `layout.tsx`.
 - Putting practice-only logic in `components/ui/`.
 

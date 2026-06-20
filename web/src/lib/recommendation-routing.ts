@@ -6,6 +6,7 @@ const ALLOWED_RECOMMENDATION_ROUTE_PREFIXES = [
     "/agents",
     "/practice",
     "/history",
+    "/sales-trainer",
 ] as const;
 
 export type RecommendationPathDowngradeReason =

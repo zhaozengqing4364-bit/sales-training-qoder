@@ -4810,6 +4810,8 @@ export interface SalesTrainerPathListResponse {
 }
 
 export interface NewcomerTrainingDurationOption {
+    option_key: string;
+    display_name: string;
     duration_minutes: number;
     target_unit_id: string;
     order_index: number;
@@ -4884,6 +4886,7 @@ export interface NewcomerPathModuleConfig {
     readonly review_action_label: string | null;
     readonly guidance_templates: Readonly<Record<string, string>>;
     readonly learning_units?: readonly BusinessEtiquetteTrainingUnitConfig[];
+    readonly duration_options?: readonly NewcomerTrainingDurationOption[];
 }
 
 export interface NewcomerArticleProgressResponse {
@@ -6847,6 +6850,22 @@ export type AiCoachChatStreamEvent =
           readonly phase: AiCoachChatStreamPhase;
           readonly message: string;
           readonly session_id?: string | null;
+      }
+    | {
+          readonly type: "assistant_text_delta";
+          readonly phase: AiCoachChatStreamPhase;
+          readonly session_id?: string | null;
+          readonly delta_id: string;
+          readonly status: "streaming";
+          readonly text: string;
+      }
+    | {
+          readonly type: "reasoning_text_delta";
+          readonly phase: AiCoachChatStreamPhase;
+          readonly session_id?: string | null;
+          readonly delta_id: string;
+          readonly status: "streaming";
+          readonly text: string;
       }
     | {
           readonly type: "ui_event_delta";

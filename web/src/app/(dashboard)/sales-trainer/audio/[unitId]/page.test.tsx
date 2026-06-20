@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import SalesTrainerAudioUploadPage from "./page";
 
@@ -30,7 +30,10 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.salesTrainer,
                 getUnitBrief: getUnitBriefMock,
                 listPaths: listPathsMock,
-                getMaterialVersionFileUrl: (versionId: string) => `/api/materials/${versionId}/file`,
+                getMaterialVersionFileUrl: (
+                    versionId: string,
+                    options?: { disposition?: "attachment" | "inline" },
+                ) => `/api/materials/${versionId}/file${options?.disposition ? `?disposition=${options.disposition}` : ""}`,
                 uploadAudioSubmissionDirect: uploadAudioSubmissionDirectMock,
             },
         },
@@ -79,8 +82,8 @@ describe("SalesTrainerAudioUploadPage", () => {
                         material_id: "material-1",
                         version_label: "v2026.06",
                         title: "公司主胶片 2026-06",
-                        file_name: "deck.pptx",
-                        content_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        file_name: "deck.md",
+                        content_type: "text/markdown",
                         file_size_bytes: 1024,
                         storage_key: "cos://deck.pptx",
                         file_hash: null,
@@ -152,6 +155,10 @@ describe("SalesTrainerAudioUploadPage", () => {
         uploadAudioSubmissionDirectMock.mockResolvedValue({ submission_id: "submission-1" });
     });
 
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
     it("shows level context, pass threshold, and uploads the selected audio file", async () => {
         render(<SalesTrainerAudioUploadPage />);
 
@@ -182,5 +189,26 @@ describe("SalesTrainerAudioUploadPage", () => {
         });
         expect(screen.queryByText(/50 秒|最大时长/)).toBeNull();
         expect(pushMock).toHaveBeenCalledWith("/sales-trainer/audio/result/submission-1");
+    });
+
+    it("renders markdown training material preview without forcing a download", async () => {
+        const fetchMock = vi.fn(async () => new Response(
+            "## 好示范\n\n新人应先讲客户场景，再讲方案价值。",
+            { status: 200 },
+        ));
+        vi.stubGlobal("fetch", fetchMock);
+
+        render(<SalesTrainerAudioUploadPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "查看材料" }));
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            "/api/materials/version-1/file?disposition=inline",
+            { credentials: "include" },
+        );
+        expect(await screen.findByText("好示范")).toBeTruthy();
+        expect(screen.getByText("新人应先讲客户场景，再讲方案价值。")).toBeTruthy();
+        expect(screen.getByRole("link", { name: /下载材料/ }).getAttribute("href"))
+            .toBe("/api/materials/version-1/file");
     });
 });

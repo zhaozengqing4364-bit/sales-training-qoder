@@ -5,14 +5,20 @@ from typing import Any
 from sales_trainer.models import SalesTrainerUnit
 from sales_trainer.schemas import SalesTrainerPathConfig
 from sales_trainer.services.path_projection_payloads import build_path_payload
+from sales_trainer.services.path_progress_service import UnitProgress
 
 
-def _unit(unit_id: str = "business-unit") -> SalesTrainerUnit:
+def _unit(
+    unit_id: str = "business-unit",
+    *,
+    name: str = "商务技巧",
+    unit_type: str = "quiz",
+) -> SalesTrainerUnit:
     return SalesTrainerUnit(
         unit_id=unit_id,
-        name="商务技巧",
+        name=name,
         description="阅读文章后练习商务技巧。",
-        unit_type="quiz",
+        unit_type=unit_type,
     )
 
 
@@ -40,6 +46,58 @@ def _path_payload(config: SalesTrainerPathConfig) -> dict[str, Any]:
         quiz_progress={},
         audio_progress={},
     )
+
+
+def test_should_recommend_retry_when_ppt_failed_even_if_business_skills_passed() -> None:
+    ppt_unit = _unit("ppt-unit", name="PPT讲解", unit_type="audio_scoring")
+    business_unit = _unit("business-unit")
+    ppt_config = SalesTrainerPathConfig(
+        enabled=True,
+        path_key="newcomer_training_path_v1",
+        module_key="ppt_explanation",
+        module_type="audio_scoring",
+        order_index=1,
+        level_title="第1关：PPT讲解录音",
+        completion_rule="passed",
+        primary_action_label="上传 PPT 讲解录音",
+    )
+    business_config = _business_path_config(ai_coach=None)
+
+    payload = build_path_payload(
+        path_key="newcomer_training_path_v1",
+        title="新人训练路径",
+        goal_title="掌握新人核心训练路径",
+        ordered_items=[(ppt_unit, ppt_config), (business_unit, business_config)],
+        quiz_progress={
+            "business-unit": UnitProgress(
+                status="scored",
+                passed=True,
+                score=85,
+                max_score=100,
+                submitted_at=None,
+                result_id="business-attempt",
+                target_path="/sales-trainer/quiz/result/business-attempt",
+            )
+        },
+        audio_progress={
+            "ppt-unit": UnitProgress(
+                status="scored",
+                passed=False,
+                score=44,
+                max_score=100,
+                submitted_at=None,
+                result_id="ppt-submission",
+                target_path="/sales-trainer/audio/result/ppt-submission",
+            )
+        },
+    )
+    recommendation = payload["goal_context"]["next_recommendation"]
+
+    assert payload["completed_levels"] == 1
+    assert payload["current_level_id"] == "ppt-unit"
+    assert recommendation["recommendation_kind"] == "retry_level"
+    assert recommendation["target_path"] == "/sales-trainer/audio/ppt-unit"
+    assert recommendation["unit_id"] == "ppt-unit"
 
 
 def test_should_expose_available_ai_coach_without_internal_prompt_fields() -> None:

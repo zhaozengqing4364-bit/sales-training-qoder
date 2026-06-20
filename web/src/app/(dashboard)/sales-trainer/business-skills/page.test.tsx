@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiRequestError } from "@/lib/api/client";
 
+import { chapterNavigationLabel } from "./config";
 import BusinessSkillsPage from "./page";
 
 const {
@@ -378,6 +379,11 @@ describe("BusinessSkillsPage", () => {
                 },
             ],
         });
+    });
+
+    it("does not duplicate section labels when chapter titles already include them", () => {
+        expect(chapterNavigationLabel(0, "第八节：礼仪的内化")).toBe("第八节：礼仪的内化");
+        expect(chapterNavigationLabel(0, "准备动作")).toBe("第一节 准备动作");
     });
 
     it("renders configured learning units before chapter reading and unlocks exam after required reading", async () => {

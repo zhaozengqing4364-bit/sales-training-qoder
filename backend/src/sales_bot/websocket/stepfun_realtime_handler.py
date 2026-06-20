@@ -265,7 +265,9 @@ class StepFunRealtimeHandler(
         self.upstream_ws = None
         self._stepfun_transport = stepfun_transport or StepFunTransport(
             local_provider_enabled=should_use_phase4_local_provider,
-            local_provider_factory=Phase4LocalStepFunProvider.from_env,
+            local_provider_factory=lambda: Phase4LocalStepFunProvider.from_env(
+                self.scenario
+            ),
         )
         self._db_session_factory = db_session_factory or self._default_db_session_factory
         self._knowledge_service_factory = (

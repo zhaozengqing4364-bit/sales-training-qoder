@@ -15,7 +15,12 @@ from curriculum_practice.models import (
 from curriculum_practice.services.learning_progress_service import (
     LearningProgressService,
 )
-from sales_trainer.models import SalesTrainerAudioScorePrompt, SalesTrainerUnit
+from sales_trainer.models import (
+    SalesTrainerAudioScorePrompt,
+    SalesTrainerMaterial,
+    SalesTrainerMaterialVersion,
+    SalesTrainerUnit,
+)
 from sales_trainer.schemas import (
     AudioSubmissionCreate,
     ExamPaperCreate,
@@ -60,6 +65,36 @@ def _question(question_id: str, *, category_id: str) -> QuestionItem:
         status="published",
         usage_scope="sales_trainer",
     )
+
+
+def _published_material(
+    admin: User,
+) -> tuple[SalesTrainerMaterial, SalesTrainerMaterialVersion]:
+    material = SalesTrainerMaterial(
+        material_id=str(uuid.uuid4()),
+        material_key=f"record-lineage-ppt-{uuid.uuid4().hex[:8]}",
+        name="PPT 讲解材料",
+        material_type="ppt_deck",
+        purpose="ppt_pitch",
+        status="published",
+        created_by=admin.user_id,
+        updated_by=admin.user_id,
+    )
+    version = SalesTrainerMaterialVersion(
+        version_id=str(uuid.uuid4()),
+        material_id=material.material_id,
+        version_label="v1",
+        title="PPT 讲解材料 v1",
+        file_name="record-lineage.pptx",
+        content_type="application/vnd.ms-powerpoint",
+        file_size_bytes=1024,
+        storage_key="/tmp/record-lineage.pptx",
+        status="published",
+        created_by=admin.user_id,
+        published_by=admin.user_id,
+    )
+    material.current_version_id = version.version_id
+    return material, version
 
 
 async def _completed_article(
@@ -131,7 +166,8 @@ async def test_should_expose_audio_training_record_path_revision_lineage(
         created_by=admin.user_id,
         updated_by=admin.user_id,
     )
-    test_db.add_all([admin, learner, prompt, unit])
+    material, version = _published_material(admin)
+    test_db.add_all([admin, learner, prompt, material, version, unit])
     await test_db.commit()
 
     path_service = SalesTrainerPathConfigService(test_db)
@@ -147,6 +183,8 @@ async def test_should_expose_audio_training_record_path_revision_lineage(
                     order_index=1,
                     title="PPT 讲解录音",
                     target_unit_id=unit.unit_id,
+                    material_id=material.material_id,
+                    material_version_id=version.version_id,
                     completion_rule="scored",
                 )
             ],
@@ -167,6 +205,7 @@ async def test_should_expose_audio_training_record_path_revision_lineage(
             size_bytes=1024,
             storage_key="/tmp/ppt-explanation.wav",
             source_page="sales_trainer_unit_detail",
+            confirmed_material_version_id=version.version_id,
             auto_process=False,
         ),
         actor=learner,

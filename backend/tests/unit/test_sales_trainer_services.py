@@ -41,7 +41,7 @@ from sales_trainer.services.material_service import SalesTrainerMaterialService
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_service import SalesTrainerPathService
 from sales_trainer.services.question_bank import QuestionBankAdapter
-from sales_trainer.services.quiz_service import QuizService
+from sales_trainer.services.quiz_service import QuizService, QuizServiceError
 from sales_trainer.services.short_answer_scoring_service import (
     ShortAnswerScoreOutcome,
     ShortAnswerScoringService,
@@ -551,6 +551,73 @@ async def test_should_publish_quiz_unit_and_score_choice_answer(
         {"value": "A", "label": "数据流动治理"},
         {"value": "B", "label": "招聘管理"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_should_reject_incomplete_quiz_attempt_before_creating_snapshot(
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    category = QuestionCategory(
+        category_id="sales-trainer-quiz-incomplete-category",
+        name="空卷边界题库",
+        order_index=1,
+    )
+    question = QuestionItem(
+        question_id="quiz-incomplete-question-1",
+        category_id=category.category_id,
+        title="产品定位",
+        stem="石犀核心定位是什么？",
+        reference_answer="A",
+        scoring_criteria={
+            "question_type": "single_choice",
+            "options": [
+                {"value": "A", "label": "数据流动治理"},
+                {"value": "B", "label": "招聘管理"},
+            ],
+            "correct_answer": "A",
+        },
+        scoring_dimensions=["content_accuracy"],
+        status="published",
+        usage_scope="sales_trainer",
+    )
+    test_db.add_all([category, question])
+    await test_db.commit()
+
+    unit_service = UnitService(test_db)
+    unit = await unit_service.create_unit(
+        SalesTrainerUnitCreate(
+            name="产品基础空卷边界",
+            unit_type="quiz",
+            config={"quiz": {"pass_threshold": 10}},
+            questions=[
+                UnitQuestionBinding(
+                    question_id=question.question_id,
+                    order_index=1,
+                    points=10,
+                )
+            ],
+        ),
+        actor=test_user,
+    )
+    unit = await unit_service.publish_unit(unit, actor=test_user)
+
+    with pytest.raises(QuizServiceError) as error:
+        await QuizService(test_db).submit_attempt(
+            QuizAttemptCreate(
+                unit_id=unit.unit_id,
+                answers=[
+                    QuizAnswerSubmit(
+                        question_id=question.question_id,
+                        answer_payload="",
+                    )
+                ],
+            ),
+            actor=test_user,
+        )
+
+    assert error.value.code == "[QUIZ_ANSWER_INCOMPLETE]"
+    assert error.value.status_code == 422
 
 
 @pytest.mark.asyncio

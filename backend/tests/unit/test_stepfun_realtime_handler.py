@@ -1353,6 +1353,37 @@ async def test_prepare_grounding_context_empty_query_skips_retrieval():
 
 
 @pytest.mark.asyncio
+async def test_prepare_grounding_context_skips_retrieval_for_phase4_local_provider(
+    monkeypatch,
+):
+    monkeypatch.setenv("PHASE4_E2E_PROVIDER", "local")
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "require_kb_grounding": True,
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+        },
+    }
+    handler._tool_search_internal_knowledge = AsyncMock()
+    pipeline = SimpleNamespace(
+        evaluate=AsyncMock(),
+        retrieve=AsyncMock(),
+        evaluate_retrieval=handler._grounding_pipeline.evaluate_retrieval,
+    )
+    cast(Any, handler)._grounding_pipeline = pipeline
+
+    await handler._prepare_grounding_context("业务目标")
+
+    pipeline.evaluate.assert_not_awaited()
+    pipeline.retrieve.assert_not_awaited()
+    handler._tool_search_internal_knowledge.assert_not_awaited()
+    assert handler._pending_grounding_context == ""
+    assert handler._pending_blocked_response_text == ""
+
+
+@pytest.mark.asyncio
 async def test_prepare_grounding_context_forces_retrieval_when_kb_bound_and_internal_flag_disabled():
     handler = StepFunRealtimeHandler()
     handler._effective_policy = {

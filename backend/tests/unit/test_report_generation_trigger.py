@@ -308,6 +308,30 @@ class TestReportGenerationTrigger:
             "presentation-provider-script.v1"
         )
 
+    def test_phase4_local_report_payload_uses_scenario_default_transcript_path(
+        self,
+        monkeypatch,
+    ):
+        monkeypatch.setenv("PHASE4_E2E_PROVIDER", "local")
+        monkeypatch.delenv("PHASE4_E2E_PROVIDER_TRANSCRIPT", raising=False)
+
+        payload = ReportGenerationTrigger._build_phase4_local_report_payload(
+            SimpleNamespace(
+                session_id="sales-session-1",
+                scenario_type="sales",
+                overall_score=88.0,
+                ruleset_version="sales-bootstrap",
+                score_basis="session_evidence_projection",
+                evidence_completeness={"message_count": 1, "complete": True},
+            )
+        )
+
+        provider_transcript = payload["evidence"]["provider_transcript"]
+        assert provider_transcript["source"] == "phase4_local_provider"
+        assert provider_transcript["path"].endswith(
+            ".sisyphus/evidence/issue-43-provider-transcript.jsonl"
+        )
+
 
 class TestTriggerReportGeneration:
     """Test fire-and-forget trigger function."""

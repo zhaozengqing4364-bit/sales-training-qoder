@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +69,9 @@ from sales_trainer.services.audio_submission_service import (
     AudioSubmissionService,
     AudioSubmissionServiceError,
 )
+from sales_trainer.services.effective_audio_training_config import (
+    EffectiveAudioTrainingConfigResolver,
+)
 from sales_trainer.services.material_service import (
     MaterialServiceError,
     SalesTrainerMaterialService,
@@ -94,6 +97,7 @@ from sales_trainer.services.quiz_service import QuizService, QuizServiceError
 from sales_trainer.services.training_record_service import TrainingRecordService
 from sales_trainer.services.unit_public_payloads import learner_safe_unit_payload
 from sales_trainer.services.unit_service import SalesTrainerUnitError, UnitService
+from sales_trainer.tasks.process_audio import process_audio_submission_background
 
 router = APIRouter(prefix="/sales-trainer", tags=["sales-trainer"])
 admin_router = APIRouter(prefix="/admin/sales-trainer", tags=["admin-sales-trainer"])
@@ -170,6 +174,19 @@ def _as_operation_log_response(log: Any) -> OperationLogResponse:
             "metadata": log.metadata_json or {},
             "created_at": log.created_at,
         }
+    )
+
+
+def _schedule_audio_processing(
+    background_tasks: BackgroundTasks,
+    *,
+    submission_id: str,
+    actor: User,
+) -> None:
+    background_tasks.add_task(
+        process_audio_submission_background,
+        submission_id,
+        actor_id=str(actor.user_id),
     )
 
 
@@ -307,7 +324,11 @@ async def get_published_unit_brief(
             message="训练单元不存在或未发布。",
         )
     try:
-        brief = await SalesTrainerMaterialService(db).resolve_unit_brief(unit)
+        effective = await EffectiveAudioTrainingConfigResolver(db).resolve_for_unit(unit)
+        brief = await SalesTrainerMaterialService(db).resolve_unit_brief(
+            unit,
+            config_override=effective.config,
+        )
     except MaterialServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     payload = {
@@ -322,6 +343,7 @@ async def get_published_unit_brief(
 @router.get("/materials/versions/{version_id}/file", response_model=None)
 async def get_sales_trainer_material_version_file(
     version_id: str,
+    disposition: str = Query("attachment", pattern="^(attachment|inline)$"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -337,6 +359,7 @@ async def get_sales_trainer_material_version_file(
             access.path,
             media_type=access.media_type,
             filename=access.filename,
+            content_disposition_type=disposition,
         )
     return _api_error("[MATERIAL_FILE_NOT_FOUND]", status_code=404)
 
@@ -400,6 +423,7 @@ async def create_audio_upload_url(
 
 @router.post("/audio-submissions/upload")
 async def upload_audio_file(
+    background_tasks: BackgroundTasks,
     unit_id: str | None = Form(None),
     purpose: str = Form("general_audio_scoring"),
     source_page: str | None = Form(None),
@@ -420,8 +444,14 @@ async def upload_audio_file(
             if confirmed_material_version_id and confirmed_material_version_id.strip()
             else None,
             actor=current_user,
-            auto_process=auto_process,
+            auto_process=False,
         )
+        if auto_process:
+            _schedule_audio_processing(
+                background_tasks,
+                submission_id=submission.submission_id,
+                actor=current_user,
+            )
     except AudioSubmissionServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     return success_response(
@@ -434,12 +464,23 @@ async def upload_audio_file(
 @router.post("/audio-submissions")
 async def register_audio_submission(
     payload: AudioSubmissionCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = AudioSubmissionService(db)
     try:
-        submission = await service.create_submission(payload, actor=current_user)
+        should_process = payload.auto_process
+        submission = await service.create_submission(
+            payload.model_copy(update={"auto_process": False}),
+            actor=current_user,
+        )
+        if should_process:
+            _schedule_audio_processing(
+                background_tasks,
+                submission_id=submission.submission_id,
+                actor=current_user,
+            )
     except AudioSubmissionServiceError as exc:
         return _api_error(exc.code, status_code=exc.status_code, message=exc.message)
     return success_response(

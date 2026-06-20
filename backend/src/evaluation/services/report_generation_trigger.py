@@ -404,7 +404,10 @@ class ReportGenerationTrigger:
                 else completeness.get("message_count")
             ),
         }
-        provider_transcript = ReportGenerationTrigger._build_provider_transcript_reference()
+        scenario_type = str(getattr(projection, "scenario_type", "sales") or "sales")
+        provider_transcript = ReportGenerationTrigger._build_provider_transcript_reference(
+            scenario_type
+        )
         if provider_transcript is not None:
             reference["provider_transcript"] = provider_transcript
         return reference
@@ -414,12 +417,29 @@ class ReportGenerationTrigger:
         return os.getenv("PHASE4_E2E_PROVIDER", "").strip().lower() == "local"
 
     @staticmethod
-    def _build_provider_transcript_reference() -> dict[str, Any] | None:
+    @staticmethod
+    def _default_provider_transcript_path(scenario_type: str | None) -> Path:
+        name = (
+            "issue-44-provider-transcript.jsonl"
+            if scenario_type == "presentation"
+            else "issue-43-provider-transcript.jsonl"
+        )
+        return Path(__file__).resolve().parents[4] / ".sisyphus" / "evidence" / name
+
+    @staticmethod
+    def _build_provider_transcript_reference(
+        scenario_type: str | None = None,
+    ) -> dict[str, Any] | None:
         raw_path = os.getenv("PHASE4_E2E_PROVIDER_TRANSCRIPT", "").strip()
-        if not raw_path:
+        if raw_path:
+            path = Path(raw_path).expanduser().resolve()
+        elif ReportGenerationTrigger._should_use_phase4_local_report():
+            path = ReportGenerationTrigger._default_provider_transcript_path(
+                scenario_type
+            )
+        else:
             return None
 
-        path = Path(raw_path).expanduser().resolve()
         reference: dict[str, Any] = {
             "source": "phase4_local_provider",
             "path": str(path),
@@ -476,8 +496,10 @@ class ReportGenerationTrigger:
         scoring_projection: ReportScoringProjection | None = None,
     ) -> dict[str, Any]:
         completeness = getattr(projection, "evidence_completeness", {})
-        provider_transcript = ReportGenerationTrigger._build_provider_transcript_reference()
         scenario_type = str(getattr(projection, "scenario_type", "sales") or "sales")
+        provider_transcript = ReportGenerationTrigger._build_provider_transcript_reference(
+            scenario_type
+        )
         evidence_source = (
             "phase4_local_presentation_e2e"
             if scenario_type == "presentation"

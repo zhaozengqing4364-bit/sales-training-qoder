@@ -212,8 +212,11 @@ alwaysApply: true
 | 系统架构 | [docs/architecture.md](docs/architecture.md) |
 | API / WS 契约 | [docs/api-contract/](docs/api-contract/) |
 | ADR | [docs/adr/](docs/adr/) |
+| 文档、ADR、契约、计划治理 | [docs/AGENTS.md](docs/AGENTS.md) |
 | 域语言 | `CONTEXT.md`、`docs/agents/domain.md` |
 | 后端 / 前端 / 测试 | [backend/AGENTS.md](backend/AGENTS.md)、[web/AGENTS.md](web/AGENTS.md) 等 |
+| 数据迁移 | [backend/alembic/AGENTS.md](backend/alembic/AGENTS.md) |
+| 本地开发、门禁、恢复脚本 | [scripts/AGENTS.md](scripts/AGENTS.md)、[backend/scripts/AGENTS.md](backend/scripts/AGENTS.md) |
 | 销售训练子域 | [backend/src/sales_trainer/AGENTS.md](backend/src/sales_trainer/AGENTS.md)、[web/src/app/admin/sales-trainer/AGENTS.md](web/src/app/admin/sales-trainer/AGENTS.md)、[docs/api-contract/sales-trainer.md](docs/api-contract/sales-trainer.md) |
 | Trellis 流程与 spec | [.trellis/workflow.md](.trellis/workflow.md)、[.trellis/spec/](.trellis/spec/) |
 | Issue | [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) |

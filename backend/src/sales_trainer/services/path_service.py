@@ -118,9 +118,5 @@ def _ordered_projection_items(
             (item.unit, item.path_config)
             for item in active_projection.items
         ],
-        key=lambda item: (
-            item[1].order_index,
-            str(item[0].updated_at),
-            str(item[0].unit_id),
-        ),
+        key=lambda item: item[1].order_index,
     )

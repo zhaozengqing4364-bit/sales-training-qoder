@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fastapi import UploadFile
 from sqlalchemy import func, select
@@ -36,13 +36,15 @@ from sales_trainer.services.audio_submission_lineage import (
     submission_lineage_fields,
 )
 from sales_trainer.services.deucate_scoring_service import DeucateScoringService
+from sales_trainer.services.effective_audio_training_config import (
+    EffectiveAudioTrainingConfigResolver,
+)
 from sales_trainer.services.material_service import (
     MaterialServiceError,
     SalesTrainerMaterialService,
 )
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_attempt_context_service import (
-    PathAttemptContextService,
     PathRuntimeContextPayload,
 )
 from sales_trainer.services.transcription_service import TranscriptionService
@@ -216,11 +218,19 @@ class AudioSubmissionService:
                     "[SALES_TRAINER_UNIT_TYPE_MISMATCH]",
                     "该训练单元不是音频评分模块。",
                 )
+            effective = await EffectiveAudioTrainingConfigResolver(
+                self._db
+            ).resolve_for_unit(unit)
             try:
-                self._require_material_binding_for_ppt(unit, payload.purpose)
+                self._require_material_binding_for_ppt(
+                    unit,
+                    payload.purpose,
+                    config_override=effective.config,
+                )
                 snapshots = await self._materials.freeze_submission_snapshots(
                     unit,
                     confirmed_material_version_id=payload.confirmed_material_version_id,
+                    config_override=effective.config,
                 )
             except MaterialServiceError as exc:
                 raise AudioSubmissionServiceError(
@@ -228,9 +238,7 @@ class AudioSubmissionService:
                     exc.message,
                     status_code=exc.status_code,
                 ) from exc
-            submission_context = (
-                await PathAttemptContextService(self._db).resolve_for_unit(unit)
-            ).to_payload()
+            submission_context = cast(PathRuntimeContextPayload, effective.context)
             task_brief_snapshot = snapshots.get("task_brief_snapshot")
             snapshots["task_brief_snapshot"] = freeze_submission_context(
                 task_brief_snapshot if isinstance(task_brief_snapshot, dict) else None,
@@ -579,12 +587,15 @@ class AudioSubmissionService:
         self,
         unit: SalesTrainerUnit,
         purpose: str,
+        *,
+        config_override: dict[str, Any] | None = None,
     ) -> None:
-        unit_purpose = ((unit.config or {}).get("audio") or {}).get("purpose")
+        config = config_override if config_override is not None else unit.config
+        unit_purpose = ((config or {}).get("audio") or {}).get("purpose")
         resolved_purpose = str(unit_purpose or purpose or "")
         if resolved_purpose != "ppt_pitch":
             return
-        materials_config = (unit.config or {}).get("materials")
+        materials_config = (config or {}).get("materials")
         bindings = (
             materials_config.get("bindings")
             if isinstance(materials_config, dict)
@@ -697,7 +708,20 @@ class AudioSubmissionService:
             if submission.unit_id
             else None
         )
-        prompt_id = _resolve_scoring_prompt_id(unit)
+        score_scheme_snapshot = (
+            submission.score_scheme_snapshot
+            if isinstance(submission.score_scheme_snapshot, dict)
+            else None
+        )
+        prompt_id = _resolve_scoring_prompt_id_from_snapshot(score_scheme_snapshot)
+        effective_config = None
+        if unit is not None and not prompt_id:
+            effective_config = (
+                await EffectiveAudioTrainingConfigResolver(self._db).resolve_for_unit(
+                    unit
+                )
+            ).config
+            prompt_id = _resolve_scoring_prompt_id(unit, config_override=effective_config)
         if not prompt_id:
             submission.status = "scoring_failed"
             submission.error_code = "[SCORING_PROMPT_REQUIRED]"
@@ -732,7 +756,15 @@ class AudioSubmissionService:
             target_id=submission.submission_id,
             metadata={"prompt_id": prompt.prompt_id, "prompt_version": prompt.version},
         )
-        threshold = resolve_audio_pass_threshold(unit.config if unit else None)
+        threshold = _resolve_pass_threshold_from_snapshot(score_scheme_snapshot)
+        if threshold is None:
+            if effective_config is None and unit is not None:
+                effective_config = (
+                    await EffectiveAudioTrainingConfigResolver(self._db).resolve_for_unit(
+                        unit
+                    )
+                ).config
+            threshold = resolve_audio_pass_threshold(effective_config if unit else None)
         outcome = await self._scoring.score_audio(
             submission=submission,
             prompt=prompt,
@@ -947,12 +979,37 @@ class AudioSubmissionService:
         return base / user_id / f"{uuid.uuid4().hex}{_safe_extension(filename)}"
 
 
-def _resolve_scoring_prompt_id(unit: SalesTrainerUnit | None) -> str | None:
+def _resolve_scoring_prompt_id(
+    unit: SalesTrainerUnit | None,
+    *,
+    config_override: dict[str, Any] | None = None,
+) -> str | None:
     if unit is None:
         return None
-    audio_config = (unit.config or {}).get("audio") or {}
+    config = config_override if config_override is not None else unit.config
+    audio_config = (config or {}).get("audio") or {}
     value = audio_config.get("scoring_prompt_id")
     return str(value) if value else None
+
+
+def _resolve_scoring_prompt_id_from_snapshot(
+    snapshot: dict[str, Any] | None,
+) -> str | None:
+    if snapshot is None:
+        return None
+    value = snapshot.get("prompt_id")
+    return str(value) if value else None
+
+
+def _resolve_pass_threshold_from_snapshot(snapshot: dict[str, Any] | None) -> int | None:
+    if snapshot is None:
+        return None
+    value = snapshot.get("pass_threshold")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return None
 
 
 def _safe_extension(filename: str) -> str:

@@ -275,6 +275,26 @@ describe("HomePage dashboard header", () => {
         expect(taskLinks.some((link) => link.getAttribute("href") === "/practice/session-ppt-1/report?focus=presentation_page&page=5")).toBe(true);
     });
 
+    it("uses the newcomer training path card for sales-trainer recommendations", async () => {
+        getRecommendationMock.mockResolvedValue({
+            title: "重练：第1关 PPT讲解录音",
+            reason: "第 1 关未通过，先回到 PPT 讲解录音补齐客户价值和下一步。",
+            action_label: "重练第1关",
+            target_path: "/sales-trainer/audio/ppt-unit",
+            recommendation_kind: "sales_trainer_path",
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("新人训练路径下一步")).toBeTruthy();
+        expect(screen.queryByText("学习路径下一步")).toBeNull();
+        expect(screen.queryByRole("link", { name: "查看学习路径" })).toBeNull();
+        const links = screen.getAllByRole("link", { name: "重练第1关" });
+        expect(links.length).toBeGreaterThan(0);
+        expect(links.every((link) => link.getAttribute("href") === "/sales-trainer/audio/ppt-unit")).toBe(true);
+    });
+
     it("downgrades unsafe dashboard recommendation targets to the training route", async () => {
         getRecommendationMock.mockResolvedValue({
             title: "继续训练",

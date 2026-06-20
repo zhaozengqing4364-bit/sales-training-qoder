@@ -21,21 +21,19 @@ function choiceOptions(question: NewcomerExamPaperQuestion): readonly SalesTrain
     return question.options ?? [];
 }
 
-function firstOptionValue(options: readonly SalesTrainerQuestionOption[] | undefined): string {
-    return options?.[0]?.value ?? "";
-}
-
 export function initialAnswer(question: NewcomerExamPaperQuestion): unknown {
-    if (question.question_type === "single_choice") {
-        return firstOptionValue(question.options);
-    }
-    if (question.question_type === "true_false") {
-        return firstOptionValue(TRUE_FALSE_OPTIONS);
-    }
     if (question.question_type === "multiple_choice") {
         return [];
     }
     return "";
+}
+
+export function isQuestionAnswered(question: NewcomerExamPaperQuestion, answers: AnswersState): boolean {
+    const value = answerPayload(question, answers);
+    if (question.question_type === "multiple_choice") {
+        return Array.isArray(value) && value.length > 0;
+    }
+    return typeof value === "string" && value.trim().length > 0;
 }
 
 export function QuestionField({
@@ -90,6 +88,7 @@ export function QuestionField({
     }
     return (
         <textarea
+            aria-label={question.stem}
             className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400"
             value={typeof value === "string" ? value : ""}
             onChange={(event) => onChange(event.target.value)}

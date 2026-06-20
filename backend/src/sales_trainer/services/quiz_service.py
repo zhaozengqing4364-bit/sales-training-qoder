@@ -84,6 +84,12 @@ class QuizService:
                 "提交答案包含未绑定到当前训练单元的题目。",
                 status_code=422,
             )
+        if self._has_incomplete_answers(bindings, question_map, answer_map):
+            raise QuizServiceError(
+                "[QUIZ_ANSWER_INCOMPLETE]",
+                "请完成全部题目后再提交。",
+                status_code=422,
+            )
 
         attempt = SalesTrainerQuizAttempt(
             unit_id=unit.unit_id,
@@ -180,6 +186,30 @@ class QuizService:
         if not allow_admin and attempt.user_id != str(actor.user_id):
             raise QuizServiceError("[ACCESS_DENIED]", "无权查看该做题记录。", 403)
         return attempt
+
+    def _has_incomplete_answers(
+        self,
+        bindings: list[SalesTrainerUnitQuestion],
+        question_map: dict[str, Any],
+        answer_map: dict[str, Any],
+    ) -> bool:
+        for binding in bindings:
+            question_id = str(binding.question_id)
+            if question_id not in answer_map:
+                return True
+            question = question_map.get(question_id)
+            if question is None:
+                continue
+            answer_payload = answer_map[question_id]
+            if answer_payload is None:
+                return True
+            if self._question_adapter.resolve_type(question) == "multiple_choice":
+                if not isinstance(answer_payload, list) or len(answer_payload) == 0:
+                    return True
+                continue
+            if not str(answer_payload).strip():
+                return True
+        return False
 
     async def get_admin_attempt(
         self,

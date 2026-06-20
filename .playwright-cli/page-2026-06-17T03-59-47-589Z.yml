@@ -1,0 +1,122 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e49]:
+    - complementary [ref=e50]:
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - img [ref=e54]
+          - generic [ref=e57]:
+            - generic [ref=e58]: AI 销售教练
+            - generic [ref=e59]: 平台
+        - navigation "主导航" [ref=e60]:
+          - generic [ref=e61]: 菜单
+          - menubar [ref=e62]:
+            - menuitem "首页" [ref=e63] [cursor=pointer]:
+              - img [ref=e65]
+              - generic [ref=e68]: 首页
+            - menuitem "训练模式" [ref=e69] [cursor=pointer]:
+              - img [ref=e70]
+              - generic [ref=e75]: 训练模式
+            - menuitem "新人训练路径" [ref=e76] [cursor=pointer]:
+              - img [ref=e77]
+              - generic [ref=e80]: 新人训练路径
+            - menuitem "排行榜" [ref=e81] [cursor=pointer]:
+              - img [ref=e82]
+              - generic [ref=e83]: 排行榜
+            - menuitem "历史记录" [ref=e84] [cursor=pointer]:
+              - img [ref=e85]
+              - generic [ref=e89]: 历史记录
+          - generic [ref=e92]: 系统
+          - menubar [ref=e93]:
+            - menuitem "运行状态" [ref=e94] [cursor=pointer]:
+              - img [ref=e95]
+              - generic [ref=e97]: 运行状态
+            - menuitem "管理后台" [ref=e98] [cursor=pointer]:
+              - img [ref=e99]
+              - generic [ref=e102]: 管理后台
+        - generic [ref=e103]:
+          - button "帮助与反馈" [ref=e105]:
+            - img [ref=e106]
+            - generic [ref=e108]: 帮助与反馈
+          - generic [ref=e109] [cursor=pointer]:
+            - img [ref=e111]
+            - generic [ref=e114]:
+              - generic [ref=e115]: 管理员
+              - generic [ref=e116]: 未设置部门
+            - img [ref=e118]
+          - button "折叠侧边栏" [ref=e121]:
+            - img [ref=e122]
+            - generic [ref=e125]: 折叠侧边栏
+    - main [ref=e126]:
+      - generic [ref=e550]:
+        - generic [ref=e551]:
+          - link "返回新人训练路径" [ref=e552] [cursor=pointer]:
+            - /url: /sales-trainer
+            - img [ref=e553]
+            - text: 返回新人训练路径
+          - generic [ref=e555]:
+            - generic [ref=e556]:
+              - heading "语音作业反馈" [level=1] [ref=e557]
+              - paragraph [ref=e558]: newcomer-silence.wav
+            - generic [ref=e559]:
+              - generic [ref=e560]:
+                - generic [ref=e561]: uploaded
+                - text: 已上传
+              - button "刷新" [ref=e562]:
+                - img [ref=e563]
+                - text: 刷新
+        - generic [ref=e568]: 转写与评分通常需要 1–3 分钟，页面会自动更新中。
+        - paragraph [ref=e571]: 本关需达到 70 分通过，可多次上传，以最新一次为准
+        - generic [ref=e572]:
+          - generic [ref=e574]:
+            - paragraph [ref=e575]: 文件大小
+            - paragraph [ref=e576]: 31.3 KB
+          - generic [ref=e577]:
+            - paragraph [ref=e578]: 上传时间
+            - paragraph [ref=e579]: 2026/6/17 11:59:42
+          - generic [ref=e580]:
+            - paragraph [ref=e581]: 处理状态
+            - generic [ref=e582]:
+              - img [ref=e583]
+              - generic [ref=e585]: 已上传
+        - generic [ref=e586]:
+          - heading "本次训练快照" [level=2] [ref=e588]
+          - generic [ref=e589]:
+            - paragraph [ref=e590]: 任务
+            - paragraph [ref=e591]: 第1关：PPT讲解录音
+          - generic [ref=e592]:
+            - paragraph [ref=e593]: 材料版本
+            - paragraph [ref=e595]: PPT 讲解任务与评分标准 · v2026.06 · 第 1 关 PPT 讲解任务与评分标准
+          - generic [ref=e596]:
+            - paragraph [ref=e597]: 评分方案
+            - paragraph [ref=e598]: 主胶片讲解录音评分 · v2
+        - generic [ref=e599]:
+          - generic [ref=e601]:
+            - paragraph [ref=e602]: 练完下一步
+            - heading "重练：第1关：PPT讲解" [level=2] [ref=e603]
+            - paragraph [ref=e604]: 本关已有提交，但还没有形成可用评分。
+          - link "再练一次" [ref=e605] [cursor=pointer]:
+            - /url: /sales-trainer/audio/d3db5adb-6e4c-4545-be6e-26510de52878
+            - text: 再练一次
+            - img [ref=e606]
+        - generic [ref=e608]:
+          - generic [ref=e610]:
+            - link "授权播放" [ref=e611] [cursor=pointer]:
+              - /url: http://localhost:3444/api/v1/sales-trainer/audio-submissions/183ef42c-55f6-4389-bb06-6b1310d2c4ac/file
+              - button "授权播放" [ref=e612]:
+                - img [ref=e613]
+                - text: 授权播放
+            - link "下载语音" [ref=e615] [cursor=pointer]:
+              - /url: http://localhost:3444/api/v1/sales-trainer/audio-submissions/183ef42c-55f6-4389-bb06-6b1310d2c4ac/file
+              - button "下载语音" [ref=e616]:
+                - img [ref=e617]
+                - text: 下载语音
+          - paragraph [ref=e620]: 页面通过授权端点读取音频，不直接暴露文件存储地址。
+        - generic [ref=e621]:
+          - heading "转写结果" [level=2] [ref=e623]
+          - paragraph [ref=e624]: 转写尚未完成。
+        - generic [ref=e625]:
+          - heading "评分结果" [level=2] [ref=e627]
+          - paragraph [ref=e628]: 评分尚未完成。
+  - button "Open Next.js Dev Tools" [ref=e44] [cursor=pointer]:
+    - img [ref=e45]
+  - alert [ref=e48]

@@ -4,6 +4,8 @@ import json
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from types import SimpleNamespace
+from typing import Literal
 
 from prompt_templates.compiled_contract import CompiledPromptContract
 from sales_trainer.ai_coach_chat_schemas import (
@@ -17,16 +19,39 @@ from sales_trainer.services.ai_coach_chat_generation_parser import (
     AiCoachChatResponseParser,
 )
 
-AiCoachGenerationDeltaHandler = Callable[
-    [AiCoachQuizCardDraftPayloadPublicV1],
-    Awaitable[None],
-]
+
+@dataclass(frozen=True)
+class AiCoachGenerationDelta:
+    delta_type: Literal["reasoning_text", "assistant_text", "quiz_card"]
+    text: str | None = None
+    quiz_card: AiCoachQuizCardDraftPayloadPublicV1 | None = None
+
+
+AiCoachGenerationDeltaHandler = Callable[[AiCoachGenerationDelta], Awaitable[None]]
 AiCoachResponseValidator = Callable[[AiCoachChatResponseInternalV1], None]
+AI_COACH_JSON_RESPONSE_FORMAT: dict[str, str] = {"type": "json_object"}
 
 
 @dataclass(frozen=True)
 class AiCoachStreamedResponseResult:
     response: AiCoachChatResponseInternalV1
+
+
+class AiCoachAssistantTextDraftExtractor:
+    def __init__(self) -> None:
+        self._last_text: str | None = None
+
+    def extract_changed(self, buffer: str) -> str | None:
+        text = AiCoachQuizCardDraftExtractor._partial_string_field(
+            buffer,
+            "assistant_text",
+        )
+        if text is None:
+            return None
+        if text == self._last_text:
+            return None
+        self._last_text = text
+        return text
 
 
 class AiCoachQuizCardDraftExtractor:
@@ -278,18 +303,41 @@ async def emit_streamed_response(
     for _attempt in range(max_attempts):
         prompt = prompt_for_attempt(contract.rendered_prompt, last_error)
         buffer = ""
-        extractor = AiCoachQuizCardDraftExtractor(session_id=session_id)
+        stream_public_deltas = last_error is None
+        assistant_text_extractor = AiCoachAssistantTextDraftExtractor()
         try:
-            async for token in llm.stream_generate(
-                prompt=prompt,
-                session_id=session_id,
-                system_message=contract.system_message,
-                allow_fallback_response=False,
-            ):
+            stream_kwargs = {
+                "prompt": prompt,
+                "session_id": session_id,
+                "system_message": contract.system_message,
+                "allow_fallback_response": False,
+                "response_format": AI_COACH_JSON_RESPONSE_FORMAT,
+            }
+            stream_chunks = getattr(llm, "stream_generate_chunks", None)
+            if stream_chunks is not None:
+                chunk_source = stream_chunks(**stream_kwargs)
+            else:
+                chunk_source = _text_only_chunks(llm.stream_generate(**stream_kwargs))
+            async for chunk in chunk_source:
+                if stream_public_deltas and chunk.reasoning_text:
+                    await on_generation_delta(
+                        AiCoachGenerationDelta(
+                            delta_type="reasoning_text",
+                            text=chunk.reasoning_text,
+                        )
+                    )
+                token = chunk.text
+                if not token:
+                    continue
                 buffer += token
-                draft = extractor.extract_changed(buffer)
-                if draft is not None:
-                    await on_generation_delta(draft)
+                text_delta = assistant_text_extractor.extract_changed(buffer)
+                if stream_public_deltas and text_delta is not None:
+                    await on_generation_delta(
+                        AiCoachGenerationDelta(
+                            delta_type="assistant_text",
+                            text=text_delta,
+                        )
+                    )
             if not buffer.strip():
                 last_error = AiCoachChatGenerationError(
                     "[AI_COACH_LLM_GENERATION_FAILED]",
@@ -320,6 +368,11 @@ async def emit_streamed_response(
     )
 
 
+async def _text_only_chunks(tokens):
+    async for token in tokens:
+        yield SimpleNamespace(text=token, reasoning_text="")
+
+
 def prompt_for_attempt(
     base_prompt: str,
     last_error: AiCoachChatGenerationError | None,
@@ -328,7 +381,6 @@ def prompt_for_attempt(
         return base_prompt
     return (
         f"{base_prompt}\n\n"
-        "上一轮输出未通过后端契约校验。请只重新输出一份合法 JSON，"
-        f"错误码：{last_error.code}。"
-        "不要解释错误，不要输出 Markdown。"
+        "上一轮输出字段类型或结构不符合要求。请直接重新输出一份严格合法 JSON。"
+        "不要解释修复过程，不要输出 Markdown。"
     )

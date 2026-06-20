@@ -187,6 +187,88 @@ async def test_should_fail_when_paraformer_subtask_failed() -> None:
     assert result.fallback == "[ASR_SUBTASK_FAILED]"
 
 
+@pytest.mark.asyncio
+async def test_should_preserve_dashscope_arrears_error_code() -> None:
+    class ArrearsClient(FakeTranscriptionClient):
+        def async_call(self, **kwargs):
+            self.async_call_kwargs = kwargs
+            return SimpleNamespace(
+                status_code=400,
+                code="Arrearage",
+                message="Access denied, please make sure your account is in good standing.",
+                output={},
+            )
+
+    provider = ParaformerFileASRProvider(
+        api_key="dashscope-key",
+        client=ArrearsClient(),
+        transcript_fetcher=lambda _: {},
+        config=_file_asr_config(),
+    )
+
+    result = await provider.transcribe_url("https://audio.example.com/sample.wav")
+
+    assert not result.is_success
+    assert result.fallback == "[ASR_ACCOUNT_ARREARS]"
+
+
+@pytest.mark.asyncio
+async def test_should_preserve_dashscope_auth_error_code() -> None:
+    class AuthFailedClient(FakeTranscriptionClient):
+        def wait(self, *, task: str, **kwargs):
+            return SimpleNamespace(
+                status_code=403,
+                code="InvalidApiKey",
+                message="invalid api key",
+                output={},
+            )
+
+    provider = ParaformerFileASRProvider(
+        api_key="dashscope-key",
+        client=AuthFailedClient(),
+        transcript_fetcher=lambda _: {},
+        config=_file_asr_config(),
+    )
+
+    result = await provider.transcribe_url("https://audio.example.com/sample.wav")
+
+    assert not result.is_success
+    assert result.fallback == "[ASR_AUTH_FAILED]"
+
+
+@pytest.mark.asyncio
+async def test_should_preserve_dashscope_file_download_error_code() -> None:
+    class DownloadFailedClient(FakeTranscriptionClient):
+        def wait(self, *, task: str, **kwargs):
+            return SimpleNamespace(
+                status_code=200,
+                output={
+                    "task_id": task,
+                    "task_status": "FAILED",
+                    "results": [
+                        {
+                            "file_url": "https://audio.example.com/sample.wav",
+                            "subtask_status": "FAILED",
+                            "code": "InvalidFile.DownloadFailed",
+                            "message": "Download failed.",
+                        }
+                    ],
+                },
+            )
+
+    provider = ParaformerFileASRProvider(
+        api_key="dashscope-key",
+        client=DownloadFailedClient(),
+        transcript_fetcher=lambda _: {},
+        config=_file_asr_config(),
+    )
+
+    result = await provider.transcribe_url("https://audio.example.com/sample.wav")
+
+    assert not result.is_success
+    assert result.fallback == "[ASR_FILE_DOWNLOAD_FAILED]"
+
+
 def test_should_extract_transcript_text_from_sentences_when_paragraph_missing() -> None:
     assert extract_transcript_text(
         {

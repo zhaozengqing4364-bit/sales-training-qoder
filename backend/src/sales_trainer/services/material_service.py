@@ -287,10 +287,17 @@ class SalesTrainerMaterialService:
     async def resolve_unit_brief(
         self,
         unit: SalesTrainerUnit,
+        *,
+        config_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        task_brief = _resolve_task_brief(unit)
-        material_items = await self.resolve_unit_material_items(unit, learner_visible=True)
-        score_scheme = await self.resolve_score_scheme(unit)
+        config = config_override if config_override is not None else unit.config
+        task_brief = _resolve_task_brief(unit, config_override=config)
+        material_items = await self.resolve_unit_material_items(
+            unit,
+            learner_visible=True,
+            config_override=config,
+        )
+        score_scheme = await self.resolve_score_scheme(unit, config_override=config)
         return {
             "task_brief": task_brief,
             "materials": material_items,
@@ -302,8 +309,10 @@ class SalesTrainerMaterialService:
         unit: SalesTrainerUnit,
         *,
         learner_visible: bool,
+        config_override: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        config = _validate_materials_config(unit.config or {})
+        raw_config = config_override if config_override is not None else unit.config
+        config = _validate_materials_config(raw_config or {})
         items: list[dict[str, Any]] = []
         for binding in sorted(config.bindings, key=lambda item: item.display_order):
             material = await self._db.get(SalesTrainerMaterial, binding.material_id)
@@ -358,8 +367,11 @@ class SalesTrainerMaterialService:
     async def resolve_score_scheme(
         self,
         unit: SalesTrainerUnit,
+        *,
+        config_override: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        prompt_id = ((unit.config or {}).get("audio") or {}).get("scoring_prompt_id")
+        raw_config = config_override if config_override is not None else unit.config
+        prompt_id = ((raw_config or {}).get("audio") or {}).get("scoring_prompt_id")
         if not prompt_id:
             return None
         from sales_trainer.models import SalesTrainerAudioScorePrompt
@@ -369,7 +381,7 @@ class SalesTrainerMaterialService:
         if prompt is None:
             return None
         rubric = prompt.learner_rubric or {}
-        threshold = resolve_audio_pass_threshold(unit.config or {})
+        threshold = resolve_audio_pass_threshold(raw_config or {})
         if isinstance(rubric, dict) and "pass_threshold" not in rubric:
             rubric = {**rubric, "pass_threshold": threshold}
         return {
@@ -387,9 +399,15 @@ class SalesTrainerMaterialService:
         unit: SalesTrainerUnit,
         *,
         confirmed_material_version_id: str | None,
+        config_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        task_brief = _resolve_task_brief(unit)
-        material_items = await self.resolve_unit_material_items(unit, learner_visible=True)
+        config = config_override if config_override is not None else unit.config
+        task_brief = _resolve_task_brief(unit, config_override=config)
+        material_items = await self.resolve_unit_material_items(
+            unit,
+            learner_visible=True,
+            config_override=config,
+        )
         required_confirmations = [
             item
             for item in material_items
@@ -412,7 +430,7 @@ class SalesTrainerMaterialService:
                     "确认的训练材料版本已不是当前要求版本，请重新下载并确认。",
                     status_code=409,
                 )
-        score_scheme = await self.resolve_score_scheme(unit)
+        score_scheme = await self.resolve_score_scheme(unit, config_override=config)
         return {
             "material_snapshot": {
                 "version": 1,
@@ -537,8 +555,13 @@ def _validate_materials_config(config: dict[str, Any]) -> SalesTrainerUnitMateri
         ) from exc
 
 
-def _resolve_task_brief(unit: SalesTrainerUnit) -> dict[str, Any]:
-    raw = (unit.config or {}).get("task_brief")
+def _resolve_task_brief(
+    unit: SalesTrainerUnit,
+    *,
+    config_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    config = config_override if config_override is not None else unit.config
+    raw = (config or {}).get("task_brief")
     if raw is None:
         return {
             "enabled": True,

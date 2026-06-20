@@ -225,7 +225,10 @@ async function auditRoute(page: Page, route: AuditRoute): Promise<AuditRouteResu
 
   let response: Response | null = null;
   try {
-    response = await page.goto(route.path, { waitUntil: "domcontentloaded" });
+    response = await page.goto(route.path, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
     await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
   } finally {
     page.off("console", onConsole);

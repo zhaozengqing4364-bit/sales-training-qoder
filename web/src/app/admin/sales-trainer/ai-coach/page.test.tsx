@@ -89,11 +89,11 @@ const aiCoachConfig = {
         "summary_card",
         "followup_prompt",
     ],
-    max_cards_per_message: 3,
+    max_cards_per_message: 1,
     proactive_coaching_enabled: true,
-    session_start_behavior: "plan_and_first_card",
+    session_start_behavior: "plan_then_wait",
     auto_advance_enabled: true,
-    max_auto_steps_per_session: 5,
+    max_auto_steps_per_session: 1,
     correct_streak_to_increase_difficulty: 2,
     incorrect_streak_to_remediate: 1,
     incorrect_streak_to_pause: 2,
@@ -176,11 +176,11 @@ describe("AdminAiCoachConfigPage", () => {
         expect(
             (screen.getByLabelText(/session_start_behavior/) as HTMLSelectElement)
                 .value,
-        ).toBe("plan_and_first_card");
+        ).toBe("plan_then_wait");
         expect(
             (screen.getByLabelText(/max_auto_steps_per_session/) as HTMLInputElement)
                 .value,
-        ).toBe("5");
+        ).toBe("1");
     });
 
     it("validates pause threshold before saving", async () => {
@@ -212,7 +212,7 @@ describe("AdminAiCoachConfigPage", () => {
                 "business_skills",
                 expect.objectContaining({
                     proactive_coaching_enabled: true,
-                    session_start_behavior: "plan_and_first_card",
+                    session_start_behavior: "plan_then_wait",
                     auto_advance_enabled: true,
                     streaming_enabled: true,
                     allowed_training_card_types: [
@@ -222,7 +222,8 @@ describe("AdminAiCoachConfigPage", () => {
                     ],
                     entry_resume_policy: "latest_active_or_new",
                     generation_timeout_seconds: 30,
-                    max_auto_steps_per_session: 5,
+                    max_auto_steps_per_session: 1,
+                    max_cards_per_message: 1,
                     empty_response_recovery_prompts: ["继续下一题", "换个场景", "总结本轮"],
                     generation_failure_recovery_prompts: ["重试下一题", "换主题", "总结一下"],
                 }),

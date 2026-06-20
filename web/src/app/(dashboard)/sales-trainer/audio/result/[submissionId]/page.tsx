@@ -35,6 +35,27 @@ function getFailureMessage(submission: SalesTrainerAudioSubmission): string | nu
     if (!submission.status.endsWith("failed")) {
         return null;
     }
+    if (submission.error_code === "[ASR_ACCOUNT_ARREARS]") {
+        return "语音转写服务账户余额不足。请管理员充值或切换 ASR 配置后，在后台“学员录音”中重试转写。";
+    }
+    if (submission.error_code === "[ASR_AUTH_FAILED]" || submission.error_code === "[ASR_API_KEY_REQUIRED]") {
+        return "语音转写服务鉴权失败。请管理员检查 DashScope API Key 配置后重试转写。";
+    }
+    if (submission.error_code === "[ASR_RATE_LIMITED]") {
+        return "语音转写服务当前限流。请稍后刷新结果，或联系管理员在后台重试转写。";
+    }
+    if (submission.error_code === "[ASR_FILE_DOWNLOAD_FAILED]") {
+        return "语音转写服务无法读取本次录音文件。请联系管理员检查对象存储签名、文件访问权限或重新上传录音。";
+    }
+    if (submission.error_code === "[ASR_TASK_SUBMIT_FAILED]") {
+        return "语音转写任务提交失败。请稍后重试；如持续失败，请管理员检查 ASR 服务配置。";
+    }
+    if (submission.error_code === "[ASR_TASK_WAIT_FAILED]" || submission.error_code === "[ASR_TASK_FAILED]") {
+        return "语音转写任务执行失败。请确认录音文件清晰可播放，或联系管理员查看 ASR 上游错误后重试。";
+    }
+    if (submission.error_code === "[ASR_PROVIDER_FAILED]") {
+        return "语音转写服务异常。请稍后刷新；如仍未恢复，请管理员检查 ASR 服务日志。";
+    }
     if (submission.error_code === "[DEUCATE_TIMEOUT]") {
         return "评分服务响应超时。转写已完成，请稍后刷新结果；如仍未恢复，请联系管理员在后台“学员录音”中重试评分。";
     }
@@ -93,6 +114,118 @@ function getSnapshotItems(snapshot: Record<string, unknown> | null): Array<{
         name?: string;
         current_version?: { version_label?: string; title?: string };
     }> : [];
+}
+
+interface DimensionCriterion {
+    key: string;
+    label: string;
+    description?: string | null;
+    weight?: number | null;
+}
+
+interface DimensionDisplayItem {
+    key: string;
+    label: string;
+    description: string | null;
+    score: number | null;
+    maxScore: number | null;
+    comment: string | null;
+}
+
+function numberOrNull(value: unknown): number | null {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+}
+
+function getLearnerRubricCriteria(snapshot: Record<string, unknown> | null): DimensionCriterion[] {
+    const rubric = snapshot?.learner_rubric;
+    if (!rubric || typeof rubric !== "object" || Array.isArray(rubric)) {
+        return [];
+    }
+    const criteria = (rubric as Record<string, unknown>).criteria;
+    if (!Array.isArray(criteria)) {
+        return [];
+    }
+    return criteria
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+        .map((item) => ({
+            key: String(item.key || ""),
+            label: String(item.label || item.key || "评分维度"),
+            description: typeof item.description === "string" ? item.description : null,
+            weight: numberOrNull(item.weight),
+        }))
+        .filter((item) => item.key.length > 0);
+}
+
+function readDimensionScore(
+    value: unknown,
+    criterion: DimensionCriterion | undefined,
+): Omit<DimensionDisplayItem, "key" | "label" | "description"> {
+    if (typeof value === "number" || typeof value === "string") {
+        return {
+            score: numberOrNull(value),
+            maxScore: criterion?.weight ?? null,
+            comment: null,
+        };
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return {
+            score: null,
+            maxScore: criterion?.weight ?? null,
+            comment: null,
+        };
+    }
+    const payload = value as Record<string, unknown>;
+    const comment = payload.comment ?? payload.feedback ?? payload.reason ?? payload.description;
+    return {
+        score: numberOrNull(payload.score ?? payload.value),
+        maxScore: numberOrNull(payload.max_score ?? payload.maxScore) ?? criterion?.weight ?? null,
+        comment: typeof comment === "string" && comment.trim() ? comment : null,
+    };
+}
+
+function buildDimensionItems(submission: SalesTrainerAudioSubmission): DimensionDisplayItem[] {
+    const dimensionScores = submission.score_result?.dimension_scores;
+    if (!dimensionScores || typeof dimensionScores !== "object" || Array.isArray(dimensionScores)) {
+        return [];
+    }
+    const criteria = getLearnerRubricCriteria(submission.score_scheme_snapshot);
+    const criterionByKey = new Map(criteria.map((criterion) => [criterion.key, criterion]));
+    const rows = criteria.map((criterion) => ({
+        key: criterion.key,
+        label: criterion.label,
+        description: criterion.description ?? null,
+        ...readDimensionScore(dimensionScores[criterion.key], criterion),
+    }));
+    const extraRows = Object.entries(dimensionScores)
+        .filter(([key]) => !criterionByKey.has(key))
+        .map(([key, value]) => ({
+            key,
+            label: key,
+            description: null,
+            ...readDimensionScore(value, undefined),
+        }));
+    return [...rows, ...extraRows].filter(
+        (item) => item.score !== null || item.comment || item.description,
+    );
+}
+
+function formatDimensionScore(item: DimensionDisplayItem): string {
+    if (item.score === null) {
+        return "--";
+    }
+    const score = Number.isInteger(item.score) ? String(item.score) : item.score.toFixed(1);
+    if (item.maxScore === null) {
+        return score;
+    }
+    const maxScore = Number.isInteger(item.maxScore) ? String(item.maxScore) : item.maxScore.toFixed(1);
+    return `${score} / ${maxScore}`;
 }
 
 export default function SalesTrainerAudioResultPage() {
@@ -165,6 +298,7 @@ export default function SalesTrainerAudioResultPage() {
             .map(formatFeedbackItem) ?? []
     );
     const showImprovements = submission.score_result?.passed === false && improvements.length > 0;
+    const dimensionItems = buildDimensionItems(submission);
 
     return (
         <div className="space-y-6 pb-20">
@@ -320,6 +454,31 @@ export default function SalesTrainerAudioResultPage() {
                             </div>
                         </div>
                         <p className="text-sm text-slate-600">{submission.score_result.summary || "暂无评分总结。"}</p>
+                        {dimensionItems.length ? (
+                            <div className="space-y-3">
+                                <p className="text-sm font-semibold text-slate-900">分项评分</p>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    {dimensionItems.map((item) => (
+                                        <div key={item.key} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                                                    {item.description ? (
+                                                        <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
+                                                    ) : null}
+                                                </div>
+                                                <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                                                    {formatDimensionScore(item)}
+                                                </span>
+                                            </div>
+                                            {item.comment ? (
+                                                <p className="mt-2 text-sm leading-6 text-slate-600">{item.comment}</p>
+                                            ) : null}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
                         {showImprovements ? (
                             <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
                                 <p className="text-sm font-semibold text-amber-900">改进建议</p>

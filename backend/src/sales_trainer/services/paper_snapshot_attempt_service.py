@@ -62,6 +62,12 @@ class PaperSnapshotAttemptService:
                 "提交答案包含未绑定到当前考卷修订的题目。",
                 422,
             )
+        if _has_incomplete_answers(questions, answer_map):
+            raise PaperSnapshotAttemptError(
+                "[QUIZ_ANSWER_INCOMPLETE]",
+                "请完成全部题目后再提交。",
+                422,
+            )
         attempt = SalesTrainerQuizAttempt(
             unit_id=paper.unit_id,
             user_id=str(actor.user_id),
@@ -206,6 +212,24 @@ def _revision_question(item: dict[str, Any]) -> RevisionQuestion:
         question_revision_id=optional_str(item.get("question_revision_id")),
         question_payload_hash=optional_str(item.get("question_payload_hash")),
     )
+
+
+def _has_incomplete_answers(
+    questions: list[RevisionQuestion],
+    answer_map: dict[str, Any],
+) -> bool:
+    return any(
+        _is_incomplete_answer(question, answer_map.get(question.question_id))
+        for question in questions
+    )
+
+
+def _is_incomplete_answer(question: RevisionQuestion, answer_payload: Any) -> bool:
+    if answer_payload is None:
+        return True
+    if question_type(question) == "multiple_choice":
+        return not isinstance(answer_payload, list) or len(answer_payload) == 0
+    return not str(answer_payload).strip()
 
 
 def _context_value(

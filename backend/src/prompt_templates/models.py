@@ -110,6 +110,8 @@ PROMPT_TEMPLATE_DISPLAY_NAMES: dict[str, str] = {
     "Welcome Message 2": "销售欢迎话术 2",
     "Welcome Message 3": "销售欢迎话术 3",
     "新人训练路径商务技巧 AI 教练题目生成 v1": "商务礼仪题目草稿生成 v1",
+    "新人训练路径商务技巧 AI 对话教练生成 v1": "商务技巧 AI 对话教练生成 v1",
+    "新人训练路径商务技巧 AI 教练简答评分 v1": "商务技巧 AI 教练简答评分 v1",
 }
 
 

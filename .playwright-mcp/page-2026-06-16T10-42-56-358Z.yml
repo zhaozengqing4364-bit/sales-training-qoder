@@ -1,0 +1,213 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e10]:
+            - generic [ref=e11]: AI 销售教练
+            - generic [ref=e12]: 平台
+        - navigation "主导航" [ref=e13]:
+          - generic [ref=e14]: 菜单
+          - menubar [ref=e15]:
+            - menuitem "首页" [ref=e16] [cursor=pointer]:
+              - img [ref=e17]
+              - generic [ref=e20]: 首页
+            - menuitem "训练模式" [ref=e21] [cursor=pointer]:
+              - img [ref=e22]
+              - generic [ref=e27]: 训练模式
+            - menuitem "新人训练路径" [ref=e28] [cursor=pointer]:
+              - img [ref=e30]
+              - generic [ref=e33]: 新人训练路径
+            - menuitem "排行榜" [ref=e34] [cursor=pointer]:
+              - img [ref=e35]
+              - generic [ref=e36]: 排行榜
+            - menuitem "历史记录" [ref=e37] [cursor=pointer]:
+              - img [ref=e38]
+              - generic [ref=e42]: 历史记录
+          - generic [ref=e45]: 系统
+          - menubar [ref=e46]:
+            - menuitem "运行状态" [ref=e47] [cursor=pointer]:
+              - img [ref=e48]
+              - generic [ref=e50]: 运行状态
+            - menuitem "管理后台" [ref=e51] [cursor=pointer]:
+              - img [ref=e52]
+              - generic [ref=e55]: 管理后台
+        - generic [ref=e56]:
+          - button "帮助与反馈" [ref=e58]:
+            - img [ref=e59]
+            - generic [ref=e61]: 帮助与反馈
+          - generic [ref=e62] [cursor=pointer]:
+            - img [ref=e64]
+            - generic [ref=e67]:
+              - generic [ref=e68]: Developer
+              - generic [ref=e69]: Development
+            - img [ref=e71]
+          - button "折叠侧边栏" [ref=e74]:
+            - img [ref=e75]
+            - generic [ref=e78]: 折叠侧边栏
+    - main [ref=e79]:
+      - generic [ref=e81]:
+        - generic [ref=e92]:
+          - link "返回新人训练路径" [ref=e93] [cursor=pointer]:
+            - /url: /sales-trainer
+            - img [ref=e94]
+            - text: 返回新人训练路径
+          - generic [ref=e96]:
+            - heading "第1关：PPT讲解录音" [level=1] [ref=e97]
+            - paragraph [ref=e98]: 上传主胶片讲解录音，系统转写后按 PPT 讲解指标进行 AI 评分。
+        - generic [ref=e99]:
+          - heading "任务简报" [level=2] [ref=e101]
+          - paragraph [ref=e102]: 你正在向有明确需求的技术或业务负责人讲解石犀主胶片。请在 5 分钟内讲清背景、方案核心、四步能力、差异化和下一步推进。
+          - list [ref=e103]:
+            - listitem [ref=e104]: 先下载并阅读本关训练材料，按主胶片逻辑准备讲解。
+            - listitem [ref=e105]: 录音中覆盖背景痛点、资产-用户-流动管控主线、四步能力和差异化。
+            - listitem [ref=e106]: 上传录音后，系统会先转写成文字，再由 AI 按评分标准判断。
+          - paragraph [ref=e107]: 请上传你自己的 PPT 讲解录音；不是上传 PPT 文件。建议控制在 5 分钟内，系统会以最新一次上传作为本关结果。
+        - generic [ref=e108]:
+          - heading "评分标准" [level=2] [ref=e110]
+          - paragraph [ref=e111]: 本关需达到 70 分通过，可多次上传，以最新一次为准
+          - generic [ref=e112]:
+            - generic [ref=e113]:
+              - generic [ref=e114]:
+                - paragraph [ref=e115]: PPT 结构完整度
+                - generic [ref=e116]: 25%
+              - paragraph [ref=e117]: 覆盖背景、方案核心、四步能力、差异化、部署与下一步。
+            - generic [ref=e118]:
+              - generic [ref=e119]:
+                - paragraph [ref=e120]: 业务信息准确性
+                - generic [ref=e121]: 25%
+              - paragraph [ref=e122]: 准确表达数据流动治理、AI 分类分级、API 风险、组件化防护和溯源审计。
+            - generic [ref=e123]:
+              - generic [ref=e124]:
+                - paragraph [ref=e125]: 客户价值表达
+                - generic [ref=e126]: 20%
+              - paragraph [ref=e127]: 能把功能翻译成合规、风险发现、零侵入、低成本扩展和可追溯等客户价值。
+            - generic [ref=e128]:
+              - generic [ref=e129]:
+                - paragraph [ref=e130]: 表达逻辑与流畅度
+                - generic [ref=e131]: 15%
+              - paragraph [ref=e132]: 顺序清晰、衔接自然，没有明显跳页、卡顿或堆术语。
+            - generic [ref=e133]:
+              - generic [ref=e134]:
+                - paragraph [ref=e135]: 案例与证据使用
+                - generic [ref=e136]: 10%
+              - paragraph [ref=e137]: 自然引用深圳航空、北京卫健委、汕头大学等案例证明价值。
+            - generic [ref=e138]:
+              - generic [ref=e139]:
+                - paragraph [ref=e140]: 下一步推进
+                - generic [ref=e141]: 5%
+              - paragraph [ref=e142]: 提出演示、旁路扫描、风险评估报告或试点等清晰动作。
+          - generic [ref=e143]:
+            - paragraph [ref=e144]: 常见扣分点
+            - list [ref=e145]:
+              - listitem [ref=e146]: 只讲公司介绍，没有进入客户痛点和方案价值。
+              - listitem [ref=e147]: 遗漏 AI 分类分级、风险监测、一键防护或溯源审计。
+              - listitem [ref=e148]: 夸大能力或编造案例、指标、政策。
+              - listitem [ref=e149]: 没有提出下一步行动。
+              - listitem [ref=e150]: 只介绍公司，没有进入客户痛点和方案价值。
+              - listitem [ref=e151]: 只罗列功能，没有讲清资产-用户-流动管控主线。
+              - listitem [ref=e152]: 没有提出演示、扫描、风险评估或试点等下一步。
+        - generic [ref=e153]:
+          - generic [ref=e155]:
+            - heading "训练材料" [level=2] [ref=e156]
+            - paragraph [ref=e157]: 请使用当前版本完成录音；提交时会冻结你确认的材料版本。
+          - generic [ref=e159]:
+            - generic [ref=e160]:
+              - generic [ref=e161]:
+                - paragraph [ref=e162]: PPT 讲解任务与评分标准
+                - paragraph [ref=e163]: v2026.06 · 第 1 关 PPT 讲解任务与评分标准
+                - paragraph [ref=e164]: 请先阅读本材料中的讲解结构和评分指标，再上传 PPT 讲解录音。
+              - generic [ref=e165]:
+                - button "收起材料" [active] [ref=e185]:
+                  - img [ref=e167]
+                  - text: 收起材料
+                - link "下载材料" [ref=e170] [cursor=pointer]:
+                  - /url: http://localhost:3444/api/v1/sales-trainer/materials/versions/c23c2465-9a30-4881-9ff9-f6362399d14e/file
+                  - button "下载材料" [ref=e171]:
+                    - img [ref=e172]
+                    - text: 下载材料
+            - generic [ref=e187]:
+              - heading "第 1 关：PPT 讲解任务与评分标准" [level=1] [ref=e188]
+              - paragraph [ref=e189]:
+                - text: 本材料用于新人训练路径第 1 关
+                - code [ref=e190]: PPT讲解
+                - text: 。学员不需要上传 PPT 文件，而是先阅读主胶片讲解要求，再上传自己的 PPT 讲解录音。系统会把录音转成文字，并由 AI 按以下指标评分。
+              - heading "训练目标" [level=2] [ref=e191]
+              - paragraph [ref=e192]: 在 5 分钟内，按公司主胶片逻辑讲清楚石犀是谁、客户为什么需要数据流动治理、石犀方案怎么解决问题、差异化价值在哪里，以及客户下一步可以怎么推进。
+              - heading "建议讲解结构" [level=2] [ref=e193]
+              - list [ref=e194]:
+                - listitem [ref=e195]: 开场与身份说明：自然介绍自己和本次交流目的。
+                - listitem [ref=e196]: 背景与痛点：讲清数据要素、等保数据安全要求、分类分级合规压力。
+                - listitem [ref=e197]: 方案主线：围绕“资产—用户—流动管控”讲清石犀的核心逻辑。
+                - listitem [ref=e198]: 四步能力：资产自动盘点、AI 分类分级、风险监测与一键防护、溯源审计。
+                - listitem [ref=e199]: 差异化：讲清“平台+组件”相对传统安全设备堆叠的优势。
+                - listitem [ref=e200]: 部署与落地：说明旁路镜像、代理模式、信创适配、典型客户案例。
+                - listitem [ref=e201]: 下一步行动：自然提出演示、旁路扫描、风险评估报告或试点建议。
+              - heading "评分维度" [level=2] [ref=e202]
+              - paragraph [ref=e203]: 总分 100 分，通过线 70 分。
+              - table [ref=e205]:
+                - rowgroup [ref=e206]:
+                  - row "维度 分值 评分说明" [ref=e207]:
+                    - columnheader "维度" [ref=e208]
+                    - columnheader "分值" [ref=e209]
+                    - columnheader "评分说明" [ref=e210]
+                - rowgroup [ref=e211]:
+                  - row "PPT 结构完整度 25 是否覆盖背景、方案核心、四步能力、差异化、部署与下一步" [ref=e212]:
+                    - cell "PPT 结构完整度" [ref=e213]
+                    - cell "25" [ref=e214]
+                    - cell "是否覆盖背景、方案核心、四步能力、差异化、部署与下一步" [ref=e215]
+                  - row "业务信息准确性 25 是否准确表达数据流动治理、AI 分类分级、API 风险、组件化防护、溯源审计等关键能力" [ref=e216]:
+                    - cell "业务信息准确性" [ref=e217]
+                    - cell "25" [ref=e218]
+                    - cell "是否准确表达数据流动治理、AI 分类分级、API 风险、组件化防护、溯源审计等关键能力" [ref=e219]
+                  - row "客户价值表达 20 是否把功能翻译成客户价值，例如合规、风险发现、零侵入、低成本扩展、可追溯" [ref=e220]:
+                    - cell "客户价值表达" [ref=e221]
+                    - cell "20" [ref=e222]
+                    - cell "是否把功能翻译成客户价值，例如合规、风险发现、零侵入、低成本扩展、可追溯" [ref=e223]
+                  - row "表达逻辑与流畅度 15 是否顺序清晰、衔接自然、没有明显跳页、卡顿或堆术语" [ref=e224]:
+                    - cell "表达逻辑与流畅度" [ref=e225]
+                    - cell "15" [ref=e226]
+                    - cell "是否顺序清晰、衔接自然、没有明显跳页、卡顿或堆术语" [ref=e227]
+                  - row "案例与证据使用 10 是否能自然引用深圳航空、北京卫健委、汕头大学等案例证明价值" [ref=e228]:
+                    - cell "案例与证据使用" [ref=e229]
+                    - cell "10" [ref=e230]
+                    - cell "是否能自然引用深圳航空、北京卫健委、汕头大学等案例证明价值" [ref=e231]
+                  - row "下一步推进 5 是否提出清晰可执行的下一步动作" [ref=e232]:
+                    - cell "下一步推进" [ref=e233]
+                    - cell "5" [ref=e234]
+                    - cell "是否提出清晰可执行的下一步动作" [ref=e235]
+              - heading "常见扣分点" [level=2] [ref=e236]
+              - list [ref=e237]:
+                - listitem [ref=e238]: 只讲公司介绍，没有进入客户痛点和方案价值。
+                - listitem [ref=e239]: 只罗列产品功能，没有讲清“资产—用户—流动管控”的主线。
+                - listitem [ref=e240]: 遗漏 AI 分类分级、风险监测、一键防护、溯源审计中的关键能力。
+                - listitem [ref=e241]: 夸大能力或编造案例、指标、政策。
+                - listitem [ref=e242]: 讲解顺序混乱，像背稿或碎片化介绍。
+                - listitem [ref=e243]: 没有提出下一步行动。
+              - heading "参考表达" [level=2] [ref=e244]
+              - paragraph [ref=e245]: 大家好，我是石犀的销售经理，今天用几分钟介绍我们数据流动治理方案。
+              - paragraph [ref=e246]: 国家数据局成立后，数据要素市场化正在加速推进；等保新规也已经把数据安全纳入强制要求，数据安全有高风险项会直接影响等保通过。工信部也在推动大量企业做数据分类分级，所以合规是刚需，数据变现也是未来趋势。
+              - paragraph [ref=e247]: 石犀的核心逻辑是“资产—用户—流动管控”。
+              - paragraph [ref=e248]: 第一步是资产自动盘点。设备旁路接入交换机镜像口，不需要改业务系统，就能自动梳理应用系统、API 接口和数据库。比如汕头大学通过我们梳理出 1000 多个 API 资产，也发现了不少未知业务系统。
+              - paragraph [ref=e249]: 第二步是 AI 分类分级。我们自研本地化 AI 模型，分类准确率超过 91%，3 分钟可以处理 10 万多个字段，把原来几个月的人工工作缩短到天级。
+              - paragraph [ref=e250]: 第三步是风险监测和防护。平台可以实时识别弱密码、敏感数据泄露、API 未鉴权、越权访问、数据出境等风险，然后通过脱敏、水印、加密、访问控制等组件一键处置，不需要改业务代码。
+              - paragraph [ref=e251]: 第四步是溯源审计。平台全量记录数据访问行为，一旦出事，可以追溯到谁、什么时间、通过什么方式访问了什么数据。北京卫健委就是用我们的溯源能力解决了其他厂家没定位出来的数据泄露追查问题。
+              - paragraph [ref=e252]: 和传统安全设备堆叠不同，石犀是平台+组件模式。传统方案可能是脱敏一台、WAF 一台、审计一台，串起来之后单点故障多、扩容成本高。我们是一个平台，30 多个安全组件按需订阅，需要什么开通什么，不需要就取消。
+              - paragraph [ref=e253]: 部署方式也比较灵活。镜像模式可以旁路无侵入，一般 1 到 3 天上线；代理模式可以解密 HTTPS 并做实时防护。平台支持信创环境，也有政府、医疗、金融、教育和企业客户案例。
+              - paragraph [ref=e254]: 所以一句话总结，石犀帮客户看清楚数据资产、监控好数据流动、防得住数据风险、追得到泄露源头。下一步可以先选 1 到 2 个非核心系统做旁路扫描，几天内出一份数据安全风险评估报告，完全不影响现有业务。
+            - generic [ref=e175]:
+              - checkbox "我已下载并确认使用 v2026.06 版本进行本次录音。" [ref=e176]
+              - generic [ref=e177]: 我已下载并确认使用 v2026.06 版本进行本次录音。
+        - generic [ref=e178]:
+          - generic [ref=e180]:
+            - heading "选择音频文件" [level=2] [ref=e181]
+            - paragraph [ref=e182]: 不做固定时长限制。若格式或大小不符合后端配置，页面会直接展示后端错误。
+          - button "选择音频文件" [ref=e183]
+          - generic [ref=e184]:
+            - button "上传并开始评分" [disabled]:
+              - img
+              - text: 上传并开始评分
+  - button "Open Next.js Dev Tools" [ref=e87] [cursor=pointer]:
+    - img [ref=e88]
+  - alert [ref=e91]

@@ -25,6 +25,8 @@ hooks/use-streaming-audio-player.test.ts
 
 lib/api/client-domains.ts
 lib/api/client-domains.test.ts
+lib/api/domains/newcomer-training.ts
+lib/api/newcomer-training.test.ts
 ```
 
 Route tests may live next to pages: `app/(user)/practice/[sessionId]/page.test.tsx`.
@@ -53,7 +55,7 @@ Run: `npm run test:coverage`
 |---------|---------|
 | Mock Next.js navigation | `vi.mock("next/navigation")` in layout tests |
 | Mock heavy UI deps | mock `glass-modal` in shell tests |
-| API contract tests | `lib/api/client-domains.test.ts` |
+| API facade/domain tests | `lib/api/client-domains.test.ts`, feature-specific `lib/api/*.test.ts` |
 | Property-based audio tests | `fast-check` in `hooks/use-audio-recorder.test.ts` |
 | Console boundary guard | `lib/console-boundary.test.ts` scans app/components/hooks/lib |
 
@@ -119,7 +121,8 @@ From `.kiro/steering/frontend-principles.md` and project Constitution (not all r
 
 - [ ] `tsc --noEmit` clean.
 - [ ] Co-located or domain tests updated for behavior changes.
-- API changes mirrored in `lib/api/types.ts` and contract tests (`lib/api/client-domains.test.ts`; backend: `tests/contract/` + `docs/api-contract/`).
+- [ ] API changes mirrored in `lib/api/types.ts` and facade/domain tests (`lib/api/client-domains.test.ts`, feature-specific `lib/api/*.test.ts`; backend: `tests/contract/` + `docs/api-contract/` when backend behavior changes).
+- [ ] UI layers still import API through `lib/api/client.ts`; `client-domains.test.ts` must keep rejecting imports from `client-domains.ts` or `lib/api/domains/*`.
 - [ ] No native dialogs in user/practice paths.
 - [ ] `"use client"` boundary minimal.
 

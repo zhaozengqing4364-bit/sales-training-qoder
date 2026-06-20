@@ -37,6 +37,7 @@ from sales_trainer.services.business_etiquette_import_service import (
     DEFAULT_BUSINESS_ETIQUETTE_TRAINING_PACK_KEY,
 )
 from sales_trainer.services.business_etiquette_question_draft_service import (
+    QUESTION_DRAFT_JSON_RESPONSE_FORMAT,
     BusinessEtiquetteQuestionDraftService,
     BusinessEtiquetteQuestionDraftServiceError,
 )
@@ -323,6 +324,7 @@ async def test_should_generate_business_etiquette_question_drafts(
     assert result.items[0].prompt_template_id == str(template.id)
     assert result.items[0].capability_keys == ["respect_boundaries"]
     assert llm.calls
+    assert llm.calls[0]["response_format"] == QUESTION_DRAFT_JSON_RESPONSE_FORMAT
     persisted = await test_db.execute(select(SalesTrainerBusinessEtiquetteQuestionDraft))
     assert len(persisted.scalars().all()) == 2
 

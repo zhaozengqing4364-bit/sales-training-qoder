@@ -162,6 +162,7 @@ from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackPacingState,
 )
 from sales_bot.websocket.grounding_decision_pipeline import GroundingDecisionContext
+from sales_bot.websocket.phase4_local_provider import should_use_phase4_local_provider
 from sales_bot.websocket.stepfun_realtime_state import StepFunRealtimeStateBase
 from sales_bot.websocket.stepfun_realtime_constants import (
     DEFAULT_GROUNDING_PREFETCH_TIMEOUT_MS,
@@ -244,6 +245,12 @@ class StepFunRealtimeUpstreamMixin(StepFunRealtimeStateBase):
         self._pending_blocked_response_text = ""
         if not normalized_query:
             self._log_grounding_debug("prefetch_skipped", reason="empty_query")
+            return
+        if should_use_phase4_local_provider():
+            self._log_grounding_debug(
+                "prefetch_skipped",
+                reason="phase4_local_provider",
+            )
             return
 
         tool_policy = self._effective_policy.get("tool_policy")

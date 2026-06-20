@@ -30,6 +30,7 @@ import { BUSINESS_SKILLS_COACH_WORKBENCH_COPY } from "./coach-workbench-config";
 type ResumeStrategy = "latest_in_progress" | "new";
 type StreamApplyResult = "status" | "delta" | "snapshot" | "error";
 type AiCoachUiEventDelta = Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }>;
+type AiCoachReasoningTextDelta = Extract<AiCoachChatStreamEvent, { type: "reasoning_text_delta" }>;
 
 type CoachPreparationPanelProps = {
     readonly learningUnits: readonly BusinessEtiquetteLearningUnit[];
@@ -208,6 +209,8 @@ export default function AiCoachPage() {
     );
     const [streamActivityLabel, setStreamActivityLabel] = useState<string | null>(null);
     const [streamPhase, setStreamPhase] = useState<AiCoachChatStreamPhase | null>(null);
+    const [streamingReasoningText, setStreamingReasoningText] =
+        useState<AiCoachReasoningTextDelta | null>(null);
     const [streamingCardDelta, setStreamingCardDelta] =
         useState<AiCoachUiEventDelta | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -225,8 +228,21 @@ export default function AiCoachPage() {
             setStreamPhase(event.phase);
             return "delta";
         }
+        if (event.type === "assistant_text_delta") {
+            setStreamPhase(event.phase);
+            return "delta";
+        }
+        if (event.type === "reasoning_text_delta") {
+            setStreamingReasoningText((current) => ({
+                ...event,
+                text: `${current?.text ?? ""}${event.text}`,
+            }));
+            setStreamPhase(event.phase);
+            return "delta";
+        }
         if (event.type === "session_snapshot") {
             setSession(event.session);
+            setStreamingReasoningText(null);
             setStreamingCardDelta(null);
             setStreamPhase(event.phase);
             if (event.session.coach_state?.business_etiquette_progress) {
@@ -238,6 +254,7 @@ export default function AiCoachPage() {
             return "snapshot";
         }
         setStreamActivityLabel(null);
+        setStreamingReasoningText(null);
         setStreamingCardDelta(null);
         setStreamPhase(event.phase);
         setError(aiCoachStreamErrorMessage(event));
@@ -269,6 +286,7 @@ export default function AiCoachPage() {
         const { controller, operationId } = beginStreamOperation();
         setError(null);
         setStreamPhase(null);
+        setStreamingReasoningText(null);
         setStreamingCardDelta(null);
         setIsStarting(true);
         setStreamActivityLabel(
@@ -419,6 +437,7 @@ export default function AiCoachPage() {
         setInput("");
         setError(null);
         setStreamPhase(null);
+        setStreamingReasoningText(null);
         setStreamingCardDelta(null);
         setIsSending(true);
         setPendingUserMessage(message);
@@ -476,6 +495,7 @@ export default function AiCoachPage() {
         const { controller, operationId } = beginStreamOperation();
         setError(null);
         setStreamPhase(null);
+        setStreamingReasoningText(null);
         setStreamingCardDelta(null);
         setIsSending(true);
         setPendingCommand(command);
@@ -546,6 +566,7 @@ export default function AiCoachPage() {
             const { controller, operationId } = beginStreamOperation();
             setError(null);
             setStreamPhase(null);
+            setStreamingReasoningText(null);
             setStreamingCardDelta(null);
             setStreamActivityLabel(BUSINESS_SKILLS_COACH_WORKBENCH_COPY.scoringAnswer);
             setSubmittingEventIds((current) => new Set(current).add(event.event_id));
@@ -679,6 +700,7 @@ export default function AiCoachPage() {
                 submittingEventIds={submittingEventIds}
                 streamActivityLabel={streamActivityLabel}
                 streamPhase={streamPhase}
+                streamingReasoningText={streamingReasoningText}
                 streamingCardDelta={streamingCardDelta}
                 error={error}
                 onInputChange={setInput}

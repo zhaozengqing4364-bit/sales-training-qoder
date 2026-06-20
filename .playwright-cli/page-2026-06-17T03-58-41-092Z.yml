@@ -1,0 +1,105 @@
+- generic [ref=e1]:
+  - generic [ref=e49]:
+    - complementary [ref=e50]:
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - img [ref=e54]
+          - generic [ref=e57]:
+            - generic [ref=e58]: AI 销售教练
+            - generic [ref=e59]: 平台
+        - navigation "主导航" [ref=e60]:
+          - generic [ref=e61]: 菜单
+          - menubar [ref=e62]:
+            - menuitem "首页" [ref=e63] [cursor=pointer]:
+              - img [ref=e65]
+              - generic [ref=e68]: 首页
+            - menuitem "训练模式" [ref=e69] [cursor=pointer]:
+              - img [ref=e70]
+              - generic [ref=e75]: 训练模式
+            - menuitem "新人训练路径" [active] [ref=e76] [cursor=pointer]:
+              - img [ref=e77]
+              - generic [ref=e80]: 新人训练路径
+            - menuitem "排行榜" [ref=e81] [cursor=pointer]:
+              - img [ref=e82]
+              - generic [ref=e83]: 排行榜
+            - menuitem "历史记录" [ref=e84] [cursor=pointer]:
+              - img [ref=e85]
+              - generic [ref=e89]: 历史记录
+          - generic [ref=e92]: 系统
+          - menubar [ref=e93]:
+            - menuitem "运行状态" [ref=e94] [cursor=pointer]:
+              - img [ref=e95]
+              - generic [ref=e97]: 运行状态
+            - menuitem "管理后台" [ref=e98] [cursor=pointer]:
+              - img [ref=e99]
+              - generic [ref=e102]: 管理后台
+        - generic [ref=e103]:
+          - button "帮助与反馈" [ref=e105]:
+            - img [ref=e106]
+            - generic [ref=e108]: 帮助与反馈
+          - generic [ref=e109] [cursor=pointer]:
+            - img [ref=e111]
+            - generic [ref=e114]:
+              - generic [ref=e115]: 管理员
+              - generic [ref=e116]: 未设置部门
+            - img [ref=e118]
+          - button "折叠侧边栏" [ref=e121]:
+            - img [ref=e122]
+            - generic [ref=e125]: 折叠侧边栏
+    - main [ref=e126]:
+      - generic [ref=e380]:
+        - generic [ref=e381]:
+          - link "返回训练大厅" [ref=e382] [cursor=pointer]:
+            - /url: /training
+            - img [ref=e383]
+            - text: 返回训练大厅
+          - generic [ref=e385]:
+            - generic [ref=e386]:
+              - heading "新人训练路径" [level=1] [ref=e387]
+              - paragraph [ref=e388]: 按后台配置的训练模块完成学习、考试与录音任务；每个模块会显示当前要做什么和下一步去哪里。
+            - button "刷新" [ref=e389]:
+              - img [ref=e390]
+              - text: 刷新
+        - generic [ref=e397]:
+          - generic [ref=e400]:
+            - generic [ref=e401]: 新人训练路径
+            - heading "新人训练路径" [level=2] [ref=e402]
+            - paragraph [ref=e403]: 掌握新人核心训练路径
+          - generic [ref=e404]:
+            - paragraph [ref=e405]: 开始训练
+            - heading "选择下方模块开始训练" [level=3] [ref=e406]
+            - paragraph [ref=e407]: 已开放模块可随时进入，无强制解锁。当前开放顺序：第1关：PPT讲解 → 第2关：商务技巧。
+          - generic [ref=e409]:
+            - generic [ref=e410]:
+              - generic [ref=e412]:
+                - img [ref=e414]
+                - generic [ref=e417]: 第 1 关
+              - generic [ref=e418]:
+                - heading "第1关：PPT讲解" [level=3] [ref=e419]
+                - paragraph [ref=e420]: 上传PPT讲解录音并获取评分。
+              - link "上传录音" [ref=e422] [cursor=pointer]:
+                - /url: /sales-trainer/audio/d3db5adb-6e4c-4545-be6e-26510de52878
+            - generic [ref=e423]:
+              - generic [ref=e425]:
+                - img [ref=e427]
+                - generic [ref=e430]: 第 2 关
+              - generic [ref=e431]:
+                - heading "第2关：商务技巧" [level=3] [ref=e432]
+                - paragraph [ref=e433]: 阅读文章后完成商务技巧考卷。
+              - generic [ref=e434]:
+                - link "阅读文章并考试" [ref=e435] [cursor=pointer]:
+                  - /url: /sales-trainer/business-skills?unitId=355b1cc5-03b8-4ed6-b0e1-4cd046f55145
+                - link "AI 教练" [ref=e436] [cursor=pointer]:
+                  - /url: /sales-trainer/business-skills/coach
+            - generic [ref=e437]:
+              - generic [ref=e439]:
+                - img [ref=e441]
+                - generic [ref=e444]: 第 4 关
+              - generic [ref=e445]:
+                - heading "第4关：实时对练（占位）" [level=3] [ref=e446]
+                - paragraph [ref=e447]: 当前版本不开放。
+              - generic [ref=e448]:
+                - button "模块 4 仅为占位，不支持实时对练。" [disabled]
+  - button "Open Next.js Dev Tools" [ref=e44] [cursor=pointer]:
+    - img [ref=e45]
+  - alert [ref=e48]

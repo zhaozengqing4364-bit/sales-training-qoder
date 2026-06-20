@@ -4,7 +4,7 @@ import uuid
 from typing import TypedDict
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
@@ -17,7 +17,7 @@ from curriculum_practice.models import (
 from curriculum_practice.services.learning_progress_service import (
     LearningProgressService,
 )
-from sales_trainer.models import SalesTrainerAssetRevision
+from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerQuizAttempt
 from sales_trainer.schemas import (
     ExamPaperCreate,
     ExamPaperQuestionBinding,
@@ -76,6 +76,52 @@ def _question(
             "correct_answer": correct_answer,
         },
         scoring_dimensions=["content_accuracy"],
+        status="published",
+        usage_scope="sales_trainer",
+    )
+
+
+def _typed_question(
+    question_id: str,
+    *,
+    category_id: str,
+    title: str,
+    question_type: str,
+) -> QuestionItem:
+    criteria_by_type: dict[str, dict[str, object]] = {
+        "single_choice": {
+            "question_type": "single_choice",
+            "options": [
+                {"value": "A", "label": "正确"},
+                {"value": "B", "label": "错误"},
+            ],
+            "correct_answer": "A",
+        },
+        "multiple_choice": {
+            "question_type": "multiple_choice",
+            "options": [
+                {"value": "A", "label": "准备客户背景"},
+                {"value": "B", "label": "确认拜访目标"},
+            ],
+            "correct_answers": ["A", "B"],
+        },
+        "true_false": {
+            "question_type": "true_false",
+            "correct_bool": False,
+        },
+        "short_answer": {
+            "question_type": "short_answer",
+            "ai_scoring": {"enabled": True, "pass_threshold": 70},
+        },
+    }
+    return QuestionItem(
+        question_id=question_id,
+        category_id=category_id,
+        title=title,
+        stem=f"{title} 的正确答案是什么？",
+        reference_answer="保持尊重和清晰表达。",
+        scoring_criteria=criteria_by_type[question_type],
+        scoring_dimensions=["business_skills"],
         status="published",
         usage_scope="sales_trainer",
     )
@@ -812,6 +858,104 @@ async def test_should_reject_attempt_question_not_bound_to_paper(
         )
 
     assert error.value.code == "[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]"
+
+
+@pytest.mark.asyncio
+async def test_should_reject_incomplete_paper_attempt_without_creating_attempt(
+    test_db: AsyncSession,
+) -> None:
+    admin = _user("admin")
+    learner = _user("user")
+    category = QuestionCategory(
+        category_id="business-paper-incomplete-category",
+        name="商务技巧空卷边界",
+        order_index=1,
+        usage_scope="sales_trainer",
+    )
+    questions = [
+        _typed_question(
+            "business-incomplete-single",
+            category_id=category.category_id,
+            title="单选题",
+            question_type="single_choice",
+        ),
+        _typed_question(
+            "business-incomplete-multiple",
+            category_id=category.category_id,
+            title="多选题",
+            question_type="multiple_choice",
+        ),
+        _typed_question(
+            "business-incomplete-true-false",
+            category_id=category.category_id,
+            title="判断题",
+            question_type="true_false",
+        ),
+        _typed_question(
+            "business-incomplete-short",
+            category_id=category.category_id,
+            title="简答题",
+            question_type="short_answer",
+        ),
+    ]
+    test_db.add_all([admin, learner, category, *questions])
+    await test_db.commit()
+
+    service = ExamPaperService(test_db)
+    paper = await service.create_paper(
+        ExamPaperCreate(
+            paper_key="business-incomplete-paper",
+            title="商务技巧空卷边界考卷",
+            module_key="business_skills",
+            questions=[
+                ExamPaperQuestionBinding(
+                    question_id=question.question_id,
+                    order_index=index,
+                    points=10,
+                )
+                for index, question in enumerate(questions, start=1)
+            ],
+        ),
+        actor=admin,
+    )
+    published = await service.publish_paper(paper.paper_id, actor=admin)
+    valid_answers = {
+        questions[0].question_id: "A",
+        questions[1].question_id: ["A", "B"],
+        questions[2].question_id: "false",
+        questions[3].question_id: "拜访前先确认客户背景和目标。",
+    }
+    invalid_answer_maps = [
+        {key: value for key, value in valid_answers.items() if key != questions[3].question_id},
+        {**valid_answers, questions[0].question_id: ""},
+        {**valid_answers, questions[1].question_id: []},
+        {**valid_answers, questions[2].question_id: ""},
+        {**valid_answers, questions[3].question_id: "  "},
+    ]
+
+    for answer_map in invalid_answer_maps:
+        with pytest.raises(ExamPaperServiceError) as error:
+            await service.submit_paper_attempt(
+                PaperAttemptCreate(
+                    paper_id=published.paper_id,
+                    answers=[
+                        QuizAnswerSubmit(
+                            question_id=question_id,
+                            answer_payload=answer_payload,
+                        )
+                        for question_id, answer_payload in answer_map.items()
+                    ],
+                ),
+                actor=learner,
+            )
+
+        assert error.value.code == "[QUIZ_ANSWER_INCOMPLETE]"
+        assert error.value.status_code == 422
+
+    attempt_count = await test_db.scalar(
+        select(func.count()).select_from(SalesTrainerQuizAttempt)
+    )
+    assert attempt_count == 0
 
 
 async def _latest_paper_revision(

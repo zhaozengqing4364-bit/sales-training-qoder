@@ -30,7 +30,10 @@ from curriculum_practice.models import (
 )
 from prompt_templates.models import PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
 from sales_trainer.models import (
+    SalesTrainerAudioScorePrompt,
     SalesTrainerExamPaper,
+    SalesTrainerMaterial,
+    SalesTrainerMaterialVersion,
     SalesTrainerUnit,
     SalesTrainerUnitQuestion,
 )
@@ -76,18 +79,30 @@ PATH_KEY = "newcomer_training_path_v1"
 LEGACY_PATH_KEY = "new_seller_modules_v1"
 PATH_TITLE = "新人训练路径"
 GOAL_TITLE = "掌握新人核心训练路径"
-MODULE_KEYS = ["ppt_explain", "business_skills", "pyramid_speech", "realtime_placeholder"]
+MODULE_KEYS = [
+    "ppt_explanation",
+    "business_skills",
+    "elevator_pitch",
+    "realtime_roleplay_placeholder",
+]
 BUSINESS_SKILLS_MODULE_KEY = "business_skills"
 BUSINESS_SKILLS_PAPER_KEY = "newcomer_business_skills_paper_v1"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 LEARNING_CONTENT_SOURCE = "seed_newcomer_training_path"
 LEARNING_CONTENT_TITLE = DEFAULT_BUSINESS_ETIQUETTE_CONTENT_TITLE
 LEARNING_CONTENT_SUMMARY = "按 7 个小单元完成阅读、小测和 AI 教练训练。"
 BUSINESS_ETIQUETTE_SOURCE_FILE = (
-    Path(__file__).resolve().parents[2]
-    / "docs"
-    / "lujingshuji"
-    / "商务礼仪-新人的第一本职业素养手册-完整版.md"
+    REPO_ROOT / "docs" / "lujingshuji" / "商务礼仪-新人的第一本职业素养手册-完整版.md"
 )
+PPT_PROMPT_NAME = "主胶片讲解录音评分"
+PPT_MATERIAL_KEY = "newcomer_ppt_explanation_training_material"
+PPT_MATERIAL_NAME = "PPT 讲解任务与评分标准"
+PPT_MATERIAL_VERSION_LABEL = "v2026.06"
+PPT_MATERIAL_SOURCE_FILE = (
+    REPO_ROOT / "docs" / "content" / "ppt-explanation-training-material.md"
+)
+ELEVATOR_PROMPT_NAME = "电梯演讲录音评分"
+ELEVATOR_DURATION_OPTIONS = (10, 20, 30)
 AI_COACH_PROMPT_NAME = "新人训练路径商务技巧 AI 对话教练生成 v1"
 AI_COACH_PROMPT_CATEGORY = "sales_trainer_ai_coach"
 AI_COACH_PROMPT_PURPOSE = PROMPT_BUSINESS_PURPOSE_AI_COACH_CONVERSATION
@@ -109,19 +124,28 @@ AI_COACH_GENERATION_PROMPT_TEMPLATE = """你正在为新人训练路径的商务
 {% else %}- 暂无
 {% endif %}
 
+当前教练状态：{{ coach_state }}
+训练小单元：{{ business_etiquette_learning_units }}
+能力点：{{ business_etiquette_capability_keys }}
+允许训练卡类型：{{ allowed_training_card_types }}
+训练卡契约：{{ training_card_contract }}
+反馈结构：{{ feedback_schema }}
+
 {% if next_action is defined and next_action %}
 后端已决定下一步动作：{{ next_action }}
 动作原因：{{ action_reason }}
-当前教练状态：{{ coach_state }}
 本题评分结果：{{ score_result }}
 学员答案：{{ user_answer_payload }}
 本题内部快照：{{ answered_interaction_snapshot }}
 当前主题：{{ current_focus }}
 当前难度：{{ difficulty }}
-请只服务这个 next_action，不要自行切换动作。每次最多生成 {{ max_cards_per_message }} 张卡片。
+请只服务这个 next_action，不要自行切换动作。每次最多生成 1 张 quiz_card。
 {% endif %}
 
-请像 ChatGPT 一样先用 assistant_text 自然回应，再按用户要求生成 0 到 {{ max_cards_per_message }} 张白名单卡片。用户要求“出 3 道题”时，优先生成 3 个 quiz_card。请只输出 JSON，不要输出 Markdown。JSON 必须满足：
+请像 ChatGPT / Claude Code Plan 模式一样先用 assistant_text 自然回应，判断当前应该聊天、追问、解释、总结，还是调用练习工具。
+只有需要验证理解或刻意练习时，才生成 0 到 1 张白名单 quiz_card。不要为了推进流程而每轮强行出题。
+如果已有未提交训练卡，优先解释当前卡或回答学员问题，不要重复生成新卡。
+请只输出 JSON，不要输出 Markdown。JSON 必须满足：
 {
   "schema_version": "ai_coach_chat_response_v1",
   "assistant_text": "自然语言教练回复",
@@ -131,7 +155,8 @@ AI_COACH_GENERATION_PROMPT_TEMPLATE = """你正在为新人训练路径的商务
       "payload": {
         "interaction": {
           "schema_version": "ai_coach_interaction_v1",
-          "interaction_type": "single_choice" 或 "multiple_choice",
+          "training_card_type": "scenario_judgment" 或 "expression_rewrite" 或 "role_response",
+          "interaction_type": "single_choice" 或 "multiple_choice" 或 "short_answer",
           "stem": "卡片题干，必须来自商务拜访、商务礼仪或客户异议处理场景",
           "options": [
             {"option_id": "A", "text": "卡片选项文本", "is_distractor": false},
@@ -148,12 +173,28 @@ AI_COACH_GENERATION_PROMPT_TEMPLATE = """你正在为新人训练路径的商务
   ]
 }
 """
+AI_COACH_SCORING_PROMPT_NAME = "新人训练路径商务技巧 AI 教练简答评分 v1"
+AI_COACH_SCORING_PROMPT_TEMPLATE = """你正在评分新人训练路径商务技巧 AI 教练中的简答/角色回应题。
+
+学员答案：{{ answer_text }}
+参考答案：{{ reference_answer }}
+满分：{{ max_score }}
+评分点：
+{% for point in scoring_points %}- {{ point.key }}：{{ point.score }} 分，{{ point.description }}
+{% endfor %}
+给分策略：{{ partial_credit_policy }}
+
+请真实评估学员答案，不要因为文字多就给高分，也不要用规则外的固定话术。
+只输出 JSON：
+{"score": number, "feedback": "具体指出命中点和缺失点", "missed_points": ["缺失点"]}
+"""
 BUSINESS_SKILLS_QUESTION_TITLES = [
     "见客户前第一步是什么？",
     "商务礼仪多选题",
     "礼仪判断题",
     "商务技巧简答题",
 ]
+PPT_PROMPT_VERSION = 2
 OWNER_EMAIL = "newcomer.training.seed.admin@example.com"
 LEARNER_EMAIL = "newcomer.training.seed.learner@example.com"
 
@@ -230,6 +271,341 @@ async def _upsert_user(
     return user
 
 
+def _default_audio_output_schema() -> dict[str, str]:
+    return {
+        "total_score": "number",
+        "passed": "boolean",
+        "summary": "string",
+        "strengths": "array",
+        "improvements": "array",
+        "dimension_scores": "object",
+    }
+
+
+def _ppt_task_brief() -> dict[str, Any]:
+    return {
+        "enabled": True,
+        "title": "第1关：PPT讲解录音",
+        "purpose": "上传主胶片讲解录音，系统转写后按 PPT 讲解指标进行 AI 评分。",
+        "scenario": (
+            "你正在向有明确需求的技术或业务负责人讲解石犀主胶片。"
+            "请在 5 分钟内讲清背景、方案核心、四步能力、差异化和下一步推进。"
+        ),
+        "instructions": [
+            "先下载并阅读本关训练材料，按主胶片逻辑准备讲解。",
+            "录音中覆盖背景痛点、资产-用户-流动管控主线、四步能力和差异化。",
+            "上传录音后，系统会先转写成文字，再由 AI 按评分标准判断。",
+        ],
+        "success_criteria": [
+            "讲解结构完整，不遗漏背景、方案核心、四步能力、差异化和部署方式。",
+            "业务信息准确，不编造政策、案例、性能或产品能力。",
+            "能把功能转成客户价值，并提出清晰下一步行动。",
+        ],
+        "common_mistakes": [
+            "只介绍公司，没有进入客户痛点和方案价值。",
+            "只罗列功能，没有讲清资产-用户-流动管控主线。",
+            "没有提出演示、扫描、风险评估或试点等下一步。",
+        ],
+        "upload_guidance": (
+            "请上传你自己的 PPT 讲解录音；不是上传 PPT 文件。"
+            "建议控制在 5 分钟内，系统会以最新一次上传作为本关结果。"
+        ),
+    }
+
+
+def _ppt_learner_rubric() -> dict[str, Any]:
+    return {
+        "visible_to_learner": True,
+        "pass_threshold": 70,
+        "criteria": [
+            {
+                "key": "ppt_structure",
+                "label": "PPT 结构完整度",
+                "weight": 25,
+                "description": "覆盖背景、方案核心、四步能力、差异化、部署与下一步。",
+            },
+            {
+                "key": "business_accuracy",
+                "label": "业务信息准确性",
+                "weight": 25,
+                "description": "准确表达数据流动治理、AI 分类分级、API 风险、组件化防护和溯源审计。",
+            },
+            {
+                "key": "customer_value",
+                "label": "客户价值表达",
+                "weight": 20,
+                "description": "能把功能翻译成合规、风险发现、零侵入、低成本扩展和可追溯等客户价值。",
+            },
+            {
+                "key": "delivery_logic",
+                "label": "表达逻辑与流畅度",
+                "weight": 15,
+                "description": "顺序清晰、衔接自然，没有明显跳页、卡顿或堆术语。",
+            },
+            {
+                "key": "evidence_usage",
+                "label": "案例与证据使用",
+                "weight": 10,
+                "description": "自然引用深圳航空、北京卫健委、汕头大学等案例证明价值。",
+            },
+            {
+                "key": "next_step",
+                "label": "下一步推进",
+                "weight": 5,
+                "description": "提出演示、旁路扫描、风险评估报告或试点等清晰动作。",
+            },
+        ],
+        "common_mistakes": [
+            "遗漏 AI 分类分级、风险监测、一键防护或溯源审计。",
+            "夸大能力或编造案例、指标、政策。",
+        ],
+    }
+
+
+def _ppt_scoring_template() -> str:
+    return """请对学员的 PPT 讲解录音进行评分。
+
+训练单元：{unit_name}
+录音用途：{purpose}
+转写文本：
+{transcript}
+
+评分目标：
+判断学员是否按公司主胶片逻辑讲清楚石犀是谁、客户为什么需要数据流动治理、石犀方案如何解决问题、差异化价值在哪里，以及客户下一步可以怎么推进。
+
+评分维度，总分 100 分：
+1. PPT 结构完整度（25 分）：是否覆盖背景、方案核心、四步能力、差异化、部署与下一步。
+2. 业务信息准确性（25 分）：是否准确表达数据流动治理、AI 分类分级、API 风险、组件化防护、溯源审计等关键能力。
+3. 客户价值表达（20 分）：是否把功能翻译成客户价值，例如合规、风险发现、零侵入、低成本扩展、可追溯。
+4. 表达逻辑与流畅度（15 分）：是否顺序清晰、衔接自然、没有明显跳页、卡顿或堆术语。
+5. 案例与证据使用（10 分）：是否自然引用深圳航空、北京卫健委、汕头大学等案例证明价值。
+6. 下一步推进（5 分）：是否提出演示、旁路扫描、风险评估报告或试点等清晰动作。
+
+一票扣分项：
+- 编造客户案例、性能指标、政策要求或产品能力。
+- 明显贬低竞品或客户现有投入。
+- 只复述产品功能，没有回应客户场景。
+- 完全没有下一步行动建议。
+
+请只输出 JSON，不要输出 Markdown，不要加代码块。JSON 必须满足：
+{
+  "total_score": number,
+  "passed": boolean,
+  "summary": "一句话总评，指出这次 PPT 讲解是否适合见客户",
+  "strengths": ["最多 3 条优点"],
+  "improvements": ["最多 3 条具体训练建议"],
+  "dimension_scores": {
+    "ppt_structure": {"score": number, "max_score": 25, "comment": "结构完整度评价"},
+    "business_accuracy": {"score": number, "max_score": 25, "comment": "业务信息准确性评价"},
+    "customer_value": {"score": number, "max_score": 20, "comment": "客户价值表达评价"},
+    "delivery_logic": {"score": number, "max_score": 15, "comment": "表达逻辑与流畅度评价"},
+    "evidence_usage": {"score": number, "max_score": 10, "comment": "案例与证据使用评价"},
+    "next_step": {"score": number, "max_score": 5, "comment": "下一步推进评价"}
+  }
+}
+"""
+
+
+def _elevator_learner_rubric() -> dict[str, Any]:
+    return {
+        "visible_to_learner": True,
+        "pass_threshold": 70,
+        "criteria": [
+            {
+                "key": "opening_positioning",
+                "label": "开场定位",
+                "weight": 20,
+                "description": "能在开场快速说明对象、场景和要解决的问题。",
+            },
+            {
+                "key": "value_density",
+                "label": "价值密度",
+                "weight": 30,
+                "description": "在限定时长内讲清客户痛点、方案价值和业务收益。",
+            },
+            {
+                "key": "structure_control",
+                "label": "结构控制",
+                "weight": 25,
+                "description": "能按背景、方案、证据、下一步推进组织表达。",
+            },
+            {
+                "key": "closing_action",
+                "label": "收尾行动",
+                "weight": 15,
+                "description": "结尾能提出清晰、可执行的下一步。",
+            },
+            {
+                "key": "delivery",
+                "label": "表达表现",
+                "weight": 10,
+                "description": "表达清楚、节奏稳定，没有明显跑题或堆术语。",
+            },
+        ],
+    }
+
+
+def _elevator_scoring_template() -> str:
+    return """请对学员的电梯演讲录音进行评分。
+
+训练单元：{unit_name}
+录音用途：{purpose}
+转写文本：
+{transcript}
+
+评分目标：
+判断学员能否在指定时长内，把石犀面向客户的核心价值讲清楚，并自然推进下一步沟通。
+
+评分维度，总分 100 分：
+1. 开场定位（20 分）：是否快速说明客户场景、问题和本次表达目标。
+2. 价值密度（30 分）：是否把数据流动治理、风险发现、合规降本等价值讲得具体。
+3. 结构控制（25 分）：是否有清晰顺序，能覆盖背景、方案、证据和行动。
+4. 收尾行动（15 分）：是否提出演示、评估、试点或资料跟进等明确动作。
+5. 表达表现（10 分）：语速、逻辑、措辞是否适合客户沟通。
+
+请只输出 JSON，不要输出 Markdown，不要加代码块。JSON 必须满足：
+{
+  "total_score": number,
+  "passed": boolean,
+  "summary": "一句话总评，指出这次电梯演讲是否适合见客户",
+  "strengths": ["最多 3 条优点"],
+  "improvements": ["最多 3 条具体训练建议"],
+  "dimension_scores": {
+    "opening_positioning": {"score": number, "max_score": 20, "comment": "开场定位评价"},
+    "value_density": {"score": number, "max_score": 30, "comment": "价值密度评价"},
+    "structure_control": {"score": number, "max_score": 25, "comment": "结构控制评价"},
+    "closing_action": {"score": number, "max_score": 15, "comment": "收尾行动评价"},
+    "delivery": {"score": number, "max_score": 10, "comment": "表达表现评价"}
+  }
+}
+"""
+
+
+async def _upsert_audio_prompt(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner_id: str,
+    name: str,
+    purpose: str,
+    system_prompt: str,
+    scoring_template: str,
+    learner_rubric: dict[str, Any],
+) -> SalesTrainerAudioScorePrompt:
+    prompt = await _first(
+        db,
+        select(SalesTrainerAudioScorePrompt).where(
+            SalesTrainerAudioScorePrompt.name == name,
+            SalesTrainerAudioScorePrompt.purpose == purpose,
+        ),
+    )
+    if prompt is None:
+        prompt = SalesTrainerAudioScorePrompt(
+            prompt_id=_uuid(),
+            name=name,
+            purpose=purpose,
+            created_by=owner_id,
+        )
+        db.add(prompt)
+        summary.created += 1
+    else:
+        summary.updated += 1
+    prompt.system_prompt = system_prompt
+    prompt.scoring_template = scoring_template
+    prompt.output_schema = _default_audio_output_schema()
+    prompt.learner_rubric = learner_rubric
+    prompt.version = max(int(prompt.version or 1), PPT_PROMPT_VERSION)
+    prompt.status = "published"
+    prompt.updated_by = owner_id
+    return prompt
+
+
+def _store_seed_material_file(material_id: str) -> tuple[str, int, str]:
+    if not PPT_MATERIAL_SOURCE_FILE.exists():
+        raise VerifyError(
+            f"missing PPT material source file {PPT_MATERIAL_SOURCE_FILE}"
+        )
+    raw = PPT_MATERIAL_SOURCE_FILE.read_bytes()
+    storage_root = Path(
+        os.getenv(
+            "SALES_TRAINER_MATERIAL_STORAGE_PATH", "./data/sales_trainer_materials"
+        )
+    ).resolve()
+    storage_path = storage_root / material_id / "ppt-explanation-training-material.md"
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+    if not storage_path.exists() or storage_path.read_bytes() != raw:
+        storage_path.write_bytes(raw)
+    return str(storage_path), len(raw), hashlib.sha256(raw).hexdigest()
+
+
+async def _upsert_ppt_training_material(
+    db: AsyncSession,
+    summary: SeedSummary,
+    *,
+    owner_id: str,
+) -> SalesTrainerMaterial:
+    material = await _first(
+        db,
+        select(SalesTrainerMaterial).where(
+            SalesTrainerMaterial.material_key == PPT_MATERIAL_KEY
+        ),
+    )
+    if material is None:
+        material = SalesTrainerMaterial(
+            material_id=_uuid(),
+            material_key=PPT_MATERIAL_KEY,
+            name=PPT_MATERIAL_NAME,
+            material_type="script",
+            purpose="ppt_pitch",
+            created_by=owner_id,
+        )
+        db.add(material)
+        await db.flush()
+        summary.created += 1
+    else:
+        summary.updated += 1
+    material.name = PPT_MATERIAL_NAME
+    material.material_type = "script"
+    material.description = "第 1 关 PPT 讲解录音的任务说明、讲解结构和评分指标。"
+    material.purpose = "ppt_pitch"
+    material.status = "published"
+    material.updated_by = owner_id
+
+    storage_key, size_bytes, file_hash = _store_seed_material_file(
+        str(material.material_id)
+    )
+    version = await _first(
+        db,
+        select(SalesTrainerMaterialVersion).where(
+            SalesTrainerMaterialVersion.material_id == material.material_id,
+            SalesTrainerMaterialVersion.version_label == PPT_MATERIAL_VERSION_LABEL,
+        ),
+    )
+    if version is None:
+        version = SalesTrainerMaterialVersion(
+            version_id=_uuid(),
+            material_id=str(material.material_id),
+            version_label=PPT_MATERIAL_VERSION_LABEL,
+            created_by=owner_id,
+        )
+        db.add(version)
+        summary.created += 1
+    else:
+        summary.updated += 1
+    version.title = "第 1 关 PPT 讲解任务与评分标准"
+    version.file_name = "ppt-explanation-training-material.md"
+    version.content_type = "text/markdown"
+    version.file_size_bytes = size_bytes
+    version.storage_key = storage_key
+    version.file_hash = file_hash
+    version.release_notes = "同步第 1 关 PPT 讲解录音评分指标。"
+    version.status = "published"
+    version.published_at = version.published_at or _now()
+    version.published_by = version.published_by or owner_id
+    material.current_version_id = str(version.version_id)
+    return material
+
+
 def _path_config(
     *,
     module_key: str,
@@ -293,9 +669,14 @@ async def _upsert_ai_coach_prompt_template(
         "article_title",
         "article_summary",
         "chapter_titles",
+        "business_etiquette_learning_units",
+        "business_etiquette_capability_keys",
         "allowed_interaction_types",
+        "allowed_training_card_types",
         "allowed_ui_event_types",
         "max_cards_per_message",
+        "training_card_contract",
+        "feedback_schema",
         "next_action",
         "action_reason",
         "coach_state",
@@ -333,7 +714,9 @@ async def _upsert_ai_coach_prompt_template(
             )
             template = await _load_ai_coach_prompt_template(db)
             if template is None:
-                raise VerifyError("business_skills AI coach prompt template insert failed")
+                raise VerifyError(
+                    "business_skills AI coach prompt template insert failed"
+                )
         else:
             template = PromptTemplate(
                 id=_uuid(),
@@ -386,6 +769,107 @@ async def _upsert_ai_coach_prompt_template(
     return template
 
 
+async def _upsert_ai_coach_scoring_prompt_template(
+    db: AsyncSession,
+    summary: SeedSummary,
+) -> PromptTemplate:
+    template = await _first(
+        db,
+        select(PromptTemplate).where(
+            PromptTemplate.name == AI_COACH_SCORING_PROMPT_NAME,
+            PromptTemplate.category == AI_COACH_PROMPT_CATEGORY,
+        ),
+    )
+    variables = [
+        "answer_text",
+        "reference_answer",
+        "max_score",
+        "scoring_points",
+        "partial_credit_policy",
+    ]
+    if template is None:
+        if _uses_postgresql(db):
+            await db.execute(
+                text(
+                    """
+                    INSERT INTO prompt_templates (
+                        id, name, prompt_type, business_purpose, category, template, variables,
+                        is_active, is_default, is_system
+                    )
+                    VALUES (
+                        CAST(:id AS uuid), :name, :prompt_type, :business_purpose, :category,
+                        :template, CAST(:variables AS jsonb),
+                        true, false, true
+                    )
+                    """
+                ),
+                {
+                    "id": _uuid(),
+                    "name": AI_COACH_SCORING_PROMPT_NAME,
+                    "prompt_type": "scoring",
+                    "business_purpose": AI_COACH_PROMPT_PURPOSE,
+                    "category": AI_COACH_PROMPT_CATEGORY,
+                    "template": AI_COACH_SCORING_PROMPT_TEMPLATE,
+                    "variables": json.dumps(variables, ensure_ascii=False),
+                },
+            )
+            template = await _load_ai_coach_scoring_prompt_template(db)
+            if template is None:
+                raise VerifyError(
+                    "business_skills AI coach scoring prompt template insert failed"
+                )
+        else:
+            template = PromptTemplate(
+                id=_uuid(),
+                name=AI_COACH_SCORING_PROMPT_NAME,
+                prompt_type="scoring",
+                business_purpose=AI_COACH_PROMPT_PURPOSE,
+                category=AI_COACH_PROMPT_CATEGORY,
+                template=AI_COACH_SCORING_PROMPT_TEMPLATE,
+                variables=variables,
+                is_active=True,
+                is_default=False,
+                is_system=True,
+            )
+            db.add(template)
+        summary.created += 1
+    else:
+        summary.updated += 1
+        if _uses_postgresql(db):
+            await db.execute(
+                text(
+                    """
+                    UPDATE prompt_templates
+                    SET
+                        prompt_type = :prompt_type,
+                        business_purpose = :business_purpose,
+                        template = :template,
+                        variables = CAST(:variables AS jsonb),
+                        is_active = true,
+                        is_system = true,
+                        updated_at = now()
+                    WHERE name = :name AND category = :category
+                    """
+                ),
+                {
+                    "name": AI_COACH_SCORING_PROMPT_NAME,
+                    "prompt_type": "scoring",
+                    "business_purpose": AI_COACH_PROMPT_PURPOSE,
+                    "category": AI_COACH_PROMPT_CATEGORY,
+                    "template": AI_COACH_SCORING_PROMPT_TEMPLATE,
+                    "variables": json.dumps(variables, ensure_ascii=False),
+                },
+            )
+        else:
+            template.prompt_type = "scoring"
+            template.business_purpose = AI_COACH_PROMPT_PURPOSE
+            template.template = AI_COACH_SCORING_PROMPT_TEMPLATE
+            template.variables = variables
+            template.is_active = True
+            template.is_system = True
+    return template
+
+
 def _uses_postgresql(db: AsyncSession) -> bool:
     return db.get_bind().dialect.name == "postgresql"
 
@@ -393,7 +877,8 @@ def _uses_postgresql(db: AsyncSession) -> bool:
 async def _load_ai_coach_prompt_template(db: AsyncSession) -> PromptTemplate | None:
     return await _first(
         db,
-        select(PromptTemplate).where(
+        select(PromptTemplate)
+        .where(
             PromptTemplate.name == AI_COACH_PROMPT_NAME,
             PromptTemplate.category == AI_COACH_PROMPT_CATEGORY,
         )
@@ -401,24 +886,50 @@ async def _load_ai_coach_prompt_template(db: AsyncSession) -> PromptTemplate | N
     )
 
 
-def _ai_coach_seed_config(prompt_template_id: str) -> dict[str, Any]:
+async def _load_ai_coach_scoring_prompt_template(
+    db: AsyncSession,
+) -> PromptTemplate | None:
+    return await _first(
+        db,
+        select(PromptTemplate)
+        .where(
+            PromptTemplate.name == AI_COACH_SCORING_PROMPT_NAME,
+            PromptTemplate.category == AI_COACH_PROMPT_CATEGORY,
+        )
+        .execution_options(populate_existing=True),
+    )
+
+
+def _ai_coach_seed_config(
+    prompt_template_id: str,
+    scoring_prompt_template_id: str,
+) -> dict[str, Any]:
     return {
         "enabled": True,
         "chat_enabled": True,
         "coach_mode": "mixed_drill",
-        "allowed_interaction_types": ["single_choice", "multiple_choice"],
+        "allowed_interaction_types": [
+            "single_choice",
+            "multiple_choice",
+            "short_answer",
+        ],
+        "allowed_training_card_types": [
+            "scenario_judgment",
+            "expression_rewrite",
+            "role_response",
+        ],
         "allowed_ui_event_types": [
             "quiz_card",
             "explanation_card",
             "summary_card",
             "followup_prompt",
         ],
-        "max_cards_per_message": 3,
-        "generation_timeout_seconds": 30,
+        "max_cards_per_message": 1,
+        "generation_timeout_seconds": 120,
         "proactive_coaching_enabled": True,
-        "session_start_behavior": "plan_and_first_card",
+        "session_start_behavior": "plan_then_wait",
         "auto_advance_enabled": False,
-        "max_auto_steps_per_session": 1,
+        "max_auto_steps_per_session": 5,
         "correct_streak_to_increase_difficulty": 2,
         "incorrect_streak_to_remediate": 1,
         "incorrect_streak_to_pause": 2,
@@ -433,7 +944,7 @@ def _ai_coach_seed_config(prompt_template_id: str) -> dict[str, Any]:
             "ask_user_choice",
             "end_session",
         ],
-        "chat_welcome_message": "你好，我是商务技巧 AI 教练。你可以直接告诉我想练什么，比如“出 3 道商务礼仪单选题”。",
+        "chat_welcome_message": "你好，我是商务技巧 AI 教练。你可以先说想练什么；需要验证时，我会在对话里放一张单选、多选或简答练习卡。",
         "empty_response_recovery_message": "我没有拿到可操作的训练卡片。你可以继续下一题、换个场景，或先总结本轮。",
         "empty_response_recovery_prompts": ["继续下一题", "换个场景", "总结本轮"],
         "generation_failure_recovery_message": "我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。",
@@ -441,7 +952,7 @@ def _ai_coach_seed_config(prompt_template_id: str) -> dict[str, Any]:
         "prompt_template_id": prompt_template_id,
         "prompt_revision_id": None,
         "prompt_contract_hash": None,
-        "scoring_prompt_template_id": None,
+        "scoring_prompt_template_id": scoring_prompt_template_id,
         "scoring_prompt_revision_id": None,
         "scoring_contract_hash": None,
         "min_turns": 3,
@@ -463,7 +974,9 @@ async def _upsert_learning_content(
 ) -> LearningContent:
     content = await _first(
         db,
-        select(LearningContent).where(LearningContent.source == LEARNING_CONTENT_SOURCE),
+        select(LearningContent).where(
+            LearningContent.source == LEARNING_CONTENT_SOURCE
+        ),
     )
     if content is None:
         content = LearningContent(
@@ -763,18 +1276,26 @@ async def _upsert_question(
     question.scoring_criteria = scoring_criteria
     capability_keys = capability_keys or []
     chapter_orders = chapter_orders or []
-    question.scoring_dimensions = list(dict.fromkeys([
-        *scoring_dimensions,
-        *capability_keys,
-    ]))
-    question.tags = list(dict.fromkeys([
-        "新人训练路径",
-        BUSINESS_SKILLS_MODULE_KEY,
-        "business_etiquette",
-        title,
-        *[f"capability:{key}" for key in capability_keys],
-        *[f"chapter:{order}" for order in chapter_orders],
-    ]))
+    question.scoring_dimensions = list(
+        dict.fromkeys(
+            [
+                *scoring_dimensions,
+                *capability_keys,
+            ]
+        )
+    )
+    question.tags = list(
+        dict.fromkeys(
+            [
+                "新人训练路径",
+                BUSINESS_SKILLS_MODULE_KEY,
+                "business_etiquette",
+                title,
+                *[f"capability:{key}" for key in capability_keys],
+                *[f"chapter:{order}" for order in chapter_orders],
+            ]
+        )
+    )
     question.difficulty = "medium"
     question.status = "published"
     question.safety_flagged = False
@@ -900,6 +1421,68 @@ async def _backfill_path_payload_from_units(
     )
 
 
+async def _elevator_duration_options_from_units(
+    db: AsyncSession,
+) -> list[dict[str, Any]]:
+    result = await db.execute(
+        select(SalesTrainerUnit).where(
+            SalesTrainerUnit.status == "published",
+            SalesTrainerUnit.unit_type == "audio_scoring",
+        )
+    )
+    options: list[dict[str, Any]] = []
+    for unit in result.scalars().all():
+        config = unit.config or {}
+        if not isinstance(config, dict):
+            continue
+        path = config.get("path") or {}
+        if not isinstance(path, dict):
+            continue
+        if path.get("module_key") != "elevator_pitch":
+            continue
+        duration_minutes = config.get("duration_minutes")
+        if not isinstance(duration_minutes, int) or duration_minutes <= 0:
+            continue
+        options.append(
+            {
+                "option_key": f"pitch_{duration_minutes}m",
+                "display_name": f"{duration_minutes} 分钟",
+                "duration_minutes": duration_minutes,
+                "target_unit_id": str(unit.unit_id),
+                "order_index": duration_minutes,
+            }
+        )
+    return sorted(options, key=lambda item: int(item["duration_minutes"]))
+
+
+def _path_payload_with_elevator_defaults(
+    payload: NewcomerPathConfigPayload,
+    *,
+    scoring_prompt_id: str | None,
+    duration_options: list[dict[str, Any]],
+) -> NewcomerPathConfigPayload:
+    modules: list[NewcomerPathModuleConfig] = []
+    for module in payload.modules:
+        data = module.model_dump(mode="json")
+        if module.module_key == "elevator_pitch":
+            data["module_type"] = "audio_scoring_group"
+            data["enabled"] = False
+            data["scoring_prompt_id"] = scoring_prompt_id
+            data["duration_options"] = duration_options
+            data["disabled_reason"] = (
+                "第 3 关电梯演讲暂不开放；需补齐材料与评分配置后再启用。"
+            )
+        modules.append(NewcomerPathModuleConfig.model_validate(data))
+    return NewcomerPathConfigPayload(
+        path_key=payload.path_key,
+        title=payload.title,
+        goal_title=payload.goal_title,
+        description=payload.description,
+        enabled=payload.enabled,
+        modules=modules,
+    )
+
+
 def _path_payload_with_business_etiquette_defaults(
     payload: NewcomerPathConfigPayload,
     ai_coach_config: dict[str, Any],
@@ -984,6 +1567,7 @@ async def _publish_seed_path_revision(
     *,
     actor: User,
     ai_coach_config: dict[str, Any],
+    elevator_prompt_id: str | None,
     learning_content_id: str,
     exam_paper_id: str,
 ) -> None:
@@ -1033,6 +1617,13 @@ async def _publish_seed_path_revision(
             or backfilled_payload
         )
 
+    elevator_duration_options = await _elevator_duration_options_from_units(db)
+    next_payload = _path_payload_with_elevator_defaults(
+        next_payload,
+        scoring_prompt_id=elevator_prompt_id,
+        duration_options=elevator_duration_options,
+    )
+
     if active_payload is not None and _payload_json(active_payload) == _payload_json(
         next_payload
     ):
@@ -1077,23 +1668,30 @@ async def _verify_ai_coach_seed_config(
     if ai_coach.get("allowed_interaction_types") != [
         "single_choice",
         "multiple_choice",
+        "short_answer",
     ]:
         raise VerifyError(f"{context} AI coach interaction types mismatch")
+    if ai_coach.get("allowed_training_card_types") != [
+        "scenario_judgment",
+        "expression_rewrite",
+        "role_response",
+    ]:
+        raise VerifyError(f"{context} AI coach training card types mismatch")
     if "quiz_card" not in (ai_coach.get("allowed_ui_event_types") or []):
         raise VerifyError(f"{context} AI coach ui event types mismatch")
-    if ai_coach.get("max_cards_per_message") != 3:
+    if ai_coach.get("max_cards_per_message") != 1:
         raise VerifyError(f"{context} AI coach max_cards_per_message mismatch")
-    if ai_coach.get("generation_timeout_seconds") != 30:
+    if ai_coach.get("generation_timeout_seconds") != 120:
         raise VerifyError(f"{context} AI coach generation_timeout_seconds mismatch")
     if (ai_coach.get("retry_policy") or {}).get("max_retries") != 1:
         raise VerifyError(f"{context} AI coach retry_policy.max_retries mismatch")
     if ai_coach.get("proactive_coaching_enabled") is not True:
         raise VerifyError(f"{context} AI coach proactive_coaching_enabled mismatch")
-    if ai_coach.get("session_start_behavior") != "plan_and_first_card":
+    if ai_coach.get("session_start_behavior") != "plan_then_wait":
         raise VerifyError(f"{context} AI coach session_start_behavior mismatch")
     if ai_coach.get("auto_advance_enabled") is not False:
         raise VerifyError(f"{context} AI coach auto_advance_enabled mismatch")
-    if ai_coach.get("max_auto_steps_per_session") != 1:
+    if ai_coach.get("max_auto_steps_per_session") != 5:
         raise VerifyError(f"{context} AI coach max_auto_steps_per_session mismatch")
     if "continue_drill" not in (ai_coach.get("allowed_next_actions") or []):
         raise VerifyError(f"{context} AI coach allowed_next_actions mismatch")
@@ -1118,7 +1716,27 @@ async def _verify_ai_coach_seed_config(
     if prompt.category != AI_COACH_PROMPT_CATEGORY or prompt.prompt_type != "stage":
         raise VerifyError(f"{context} AI coach prompt template metadata mismatch")
     if prompt.business_purpose != AI_COACH_PROMPT_PURPOSE:
-        raise VerifyError(f"{context} AI coach prompt template business_purpose mismatch")
+        raise VerifyError(
+            f"{context} AI coach prompt template business_purpose mismatch"
+        )
+    if not ai_coach.get("scoring_prompt_template_id"):
+        raise VerifyError(f"{context} AI coach scoring_prompt_template_id missing")
+    scoring_prompt = await _first(
+        db,
+        select(PromptTemplate)
+        .where(
+            cast(PromptTemplate.id, String)
+            == str(ai_coach["scoring_prompt_template_id"])
+        )
+        .execution_options(populate_existing=True),
+    )
+    if scoring_prompt is None:
+        raise VerifyError(f"{context} AI coach scoring prompt template missing")
+    if (
+        scoring_prompt.category != AI_COACH_PROMPT_CATEGORY
+        or scoring_prompt.prompt_type != "scoring"
+    ):
+        raise VerifyError(f"{context} AI coach scoring prompt metadata mismatch")
 
 
 async def _verify_active_path_ai_coach_config(db: AsyncSession) -> None:
@@ -1202,6 +1820,43 @@ async def _verify_active_path_business_etiquette_article(
         raise VerifyError("active path business_skills article chapters missing")
 
 
+async def _verify_active_path_elevator_options(db: AsyncSession) -> None:
+    revisions = SalesTrainerAssetRevisionService(db)
+    active = await revisions.active_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+    )
+    if active is None:
+        raise VerifyError("newcomer path active revision missing")
+    try:
+        payload = payload_from_revision(active)
+    except SalesTrainerPathConfigError as exc:
+        raise VerifyError("newcomer path active revision invalid") from exc
+    elevator_module = next(
+        (
+            module
+            for module in payload.modules
+            if module.module_key == "elevator_pitch"
+        ),
+        None,
+    )
+    if elevator_module is None:
+        raise VerifyError("active path elevator_pitch module missing")
+    if elevator_module.enabled is not False:
+        raise VerifyError("active path elevator_pitch must remain disabled")
+    durations = [
+        option.duration_minutes
+        for option in sorted(
+            elevator_module.duration_options,
+            key=lambda item: item.order_index,
+        )
+    ]
+    if durations != list(ELEVATOR_DURATION_OPTIONS):
+        raise VerifyError("active path elevator_pitch duration options mismatch")
+    if elevator_module.scoring_prompt_id is not None:
+        raise VerifyError("active path elevator_pitch scoring prompt must stay unset")
+
+
 async def _verify_active_business_etiquette_training_pack(
     db: AsyncSession,
 ) -> None:
@@ -1218,7 +1873,9 @@ async def _verify_active_business_etiquette_training_pack(
         raise VerifyError("business etiquette training pack chapter count mismatch")
     snapshot = payload.get(CAPABILITY_SNAPSHOT_KEY)
     if not isinstance(snapshot, dict):
-        raise VerifyError("business etiquette training pack capability snapshot missing")
+        raise VerifyError(
+            "business etiquette training pack capability snapshot missing"
+        )
     if len(snapshot.get("capabilities") or []) != 8:
         raise VerifyError("business etiquette training pack capability count mismatch")
     if len(snapshot.get("chapter_bindings") or []) != 8:
@@ -1266,8 +1923,34 @@ async def seed(db: AsyncSession) -> SeedSummary:
 
     category = await _upsert_question_category(db, summary, owner_id=str(owner.user_id))
     ai_coach_prompt = await _upsert_ai_coach_prompt_template(db, summary)
+    ai_coach_scoring_prompt = await _upsert_ai_coach_scoring_prompt_template(
+        db,
+        summary,
+    )
+    ppt_prompt = await _upsert_audio_prompt(
+        db,
+        summary,
+        owner_id=str(owner.user_id),
+        name=PPT_PROMPT_NAME,
+        purpose="ppt_pitch",
+        system_prompt=(
+            "你是新人训练路径第 1 关的 PPT 讲解录音评分员。"
+            "你会根据录音转写文本判断学员是否能按主胶片逻辑完成客户讲解。"
+            "只输出符合 schema 的 JSON，不要输出 Markdown。"
+        ),
+        scoring_template=_ppt_scoring_template(),
+        learner_rubric=_ppt_learner_rubric(),
+    )
+    ppt_material = await _upsert_ppt_training_material(
+        db,
+        summary,
+        owner_id=str(owner.user_id),
+    )
     await db.flush()
-    ai_coach_config = _ai_coach_seed_config(str(ai_coach_prompt.id))
+    ai_coach_config = _ai_coach_seed_config(
+        str(ai_coach_prompt.id),
+        str(ai_coach_scoring_prompt.id),
+    )
     q1 = await _upsert_question(
         db,
         summary,
@@ -1389,45 +2072,66 @@ async def seed(db: AsyncSession) -> SeedSummary:
         unit_type="audio_scoring",
         config={
             "audio": {
+                "scoring_prompt_id": str(ppt_prompt.prompt_id),
                 "purpose": "ppt_pitch",
                 "pass_threshold": 70,
             },
-            "path": _path_config(
-                module_key="ppt_explain",
-                module_type="audio_scoring",
-                order_index=1,
-                level_title="第1关：PPT讲解",
-                level_description="上传PPT讲解录音并获取评分。",
-                target_unit_id=None,
-                completion_rule="scored",
-                primary_action_label="上传录音",
-            ),
-        },
-    )
-    await _upsert_unit(
-        db,
-        summary,
-        owner_id=str(owner.user_id),
-        name="电梯演讲",
-        description="上传 10/20/30 分钟的电梯演讲录音，由 AI 评分。",
-        unit_type="audio_scoring",
-        config={
-            "audio": {
-                "purpose": "pyramid_speech",
-                "pass_threshold": 70,
+            "task_brief": _ppt_task_brief(),
+            "materials": {
+                "require_latest_confirmation": True,
+                "bindings": [
+                    {
+                        "material_id": str(ppt_material.material_id),
+                        "required": True,
+                        "confirmation_required": True,
+                        "version_policy": "current_published",
+                        "display_order": 1,
+                        "learner_note": (
+                            "请先阅读本材料中的讲解结构和评分指标，再上传 PPT 讲解录音。"
+                        ),
+                    }
+                ],
             },
             "path": _path_config(
-                module_key="pyramid_speech",
-                module_type="audio_scoring_group",
-                order_index=3,
-                level_title="第3关：电梯演讲",
-                level_description="按 10/20/30 分钟档位上传录音。",
-                completion_rule="scored",
-                primary_action_label="上传录音",
+                module_key="ppt_explanation",
+                module_type="audio_scoring",
+                order_index=1,
+                level_title="第1关：PPT讲解录音",
+                level_description="上传主胶片讲解录音，系统转写后由 AI 按 PPT 讲解指标评分。",
+                target_unit_id=None,
+                completion_rule="passed",
+                primary_action_label="上传 PPT 讲解录音",
             ),
-            "duration_options": [10, 20, 30],
         },
     )
+    for duration_minutes in ELEVATOR_DURATION_OPTIONS:
+        await _upsert_unit(
+            db,
+            summary,
+            owner_id=str(owner.user_id),
+            name=f"电梯演讲 · {duration_minutes} 分钟",
+            description=f"上传 {duration_minutes} 分钟电梯演讲录音，由 AI 评分。",
+            unit_type="audio_scoring",
+            config={
+                "audio": {
+                    "purpose": "elevator_pitch",
+                    "pass_threshold": 70,
+                },
+                "path": _path_config(
+                    module_key="elevator_pitch",
+                    module_type="audio_scoring_group",
+                    order_index=3,
+                    level_title="第3关：电梯演讲",
+                    level_description="当前版本暂不开放，仅保留后台配置诊断。",
+                    enabled=False,
+                    completion_rule="scored",
+                    primary_action_label="上传录音",
+                    disabled_reason="第 3 关暂不开放；需补齐材料与评分配置后再启用。",
+                ),
+                "duration_minutes": duration_minutes,
+                "duration_options": list(ELEVATOR_DURATION_OPTIONS),
+            },
+        )
     _ = await _upsert_unit(
         db,
         summary,
@@ -1437,7 +2141,7 @@ async def seed(db: AsyncSession) -> SeedSummary:
         unit_type="quiz",
         config={
             "path": _path_config(
-                module_key="realtime_placeholder",
+                module_key="realtime_roleplay_placeholder",
                 module_type="realtime_placeholder",
                 order_index=4,
                 level_title="第4关：实时对练（占位）",
@@ -1456,10 +2160,18 @@ async def seed(db: AsyncSession) -> SeedSummary:
         owner_id=str(owner.user_id),
         unit_id=str(paper_unit.unit_id),
         question_bindings=[
-            ExamPaperQuestionBinding(question_id=str(q1.question_id), order_index=1, points=25),
-            ExamPaperQuestionBinding(question_id=str(q2.question_id), order_index=2, points=25),
-            ExamPaperQuestionBinding(question_id=str(q3.question_id), order_index=3, points=25),
-            ExamPaperQuestionBinding(question_id=str(q4.question_id), order_index=4, points=25),
+            ExamPaperQuestionBinding(
+                question_id=str(q1.question_id), order_index=1, points=25
+            ),
+            ExamPaperQuestionBinding(
+                question_id=str(q2.question_id), order_index=2, points=25
+            ),
+            ExamPaperQuestionBinding(
+                question_id=str(q3.question_id), order_index=3, points=25
+            ),
+            ExamPaperQuestionBinding(
+                question_id=str(q4.question_id), order_index=4, points=25
+            ),
         ],
     )
 
@@ -1491,6 +2203,7 @@ async def seed(db: AsyncSession) -> SeedSummary:
         summary,
         actor=owner,
         ai_coach_config=ai_coach_config,
+        elevator_prompt_id=None,
         learning_content_id=str(content.learning_content_id),
         exam_paper_id=str(paper.paper_id),
     )
@@ -1501,7 +2214,9 @@ async def seed(db: AsyncSession) -> SeedSummary:
     return summary
 
 
-async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> SeedSummary:
+async def verify(
+    db: AsyncSession, *, summary: SeedSummary | None = None
+) -> SeedSummary:
     summary = summary or SeedSummary()
     learner = await _first(db, select(User).where(User.email == LEARNER_EMAIL))
     if learner is None:
@@ -1509,7 +2224,9 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
 
     content = await _first(
         db,
-        select(LearningContent).where(LearningContent.source == LEARNING_CONTENT_SOURCE),
+        select(LearningContent).where(
+            LearningContent.source == LEARNING_CONTENT_SOURCE
+        ),
     )
     if content is None:
         raise VerifyError("missing learning content")
@@ -1517,12 +2234,18 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
         raise VerifyError("learning content not published")
 
     chapters = (
-        await db.execute(
-            select(LearningChapter)
-            .where(LearningChapter.learning_content_id == content.learning_content_id)
-            .order_by(LearningChapter.order_index.asc())
+        (
+            await db.execute(
+                select(LearningChapter)
+                .where(
+                    LearningChapter.learning_content_id == content.learning_content_id
+                )
+                .order_by(LearningChapter.order_index.asc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if len(chapters) != 8:
         raise VerifyError(f"expected 8 learning chapters, got {len(chapters)}")
 
@@ -1537,27 +2260,35 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
     if paper.status != "published":
         raise VerifyError("business skills paper not published")
     paper_questions = (
-        await db.execute(
-            select(SalesTrainerUnitQuestion).where(
-                SalesTrainerUnitQuestion.unit_id == paper.unit_id
+        (
+            await db.execute(
+                select(SalesTrainerUnitQuestion).where(
+                    SalesTrainerUnitQuestion.unit_id == paper.unit_id
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if len(paper_questions) != 4:
         raise VerifyError(
             f"expected 4 business skills paper questions, got {len(paper_questions)}"
         )
 
     questions = (
-        await db.execute(
-            select(QuestionItem)
-            .where(
-                QuestionItem.usage_scope == "sales_trainer",
-                QuestionItem.title.in_(BUSINESS_SKILLS_QUESTION_TITLES),
+        (
+            await db.execute(
+                select(QuestionItem)
+                .where(
+                    QuestionItem.usage_scope == "sales_trainer",
+                    QuestionItem.title.in_(BUSINESS_SKILLS_QUESTION_TITLES),
+                )
+                .order_by(QuestionItem.title.asc())
             )
-            .order_by(QuestionItem.title.asc())
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if len(questions) != 4:
         raise VerifyError(
             f"expected 4 seeded business skills questions, got {len(questions)}"
@@ -1569,7 +2300,62 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
 
     expected_keys = set(CANONICAL_NEWCOMER_MODULE_KEYS)
     if set(modules) != expected_keys:
-        raise VerifyError(f"module keys mismatch: {sorted(set(modules) ^ expected_keys)}")
+        raise VerifyError(
+            f"module keys mismatch: {sorted(set(modules) ^ expected_keys)}"
+        )
+
+    ppt_unit = modules["ppt_explanation"]
+    ppt_config = ppt_unit.config or {}
+    ppt_path = ppt_config.get("path") or {}
+    if ppt_path.get("completion_rule") != "passed":
+        raise VerifyError("ppt_explanation completion_rule must be passed")
+    ppt_audio = ppt_config.get("audio") or {}
+    if ppt_audio.get("purpose") != "ppt_pitch":
+        raise VerifyError("ppt_explanation audio purpose mismatch")
+    if not ppt_audio.get("scoring_prompt_id"):
+        raise VerifyError("ppt_explanation scoring_prompt_id missing")
+    ppt_prompt = await _first(
+        db,
+        select(SalesTrainerAudioScorePrompt).where(
+            SalesTrainerAudioScorePrompt.prompt_id == ppt_audio["scoring_prompt_id"]
+        ),
+    )
+    if ppt_prompt is None or ppt_prompt.status != "published":
+        raise VerifyError("ppt_explanation scoring prompt not published")
+    if ppt_prompt.purpose != "ppt_pitch":
+        raise VerifyError("ppt_explanation scoring prompt purpose mismatch")
+    ppt_rubric = ppt_prompt.learner_rubric or {}
+    if len(ppt_rubric.get("criteria") or []) != 6:
+        raise VerifyError("ppt_explanation learner rubric criteria mismatch")
+    ppt_materials = ppt_config.get("materials") or {}
+    ppt_bindings = ppt_materials.get("bindings") or []
+    if not ppt_bindings:
+        raise VerifyError("ppt_explanation material binding missing")
+    required_confirmed = [
+        item
+        for item in ppt_bindings
+        if item.get("required") is True and item.get("confirmation_required") is True
+    ]
+    if not required_confirmed:
+        raise VerifyError("ppt_explanation confirmed material binding missing")
+    ppt_material = await _first(
+        db,
+        select(SalesTrainerMaterial).where(
+            SalesTrainerMaterial.material_id == required_confirmed[0]["material_id"]
+        ),
+    )
+    if ppt_material is None or ppt_material.status != "published":
+        raise VerifyError("ppt_explanation material not published")
+    if not ppt_material.current_version_id:
+        raise VerifyError("ppt_explanation material current version missing")
+    ppt_material_version = await _first(
+        db,
+        select(SalesTrainerMaterialVersion).where(
+            SalesTrainerMaterialVersion.version_id == ppt_material.current_version_id
+        ),
+    )
+    if ppt_material_version is None or ppt_material_version.status != "published":
+        raise VerifyError("ppt_explanation material version not published")
 
     business_unit = modules[BUSINESS_SKILLS_MODULE_KEY]
     business_path = (business_unit.config or {}).get("path") or {}
@@ -1589,17 +2375,18 @@ async def verify(db: AsyncSession, *, summary: SeedSummary | None = None) -> See
     await _verify_active_path_ai_coach_config(db)
     await _verify_active_path_business_etiquette_learning_units(db)
     await _verify_active_path_business_etiquette_article(db)
+    await _verify_active_path_elevator_options(db)
     await _verify_active_business_etiquette_training_pack(db)
 
-    if (
-        (
-            (modules["realtime_roleplay_placeholder"].config or {}).get("path") or {}
-        ).get("enabled")
-        is not False
-    ):
+    if ((modules["realtime_roleplay_placeholder"].config or {}).get("path") or {}).get(
+        "enabled"
+    ) is not False:
         raise VerifyError("module 4 must remain disabled")
+    elevator_path = ((modules["elevator_pitch"].config or {}).get("path") or {})
+    if elevator_path.get("enabled") is not False:
+        raise VerifyError("elevator_pitch must remain disabled")
     if (modules["elevator_pitch"].config or {}).get("duration_options") != [10, 20, 30]:
-        raise VerifyError("pyramid_speech duration options mismatch")
+        raise VerifyError("elevator_pitch duration options mismatch")
 
     summary.verified = True
     return summary

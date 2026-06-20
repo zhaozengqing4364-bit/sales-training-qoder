@@ -22,7 +22,11 @@ from sales_trainer.services.ai_coach_chat_generation import AiCoachChatGenerator
 from sales_trainer.services.ai_coach_chat_generation_parser import (
     AiCoachChatResponseParser,
 )
+from sales_trainer.services.ai_coach_chat_generation_prompt import (
+    AiCoachChatPromptCompiler,
+)
 from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AI_COACH_JSON_RESPONSE_FORMAT,
     AiCoachGenerationDeltaHandler,
     emit_streamed_response,
     prompt_for_attempt,
@@ -90,6 +94,7 @@ class AiCoachChatNextActionGenerator:
                 session_id=session.session_id,
                 system_message=contract.system_message,
                 allow_fallback_response=False,
+                response_format=AI_COACH_JSON_RESPONSE_FORMAT,
             )
             if not result.is_success or not result.value:
                 last_error = AiCoachChatGenerationError(
@@ -180,6 +185,11 @@ class AiCoachChatNextActionGenerator:
     ) -> dict[str, Any]:
         article = session.article_snapshot or {}
         chapters = article.get("chapters") if isinstance(article, dict) else []
+        raw_path_config = getattr(session, "path_config_snapshot", None)
+        path_config = raw_path_config if isinstance(raw_path_config, dict) else {}
+        learning_units = AiCoachChatPromptCompiler.business_etiquette_learning_units(
+            path_config
+        )
         return {
             "module_key": session.module_key,
             "user_message": "",
@@ -193,13 +203,24 @@ class AiCoachChatNextActionGenerator:
             "user_answer_payload": answer_payload.model_dump(mode="json"),
             "allowed_ui_event_types": list(AiCoachChatGenerator.allowed_ui_event_types(config)),
             "allowed_interaction_types": list(config.allowed_interaction_types),
+            "allowed_training_card_types": list(
+                AiCoachChatPromptCompiler.compatible_training_card_types(config)
+            ),
             "max_cards_per_message": int(config.max_cards_per_message),
+            "training_card_contract": AiCoachChatPromptCompiler.training_card_contract(
+                config
+            ),
+            "feedback_schema": AiCoachChatPromptCompiler.feedback_schema(),
             "current_focus": state.current_focus,
             "difficulty": state.difficulty,
             "article_title": article.get("title") if isinstance(article, dict) else "",
             "article_summary": article.get("summary") if isinstance(article, dict) else "",
             "article_snapshot": session.article_snapshot or {},
             "chapter_titles": self._chapter_titles(chapters),
+            "business_etiquette_learning_units": learning_units,
+            "business_etiquette_capability_keys": (
+                AiCoachChatPromptCompiler.capability_keys(learning_units)
+            ),
             "history": [
                 {"role": message.role, "content": message.content}
                 for message in history
@@ -222,10 +243,16 @@ class AiCoachChatNextActionGenerator:
         decision: AiCoachNextActionDecision,
     ) -> str:
         allowed_ui = ", ".join(AiCoachChatGenerator.allowed_ui_event_types(config))
+        allowed_cards = ", ".join(
+            AiCoachChatPromptCompiler.compatible_training_card_types(config)
+        )
         return (
-            "你是商务技巧 AI 教练。后端已经决定 next_action="
-            f"{decision.action}，你必须只服务这个动作。只能输出 JSON，"
+            "你是商务技巧 AI 教练，不是固定出题器。后端已经决定 next_action="
+            f"{decision.action}，你必须只服务这个动作，但可以先自然聊天、解释或追问。只能输出 JSON，"
             f"ui_events 只能使用这些 type: {allowed_ui}。"
+            f"quiz_card.payload.interaction.training_card_type 只能使用这些值: {allowed_cards}。"
+            "每轮最多生成 1 张 quiz_card；当 assistant_text 已能完成讲解或追问时，可以不生成 quiz_card。"
+            "把 quiz_card 当成工具调用结果：需要检测理解时用单选/多选，需要表达训练时用 short_answer。"
             "不得输出 HTML、JSX、CSS、脚本或任意组件树。"
         )
 
@@ -251,29 +278,29 @@ class AiCoachChatNextActionGenerator:
 
         match action:
             case "continue_drill" | "increase_difficulty":
-                if counts != {
-                    "quiz_card": 1,
-                    "explanation_card": 0,
-                    "summary_card": 0,
-                    "followup_prompt": 0,
-                }:
-                    invalid("该 next_coach_action 只能生成 1 张 quiz_card。")
-            case "remediate":
-                if counts != {
-                    "quiz_card": 1,
-                    "explanation_card": 1,
-                    "summary_card": 0,
-                    "followup_prompt": 0,
-                }:
-                    invalid("remediate 必须生成 1 张 explanation_card 和 1 张 quiz_card。")
-            case "switch_scenario":
                 if (
-                    counts["quiz_card"] != 1
+                    counts["quiz_card"] > 1
                     or counts["explanation_card"] != 0
                     or counts["summary_card"] != 0
                     or counts["followup_prompt"] > 1
                 ):
-                    invalid("switch_scenario 必须生成 1 张 quiz_card，可附 1 个 followup_prompt。")
+                    invalid("该 next_coach_action 最多生成 1 张 quiz_card，可附 1 个 followup_prompt。")
+            case "remediate":
+                if (
+                    counts["quiz_card"] > 1
+                    or counts["explanation_card"] > 1
+                    or counts["summary_card"] != 0
+                    or counts["followup_prompt"] > 1
+                ):
+                    invalid("remediate 最多生成 1 张 explanation_card 和 1 张 quiz_card。")
+            case "switch_scenario":
+                if (
+                    counts["quiz_card"] > 1
+                    or counts["explanation_card"] > 1
+                    or counts["summary_card"] != 0
+                    or counts["followup_prompt"] > 1
+                ):
+                    invalid("switch_scenario 最多生成 1 张 quiz_card，可附 1 个 followup_prompt。")
             case "summarize":
                 if (
                     counts["summary_card"] != 1

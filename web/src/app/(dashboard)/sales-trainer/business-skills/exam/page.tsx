@@ -23,6 +23,7 @@ import {
     answerPayload,
     type AnswersState,
     initialAnswer,
+    isQuestionAnswered,
     QuestionField,
 } from "./business-skills-exam-fields";
 
@@ -123,6 +124,11 @@ export default function BusinessSkillsExamPage() {
         if (!paper) {
             return;
         }
+        const hasAnsweredAllQuestions = paper.questions.every((question) => isQuestionAnswered(question, answers));
+        if (!hasAnsweredAllQuestions) {
+            setError(BUSINESS_SKILLS_EXAM_COPY.incompleteAnswerError);
+            return;
+        }
         setIsSubmitting(true);
         setError(null);
         try {
@@ -141,6 +147,7 @@ export default function BusinessSkillsExamPage() {
     }
 
     const showLearningGate = learningRequired || learningMismatch;
+    const canSubmitPaper = paper?.questions.every((question) => isQuestionAnswered(question, answers)) ?? false;
     const gateCopy = learningMismatch
         ? {
             title: BUSINESS_SKILLS_EXAM_COPY.learningMismatchTitle,
@@ -222,10 +229,15 @@ export default function BusinessSkillsExamPage() {
                             <Button
                                 className="w-full rounded-full bg-slate-900 text-white"
                                 onClick={() => void submitPaper()}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || !canSubmitPaper}
                             >
                                 {BUSINESS_SKILLS_EXAM_COPY.submitButton}
                             </Button>
+                            {!canSubmitPaper ? (
+                                <p className="text-center text-xs font-medium text-slate-500">
+                                    {BUSINESS_SKILLS_EXAM_COPY.incompleteAnswerHint}
+                                </p>
+                            ) : null}
                         </>
                     ) : null}
                 </GlassCard>

@@ -487,6 +487,15 @@ describe("api.salesTrainer facade", () => {
         expect(api.salesTrainer.getAudioSubmissionFileUrl("submission-1")).toContain(
             "/sales-trainer/audio-submissions/submission-1/file",
         );
+        expect(api.salesTrainer.getMaterialVersionFileUrl("version-1")).toContain(
+            "/sales-trainer/materials/versions/version-1/file",
+        );
+        expect(api.salesTrainer.getMaterialVersionFileUrl("version-1")).not.toContain(
+            "undefined",
+        );
+        expect(api.salesTrainer.getMaterialVersionFileUrl("version-1", { disposition: "inline" })).toContain(
+            "/sales-trainer/materials/versions/version-1/file?disposition=inline",
+        );
         expect(api.admin.salesTrainer.getAudioSubmissionFileUrl("submission-1")).toContain(
             "/admin/sales-trainer/audio-submissions/submission-1/file",
         );

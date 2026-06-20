@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from common.ai.llm_service import LLMService
 from common.error_handling.result import Result
 from prompt_templates.compiled_contract import CompiledPromptContract
 from sales_trainer.ai_coach_chat_models import SalesTrainerAiCoachCoachAction
@@ -56,13 +57,18 @@ from sales_trainer.services.ai_coach_chat_generation_prompt import (
     AiCoachChatPromptCompiler,
 )
 from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AI_COACH_JSON_RESPONSE_FORMAT,
+    AiCoachAssistantTextDraftExtractor,
+    AiCoachGenerationDelta,
     AiCoachQuizCardDraftExtractor,
+    emit_streamed_response,
 )
 from sales_trainer.services.ai_coach_chat_next_action import AiCoachNextActionDecider
 from sales_trainer.services.ai_coach_chat_next_action_generation import (
     AiCoachChatNextActionGenerator,
 )
 from sales_trainer.services.ai_coach_chat_projection import AiCoachChatProjection
+from sales_trainer.services.ai_coach_chat_scoring import AiCoachChatScorer
 from sales_trainer.services.ai_coach_chat_service import (
     AiCoachChatService,
     AiCoachChatServiceError,
@@ -131,6 +137,38 @@ def _choice_interaction(
         "feedback_guidance": {
             "correct": "处理得当。",
             "incorrect": "先确认拜访安排，再进入介绍。",
+        },
+        "source_evidence": None,
+    }
+
+
+def _short_answer_interaction(
+    stem: str = "请把这句客户接待话术改得更专业。",
+) -> dict[str, object]:
+    return {
+        "schema_version": "ai_coach_interaction_v1",
+        "training_card_type": "expression_rewrite",
+        "interaction_type": "short_answer",
+        "stem": stem,
+        "options": None,
+        "answer_key": {
+            "option_ids": [],
+            "reference_answer": "我会先确认您的到访目的和人数，再安排合适的接待动线。",
+        },
+        "scoring_rubric": {
+            "max_score": 100,
+            "points": [
+                {
+                    "key": "respect-and-clarity",
+                    "score": 100,
+                    "description": "表达尊重、清晰确认接待关键事项",
+                }
+            ],
+            "partial_credit_policy": "proportional",
+        },
+        "feedback_guidance": {
+            "correct": "表达清楚且尊重客户。",
+            "incorrect": "需要说明具体动作，避免空泛回答。",
         },
         "source_evidence": None,
     }
@@ -214,7 +252,7 @@ def test_ai_coach_proactive_config_defaults_are_safe() -> None:
     assert "remediate" in config.allowed_next_actions
     assert config.streaming_enabled is True
     assert config.entry_resume_policy == "latest_active_or_new"
-    assert config.generation_timeout_seconds == 30
+    assert config.generation_timeout_seconds == 120
     assert config.retry_policy.max_retries == 1
     assert config.empty_response_recovery_prompts == ["继续下一题", "换个场景", "总结本轮"]
     assert config.generation_failure_recovery_message == (
@@ -266,6 +304,17 @@ def test_streaming_quiz_card_draft_exposes_partial_stem_before_json_closes() -> 
     assert interaction.stem == "在商务场合第一次见客户时，称呼对方"
     assert interaction.options is None
     assert interaction.answer_constraints == {"min_selected": 1, "max_selected": 1}
+
+
+def test_streaming_assistant_text_delta_exposes_partial_markdown() -> None:
+    extractor = AiCoachAssistantTextDraftExtractor()
+    first = extractor.extract_changed('{"assistant_text":"**先判断**客户')
+    duplicate = extractor.extract_changed('{"assistant_text":"**先判断**客户')
+    second = extractor.extract_changed('{"assistant_text":"**先判断**客户意图\\n- 再给建议')
+
+    assert first == "**先判断**客户"
+    assert duplicate is None
+    assert second == "**先判断**客户意图\n- 再给建议"
 
 
 def test_ai_coach_config_rejects_empty_generation_failure_recovery_prompt() -> None:
@@ -342,6 +391,15 @@ def test_prompt_variables_include_business_etiquette_training_card_context() -> 
         "expression_rewrite",
     ]
     assert variables["feedback_schema"]["suggested_response"] == "可以怎么说"
+
+
+def test_chat_prompt_system_message_names_scoring_policy_values() -> None:
+    system_message = AiCoachChatPromptCompiler.system_message(AiCoachConfig(enabled=True))
+
+    assert "all_or_nothing" in system_message
+    assert "proportional" in system_message
+    assert "tiered" in system_message
+    assert "不得使用 partial" in system_message
 
 
 def test_chat_request_models_accept_resume_strategy_and_commands() -> None:
@@ -575,8 +633,8 @@ def test_next_action_falls_back_to_allowed_action() -> None:
     assert decision.should_generate is True
 
 
-def test_next_action_generation_rejects_ui_events_outside_action_contract() -> None:
-    response = AiCoachChatResponseInternalV1.model_validate(_chat_response(card_count=1))
+def test_next_action_generation_rejects_multiple_quiz_cards_for_chat_first_action() -> None:
+    response = AiCoachChatResponseInternalV1.model_validate(_chat_response(card_count=2))
 
     with pytest.raises(AiCoachChatGenerationError) as exc_info:
         AiCoachChatNextActionGenerator._validate_response_for_action(
@@ -585,6 +643,18 @@ def test_next_action_generation_rejects_ui_events_outside_action_contract() -> N
         )
 
     assert exc_info.value.code == "[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]"
+
+
+def test_next_action_generation_allows_chat_only_continue_drill() -> None:
+    response = AiCoachChatResponseInternalV1(
+        assistant_text="你先把客户第一次来访的准备动作说一遍，我再决定是否给你一张练习卡。",
+        ui_events=[],
+    )
+
+    AiCoachChatNextActionGenerator._validate_response_for_action(
+        response,
+        "continue_drill",
+    )
 
 
 def test_next_action_generation_accepts_remediate_contract() -> None:
@@ -681,12 +751,14 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
 
     class FakeLLMService:
         prompts: list[str] = []
+        response_formats: list[object] = []
         outputs = ["not json", json.dumps(_chat_response(card_count=1))]
 
         async def generate(self, **kwargs: object) -> Result:
             prompt = kwargs.get("prompt")
             assert isinstance(prompt, str)
             self.prompts.append(prompt)
+            self.response_formats.append(kwargs.get("response_format"))
             return Result.ok(self.outputs.pop(0))
 
     monkeypatch.setattr(
@@ -727,7 +799,169 @@ def test_generate_chat_response_retries_when_model_output_breaks_contract(
     assert len(parsed.ui_events) == 1
     assert session.prompt_contract_hash == "hash-chat-1"
     assert len(FakeLLMService.prompts) == 2
-    assert "[AI_COACH_INTERACTION_INVALID]" in FakeLLMService.prompts[1]
+    assert FakeLLMService.response_formats == [
+        AI_COACH_JSON_RESPONSE_FORMAT,
+        AI_COACH_JSON_RESPONSE_FORMAT,
+    ]
+    assert "上一轮输出字段类型或结构不符合要求" in FakeLLMService.prompts[1]
+    assert "错误码" not in FakeLLMService.prompts[1]
+    assert "[AI_COACH_INTERACTION_INVALID]" not in FakeLLMService.prompts[1]
+
+
+def test_streamed_chat_generation_requests_json_response_format() -> None:
+    captured: dict[str, object] = {}
+    model_json = json.dumps(_chat_response(card_count=0), ensure_ascii=False)
+
+    class FakeLLM:
+        async def stream_generate(self, **kwargs: object):
+            captured.update(kwargs)
+            yield model_json
+
+    async def ignore_delta(_delta: object) -> None:
+        return None
+
+    async def collect() -> AiCoachChatResponseInternalV1:
+        result = await emit_streamed_response(
+            llm=FakeLLM(),
+            parser=AiCoachChatResponseParser(),
+            contract=_compiled_chat_contract(),
+            config=AiCoachConfig(enabled=True),
+            session_id="session-1",
+            max_attempts=1,
+            failure_message="生成失败",
+            on_generation_delta=ignore_delta,
+        )
+        return result.response
+
+    parsed = asyncio.run(collect())
+
+    assert parsed.assistant_text == "可以，我们先做一组商务礼仪情境卡。"
+    assert captured["response_format"] == AI_COACH_JSON_RESPONSE_FORMAT
+
+
+def test_streamed_chat_generation_emits_reasoning_delta() -> None:
+    model_json = json.dumps(_chat_response(card_count=0), ensure_ascii=False)
+    deltas: list[AiCoachGenerationDelta] = []
+
+    class FakeLLM:
+        async def stream_generate_chunks(self, **_kwargs: object):
+            yield SimpleNamespace(text="", reasoning_text="先判断客户场景。")
+            yield SimpleNamespace(text=model_json, reasoning_text="")
+
+    async def collect_delta(delta: AiCoachGenerationDelta) -> None:
+        deltas.append(delta)
+
+    async def collect() -> AiCoachChatResponseInternalV1:
+        result = await emit_streamed_response(
+            llm=FakeLLM(),
+            parser=AiCoachChatResponseParser(),
+            contract=_compiled_chat_contract(),
+            config=AiCoachConfig(enabled=True),
+            session_id="session-1",
+            max_attempts=1,
+            failure_message="生成失败",
+            on_generation_delta=collect_delta,
+        )
+        return result.response
+
+    parsed = asyncio.run(collect())
+
+    assert parsed.assistant_text == "可以，我们先做一组商务礼仪情境卡。"
+    assert deltas[0].delta_type == "reasoning_text"
+    assert deltas[0].text == "先判断客户场景。"
+
+
+def test_streamed_chat_generation_does_not_emit_unvalidated_quiz_card_delta() -> None:
+    model_json = json.dumps(_chat_response(card_count=1), ensure_ascii=False)
+    deltas: list[AiCoachGenerationDelta] = []
+
+    class FakeLLM:
+        async def stream_generate_chunks(self, **_kwargs: object):
+            yield SimpleNamespace(text=model_json, reasoning_text="")
+
+    async def collect_delta(delta: AiCoachGenerationDelta) -> None:
+        deltas.append(delta)
+
+    async def collect() -> AiCoachChatResponseInternalV1:
+        result = await emit_streamed_response(
+            llm=FakeLLM(),
+            parser=AiCoachChatResponseParser(),
+            contract=_compiled_chat_contract(),
+            config=AiCoachConfig(enabled=True),
+            session_id="session-1",
+            max_attempts=1,
+            failure_message="生成失败",
+            on_generation_delta=collect_delta,
+        )
+        return result.response
+
+    parsed = asyncio.run(collect())
+
+    assert len(parsed.ui_events) == 1
+    assert {delta.delta_type for delta in deltas} == {"assistant_text"}
+
+
+def test_streamed_chat_generation_hides_retry_reasoning() -> None:
+    model_json = json.dumps(_chat_response(card_count=0), ensure_ascii=False)
+    deltas: list[AiCoachGenerationDelta] = []
+
+    class FakeLLM:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def stream_generate_chunks(self, **_kwargs: object):
+            self.calls += 1
+            if self.calls == 1:
+                yield SimpleNamespace(text="", reasoning_text="先拟一张训练卡。")
+                yield SimpleNamespace(text="not json", reasoning_text="")
+                return
+            yield SimpleNamespace(text="", reasoning_text="根据错误码修复 JSON。")
+            yield SimpleNamespace(text=model_json, reasoning_text="")
+
+    async def collect_delta(delta: AiCoachGenerationDelta) -> None:
+        deltas.append(delta)
+
+    async def collect() -> AiCoachChatResponseInternalV1:
+        result = await emit_streamed_response(
+            llm=FakeLLM(),
+            parser=AiCoachChatResponseParser(),
+            contract=_compiled_chat_contract(),
+            config=AiCoachConfig(enabled=True),
+            session_id="session-1",
+            max_attempts=2,
+            failure_message="生成失败",
+            on_generation_delta=collect_delta,
+        )
+        return result.response
+
+    parsed = asyncio.run(collect())
+
+    assert parsed.assistant_text == "可以，我们先做一组商务礼仪情境卡。"
+    assert [delta.text for delta in deltas] == ["先拟一张训练卡。"]
+
+
+def test_llm_chunk_extracts_deepseek_reasoning_shapes() -> None:
+    assert LLMService._chunk_reasoning_to_text(
+        SimpleNamespace(additional_kwargs={"reasoning_content": "先分析。"})
+    ) == "先分析。"
+    assert LLMService._chunk_reasoning_to_text(
+        SimpleNamespace(content=[{"type": "reasoning", "text": "再判断。"}])
+    ) == "再判断。"
+    assert LLMService._chunk_reasoning_to_text(
+        SimpleNamespace(response_metadata={"delta": {"reasoning_content": "后输出。"}})
+    ) == "后输出。"
+    assert LLMService._openai_stream_chunk_to_llm_chunk(
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(
+                        content=None,
+                        reasoning_content="官方流式思考。",
+                    )
+                )
+            ]
+        )
+    ).reasoning_text == "官方流式思考。"
 
 
 def test_score_event_rejects_duplicate_submission() -> None:
@@ -752,6 +986,64 @@ def test_score_event_rejects_duplicate_submission() -> None:
         )
 
     assert exc_info.value.code == "[AI_COACH_CHAT_EVENT_ALREADY_SUBMITTED]"
+
+
+def test_score_text_quiz_event_calls_ai_short_answer_scoring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeDb(_FakeDb):
+        async def get(self, _model: object, session_id: str) -> object:
+            assert session_id == "session-1"
+            return SimpleNamespace(
+                config_snapshot={
+                    "scoring_prompt_template_id": "22222222-2222-2222-2222-222222222222",
+                    "scoring_prompt_revision_id": "rev-1",
+                    "scoring_contract_hash": "hash-score-1",
+                }
+            )
+
+    captured: dict[str, object] = {}
+
+    async def fake_score_short_answer(self, **kwargs: object) -> Result:
+        captured.update(kwargs)
+        return Result.ok(
+            AiCoachScoreResultV1(
+                score=82,
+                max_score=100,
+                feedback="回答能体现尊重和确认动作。",
+                missed_points=[],
+            )
+        )
+
+    monkeypatch.setattr(
+        "sales_trainer.services.ai_coach_session_service.AiCoachSessionService.score_short_answer",
+        fake_score_short_answer,
+    )
+    event = SimpleNamespace(
+        event_id="event-1",
+        session_id="session-1",
+        event_type="quiz_card",
+        status="pending",
+        payload_json={
+            "interaction_snapshot": _short_answer_interaction(),
+            "public_interaction": {},
+        },
+        answer_payload=None,
+    )
+    scorer = AiCoachChatScorer(FakeDb())  # type: ignore[arg-type]
+
+    result = asyncio.run(
+        scorer.score_quiz_event(
+            event,  # pyright: ignore[reportArgumentType]
+            answer_payload={"variant": "text", "text": "我会先确认来访目的和人数，再安排接待。"},
+        )
+    )
+
+    assert result.score == 82
+    assert captured["answer_text"] == "我会先确认来访目的和人数，再安排接待。"
+    assert captured["scoring_prompt_template_id"] == "22222222-2222-2222-2222-222222222222"
+    assert captured["scoring_prompt_revision_id"] == "rev-1"
+    assert captured["scoring_contract_hash"] == "hash-score-1"
 
 
 def test_projection_exposes_active_event_and_answering_phase() -> None:
@@ -1412,6 +1704,20 @@ def test_stream_submit_answer_manual_pace_skips_next_generation_statuses() -> No
 
         async def advance_after_scored_event(self, **_kwargs: object) -> None:
             calls.append("advance")
+            on_generation_delta = _kwargs.get("on_generation_delta")
+            if callable(on_generation_delta):
+                await on_generation_delta(
+                    AiCoachGenerationDelta(
+                        delta_type="reasoning_text",
+                        text="先判断是否继续同主题。",
+                    )
+                )
+                await on_generation_delta(
+                    AiCoachGenerationDelta(
+                        delta_type="assistant_text",
+                        text="**下一步**：继续练客户开场。",
+                    )
+                )
 
     async def collect_events() -> list[dict[str, object]]:
         service = AiCoachChatStreamService(  # type: ignore[arg-type]
@@ -1495,6 +1801,20 @@ def test_stream_submit_answer_auto_advance_emits_next_generation_statuses() -> N
 
         async def advance_after_scored_event(self, **_kwargs: object) -> None:
             calls.append("advance")
+            on_generation_delta = _kwargs.get("on_generation_delta")
+            if callable(on_generation_delta):
+                await on_generation_delta(
+                    AiCoachGenerationDelta(
+                        delta_type="reasoning_text",
+                        text="先判断是否继续同主题。",
+                    )
+                )
+                await on_generation_delta(
+                    AiCoachGenerationDelta(
+                        delta_type="assistant_text",
+                        text="**下一步**：继续练客户开场。",
+                    )
+                )
 
     async def collect_events() -> list[dict[str, object]]:
         service = AiCoachChatStreamService(  # type: ignore[arg-type]
@@ -1522,8 +1842,21 @@ def test_stream_submit_answer_auto_advance_emits_next_generation_statuses() -> N
         "answer_scored",
         "deciding_next_action",
         "generating_next_card",
+        "generating_next_card",
+        "generating_next_card",
         "completed",
     ]
+    assert [event["type"] for event in events] == [
+        "status",
+        "session_snapshot",
+        "status",
+        "status",
+        "reasoning_text_delta",
+        "assistant_text_delta",
+        "session_snapshot",
+    ]
+    assert events[4]["text"] == "先判断是否继续同主题。"
+    assert events[5]["text"] == "**下一步**：继续练客户开场。"
     assert calls == ["score", "advance"]
 
 

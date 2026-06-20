@@ -9,6 +9,7 @@ describe("normalizeInternalRecommendationPath", () => {
         ["/agents/agent-1?persona_id=persona-1", "/agents/agent-1?persona_id=persona-1"],
         ["/practice/session-1/report?focus=presentation_page&page=5", "/practice/session-1/report?focus=presentation_page&page=5"],
         ["/history", "/history"],
+        ["/sales-trainer/audio/ppt-unit", "/sales-trainer/audio/ppt-unit"],
     ])("allows known internal recommendation route %s", (targetPath, expected) => {
         expect(normalizeInternalRecommendationPath(targetPath)).toEqual({
             href: expected,

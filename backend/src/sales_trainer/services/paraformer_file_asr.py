@@ -67,7 +67,9 @@ class ParaformerFileASRProvider:
             response = await asyncio.to_thread(self._submit_and_wait, file_url)
         except ImportError:
             return Result.fail("[ASR_DASHSCOPE_SDK_REQUIRED]")
-        except (RuntimeError, ValueError, httpx.HTTPError):
+        except RuntimeError as exc:
+            return Result.fail(_safe_asr_error_code(str(exc), "[ASR_PROVIDER_FAILED]"))
+        except (ValueError, httpx.HTTPError):
             return Result.fail("[ASR_PROVIDER_FAILED]")
 
         output = _response_output(response)
@@ -107,16 +109,31 @@ class ParaformerFileASRProvider:
         kwargs = self._build_request_kwargs(file_url)
         task_response = client.async_call(**kwargs)
         if getattr(task_response, "status_code", None) != HTTPStatus.OK:
-            raise RuntimeError("[ASR_TASK_SUBMIT_FAILED]")
+            raise RuntimeError(
+                _classify_provider_response_error(
+                    task_response,
+                    fallback="[ASR_TASK_SUBMIT_FAILED]",
+                )
+            )
         task_id = str(_response_output(task_response).get("task_id") or "")
         if not task_id:
             raise RuntimeError("[ASR_TASK_ID_MISSING]")
         response = client.wait(task=task_id, api_key=self._api_key)
         if getattr(response, "status_code", None) != HTTPStatus.OK:
-            raise RuntimeError("[ASR_TASK_WAIT_FAILED]")
+            raise RuntimeError(
+                _classify_provider_response_error(
+                    response,
+                    fallback="[ASR_TASK_WAIT_FAILED]",
+                )
+            )
         output = _response_output(response)
         if output.get("task_status") == "FAILED":
-            raise RuntimeError("[ASR_TASK_FAILED]")
+            raise RuntimeError(
+                _classify_provider_output_error(
+                    output,
+                    fallback="[ASR_TASK_FAILED]",
+                )
+            )
         return response
 
     def _build_request_kwargs(self, file_url: str) -> dict[str, object]:
@@ -249,6 +266,86 @@ def _response_output(response: Any) -> dict[str, object]:
     if hasattr(output, "__dict__"):
         return dict(output.__dict__)
     raise RuntimeError("[ASR_RESPONSE_INVALID]")
+
+
+def _safe_asr_error_code(value: str, fallback: str) -> str:
+    cleaned = value.strip()
+    return cleaned if cleaned.startswith("[ASR_") and cleaned.endswith("]") else fallback
+
+
+def _classify_provider_response_error(response: Any, *, fallback: str) -> str:
+    status_code = getattr(response, "status_code", None)
+    pieces = [
+        str(getattr(response, "code", "") or ""),
+        str(getattr(response, "message", "") or ""),
+        str(getattr(response, "request_id", "") or ""),
+    ]
+    try:
+        output = _response_output(response)
+    except RuntimeError:
+        output = {}
+    return _classify_provider_error_parts(
+        pieces + _output_error_parts(output),
+        status_code=status_code,
+        fallback=fallback,
+    )
+
+
+def _classify_provider_output_error(output: dict[str, object], *, fallback: str) -> str:
+    return _classify_provider_error_parts(
+        _output_error_parts(output),
+        status_code=None,
+        fallback=fallback,
+    )
+
+
+def _output_error_parts(output: dict[str, object]) -> list[str]:
+    parts = [
+        str(output.get("code") or ""),
+        str(output.get("message") or ""),
+        str(output.get("task_status") or ""),
+    ]
+    results = output.get("results")
+    if isinstance(results, list):
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            parts.extend(
+                [
+                    str(item.get("code") or ""),
+                    str(item.get("message") or ""),
+                    str(item.get("subtask_status") or ""),
+                ]
+            )
+    return parts
+
+
+def _classify_provider_error_parts(
+    parts: Sequence[str],
+    *,
+    status_code: object,
+    fallback: str,
+) -> str:
+    text = " ".join(part for part in parts if part).lower()
+    if "arrearage" in text or "account is in good standing" in text:
+        return "[ASR_ACCOUNT_ARREARS]"
+    if "downloadfailed" in text or "download failed" in text:
+        return "[ASR_FILE_DOWNLOAD_FAILED]"
+    if (
+        status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN, 401, 403}
+        or "invalidapikey" in text
+        or "invalid api key" in text
+        or "accessdenied" in text
+    ):
+        return "[ASR_AUTH_FAILED]"
+    if (
+        status_code in {HTTPStatus.TOO_MANY_REQUESTS, 429}
+        or "throttl" in text
+        or "toomanyrequests" in text
+        or "rate limit" in text
+    ):
+        return "[ASR_RATE_LIMITED]"
+    return fallback
 
 
 def _select_successful_result(

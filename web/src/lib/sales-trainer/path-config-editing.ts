@@ -24,7 +24,7 @@ export interface PathBusinessBindingValue {
 
 const AUDIO_MODULE_DEFAULTS: Record<AudioEditableModuleKey, {
     readonly completionRule: "scored";
-    readonly moduleType: "audio_scoring";
+    readonly moduleType: "audio_scoring" | "audio_scoring_group";
     readonly orderIndex: number;
     readonly primaryActionLabel: string;
 }> = {
@@ -36,7 +36,7 @@ const AUDIO_MODULE_DEFAULTS: Record<AudioEditableModuleKey, {
     },
     elevator_pitch: {
         completionRule: "scored",
-        moduleType: "audio_scoring",
+        moduleType: "audio_scoring_group",
         orderIndex: 3,
         primaryActionLabel: "上传演讲录音",
     },
@@ -143,6 +143,7 @@ function defaultAudioModule(moduleKey: AudioEditableModuleKey): NewcomerPathModu
         review_action_label: null,
         guidance_templates: {},
         learning_units: defaultBusinessEtiquetteLearningUnits(),
+        duration_options: [],
     };
 }
 

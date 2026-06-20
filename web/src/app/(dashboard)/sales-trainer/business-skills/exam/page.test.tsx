@@ -143,9 +143,14 @@ describe("BusinessSkillsExamPage", () => {
         expect(screen.getByText("商务技巧考卷")).toBeTruthy();
         expect(screen.getByLabelText("正确")).toBeTruthy();
         expect(screen.getByLabelText("错误")).toBeTruthy();
+        expect((screen.getByLabelText("A") as HTMLInputElement).checked).toBe(false);
+        expect((screen.getByLabelText("错误") as HTMLInputElement).checked).toBe(false);
+        expect((screen.getByRole("button", { name: "提交考卷" }) as HTMLButtonElement).disabled).toBe(true);
+        expect(screen.getByText("所有题目完成后才能提交考卷。")).toBeTruthy();
 
         fireEvent.click(screen.getByLabelText("A"));
         fireEvent.click(screen.getByLabelText("错误"));
+        expect((screen.getByRole("button", { name: "提交考卷" }) as HTMLButtonElement).disabled).toBe(false);
         fireEvent.click(screen.getByRole("button", { name: "提交考卷" }));
 
         await waitFor(() => {

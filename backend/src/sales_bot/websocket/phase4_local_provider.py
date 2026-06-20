@@ -16,6 +16,24 @@ def should_use_phase4_local_provider() -> bool:
     return os.getenv("PHASE4_E2E_PROVIDER", "").strip().lower() == "local"
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[4]
+
+
+def _default_fixture_name(scenario_type: str | None) -> str:
+    if scenario_type == "presentation":
+        return "presentation-provider-script.v1.json"
+    return "sales-provider-script.v1.json"
+
+
+def _default_transcript_path(scenario_type: str | None) -> Path:
+    if scenario_type == "presentation":
+        name = "issue-44-provider-transcript.jsonl"
+    else:
+        name = "issue-43-provider-transcript.jsonl"
+    return _repo_root() / ".sisyphus" / "evidence" / name
+
+
 class Phase4LocalStepFunProvider:
     """Small WebSocket-like provider backed by a milestone fixture script."""
 
@@ -28,12 +46,19 @@ class Phase4LocalStepFunProvider:
         self._turn_index = 0
 
     @classmethod
-    def from_env(cls) -> Phase4LocalStepFunProvider:
-        fixture_name = os.getenv(
-            "PHASE4_E2E_PROVIDER_SCRIPT", "sales-provider-script.v1.json"
+    def from_env(cls, scenario_type: str | None = None) -> Phase4LocalStepFunProvider:
+        fixture_name = (
+            os.getenv(
+                "PHASE4_E2E_PROVIDER_SCRIPT", _default_fixture_name(scenario_type)
+            ).strip()
+            or _default_fixture_name(scenario_type)
         )
         transcript = os.getenv("PHASE4_E2E_PROVIDER_TRANSCRIPT", "").strip()
-        transcript_path = Path(transcript).expanduser().resolve() if transcript else None
+        transcript_path = (
+            Path(transcript).expanduser().resolve()
+            if transcript
+            else _default_transcript_path(scenario_type)
+        )
         return cls(load_versioned_fixture(fixture_name), transcript_path)
 
     async def send(self, raw_payload: str) -> None:

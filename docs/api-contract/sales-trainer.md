@@ -145,10 +145,10 @@ interface NewcomerTrainingPathModuleConfig {
 
 | module_key | 默认名称 | module_type | 默认 enabled | completion_rule | 必要绑定 | 管理入口 | 权限 | audit action |
 |---|---|---|---|---|---|---|---|---|
-| `ppt_explanation` | `PPT 讲解录音` | `"audio_scoring"` | `true` | `audio_scored` | `target_unit_id`、已发布材料、已发布评分提示词 | admin 新人训练路径模块/材料/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.ppt_explanation.*` |
-| `business_skills` | `商务技巧` | `"article_exam"` | `true` | `paper_passed` | `learning_content_id`、`exam_paper_id` | admin 新人训练路径文章绑定/考卷管理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_module.business_skills.*` |
-| `elevator_pitch` | `电梯演讲` | `"audio_scoring_group"` | `true` | `all_audio_options_scored` | `duration_options[].target_unit_id`、已发布评分提示词 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
-| `realtime_roleplay_placeholder` | `实时对练` | `"realtime_placeholder"` | `false` | `placeholder_disabled` | 无；只允许 `disabled_reason` | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
+| `ppt_explanation` | `PPT 讲解录音` | `"audio_scoring"` | `true` | `passed` | `target_unit_id`、已发布材料、已发布评分提示词 | admin 新人训练路径模块/材料/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_materials`、`sales_trainer.manage_prompts` | `newcomer_module.ppt_explanation.*` |
+| `business_skills` | `商务技巧` | `"article_exam"` | `true` | `passed` | `learning_content_id`、`exam_paper_id` | admin 新人训练路径文章绑定/考卷管理 | `sales_trainer.manage_modules`、`sales_trainer.manage_papers`、`learning_content.manage` | `newcomer_module.business_skills.*` |
+| `elevator_pitch` | `电梯演讲` | `"audio_scoring_group"` | `false` | `scored` | 默认不开放；后台启用前需补齐材料、`duration_options[].target_unit_id` 和已发布评分提示词 | admin 新人训练路径模块/评分方案 | `sales_trainer.manage_modules`、`sales_trainer.manage_prompts` | `newcomer_module.elevator_pitch.*` |
+| `realtime_roleplay_placeholder` | `实时对练` | `"realtime_placeholder"` | `false` | `placeholder_disabled` | `target_unit_id` 指向已发布占位展示单元；只允许 `disabled_reason`，不得绑定 runtime | admin 新人训练路径模块配置 | `sales_trainer.manage_modules` | `newcomer_module.realtime_placeholder.*` |
 
 ### 校验与兜底
 
@@ -158,7 +158,7 @@ interface NewcomerTrainingPathModuleConfig {
 - `"audio_scoring"` 模块必须绑定一个已发布 `audio_scoring` 单元、至少一个 required 材料绑定和已发布音频评分提示词；缺失返回 `[NEWCOMER_MODULE_BINDING_MISSING]`。
 - `"article_exam"` 模块必须绑定已发布 `LearningContent` 和已发布 `ExamPaper`；草稿或归档内容对 learner 返回 `[LEARNING_CONTENT_NOT_PUBLISHED]` 或 `[PAPER_NOT_PUBLISHED]`。
 - `"audio_scoring_group"` 模块必须至少有一个 duration option；每个 option 的 `duration_minutes` 必须大于 0，`target_unit_id` 必须指向已发布音频评分单元。
-- `"realtime_placeholder"` 默认 disabled；即使 enabled，也只能展示占位和 `disabled_reason`，不得调用 `/api/v1/practice/sessions`。
+- `"realtime_placeholder"` 默认 disabled；发布时必须绑定已发布占位展示单元，learner 只展示占位和 `disabled_reason`，不得调用 `/api/v1/practice/sessions`。
 - 非法 `module_type`、未知 `completion_rule`、重复 `module_key`、重复 `order_index` 或绑定不存在时，后台保存/发布返回 `[NEWCOMER_MODULE_CONFIG_INVALID]` 并写操作日志。
 - 配置读取失败或配置缺失时 learner 不展示伪成功；返回空路径、诊断错误或 disabled 模块，由 UI 显示可配置空状态。
 
@@ -172,23 +172,23 @@ interface NewcomerTrainingPathModuleConfig {
 - `chat_enabled=true`
 - `streaming_enabled=true`
 - `entry_resume_policy="latest_active_or_new"`；可选 `"latest_active_or_new" | "latest_in_progress" | "new"`。缺省会话创建请求必须读取该配置。
-- `generation_timeout_seconds=30`，范围 `5..120`
+- `generation_timeout_seconds=120`，范围 `5..120`
 - `coach_mode="mixed_drill"`
-- `allowed_interaction_types=["single_choice","multiple_choice"]`
-- `allowed_training_card_types=["scenario_judgment"]`；可选 `"scenario_judgment" | "expression_rewrite" | "role_response"`。安全默认只开启场景判断卡；启用改写卡或角色回应卡时必须同时启用 `"short_answer"` 并绑定 `scoring_prompt_template_id`。
+- `allowed_interaction_types=["single_choice","multiple_choice"]`；裸配置安全默认不启用简答，因为简答必须绑定评分 Prompt。商务礼仪 seed/admin 默认绑定评分 Prompt，并启用 `["single_choice","multiple_choice","short_answer"]`。
+- `allowed_training_card_types=["scenario_judgment"]`；可选 `"scenario_judgment" | "expression_rewrite" | "role_response"`。安全默认只开启场景判断卡；启用改写卡或角色回应卡时必须同时启用 `"short_answer"` 并绑定 `scoring_prompt_template_id`。商务礼仪 seed/admin 默认启用三类训练卡。
 - `allowed_ui_event_types=["quiz_card","explanation_card","summary_card","followup_prompt"]`
-- `max_cards_per_message=3`
+- `max_cards_per_message=1`
 - `proactive_coaching_enabled=false`；demo/local seed 为 `true`
-- `session_start_behavior="welcome_only"`；可选 `"welcome_only" | "plan_then_wait" | "plan_and_first_card"`，demo/local seed 为 `"plan_and_first_card"`
-- `auto_advance_enabled=false`；demo/local seed 也为 `false`，答题后默认停在反馈与下一步选择，不自动生成下一题
-- `max_auto_steps_per_session=5`，范围 `1..10`；demo/local seed 为 `1`，仅在管理员显式开启自动推进时生效
+- `session_start_behavior="welcome_only"`；可选 `"welcome_only" | "plan_then_wait" | "plan_and_first_card"`，demo/local seed 为 `"plan_then_wait"`
+- `auto_advance_enabled=false`；demo/local seed 为 `true`，但每次下一步生成仍最多只允许 1 张练习卡
+- `max_auto_steps_per_session=5`，范围 `1..10`；每轮仍最多生成 1 张练习卡，提交后可连续推进到下一步或阶段总结
 - `correct_streak_to_increase_difficulty=2`，范围 `1..10`
 - `incorrect_streak_to_remediate=1`，范围 `1..10`
 - `incorrect_streak_to_pause=2`，范围 `1..10` 且必须 `>= incorrect_streak_to_remediate`
 - `remediation_strategy="explain_then_retry"`；可选 `"explain_then_retry" | "ask_user_choice" | "simplify_then_retry"`
 - `summary_when_mastery_reached=true`
 - `allowed_next_actions=["continue_drill","increase_difficulty","remediate","switch_scenario","summarize","ask_user_choice","end_session"]`
-- `chat_welcome_message="你好，我是商务技巧 AI 教练。你可以直接说想练什么，我会把练习卡片放在对话里。"`
+- `chat_welcome_message="你好，我是商务技巧 AI 教练。你可以先说想练什么；需要验证时，我会在对话里放一张单选、多选或简答练习卡。"`
 - `empty_response_recovery_message="我没有拿到可操作的训练卡片。你可以继续下一题、换个场景，或先总结本轮。"`
 - `empty_response_recovery_prompts=["继续下一题","换个场景","总结本轮"]`，范围 `1..4` 个非空字符串
 - `generation_failure_recovery_message="我已保留当前训练局，但下一步训练生成失败。你可以让我重试、换主题，或先总结一下。"`
@@ -202,9 +202,10 @@ interface NewcomerTrainingPathModuleConfig {
 
 Learner 工作台 UI 配置：
 
-- 商务礼仪 AI 教练页面必须是“训练卡优先”的工作台，不是通用聊天页。当前 active `quiz_card` 是主视觉；历史消息只作为“对话证据”辅助展示。
+- 商务礼仪 AI 教练页面必须是 Chat-First 工作台：AI 文本、学员消息、单选/多选/简答/改写/角色回应卡都在同一条对话时间线中渲染。练习卡是教练按需调用的工具结果，不是每轮强制主流程。
+- 页面首屏只保留轻量标题、当前小单元和训练状态；“教练判断/完整结论”不得常驻首屏，只有提交卡片后在卡片附近展示简短反馈，结束总结时通过 `summary_card` 展示完整结论。
 - `web/src/app/(dashboard)/sales-trainer/business-skills/coach/coach-workbench-config.ts` 是 Slice 7 的前端集中配置来源，包含页面文案、按钮文案、训练状态标签、是否展示自由追问、是否允许跳过当前卡片。
-- 默认 `showFreeFollowup=true`，自由追问只调用 chat message stream，不提交训练卡答案，也不得绕过 `active_event_id` 对应的训练卡状态机。
+- 默认 `showFreeFollowup=true`，自由追问只调用 chat message stream；它可以解释、追问和生成可选练习卡，但正式训练进度只根据已提交训练卡和总结推进。
 - 默认 `allowSkipActiveCard=false`，存在 active pending `quiz_card` 时“继续下一题”命令禁用；如未来放开，必须迁移为后端 `modules[].ai_coach` 配置并纳入 `sales_trainer.manage_modules` 权限、配置发布和操作日志。
 - 页面文案/按钮文案当前由前端集中配置治理；若需要运营后台调整，必须新增 `modules[].ai_coach.workbench_copy` 或等价配置对象，并定义字段校验、默认值、回滚和审计。
 
@@ -296,6 +297,15 @@ type AiCoachChatResponseInternalV1 = {
 };
 ```
 
+Chat-First 运行时语义：
+
+- 后端提示词必须让 AI 先判断本轮动作：自然聊天、解释、追问、调用练习工具、批改后反馈或结束总结。普通聊天允许只返回 `assistant_text`，不得为了推进流程强行生成题。
+- AI 教练生成链路必须在调用 LLM 时传入 OpenAI-compatible `response_format={"type":"json_object"}`，这是调用级约束，不写入全局模型配置，避免影响报告、普通文本生成等非 JSON 消费方。
+- `quiz_card` 是工具调用结果，不是固定下一步。需要检测概念理解时可生成 `scenario_judgment` 单选/多选；需要表达训练时可生成 `expression_rewrite` 或 `role_response` 简答卡。
+- 每个 assistant turn 最多 1 张 `quiz_card`；如果 active pending `quiz_card` 已存在，AI 应优先解释当前卡或回答问题，除非用户明确换题或后端动作要求切换。
+- `mixed_drill` 表示“由教练判断是否调用练习工具”，不等同于随机出选择题。
+- 简答卡提交必须调用 `scoring_prompt_template_id` 对应的评分 Prompt 和模型；不得使用前端规则、文本长度或静态答案直接冒充 AI 评分。
+
 Learner public projection:
 
 - 创建 session 请求：
@@ -323,13 +333,13 @@ Learner public projection:
 - 后端只接受 `allowed_ui_event_types` 中的事件类型；未知类型返回 `[AI_COACH_UI_EVENT_TYPE_NOT_ALLOWED]` 或 `[AI_COACH_INTERACTION_INVALID:*]`。
 - 单轮 `quiz_card` 数量超过 `max_cards_per_message` 时返回 `[AI_COACH_INTERACTION_INVALID]`。
 - `next_coach_action` 生成结果还必须满足动作级 UI 约束；不匹配时返回或记录 `[AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]`：
-  - `continue_drill` / `increase_difficulty`：只能生成 1 张 `quiz_card`。
-  - `remediate`：必须生成 1 张 `explanation_card` 和 1 张 `quiz_card`。
-  - `switch_scenario`：必须生成 1 张 `quiz_card`，可附 1 个 `followup_prompt`。
+  - `continue_drill` / `increase_difficulty`：最多生成 1 张 `quiz_card`，可附 1 个 `followup_prompt`；也允许只用 `assistant_text` 解释或追问。
+  - `remediate`：最多生成 1 张 `explanation_card` 和 1 张 `quiz_card`，可附 1 个 `followup_prompt`。
+  - `switch_scenario`：最多生成 1 张 `quiz_card` 或 1 张 `explanation_card`，可附 1 个 `followup_prompt`。
   - `summarize`：必须生成 1 张 `summary_card`，可附 1 个 `followup_prompt`，不得生成新题。
   - `ask_user_choice`：必须只生成 1 个 `followup_prompt`。
   - `end_session`：必须只生成 1 张 `summary_card`。
-- `plan_and_first_card` 开局也必须满足 `continue_drill` 的动作级 UI 约束，只生成 1 张首题卡。首卡生成失败时不应让 learner 页面进入笼统网络错误；后端必须记录 failed action，并返回安全 `followup_prompt` 作为可恢复状态。
+- `plan_and_first_card` 作为兼容旧配置仍可用，但也必须满足 `continue_drill` 的动作级 UI 约束，只生成 1 张首题卡。商务礼仪默认使用 `plan_then_wait`，先欢迎和对话，再按需调用练习工具。
 - 提交 `quiz_card` 答案时，后端先持久化答案、评分和 `ai_coach_chat_card_submitted_v1` 操作日志，再调用 LLM 生成下一步，避免 LLM 调用期间持有评分事务。
 - `failure_behavior="abort"` 时，下一步生成失败会记录 `sales_trainer_ai_coach_coach_actions.status="failed"` 和 `ai_coach_chat_next_action_failed_v1` 操作日志，并向 API 调用方返回 typed error；`skip_turn` / `continue_with_fallback` 时，评分保留，追加安全 `followup_prompt`，同样记录 failed action 和 error_code。
 - `chat_enabled=false`、`enabled=false`、缺少生成 Prompt、配置非法或 prompt revision 不可用时，直达 chat URL 显示明确不可用/不可重试错误；前端不得展示旧考试页替代。
@@ -337,13 +347,21 @@ Learner public projection:
 SSE 流式响应契约：
 
 - 以上三个 `*/stream` 端点返回 `Content-Type: text/event-stream`。
-- 每个 frame 的 `event` 与 JSON `data.type` 一致，取值为 `"status" | "ui_event_delta" | "session_snapshot" | "error"`。
+- 每个 frame 的 `event` 与 JSON `data.type` 一致，取值为 `"status" | "reasoning_text_delta" | "assistant_text_delta" | "ui_event_delta" | "session_snapshot" | "error"`。
 - `status` frame：
   - `phase: "resolving_session" | "creating_session" | "session_ready" | "saving_user_message" | "scoring_answer" | "answer_scored" | "deciding_next_action" | "generating_first_card" | "generating_next_card" | "completed" | "failed"`
   - `message: string`
   - `session_id?: string | null`
+- `reasoning_text_delta` frame：
+  - 仅用于透传模型供应商显式返回的推理文本。DeepSeek OpenAI-compatible 流式响应读取 `chunk.choices[0].delta.reasoning_content`；不得用前端假步骤、`assistant_text` 或 raw prompt 冒充。
+  - `text` 是 reasoning 增量文本；前端可以折叠或限制高度展示，不能当作可提交训练证据，也不能写入最终 assistant message。
+- `assistant_text_delta` frame：
+  - 用于流式预览 AI 教练正文，通常出现在 `phase="generating_first_card"` 或 `phase="generating_next_card"`。
+  - `text` 是当前已可公开展示的 `assistant_text` 增量快照，可包含 Markdown；前端必须按安全 Markdown 渲染，不能执行 HTML、JSX、脚本或组件树。
+  - `assistant_text_delta` 是最终回复预览，不是思考过程；前端不得把它标记为「思考过程」。
 - `ui_event_delta` frame：
   - 用于 AI 教练生成中可渲染预览，只能出现在 `phase="generating_first_card"` 或 `phase="generating_next_card"`。
+  - 商务技巧 AI 教练默认可以不发送 `ui_event_delta`；当模型输出仍待后端完整 JSON 解析与契约校验时，后端必须等待最终 `session_snapshot`，不得把半截题卡草稿展示给学员。
   - `event_type="quiz_card"`，`status="streaming"`，`delta_id` 在同一次生成内稳定。
   - `payload.interaction` 使用 `ai_coach_interaction_public_draft_v1`，只允许公开渲染字段：`training_card_type`、`interaction_type`、`stem`、`options.option_id`、`options.text`、`answer_constraints`、`capability_keys`、`source_chapter_orders`、`is_complete=false`。
   - `ui_event_delta` 不代表已持久化事件，前端必须禁用作答、提交、评分；只有最终 `session_snapshot.ui_events[].event_id` 才能作为提交答案的目标。
@@ -917,13 +935,15 @@ Response `data`: `SalesTrainerUnitBrief`
 
 下载 learner 可见的已发布训练材料版本。
 
+- Query:
+  - `disposition?: "attachment" | "inline"`，默认 `attachment`。学员页在线预览音频、视频、PDF、Markdown 等材料时使用 `inline`；下载按钮使用默认下载语义。
 - 本地存储: 返回 `200` 文件内容。
 - 对象存储: 返回 `302` 短期签名下载 URL。
 - 版本不存在或未发布返回 `[MATERIAL_VERSION_NOT_PUBLISHED]`。
 
 ### `POST /api/v1/sales-trainer/quiz-attempts`
 
-提交做题结果。仅允许提交 `quiz` 类型且已发布训练单元。
+提交做题结果。仅允许提交 `quiz` 类型且已发布训练单元。`answers[].question_id` 必须属于该训练单元；缺少任一题答案、单选/判断为空、多选为空或简答为空时返回 422 `[QUIZ_ANSWER_INCOMPLETE]`，message 固定为 `请完成全部题目后再提交。`，不得创建 attempt、不得评分。
 
 Request:
 
@@ -947,7 +967,7 @@ Response `data`: `ExamPaper`
 
 ### `POST /api/v1/sales-trainer/paper-attempts`
 
-提交已发布考卷答案。服务端按 `paper_id` 找到考卷 active revision 和兼容 quiz 执行单元并复用当前题型评分逻辑。`answers[].question_id` 必须属于该考卷当前 active revision，额外题目返回 `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]`。如果当前新人训练路径把该考卷或 backing unit 绑定为 `article_exam`，提交前必须完成当前绑定文章的全部章节阅读；未完成返回 403 `[NEWCOMER_ARTICLE_PROGRESS_REQUIRED]`，不得进入评分。提交成功后，attempt 必须记录当时的 `paper_revision_id`；answer payload 必须冻结题目快照和 `attempt_context`，其中包含提交时命中的 `path_key`、`path_revision_id`、`path_revision_no`、`module_key`、`paper_revision_id`。旧数据无法可靠匹配路径修订时返回 `legacy_snapshot_only=true`，不得从最新路径配置伪造历史 revision。简答题 AI 批改依赖外部模型配置；外部模型鉴权、连接、超时或重试失败时，服务端必须保存本次提交与答案快照，返回 `status="submitted"`、简答题 `score=null`，不得因批改服务不可用让整张考卷提交失败。
+提交已发布考卷答案。服务端按 `paper_id` 找到考卷 active revision 和兼容 quiz 执行单元并复用当前题型评分逻辑。`answers[].question_id` 必须属于该考卷当前 active revision，额外题目返回 `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]`；缺少任一题答案、单选/判断为空、多选为空或简答为空时返回 422 `[QUIZ_ANSWER_INCOMPLETE]`，message 固定为 `请完成全部题目后再提交。`，不得创建 attempt、不得评分。如果当前新人训练路径把该考卷或 backing unit 绑定为 `article_exam`，提交前必须完成当前绑定文章的全部章节阅读；未完成返回 403 `[NEWCOMER_ARTICLE_PROGRESS_REQUIRED]`，不得进入评分。提交成功后，attempt 必须记录当时的 `paper_revision_id`；answer payload 必须冻结题目快照和 `attempt_context`，其中包含提交时命中的 `path_key`、`path_revision_id`、`path_revision_no`、`module_key`、`paper_revision_id`。旧数据无法可靠匹配路径修订时返回 `legacy_snapshot_only=true`，不得从最新路径配置伪造历史 revision。简答题 AI 批改依赖外部模型配置；外部模型鉴权、连接、超时或重试失败时，服务端必须保存本次提交与答案快照，返回 `status="submitted"`、简答题 `score=null`，不得因批改服务不可用让整张考卷提交失败。
 
 Request:
 
@@ -1055,7 +1075,7 @@ Form fields:
 | `purpose` | string | 否 | 默认 `general_audio_scoring` |
 | `duration_seconds` | number | 否 | 可选元数据；不作为上传限制 |
 | `source_page` | string | 否 | 可选来源页面 |
-| `auto_process` | boolean | 否 | 默认 `true`，为 `true` 时触发转写和评分 |
+| `auto_process` | boolean | 否 | 默认 `true`，为 `true` 时在响应返回后调度转写和评分后台任务 |
 | `confirmed_material_version_id` | string | 否 | PPT 演练等要求确认材料版本时必填 |
 
 Response `data`: `AudioSubmission`
@@ -1086,6 +1106,8 @@ Response `data`: `AudioSubmission`
 
 提交规则:
 
+- `auto_process=true` 时，learner API 必须先返回 `status="uploaded"` 的提交记录，再调度后台转写和评分；结果页通过 `GET /audio-submissions/{submission_id}` 轮询 `transcribing -> transcribed -> scoring -> scored` 或失败状态。不得让上传请求同步等待完整 ASR/评分流程。
+- `auto_process=false` 只登记提交，不调度后台任务；主要用于测试、排障或管理员手动处理。
 - 非 PPT 普通录音沿用旧闭环，未绑定材料时仍可提交。
 - `purpose` 或训练单元配置解析为 `ppt_pitch` 时，训练单元必须绑定至少一个 required 且 confirmation_required 的已发布材料，否则返回 `[PPT_MATERIAL_BINDING_REQUIRED]`。
 - 绑定材料要求确认时，`confirmed_material_version_id` 必须匹配当前要求版本，否则返回 `[MATERIAL_VERSION_CONFIRMATION_REQUIRED]` 或 `[MATERIAL_VERSION_CONFIRMATION_OUTDATED]`。
@@ -1572,6 +1594,7 @@ interface BusinessEtiquetteQuestionDraftRejectRequest {
 - `question_types` 只能包含单选、多选、简答；`draft_count` 范围 `1..10`；能力点必须存在且未归档。
 - Prompt 模板不存在、停用、ID 非法、用途不匹配、schema 不匹配或编译失败，分别返回 `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_NOT_FOUND]`、`[BUSINESS_ETIQUETTE_QUESTION_PROMPT_INACTIVE]`、`[BUSINESS_ETIQUETTE_QUESTION_PROMPT_INVALID]`、`[BUSINESS_ETIQUETTE_QUESTION_PROMPT_PURPOSE_MISMATCH]`、`[BUSINESS_ETIQUETTE_QUESTION_PROMPT_SCHEMA_MISMATCH]` 或 `[BUSINESS_ETIQUETTE_QUESTION_PROMPT_COMPILE_FAILED:*]`。
 - `business_purpose="business_etiquette_question_generation"` 的模板仍必须满足题目草稿生成 contract；如果模板正文或变量明显属于 `ai_coach_interaction_v1` 互动卡片 contract，后端必须拒绝，不能进入 LLM 调用。
+- 题目草稿生成 LLM 调用必须声明 OpenAI 兼容 `response_format={"type":"json_object"}`；模板可以承载出题方法论、难度分布和质量检查，但最终输出仍必须是 `drafts`/`questions` JSON，不得输出 Markdown/HTML 页面或绕过 `draft_count` 批量生成。
 - 管理端学习内容详情页必须以下拉方式选择 Prompt 模板；模板配置入口为 `/admin/prompts`。可选模板必须优先按 `business_purpose="business_etiquette_question_generation"` 精确筛选；旧数据缺少 `business_purpose` 时，仅允许来自 `category="business_etiquette"`、`category="sales_trainer_ai_coach"` 或历史 `category="sales_trainer"` 且明显为题目生成用途的启用模板作为兼容回退。不得回退展示所有启用模板，不得把销售总结、欢迎词、PPT 提取或 `business_purpose="ai_coach_conversation_generation"` 的 AI 对话教练系统提示词混入题目生成下拉，不得要求运营手填 `PromptTemplate` UUID。
 - 管理端学习内容详情页必须以下拉方式选择 LLM 模型配置；模型配置入口为 `/admin/settings` 的「模型配置」标签。`model_config.model_config_id` 只能指向 active LLM 配置；不存在、停用或非 LLM 分别返回 `[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_NOT_FOUND]`、`[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_INACTIVE]`、`[BUSINESS_ETIQUETTE_QUESTION_MODEL_CONFIG_INVALID]`。
 - AI 输出必须是 JSON，顶层包含 `drafts` 或 `questions` 数组；任一题结构非法时整批失败，返回 `[BUSINESS_ETIQUETTE_QUESTION_GENERATION_INVALID_SCHEMA]`，不得写入部分草稿。
@@ -2498,7 +2521,8 @@ interface OperationLogListResponse {
 | `[SALES_TRAINER_QUIZ_HAS_NO_QUESTIONS]` | 400 | learner 提交没有题目的 quiz 单元 |
 | `[QUIZ_PASS_THRESHOLD_INVALID]` | 400 | 做题通过线配置非法 |
 | `[QUIZ_ATTEMPT_NOT_FOUND]` | 404 | 做题记录不存在 |
-| `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]` | 400 | 提交了不属于该单元的题目 |
+| `[QUIZ_ANSWER_QUESTION_NOT_IN_UNIT]` | 422 | 提交了不属于该单元的题目 |
+| `[QUIZ_ANSWER_INCOMPLETE]` | 422 | 提交考卷缺题或存在空答案 |
 | `[SHORT_ANSWER_AI_SCORING_FAILED]` | 无 HTTP 错误；提交成功并保持 `submitted` | 简答题外部 AI 批改鉴权、连接、超时或重试失败，答案已保存但该题未评分 |
 | `[QUESTION_TYPE_UNSUPPORTED]` | 422 | 当前题型或题库结构不支持自动判分或展示 |
 | `[AUDIO_TYPE_NOT_ALLOWED]` | 422 | 音频格式不在允许列表 |
@@ -2568,6 +2592,13 @@ interface OperationLogListResponse {
 | `[MATERIAL_FILE_NOT_FOUND]` | 404 | 材料文件不存在 |
 | `[MATERIAL_FILE_ACCESS_DENIED]` | 403 | 本地材料文件不在允许存储目录内 |
 | `[MATERIAL_FILE_URL_EXPIRES_CONFIG_INVALID]` | 500 | 材料文件访问链接有效期配置非法 |
+| `[ASR_ACCOUNT_ARREARS]` | 402/502 | ASR 供应商账户欠费或不可用，需要管理员处理账户状态后重试 |
+| `[ASR_AUTH_FAILED]` | 401/403/502 | ASR API Key 或供应商鉴权失败 |
+| `[ASR_RATE_LIMITED]` | 429/502 | ASR 供应商限流，需要稍后重试 |
+| `[ASR_FILE_DOWNLOAD_FAILED]` | 502 | ASR 供应商无法下载提交音频，需检查对象存储签名 URL、权限或文件可访问性 |
+| `[ASR_TASK_SUBMIT_FAILED]` | 502 | ASR 任务提交失败，未命中更具体供应商错误 |
+| `[ASR_TASK_WAIT_FAILED]` | 502 | ASR 任务轮询失败，未命中更具体供应商错误 |
+| `[ASR_TASK_FAILED]` | 502 | ASR 任务执行失败，未命中更具体供应商错误 |
 | `[TRAINING_RECORD_TYPE_INVALID]` | 400 | 统一训练记录详情的 `record_type` 不是 `audio_submission`、`quiz_attempt` 或 `ai_coach_session` |
 | `[TRAINING_RECORD_NOT_FOUND]` | 404 | 训练记录不存在 |
 
@@ -2594,8 +2625,8 @@ interface OperationLogListResponse {
 | `SALES_TRAINER_ASR_MODEL` | `fun-asr` | DashScope 文件识别 | 环境配置/系统配置 | `language_hints` 仅在 `paraformer-v2` 时传入 |
 | `SALES_TRAINER_MANAGER_ROLES` | `support,training_lead,training_manager` | 培训负责人记录查看能力兼容配置 | 环境配置/系统配置 | 逗号分隔角色列表；缺失使用默认培训负责人角色；只授予团队记录读取能力，不授予内容管理、日志、配置健康或任务重试能力 |
 | `sales_trainer.phase2.closed_loop_policy` | `sales_trainer_phase2_closed_loop_policy_v1`、`enabled=true`、`low_score_threshold=70`、`repeat_practice_threshold=2`、`dashboard_record_limit=500`、默认主管动作与补救动作 | 阶段 2 训练记录投影、能力画像、补救动作、管理者看板和 settings 策略摘要 | `/admin/business-rules/sales-trainer-phase2`，复用 `BusinessRuleConfig` 发布/回滚/禁用/审计 | 阈值范围 `0..100`、`1..20`、`1..5000`；action code/record_type 必须覆盖且不重复；文案/模板非空；缺失、非法或 disabled 使用 bundled default，并返回 `phase2_policy.fallback_applied=true` |
-| `modules[].ai_coach.allowed_training_card_types` | `["scenario_judgment"]` | 新人训练路径 active/working revision 的 `business_skills.ai_coach` | `/admin/sales-trainer/ai-coach` | 至少 1 项，只允许 `scenario_judgment`、`expression_rewrite`、`role_response`；改写/角色回应必须同时启用 `short_answer` 并绑定评分 prompt；非法保存返回 Pydantic 校验错误，运行时输出不命中返回 `[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]` |
-| `BUSINESS_SKILLS_COACH_WORKBENCH_COPY` | 页面标题、训练卡工作台、教练反馈、结束面板、按钮和空状态文案 | `web/src/app/(dashboard)/sales-trainer/business-skills/coach/coach-workbench-config.ts` | 当前为前端集中配置；未来运营可调时迁移到 `/admin/sales-trainer/ai-coach` | 必须非空、语义与训练工作台一致；缺失会在构建/类型检查阶段暴露；当前不支持后台热更新 |
+| `modules[].ai_coach.allowed_training_card_types` | 裸默认 `["scenario_judgment"]`；商务礼仪 seed/admin 默认 `["scenario_judgment","expression_rewrite","role_response"]` | 新人训练路径 active/working revision 的 `business_skills.ai_coach` | `/admin/sales-trainer/ai-coach` | 至少 1 项，只允许 `scenario_judgment`、`expression_rewrite`、`role_response`；改写/角色回应必须同时启用 `short_answer` 并绑定评分 prompt；非法保存返回 Pydantic 校验错误，运行时输出不命中返回 `[AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]` |
+| `BUSINESS_SKILLS_COACH_WORKBENCH_COPY` | 页面标题、聊天工作台、教练反馈、结束面板、按钮和空状态文案 | `web/src/app/(dashboard)/sales-trainer/business-skills/coach/coach-workbench-config.ts` | 当前为前端集中配置；未来运营可调时迁移到 `/admin/sales-trainer/ai-coach` | 必须非空、语义与 Chat-First 教练工作台一致；缺失会在构建/类型检查阶段暴露；当前不支持后台热更新 |
 | `BUSINESS_SKILLS_COACH_WORKBENCH_RULES.showFreeFollowup` | `true` | 同上 | 当前为前端集中配置；未来迁移到 `modules[].ai_coach` | `true` 时自由追问只走 chat message stream；`false` 时隐藏输入框；不得替代训练卡提交 |
 | `BUSINESS_SKILLS_COACH_WORKBENCH_RULES.allowSkipActiveCard` | `false` | 同上 | 当前为前端集中配置；未来迁移到 `modules[].ai_coach`，由 `sales_trainer.manage_modules` 管理 | `false` 时 active pending 训练卡存在则禁用“继续下一题”；如配置为 `true` 必须确认不会破坏达标状态机 |
 | `DEUCATE_BASE_URL` | 无 | Deucate 评分服务 | 环境配置/模型配置 | 缺失返回 `[DEUCATE_CONFIG_MISSING]` |
@@ -2641,6 +2672,12 @@ interface OperationLogListResponse {
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-06-17 | AI 教练停止流式展示未校验题卡草稿 | 题卡必须等完整 JSON 解析、schema 校验和持久化后的 `session_snapshot` 展示；重试修复过程不向前端流 reasoning |
+| 2026-06-17 | AI 教练默认生成超时调整为 120 秒并新增 `reasoning_text_delta` | DeepSeek reasoning 走 `delta.reasoning_content` 原始流；前端不得用最终回复或假步骤冒充思考 |
+| 2026-06-17 | 明确新人训练路径音频组与实时占位发布契约 | `audio_scoring_group` 必须通过 `duration_options[]` 展开每个录音入口；`realtime_placeholder` 必须绑定已发布占位展示单元且不得调用实时 runtime |
+| 2026-06-16 | 新增 AI 教练 `assistant_text_delta` 流式正文契约 | 教练正文可先按 Markdown 流式预览；思考态只展示公开处理状态，不展示模型内部推理链 |
+| 2026-06-16 | AI 教练 LLM 调用增加 JSON response_format 约束 | Chat/下一步生成仍使用可选模型配置，但运行时强制 JSON object，减少模型自然语言输出导致的契约失败 |
+| 2026-06-16 | AI 教练改为 Chat-First 工具调用式契约 | 教练可先聊天/追问/解释，按需生成最多 1 张练习卡；商务礼仪默认启用单选、多选、简答、改写和角色回应，简答必须真实调用评分 Prompt |
 | 2026-06-15 | 新增 AI 教练 `ui_event_delta` 流式渲染契约 | 生成题卡时 SSE 可先返回公开题干/选项草稿；草稿不可提交且不得携带答案、评分规则或原始模型输出 |
 | 2026-06-14 | 新增商务礼仪训练包发布与重练治理契约 | 发布前影响分析覆盖章节、小单元、题目、草稿、能力点、AI 教练配置和旧学员；支持未来学员、自愿切换和指定重练三种策略 |
 | 2026-06-14 | 新增商务礼仪 AI 教练达标与补救流契约 | AI 教练训练卡写入能力点进度，按小单元配置判断达标、可上场、阻断和人工复盘 |

@@ -23,6 +23,7 @@ PathModuleBindingRef = tuple[
     str | None,
     str | None,
     str | None,
+    tuple[tuple[str, str, int, str, int], ...],
 ]
 
 NEWCOMER_PATH_RESOURCE_TYPE = "newcomer_training_path"
@@ -133,6 +134,10 @@ def canonical_path_module_key(
 def path_config_from_module(
     payload: NewcomerPathConfigPayload,
     module: NewcomerPathModuleConfig,
+    *,
+    target_unit_id: str | None = None,
+    level_title: str | None = None,
+    order_index: int | None = None,
 ) -> SalesTrainerPathConfig:
     return SalesTrainerPathConfig(
         enabled=module.enabled,
@@ -141,10 +146,10 @@ def path_config_from_module(
         module_type=module.module_type,
         path_title=payload.title,
         goal_title=payload.goal_title,
-        level_title=module.title,
+        level_title=level_title or module.title,
         level_description=module.description,
-        order_index=module.order_index,
-        target_unit_id=module.target_unit_id,
+        order_index=order_index or module.order_index,
+        target_unit_id=target_unit_id or module.target_unit_id,
         learning_content_id=module.learning_content_id,
         exam_paper_id=module.exam_paper_id,
         material_id=module.material_id,
@@ -222,6 +227,19 @@ def _module_refs(payload: NewcomerPathConfigPayload) -> list[PathModuleBindingRe
             module.material_id,
             module.material_version_id,
             module.scoring_prompt_id,
+            tuple(
+                (
+                    option.option_key,
+                    option.target_unit_id,
+                    option.duration_minutes,
+                    option.display_name,
+                    option.order_index,
+                )
+                for option in sorted(
+                    module.duration_options,
+                    key=lambda item: (item.order_index, item.option_key),
+                )
+            ),
         )
         for module in sorted(payload.modules, key=lambda item: item.order_index)
     ]

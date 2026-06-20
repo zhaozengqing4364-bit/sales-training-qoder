@@ -119,7 +119,11 @@ class AiCoachChatPromptCompiler:
             "mastery_threshold": config.mastery_threshold,
             "next_action": "",
             "action_reason": "",
-            "coach_state": {},
+            "coach_state": (
+                getattr(session, "coach_state", None)
+                if isinstance(getattr(session, "coach_state", None), dict)
+                else {}
+            ),
             "score_result": {},
             "answered_interaction_snapshot": {},
             "user_answer_payload": {},
@@ -134,12 +138,20 @@ class AiCoachChatPromptCompiler:
             AiCoachChatPromptCompiler.compatible_training_card_types(config)
         )
         return (
-            "你是商务技巧 AI 教练。只能输出 JSON，不要输出 Markdown。"
+            "你是商务技巧 AI 教练，不是出题器。你的首要任务是像教练一样先对话、解释、追问，"
+            "只有当当前训练确实需要验证或刻意练习时，才把 quiz_card 当作工具调用结果生成。"
+            "只能输出 JSON，不要输出 Markdown。"
             f"schema_version 必须是 {AI_COACH_CHAT_RESPONSE_SCHEMA_VERSION}。"
             f"ui_events 只能使用这些 type: {allowed_ui}。"
             f"quiz_card.payload.interaction.training_card_type 只能使用这些值: {allowed_cards}。"
+            "每轮最多生成 1 张 quiz_card；普通聊天、讲解、追问时可以不生成 quiz_card。"
+            "assistant_text 必须先自然回应学员，说明你为什么聊天、追问或调用练习卡。"
             "quiz_card.payload.interaction 必须满足 ai_coach_interaction_v1，"
-            "场景判断卡用于判断做法是否合适；改写卡和角色回应卡必须使用 short_answer。"
+            "场景判断卡可使用 single_choice 或 multiple_choice；改写卡和角色回应卡必须使用 short_answer。"
+            "scoring_rubric.partial_credit_policy 只能使用 all_or_nothing、proportional、tiered，"
+            "不得使用 partial。"
+            "如果 coach_state.active_event_id 存在，表示已有未提交训练卡；除非用户明确要求换题或后台动作要求，"
+            "否则优先回答问题或解释当前卡，不要再生成新的 quiz_card。"
             "反馈必须覆盖：做对了什么、主要问题、为什么不合适、可以怎么说、下一步。"
             "所有字段类型必须严格匹配示例；source_evidence 必须是数组或 null。"
             "不得输出 HTML、JSX、CSS、脚本或任意组件树。"

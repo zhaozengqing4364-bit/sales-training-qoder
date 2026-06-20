@@ -13,17 +13,21 @@ from sales_trainer.ai_coach_chat_schemas import (
     AiCoachChatEventAnswerSubmit,
     AiCoachChatMessageCreate,
     AiCoachChatSessionCreate,
+    AiCoachChatStreamAssistantTextDeltaEventV1,
     AiCoachChatStreamErrorEventV1,
     AiCoachChatStreamEventV1,
+    AiCoachChatStreamReasoningTextDeltaEventV1,
     AiCoachChatStreamSessionSnapshotEventV1,
     AiCoachChatStreamStatusEventV1,
     AiCoachChatStreamUiEventDeltaEventV1,
-    AiCoachQuizCardDraftPayloadPublicV1,
 )
 from sales_trainer.services.ai_coach_chat_errors import (
     AI_COACH_STREAM_TIMEOUT_CODE,
     AI_COACH_STREAM_TIMEOUT_MESSAGE,
     AiCoachChatServiceError,
+)
+from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AiCoachGenerationDelta,
 )
 from sales_trainer.services.ai_coach_chat_service import AiCoachChatService
 
@@ -327,25 +331,59 @@ class AiCoachChatStreamService:
         session_id: str,
         phase,
     ):
-        queue: asyncio.Queue[AiCoachChatStreamUiEventDeltaEventV1] = asyncio.Queue()
+        queue: asyncio.Queue[
+            AiCoachChatStreamReasoningTextDeltaEventV1
+            | AiCoachChatStreamAssistantTextDeltaEventV1
+            | AiCoachChatStreamUiEventDeltaEventV1
+        ] = asyncio.Queue()
 
-        async def on_delta(draft: AiCoachQuizCardDraftPayloadPublicV1) -> None:
-            await queue.put(
-                AiCoachChatStreamUiEventDeltaEventV1(
-                    phase=phase,
-                    session_id=session_id,
-                    delta_id=f"{session_id}:quiz_card",
-                    payload=draft,
+        async def on_delta(delta: AiCoachGenerationDelta) -> None:
+            if delta.delta_type == "reasoning_text" and delta.text:
+                await queue.put(
+                    AiCoachChatStreamReasoningTextDeltaEventV1(
+                        phase=phase,
+                        session_id=session_id,
+                        delta_id=f"{session_id}:reasoning_text",
+                        text=delta.text,
+                    )
                 )
-            )
+                return
+            if delta.delta_type == "assistant_text" and delta.text:
+                await queue.put(
+                    AiCoachChatStreamAssistantTextDeltaEventV1(
+                        phase=phase,
+                        session_id=session_id,
+                        delta_id=f"{session_id}:assistant_text",
+                        text=delta.text,
+                    )
+                )
+                return
+            if delta.delta_type == "quiz_card" and delta.quiz_card is not None:
+                await queue.put(
+                    AiCoachChatStreamUiEventDeltaEventV1(
+                        phase=phase,
+                        session_id=session_id,
+                        delta_id=f"{session_id}:quiz_card",
+                        payload=delta.quiz_card,
+                    )
+                )
 
         return queue, on_delta
 
     @staticmethod
     async def _poll_delta(
         task: asyncio.Task,
-        queue: asyncio.Queue[AiCoachChatStreamUiEventDeltaEventV1],
-    ) -> AiCoachChatStreamUiEventDeltaEventV1 | None:
+        queue: asyncio.Queue[
+            AiCoachChatStreamReasoningTextDeltaEventV1
+            | AiCoachChatStreamAssistantTextDeltaEventV1
+            | AiCoachChatStreamUiEventDeltaEventV1
+        ],
+    ) -> (
+        AiCoachChatStreamReasoningTextDeltaEventV1
+        | AiCoachChatStreamAssistantTextDeltaEventV1
+        | AiCoachChatStreamUiEventDeltaEventV1
+        | None
+    ):
         if task.done() and queue.empty():
             return None
         try:

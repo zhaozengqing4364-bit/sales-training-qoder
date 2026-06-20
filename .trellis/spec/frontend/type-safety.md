@@ -8,7 +8,7 @@
 
 **Strict TypeScript** (`strict: true` in `web/tsconfig.json`). API types mirror the **Python backend's snake_case** JSON. Normalization and error parsing live in `lib/api/client.ts` — pages should not re-parse raw responses.
 
-Reference: `lib/api/types.ts`, `lib/api/client.ts`, `lib/api/client-domains.ts`.
+Reference: `lib/api/types.ts`, `lib/api/client.ts`, `lib/api/client-domains.ts`, `lib/api/domains/shared.ts`, `lib/api/domains/*`.
 
 ---
 
@@ -43,7 +43,7 @@ export interface ApiResponse<T> {
 - Field names match backend: `weekly_activity`, `session_id`, etc.
 - Central types file is large (~4000+ lines) — add new DTOs in the appropriate feature section; do not duplicate in pages.
 
-Domain API builders live in `lib/api/client-domains.ts` (and domain sections inside `lib/api/client.ts`). Tests: `lib/api/client-domains.test.ts`, `lib/api/client-learning-content.test.ts`.
+Domain API builders are split between the legacy aggregation seam `lib/api/client-domains.ts` and extracted modules under `lib/api/domains/*`. Tests: `lib/api/client-domains.test.ts`, feature-specific `lib/api/*.test.ts`, and page tests where the API result drives UI behavior.
 
 ---
 
@@ -56,6 +56,119 @@ Utilities in `client.ts`:
 - `isAuthenticationError()`
 - `getApiErrorMessage()` — user-safe strings, no raw stack traces
 - Normalizers e.g. `normalizeQuestionCategory()`
+
+### Scenario: API Facade And Extracted Domain Builders
+
+#### 1. Scope / Trigger
+
+- Trigger: adding or moving frontend API methods, API streams, upload helpers, domain DTOs, or client normalizers.
+- Scope: `web/src/lib/api/types.ts`, `web/src/lib/api/client.ts`, `web/src/lib/api/client-domains.ts`, `web/src/lib/api/domains/*`, and tests under `web/src/lib/api/*.test.ts`.
+- UI layers in scope: `web/src/app`, `web/src/components`, and `web/src/hooks`, because they must consume only the public `api` facade.
+
+#### 2. Signatures
+
+Shared domain dependencies:
+
+```ts
+export type ApiRequest = <T>(endpoint: string, options?: ApiRequestOptions) => Promise<T>;
+export type ApiStream = <T>(endpoint: string, options?: ApiRequestOptions) => AsyncIterable<T>;
+export type ApiUpload = <T>(
+  endpoint: string,
+  formData: FormData,
+  signal?: AbortSignal,
+  options?: { skipSessionExpiredHandling?: boolean },
+) => Promise<T>;
+```
+
+Extracted domain factory shape:
+
+```ts
+type NewcomerTrainingDomainDependencies = {
+  request: ApiRequest;
+  stream: ApiStream;
+};
+
+export function createNewcomerTrainingDomain({
+  request,
+  stream,
+}: NewcomerTrainingDomainDependencies) {
+  return {
+    startChatStream: (payload: AiCoachChatSessionCreateRequest) =>
+      stream<AiCoachChatStreamEvent>("/newcomer-training/ai-coach/chat/sessions/stream", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+  };
+}
+```
+
+Facade wiring:
+
+```ts
+const newcomerTrainingDomain = createNewcomerTrainingDomain({
+  request: apiFetch,
+  stream: apiStream,
+});
+
+export const api = {
+  newcomerTraining: newcomerTrainingDomain,
+};
+```
+
+#### 3. Contracts
+
+- `client.ts` owns cross-cutting behavior: auth/session expiry, trace headers, CSRF/auth headers, loopback retry, SSE parsing, upload transport, `ApiRequestError`, and `getApiErrorMessage()`.
+- `client-domains.ts` is the aggregation seam. It exports extracted domain factories and may still host legacy/low-growth domain builders.
+- New high-growth domains should live in `lib/api/domains/<domain>.ts` and receive only typed dependencies (`ApiRequest`, `ApiStream`, `ApiUpload`, plus explicit normalizers or URL helpers when needed).
+- Pages, hooks, and components import from `@/lib/api/client` only. They must not import `client-domains.ts` or `lib/api/domains/*` directly.
+- DTOs remain snake_case in `types.ts`; domain factories may normalize defensive `unknown` values, but they must not invent business defaults that belong to backend configs.
+- SSE stream methods must use the shared `ApiStream` dependency, not `EventSource`, page-local `fetch`, or ad hoc stream parsers.
+
+#### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+|---|---|
+| UI imports `client-domains.ts` or `lib/api/domains/*` | `client-domains.test.ts` boundary test fails |
+| New extracted domain bypasses `client.ts` transport | Review failure; auth, trace, retry, and error mapping are no longer guaranteed |
+| Stream method uses page-local `fetch`/`EventSource` | Reject; move stream parsing to `apiStream` and expose a typed `AsyncIterable<T>` |
+| New API response type is declared in a page | Reject; define DTO in `lib/api/types.ts` |
+| Domain factory needs uploads or base URL | Inject `ApiUpload` / `resolveApiBaseUrl` explicitly instead of importing transport internals |
+| Backend returns bracketed error code | Surface through `ApiRequestError` and `getApiErrorMessage()`, not page-local string parsing |
+
+#### 5. Good/Base/Bad Cases
+
+- Good: `newcomer-training.ts` receives `request` and `stream`, exposes typed methods, and is wired into the public `api.newcomerTraining` facade.
+- Base: a small legacy admin method remains in `client-domains.ts` until the domain grows enough to justify extraction.
+- Bad: a page imports `createNewcomerTrainingDomain` directly and passes a custom `fetch`, bypassing shared auth and trace handling.
+
+#### 6. Tests Required
+
+- Boundary: keep `client-domains.test.ts` asserting UI layers do not import `client-domains` or `domains/*`.
+- Domain: add or update a `lib/api/*.test.ts` case proving the factory calls the expected endpoint, HTTP method, body, upload dependency, or stream dependency.
+- Type: add DTOs to `types.ts` and ensure `npx tsc --noEmit` covers the facade shape.
+- UI: when a new API payload drives visible behavior, add a page/component test that mocks `api` from `client.ts`, not internal domain factories.
+
+#### 7. Wrong vs Correct
+
+##### Wrong
+
+```tsx
+import { createNewcomerTrainingDomain } from "@/lib/api/domains/newcomer-training";
+
+const api = createNewcomerTrainingDomain({ request: localFetch, stream: localStream });
+```
+
+This bypasses shared auth, trace, retry, stream parsing, and error semantics.
+
+##### Correct
+
+```tsx
+import { api } from "@/lib/api/client";
+
+const events = api.newcomerTraining.startChatStream(payload);
+```
+
+The page consumes the public facade, while transport and domain wiring remain centralized.
 
 ---
 
@@ -97,7 +210,7 @@ Server-sent event APIs must still flow through the central `api` facade. Pages m
 Required pattern:
 
 - Define the stream event discriminated union in `lib/api/types.ts`.
-- Add a domain method in `lib/api/client-domains.ts` that receives the shared `ApiStream` dependency.
+- Add a domain method in `lib/api/domains/<domain>.ts` for extracted domains, or `lib/api/client-domains.ts` for legacy domains, that receives the shared `ApiStream` dependency.
 - Implement parsing, auth headers, loopback retry, session-expired handling, and `ApiRequestError` mapping in `lib/api/client.ts`.
 - Keep `event:` names aligned with `data.type`; treat malformed frames as typed API errors instead of silently dropping them.
 - Add a client-domain test proving the stream method calls the expected endpoint and yields typed events.
@@ -312,7 +425,9 @@ api.clonePromptTemplate(templateId: string, payload: PromptTemplateCloneRequest)
 |----------|------|
 | Core API types | `lib/api/types.ts` |
 | Client + guards | `lib/api/client.ts` |
-| Domain methods | `lib/api/client-domains.ts` |
+| Domain aggregation seam | `lib/api/client-domains.ts` |
+| Extracted domain factories | `lib/api/domains/*` |
+| Shared domain dependencies | `lib/api/domains/shared.ts` |
 | Contract tests | `lib/api/client-domains.test.ts` |
 | Trace typing | `lib/observability/trace-context.ts` |
 

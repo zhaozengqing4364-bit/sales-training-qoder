@@ -59,6 +59,8 @@ backend/
 Enter these before making changes in the corresponding subtree:
 
 - `backend/tests/AGENTS.md`
+- `backend/alembic/AGENTS.md`
+- `backend/scripts/AGENTS.md`
 - `backend/src/common/AGENTS.md`
 - `backend/src/sales_bot/AGENTS.md`
 - `backend/src/presentation_coach/AGENTS.md`

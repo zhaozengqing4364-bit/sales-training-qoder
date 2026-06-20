@@ -564,6 +564,30 @@ export default function HomePage() {
             iconClassName: "bg-emerald-100 text-emerald-600",
         },
     ];
+    const isSalesTrainerRecommendation = displayRecommendation.recommendation_kind === "sales_trainer_path";
+    const nextPathCardEyebrow = isSalesTrainerRecommendation ? "新人训练路径下一步" : "学习路径下一步";
+    const nextPathCardTitle = isSalesTrainerRecommendation
+        ? displayRecommendation.title
+        : isLearningPathLoading
+            ? "学习路径加载中"
+            : learningPathNextTask?.title ?? "学习路径暂不可用";
+    const nextPathCardDescription = isSalesTrainerRecommendation
+        ? displayRecommendation.reason
+        : isLearningPathDegraded
+            ? "学习路径接口暂时无法读取；可先进入完整路径页稍后重试。"
+            : learningPathNextTask?.failure_reason
+                ? `失败原因：${learningPathNextTask.failure_reason}`
+                : learningPathNextTask?.reason
+                    ? learningPathNextTask.reason
+                    : learningPathNextTask?.estimated_duration_minutes
+                        ? `建议时长：${learningPathNextTask.estimated_duration_minutes} 分钟，状态：${learningPathNextTask.state}`
+                        : "根据最近报告弱项生成；冷启动用户会看到默认训练路径。";
+    const nextPathCardHref = isSalesTrainerRecommendation
+        ? displayRecommendation.target_path
+        : "/learning-path";
+    const nextPathCardActionLabel = isSalesTrainerRecommendation
+        ? displayRecommendation.action_label
+        : learningPathNextTask?.primary_cta ?? "查看学习路径";
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -931,26 +955,18 @@ export default function HomePage() {
                                 <Route className="w-6 h-6" />
                             </div>
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-wider text-blue-500">学习路径下一步</p>
+                                <p className="text-xs font-bold uppercase tracking-wider text-blue-500">{nextPathCardEyebrow}</p>
                                 <h2 className="text-xl font-black text-slate-900 mt-1">
-                                    {isLearningPathLoading ? "学习路径加载中" : learningPathNextTask?.title ?? "学习路径暂不可用"}
+                                    {nextPathCardTitle}
                                 </h2>
                                 <p className="text-sm text-slate-600 mt-2">
-                                    {isLearningPathDegraded
-                                        ? "学习路径接口暂时无法读取；可先进入完整路径页稍后重试。"
-                                        : learningPathNextTask?.failure_reason
-                                            ? `失败原因：${learningPathNextTask.failure_reason}`
-                                            : learningPathNextTask?.reason
-                                                ? learningPathNextTask.reason
-                                            : learningPathNextTask?.estimated_duration_minutes
-                                                ? `建议时长：${learningPathNextTask.estimated_duration_minutes} 分钟，状态：${learningPathNextTask.state}`
-                                                : "根据最近报告弱项生成；冷启动用户会看到默认训练路径。"}
+                                    {nextPathCardDescription}
                                 </p>
                             </div>
                         </div>
                         <Button asChild className="rounded-full bg-slate-900 text-white hover:bg-slate-800">
-                            <Link href="/learning-path">
-                                {learningPathNextTask?.primary_cta ?? "查看学习路径"} <ArrowRight className="ml-2 w-4 h-4" />
+                            <Link href={nextPathCardHref}>
+                                {nextPathCardActionLabel} <ArrowRight className="ml-2 w-4 h-4" />
                             </Link>
                         </Button>
                     </div>

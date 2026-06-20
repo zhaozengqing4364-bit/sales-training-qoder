@@ -7,7 +7,7 @@ export const NEWCOMER_TRAINING_PATH_KEY = "newcomer_training_path_v1";
 export const LEGACY_GOAL_PATH_KEY = "new_seller_goal_path";
 
 export const MODULE_SUGGESTED_ORDER_HINT =
-    "建议顺序：PPT讲解录音 → 商务技巧 → 电梯演讲（时长自选）。实时对练暂不开放。";
+    "建议顺序：PPT讲解录音 → 商务技巧。电梯演讲和实时对练暂不开放。";
 
 export function isLegacyPathEnabled(): boolean {
     return process.env.NEXT_PUBLIC_SALES_TRAINER_LEGACY_PATH === "1";
@@ -203,7 +203,9 @@ function buildElevatorPitchView(enrichedLevels: EnrichedLevel[]): SalesTrainerMo
 }
 
 function buildRealtimePlaceholderView(enriched: EnrichedLevel): SalesTrainerModuleView {
-    const disabledReason = enriched.unit?.config.path?.disabled_reason ?? "暂不开放";
+    const disabledReason = enriched.level.lock_reason
+        ?? enriched.unit?.config.path?.disabled_reason
+        ?? "暂不开放";
     return {
         key: "realtime_practice",
         title: titleFor(enriched, "实时对练"),

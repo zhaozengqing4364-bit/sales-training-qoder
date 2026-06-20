@@ -52,6 +52,8 @@ AiCoachChatSessionPhaseV1: TypeAlias = Literal[
 ]
 AiCoachChatStreamEventTypeV1: TypeAlias = Literal[
     "status",
+    "reasoning_text_delta",
+    "assistant_text_delta",
     "ui_event_delta",
     "session_snapshot",
     "error",
@@ -304,6 +306,28 @@ class AiCoachChatStreamStatusEventV1(BaseModel):
     session_id: str | None = Field(None, max_length=36)
 
 
+class AiCoachChatStreamAssistantTextDeltaEventV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["assistant_text_delta"] = "assistant_text_delta"
+    phase: AiCoachChatStreamPhaseV1
+    session_id: str | None = Field(None, max_length=36)
+    delta_id: str = Field(..., min_length=1, max_length=80)
+    status: Literal["streaming"] = "streaming"
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+class AiCoachChatStreamReasoningTextDeltaEventV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["reasoning_text_delta"] = "reasoning_text_delta"
+    phase: AiCoachChatStreamPhaseV1
+    session_id: str | None = Field(None, max_length=36)
+    delta_id: str = Field(..., min_length=1, max_length=80)
+    status: Literal["streaming"] = "streaming"
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
 class AiCoachChatStreamUiEventDeltaEventV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -336,6 +360,8 @@ class AiCoachChatStreamErrorEventV1(BaseModel):
 
 AiCoachChatStreamEventV1: TypeAlias = (
     AiCoachChatStreamStatusEventV1
+    | AiCoachChatStreamReasoningTextDeltaEventV1
+    | AiCoachChatStreamAssistantTextDeltaEventV1
     | AiCoachChatStreamUiEventDeltaEventV1
     | AiCoachChatStreamSessionSnapshotEventV1
     | AiCoachChatStreamErrorEventV1

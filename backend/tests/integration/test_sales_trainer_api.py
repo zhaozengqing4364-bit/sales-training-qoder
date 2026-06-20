@@ -514,6 +514,59 @@ async def test_register_cos_audio_submission_should_head_object_and_reject_size_
 
 
 @pytest.mark.asyncio
+async def test_register_audio_submission_should_schedule_processing_after_response(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    learner = _user("user")
+    test_db.add(learner)
+    await test_db.commit()
+
+    class FakeSigner:
+        def get_object_size(self, object_key: str) -> int:
+            assert object_key == "sales-trainer/audio/user/direct.wav"
+            return 12
+
+    scheduled: list[tuple[str, str | None]] = []
+
+    async def fake_process_audio_submission_background(
+        submission_id: str,
+        *,
+        actor_id: str | None = None,
+    ) -> None:
+        scheduled.append((submission_id, actor_id))
+
+    monkeypatch.setattr(
+        "sales_trainer.services.audio_submission_service.get_cos_signing_service",
+        lambda: FakeSigner(),
+    )
+    monkeypatch.setattr(
+        "sales_trainer.api.process_audio_submission_background",
+        fake_process_audio_submission_background,
+    )
+
+    response = await async_client.post(
+        "/api/v1/sales-trainer/audio-submissions",
+        headers=_auth_headers(learner),
+        json={
+            "unit_id": None,
+            "purpose": "general_audio_scoring",
+            "original_filename": "direct.wav",
+            "content_type": "audio/wav",
+            "size_bytes": 12,
+            "storage_key": "cos://sales-trainer/audio/user/direct.wav",
+            "auto_process": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["status"] == "uploaded"
+    assert scheduled == [(payload["submission_id"], learner.user_id)]
+
+
+@pytest.mark.asyncio
 async def test_should_reject_non_admin_from_sales_trainer_admin_api(
     async_client: AsyncClient,
     test_db: AsyncSession,

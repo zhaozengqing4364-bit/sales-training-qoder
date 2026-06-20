@@ -227,7 +227,13 @@ describe("module-path", () => {
             level({ unit_id: "ppt-unit", order_index: 20, level_title: "第一关：PPT 讲解录音", target_path: "/sales-trainer/audio/ppt-unit" }),
             level({ unit_id: "pitch-10", order_index: 30, level_title: "电梯演讲 · 10 分钟" }),
             level({ unit_id: "pitch-20", order_index: 40, level_title: "电梯演讲 · 20 分钟" }),
-            level({ unit_id: "realtime", order_index: 50, level_title: "第四关：实时对练" }),
+            level({
+                unit_id: "realtime",
+                order_index: 50,
+                level_title: "第四关：实时对练",
+                locked: true,
+                lock_reason: "后端配置占位，不开放实时对练",
+            }),
         ];
         const unitsById = new Map<string, SalesTrainerUnit>([
             ["ppt-unit", unitWithPath("ppt-unit", "ppt_explanation", "audio_scoring")],
@@ -237,7 +243,7 @@ describe("module-path", () => {
             [
                 "realtime",
                 unitWithPath("realtime", "realtime_roleplay_placeholder", "realtime_placeholder", {
-                    disabled_reason: "试运行阶段暂不开放",
+                    disabled_reason: "旧单元占位原因",
                 }),
             ],
         ]);
@@ -248,6 +254,6 @@ describe("module-path", () => {
         expect(views[0].hubUnitId).toBe("business-unit");
         expect(views[1].pptUploadHref).toBe("/sales-trainer/audio/ppt-unit");
         expect(views[2].audioOptions.map((option) => option.durationLabel)).toEqual(["10 分钟", "20 分钟"]);
-        expect(views[3].disabledReason).toBe("试运行阶段暂不开放");
+        expect(views[3].disabledReason).toBe("后端配置占位，不开放实时对练");
     });
 });

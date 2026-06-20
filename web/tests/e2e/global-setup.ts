@@ -17,6 +17,9 @@ export default async function globalSetup() {
     return;
   }
 
+  process.env.PHASE4_E2E_PROVIDER ||= "local";
+  process.env.STEPFUN_API_KEY ||= "phase4-local-e2e";
+
   execFileSync("bash", [path.join(repoRoot, "scripts", "dev-smoke-up.sh")], {
     cwd: repoRoot,
     stdio: "inherit",

@@ -7,7 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
-from sales_trainer.models import SalesTrainerOperationLog, SalesTrainerUnit
+from curriculum_practice.models import LearningContent
+from sales_trainer.models import (
+    SalesTrainerExamPaper,
+    SalesTrainerOperationLog,
+    SalesTrainerUnit,
+)
 from sales_trainer.schemas import (
     NewcomerPathConfigSaveRequest,
     NewcomerPathModuleConfig,
@@ -24,6 +29,10 @@ def _admin() -> User:
         email="newcomer-path-config-admin@example.com",
         role="admin",
     )
+
+
+BUSINESS_CONTENT_ID = "path-config-business-content"
+BUSINESS_PAPER_ID = "path-config-business-paper"
 
 
 def _unit(unit_id: str, *, title: str, order_index: int = 1) -> SalesTrainerUnit:
@@ -58,14 +67,19 @@ def _path_unit(
     updated_at: datetime,
     enabled: bool = True,
     audio_purpose: str | None = None,
+    duration_minutes: int | None = None,
 ) -> SalesTrainerUnit:
     unit = _unit(unit_id, title=title, order_index=order_index)
     unit.config["path"]["module_key"] = module_key
     unit.config["path"]["module_type"] = module_type
     unit.config["path"]["enabled"] = enabled
     unit.updated_at = updated_at
+    if module_type in {"audio_scoring", "audio_scoring_group"}:
+        unit.unit_type = "audio_scoring"
     if audio_purpose is not None:
         unit.config["audio"] = {"purpose": audio_purpose}
+    if duration_minutes is not None:
+        unit.config["duration_minutes"] = duration_minutes
     return unit
 
 
@@ -84,10 +98,38 @@ def _payload(*, unit_id: str, title: str) -> NewcomerPathConfigSaveRequest:
                 title=title,
                 description=f"{title}说明",
                 target_unit_id=unit_id,
+                learning_content_id=BUSINESS_CONTENT_ID,
+                exam_paper_id=BUSINESS_PAPER_ID,
                 completion_rule="submitted",
                 primary_action_label="开始学习",
             )
         ],
+    )
+
+
+def _business_assets(admin: User, unit: SalesTrainerUnit) -> tuple[LearningContent, SalesTrainerExamPaper]:
+    return (
+        LearningContent(
+            learning_content_id=BUSINESS_CONTENT_ID,
+            title="商务技巧学习内容",
+            summary="发布配置测试用学习内容。",
+            owner="新人训练路径",
+            source="unit_test",
+            status="published",
+            created_by=str(admin.user_id),
+            updated_by=str(admin.user_id),
+        ),
+        SalesTrainerExamPaper(
+            paper_id=BUSINESS_PAPER_ID,
+            paper_key=f"{unit.unit_id}-paper",
+            title="商务技巧考卷",
+            module_key="business_skills",
+            unit_id=unit.unit_id,
+            pass_threshold=60,
+            status="published",
+            created_by=str(admin.user_id),
+            updated_by=str(admin.user_id),
+        ),
     )
 
 
@@ -138,13 +180,34 @@ async def test_should_backfill_one_path_module_per_business_stage(
         audio_purpose="ppt_pitch",
     )
     elevator_unit = _path_unit(
-        "path-backfill-elevator",
-        title="电梯演讲",
+        "path-backfill-elevator-10",
+        title="电梯演讲 · 10 分钟",
         module_key="pyramid_speech",
         module_type="audio_scoring_group",
         order_index=3,
         updated_at=datetime(2026, 1, 20, tzinfo=UTC),
         audio_purpose="pyramid_speech",
+        duration_minutes=10,
+    )
+    elevator_20 = _path_unit(
+        "path-backfill-elevator-20",
+        title="电梯演讲 · 20 分钟",
+        module_key="elevator_pitch",
+        module_type="audio_scoring_group",
+        order_index=3,
+        updated_at=datetime(2026, 1, 21, tzinfo=UTC),
+        audio_purpose="elevator_pitch",
+        duration_minutes=20,
+    )
+    elevator_30 = _path_unit(
+        "path-backfill-elevator-30",
+        title="电梯演讲 · 30 分钟",
+        module_key="elevator_pitch",
+        module_type="audio_scoring_group",
+        order_index=3,
+        updated_at=datetime(2026, 1, 22, tzinfo=UTC),
+        audio_purpose="elevator_pitch",
+        duration_minutes=30,
     )
     realtime_unit = _path_unit(
         "path-backfill-realtime",
@@ -170,6 +233,8 @@ async def test_should_backfill_one_path_module_per_business_stage(
         current_business,
         ppt_unit,
         elevator_unit,
+        elevator_20,
+        elevator_30,
         realtime_unit,
         uuid_noise,
     ])
@@ -186,7 +251,11 @@ async def test_should_backfill_one_path_module_per_business_stage(
     ]
     assert modules[1]["target_unit_id"] == current_business.unit_id
     assert modules[1]["title"] == "商务技巧当前单元"
-    assert modules[2]["target_unit_id"] == elevator_unit.unit_id
+    assert modules[2]["target_unit_id"] == elevator_30.unit_id
+    assert [
+        option["duration_minutes"]
+        for option in modules[2]["duration_options"]
+    ] == [10, 20, 30]
     assert modules[3]["target_unit_id"] == realtime_unit.unit_id
     assert modules[3]["enabled"] is False
 
@@ -194,10 +263,10 @@ async def test_should_backfill_one_path_module_per_business_stage(
 @pytest.mark.asyncio
 async def test_should_keep_learner_path_on_active_revision_until_working_is_published(
     test_db: AsyncSession,
-) -> None:
+    ) -> None:
     admin = _admin()
     unit = _unit("path-config-working-unit", title="商务技巧旧版")
-    test_db.add_all([admin, unit])
+    test_db.add_all([admin, unit, *_business_assets(admin, unit)])
     await test_db.commit()
 
     service = SalesTrainerPathConfigService(test_db)
@@ -224,7 +293,7 @@ async def test_should_expose_active_revision_module_identity_to_learner_path(
     unit = _unit("path-config-module-identity-unit", title="旧单元配置")
     unit.config["path"]["module_key"] = "ppt_explanation"
     unit.config["path"]["module_type"] = "audio_scoring"
-    test_db.add_all([admin, unit])
+    test_db.add_all([admin, unit, *_business_assets(admin, unit)])
     await test_db.commit()
 
     service = SalesTrainerPathConfigService(test_db)
@@ -250,7 +319,7 @@ async def test_should_rollback_path_config_future_only_and_write_audit_log(
 ) -> None:
     admin = _admin()
     unit = _unit("path-config-rollback-unit", title="商务技巧原始")
-    test_db.add_all([admin, unit])
+    test_db.add_all([admin, unit, *_business_assets(admin, unit)])
     await test_db.commit()
     service = SalesTrainerPathConfigService(test_db)
 

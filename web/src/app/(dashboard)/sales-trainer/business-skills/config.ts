@@ -8,6 +8,8 @@ export const BUSINESS_SKILLS_EXAM_COPY = {
     pageTitle: "商务技巧考试",
     pageSubtitle: "完成学习后提交商务技巧考卷。",
     submitButton: "提交考卷",
+    incompleteAnswerError: "请完成全部题目后再提交。",
+    incompleteAnswerHint: "所有题目完成后才能提交考卷。",
     backLink: "返回商务技巧学习",
     paperMissingTitle: "暂未绑定商务技巧考卷",
     paperMissingDescription:
@@ -128,4 +130,10 @@ export function businessSkillsArticleErrorMessage(error: unknown): string {
 export function chapterDisplayLabel(index: number): string {
     const labels = ["第一节", "第二节", "第三节", "第四节", "第五节"] as const;
     return labels[index] ?? `第${index + 1}节`;
+}
+
+export function chapterNavigationLabel(index: number, title: string): string {
+    return /^第[一二三四五六七八九十百\d]+节[：:]/.test(title.trim())
+        ? title
+        : `${chapterDisplayLabel(index)} ${title}`;
 }

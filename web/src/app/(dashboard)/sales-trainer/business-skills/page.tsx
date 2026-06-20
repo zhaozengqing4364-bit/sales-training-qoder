@@ -38,7 +38,7 @@ import {
     BUSINESS_SKILLS_MODULE_KEY,
     businessSkillsArticleErrorMessage,
     businessSkillsExamHref,
-    chapterDisplayLabel,
+    chapterNavigationLabel,
     learningContentIdFromUnit,
     resolveBusinessSkillsUnit,
 } from "./config";
@@ -154,7 +154,7 @@ function ChapterList({
                     >
                         <span className="flex items-center gap-2 text-sm font-bold leading-relaxed">
                             {chapter.completed ? <CheckCircle2 className="h-4 w-4" /> : null}
-                            {chapterDisplayLabel(index)} {chapter.title}
+                            {chapterNavigationLabel(index, chapter.title)}
                         </span>
                     </button>
                 );

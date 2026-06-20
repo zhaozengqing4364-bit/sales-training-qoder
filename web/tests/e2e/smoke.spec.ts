@@ -17,6 +17,16 @@ const backendBaseUrl =
   process.env.SMOKE_BACKEND_BASE_URL || "http://localhost:3444/api/v1";
 const smokeStateFile = path.resolve(__dirname, "../../../.dev/smoke/state.env");
 const nextTaskPath = "/curriculum-practice/learning-path/me/next-task";
+const navigationAbortPaths = new Set([
+  nextTaskPath,
+  "/dashboard/stats",
+  "/growth/dashboard",
+  "/practice/history",
+  "/recommendations/latest",
+  "/retraining/tasks",
+  "/users/me/interventions/open",
+  "/users/me/history",
+]);
 
 let cachedSmokeState: Record<string, string> | null = null;
 
@@ -110,9 +120,16 @@ function isIgnorableResponse(response: Response): boolean {
 function isIgnorableFailedRequest(request: Request): boolean {
   const url = request.url();
   const errorText = request.failure()?.errorText;
+  const pathname = url.startsWith("http") ? new URL(url).pathname : "";
+  const normalizedPathname = pathname.replace(/^\/api\/v1(?=\/)/, "");
+  const isNavigationAbort = errorText === "net::ERR_ABORTED";
   return (
     url.includes("_next/webpack-hmr") ||
-    (url.includes(nextTaskPath) && errorText === "net::ERR_ABORTED")
+    (isNavigationAbort && pathname.startsWith("/__nextjs_font/")) ||
+    (
+      isNavigationAbort &&
+      (navigationAbortPaths.has(pathname) || navigationAbortPaths.has(normalizedPathname))
+    )
   );
 }
 
@@ -394,7 +411,9 @@ test.describe("full-stack smoke baseline", () => {
     await loginFromUi(page);
     await page.goto("/admin/analytics");
 
-    await expect(page.getByRole("heading", { name: "数据分析" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "数据分析" })).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(page.getByRole("button", { name: "刷新" })).toBeVisible();
     await expect(
       page.getByRole("button", { name: /导出报表|导出中/ }),

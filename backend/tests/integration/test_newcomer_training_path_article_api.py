@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.auth.service import create_access_token
 from common.db.models import User
 from curriculum_practice.models import LearningChapter, LearningContent
-from sales_trainer.models import SalesTrainerAssetRevision, SalesTrainerUnit
+from sales_trainer.models import (
+    SalesTrainerAssetRevision,
+    SalesTrainerExamPaper,
+    SalesTrainerUnit,
+)
 from sales_trainer.services.operation_log_service import OperationLogService
 from sales_trainer.services.path_config_models import (
     NEWCOMER_PATH_LOGICAL_ID,
@@ -148,7 +152,17 @@ async def test_should_bind_newcomer_article_content_via_admin_api(
             }
         },
     )
-    test_db.add_all([admin, learner, content, chapter, module_unit])
+    paper = SalesTrainerExamPaper(
+        paper_id="article-admin-paper-binding",
+        paper_key="article-admin-paper-binding",
+        title="商务技巧考卷",
+        module_key="business_skills",
+        unit_id=module_unit.unit_id,
+        status="published",
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    test_db.add_all([admin, learner, content, chapter, module_unit, paper])
     await test_db.commit()
 
     bind_response = await async_client.put(
@@ -206,6 +220,39 @@ async def test_should_bind_newcomer_article_content_via_admin_api(
         "/api/v1/admin/newcomer-training/path-config/publish",
         headers=_auth_headers(admin),
         json={"reason": "商务技巧学习文章绑定生效"},
+    )
+    assert publish_response.status_code == 409
+    assert publish_response.json()["error"] == "[NEWCOMER_MODULE_BINDING_MISSING]"
+
+    save_response = await async_client.put(
+        "/api/v1/admin/newcomer-training/path-config",
+        headers=_auth_headers(admin),
+        json={
+            "path_key": "newcomer_training_path_v1",
+            "title": "新人训练路径",
+            "goal_title": "完成新人训练",
+            "reason": "补齐商务技巧考卷绑定",
+            "modules": [
+                {
+                    "module_key": "business_skills",
+                    "module_type": "article_exam",
+                    "enabled": True,
+                    "order_index": 2,
+                    "title": "商务技巧",
+                    "target_unit_id": module_unit.unit_id,
+                    "learning_content_id": content.learning_content_id,
+                    "exam_paper_id": paper.paper_id,
+                    "completion_rule": "passed",
+                }
+            ],
+        },
+    )
+    assert save_response.status_code == 200, save_response.text
+
+    publish_response = await async_client.post(
+        "/api/v1/admin/newcomer-training/path-config/publish",
+        headers=_auth_headers(admin),
+        json={"reason": "商务技巧文章和考卷绑定生效"},
     )
     assert publish_response.status_code == 200
 

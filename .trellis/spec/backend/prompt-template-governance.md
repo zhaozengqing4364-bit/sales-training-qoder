@@ -100,3 +100,106 @@ await service.set_default_template(
 ```
 
 The service validates active/type/governance state, clears old defaults, writes audit, commits, and invalidates prompt cache.
+
+## Scenario: Sales Trainer AI Coach Chat-First Prompts
+
+### 1. Scope / Trigger
+
+- Trigger: changing newcomer-training AI coach generation, next-action generation, short-answer scoring, seed defaults, or prompt variables.
+- Scope: `backend/src/sales_trainer/services/ai_coach_chat_*`, `AiCoachConfig`, `seed_newcomer_training_path.py`, and prompt templates used by `business_skills.ai_coach`.
+
+### 2. Signatures
+
+- Generation PromptTemplate: `prompt_type="stage"`, `business_purpose="ai_coach_conversation_generation"`, `category="sales_trainer_ai_coach"`.
+- Short-answer scoring PromptTemplate: `prompt_type="scoring"`, same business purpose/category.
+- JSON generation calls must use call-scoped LLM constraints:
+  - `LLMService.generate(..., response_format=AI_COACH_JSON_RESPONSE_FORMAT)`
+  - `LLMService.stream_generate(..., response_format=AI_COACH_JSON_RESPONSE_FORMAT)`
+- Runtime events stay on the existing public types: `assistant_text`, `quiz_card`, `quiz_result`, `summary_card`, `followup_prompt`.
+
+### 3. Contracts
+
+- AI coach is Chat-First: `assistant_text` is always the natural coach response; `quiz_card` is an optional tool result, not a mandatory turn output.
+- One assistant turn may produce at most one `quiz_card`; `max_cards_per_message` for business-skills seed/admin defaults is `1`.
+- `mixed_drill` means "coach decides whether to call a practice-card tool", not random question generation.
+- `scenario_judgment` may use single/multiple choice; `expression_rewrite` and `role_response` must use `short_answer`.
+- Enabling `short_answer`, `expression_rewrite`, or `role_response` requires a valid `scoring_prompt_template_id`.
+- Text-answer scoring must call `AiCoachSessionService.score_short_answer(...)` with the session scoring prompt id/revision/hash; do not score it with local text-length or answer-string rules.
+- AI coach generation, next-action generation, and business-etiquette question draft generation must request OpenAI-compatible JSON mode per call. Do not put `response_format` into shared model configuration, because report writing, free-form copy, and other text consumers must remain unconstrained.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+|---|---|
+| LLM returns more quiz cards than `max_cards_per_message` | `502 [AI_COACH_INTERACTION_INVALID]` |
+| LLM returns a training card outside `allowed_training_card_types` | `502 [AI_COACH_TRAINING_CARD_TYPE_NOT_ALLOWED]` |
+| LLM returns short-answer card while config disallows `short_answer` | `502 [AI_COACH_INTERACTION_TYPE_NOT_ALLOWED]` |
+| Short-answer scoring prompt missing/invalid | 409 prompt config error from scoring service |
+| JSON-generating LLM call omits `response_format={"type":"json_object"}` | Test failure; runtime parser still treats non-JSON output as invalid and returns the existing typed error |
+| `continue_drill` / `increase_difficulty` returns no quiz card | Valid; assistant may be explaining or asking a clarifying question |
+| `summarize` / `end_session` omits summary card | `502 [AI_COACH_NEXT_ACTION_UI_EVENT_INVALID]` |
+
+### 5. Good/Base/Bad Cases
+
+- Good: learner asks a free question; AI returns `assistant_text` only, or `assistant_text + followup_prompt`.
+- Good: learner needs practice; AI returns `assistant_text + one quiz_card`, using a configured card and interaction type.
+- Good: each AI coach JSON-producing call binds `response_format` for that call only.
+- Base: learner submits a short answer; backend records answer, calls scoring PromptTemplate, stores `score_result`, then optionally generates the next assistant turn.
+- Bad: prompt says "always generate 3 questions" or scorer gives 0/100 based on text length before calling the configured model.
+- Bad: a global LLM model config is edited to always force JSON output, breaking non-JSON text generation elsewhere.
+
+### 6. Tests Required
+
+- Unit: Chat response parser rejects disallowed card type and too many quiz cards.
+- Unit: next-action validator accepts chat-only `continue_drill` and rejects multiple quiz cards.
+- Unit: text quiz submission calls short-answer scoring with session scoring prompt id/revision/hash.
+- Unit: chat generation, streamed generation, next-action generation, and question-draft generation pass the JSON `response_format` to `LLMService` when they expect machine-readable JSON.
+- Seed test: business-skills AI coach seed enables single/multiple/short answer, all three training card types, `max_cards_per_message=1`, `plan_then_wait`, and a scoring prompt.
+- Frontend test: coach page renders assistant text and cards in one chat timeline and only shows full coach judgment on summary.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+if payload.variant == "text" and len(payload.text or "") < 5:
+    return AiCoachScoreResultV1(score=0, feedback="回答过短。")
+```
+
+This bypasses the governed scoring prompt and makes the learner see fake AI evaluation.
+
+#### Correct
+
+```python
+result = await self._scoring.score_short_answer(
+    answer_text=payload.text or "",
+    reference_answer=internal.answer_key.reference_answer or "",
+    scoring_rubric=internal.scoring_rubric,
+    session_id=str(event.session_id),
+    scoring_prompt_template_id=config.get("scoring_prompt_template_id"),
+    scoring_prompt_revision_id=config.get("scoring_prompt_revision_id"),
+    scoring_contract_hash=config.get("scoring_contract_hash"),
+)
+```
+
+The service resolves and compiles the scoring PromptTemplate, calls the configured model, validates the JSON score, and preserves auditability through prompt ids and hashes.
+
+#### Wrong
+
+```python
+await llm.generate(prompt, session_id=session_id)
+```
+
+This relies on prompt wording alone to produce JSON and increases contract failures when the model returns natural language.
+
+#### Correct
+
+```python
+await llm.generate(
+    prompt,
+    session_id=session_id,
+    response_format=AI_COACH_JSON_RESPONSE_FORMAT,
+)
+```
+
+The JSON constraint is bound to this call only, so other model consumers keep their normal text-generation behavior.

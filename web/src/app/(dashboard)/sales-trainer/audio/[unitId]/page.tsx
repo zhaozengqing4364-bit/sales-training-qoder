@@ -3,22 +3,32 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Download, Upload } from "lucide-react";
+import { ArrowLeft, Download, Eye, Upload } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
+import { markdownComponents } from "@/components/sales-trainer/coo-markdown-components";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import type {
     SalesTrainerLearnerRubric,
     SalesTrainerPath,
     SalesTrainerUnit,
     SalesTrainerUnitBrief,
+    SalesTrainerMaterialVersion,
 } from "@/lib/api/types";
 import {
     findLevelForUnit,
     formatPassThresholdLine,
     getAudioPassThreshold,
 } from "@/lib/sales-trainer/learner-presenter";
+
+type MaterialPreviewState = {
+    versionId: string;
+    text: string;
+    error: string | null;
+};
 
 function getAudioPurpose(unit: SalesTrainerUnit): string {
     const rawPurpose = unit.config.audio?.purpose;
@@ -47,6 +57,27 @@ function getRubric(brief: SalesTrainerUnitBrief | null): SalesTrainerLearnerRubr
     return rubric as SalesTrainerLearnerRubric;
 }
 
+function isTextPreview(version: SalesTrainerMaterialVersion): boolean {
+    const type = version.content_type.toLowerCase();
+    return type.includes("markdown") || type.startsWith("text/");
+}
+
+function isAudioPreview(version: SalesTrainerMaterialVersion): boolean {
+    return version.content_type.toLowerCase().startsWith("audio/");
+}
+
+function isVideoPreview(version: SalesTrainerMaterialVersion): boolean {
+    return version.content_type.toLowerCase().startsWith("video/");
+}
+
+function isPdfPreview(version: SalesTrainerMaterialVersion): boolean {
+    return version.content_type.toLowerCase() === "application/pdf";
+}
+
+function canPreviewInline(version: SalesTrainerMaterialVersion): boolean {
+    return isTextPreview(version) || isAudioPreview(version) || isVideoPreview(version) || isPdfPreview(version);
+}
+
 export default function SalesTrainerAudioUploadPage() {
     const params = useParams<{ unitId: string }>();
     const router = useRouter();
@@ -55,7 +86,8 @@ export default function SalesTrainerAudioUploadPage() {
     const [paths, setPaths] = useState<SalesTrainerPath[]>([]);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [confirmedMaterialVersionId, setConfirmedMaterialVersionId] = useState<string | null>(null);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [activeMaterialVersionId, setActiveMaterialVersionId] = useState<string | null>(null);
+    const [materialPreview, setMaterialPreview] = useState<MaterialPreviewState | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -84,24 +116,87 @@ export default function SalesTrainerAudioUploadPage() {
         void loadData();
     }, [params.unitId]);
 
+    const previewUrl = useMemo(
+        () => selectedFile ? URL.createObjectURL(selectedFile) : null,
+        [selectedFile],
+    );
+
     useEffect(() => {
-        if (!selectedFile) {
-            setPreviewUrl(null);
+        if (!previewUrl) {
             return;
         }
 
-        const objectUrl = URL.createObjectURL(selectedFile);
-        setPreviewUrl(objectUrl);
-
         return () => {
-            URL.revokeObjectURL(objectUrl);
+            URL.revokeObjectURL(previewUrl);
         };
-    }, [selectedFile]);
+    }, [previewUrl]);
 
+    const materials = useMemo(() => brief?.materials ?? [], [brief?.materials]);
     const levelContext = useMemo(
         () => findLevelForUnit(paths, params.unitId),
         [paths, params.unitId],
     );
+    const activeMaterialVersion = useMemo(() => {
+        if (!activeMaterialVersionId) {
+            return null;
+        }
+        return materials
+            .map((material) => material.current_version)
+            .find((version) => version.version_id === activeMaterialVersionId) ?? null;
+    }, [activeMaterialVersionId, materials]);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        if (!activeMaterialVersion || !isTextPreview(activeMaterialVersion)) {
+            return () => {
+                isMounted = false;
+            };
+        }
+        const previewVersion = activeMaterialVersion;
+
+        async function loadMaterialPreview() {
+            try {
+                const response = await fetch(
+                    api.salesTrainer.getMaterialVersionFileUrl(
+                        previewVersion.version_id,
+                        { disposition: "inline" },
+                    ),
+                    { credentials: "include" },
+                );
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const text = await response.text();
+                if (isMounted) {
+                    setMaterialPreview({
+                        versionId: previewVersion.version_id,
+                        text,
+                        error: null,
+                    });
+                }
+            } catch {
+                if (isMounted) {
+                    setMaterialPreview({
+                        versionId: previewVersion.version_id,
+                        text: "",
+                        error: "材料预览加载失败，请使用“下载材料”或“新窗口打开”。",
+                    });
+                }
+            }
+        }
+
+        void loadMaterialPreview();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [activeMaterialVersion]);
+    const activeMaterialPreview = activeMaterialVersion
+        && materialPreview?.versionId === activeMaterialVersion.version_id
+        ? materialPreview
+        : null;
+
     const pageTitle = getBriefText(brief?.task_brief, "title")
         || levelContext?.level.level_title
         || unit?.name
@@ -111,7 +206,7 @@ export default function SalesTrainerAudioUploadPage() {
         || unit?.description
         || "上传本次语音作业，系统会完成转写和评分。";
     const passThreshold = brief?.score_scheme?.pass_threshold ?? getAudioPassThreshold(unit);
-    const requiredMaterial = brief?.materials.find(
+    const requiredMaterial = materials.find(
         (material) => material.required && material.confirmation_required,
     ) ?? null;
     const rubric = getRubric(brief);
@@ -231,16 +326,23 @@ export default function SalesTrainerAudioUploadPage() {
                 ) : null}
             </GlassCard>
 
-            {brief?.materials.length ? (
+            {materials.length ? (
                 <GlassCard className="space-y-4 p-6">
                     <div>
                         <h2 className="text-lg font-bold text-slate-900">训练材料</h2>
                         <p className="mt-1 text-sm text-slate-500">请使用当前版本完成录音；提交时会冻结你确认的材料版本。</p>
                     </div>
                     <div className="space-y-3">
-                        {brief.materials.map((material) => {
+                        {materials.map((material) => {
                             const version = material.current_version;
-                            const fileUrl = api.salesTrainer.getMaterialVersionFileUrl(version.version_id);
+                            const fileUrl = api.salesTrainer.getMaterialVersionFileUrl(
+                                version.version_id,
+                            );
+                            const inlineFileUrl = api.salesTrainer.getMaterialVersionFileUrl(
+                                version.version_id,
+                                { disposition: "inline" },
+                            );
+                            const isActivePreview = activeMaterialVersionId === version.version_id;
                             return (
                                 <div key={`${material.material_id}-${version.version_id}`} className="rounded-2xl border border-slate-100 bg-white p-4">
                                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -253,13 +355,73 @@ export default function SalesTrainerAudioUploadPage() {
                                                 <p className="mt-2 text-sm text-slate-600">{material.learner_note}</p>
                                             ) : null}
                                         </div>
-                                        <a href={fileUrl} target="_blank" rel="noreferrer">
-                                            <Button variant="outline" className="rounded-full">
-                                                <Download className="mr-2 h-4 w-4" />
-                                                下载材料
-                                            </Button>
-                                        </a>
+                                        <div className="flex flex-wrap gap-2">
+                                            {canPreviewInline(version) ? (
+                                                <Button
+                                                    variant="outline"
+                                                    className="rounded-full"
+                                                    onClick={() => setActiveMaterialVersionId(
+                                                        isActivePreview ? null : version.version_id,
+                                                    )}
+                                                >
+                                                    <Eye className="mr-2 h-4 w-4" />
+                                                    {isActivePreview ? "收起材料" : "查看材料"}
+                                                </Button>
+                                            ) : (
+                                                <a href={inlineFileUrl} target="_blank" rel="noreferrer">
+                                                    <Button variant="outline" className="rounded-full">
+                                                        <Eye className="mr-2 h-4 w-4" />
+                                                        新窗口打开
+                                                    </Button>
+                                                </a>
+                                            )}
+                                            <a href={fileUrl} target="_blank" rel="noreferrer" download>
+                                                <Button variant="outline" className="rounded-full">
+                                                    <Download className="mr-2 h-4 w-4" />
+                                                    下载材料
+                                                </Button>
+                                            </a>
+                                        </div>
                                     </div>
+                                    {isActivePreview ? (
+                                        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
+                                            {isTextPreview(version) ? (
+                                                <div className="max-h-[32rem] overflow-y-auto px-5 py-4">
+                                                    {!activeMaterialPreview ? (
+                                                        <p className="text-sm text-slate-500">正在加载材料预览...</p>
+                                                    ) : activeMaterialPreview.error ? (
+                                                        <p className="text-sm text-red-700">{activeMaterialPreview.error}</p>
+                                                    ) : (
+                                                        <ReactMarkdown
+                                                            remarkPlugins={[remarkGfm]}
+                                                            components={markdownComponents}
+                                                        >
+                                                            {activeMaterialPreview.text}
+                                                        </ReactMarkdown>
+                                                    )}
+                                                </div>
+                                            ) : null}
+                                            {isAudioPreview(version) ? (
+                                                <div className="p-4">
+                                                    <audio controls src={inlineFileUrl} className="w-full">
+                                                        您的浏览器不支持音频播放。
+                                                    </audio>
+                                                </div>
+                                            ) : null}
+                                            {isVideoPreview(version) ? (
+                                                <video controls src={inlineFileUrl} className="max-h-[32rem] w-full bg-black">
+                                                    您的浏览器不支持视频播放。
+                                                </video>
+                                            ) : null}
+                                            {isPdfPreview(version) ? (
+                                                <iframe
+                                                    title={version.title}
+                                                    src={inlineFileUrl}
+                                                    className="h-[32rem] w-full"
+                                                />
+                                            ) : null}
+                                        </div>
+                                    ) : null}
                                     {material.confirmation_required ? (
                                         <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
                                             <input

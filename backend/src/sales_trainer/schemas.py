@@ -92,6 +92,16 @@ class SalesTrainerPathConfig(BaseModel):
         return self
 
 
+class NewcomerPathDurationOptionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    option_key: str = Field(..., min_length=1, max_length=80)
+    display_name: str = Field(..., min_length=1, max_length=120)
+    duration_minutes: int = Field(..., gt=0)
+    target_unit_id: str = Field(..., min_length=1, max_length=36)
+    order_index: int = Field(1, ge=1)
+
+
 class SalesTrainerTaskBriefConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -469,10 +479,10 @@ class AiCoachConfig(BaseModel):
             "followup_prompt",
         ]
     )
-    max_cards_per_message: int = Field(3, ge=1, le=5)
+    max_cards_per_message: int = Field(1, ge=1, le=5)
     streaming_enabled: bool = True
     entry_resume_policy: AiCoachEntryResumePolicyV1 = "latest_active_or_new"
-    generation_timeout_seconds: int = Field(30, ge=5, le=120)
+    generation_timeout_seconds: int = Field(120, ge=5, le=120)
     proactive_coaching_enabled: bool = False
     session_start_behavior: AiCoachSessionStartBehaviorV1 = "welcome_only"
     auto_advance_enabled: bool = False
@@ -1172,14 +1182,27 @@ class NewcomerPathModuleConfig(BaseModel):
     learning_units: list[BusinessEtiquetteTrainingUnitConfig] = Field(
         default_factory=list
     )
+    duration_options: list[NewcomerPathDurationOptionConfig] = Field(
+        default_factory=list
+    )
 
     @model_validator(mode="after")
-    def validate_learning_units(self) -> NewcomerPathModuleConfig:
+    def validate_module_collections(self) -> NewcomerPathModuleConfig:
         if len(self.learning_units) > 30:
             raise ValueError("learning_units must contain <= 30 items")
         unit_keys = [unit.unit_key for unit in self.learning_units]
         if len(set(unit_keys)) != len(unit_keys):
             raise ValueError("learning_units cannot contain duplicate unit_key values")
+        if len(self.duration_options) > 12:
+            raise ValueError("duration_options must contain <= 12 items")
+        option_keys = [option.option_key for option in self.duration_options]
+        if len(set(option_keys)) != len(option_keys):
+            raise ValueError("duration_options cannot contain duplicate option_key values")
+        target_unit_ids = [option.target_unit_id for option in self.duration_options]
+        if len(set(target_unit_ids)) != len(target_unit_ids):
+            raise ValueError(
+                "duration_options cannot contain duplicate target_unit_id values"
+            )
         return self
 
 

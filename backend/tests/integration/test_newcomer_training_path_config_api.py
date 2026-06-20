@@ -10,8 +10,10 @@ from sqlalchemy.orm import sessionmaker
 
 from common.auth.service import create_access_token
 from common.db.models import User
+from curriculum_practice.models import LearningContent
 from sales_trainer.models import (
     SalesTrainerAssetRevision,
+    SalesTrainerExamPaper,
     SalesTrainerOperationLog,
     SalesTrainerUnit,
 )
@@ -59,30 +61,50 @@ def _unit(unit_id: str, title: str) -> SalesTrainerUnit:
     )
 
 
-def _path_payload(unit_id: str, title: str) -> dict[str, object]:
+def _path_payload(
+    unit_id: str,
+    title: str,
+    *,
+    learning_content_id: str | None = None,
+    exam_paper_id: str | None = None,
+) -> dict[str, object]:
+    module: dict[str, object] = {
+        "module_key": "business_skills",
+        "module_type": "article_exam",
+        "enabled": True,
+        "order_index": 1,
+        "title": title,
+        "description": f"{title}说明",
+        "target_unit_id": unit_id,
+        "completion_rule": "submitted",
+        "primary_action_label": "开始学习",
+    }
+    if learning_content_id:
+        module["learning_content_id"] = learning_content_id
+    if exam_paper_id:
+        module["exam_paper_id"] = exam_paper_id
     return {
         "path_key": "newcomer_training_path_v1",
         "title": "新人训练路径",
         "goal_title": "完成新人训练",
         "reason": f"{title}保存为待发布修订",
-        "modules": [
-            {
-                "module_key": "business_skills",
-                "module_type": "article_exam",
-                "enabled": True,
-                "order_index": 1,
-                "title": title,
-                "description": f"{title}说明",
-                "target_unit_id": unit_id,
-                "completion_rule": "submitted",
-                "primary_action_label": "开始学习",
-            }
-        ],
+        "modules": [module],
     }
 
 
-def _path_payload_with_ai_coach(unit_id: str, title: str) -> dict[str, object]:
-    payload = _path_payload(unit_id, title)
+def _path_payload_with_ai_coach(
+    unit_id: str,
+    title: str,
+    *,
+    learning_content_id: str | None = None,
+    exam_paper_id: str | None = None,
+) -> dict[str, object]:
+    payload = _path_payload(
+        unit_id,
+        title,
+        learning_content_id=learning_content_id,
+        exam_paper_id=exam_paper_id,
+    )
     modules = payload["modules"]
     assert isinstance(modules, list)
     first_module = modules[0]
@@ -109,6 +131,39 @@ def _path_payload_with_ai_coach(unit_id: str, title: str) -> dict[str, object]:
     return payload
 
 
+async def _seed_business_bindings(
+    test_db: AsyncSession,
+    *,
+    admin: User,
+    unit: SalesTrainerUnit,
+    key_prefix: str,
+) -> tuple[LearningContent, SalesTrainerExamPaper]:
+    content = LearningContent(
+        learning_content_id=f"{key_prefix}-content",
+        title=f"{unit.name}学习内容",
+        summary="发布配置测试用学习内容。",
+        owner="新人训练路径",
+        source="integration_test",
+        status="published",
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    paper = SalesTrainerExamPaper(
+        paper_id=str(uuid.uuid4()),
+        paper_key=f"{key_prefix}-paper",
+        title=f"{unit.name}考卷",
+        module_key="business_skills",
+        unit_id=unit.unit_id,
+        pass_threshold=60,
+        status="published",
+        created_by=str(admin.user_id),
+        updated_by=str(admin.user_id),
+    )
+    test_db.add_all([content, paper])
+    await test_db.commit()
+    return content, paper
+
+
 @pytest.mark.asyncio
 async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     async_client: AsyncClient,
@@ -119,6 +174,12 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     unit = _unit("newcomer-path-config-api-unit", "商务技巧旧版")
     test_db.add_all([admin, learner, unit])
     await test_db.commit()
+    content, paper = await _seed_business_bindings(
+        test_db,
+        admin=admin,
+        unit=unit,
+        key_prefix="newcomer-path-config-api",
+    )
 
     backfill_response = await async_client.get(
         "/api/v1/admin/newcomer-training/path-config",
@@ -130,7 +191,12 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     save_first_response = await async_client.put(
         "/api/v1/admin/newcomer-training/path-config",
         headers=_auth_headers(admin),
-        json=_path_payload(unit.unit_id, "商务技巧第一版"),
+        json=_path_payload(
+            unit.unit_id,
+            "商务技巧第一版",
+            learning_content_id=content.learning_content_id,
+            exam_paper_id=paper.paper_id,
+        ),
     )
     assert save_first_response.status_code == 200
     assert save_first_response.json()["data"]["has_unpublished_revision"] is True
@@ -154,7 +220,12 @@ async def test_should_publish_and_rollback_newcomer_path_config_via_api(
     save_second_response = await async_client.put(
         "/api/v1/admin/newcomer-training/path-config",
         headers=_auth_headers(admin),
-        json=_path_payload(unit.unit_id, "商务技巧第二版"),
+        json=_path_payload(
+            unit.unit_id,
+            "商务技巧第二版",
+            learning_content_id=content.learning_content_id,
+            exam_paper_id=paper.paper_id,
+        ),
     )
     assert save_second_response.status_code == 200
     publish_second_response = await async_client.post(
@@ -308,11 +379,22 @@ async def test_should_reject_ai_coach_high_risk_rollback_for_content_admin(
     unit = _unit("ai-coach-rollback-rbac-unit", "商务技巧")
     test_db.add_all([admin, content_admin, unit])
     await test_db.commit()
+    content, paper = await _seed_business_bindings(
+        test_db,
+        admin=admin,
+        unit=unit,
+        key_prefix="ai-coach-rollback-rbac",
+    )
 
     save_first_response = await async_client.put(
         "/api/v1/admin/newcomer-training/path-config",
         headers=_auth_headers(admin),
-        json=_path_payload(unit.unit_id, "商务技巧第一版"),
+        json=_path_payload(
+            unit.unit_id,
+            "商务技巧第一版",
+            learning_content_id=content.learning_content_id,
+            exam_paper_id=paper.paper_id,
+        ),
     )
     assert save_first_response.status_code == 200, save_first_response.text
     publish_first_response = await async_client.post(
@@ -326,7 +408,12 @@ async def test_should_reject_ai_coach_high_risk_rollback_for_content_admin(
     save_second_response = await async_client.put(
         "/api/v1/admin/newcomer-training/path-config",
         headers=_auth_headers(admin),
-        json=_path_payload_with_ai_coach(unit.unit_id, "商务技巧第二版"),
+        json=_path_payload_with_ai_coach(
+            unit.unit_id,
+            "商务技巧第二版",
+            learning_content_id=content.learning_content_id,
+            exam_paper_id=paper.paper_id,
+        ),
     )
     assert save_second_response.status_code == 200, save_second_response.text
     publish_second_response = await async_client.post(

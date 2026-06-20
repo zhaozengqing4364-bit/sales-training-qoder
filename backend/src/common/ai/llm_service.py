@@ -12,12 +12,13 @@ References:
 
 import os
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
-from openai import OpenAIError
+from openai import AsyncOpenAI, OpenAIError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from common.ai.config_manager import get_config_manager
@@ -28,6 +29,12 @@ from common.monitoring.logger import get_logger
 from prompt_templates.compiled_contract import CompiledPromptContract
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class LLMStreamChunk:
+    text: str = ""
+    reasoning_text: str = ""
 
 
 LEGACY_PROMPT_ENTRYPOINTS: dict[str, dict[str, Any]] = {
@@ -403,6 +410,8 @@ class LLMService:
     def _content_to_text(content: Any) -> str:
         if isinstance(content, str):
             return content
+        if isinstance(content, dict):
+            return LLMService._content_to_text(content.get("text", ""))
         if isinstance(content, list):
             pieces: list[str] = []
             for item in content:
@@ -413,6 +422,139 @@ class LLMService:
             return "".join(pieces)
         return ""
 
+    @staticmethod
+    def _chunk_reasoning_to_text(chunk: Any) -> str:
+        text = LLMService._reasoning_content_to_text(getattr(chunk, "content", ""))
+        if text:
+            return text
+        for key in ("reasoning_content", "reasoning", "reasoning_text"):
+            text = LLMService._content_to_text(getattr(chunk, key, ""))
+            if text:
+                return text
+        for container_name in ("additional_kwargs", "response_metadata"):
+            container = getattr(chunk, container_name, None)
+            if not isinstance(container, dict):
+                continue
+            text = LLMService._reasoning_mapping_to_text(container)
+            if text:
+                return text
+        return ""
+
+    @staticmethod
+    def _reasoning_content_to_text(content: Any) -> str:
+        if isinstance(content, dict):
+            return LLMService._reasoning_mapping_to_text(content)
+        if isinstance(content, list):
+            pieces = [LLMService._reasoning_content_to_text(item) for item in content]
+            return "".join(piece for piece in pieces if piece)
+        return ""
+
+    @staticmethod
+    def _reasoning_mapping_to_text(mapping: dict[str, Any]) -> str:
+        for key in ("reasoning_content", "reasoning", "reasoning_text"):
+            text = LLMService._content_to_text(mapping.get(key, ""))
+            if text:
+                return text
+        item_type = str(mapping.get("type", "")).lower()
+        if "reason" in item_type or "thinking" in item_type:
+            return LLMService._content_to_text(mapping.get("text", ""))
+        for key in ("delta", "message"):
+            nested = mapping.get(key)
+            if isinstance(nested, dict):
+                text = LLMService._reasoning_mapping_to_text(nested)
+                if text:
+                    return text
+        return ""
+
+    def _llm_for_call(self, response_format: dict[str, Any] | None = None) -> Any:
+        """Return the runtime client, optionally constrained for this call only."""
+        if response_format is None:
+            return self._llm
+        return self._llm.bind(response_format=response_format)
+
+    def _uses_deepseek_reasoning_stream(self) -> bool:
+        if not self._effective_config:
+            return False
+        provider = str(self._effective_config.get("provider", "")).lower()
+        model_name = str(self._effective_config.get("model_name", "")).lower()
+        base_url = str(self._effective_config.get("base_url", "")).lower()
+        return provider == "openai" and (
+            model_name.startswith("deepseek") or "deepseek" in base_url
+        )
+
+    @staticmethod
+    def _messages_to_openai_payload(
+        messages: list[SystemMessage | HumanMessage | AIMessage],
+    ) -> list[dict[str, str]]:
+        role_by_type = {
+            SystemMessage: "system",
+            HumanMessage: "user",
+            AIMessage: "assistant",
+        }
+        payload: list[dict[str, str]] = []
+        for message in messages:
+            role = next(
+                value for klass, value in role_by_type.items() if isinstance(message, klass)
+            )
+            payload.append(
+                {
+                    "role": role,
+                    "content": LLMService._content_to_text(message.content),
+                }
+            )
+        return payload
+
+    @staticmethod
+    def _openai_stream_chunk_to_llm_chunk(chunk: Any) -> LLMStreamChunk:
+        choices = getattr(chunk, "choices", None) or []
+        if not choices:
+            return LLMStreamChunk()
+        delta = getattr(choices[0], "delta", None)
+        if delta is None:
+            return LLMStreamChunk()
+        content = getattr(delta, "content", "") or ""
+        reasoning = getattr(delta, "reasoning_content", "") or ""
+        if not reasoning and hasattr(delta, "model_dump"):
+            dumped = delta.model_dump(exclude_none=True)
+            if isinstance(dumped, dict):
+                reasoning = dumped.get("reasoning_content", "") or ""
+        return LLMStreamChunk(text=str(content or ""), reasoning_text=str(reasoning or ""))
+
+    async def _stream_deepseek_reasoning_chunks(
+        self,
+        *,
+        prompt: str,
+        session_id: str,
+        system_message: str | None,
+        context: dict[str, Any] | None,
+        response_format: dict[str, Any] | None,
+    ) -> AsyncIterator[LLMStreamChunk]:
+        if not self._effective_config:
+            return
+        extra_config = self._effective_config.get("extra_config", {}) or {}
+        client = AsyncOpenAI(
+            api_key=str(self._effective_config.get("api_key", "")),
+            base_url=str(self._effective_config.get("base_url", "")).rstrip("/") or None,
+            timeout=float(extra_config.get("timeout", 60.0)),
+            max_retries=int(extra_config.get("max_retries", 0)),
+        )
+        request: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": self._messages_to_openai_payload(
+                self._build_messages(prompt, system_message, context)
+            ),
+            "stream": True,
+            "reasoning_effort": str(extra_config.get("reasoning_effort", "high")),
+            "extra_body": {"thinking": {"type": "enabled"}},
+        }
+        if response_format is not None:
+            request["response_format"] = response_format
+        stream = await client.chat.completions.create(**request)
+        async for raw_chunk in stream:
+            chunk = self._openai_stream_chunk_to_llm_chunk(raw_chunk)
+            if chunk.text or chunk.reasoning_text:
+                yield chunk
+
     async def stream_generate(
         self,
         prompt: str,
@@ -421,10 +563,33 @@ class LLMService:
         context: dict[str, Any] | None = None,
         *,
         allow_fallback_response: bool = True,
+        response_format: dict[str, Any] | None = None,
     ) -> AsyncIterator[str]:
         """Stream LLM response text chunks for callers with their own contracts."""
+        async for chunk in self.stream_generate_chunks(
+            prompt=prompt,
+            session_id=session_id,
+            system_message=system_message,
+            context=context,
+            allow_fallback_response=allow_fallback_response,
+            response_format=response_format,
+        ):
+            if chunk.text:
+                yield chunk.text
+
+    async def stream_generate_chunks(
+        self,
+        prompt: str,
+        session_id: str,
+        system_message: str | None = None,
+        context: dict[str, Any] | None = None,
+        *,
+        allow_fallback_response: bool = True,
+        response_format: dict[str, Any] | None = None,
+    ) -> AsyncIterator[LLMStreamChunk]:
+        """Stream LLM text plus provider reasoning chunks when available."""
         if self._is_performance_test_mode():
-            yield self._get_fallback_response(prompt, context)
+            yield LLMStreamChunk(text=self._get_fallback_response(prompt, context))
             return
 
         if not self.is_configured:
@@ -439,20 +604,31 @@ class LLMService:
                 ),
             )
             if allow_fallback_response:
-                yield self._get_fallback_response(prompt, context)
+                yield LLMStreamChunk(text=self._get_fallback_response(prompt, context))
                 return
             raise RuntimeError("[LLM_NOT_CONFIGURED]")
 
         try:
-            messages = self._build_messages(prompt, system_message, context)
             cost_handler = CostTrackingHandler(session_id)
-            async for chunk in self._llm.astream(
-                messages,
-                config={"callbacks": [cost_handler]},
-            ):
-                text = self._content_to_text(getattr(chunk, "content", ""))
-                if text:
-                    yield text
+            if self._uses_deepseek_reasoning_stream():
+                async for chunk in self._stream_deepseek_reasoning_chunks(
+                    prompt=prompt,
+                    session_id=session_id,
+                    system_message=system_message,
+                    context=context,
+                    response_format=response_format,
+                ):
+                    yield chunk
+            else:
+                messages = self._build_messages(prompt, system_message, context)
+                async for chunk in self._llm_for_call(response_format).astream(
+                    messages,
+                    config={"callbacks": [cost_handler]},
+                ):
+                    text = self._content_to_text(getattr(chunk, "content", ""))
+                    reasoning_text = self._chunk_reasoning_to_text(chunk)
+                    if text or reasoning_text:
+                        yield LLMStreamChunk(text=text, reasoning_text=reasoning_text)
             cost = (cost_handler.total_tokens / 1000) * self.cost_per_1k_tokens
             self.session_costs[session_id] = (
                 self.session_costs.get(session_id, 0) + cost
@@ -469,6 +645,7 @@ class LLMService:
                     details={
                         "provider": self.provider,
                         "model_name": self.model_name,
+                        "response_format": response_format,
                     },
                     metrics={
                         "prompt_tokens": cost_handler.prompt_tokens,
@@ -500,7 +677,7 @@ class LLMService:
                 ),
             )
             if allow_fallback_response:
-                yield self._get_fallback_response(prompt, context)
+                yield LLMStreamChunk(text=self._get_fallback_response(prompt, context))
                 return
             raise RuntimeError("[LLM_STREAMING_GENERATION_FAILED]") from e
 
@@ -515,6 +692,7 @@ class LLMService:
         context: dict[str, Any] | None = None,
         *,
         allow_fallback_response: bool = True,
+        response_format: dict[str, Any] | None = None,
     ) -> Result[str]:
         """
         Generate LLM response with timeout and retry.
@@ -567,7 +745,9 @@ class LLMService:
 
             # Generate with cost tracking
             cost_handler = CostTrackingHandler(session_id)
-            result = await self._llm.agenerate([messages], callbacks=[cost_handler])
+            result = await self._llm_for_call(response_format).agenerate(
+                [messages], callbacks=[cost_handler]
+            )
 
             # Extract response text
             generation = result.generations[0][0]
@@ -592,6 +772,7 @@ class LLMService:
                     details={
                         "provider": self.provider,
                         "model_name": self.model_name,
+                        "response_format": response_format,
                     },
                     metrics={
                         "prompt_tokens": cost_handler.prompt_tokens,

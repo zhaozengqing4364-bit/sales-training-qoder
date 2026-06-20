@@ -254,8 +254,12 @@ export function createSalesTrainerDomain({
             return `${resolveApiBaseUrl()}/sales-trainer/audio-submissions/${encodeURIComponent(submissionId)}/file`;
         },
 
-        getMaterialVersionFileUrl: (versionId: string) => {
-            return `${resolveApiBaseUrl()}/sales-trainer/materials/versions/${encodeURIComponent(versionId)}/file`;
+        getMaterialVersionFileUrl: (
+            versionId: string,
+            options?: { disposition?: "attachment" | "inline" },
+        ) => {
+            const query = options ? buildQueryString(options) : "";
+            return `${resolveApiBaseUrl()}/sales-trainer/materials/versions/${encodeURIComponent(versionId)}/file${query}`;
         },
     };
 }

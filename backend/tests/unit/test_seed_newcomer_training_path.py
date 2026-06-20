@@ -15,7 +15,10 @@ from curriculum_practice.models import (
     QuestionItem,
 )
 from sales_trainer.models import (
+    SalesTrainerAudioScorePrompt,
     SalesTrainerExamPaper,
+    SalesTrainerMaterial,
+    SalesTrainerMaterialVersion,
     SalesTrainerUnit,
     SalesTrainerUnitQuestion,
 )
@@ -46,6 +49,13 @@ def _load_seed_module():
     return module
 
 
+@pytest.fixture(autouse=True)
+def _isolate_seed_material_storage(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setenv(
+        "SALES_TRAINER_MATERIAL_STORAGE_PATH", str(tmp_path / "sales_trainer_materials")
+    )
+
+
 @pytest.mark.asyncio
 async def test_seed_newcomer_training_path_is_idempotent(
     test_db: AsyncSession,
@@ -68,7 +78,29 @@ async def test_seed_newcomer_training_path_is_idempotent(
             == seed_module.PATH_KEY
         )
     )
-    assert unit_count == len(seed_module.MODULE_KEYS)
+    assert unit_count == (
+        len(seed_module.MODULE_KEYS) + len(seed_module.ELEVATOR_DURATION_OPTIONS) - 1
+    )
+
+    active_revision = await SalesTrainerAssetRevisionService(test_db).active_revision(
+        resource_type=NEWCOMER_PATH_RESOURCE_TYPE,
+        logical_id=NEWCOMER_PATH_LOGICAL_ID,
+    )
+    assert active_revision is not None
+    active_payload = NewcomerPathConfigPayload.model_validate(
+        active_revision.payload_json
+    )
+    elevator_module = next(
+        module
+        for module in active_payload.modules
+        if module.module_key == "elevator_pitch"
+    )
+    assert elevator_module.enabled is False
+    assert elevator_module.scoring_prompt_id is None
+    assert [option.duration_minutes for option in elevator_module.duration_options] == list(
+        seed_module.ELEVATOR_DURATION_OPTIONS
+    )
+    assert all(option.target_unit_id for option in elevator_module.duration_options)
 
     paper_count = await test_db.scalar(
         select(func.count())
@@ -77,13 +109,17 @@ async def test_seed_newcomer_training_path_is_idempotent(
     )
     assert paper_count == 1
     paper = (
-        await test_db.execute(
-            select(SalesTrainerExamPaper).where(
-                SalesTrainerExamPaper.paper_key
-                == seed_module.BUSINESS_SKILLS_PAPER_KEY
+        (
+            await test_db.execute(
+                select(SalesTrainerExamPaper).where(
+                    SalesTrainerExamPaper.paper_key
+                    == seed_module.BUSINESS_SKILLS_PAPER_KEY
+                )
             )
         )
-    ).scalars().one()
+        .scalars()
+        .one()
+    )
     paper_question_count = await test_db.scalar(
         select(func.count())
         .select_from(SalesTrainerUnitQuestion)
@@ -98,12 +134,16 @@ async def test_seed_newcomer_training_path_is_idempotent(
     )
     assert content_count == 1
     content = (
-        await test_db.execute(
-            select(LearningContent).where(
-                LearningContent.source == "seed_newcomer_training_path"
+        (
+            await test_db.execute(
+                select(LearningContent).where(
+                    LearningContent.source == "seed_newcomer_training_path"
+                )
             )
         )
-    ).scalars().one()
+        .scalars()
+        .one()
+    )
     chapter_count = await test_db.scalar(
         select(func.count())
         .select_from(LearningChapter)
@@ -133,10 +173,14 @@ async def test_seed_newcomer_training_path_is_idempotent(
     )
     assert question_count == 4
     seeded_questions = (
-        await test_db.execute(
-            select(QuestionItem).where(QuestionItem.usage_scope == "sales_trainer")
+        (
+            await test_db.execute(
+                select(QuestionItem).where(QuestionItem.usage_scope == "sales_trainer")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert any(
         "respect_boundaries" in list(question.scoring_dimensions or [])
         for question in seeded_questions
@@ -147,13 +191,70 @@ async def test_seed_newcomer_training_path_is_idempotent(
         .select_from(PromptTemplate)
         .where(PromptTemplate.category == seed_module.AI_COACH_PROMPT_CATEGORY)
     )
-    assert prompt_count == 1
+    assert prompt_count == 2
+    prompt_types = set(
+        (
+            await test_db.execute(
+                select(PromptTemplate.prompt_type).where(
+                    PromptTemplate.category == seed_module.AI_COACH_PROMPT_CATEGORY
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert prompt_types == {"stage", "scoring"}
     path_service = SalesTrainerPathConfigService(test_db)
     current_path = await path_service.get_config()
     business_module = _business_module(current_path["path"])
     assert len(business_module.learning_units) == 7
     assert business_module.learning_units[0].unit_key == "trust_foundation"
     assert business_module.learning_units[-1].source_chapter_orders == [8]
+    assert business_module.ai_coach is not None
+    assert business_module.ai_coach.auto_advance_enabled is False
+
+    ppt_unit = (
+        (
+            await test_db.execute(
+                select(SalesTrainerUnit).where(
+                    SalesTrainerUnit.name == "PPT讲解",
+                    SalesTrainerUnit.unit_type == "audio_scoring",
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+    ppt_audio = ppt_unit.config["audio"]
+    assert ppt_unit.config["path"]["completion_rule"] == "passed"
+    assert ppt_audio["purpose"] == "ppt_pitch"
+    assert ppt_audio["scoring_prompt_id"]
+    ppt_prompt = await test_db.get(
+        SalesTrainerAudioScorePrompt,
+        ppt_audio["scoring_prompt_id"],
+    )
+    assert ppt_prompt is not None
+    assert ppt_prompt.status == "published"
+    assert ppt_prompt.purpose == "ppt_pitch"
+    assert len(ppt_prompt.learner_rubric["criteria"]) == 6
+    assert "dimension_scores" in ppt_prompt.output_schema
+    assert ppt_unit.config["task_brief"]["title"] == "第1关：PPT讲解录音"
+    ppt_bindings = ppt_unit.config["materials"]["bindings"]
+    assert ppt_bindings[0]["required"] is True
+    assert ppt_bindings[0]["confirmation_required"] is True
+    ppt_material = await test_db.get(
+        SalesTrainerMaterial, ppt_bindings[0]["material_id"]
+    )
+    assert ppt_material is not None
+    assert ppt_material.status == "published"
+    assert ppt_material.current_version_id
+    ppt_version = await test_db.get(
+        SalesTrainerMaterialVersion,
+        ppt_material.current_version_id,
+    )
+    assert ppt_version is not None
+    assert ppt_version.status == "published"
+    assert ppt_version.content_type == "text/markdown"
 
 
 @pytest.mark.asyncio
@@ -165,31 +266,53 @@ async def test_seed_newcomer_training_path_flushes_business_unit_before_paper(
     await seed_module.seed(test_db)
 
     paper = (
-        await test_db.execute(
-            select(SalesTrainerExamPaper).where(
-                SalesTrainerExamPaper.paper_key
-                == seed_module.BUSINESS_SKILLS_PAPER_KEY
+        (
+            await test_db.execute(
+                select(SalesTrainerExamPaper).where(
+                    SalesTrainerExamPaper.paper_key
+                    == seed_module.BUSINESS_SKILLS_PAPER_KEY
+                )
             )
         )
-    ).scalars().one()
+        .scalars()
+        .one()
+    )
     business_unit = await test_db.get(SalesTrainerUnit, paper.unit_id)
 
     assert business_unit is not None
     assert business_unit.config["path"]["module_key"] == "business_skills"
     ai_coach = business_unit.config["path"]["ai_coach"]
     assert ai_coach["enabled"] is True
-    assert ai_coach["allowed_interaction_types"] == ["single_choice", "multiple_choice"]
+    assert ai_coach["allowed_interaction_types"] == [
+        "single_choice",
+        "multiple_choice",
+        "short_answer",
+    ]
+    assert ai_coach["allowed_training_card_types"] == [
+        "scenario_judgment",
+        "expression_rewrite",
+        "role_response",
+    ]
     assert ai_coach["proactive_coaching_enabled"] is True
-    assert ai_coach["session_start_behavior"] == "plan_and_first_card"
+    assert ai_coach["session_start_behavior"] == "plan_then_wait"
     assert ai_coach["auto_advance_enabled"] is False
-    assert ai_coach["max_auto_steps_per_session"] == 1
+    assert ai_coach["max_cards_per_message"] == 1
+    assert ai_coach["max_auto_steps_per_session"] == 5
     assert "continue_drill" in ai_coach["allowed_next_actions"]
     assert ai_coach["prompt_template_id"]
+    assert ai_coach["scoring_prompt_template_id"]
     prompt = await test_db.get(PromptTemplate, ai_coach["prompt_template_id"])
     assert prompt is not None
     assert prompt.category == seed_module.AI_COACH_PROMPT_CATEGORY
     assert prompt.prompt_type == "stage"
     assert prompt.business_purpose == seed_module.AI_COACH_PROMPT_PURPOSE
+    scoring_prompt = await test_db.get(
+        PromptTemplate, ai_coach["scoring_prompt_template_id"]
+    )
+    assert scoring_prompt is not None
+    assert scoring_prompt.category == seed_module.AI_COACH_PROMPT_CATEGORY
+    assert scoring_prompt.prompt_type == "scoring"
+    assert scoring_prompt.business_purpose == seed_module.AI_COACH_PROMPT_PURPOSE
 
 
 @pytest.mark.asyncio
@@ -203,10 +326,14 @@ async def test_seed_newcomer_training_path_syncs_active_ai_coach_prompt(
     current = await path_service.get_config()
     stale_payload = _path_payload_with_stale_ai_coach_prompt(current["path"])
     owner = (
-        await test_db.execute(
-            select(User).where(User.email == seed_module.OWNER_EMAIL)
+        (
+            await test_db.execute(
+                select(User).where(User.email == seed_module.OWNER_EMAIL)
+            )
         )
-    ).scalars().one()
+        .scalars()
+        .one()
+    )
     stale_revision = await SalesTrainerAssetRevisionService(
         test_db
     ).create_published_revision(
@@ -246,10 +373,14 @@ async def test_seed_newcomer_training_path_backfills_business_learning_units(
         current["path"]
     )
     owner = (
-        await test_db.execute(
-            select(User).where(User.email == seed_module.OWNER_EMAIL)
+        (
+            await test_db.execute(
+                select(User).where(User.email == seed_module.OWNER_EMAIL)
+            )
         )
-    ).scalars().one()
+        .scalars()
+        .one()
+    )
     stale_revision = await SalesTrainerAssetRevisionService(
         test_db
     ).create_published_revision(
@@ -300,10 +431,14 @@ async def test_seed_newcomer_training_path_rebinds_article_without_chapters(
         learning_content_id=empty_content.learning_content_id,
     )
     owner = (
-        await test_db.execute(
-            select(User).where(User.email == seed_module.OWNER_EMAIL)
+        (
+            await test_db.execute(
+                select(User).where(User.email == seed_module.OWNER_EMAIL)
+            )
         )
-    ).scalars().one()
+        .scalars()
+        .one()
+    )
     stale_revision = await SalesTrainerAssetRevisionService(
         test_db
     ).create_published_revision(
@@ -323,12 +458,16 @@ async def test_seed_newcomer_training_path_rebinds_article_without_chapters(
     await seed_module.seed(test_db)
 
     seed_content = (
-        await test_db.execute(
-            select(LearningContent).where(
-                LearningContent.source == "seed_newcomer_training_path"
+        (
+            await test_db.execute(
+                select(LearningContent).where(
+                    LearningContent.source == "seed_newcomer_training_path"
+                )
             )
         )
-    ).scalars().one()
+        .scalars()
+        .one()
+    )
     after = await path_service.get_config()
     after_business = _business_module(after["path"])
     assert after_business.learning_content_id == seed_content.learning_content_id
@@ -342,8 +481,8 @@ async def test_verify_newcomer_training_path_ignores_unrelated_sales_trainer_que
     seed_module = _load_seed_module()
     await seed_module.seed(test_db)
     category = (
-        await test_db.execute(select(QuestionCategory).limit(1))
-    ).scalars().one()
+        (await test_db.execute(select(QuestionCategory).limit(1))).scalars().one()
+    )
     extra_question = QuestionItem(
         question_id="unrelated-sales-trainer-question",
         category_id=category.category_id,

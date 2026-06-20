@@ -1,7 +1,6 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useMemo } from "react";
 import {
     BookOpenCheck,
     Bot,
@@ -9,12 +8,10 @@ import {
     ClipboardList,
     Lightbulb,
     ListChecks,
-    Loader2,
     MessageSquareText,
     RefreshCw,
     RotateCcw,
     Send,
-    Target,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -29,7 +26,6 @@ import type {
     BusinessEtiquetteLearningUnit,
 } from "@/lib/api/types";
 
-import { GenerativeCard } from "./coach-cards";
 import { CoachMessageList } from "./coach-message-list";
 import {
     activeEventIdForSession,
@@ -69,6 +65,7 @@ interface AiCoachChatSurfaceProps {
     readonly submittingEventIds: ReadonlySet<string>;
     readonly streamActivityLabel: string | null;
     readonly streamPhase: AiCoachChatStreamPhase | null;
+    readonly streamingReasoningText: Extract<AiCoachChatStreamEvent, { type: "reasoning_text_delta" }> | null;
     readonly streamingCardDelta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }> | null;
     readonly error: string | null;
     readonly onInputChange: (value: string) => void;
@@ -96,6 +93,7 @@ export function AiCoachChatSurface({
     submittingEventIds,
     streamActivityLabel,
     streamPhase,
+    streamingReasoningText,
     streamingCardDelta,
     error,
     onInputChange,
@@ -114,23 +112,40 @@ export function AiCoachChatSurface({
     const latestScoredQuiz = latestScoredQuizEventForSession(session);
     const referenceQuiz = trainingReferenceEventForSession(session);
     const summaryEvent = latestSummaryEventForSession(session);
-    const followupPromptEvent = latestFollowupPromptEventForSession(session);
     const progressUnit = coachProgress
         ? learningUnits.find((unit) => unit.unit_key === coachProgress.learning_unit_key)
         : null;
     const currentUnit = progressUnit ?? resolveCurrentLearningUnit(learningUnits, referenceQuiz);
-    const hiddenEventIds = useMemo(
-        () => new Set(
-            [activeQuiz?.event_id, followupPromptEvent?.event_id].filter(
-                (eventId): eventId is string => typeof eventId === "string",
-            ),
-        ),
-        [activeQuiz?.event_id, followupPromptEvent?.event_id],
-    );
     const activityLabel = streamActivityLabel
         ?? activityLabelFor(pendingCommand, isSending, isAdvancing, isStarting);
+    const shouldShowStreamingResponse = shouldShowStreamingCoachResponse({
+        isStarting,
+        isSending,
+        isAdvancing,
+        streamPhase,
+        streamingReasoningText,
+        streamingCardDelta,
+        activeQuiz,
+    });
+    const streamingPreview = shouldShowStreamingResponse ? (
+        <StreamingCoachResponse
+            activityLabel={activityLabel}
+            currentUnit={currentUnit}
+            reasoningText={streamingReasoningText?.text ?? ""}
+            cardDelta={streamingCardDelta}
+        />
+    ) : null;
+    const streamingInteraction = streamingCardDelta?.payload.interaction ?? null;
+    const streamingScrollKey = [
+        streamPhase ?? "",
+        streamingReasoningText?.text.length ?? 0,
+        streamingCardDelta?.delta_id ?? "",
+        streamingInteraction?.stem?.length ?? 0,
+        streamingInteraction?.options?.length ?? 0,
+        activityLabel ?? "",
+    ].join(":");
     return (
-        <section className="mx-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-slate-50/80 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.32)]">
+        <section className="mx-auto flex h-[calc(100dvh-6rem)] min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/80 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.24)]">
             <WorkbenchHeader
                 session={session}
                 isBusy={isBusy}
@@ -139,81 +154,44 @@ export function AiCoachChatSurface({
                 onNewSession={onNewSession}
                 onEnd={() => onCoachCommand("end")}
             />
-            <main className="px-4 py-4 md:px-6 lg:px-7">
+            <main className="flex min-h-0 flex-1 flex-col px-3 py-3 md:px-4 lg:px-5">
                 <TrainingContextPanel
                     session={session}
                     currentUnit={currentUnit}
-                    activeQuiz={activeQuiz}
                     referenceQuiz={referenceQuiz}
                     coachProgress={coachProgress}
                     coachProgressError={coachProgressError}
                     learningUnitsError={learningUnitsError}
-                    activityLabel={activityLabel}
                 />
                 <CoachErrorBanner message={error} />
-                <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
-                    <ActiveTrainingPanel
-                        activeQuiz={activeQuiz}
-                        latestScoredQuiz={latestScoredQuiz}
-                        draft={activeQuiz ? drafts[activeQuiz.event_id] ?? null : null}
-                        currentUnit={currentUnit}
-                        isCardStreaming={isStreamingTrainingCardPhase(streamPhase)}
-                        streamingCardDelta={streamingCardDelta}
-                        streamingLabel={activityLabel}
-                        isSubmitting={activeQuiz ? submittingEventIds.has(activeQuiz.event_id) : false}
+                <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100/60">
+                    <CoachMessageList
+                        session={session}
+                        pendingUserMessage={pendingUserMessage}
+                        drafts={drafts}
+                        submittingEventIds={submittingEventIds}
+                        isStarting={isStarting}
+                        isSending={isSending}
+                        isAdvancing={isAdvancing}
+                        activityLabel={activityLabel}
+                        activeEventId={activeEventId}
+                        error={error}
+                        autoScrollKey={streamingScrollKey}
+                        trailingNode={streamingPreview}
+                        className="h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 md:px-4"
                         onFollowupPrompt={onFollowupPrompt}
-                        onDraftChange={(payload) => {
-                            if (activeQuiz) {
-                                onDraftChange(activeQuiz.event_id, payload);
-                            }
-                        }}
-                        onSubmit={() => {
-                            if (activeQuiz) {
-                                onSubmitEvent(activeQuiz);
-                            }
-                        }}
+                        onDraftChange={onDraftChange}
+                        onSubmitEvent={onSubmitEvent}
                     />
+                </div>
+                {summaryEvent ? (
                     <CoachGuidancePanel
                         latestScoredQuiz={latestScoredQuiz}
                         summaryEvent={summaryEvent}
                         coachProgress={coachProgress}
                         coachProgressError={coachProgressError}
                     />
-                </div>
-                <FollowupPromptPanel
-                    event={followupPromptEvent}
-                    onFollowupPrompt={onFollowupPrompt}
-                />
-                <details className="mt-4 rounded-2xl border border-slate-200 bg-white/85">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
-                        <span className="inline-flex items-center gap-2">
-                            <MessageSquareText className="h-4 w-4 text-slate-500" />
-                            {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.conversationEvidenceTitle}
-                        </span>
-                        <span className="hidden text-xs font-medium text-slate-500 sm:inline">
-                            {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.conversationEvidenceDescription}
-                        </span>
-                    </summary>
-                    <div className="border-t border-slate-100">
-                        <CoachMessageList
-                            session={session}
-                            pendingUserMessage={pendingUserMessage}
-                            drafts={drafts}
-                            submittingEventIds={submittingEventIds}
-                            isStarting={isStarting}
-                            isSending={isSending}
-                            isAdvancing={isAdvancing}
-                            activityLabel={activityLabel}
-                            activeEventId={activeEventId}
-                            hiddenEventIds={hiddenEventIds}
-                            error={error}
-                            className="max-h-72 space-y-4 overflow-y-auto overscroll-contain px-4 py-4"
-                            onFollowupPrompt={onFollowupPrompt}
-                            onDraftChange={onDraftChange}
-                            onSubmitEvent={onSubmitEvent}
-                        />
-                    </div>
-                </details>
+                ) : null}
             </main>
             <CoachCommandBar
                 disabled={!session || isBusy}
@@ -250,10 +228,10 @@ function WorkbenchHeader({
     readonly onEnd: () => void;
 }) {
     return (
-        <header className="shrink-0 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <header className="shrink-0 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
                         <Bot className="h-5 w-5" />
                     </div>
                     <div>
@@ -311,21 +289,17 @@ function WorkbenchHeader({
 function TrainingContextPanel({
     session,
     currentUnit,
-    activeQuiz,
     referenceQuiz,
     coachProgress,
     coachProgressError,
     learningUnitsError,
-    activityLabel,
 }: {
     readonly session: AiCoachChatSessionPublicV1 | null;
     readonly currentUnit: BusinessEtiquetteLearningUnit | null;
-    readonly activeQuiz: QuizCardEvent | null;
     readonly referenceQuiz: QuizCardEvent | null;
     readonly coachProgress: BusinessEtiquetteAiCoachProgress | null;
     readonly coachProgressError: string | null;
     readonly learningUnitsError: string | null;
-    readonly activityLabel: string | null;
 }) {
     const state = session?.coach_state;
     const phaseLabel = state
@@ -346,30 +320,32 @@ function TrainingContextPanel({
     const chapters = referenceQuiz?.payload.interaction.source_chapter_orders
         ?? currentUnit?.source_chapter_orders
         ?? [];
-    const focusTitle = activeQuiz
-        ? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.focusPanelTitle
-        : state?.session_phase === "choosing"
-            ? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.focusPanelChoosingTitle
-            : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.focusPanelReviewTitle;
+    const contextMeta = [
+        capabilityLabels.length
+            ? capabilityLabels.join("、")
+            : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.fallbackUnitDescription,
+        chapters.length ? `关联第 ${chapters.join("、")} 章` : null,
+        `${difficultyLabel} · ${nextActionLabel}`,
+        state?.current_focus ?? null,
+        coachProgressError
+            ? coachProgressError
+            : progressDetail(coachProgress) ?? `已完成 ${state?.answered_card_count ?? 0} 张卡`,
+    ].filter((item): item is string => typeof item === "string" && item.length > 0);
     return (
-        <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <section className="rounded-xl border border-slate-200 bg-white/90 px-4 py-2.5 shadow-sm">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                     <p className="text-xs font-semibold text-slate-500">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.focusPanelEyebrow}
+                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.currentUnitLabel}
                     </p>
-                    <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
-                        {focusTitle}
+                    <h2 className="mt-0.5 truncate text-base font-semibold tracking-tight text-slate-950">
+                        {currentUnit?.title ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.fallbackUnitTitle}
                     </h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.focusPanelDescription}
+                    <p className="mt-0.5 line-clamp-1 text-xs leading-5 text-slate-500">
+                        {contextMeta.join(" / ")}
                     </p>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-3 xl:w-[30rem]">
-                    <ContextChip
-                        label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.currentUnitLabel}
-                        value={currentUnit?.title ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.fallbackUnitTitle}
-                    />
+                <div className="grid gap-2 sm:grid-cols-2 lg:w-[21rem]">
                     <ContextChip
                         label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.activityLabel}
                         value={phaseLabel}
@@ -379,35 +355,6 @@ function TrainingContextPanel({
                         value={masteryLabel}
                     />
                 </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
-                <span className="rounded-full bg-slate-100 px-3 py-1 font-medium">
-                    {capabilityLabels.length ? capabilityLabels.join("、") : "综合能力"}
-                </span>
-                {chapters.length ? (
-                    <span className="rounded-full bg-slate-100 px-3 py-1 font-medium">
-                        关联第 {chapters.join("、")} 章
-                    </span>
-                ) : null}
-                <span className="rounded-full bg-slate-100 px-3 py-1 font-medium">
-                    {difficultyLabel} · {nextActionLabel}
-                </span>
-                {state?.current_focus ? (
-                    <span className="rounded-full bg-slate-100 px-3 py-1 font-medium">
-                        {state.current_focus}
-                    </span>
-                ) : null}
-                <span className="rounded-full bg-slate-100 px-3 py-1 font-medium">
-                    {coachProgressError
-                        ? coachProgressError
-                        : progressDetail(coachProgress)
-                        ?? `已完成 ${state?.answered_card_count ?? 0} 张卡`}
-                </span>
-                {activityLabel ? (
-                    <span className="rounded-full bg-blue-50 px-3 py-1 font-medium text-blue-700">
-                        {activityLabel}
-                    </span>
-                ) : null}
             </div>
             {unitWarning ? (
                 <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
@@ -436,99 +383,59 @@ function CoachErrorBanner({
     );
 }
 
-function FollowupPromptPanel({
-    event,
-    onFollowupPrompt,
+function StreamingCoachResponse({
+    activityLabel,
+    currentUnit,
+    reasoningText,
+    cardDelta,
 }: {
-    readonly event: Extract<AiCoachUiEventPublicV1, { type: "followup_prompt" }> | null;
-    readonly onFollowupPrompt: (prompt: string) => void;
+    readonly activityLabel: string | null;
+    readonly currentUnit: BusinessEtiquetteLearningUnit | null;
+    readonly reasoningText: string;
+    readonly cardDelta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }> | null;
 }) {
-    if (!event) {
-        return null;
-    }
     return (
-        <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-900">
-                {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.followupPromptTitle}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-                {event.payload.prompts.map((prompt) => (
-                    <button
-                        key={prompt}
-                        type="button"
-                        onClick={() => onFollowupPrompt(prompt)}
-                        className="rounded-full border border-violet-100 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100"
-                    >
-                        {prompt}
-                    </button>
-                ))}
-            </div>
-        </section>
+        <div
+            aria-live="polite"
+            className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+        >
+            <StreamingStatusLine activityLabel={activityLabel} />
+            {reasoningText.trim() ? (
+                <details
+                    open
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600"
+                >
+                    <summary className="cursor-pointer select-none text-xs font-semibold text-slate-700">
+                        思考过程
+                    </summary>
+                    <p className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5">
+                        {reasoningText.trim()}
+                    </p>
+                </details>
+            ) : null}
+            {cardDelta ? (
+                <StreamingTrainingCard
+                    activityLabel={activityLabel}
+                    currentUnit={currentUnit}
+                    delta={cardDelta}
+                />
+            ) : null}
+        </div>
     );
 }
 
-function ActiveTrainingPanel({
-    activeQuiz,
-    latestScoredQuiz,
-    draft,
-    currentUnit,
-    isCardStreaming,
-    streamingCardDelta,
-    streamingLabel,
-    isSubmitting,
-    onFollowupPrompt,
-    onDraftChange,
-    onSubmit,
+function StreamingStatusLine({
+    activityLabel,
 }: {
-    readonly activeQuiz: QuizCardEvent | null;
-    readonly latestScoredQuiz: QuizCardEvent | null;
-    readonly draft: AiCoachAnswerPayloadV1 | null;
-    readonly currentUnit: BusinessEtiquetteLearningUnit | null;
-    readonly isCardStreaming: boolean;
-    readonly streamingCardDelta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }> | null;
-    readonly streamingLabel: string | null;
-    readonly isSubmitting: boolean;
-    readonly onFollowupPrompt: (prompt: string) => void;
-    readonly onDraftChange: (payload: AiCoachAnswerPayloadV1) => void;
-    readonly onSubmit: () => void;
+    readonly activityLabel: string | null;
 }) {
-    const shouldShowStreamingCard = isCardStreaming && (
-        streamingCardDelta !== null || activeQuiz === null
-    );
+    if (!activityLabel) {
+        return null;
+    }
     return (
-        <section className="min-w-0 space-y-3">
-            <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2">
-                    <Target className="h-4 w-4 text-slate-600" />
-                    <h2 className="text-sm font-semibold text-slate-900">
-                        {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.trainingDeskTitle}
-                    </h2>
-                </div>
-                <p className="text-xs font-medium text-slate-500">
-                    {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.activeCardInstruction}
-                </p>
-            </div>
-            {shouldShowStreamingCard ? (
-                <StreamingTrainingCard
-                    activityLabel={streamingLabel}
-                    currentUnit={currentUnit}
-                    delta={streamingCardDelta}
-                />
-            ) : activeQuiz ? (
-                <GenerativeCard
-                    event={activeQuiz}
-                    draft={draft}
-                    isActive
-                    isSubmitting={isSubmitting}
-                    presentation="primary"
-                    onFollowupPrompt={onFollowupPrompt}
-                    onDraftChange={onDraftChange}
-                    onSubmit={onSubmit}
-                />
-            ) : (
-                <NoActiveCard latestScoredQuiz={latestScoredQuiz} />
-            )}
-        </section>
+        <p className="text-xs font-medium leading-5 text-slate-500">
+            {activityLabel}
+        </p>
     );
 }
 
@@ -539,7 +446,7 @@ function StreamingTrainingCard({
 }: {
     readonly activityLabel: string | null;
     readonly currentUnit: BusinessEtiquetteLearningUnit | null;
-    readonly delta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }> | null;
+    readonly delta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }>;
 }) {
     const interaction = delta?.payload.interaction ?? null;
     const options = interaction?.options ?? [];
@@ -554,8 +461,7 @@ function StreamingTrainingCard({
         >
             <div className="flex items-start justify-between gap-4">
                 <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
                         {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.streamingCardTitle}
                     </span>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
@@ -573,11 +479,7 @@ function StreamingTrainingCard({
                         </span>
                     ) : null}
                 </div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                    <span className="relative flex h-2 w-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
-                    </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
                     {activityLabel ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.streamingCardActivityFallback}
                 </span>
             </div>
@@ -721,25 +623,6 @@ function GuidanceBlock({
                 {children}
             </div>
         </section>
-    );
-}
-
-function NoActiveCard({
-    latestScoredQuiz,
-}: {
-    readonly latestScoredQuiz: QuizCardEvent | null;
-}) {
-    return (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-8 text-center">
-            <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600" />
-            <h3 className="mt-3 text-base font-semibold text-slate-950">
-                {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.noActiveCardTitle}
-            </h3>
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-slate-500">
-                {latestScoredQuiz?.score_result?.structured_feedback?.next_step
-                    ?? BUSINESS_SKILLS_COACH_WORKBENCH_COPY.noActiveCardDescription}
-            </p>
-        </div>
     );
 }
 
@@ -1066,7 +949,7 @@ function ContextChip({
     readonly value: string;
 }) {
     return (
-        <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+        <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
             <p className="text-[11px] font-semibold text-slate-400">{label}</p>
             <p className="mt-1 truncate text-sm font-semibold leading-relaxed text-slate-900">
                 {value}
@@ -1099,8 +982,8 @@ function CoachCommandBar({
         { command: "summarize" },
     ];
     return (
-        <div className="shrink-0 border-t border-slate-200 bg-white/90 px-4 py-3 md:px-6">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="shrink-0 border-t border-slate-200 bg-white/90 px-4 py-2 md:px-5">
+            <div className="flex items-center gap-2 overflow-x-auto">
                 <span className="mr-1 inline-flex shrink-0 items-center text-xs font-semibold text-slate-500">
                     <CheckCircle2 className="mr-1 h-4 w-4 text-emerald-600" />
                     {BUSINESS_SKILLS_COACH_WORKBENCH_COPY.commandBarLabel}
@@ -1145,9 +1028,9 @@ function Composer({
     return (
         <form
             onSubmit={submit}
-            className="shrink-0 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur md:px-8"
+            className="shrink-0 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:px-5"
         >
-            <div className="flex items-end gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+            <div className="flex items-end gap-3 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
                 <textarea
                     value={value}
                     disabled={disabled}
@@ -1158,12 +1041,12 @@ function Composer({
                             : BUSINESS_SKILLS_COACH_WORKBENCH_COPY.followupPlaceholderDefault
                     }
                     rows={1}
-                    className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-3 py-2 text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-400"
+                    className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-3 py-2 text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-400"
                 />
                 <Button
                     type="submit"
                     disabled={disabled || !value.trim()}
-                    className="h-11 rounded-xl bg-slate-950 px-4 hover:bg-slate-800"
+                    className="h-10 rounded-xl bg-slate-950 px-4 hover:bg-slate-800"
                     aria-label={BUSINESS_SKILLS_COACH_WORKBENCH_COPY.sendAriaLabel}
                 >
                     <Send className="h-4 w-4" />
@@ -1191,18 +1074,6 @@ function capabilityLabelsFor(
         return capabilityKeys.map((key) => displayByKey.get(key) ?? key);
     }
     return currentUnit.capabilities.map((capability) => capability.display_name);
-}
-
-function latestFollowupPromptEventForSession(
-    session: AiCoachChatSessionPublicV1 | null,
-): Extract<AiCoachUiEventPublicV1, { type: "followup_prompt" }> | null {
-    return (
-        [...(session?.ui_events ?? [])]
-            .reverse()
-            .find((event): event is Extract<AiCoachUiEventPublicV1, { type: "followup_prompt" }> =>
-                event.type === "followup_prompt" && event.status === "pending",
-            ) ?? null
-    );
 }
 
 function capabilityDisplayNames(
@@ -1279,4 +1150,33 @@ function isStreamingTrainingCardPhase(
     return phase === "generating_first_card"
         || phase === "generating_next_card"
         || phase === "deciding_next_action";
+}
+
+function shouldShowStreamingCoachResponse({
+    isStarting,
+    isSending,
+    isAdvancing,
+    streamPhase,
+    streamingReasoningText,
+    streamingCardDelta,
+    activeQuiz,
+}: {
+    readonly isStarting: boolean;
+    readonly isSending: boolean;
+    readonly isAdvancing: boolean;
+    readonly streamPhase: AiCoachChatStreamPhase | null;
+    readonly streamingReasoningText: Extract<AiCoachChatStreamEvent, { type: "reasoning_text_delta" }> | null;
+    readonly streamingCardDelta: Extract<AiCoachChatStreamEvent, { type: "ui_event_delta" }> | null;
+    readonly activeQuiz: QuizCardEvent | null;
+}): boolean {
+    if (
+        streamingReasoningText?.text.trim()
+        || streamingCardDelta !== null
+    ) {
+        return true;
+    }
+    if (!isStarting && !isSending && !isAdvancing) {
+        return false;
+    }
+    return isStreamingTrainingCardPhase(streamPhase) && activeQuiz === null;
 }

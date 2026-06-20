@@ -15,6 +15,7 @@ from sales_trainer.services.ai_coach_chat_generation_prompt import (
     AiCoachChatPromptCompiler,
 )
 from sales_trainer.services.ai_coach_chat_generation_streaming import (
+    AI_COACH_JSON_RESPONSE_FORMAT,
     AiCoachGenerationDeltaHandler,
     emit_streamed_response,
     prompt_for_attempt,
@@ -63,6 +64,7 @@ class AiCoachChatGenerator:
                 session_id=session.session_id,
                 system_message=contract.system_message,
                 allow_fallback_response=False,
+                response_format=AI_COACH_JSON_RESPONSE_FORMAT,
             )
             if not result.is_success or not result.value:
                 last_error = AiCoachChatGenerationError(

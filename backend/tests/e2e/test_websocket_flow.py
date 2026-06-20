@@ -62,3 +62,20 @@ def test_should_keep_sales_websocket_stepfun_only_runtime():
         "sales_bot.websocket.simple_handler",
     ):
         assert importlib.util.find_spec(module_name) is None
+
+
+def test_should_default_local_provider_fixture_by_scenario(monkeypatch):
+    monkeypatch.delenv("PHASE4_E2E_PROVIDER_SCRIPT", raising=False)
+    monkeypatch.delenv("PHASE4_E2E_PROVIDER_TRANSCRIPT", raising=False)
+
+    sales_provider = Phase4LocalStepFunProvider.from_env("sales")
+    presentation_provider = Phase4LocalStepFunProvider.from_env("presentation")
+
+    assert sales_provider.fixture["fixture_version"] == "sales-provider-script.v1"
+    assert sales_provider.transcript_path.name == "issue-43-provider-transcript.jsonl"
+    assert presentation_provider.fixture["fixture_version"] == (
+        "presentation-provider-script.v1"
+    )
+    assert presentation_provider.transcript_path.name == (
+        "issue-44-provider-transcript.jsonl"
+    )
