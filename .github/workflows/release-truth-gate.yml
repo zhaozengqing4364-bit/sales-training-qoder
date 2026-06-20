@@ -2,9 +2,9 @@ name: Release Truth Gate
 
 on:
   push:
-    branches: [main, 001-ai-practice-system]
+    branches: [main, dev, 001-ai-practice-system]
   pull_request:
-    branches: [main, 001-ai-practice-system]
+    branches: [main, dev, 001-ai-practice-system]
   workflow_dispatch:
 
 jobs:
